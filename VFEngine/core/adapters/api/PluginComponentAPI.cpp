@@ -30,6 +30,7 @@ namespace core::api
     struct StructFieldMapping {
         std::string name;
         entt::id_type metaId;
+        entt::meta_data metaMember;      // cached meta_data handle (lightweight, no lifetime issues)
         FieldKind kind;
         StructTypeMapping* nestedMapping = nullptr;
         entt::meta_type elementType;     // for ARRAY: element type
@@ -46,6 +47,8 @@ namespace core::api
 
     static std::unordered_map<entt::id_type, StructTypeMapping> structMappings;
     static std::shared_ptr<std::vector<plugin::MetaComponentBridge>> storedBridges;
+    // Raw pointer — valid between registerStructClasses() and cleanup().
+    // cleanup() is called before interpreter is destroyed (see ScriptingAdapter::cleanUp).
     static services::ScriptInterpreter* storedInterpreter = nullptr;
 
     // Extract short class name from C++ type name (strip namespaces and struct/class prefix)
@@ -76,8 +79,10 @@ namespace core::api
         if (type.info() == entt::type_id<glm::vec4>())   return FieldKind::VEC4;
         if (type.is_sequence_container())                 return FieldKind::ARRAY;
         if (type.is_associative_container())              return FieldKind::MAP;
+        if (type.is_enum())                               return FieldKind::SCALAR_INT; // enums handled via getEnum/setEnum
         if (type.is_class())                              return FieldKind::STRUCT;
-        return FieldKind::SCALAR_INT; // fallback
+        vfLogWarning("[Plugin] classifyType: unrecognised type '{}', treating as int", type.info().name());
+        return FieldKind::SCALAR_INT;
     }
 
     // Map a FieldKind to mType ValueType for FieldDefinition
@@ -118,6 +123,10 @@ namespace core::api
         mapping.metaType = type;
         mapping.classDef = classDef;
 
+        // Construct one temp instance for container element-type introspection.
+        // EnTT doesn't expose container element types statically — an instance is needed.
+        auto tempInstance = type.construct();
+
         // Scan fields
         for (auto&& [id, member] : type.data())
         {
@@ -127,36 +136,29 @@ namespace core::api
             StructFieldMapping field;
             field.name = n;
             field.metaId = id;
+            field.metaMember = member;
             field.kind = classifyType(member.type());
 
             // For container fields, cache element/key/value types
-            if (field.kind == FieldKind::ARRAY)
+            if (field.kind == FieldKind::ARRAY && tempInstance)
             {
-                // Construct a default instance to get the sequence container view's value_type
-                auto temp = type.construct();
-                if (temp) {
-                    auto fieldVal = member.get(temp);
-                    if (fieldVal) {
-                        auto view = fieldVal.as_sequence_container();
-                        field.elementType = view.value_type();
-                        // If element type is a struct, register it recursively
-                        if (field.elementType.is_class())
-                            field.nestedMapping = registerStructType(field.elementType, env);
-                    }
+                auto fieldVal = member.get(tempInstance);
+                if (fieldVal) {
+                    auto view = fieldVal.as_sequence_container();
+                    field.elementType = view.value_type();
+                    if (field.elementType.is_class())
+                        field.nestedMapping = registerStructType(field.elementType, env);
                 }
             }
-            else if (field.kind == FieldKind::MAP)
+            else if (field.kind == FieldKind::MAP && tempInstance)
             {
-                auto temp = type.construct();
-                if (temp) {
-                    auto fieldVal = member.get(temp);
-                    if (fieldVal) {
-                        auto view = fieldVal.as_associative_container();
-                        field.keyType = view.key_type();
-                        field.mappedType = view.mapped_type();
-                        if (field.mappedType.is_class())
-                            field.nestedMapping = registerStructType(field.mappedType, env);
-                    }
+                auto fieldVal = member.get(tempInstance);
+                if (fieldVal) {
+                    auto view = fieldVal.as_associative_container();
+                    field.keyType = view.key_type();
+                    field.mappedType = view.mapped_type();
+                    if (field.mappedType.is_class())
+                        field.nestedMapping = registerStructType(field.mappedType, env);
                 }
             }
             else if (field.kind == FieldKind::STRUCT)
@@ -243,10 +245,7 @@ namespace core::api
             auto instance = std::make_shared<ObjectInstance>(mapping.classDef);
             for (auto& field : mapping.fields)
             {
-                entt::meta_data member{};
-                for (auto&& [id, m] : type.data()) {
-                    if (id == field.metaId) { member = m; break; }
-                }
+                auto member = field.metaMember;
                 if (!member) continue;
                 auto fieldVal = member.get(val);
                 if (!fieldVal) continue;
@@ -353,10 +352,7 @@ namespace core::api
 
             for (auto& field : mappingIt->second.fields)
             {
-                entt::meta_data member{};
-                for (auto&& [id, m] : type.data()) {
-                    if (id == field.metaId) { member = m; break; }
-                }
+                auto member = field.metaMember;
                 if (!member) continue;
 
                 auto fieldVal = (*obj)->getFieldValue(field.name);
@@ -392,56 +388,22 @@ namespace core::api
                         break;
                     }
                     case FieldKind::MAP: {
-                        // Rebuild C++ map from HashMap ObjectInstance
+                        // Rebuild C++ map from HashMap using stable public API (getKeys/get)
                         if (!storedInterpreter) break;
-                        auto* mapObj = std::get_if<std::shared_ptr<ObjectInstance>>(&fieldVal);
-                        if (!mapObj || !*mapObj) break;
                         auto fieldMeta = member.get(constructed);
                         auto view = fieldMeta.as_associative_container();
                         view.clear();
-                        // Get size and iterate via keys
-                        auto sizeVal = storedInterpreter->callMethod(fieldVal, "size", {});
-                        int64_t mapSize = 0;
-                        if (auto* sz = std::get_if<int64_t>(&sizeVal)) mapSize = *sz;
-                        if (mapSize > 0) {
-                            auto keysVal = storedInterpreter->callMethod(fieldVal, "keys", {});
-                            // keys() returns an iterator/collection — iterate entries instead
-                            // Use entrySet or direct bucket access
-                            // For now, use a simpler approach: iterate keyBuckets directly
-                            auto& allFields = (*mapObj)->getAllFieldValues();
-                            // HashMap stores keyBuckets and valueBuckets as 2D arrays
-                            // We need to iterate through the buckets
-                            auto bucketsIt = allFields.find("keyBuckets");
-                            auto valBucketsIt = allFields.find("valueBuckets");
-                            auto sizesIt = allFields.find("bucketSizes");
-                            auto capIt = allFields.find("capacity");
-                            if (bucketsIt == allFields.end() || valBucketsIt == allFields.end() ||
-                                sizesIt == allFields.end() || capIt == allFields.end()) break;
-                            auto* capPtr = std::get_if<int64_t>(&capIt->second);
-                            if (!capPtr) break;
-                            int64_t cap = *capPtr;
-                            auto* bucketSizesArr = std::get_if<std::shared_ptr<value::NativeArray>>(&sizesIt->second);
-                            auto* keyBuckets = std::get_if<std::shared_ptr<value::NativeArray>>(&bucketsIt->second);
-                            auto* valBuckets = std::get_if<std::shared_ptr<value::NativeArray>>(&valBucketsIt->second);
-                            if (!bucketSizesArr || !keyBuckets || !valBuckets) break;
-                            if (!*bucketSizesArr || !*keyBuckets || !*valBuckets) break;
-                            for (int64_t b = 0; b < cap && b < static_cast<int64_t>((*bucketSizesArr)->size()); ++b) {
-                                auto bsVal = (**bucketSizesArr)[b];
-                                auto* bs = std::get_if<int64_t>(&bsVal);
-                                if (!bs || *bs <= 0) continue;
-                                auto keyRow = (**keyBuckets)[b];
-                                auto valRow = (**valBuckets)[b];
-                                auto* keyArr = std::get_if<std::shared_ptr<value::NativeArray>>(&keyRow);
-                                auto* valArr = std::get_if<std::shared_ptr<value::NativeArray>>(&valRow);
-                                if (!keyArr || !valArr || !*keyArr || !*valArr) continue;
-                                for (int64_t e = 0; e < *bs && e < static_cast<int64_t>((*keyArr)->size()); ++e) {
-                                    auto kv = (**keyArr)[e];
-                                    auto vv = (**valArr)[e];
-                                    auto keyMeta = valueToMeta(kv, view.key_type());
-                                    auto valMeta = valueToMeta(vv, view.mapped_type());
-                                    if (keyMeta && valMeta)
-                                        view.insert(keyMeta, valMeta);
-                                }
+                        // Use HashMap.getKeys() -> K[] and HashMap.get(key) -> V
+                        auto keysResult = storedInterpreter->callMethod(fieldVal, "getKeys", {});
+                        auto* keysArr = std::get_if<std::shared_ptr<value::NativeArray>>(&keysResult);
+                        if (keysArr && *keysArr) {
+                            for (std::size_t i = 0; i < (*keysArr)->size(); ++i) {
+                                auto keyVal = (**keysArr)[i];
+                                auto valResult = storedInterpreter->callMethod(fieldVal, "get", {keyVal});
+                                auto keyMeta = valueToMeta(keyVal, view.key_type());
+                                auto valMeta = valueToMeta(valResult, view.mapped_type());
+                                if (keyMeta && valMeta)
+                                    view.insert(keyMeta, valMeta);
                             }
                         }
                         member.set(constructed, fieldMeta);
@@ -539,7 +501,12 @@ namespace core::api
         return FieldResolution{current, finalMember, std::move(chain)};
     }
 
-    // Write back dot-path chain after setting a leaf field
+    // Write back dot-path chain after setting a leaf field.
+    // member.get() returns by value (entt default as_value_t policy), so nested struct
+    // modifications must be propagated back up. This is the same pattern used in
+    // MetaComponentDrawer.cpp:86-111 (drawElementValue returns modified parent).
+    // Note: the root instance (chain[0].second) was created via from_void(ptr) which
+    // wraps the live component memory — changes to it propagate to the ECS registry.
     static void writeBackChain(FieldResolution& res)
     {
         if (res.chain.empty()) return;
