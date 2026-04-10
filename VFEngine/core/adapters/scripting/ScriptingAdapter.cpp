@@ -229,6 +229,11 @@ namespace core
                 builder.clean(*config);
             }
 
+            if (interpreter)
+            {
+                interpreter->resetForRebuild();
+            }
+
             pathToClassName.clear();
             compiled = false;
 

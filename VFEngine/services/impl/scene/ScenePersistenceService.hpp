@@ -57,6 +57,8 @@ namespace services
 
         void update();
 
+        void cancelPendingLoads();
+
         bool newScene();
         bool saveScene(const std::string& filePath);
         bool loadScene(const std::string& filePath);

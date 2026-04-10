@@ -26,6 +26,10 @@ namespace events::scene {
         std::string_view getName() const override { return "LoadScene"; }
     };
 
+    struct CancelPendingSceneLoadsCommand : ICommand<void> {
+        std::string_view getName() const override { return "CancelPendingSceneLoads"; }
+    };
+
     struct SavePrefabCommand : ICommand<bool> {
         services::EntityHandle entity;
         std::string filePath;

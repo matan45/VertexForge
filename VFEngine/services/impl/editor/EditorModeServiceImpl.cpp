@@ -1,21 +1,20 @@
 #include "EditorModeServiceImpl.hpp"
-#include "../../events/EventDispatcher.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
-#include "../../events/render/RenderEvents.hpp"
-#include "../../events/terrain/TerrainEvents.hpp"
-#include "../../events/terrain/OceanEvents.hpp"
-#include "../../data/EntityConversion.hpp"
-#include "serialization/SceneSerialization.hpp"
-#include "scene/SceneGraphSystem.hpp"
-#include "scene/EntityRegistry.hpp"
-#include "components/Components.hpp"
 
 namespace services
 {
     EditorModeServiceImpl::EditorModeServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
         : sceneGraph(std::move(sceneGraph))
     {
+    }
+
+    EditorModeServiceImpl::~EditorModeServiceImpl()
+    {
+        if (sceneLoadedToken.isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(sceneLoadedToken);
+        }
     }
 
     void EditorModeServiceImpl::setMode(EditorMode mode)
@@ -30,10 +29,10 @@ namespace services
         if (mode == EditorMode::Play && previousMode == EditorMode::Edit)
         {
             paused = false;
-            captureSnapshot();
+            savedScenePath = currentScenePath;
         }
 
-        // Publish notification BEFORE restoring snapshot so scripts can call onDestroy
+        // Publish notification BEFORE restoring scene so scripts can call onDestroy
         if (mode == EditorMode::Edit && previousMode == EditorMode::Play)
         {
             paused = false;
@@ -43,7 +42,7 @@ namespace services
             notification.currentMode = mode;
             events::EventDispatcher::instance().publish(notification);
 
-            restoreSnapshot();
+            restoreScene();
             currentMode = mode;
             return;
         }
@@ -56,106 +55,29 @@ namespace services
         events::EventDispatcher::instance().publish(notification);
     }
 
-    void EditorModeServiceImpl::captureSnapshot()
+    void EditorModeServiceImpl::restoreScene()
     {
-        if (!sceneGraph)
-        {
-            return;
-        }
-
-        // Save the IBL path now while it's still resolvable
-        savedIBLPath.clear();
-        scene::Entity& root = sceneGraph->GetRoot();
-        if (root.hasComponent<components::IBLComponent>())
-        {
-            const auto& iblComp = root.getComponent<components::IBLComponent>();
-            if (iblComp.hdrRef.isValid())
-            {
-                savedIBLPath = iblComp.hdrRef.resolve();
-            }
-        }
-
-        playModeSnapshot = serialization::SceneSerialization::createSnapshot(*sceneGraph);
-    }
-
-    void EditorModeServiceImpl::restoreSnapshot()
-    {
-        if (!playModeSnapshot.has_value() || !sceneGraph)
-        {
-            return;
-        }
-
-        // Block render preparation from accessing registry during scene transition
-        scene::EntityRegistry::setSceneTransitioning(true);
-
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Clear entity selection
-        events::scene::SelectEntityCommand clearSelectionCmd;
-        clearSelectionCmd.entity = std::nullopt;
-        dispatcher.execute(clearSelectionCmd);
+        // Cancel any deferred scene loads queued during play mode
+        events::scene::CancelPendingSceneLoadsCommand cancelCmd;
+        dispatcher.execute(cancelCmd);
 
-        // Remove current IBL before clearing scene
-        events::render::RemoveIBLCommand removeIblCmd;
-        dispatcher.execute(removeIblCmd);
+        // Clear the current scene
+        events::scene::NewSceneCommand newCmd;
+        dispatcher.execute(newCmd);
 
-        // Remove all cameras from graphics layer before clearing scene
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto cameraView = registry.view<components::CameraComponent>();
-        for (auto entity : cameraView)
+        if (!savedScenePath.empty())
         {
-            const auto& camComp = cameraView.get<components::CameraComponent>(entity);
-            events::render::RemoveCameraCommand removeCamCmd;
-            removeCamCmd.cameraId = camComp.cameraId;
-            dispatcher.execute(removeCamCmd);
+            // Reload the saved scene from disk.
+            // This goes through performDeferredLoad which fully restores all subsystems
+            // (IBL, terrain, meshes, physics/audio/render settings, etc.).
+            events::scene::LoadSceneCommand loadCmd;
+            loadCmd.filePath = savedScenePath;
+            dispatcher.execute(loadCmd);
         }
 
-        // Restore scene from snapshot
-        bool restoreSuccess = serialization::SceneSerialization::restoreFromSnapshot(
-            *playModeSnapshot, *sceneGraph);
-
-        if (!restoreSuccess)
-        {
-            // Leave flag true — cleared next frame by getViewportTexture()
-            playModeSnapshot.reset();
-            return;
-        }
-
-        // Re-set IBL using the path saved before entering play mode
-        if (!savedIBLPath.empty())
-        {
-            events::render::SetIBLCommand setIblCmd;
-            setIblCmd.hdrPath = savedIBLPath;
-            dispatcher.execute(setIblCmd);
-        }
-
-        // Re-map terrain registrations to restored entity IDs
-        events::terrain::RemapTerrainEntitiesCommand remapTerrainCmd;
-        dispatcher.execute(remapTerrainCmd);
-
-        // Rebuild ocean from restored components
-        events::ocean::RebuildOceanFromComponentsCommand rebuildOceanCmd;
-        dispatcher.execute(rebuildOceanCmd);
-
-        // Re-trigger mesh loading for all entities with MeshComponent
-        auto meshView = registry.view<components::MeshComponent>();
-        for (auto entity : meshView)
-        {
-            const auto& meshComp = meshView.get<components::MeshComponent>(entity);
-            if (meshComp.meshRef.isValid())
-            {
-                events::scene::MeshDataChangedNotification meshNotif;
-                meshNotif.entity = internal::toHandle(entity);
-                meshNotif.meshPath = meshComp.meshRef.resolve();
-                meshNotif.animatorPath = meshComp.animatorRef.resolve();
-                dispatcher.publish(meshNotif);
-            }
-        }
-
-        // Leave sceneTransitioning = true so the rest of this frame skips render prep.
-        // EditorRenderServiceImpl::getViewportTexture() will clear it on the next frame.
-
-        playModeSnapshot.reset();
+        savedScenePath.clear();
     }
 
     EditorMode EditorModeServiceImpl::getMode() const
@@ -230,6 +152,13 @@ namespace services
             [this](const events::editor::IsEditorPausedQuery&)
             {
                 return isPaused();
+            });
+
+        // Track the current scene file path so we can restore it on Stop
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification& n)
+            {
+                currentScenePath = n.scenePath;
             });
     }
 }

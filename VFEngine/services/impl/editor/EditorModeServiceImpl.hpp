@@ -1,8 +1,8 @@
 #pragma once
 #include "../../interfaces/editor/IEditorModeService.hpp"
-#include <nlohmann/json.hpp>
-#include <optional>
+#include "../../events/EventDispatcher.hpp"
 #include <memory>
+#include <string>
 
 namespace scene
 {
@@ -17,12 +17,15 @@ namespace services
         EditorMode currentMode = EditorMode::Edit;
         bool paused = false;
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
-        std::optional<nlohmann::json> playModeSnapshot;
-        std::string savedIBLPath;
+
+        // Play-mode scene restore: remember which scene file was open when Play was pressed
+        std::string currentScenePath;
+        std::string savedScenePath;
+        ::events::SubscriptionToken sceneLoadedToken;
 
     public:
         explicit EditorModeServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
-        ~EditorModeServiceImpl() override = default;
+        ~EditorModeServiceImpl() override;
 
         void registerEventHandlers() override;
 
@@ -39,7 +42,6 @@ namespace services
         bool isPaused() const override;
 
     private:
-        void captureSnapshot();
-        void restoreSnapshot();
+        void restoreScene();
     };
 }

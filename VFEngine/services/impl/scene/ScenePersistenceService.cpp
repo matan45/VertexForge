@@ -141,8 +141,20 @@ namespace services
                 return isSceneLoaded(q.sceneName);
             });
 
+        dispatcher.registerCommandHandler<events::scene::CancelPendingSceneLoadsCommand>(
+            [this](const events::scene::CancelPendingSceneLoadsCommand&)
+            {
+                cancelPendingLoads();
+            });
+
         // Streaming zone events
         streamingZoneManager->registerEventHandlers(dispatcher);
+    }
+
+    void ScenePersistenceService::cancelPendingLoads()
+    {
+        pendingLoadPath.reset();
+        while (!pendingAdditiveLoads.empty()) pendingAdditiveLoads.pop();
     }
 
     bool ScenePersistenceService::newScene()
