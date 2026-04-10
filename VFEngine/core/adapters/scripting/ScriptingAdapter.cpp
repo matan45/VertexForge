@@ -139,6 +139,7 @@ namespace core
         instanceToObject.clear();
         pathToClassName.clear();
 
+        api::PluginComponentAPI::cleanup();
         apiRegistry.reset();
         interpreter.reset();
         initialized = false;
@@ -189,6 +190,8 @@ namespace core
             if (result.success)
             {
                 compiled = true;
+                // Register mType classes for plugin struct types (requires stdlib loaded)
+                api::PluginComponentAPI::registerStructClasses(interpreter.get());
                 vfLogInfo("[ScriptingAdapter] Build successful: {} files compiled", result.filesCompiled);
             }
             else
@@ -269,6 +272,9 @@ namespace core
 
             vfLogInfo("[ScriptingAdapter] Loading compiled scripts from: {}", libraryPath);
             interpreter->loadCompiledBytecode(libraryPath);
+
+            // Register mType classes for plugin struct types (requires stdlib loaded)
+            api::PluginComponentAPI::registerStructClasses(interpreter.get());
 
             vfLogInfo("[ScriptingAdapter] Compiled scripts loaded successfully");
             return true;

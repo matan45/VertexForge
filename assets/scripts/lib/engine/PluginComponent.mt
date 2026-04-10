@@ -41,6 +41,42 @@ public class PluginComponent {
     }
 
     // ============================================
+    // Unified Get/Set (returns Object — cast to target type)
+    // Usage: int hp = (int)PluginComponent.get(self, "Stats", "health");
+    //        BuffEntry b = (BuffEntry)PluginComponent.get(self, "Comp", "activeBuff");
+    // Supports dot-paths: (int)PluginComponent.get(self, "Comp", "weapon.damage")
+    // ============================================
+
+    public static function get(int entityId, string componentName, string fieldName): Object {
+        return _plugin_get(entityId, componentName, fieldName);
+    }
+
+    public static function set(int entityId, string componentName, string fieldName, Object value): bool {
+        return _plugin_set(entityId, componentName, fieldName, value);
+    }
+
+    // ============================================
+    // Object-Returning Container Access (for struct elements)
+    // Usage: BuffEntry b = (BuffEntry)PluginComponent.getArrayElement(self, "Comp", "buffs", 0);
+    // ============================================
+
+    public static function getArrayElement(int entityId, string componentName, string fieldName, int index): Object {
+        return _plugin_getArrayElement(entityId, componentName, fieldName, index);
+    }
+
+    public static function setArrayElement(int entityId, string componentName, string fieldName, int index, Object value): bool {
+        return _plugin_setArrayElement(entityId, componentName, fieldName, index, value);
+    }
+
+    public static function getMapValue(int entityId, string componentName, string fieldName, string key): Object {
+        return _plugin_getMapValue(entityId, componentName, fieldName, key);
+    }
+
+    public static function setMapValue(int entityId, string componentName, string fieldName, string key, Object value): bool {
+        return _plugin_setMapValue(entityId, componentName, fieldName, key, value);
+    }
+
+    // ============================================
     // Scalar Getters
     // ============================================
 
