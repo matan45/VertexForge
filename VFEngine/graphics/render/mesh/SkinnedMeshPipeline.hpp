@@ -103,7 +103,8 @@ namespace render::mesh
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                  uint32_t imageIndex,
-                                 const SkinnedMeshRenderData& renderData) const;
+                                 const SkinnedMeshRenderData& renderData,
+                                 bool clearAttachments = true) const;
 
     private:
         void loadShaders();

@@ -38,6 +38,8 @@ namespace core
         void updateAnimationPreview(services::PreviewInstanceId instanceId, float deltaTime) override;
         void setAnimationPreviewParams(services::PreviewInstanceId instanceId,
                                        const services::AnimationPreviewParams& params) override;
+        void setAnimationPreviewEnvironment(services::PreviewInstanceId instanceId,
+                                            const services::PreviewEnvironmentParams& params) override;
         void updateAnimationCamera(services::PreviewInstanceId instanceId, const glm::mat4& view,
                                    const glm::mat4& projection, const glm::vec3& cameraPos) override;
 

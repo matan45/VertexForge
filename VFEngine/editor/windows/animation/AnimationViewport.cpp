@@ -38,6 +38,20 @@ namespace windows::animation
             events::EventDispatcher::instance().execute(updateCmd);
         }
 
+        services::PreviewEnvironmentParams envParams;
+        envParams.backgroundMode      = static_cast<uint8_t>(ctx.environment.backgroundMode);
+        envParams.backgroundColor     = ctx.environment.backgroundColor;
+        envParams.gradientTopColor    = ctx.environment.gradientTopColor;
+        envParams.gradientBottomColor = ctx.environment.gradientBottomColor;
+        envParams.showGrid            = ctx.environment.showGrid;
+        envParams.lightingMode        = static_cast<uint8_t>(ctx.environment.lightingMode);
+        envParams.lightingIntensity   = ctx.environment.lightingIntensity;
+
+        services::events::animpreview::SetAnimationPreviewEnvironmentCommand envCmd;
+        envCmd.instanceId = ctx.instanceId;
+        envCmd.params = envParams;
+        events::EventDispatcher::instance().execute(envCmd);
+
         glm::mat4 model = glm::mat4(1.0f);
         services::AnimationPreviewParams params;
         params.modelMatrix = model;

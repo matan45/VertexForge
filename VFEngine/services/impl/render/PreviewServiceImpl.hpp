@@ -75,6 +75,8 @@ namespace services
 
         void updateAnimationPreview(PreviewInstanceId instanceId, float deltaTime) override;
         void setAnimationPreviewParams(PreviewInstanceId instanceId, const AnimationPreviewParams& params) override;
+        void setAnimationPreviewEnvironment(PreviewInstanceId instanceId,
+                                            const PreviewEnvironmentParams& params) override;
         void updateAnimationCamera(PreviewInstanceId instanceId, const glm::mat4& view,
                                    const glm::mat4& projection, const glm::vec3& cameraPos) override;
 

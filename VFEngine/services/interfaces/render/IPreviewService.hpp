@@ -76,6 +76,8 @@ namespace services
 
         virtual void updateAnimationPreview(PreviewInstanceId instanceId, float deltaTime) = 0;
         virtual void setAnimationPreviewParams(PreviewInstanceId instanceId, const AnimationPreviewParams& params) = 0;
+        virtual void setAnimationPreviewEnvironment(PreviewInstanceId instanceId,
+                                                    const PreviewEnvironmentParams& params) = 0;
         virtual void updateAnimationCamera(PreviewInstanceId instanceId, const glm::mat4& view,
                                            const glm::mat4& projection, const glm::vec3& cameraPos) = 0;
 

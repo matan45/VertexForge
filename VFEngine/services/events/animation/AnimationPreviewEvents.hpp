@@ -2,6 +2,7 @@
 
 #include "../EventTypes.hpp"
 #include "../../providers/animation/IAnimationPreviewProvider.hpp"
+#include "../../providers/render/IMeshPreviewProvider.hpp"
 #include "../../providers/PreviewInstanceId.hpp"
 #include "../../data/DTOs.hpp"
 #include <glm/glm.hpp>
@@ -87,6 +88,13 @@ namespace services::events::animpreview
         PreviewInstanceId instanceId;
         AnimationPreviewParams params;
         std::string_view getName() const override { return "SetAnimationPreviewParams"; }
+    };
+
+    struct SetAnimationPreviewEnvironmentCommand : ::events::ICommand<void>
+    {
+        PreviewInstanceId instanceId;
+        PreviewEnvironmentParams params;
+        std::string_view getName() const override { return "SetAnimationPreviewEnvironment"; }
     };
 
     struct UpdateAnimationCameraCommand : ::events::ICommand<void>

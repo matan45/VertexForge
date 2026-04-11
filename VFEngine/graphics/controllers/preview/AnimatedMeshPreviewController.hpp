@@ -4,6 +4,7 @@
 #include <math/Frustum.hpp>
 #include "../../animation/AnimationEvaluator.hpp"
 #include "../../render/mesh/SkinnedMeshTypes.hpp"
+#include "../../../services/providers/render/IMeshPreviewProvider.hpp"
 #include "resource/Types.hpp"
 #include <memory>
 #include <string>
@@ -14,6 +15,17 @@ namespace core
     class SwapChain;
     class CommandPool;
     struct OffscreenResources;
+}
+
+namespace render
+{
+    class ClearColor;
+}
+
+namespace render::preview
+{
+    class PreviewBackgroundRenderer;
+    class PreviewGridRenderer;
 }
 
 namespace render::mesh
@@ -35,6 +47,10 @@ namespace controllers
         std::vector<vk::Fence> inFlightFences;
 
         std::unique_ptr<render::mesh::SkinnedMeshPipeline> skinnedPipeline;
+        std::unique_ptr<render::ClearColor> clearColor;
+        std::unique_ptr<render::preview::PreviewBackgroundRenderer> previewBackground;
+        std::unique_ptr<render::preview::PreviewGridRenderer> previewGrid;
+        services::PreviewEnvironmentParams environmentParams;
 
         animation::AnimationEvaluator animEvaluator;
         resource::AnimationData animationData;
@@ -89,6 +105,7 @@ namespace controllers
         void setMetallic(float value) { renderData.metallic = value; }
         void setRoughness(float value) { renderData.roughness = value; }
         void setClearColor(const glm::vec4& color);
+        void setEnvironment(const services::PreviewEnvironmentParams& params) { environmentParams = params; }
 
         void* render();
 
