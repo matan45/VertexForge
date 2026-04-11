@@ -3,8 +3,6 @@
 #include "animator/AnimatorAsset.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
-#include "events/animation/AnimatorEvents.hpp"
-#include "events/scene/EntityTransformEvents.hpp"
 #include "imgui.h"
 #include <imgui_internal.h>
 #include <imgui_node_editor.h>
@@ -202,13 +200,6 @@ namespace windows
                     }
                 }
 
-                // Runtime debug overlay
-                if (debugMode && debugData.isValid)
-                {
-                    ImGui::Separator();
-                    propertiesPanel.drawRuntimeDebugOverlay(debugData, animatorData.get(), selectedTransitionId);
-                }
-
                 ImGui::EndChild();
 
                 ImGui::SameLine();
@@ -216,25 +207,8 @@ namespace windows
                 ImGui::BeginChild("NodeGraphPanel", ImVec2(graphWidth, innerSize.y), true,
                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-                // Poll debug data if in debug mode
-                if (debugMode && debugEntity.isValid())
-                {
-                    services::events::animator::GetAnimatorRuntimeDebugDataQuery debugQuery;
-                    debugQuery.entity = debugEntity;
-                    debugQuery.layerIndex = selectedLayerIndex;
-                    debugData = events::EventDispatcher::instance().query(debugQuery);
-                }
-                else
-                {
-                    debugData = services::AnimatorRuntimeDebugData{};
-                }
-
-                const services::AnimatorRuntimeDebugData* debugDataPtr =
-                    (debugMode && debugData.isValid) ? &debugData : nullptr;
-
                 nodeGraph.draw(animatorData.get(), selectedStateId, selectedTransitionId,
-                               isDirty, needsPositionInit, needsNavigateToContent, pendingZoomSteps,
-                               debugDataPtr);
+                               isDirty, needsPositionInit, needsNavigateToContent, pendingZoomSteps);
 
                 // Swap the edited graph back into the selected layer
                 if (animatorData && !animatorData->layers.empty() && selectedLayerIndex < animatorData->layers.size())
@@ -326,61 +300,14 @@ namespace windows
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
-        // Debug mode toggle
-        if (debugMode)
-        {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
-        }
-        if (ImGui::Button(ICON_FA_BUG " Debug"))
-        {
-            debugMode = !debugMode;
-            if (debugMode)
-            {
-                // Auto-select currently selected entity in scene
-                events::scene::GetSelectedEntityQuery selQuery;
-                auto selected = events::EventDispatcher::instance().query(selQuery);
-                if (selected.has_value())
-                {
-                    debugEntity = selected.value();
-                }
-            }
-        }
-        if (debugMode)
-        {
-            ImGui::PopStyleColor();
-        }
-
-        if (debugMode)
-        {
-            ImGui::SameLine();
-            if (debugEntity.isValid())
-            {
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Entity: %llu", debugEntity.id);
-            }
-            else
-            {
-                ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "No entity");
-            }
-
-            ImGui::SameLine();
-            if (ImGui::SmallButton(ICON_FA_CROSSHAIRS " Pick"))
-            {
-                events::scene::GetSelectedEntityQuery selQuery;
-                auto selected = events::EventDispatcher::instance().query(selQuery);
-                if (selected.has_value())
-                {
-                    debugEntity = selected.value();
-                }
-            }
-        }
-
-        ImGui::SameLine();
-        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-        ImGui::SameLine();
-
         // Search
-        ImGui::SetNextItemWidth(150.0f);
-        if (ImGui::InputTextWithHint("##Search", ICON_FA_MAGNIFYING_GLASS " Search...", searchBuffer, sizeof(searchBuffer)))
+        ImGui::SetNextItemWidth(180.0f);
+        const bool searchChanged = ImGui::InputTextWithHint(
+            "##Search", ICON_FA_MAGNIFYING_GLASS " Search states by name...",
+            searchBuffer, sizeof(searchBuffer));
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Type to find a state by name and jump to it in the graph");
+        if (searchChanged)
         {
             // Navigate to first matching state
             if (searchBuffer[0] != '\0' && animatorData)
@@ -418,19 +345,29 @@ namespace windows
             if (animatorData)
             {
                 validationWarnings = animation::AnimatorGraphValidator::validate(*animatorData);
-                showValidationPanel = !validationWarnings.empty();
+                showValidationPanel = true;
             }
         }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Check the graph for missing default state, dead ends, "
+                              "unreachable states, missing clips, and undefined parameters");
 
-        if (!validationWarnings.empty())
+        // Status badge
+        if (showValidationPanel)
         {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "(%zu)", validationWarnings.size());
+            if (validationWarnings.empty())
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f),
+                                   ICON_FA_CIRCLE_CHECK " No issues");
+            else
+                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f),
+                                   "(%zu)", validationWarnings.size());
         }
 
         ImGui::Separator();
 
-        // Validation warnings panel
+        // Validation panel - only shown when there are warnings to display.
+        // On success the inline "No issues" badge above is enough; no need for an empty panel.
         if (showValidationPanel && !validationWarnings.empty())
         {
             ImGui::BeginChild("ValidationPanel", ImVec2(0, 80), true);
