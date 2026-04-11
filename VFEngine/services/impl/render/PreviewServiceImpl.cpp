@@ -221,6 +221,12 @@ namespace services
                 setAnimationPreviewParams(cmd.instanceId, cmd.params);
             });
 
+        dispatcher.registerCommandHandler<events::animpreview::SetAnimationPreviewEnvironmentCommand>(
+            [this](const events::animpreview::SetAnimationPreviewEnvironmentCommand& cmd)
+            {
+                setAnimationPreviewEnvironment(cmd.instanceId, cmd.params);
+            });
+
         dispatcher.registerCommandHandler<events::animpreview::UpdateAnimationCameraCommand>(
             [this](const events::animpreview::UpdateAnimationCameraCommand& cmd)
             {

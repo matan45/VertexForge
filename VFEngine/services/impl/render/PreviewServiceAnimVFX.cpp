@@ -85,6 +85,13 @@ namespace services
             animationProvider->setAnimationPreviewParams(instanceId, params);
     }
 
+    void PreviewServiceImpl::setAnimationPreviewEnvironment(PreviewInstanceId instanceId,
+                                                            const PreviewEnvironmentParams& params)
+    {
+        if (animationProvider)
+            animationProvider->setAnimationPreviewEnvironment(instanceId, params);
+    }
+
     void PreviewServiceImpl::updateAnimationCamera(PreviewInstanceId instanceId, const glm::mat4& view,
                                                    const glm::mat4& projection, const glm::vec3& cameraPos)
     {

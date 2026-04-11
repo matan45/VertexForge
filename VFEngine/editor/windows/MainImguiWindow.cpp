@@ -67,6 +67,7 @@ namespace windows
         dispatcher.unsubscribe(sceneLoadedToken);
         dispatcher.unsubscribe(openImportDialogToken);
         dispatcher.unsubscribe(openInputMappingToken);
+        dispatcher.unsubscribe(openProjectSettingsToken);
         dispatcher.unsubscribe(openBackgroundRemovalToken);
         dispatcher.unsubscribe(settingsChangedToken);
     }
@@ -103,6 +104,12 @@ namespace windows
             [this](const events::application::OpenInputMappingWindowNotification&)
             {
                 inputActionMappingWindow.show();
+            });
+
+        openProjectSettingsToken = dispatcher.subscribe<events::application::OpenProjectSettingsWindowNotification>(
+            [this](const events::application::OpenProjectSettingsWindowNotification&)
+            {
+                editorSettingsWindow.show(EditorSettingsWindow::Project);
             });
 
         openBackgroundRemovalToken = dispatcher.subscribe<events::application::OpenBackgroundRemovalNotification>(

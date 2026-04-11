@@ -34,6 +34,33 @@ namespace editor::preview
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
+        // Vertical nudge: move the camera target up/down (effectively translating the
+        // previewed model in the viewport). Step is proportional to camera distance so
+        // the visual nudge feels consistent regardless of zoom level.
+        const float nudgeStep = 0.1f * camera->distance;
+
+        if (ImGui::SmallButton(ICON_FA_ARROW_UP "##NudgeUp"))
+        {
+            camera->target.y += nudgeStep;
+            camera->updateMatrices();
+            changed = true;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move up");
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton(ICON_FA_ARROW_DOWN "##NudgeDown"))
+        {
+            camera->target.y -= nudgeStep;
+            camera->updateMatrices();
+            changed = true;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move down");
+
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+
         // Toggle Grid
         if (ImGui::SmallButton(env.showGrid ? (ICON_FA_BORDER_ALL " Grid") : (ICON_FA_BORDER_NONE " Grid")))
         {

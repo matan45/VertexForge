@@ -307,19 +307,23 @@ namespace render::mesh
 
     void SkinnedMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                                   uint32_t imageIndex,
-                                                  const SkinnedMeshRenderData& renderData) const
+                                                  const SkinnedMeshRenderData& renderData,
+                                                  bool clearAttachments) const
     {
         if (!loadedMesh || loadedMesh->meshData.subMeshes.empty())
         {
             return;
         }
 
-        auto colorAttach = core::colorClear(
-            offscreenResources.colorImages[imageIndex].colorImageView,
-            vk::ClearColorValue(std::array<float, 4>{
-                clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a}));
-        auto depthAttach = core::depthClear(
-            offscreenResources.depthImage.depthImageView, 1.0f, 0);
+        auto colorAttach = clearAttachments
+            ? core::colorClear(
+                offscreenResources.colorImages[imageIndex].colorImageView,
+                vk::ClearColorValue(std::array<float, 4>{
+                    clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a}))
+            : core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+        auto depthAttach = clearAttachments
+            ? core::depthClear(offscreenResources.depthImage.depthImageView, 1.0f, 0)
+            : core::depthLoad(offscreenResources.depthImage.depthImageView);
 
         core::DynamicRenderingInfo dynInfo{};
         dynInfo.extent = swapChain.getSwapchainExtent();

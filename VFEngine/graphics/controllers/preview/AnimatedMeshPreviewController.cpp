@@ -8,6 +8,9 @@
 #include "../../core/Utilities.hpp"
 #include "../../core/RenderManager.hpp"
 #include "../../render/mesh/SkinnedMeshPipeline.hpp"
+#include "../../render/ClearColor.hpp"
+#include "../../render/preview/PreviewBackgroundRenderer.hpp"
+#include "../../render/preview/PreviewGridRenderer.hpp"
 #include "resource/AnimationResource.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "print/Log.hpp"
@@ -54,6 +57,17 @@ namespace controllers
                 device, swapChain, *offscreenResources);
             skinnedPipeline->init();
 
+            clearColor = std::make_unique<render::ClearColor>(device, swapChain, *offscreenResources);
+            clearColor->init();
+
+            previewBackground = std::make_unique<render::preview::PreviewBackgroundRenderer>(
+                device, swapChain, *offscreenResources);
+            previewBackground->init();
+
+            previewGrid = std::make_unique<render::preview::PreviewGridRenderer>(
+                device, swapChain, *offscreenResources);
+            previewGrid->init();
+
             initialized = true;
         }
         catch (const std::exception& e)
@@ -68,6 +82,26 @@ namespace controllers
         device.getLogicalDevice().waitIdle();
 
         unload();
+
+        if (previewGrid)
+        {
+            previewGrid->cleanUpShader();
+            previewGrid->cleanUp();
+            previewGrid.reset();
+        }
+
+        if (previewBackground)
+        {
+            previewBackground->cleanUpShader();
+            previewBackground->cleanUp();
+            previewBackground.reset();
+        }
+
+        if (clearColor)
+        {
+            clearColor->cleanUp();
+            clearColor.reset();
+        }
 
         if (skinnedPipeline)
         {
@@ -421,25 +455,44 @@ namespace controllers
         commandBuffer.reset();
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
+        // Step 1: Clear color + depth via the shared ClearColor helper.
+        // For solid mode use the env background color; for gradient mode use the
+        // gradient bottom as the clear base (the gradient pass will overwrite it).
+        const glm::vec4 clearVal = (environmentParams.backgroundMode == 1)
+            ? environmentParams.gradientBottomColor
+            : environmentParams.backgroundColor;
+        clearColor->setClearColor(clearVal);
+        clearColor->recordCommandBuffer(commandBuffer, imageIndex);
+
+        // Step 2: Draw gradient overlay (only in gradient mode).
+        if (environmentParams.backgroundMode == 1 && previewBackground && previewBackground->isInitialized())
+        {
+            previewBackground->render(commandBuffer, imageIndex,
+                                      environmentParams.gradientTopColor,
+                                      environmentParams.gradientBottomColor);
+        }
+
+        // Step 3: Draw the skinned mesh, loading the existing color/depth
+        // (so the background we just drew is preserved).
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources->colorImages[imageIndex].colorImage,
-            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        core::ImageUtilities::transitionImageLayout(commandBuffer,
-            offscreenResources->depthImage.depthImage,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
-
-        skinnedPipeline->recordCommandBuffer(commandBuffer, imageIndex, renderData);
+        skinnedPipeline->recordCommandBuffer(commandBuffer, imageIndex, renderData, /*clearAttachments=*/false);
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources->colorImages[imageIndex].colorImage,
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
+
+        // Step 4: Grid overlay (handles its own transitions; ends in ShaderReadOnlyOptimal).
+        if (previewGrid && previewGrid->isInitialized() && environmentParams.showGrid)
+        {
+            previewGrid->render(commandBuffer, imageIndex, currentView, currentProjection, true);
+        }
 
         commandBuffer.end();
 

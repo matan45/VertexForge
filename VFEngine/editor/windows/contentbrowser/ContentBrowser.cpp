@@ -196,6 +196,10 @@ namespace windows
         {
             events::EventDispatcher::instance().publish(events::application::OpenInputMappingWindowNotification{});
         }
+        else if (selectedType == AssetType::Project)
+        {
+            events::EventDispatcher::instance().publish(events::application::OpenProjectSettingsWindowNotification{});
+        }
         else if (selectedType != AssetType::Navmesh && selectedType != AssetType::PhysAnim)
         {
             showFileWindow = true;

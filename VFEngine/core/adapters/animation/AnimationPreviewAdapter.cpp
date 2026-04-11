@@ -142,6 +142,15 @@ namespace core
         }
     }
 
+    void AnimationPreviewAdapter::setAnimationPreviewEnvironment(services::PreviewInstanceId instanceId,
+                                                                 const services::PreviewEnvironmentParams& params)
+    {
+        if (auto* controller = getController(instanceId))
+        {
+            controller->setEnvironment(params);
+        }
+    }
+
     void AnimationPreviewAdapter::updateAnimationCamera(services::PreviewInstanceId instanceId,
                                                         const glm::mat4& view, const glm::mat4& projection,
                                                         const glm::vec3& cameraPos)
