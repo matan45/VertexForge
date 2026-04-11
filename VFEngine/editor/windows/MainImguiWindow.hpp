@@ -104,6 +104,7 @@ namespace windows
         events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken openImportDialogToken;
         events::SubscriptionToken openInputMappingToken;
+        events::SubscriptionToken openProjectSettingsToken;
         events::SubscriptionToken openBackgroundRemovalToken;
         events::SubscriptionToken settingsChangedToken;
 
