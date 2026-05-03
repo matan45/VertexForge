@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "OceanAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -17,8 +19,8 @@ namespace core::api
         {
             // ocean.isInOcean(x, y, z) -> bool
             interpreter->registerNativeFunction("_native_ocean_isInOcean",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 3) return value::Value(false);
 
                     events::ocean::IsPositionInOceanQuery query;
@@ -27,12 +29,12 @@ namespace core::api
                         extractFloat(args[1]),
                         extractFloat(args[2]));
                     return value::Value(dispatcher.query(query));
-                });
+                }});
 
             // ocean.getOceanHeightAt(x, z) -> float
             interpreter->registerNativeFunction("_native_ocean_getOceanHeightAt",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value(0.0f);
 
                     events::ocean::GetOceanHeightAtQuery query;
@@ -40,12 +42,12 @@ namespace core::api
                         extractFloat(args[0]),
                         extractFloat(args[1]));
                     return value::Value(dispatcher.query(query));
-                });
+                }});
 
             // ocean.isCameraUnderwater() -> bool
             interpreter->registerNativeFunction("_native_ocean_isCameraUnderwater",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     auto& registry = scene::EntityRegistry::getRegistry();
                     auto view = registry.view<components::OceanComponent>();
                     for (auto entity : view)
@@ -61,12 +63,12 @@ namespace core::api
                         }
                     }
                     return value::Value(false);
-                });
+                }});
 
             // ocean.hasOcean(entityId) -> bool
             interpreter->registerNativeFunction("_native_ocean_hasOcean",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(false);
                     int64_t id = extractInt64(args[0]);
                     if (id < 0) return value::Value(false);
@@ -74,15 +76,14 @@ namespace core::api
                     events::ocean::HasOceanComponentQuery query;
                     query.entity = services::EntityHandle{static_cast<uint64_t>(id)};
                     return value::Value(dispatcher.query(query));
-                });
+                }});
         }
 
         void registerPropertyFunctions(services::ScriptInterpreter* interpreter)
         {
             // ocean.getBaseHeight(entityId) -> float
             interpreter->registerNativeFunction("_native_ocean_getBaseHeight",
-                [](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                     if (args.empty()) return value::Value(0.0f);
                     auto entity = resolveEntity(args[0]);
                     if (!entity) return value::Value(0.0f);
@@ -93,12 +94,11 @@ namespace core::api
                         return value::Value(registry.get<components::OceanComponent>(*entity).waterHeight);
                     }
                     return value::Value(0.0f);
-                });
+                }});
 
             // ocean.getDensity(entityId) -> float
             interpreter->registerNativeFunction("_native_ocean_getDensity",
-                [](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                     if (args.empty()) return value::Value(1000.0f);
                     auto entity = resolveEntity(args[0]);
                     if (!entity) return value::Value(1000.0f);
@@ -108,12 +108,11 @@ namespace core::api
                         return value::Value(1000.0f);
 
                     return value::Value(registry.get<components::OceanComponent>(*entity).density);
-                });
+                }});
 
             // ocean.getDrag(entityId) -> float
             interpreter->registerNativeFunction("_native_ocean_getDrag",
-                [](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                     if (args.empty()) return value::Value(0.5f);
                     auto entity = resolveEntity(args[0]);
                     if (!entity) return value::Value(0.5f);
@@ -123,12 +122,11 @@ namespace core::api
                         return value::Value(0.5f);
 
                     return value::Value(registry.get<components::OceanComponent>(*entity).drag);
-                });
+                }});
 
             // ocean.getBuoyancyStrength(entityId) -> float
             interpreter->registerNativeFunction("_native_ocean_getBuoyancyStrength",
-                [](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                     if (args.empty()) return value::Value(2.0f);
                     auto entity = resolveEntity(args[0]);
                     if (!entity) return value::Value(2.0f);
@@ -138,7 +136,7 @@ namespace core::api
                         return value::Value(2.0f);
 
                     return value::Value(registry.get<components::OceanComponent>(*entity).buoyancyStrength);
-                });
+                }});
         }
 
         void registerCommandFunctions(services::ScriptInterpreter* interpreter,
@@ -146,8 +144,8 @@ namespace core::api
         {
             // ocean.setPhysicsSettings(oceanEntityId, density, drag, buoyancyStrength)
             interpreter->registerNativeFunction("_native_ocean_setPhysicsSettings",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 4) return value::Value(std::monostate{});
                     int64_t id = extractInt64(args[0]);
                     if (id < 0) return value::Value(std::monostate{});
@@ -160,13 +158,13 @@ namespace core::api
                     dispatcher.execute(cmd);
 
                     return value::Value(std::monostate{});
-                });
+                }});
 
             // ocean.setVisualSettings(oceanEntityId, shallowR, shallowG, shallowB, shallowA,
             //                         deepR, deepG, deepB, deepA, maxVisibleDepth, fresnelPower)
             interpreter->registerNativeFunction("_native_ocean_setVisualSettings",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 11) return value::Value(std::monostate{});
                     int64_t id = extractInt64(args[0]);
                     if (id < 0) return value::Value(std::monostate{});
@@ -184,7 +182,7 @@ namespace core::api
                     dispatcher.execute(cmd);
 
                     return value::Value(std::monostate{});
-                });
+                }});
         }
     }
 

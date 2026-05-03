@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "PhysicsAnimationAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -30,8 +32,8 @@ namespace core::api
         // ============================================
 
         interpreter->registerNativeFunction("_native_physanim_hasPhysicsAnimation",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(false);
                 int64_t id = extractInt64(args[0]);
                 if (id < 0) return value::Value(false);
@@ -39,11 +41,11 @@ namespace core::api
                 events::physicsAnimation::HasPhysicsAnimationQuery query;
                 query.entity = intToEntity(id);
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_physanim_isRagdollActive",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(false);
                 int64_t id = extractInt64(args[0]);
                 if (id < 0) return value::Value(false);
@@ -51,11 +53,11 @@ namespace core::api
                 events::physicsAnimation::IsRagdollActiveQuery query;
                 query.entity = intToEntity(id);
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_physanim_getMode",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(static_cast<int64_t>(0));
                 int64_t id = extractInt64(args[0]);
                 if (id < 0) return value::Value(static_cast<int64_t>(0));
@@ -64,15 +66,15 @@ namespace core::api
                 query.entity = intToEntity(id);
                 auto mode = dispatcher.query(query);
                 return value::Value(static_cast<int64_t>(mode));
-            });
+            }});
 
         // ============================================
         // Ragdoll Control
         // ============================================
 
         interpreter->registerNativeFunction("_native_physanim_activateRagdoll",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] PhysicsAnimation.activateRagdoll: missing entity ID");
@@ -100,11 +102,11 @@ namespace core::api
 
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_physanim_deactivateRagdoll",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 int64_t id = extractInt64(args[0]);
                 if (id < 0) return value::Value(std::monostate{});
@@ -113,15 +115,15 @@ namespace core::api
                 cmd.entity = intToEntity(id);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // ============================================
         // Impulse Application
         // ============================================
 
         interpreter->registerNativeFunction("_native_physanim_applyRagdollImpulse",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 4) return value::Value(std::monostate{});
                 int64_t id = extractInt64(args[0]);
                 if (id < 0) return value::Value(std::monostate{});
@@ -133,11 +135,11 @@ namespace core::api
                     MAX_RAGDOLL_IMPULSE_MAGNITUDE);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_physanim_applyRagdollBoneImpulse",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 5) return value::Value(std::monostate{});
                 int64_t id = extractInt64(args[0]);
                 if (id < 0) return value::Value(std::monostate{});
@@ -150,7 +152,7 @@ namespace core::api
                     MAX_RAGDOLL_IMPULSE_MAGNITUDE);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         vfLogInfo("[PhysicsAnimationAPI] Registered PhysicsAnimation native functions");
     }

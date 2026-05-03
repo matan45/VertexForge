@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "InputAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -14,8 +16,8 @@ namespace core::api
 
         // _native_input_isKeyDown(keyCode) -> bool
         interpreter->registerNativeFunction("_native_input_isKeyDown",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -25,12 +27,12 @@ namespace core::api
                 events::input::IsKeyDownQuery query;
                 query.keyCode = keyCode;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         // _native_input_isMouseButtonDown(button) -> bool
         interpreter->registerNativeFunction("_native_input_isMouseButtonDown",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -40,48 +42,48 @@ namespace core::api
                 events::input::IsMouseButtonDownQuery query;
                 query.button = button;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         // _native_input_getMouseX() -> float
         interpreter->registerNativeFunction("_native_input_getMouseX",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 events::input::GetMousePositionQuery query;
                 glm::vec2 pos = dispatcher.query(query);
                 return value::Value(pos.x);
-            });
+            }});
 
         // _native_input_getMouseY() -> float
         interpreter->registerNativeFunction("_native_input_getMouseY",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 events::input::GetMousePositionQuery query;
                 glm::vec2 pos = dispatcher.query(query);
                 return value::Value(pos.y);
-            });
+            }});
 
         // _native_input_getMouseDeltaX() -> float
         interpreter->registerNativeFunction("_native_input_getMouseDeltaX",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 events::input::GetMouseDeltaQuery query;
                 glm::vec2 delta = dispatcher.query(query);
                 return value::Value(delta.x);
-            });
+            }});
 
         // _native_input_getMouseDeltaY() -> float
         interpreter->registerNativeFunction("_native_input_getMouseDeltaY",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 events::input::GetMouseDeltaQuery query;
                 glm::vec2 delta = dispatcher.query(query);
                 return value::Value(delta.y);
-            });
+            }});
 
         // _native_input_isKeyReleased(keyCode) -> bool
         interpreter->registerNativeFunction("_native_input_isKeyReleased",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -91,12 +93,12 @@ namespace core::api
                 events::input::IsKeyReleasedQuery query;
                 query.keyCode = keyCode;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         // _native_input_isMouseButtonReleased(button) -> bool
         interpreter->registerNativeFunction("_native_input_isMouseButtonReleased",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -106,12 +108,12 @@ namespace core::api
                 events::input::IsMouseButtonReleasedQuery query;
                 query.button = button;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         // _native_input_isDoubleClick(button) -> bool
         interpreter->registerNativeFunction("_native_input_isDoubleClick",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -121,62 +123,62 @@ namespace core::api
                 events::input::IsDoubleClickQuery query;
                 query.button = button;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
         // _native_input_setKeyboardEnabled(enabled) -> void
         interpreter->registerNativeFunction("_native_input_setKeyboardEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 bool enabled = extractBool(args[0]);
                 events::input::SetKeyboardEnabledCommand cmd;
                 cmd.enabled = enabled;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_input_setMouseEnabled(enabled) -> void
         interpreter->registerNativeFunction("_native_input_setMouseEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 bool enabled = extractBool(args[0]);
                 events::input::SetMouseEnabledCommand cmd;
                 cmd.enabled = enabled;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_input_setCursorVisible(visible) -> void
         interpreter->registerNativeFunction("_native_input_setCursorVisible",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 bool visible = extractBool(args[0]);
                 events::input::SetCursorVisibleCommand cmd;
                 cmd.visible = visible;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_input_isKeyboardEnabled() -> bool
         interpreter->registerNativeFunction("_native_input_isKeyboardEnabled",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return value::Value(dispatcher.query(events::input::IsKeyboardEnabledQuery{}));
-            });
+            }});
 
         // _native_input_isMouseEnabled() -> bool
         interpreter->registerNativeFunction("_native_input_isMouseEnabled",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return value::Value(dispatcher.query(events::input::IsMouseEnabledQuery{}));
-            });
+            }});
 
         // _native_input_isCursorVisible() -> bool
         interpreter->registerNativeFunction("_native_input_isCursorVisible",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return value::Value(dispatcher.query(events::input::IsCursorVisibleQuery{}));
-            });
+            }});
     }
 }

@@ -1,5 +1,6 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
 
 #include "LightAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -7,12 +8,14 @@
 #include "components/Components.hpp"
 #include "data/EntityConversion.hpp"
 
+#include <span>
+
 namespace core::api
 {
     namespace
     {
         template<typename Component>
-        std::optional<entt::entity> getValidEntity(const std::vector<value::Value>& args)
+        std::optional<entt::entity> getValidEntity(std::span<const value::Value> args)
         {
             if (args.empty())
             {
@@ -36,7 +39,7 @@ namespace core::api
         }
 
         template<typename Component>
-        value::Value getColor(const std::vector<value::Value>& args)
+        value::Value getColor(std::span<const value::Value> args)
         {
             auto entityOpt = getValidEntity<Component>(args);
             if (!entityOpt)
@@ -54,7 +57,7 @@ namespace core::api
         }
 
         template<typename Component>
-        value::Value setColor(const std::vector<value::Value>& args, const char* context)
+        value::Value setColor(std::span<const value::Value> args, const char* context)
         {
             if (args.size() < 4)
             {
@@ -79,7 +82,7 @@ namespace core::api
         }
 
         template<typename Component, auto MemberPtr>
-        value::Value getFloatProperty(const std::vector<value::Value>& args)
+        value::Value getFloatProperty(std::span<const value::Value> args)
         {
             auto entityOpt = getValidEntity<Component>(args);
             if (!entityOpt)
@@ -93,7 +96,7 @@ namespace core::api
         }
 
         template<typename Component, auto MemberPtr>
-        value::Value setFloatProperty(const std::vector<value::Value>& args, const char* context)
+        value::Value setFloatProperty(std::span<const value::Value> args, const char* context)
         {
             if (args.size() < 2)
             {
@@ -123,63 +126,63 @@ namespace core::api
         using SpLight = components::SpotLightComponent;
 
         interpreter->registerNativeFunction("_native_directionalLight_getColor",
-            [](const std::vector<value::Value>& args) { return getColor<DirLight>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getColor<DirLight>(args); }});
 
         interpreter->registerNativeFunction("_native_directionalLight_setColor",
-            [](const std::vector<value::Value>& args) { return setColor<DirLight>(args, "DirectionalLight.setColor"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setColor<DirLight>(args, "DirectionalLight.setColor"); }});
 
         interpreter->registerNativeFunction("_native_directionalLight_getIntensity",
-            [](const std::vector<value::Value>& args) { return getFloatProperty<DirLight, &DirLight::intensity>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getFloatProperty<DirLight, &DirLight::intensity>(args); }});
 
         interpreter->registerNativeFunction("_native_directionalLight_setIntensity",
-            [](const std::vector<value::Value>& args) { return setFloatProperty<DirLight, &DirLight::intensity>(args, "DirectionalLight.setIntensity"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setFloatProperty<DirLight, &DirLight::intensity>(args, "DirectionalLight.setIntensity"); }});
 
         interpreter->registerNativeFunction("_native_pointLight_getColor",
-            [](const std::vector<value::Value>& args) { return getColor<PtLight>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getColor<PtLight>(args); }});
 
         interpreter->registerNativeFunction("_native_pointLight_setColor",
-            [](const std::vector<value::Value>& args) { return setColor<PtLight>(args, "PointLight.setColor"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setColor<PtLight>(args, "PointLight.setColor"); }});
 
         interpreter->registerNativeFunction("_native_pointLight_getIntensity",
-            [](const std::vector<value::Value>& args) { return getFloatProperty<PtLight, &PtLight::intensity>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getFloatProperty<PtLight, &PtLight::intensity>(args); }});
 
         interpreter->registerNativeFunction("_native_pointLight_setIntensity",
-            [](const std::vector<value::Value>& args) { return setFloatProperty<PtLight, &PtLight::intensity>(args, "PointLight.setIntensity"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setFloatProperty<PtLight, &PtLight::intensity>(args, "PointLight.setIntensity"); }});
 
         interpreter->registerNativeFunction("_native_pointLight_getRadius",
-            [](const std::vector<value::Value>& args) { return getFloatProperty<PtLight, &PtLight::radius>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getFloatProperty<PtLight, &PtLight::radius>(args); }});
 
         interpreter->registerNativeFunction("_native_pointLight_setRadius",
-            [](const std::vector<value::Value>& args) { return setFloatProperty<PtLight, &PtLight::radius>(args, "PointLight.setRadius"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setFloatProperty<PtLight, &PtLight::radius>(args, "PointLight.setRadius"); }});
 
         interpreter->registerNativeFunction("_native_spotLight_getColor",
-            [](const std::vector<value::Value>& args) { return getColor<SpLight>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getColor<SpLight>(args); }});
 
         interpreter->registerNativeFunction("_native_spotLight_setColor",
-            [](const std::vector<value::Value>& args) { return setColor<SpLight>(args, "SpotLight.setColor"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setColor<SpLight>(args, "SpotLight.setColor"); }});
 
         interpreter->registerNativeFunction("_native_spotLight_getIntensity",
-            [](const std::vector<value::Value>& args) { return getFloatProperty<SpLight, &SpLight::intensity>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getFloatProperty<SpLight, &SpLight::intensity>(args); }});
 
         interpreter->registerNativeFunction("_native_spotLight_setIntensity",
-            [](const std::vector<value::Value>& args) { return setFloatProperty<SpLight, &SpLight::intensity>(args, "SpotLight.setIntensity"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setFloatProperty<SpLight, &SpLight::intensity>(args, "SpotLight.setIntensity"); }});
 
         interpreter->registerNativeFunction("_native_spotLight_getInnerAngle",
-            [](const std::vector<value::Value>& args) { return getFloatProperty<SpLight, &SpLight::innerAngle>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getFloatProperty<SpLight, &SpLight::innerAngle>(args); }});
 
         interpreter->registerNativeFunction("_native_spotLight_setInnerAngle",
-            [](const std::vector<value::Value>& args) { return setFloatProperty<SpLight, &SpLight::innerAngle>(args, "SpotLight.setInnerAngle"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setFloatProperty<SpLight, &SpLight::innerAngle>(args, "SpotLight.setInnerAngle"); }});
 
         interpreter->registerNativeFunction("_native_spotLight_getOuterAngle",
-            [](const std::vector<value::Value>& args) { return getFloatProperty<SpLight, &SpLight::outerAngle>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getFloatProperty<SpLight, &SpLight::outerAngle>(args); }});
 
         interpreter->registerNativeFunction("_native_spotLight_setOuterAngle",
-            [](const std::vector<value::Value>& args) { return setFloatProperty<SpLight, &SpLight::outerAngle>(args, "SpotLight.setOuterAngle"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setFloatProperty<SpLight, &SpLight::outerAngle>(args, "SpotLight.setOuterAngle"); }});
 
         interpreter->registerNativeFunction("_native_spotLight_getRange",
-            [](const std::vector<value::Value>& args) { return getFloatProperty<SpLight, &SpLight::range>(args); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return getFloatProperty<SpLight, &SpLight::range>(args); }});
 
         interpreter->registerNativeFunction("_native_spotLight_setRange",
-            [](const std::vector<value::Value>& args) { return setFloatProperty<SpLight, &SpLight::range>(args, "SpotLight.setRange"); });
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value { return setFloatProperty<SpLight, &SpLight::range>(args, "SpotLight.setRange"); }});
     }
 }

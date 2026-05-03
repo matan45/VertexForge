@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "BehaviorTreeAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -15,8 +17,8 @@ namespace core::api
         // === Blackboard setters ===
 
         interpreter->registerNativeFunction("_native_bt_setBlackboardFloat",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return value::Value(std::monostate{});
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(std::monostate{});
@@ -30,11 +32,11 @@ namespace core::api
                 cmd.value = val;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_setBlackboardInt",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return value::Value(std::monostate{});
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(std::monostate{});
@@ -48,11 +50,11 @@ namespace core::api
                 cmd.value = val;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_setBlackboardBool",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return value::Value(std::monostate{});
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(std::monostate{});
@@ -66,11 +68,11 @@ namespace core::api
                 cmd.value = val;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_setBlackboardString",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return value::Value(std::monostate{});
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(std::monostate{});
@@ -84,11 +86,11 @@ namespace core::api
                 cmd.value = val;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_setBlackboardVec3",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 5) return value::Value(std::monostate{});
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(std::monostate{});
@@ -104,13 +106,13 @@ namespace core::api
                 cmd.value = glm::vec3(x, y, z);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // === Blackboard getters ===
 
         interpreter->registerNativeFunction("_native_bt_getBlackboardFloat",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(0.0);
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(0.0);
@@ -122,11 +124,11 @@ namespace core::api
                 if (std::holds_alternative<float>(result))
                     return value::Value(static_cast<double>(std::get<float>(result)));
                 return value::Value(0.0);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_getBlackboardInt",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(static_cast<int64_t>(0));
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(static_cast<int64_t>(0));
@@ -138,11 +140,11 @@ namespace core::api
                 if (std::holds_alternative<int32_t>(result))
                     return value::Value(static_cast<int64_t>(std::get<int32_t>(result)));
                 return value::Value(static_cast<int64_t>(0));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_getBlackboardBool",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(false);
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(false);
@@ -154,11 +156,11 @@ namespace core::api
                 if (std::holds_alternative<bool>(result))
                     return value::Value(std::get<bool>(result));
                 return value::Value(false);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_getBlackboardString",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::string{});
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(std::string{});
@@ -170,11 +172,11 @@ namespace core::api
                 if (std::holds_alternative<std::string>(result))
                     return value::Value(std::get<std::string>(result));
                 return value::Value(std::string{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_getBlackboardVec3",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return makeVec3Array(glm::vec3(0.0f));
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return makeVec3Array(glm::vec3(0.0f));
@@ -186,13 +188,13 @@ namespace core::api
                 if (std::holds_alternative<glm::vec3>(result))
                     return makeVec3Array(std::get<glm::vec3>(result));
                 return makeVec3Array(glm::vec3(0.0f));
-            });
+            }});
 
         // === Blackboard key check ===
 
         interpreter->registerNativeFunction("_native_bt_hasBlackboardKey",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(false);
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(false);
@@ -201,13 +203,13 @@ namespace core::api
                 query.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
                 query.key = extractString(args[1]);
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         // === Behavior Tree control ===
 
         interpreter->registerNativeFunction("_native_bt_hasBehaviorTree",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(false);
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(false);
@@ -215,11 +217,11 @@ namespace core::api
                 events::ai::HasBehaviorTreeQuery query;
                 query.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_setBehaviorTreeEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(std::monostate{});
@@ -229,11 +231,11 @@ namespace core::api
                 cmd.enabled = extractBool(args[1]);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_isEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(false);
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(false);
@@ -241,11 +243,11 @@ namespace core::api
                 events::ai::IsBehaviorTreeEnabledQuery query;
                 query.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_bt_getStatus",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::string{"stopped"});
                 auto entity = resolveEntity(args[0]);
                 if (!entity) return value::Value(std::string{"stopped"});
@@ -253,6 +255,6 @@ namespace core::api
                 events::ai::GetBehaviorTreeStatusQuery query;
                 query.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
                 return value::Value(dispatcher.query(query));
-            });
+            }});
     }
 }

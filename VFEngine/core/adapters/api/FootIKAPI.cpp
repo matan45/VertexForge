@@ -1,4 +1,6 @@
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "FootIKAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -9,8 +11,7 @@ namespace core::api
     void FootIKAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
         interpreter->registerNativeFunction("_native_footik_calculateFootTarget",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 16)
                 {
                     vfLogError("[Script] FootIK.calculateFootTarget: expected 16 arguments");
@@ -73,11 +74,10 @@ namespace core::api
                 arr->set(8, value::Value(result.isGrounded ? 1.0f : 0.0f));
 
                 return value::Value(arr);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_footik_calculatePelvisOffset",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 15)
                 {
                     vfLogError("[Script] FootIK.calculatePelvisOffset: expected 15 arguments");
@@ -113,6 +113,6 @@ namespace core::api
                     currentOffset, deltaTime, adjustSpeed);
 
                 return value::Value(result);
-            });
+            }});
     }
 }

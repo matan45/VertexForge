@@ -57,7 +57,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\dependencies\imgui;..\dependencies\imgui\backends;..\dependencies\ImGuizmo;..\dependencies\imgui-node-editor;..\dependencies\glfw\include;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\dependencies\imgui;..\dependencies\imgui\backends;..\dependencies\ImGuizmo\src;..\dependencies\imgui-node-editor;..\dependencies\glfw\include;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -78,7 +78,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\dependencies\imgui;..\dependencies\imgui\backends;..\dependencies\ImGuizmo;..\dependencies\imgui-node-editor;..\dependencies\glfw\include;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\dependencies\imgui;..\dependencies\imgui\backends;..\dependencies\ImGuizmo\src;..\dependencies\imgui-node-editor;..\dependencies\glfw\include;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -99,13 +99,14 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\dependencies\ImGuizmo\GraphEditor.h" />
-    <ClInclude Include="..\dependencies\ImGuizmo\ImCurveEdit.h" />
-    <ClInclude Include="..\dependencies\ImGuizmo\ImGradient.h" />
-    <ClInclude Include="..\dependencies\ImGuizmo\ImGuizmo.h" />
-    <ClInclude Include="..\dependencies\ImGuizmo\ImLightRig.h" />
-    <ClInclude Include="..\dependencies\ImGuizmo\ImSequencer.h" />
-    <ClInclude Include="..\dependencies\ImGuizmo\ImZoomSlider.h" />
+    <ClInclude Include="..\dependencies\ImGuizmo\src\GraphEditor.h" />
+    <ClInclude Include="..\dependencies\ImGuizmo\src\ImCurveEdit.h" />
+    <ClInclude Include="..\dependencies\ImGuizmo\src\ImGradient.h" />
+    <ClInclude Include="..\dependencies\ImGuizmo\src\ImGuizmo.h" />
+    <ClInclude Include="..\dependencies\ImGuizmo\src\ImLightRig.h" />
+    <ClInclude Include="..\dependencies\ImGuizmo\src\ImSequencer.h" />
+    <ClInclude Include="..\dependencies\ImGuizmo\src\ImVectorEditor.h" />
+    <ClInclude Include="..\dependencies\ImGuizmo\src\ImZoomSlider.h" />
     <ClInclude Include="..\dependencies\imgui-node-editor\crude_json.h" />
     <ClInclude Include="..\dependencies\imgui-node-editor\imgui_bezier_math.h" />
     <ClInclude Include="..\dependencies\imgui-node-editor\imgui_bezier_math.inl" />
@@ -125,11 +126,12 @@
     <ClInclude Include="..\dependencies\imgui\imstb_truetype.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\dependencies\ImGuizmo\GraphEditor.cpp" />
-    <ClCompile Include="..\dependencies\ImGuizmo\ImCurveEdit.cpp" />
-    <ClCompile Include="..\dependencies\ImGuizmo\ImGradient.cpp" />
-    <ClCompile Include="..\dependencies\ImGuizmo\ImGuizmo.cpp" />
-    <ClCompile Include="..\dependencies\ImGuizmo\ImSequencer.cpp" />
+    <ClCompile Include="..\dependencies\ImGuizmo\src\GraphEditor.cpp" />
+    <ClCompile Include="..\dependencies\ImGuizmo\src\ImCurveEdit.cpp" />
+    <ClCompile Include="..\dependencies\ImGuizmo\src\ImGradient.cpp" />
+    <ClCompile Include="..\dependencies\ImGuizmo\src\ImGuizmo.cpp" />
+    <ClCompile Include="..\dependencies\ImGuizmo\src\ImSequencer.cpp" />
+    <ClCompile Include="..\dependencies\ImGuizmo\src\ImVectorEditor.cpp" />
     <ClCompile Include="..\dependencies\imgui-node-editor\crude_json.cpp" />
     <ClCompile Include="..\dependencies\imgui-node-editor\imgui_canvas.cpp" />
     <ClCompile Include="..\dependencies\imgui-node-editor\imgui_node_editor.cpp" />

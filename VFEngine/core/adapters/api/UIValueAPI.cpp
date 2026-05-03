@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "UIValueAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -14,8 +16,8 @@ namespace core::api
                                    events::EventDispatcher& dispatcher)
         {
             interpreter->registerNativeFunction("_native_ui_getTabsActiveIndex",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(static_cast<int64_t>(-1));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getTabsActiveIndex"));
 
@@ -25,11 +27,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(static_cast<int64_t>(-1));
 
                     return value::Value(static_cast<int64_t>(data->activeTabIndex));
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setTabsActiveIndex",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setTabsActiveIndex"));
                     int64_t tabIndex = extractInt64(args[1], "_native_ui_setTabsActiveIndex");
@@ -39,11 +41,11 @@ namespace core::api
                     cmd.tabIndex = static_cast<int>(tabIndex);
                     dispatcher.execute(cmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getTabsBarPosition",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(static_cast<int64_t>(0));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getTabsBarPosition"));
 
@@ -53,15 +55,15 @@ namespace core::api
                     if (!data.has_value()) return value::Value(static_cast<int64_t>(0));
 
                     return value::Value(static_cast<int64_t>(data->tabBarPosition));
-                });
+                }});
         }
 
         void registerSliderFunctions(services::ScriptInterpreter* interpreter,
                                      events::EventDispatcher& dispatcher)
         {
             interpreter->registerNativeFunction("_native_ui_getSliderValue",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(0.0f);
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getSliderValue"));
 
@@ -71,11 +73,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(0.0f);
 
                     return value::Value(data->value);
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setSliderValue",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setSliderValue"));
 
@@ -84,11 +86,11 @@ namespace core::api
                     cmd.value = extractFloat(args[1], "_native_ui_setSliderValue");
                     dispatcher.execute(cmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getSliderState",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(static_cast<int64_t>(-1));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getSliderState"));
 
@@ -98,11 +100,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(static_cast<int64_t>(-1));
 
                     return value::Value(static_cast<int64_t>(data->currentState));
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setSliderInteractable",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setSliderInteractable"));
                     bool interactable = extractBool(args[1]);
@@ -120,11 +122,11 @@ namespace core::api
                     setCmd.sliderData = sliderData;
                     dispatcher.execute(setCmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getSliderMin",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(0.0f);
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getSliderMin"));
 
@@ -134,11 +136,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(0.0f);
 
                     return value::Value(data->minValue);
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getSliderMax",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(0.0f);
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getSliderMax"));
 
@@ -148,11 +150,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(0.0f);
 
                     return value::Value(data->maxValue);
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setSliderMinMax",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 3) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setSliderMinMax"));
                     float minVal = extractFloat(args[1], "_native_ui_setSliderMinMax");
@@ -172,27 +174,27 @@ namespace core::api
                     setCmd.sliderData = sliderData;
                     dispatcher.execute(setCmd);
                     return value::Value();
-                });
+                }});
         }
 
         void registerDragDropFunctions(services::ScriptInterpreter* interpreter,
                                        events::EventDispatcher& dispatcher)
         {
             interpreter->registerNativeFunction("_native_ui_cancelDrag",
-                [&dispatcher](const std::vector<value::Value>&) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     events::ui::CancelDragCommand cmd;
                     bool result = dispatcher.execute(cmd);
                     return value::Value(result);
-                });
+                }});
         }
 
         void registerProgressBarFunctions(services::ScriptInterpreter* interpreter,
                                           events::EventDispatcher& dispatcher)
         {
             interpreter->registerNativeFunction("_native_ui_getProgressBarValue",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(0.0f);
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getProgressBarValue"));
 
@@ -202,11 +204,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(0.0f);
 
                     return value::Value(data->value);
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setProgressBarValue",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setProgressBarValue"));
 
@@ -215,11 +217,11 @@ namespace core::api
                     cmd.value = extractFloat(args[1], "_native_ui_setProgressBarValue");
                     dispatcher.execute(cmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getProgressBarDisplayValue",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(0.0f);
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getProgressBarDisplayValue"));
 
@@ -229,11 +231,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(0.0f);
 
                     return value::Value(data->displayValue);
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getProgressBarMin",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(0.0f);
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getProgressBarMin"));
 
@@ -243,11 +245,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(0.0f);
 
                     return value::Value(data->minValue);
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getProgressBarMax",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(0.0f);
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getProgressBarMax"));
 
@@ -257,11 +259,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(0.0f);
 
                     return value::Value(data->maxValue);
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setProgressBarMinMax",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 3) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setProgressBarMinMax"));
                     float minVal = extractFloat(args[1], "_native_ui_setProgressBarMinMax");
@@ -281,11 +283,11 @@ namespace core::api
                     setCmd.progressBarData = progressBarData;
                     dispatcher.execute(setCmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_isProgressBarCompleted",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(false);
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_isProgressBarCompleted"));
 
@@ -295,7 +297,7 @@ namespace core::api
                     if (!data.has_value()) return value::Value(false);
 
                     return value::Value(data->value >= data->maxValue);
-                });
+                }});
         }
     }
 

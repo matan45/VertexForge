@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "PhysicsAPI.hpp"
 #include "PhysicsRigidBodyAPI.hpp"
@@ -72,8 +74,8 @@ namespace core::api
         PhysicsAnimationAPI::registerAPI(interpreter);
 
         interpreter->registerNativeFunction("_native_physics_raycast",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (raycastCountThisFrame >= MAX_RAYCASTS_PER_FRAME)
                 {
                     vfLogWarning("[Script] Raycast rate limit exceeded ({}/frame)",
@@ -127,11 +129,11 @@ namespace core::api
                 auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
                 result->set(0, value::Value(0.0f));
                 return value::Value(result);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_physics_raycastAll",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (raycastCountThisFrame >= MAX_RAYCASTS_PER_FRAME)
                 {
                     vfLogWarning("[Script] Raycast rate limit exceeded ({}/frame)",
@@ -187,11 +189,11 @@ namespace core::api
                 }
 
                 return value::Value(result);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_physics_isOverlapping",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(false);
                 int64_t idA = extractInt64(args[0]);
                 int64_t idB = extractInt64(args[1]);
@@ -201,25 +203,25 @@ namespace core::api
                 query.entityA = services::EntityHandle{static_cast<uint64_t>(idA)};
                 query.entityB = services::EntityHandle{static_cast<uint64_t>(idB)};
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_physics_getGravity",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 events::physics::GetGravityQuery query;
                 return makeVec3Array(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_physics_setGravity",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return value::Value(std::monostate{});
                 events::physics::SetGravityCommand cmd;
                 cmd.gravity = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
                                         extractFloat(args[2]));
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         vfLogInfo("[PhysicsAPI] Registered Physics native functions");
     }

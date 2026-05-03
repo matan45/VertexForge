@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "LogAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -9,8 +11,7 @@ namespace core::api
     void LogAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
         interpreter->registerNativeFunction("_native_log_info",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!args.empty())
                 {
                     std::string message = extractString(args[0]);
@@ -20,11 +21,10 @@ namespace core::api
                     }
                 }
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_log_warn",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!args.empty())
                 {
                     std::string message = extractString(args[0]);
@@ -34,11 +34,10 @@ namespace core::api
                     }
                 }
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_log_error",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!args.empty())
                 {
                     std::string message = extractString(args[0]);
@@ -48,6 +47,6 @@ namespace core::api
                     }
                 }
                 return value::Value(std::monostate{});
-            });
+            }});
     }
 }

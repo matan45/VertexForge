@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "EntityComponentAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -126,8 +128,8 @@ namespace core::api
         auto& dispatcher = events::EventDispatcher::instance();
 
         interpreter->registerNativeFunction("_native_entity_hasComponent",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                 {
                     vfLogError("[Script] Entity.hasComponent: missing arguments");
@@ -148,11 +150,11 @@ namespace core::api
                     return value::Value(result->hasComponent(*compType));
                 }
                 return value::Value(false);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_entity_getComponents",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(std::make_shared<value::NativeArray>(
@@ -180,11 +182,11 @@ namespace core::api
                 }
                 return value::Value(std::make_shared<value::NativeArray>(
                     0, value::ValueType::STRING));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_entity_addComponent",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                 {
                     vfLogError("[Script] Entity.addComponent: missing arguments");
@@ -206,11 +208,11 @@ namespace core::api
                     return value::Value(false);
                 }
                 return value::Value(it->second(dispatcher, intToEntity(id)));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_entity_removeComponent",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                 {
                     vfLogError("[Script] Entity.removeComponent: missing arguments");
@@ -232,6 +234,6 @@ namespace core::api
                     return value::Value(false);
                 }
                 return value::Value(it->second(dispatcher, intToEntity(id)));
-            });
+            }});
     }
 }

@@ -1,5 +1,6 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <value/ValueShim.hpp>
 
 #include "ScriptingAdapter.hpp"
 #include "CoroutineManager.hpp"
@@ -203,10 +204,10 @@ namespace core
 
             auto result = interpreter->callMethod(instance, methodName, valueArgs);
 
-            if (std::holds_alternative<std::string>(result))
-                return std::get<std::string>(result);
-            if (std::holds_alternative<bool>(result))
-                return std::get<bool>(result) ? "success" : "failure";
+            if (value::isString(result))
+                return value::asString(result);
+            if (value::isBool(result))
+                return value::asBool(result) ? "success" : "failure";
 
             return "";
         }

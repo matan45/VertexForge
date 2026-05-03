@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "UIInputAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -15,8 +17,8 @@ namespace core::api
                                         events::EventDispatcher& dispatcher)
         {
             interpreter->registerNativeFunction("_native_ui_getTextInputText",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(std::string(""));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getTextInputText"));
 
@@ -30,11 +32,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(std::string(""));
 
                     return value::Value(data->text);
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setTextInputText",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setTextInputText"));
                     std::string text = extractString(args[1], "_native_ui_setTextInputText");
@@ -52,11 +54,11 @@ namespace core::api
                     setCmd.textInputData = textInputData;
                     dispatcher.execute(setCmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getTextInputState",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(static_cast<int64_t>(-1));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getTextInputState"));
 
@@ -70,11 +72,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(static_cast<int64_t>(-1));
 
                     return value::Value(static_cast<int64_t>(data->currentState));
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setTextInputInteractable",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setTextInputInteractable"));
                     bool interactable = extractBool(args[1]);
@@ -92,15 +94,15 @@ namespace core::api
                     setCmd.textInputData = textInputData;
                     dispatcher.execute(setCmd);
                     return value::Value();
-                });
+                }});
         }
 
         void registerCheckboxFunctions(services::ScriptInterpreter* interpreter,
                                        events::EventDispatcher& dispatcher)
         {
             interpreter->registerNativeFunction("_native_ui_isCheckboxChecked",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(false);
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_isCheckboxChecked"));
 
@@ -114,11 +116,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(false);
 
                     return value::Value(data->isChecked);
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setCheckboxChecked",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setCheckboxChecked"));
                     bool checked = extractBool(args[1]);
@@ -136,11 +138,11 @@ namespace core::api
                     setCmd.checkboxData = checkboxData;
                     dispatcher.execute(setCmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getCheckboxState",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(static_cast<int64_t>(-1));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getCheckboxState"));
 
@@ -154,11 +156,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(static_cast<int64_t>(-1));
 
                     return value::Value(static_cast<int64_t>(data->currentState));
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setCheckboxInteractable",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setCheckboxInteractable"));
                     bool interactable = extractBool(args[1]);
@@ -176,11 +178,11 @@ namespace core::api
                     setCmd.checkboxData = checkboxData;
                     dispatcher.execute(setCmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getCheckboxLabelText",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(std::string(""));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getCheckboxLabelText"));
 
@@ -203,15 +205,15 @@ namespace core::api
                         }
                     }
                     return value::Value(std::string(""));
-                });
+                }});
         }
 
         void registerDropdownFunctions(services::ScriptInterpreter* interpreter,
                                        events::EventDispatcher& dispatcher)
         {
             interpreter->registerNativeFunction("_native_ui_getDropdownSelectedIndex",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(static_cast<int64_t>(-1));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getDropdownSelectedIndex"));
 
@@ -221,11 +223,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(static_cast<int64_t>(-1));
 
                     return value::Value(static_cast<int64_t>(data->selectedIndex));
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setDropdownSelectedIndex",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setDropdownSelectedIndex"));
                     int64_t index = extractInt64(args[1], "_native_ui_setDropdownSelectedIndex");
@@ -235,11 +237,11 @@ namespace core::api
                     cmd.selectedIndex = static_cast<int>(index);
                     dispatcher.execute(cmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getDropdownSelectedValue",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(std::string(""));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getDropdownSelectedValue"));
 
@@ -253,11 +255,11 @@ namespace core::api
                         return value::Value(data->options[data->selectedIndex].text);
 
                     return value::Value(std::string(""));
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_getDropdownState",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(static_cast<int64_t>(-1));
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_getDropdownState"));
 
@@ -267,11 +269,11 @@ namespace core::api
                     if (!data.has_value()) return value::Value(static_cast<int64_t>(-1));
 
                     return value::Value(static_cast<int64_t>(data->currentState));
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setDropdownInteractable",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setDropdownInteractable"));
                     bool interactable = extractBool(args[1]);
@@ -289,11 +291,11 @@ namespace core::api
                     setCmd.dropdownData = dropdownData;
                     dispatcher.execute(setCmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_setDropdownOptions",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value();
                     auto handle = intToEntity(extractInt64(args[0], "_native_ui_setDropdownOptions"));
                     std::string optionsStr = extractString(args[1], "_native_ui_setDropdownOptions");
@@ -325,27 +327,27 @@ namespace core::api
                     setCmd.dropdownData = dropdownData;
                     dispatcher.execute(setCmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_openDropdown",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value();
                     events::ui::OpenUIDropdownCommand cmd;
                     cmd.entity = intToEntity(extractInt64(args[0], "_native_ui_openDropdown"));
                     dispatcher.execute(cmd);
                     return value::Value();
-                });
+                }});
 
             interpreter->registerNativeFunction("_native_ui_closeDropdown",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value();
                     events::ui::CloseUIDropdownCommand cmd;
                     cmd.entity = intToEntity(extractInt64(args[0], "_native_ui_closeDropdown"));
                     dispatcher.execute(cmd);
                     return value::Value();
-                });
+                }});
         }
     }
 

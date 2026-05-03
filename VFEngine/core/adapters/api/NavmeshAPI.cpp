@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "NavmeshAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -20,8 +22,8 @@ namespace core::api
         auto& dispatcher = events::EventDispatcher::instance();
 
         interpreter->registerNativeFunction("_native_navmesh_findPath",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (pathQueryCountThisFrame >= MAX_PATH_QUERIES_PER_FRAME)
                 {
                     vfLogWarning("[Script] Navmesh path query rate limit exceeded ({}/frame)",
@@ -66,11 +68,11 @@ namespace core::api
                     result->set(static_cast<int>(3 + i * 3), value::Value(path.waypoints[i].z));
                 }
                 return value::Value(result);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_navmesh_setDestination",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 4) return value::Value(std::monostate{});
 
                 events::navmesh::SetAgentDestinationCommand cmd;
@@ -79,44 +81,44 @@ namespace core::api
                                         extractFloat(args[3]));
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_navmesh_stopAgent",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
 
                 events::navmesh::StopAgentCommand cmd;
                 cmd.entity = intToEntity(extractInt64(args[0]));
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_navmesh_isPointOnNavmesh",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return value::Value(false);
 
                 events::navmesh::IsPointOnNavmeshQuery query;
                 query.point = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
                                          extractFloat(args[2]));
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_navmesh_getClosestPoint",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return makeVec3Array(glm::vec3(0.0f));
 
                 events::navmesh::GetClosestPointQuery query;
                 query.point = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
                                          extractFloat(args[2]));
                 return makeVec3Array(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_navmesh_raycast",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (pathQueryCountThisFrame >= MAX_PATH_QUERIES_PER_FRAME)
                 {
                     vfLogWarning("[Script] Navmesh query rate limit exceeded ({}/frame)",
@@ -154,11 +156,11 @@ namespace core::api
                 result->set(2, value::Value(hit.hitPoint.y));
                 result->set(3, value::Value(hit.hitPoint.z));
                 return value::Value(result);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_navmesh_setAgentSpeed",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
 
                 events::navmesh::UpdateAgentConfigCommand cmd;
@@ -166,11 +168,11 @@ namespace core::api
                 cmd.maxSpeed = extractFloat(args[1]);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_navmesh_setAgentAcceleration",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
 
                 events::navmesh::UpdateAgentConfigCommand cmd;
@@ -178,27 +180,27 @@ namespace core::api
                 cmd.maxAcceleration = extractFloat(args[1]);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_navmesh_getAgentSpeed",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(0.0);
 
                 events::navmesh::GetAgentSpeedQuery query;
                 query.entity = intToEntity(extractInt64(args[0]));
                 return value::Value(static_cast<double>(dispatcher.query(query)));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_navmesh_getAgentVelocity",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return makeVec3Array(glm::vec3(0.0f));
 
                 events::navmesh::GetAgentVelocityQuery query;
                 query.entity = intToEntity(extractInt64(args[0]));
                 return makeVec3Array(dispatcher.query(query));
-            });
+            }});
 
         registerVolumetricAPI(interpreter);
         registerEQSAPI(interpreter);
@@ -211,8 +213,8 @@ namespace core::api
         auto& dispatcher = events::EventDispatcher::instance();
 
         interpreter->registerNativeFunction("_native_volumetric_findPath3D",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (pathQueryCountThisFrame >= MAX_PATH_QUERIES_PER_FRAME)
                 {
                     auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
@@ -254,11 +256,11 @@ namespace core::api
                     result->set(static_cast<int>(3 + i * 3), value::Value(path.waypoints[i].z));
                 }
                 return value::Value(result);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_volumetric_setDestination",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 4) return value::Value(std::monostate{});
 
                 events::volumetric::SetVolumetricAgentDestinationCommand cmd;
@@ -267,29 +269,29 @@ namespace core::api
                                         extractFloat(args[3]));
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_volumetric_stopAgent",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
 
                 events::volumetric::StopVolumetricAgentCommand cmd;
                 cmd.entity = intToEntity(extractInt64(args[0]));
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_volumetric_isPointNavigable",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return value::Value(false);
 
                 events::volumetric::IsPointNavigable3DQuery query;
                 query.point = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
                                          extractFloat(args[2]));
                 return value::Value(dispatcher.query(query));
-            });
+            }});
     }
 
     void NavmeshAPI::registerEQSAPI(services::ScriptInterpreter* interpreter)
@@ -297,8 +299,8 @@ namespace core::api
         auto& dispatcher = events::EventDispatcher::instance();
 
         interpreter->registerNativeFunction("_native_eqs_submitQuery",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 7) return value::Value(0.0);
 
                 events::ai::SubmitEQSQueryCommand cmd;
@@ -310,11 +312,11 @@ namespace core::api
 
                 auto handle = dispatcher.execute(cmd);
                 return value::Value(static_cast<double>(handle.id));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_eqs_getResult",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return makeVec3Array(glm::vec3(0.0f));
 
                 events::ai::GetEQSQueryResultQuery query;
@@ -332,17 +334,17 @@ namespace core::api
                     arr->set(4, value::Value(result.getBestScore()));
                 }
                 return value::Value(arr);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_eqs_cancelQuery",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
 
                 events::ai::CancelEQSQueryCommand cmd;
                 cmd.handle.id = static_cast<uint64_t>(extractInt64(args[0]));
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
     }
 }

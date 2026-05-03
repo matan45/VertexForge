@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "CameraAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -15,8 +17,8 @@ namespace core::api
         auto& dispatcher = events::EventDispatcher::instance();
 
         interpreter->registerNativeFunction("_native_camera_getPosition",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
                 events::scene::GetTransformQuery q;
@@ -24,11 +26,11 @@ namespace core::api
                 auto result = dispatcher.query(q);
                 if (!result.has_value()) return value::Value(std::monostate{});
                 return makeVec3Array(result->position);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_setPosition",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 4) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
 
@@ -46,11 +48,11 @@ namespace core::api
                 cmd.transform = *current;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_getRotation",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
                 events::scene::GetTransformQuery q;
@@ -58,11 +60,11 @@ namespace core::api
                 auto result = dispatcher.query(q);
                 if (!result.has_value()) return value::Value(std::monostate{});
                 return makeVec3Array(result->rotation);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_setRotation",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 4) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
 
@@ -80,11 +82,11 @@ namespace core::api
                 cmd.transform = *current;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_getFOV",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
                 events::scene::GetCameraDataQuery q;
@@ -92,11 +94,11 @@ namespace core::api
                 auto result = dispatcher.query(q);
                 if (!result.has_value()) return value::Value(std::monostate{});
                 return value::Value(result->fieldOfView);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_setFOV",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
 
@@ -112,11 +114,11 @@ namespace core::api
                 cmd.cameraData = *current;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_getNearPlane",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
                 events::scene::GetCameraDataQuery q;
@@ -124,11 +126,11 @@ namespace core::api
                 auto result = dispatcher.query(q);
                 if (!result.has_value()) return value::Value(std::monostate{});
                 return value::Value(result->nearPlane);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_setNearPlane",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
 
@@ -144,11 +146,11 @@ namespace core::api
                 cmd.cameraData = *current;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_getFarPlane",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
                 events::scene::GetCameraDataQuery q;
@@ -156,11 +158,11 @@ namespace core::api
                 auto result = dispatcher.query(q);
                 if (!result.has_value()) return value::Value(std::monostate{});
                 return value::Value(result->farPlane);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_setFarPlane",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
 
@@ -176,11 +178,10 @@ namespace core::api
                 cmd.cameraData = *current;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_getViewMatrix",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto entityOpt = resolveEntity(args.empty() ? value::Value(std::monostate{}) : args[0]);
                 if (!entityOpt) return value::Value(std::monostate{});
                 auto& registry = scene::EntityRegistry::getRegistry();
@@ -188,11 +189,10 @@ namespace core::api
                     return value::Value(std::monostate{});
                 const auto& cam = registry.get<components::CameraComponent>(*entityOpt);
                 return makeMat4Array(cam.viewMatrix);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_getProjectionMatrix",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto entityOpt = resolveEntity(args.empty() ? value::Value(std::monostate{}) : args[0]);
                 if (!entityOpt) return value::Value(std::monostate{});
                 auto& registry = scene::EntityRegistry::getRegistry();
@@ -200,19 +200,19 @@ namespace core::api
                     return value::Value(std::monostate{});
                 const auto& cam = registry.get<components::CameraComponent>(*entityOpt);
                 return makeMat4Array(cam.projectionMatrix);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_getPrimary",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto result = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
                 if (!result.has_value()) return value::Value(static_cast<int64_t>(-1));
                 return value::Value(entityToInt(*result));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_camera_setIsPrimary",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
 
@@ -228,6 +228,6 @@ namespace core::api
                 cmd.cameraData = *current;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
     }
 }

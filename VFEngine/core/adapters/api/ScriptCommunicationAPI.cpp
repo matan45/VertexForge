@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "ScriptCommunicationAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -16,8 +18,7 @@ namespace core::api
     void ScriptCommunicationAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
         interpreter->registerNativeFunction("_native_entity_getScript",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!communicationManager || args.size() < 2)
                     return value::Value(std::monostate{});
 
@@ -27,11 +28,10 @@ namespace core::api
                     return value::Value(std::monostate{});
 
                 return communicationManager->getScript(static_cast<uint64_t>(entityId), className);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_entity_hasScript",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!communicationManager || args.size() < 2)
                     return value::Value(false);
 
@@ -42,12 +42,11 @@ namespace core::api
 
                 return value::Value(communicationManager->hasScript(
                     static_cast<uint64_t>(entityId), className));
-            });
+            }});
 
         // sendMessage(entityId, callback) — calls callback(scriptObject) for each script on entity
         interpreter->registerNativeFunction("_native_entity_sendMessage",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!communicationManager || args.size() < 2)
                     return value::Value(std::monostate{});
 
@@ -63,12 +62,11 @@ namespace core::api
                 communicationManager->sendMessage(
                     static_cast<uint64_t>(entityId), callback, forwardArgs);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // broadcastMessage(entityId, callback) — calls callback(scriptObject) for each script on entity and descendants
         interpreter->registerNativeFunction("_native_entity_broadcastMessage",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!communicationManager || args.size() < 2)
                     return value::Value(std::monostate{});
 
@@ -82,12 +80,11 @@ namespace core::api
                 communicationManager->broadcastMessage(
                     static_cast<uint64_t>(entityId), callback, forwardArgs);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // listen(eventName, callback) — registers lambda to be called when event fires
         interpreter->registerNativeFunction("_native_scriptEvent_listen",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!communicationManager || args.size() < 2)
                     return value::Value(static_cast<int64_t>(-1));
 
@@ -101,11 +98,10 @@ namespace core::api
                 uint64_t instanceId = NativeAPIRegistry::getCurrentInstanceId();
                 uint64_t token = communicationManager->listen(eventName, instanceId, callback);
                 return value::Value(static_cast<int64_t>(token));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_scriptEvent_unlisten",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!communicationManager || args.empty())
                     return value::Value(std::monostate{});
 
@@ -114,11 +110,10 @@ namespace core::api
                     communicationManager->unlisten(static_cast<uint64_t>(token));
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_scriptEvent_emit",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!communicationManager || args.empty())
                     return value::Value(std::monostate{});
 
@@ -130,6 +125,6 @@ namespace core::api
                 std::vector<value::Value> forwardArgs(args.begin() + 1, args.end());
                 communicationManager->emit(eventName, forwardArgs);
                 return value::Value(std::monostate{});
-            });
+            }});
     }
 }

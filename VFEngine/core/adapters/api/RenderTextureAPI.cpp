@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "RenderTextureAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -17,8 +19,8 @@ namespace core::api
         auto& dispatcher = events::EventDispatcher::instance();
 
         interpreter->registerNativeFunction("_native_rtt_requestRender",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(std::monostate{});
@@ -50,11 +52,11 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_setEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                 {
                     return value::Value(std::monostate{});
@@ -66,9 +68,9 @@ namespace core::api
                 }
 
                 bool enabled = false;
-                if (std::holds_alternative<bool>(args[1]))
+                if (value::isBool(args[1]))
                 {
-                    enabled = std::get<bool>(args[1]);
+                    enabled = value::asBool(args[1]);
                 }
 
                 auto& registry = scene::EntityRegistry::getRegistry();
@@ -93,11 +95,10 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_isEnabled",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -120,11 +121,11 @@ namespace core::api
 
                 const auto& rttComp = registry.get<components::RenderTextureComponent>(entity);
                 return value::Value(rttComp.enabled);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_create",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 4) return value::Value(std::monostate{});
                 int64_t id = extractInt64(args[0]);
                 if (id < 0) return value::Value(std::monostate{});
@@ -160,11 +161,11 @@ namespace core::api
                 rttComp.updateMode = desc.updateMode;
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_destroy",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 int64_t id = extractInt64(args[0]);
                 if (id < 0) return value::Value(std::monostate{});
@@ -187,11 +188,11 @@ namespace core::api
                 rttComp.textureId = rendertexture::INVALID_RENDER_TEXTURE_ID;
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_resize",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return value::Value(std::monostate{});
                 int64_t id = extractInt64(args[0]);
                 if (id < 0) return value::Value(std::monostate{});
@@ -220,11 +221,11 @@ namespace core::api
                 rttComp.height = h;
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_setCamera",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
                 int64_t rttId = extractInt64(args[0]);
                 int64_t camId = extractInt64(args[1]);
@@ -263,11 +264,11 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_setPriority",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
                 uint32_t priority = static_cast<uint32_t>(extractInt64(args[1]));
@@ -284,11 +285,11 @@ namespace core::api
                 cmd.renderTextureData = *data;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_setUpdateMode",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
                 auto handle = intToEntity(extractInt64(args[0]));
                 uint8_t mode = static_cast<uint8_t>(extractInt64(args[1]));
@@ -305,11 +306,10 @@ namespace core::api
                 cmd.renderTextureData = *data;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_getWidth",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.empty()) return value::Value(static_cast<int64_t>(0));
                 auto entityOpt = resolveEntity(args[0]);
                 if (!entityOpt) return value::Value(static_cast<int64_t>(0));
@@ -318,11 +318,10 @@ namespace core::api
                     return value::Value(static_cast<int64_t>(0));
                 const auto& rttComp = registry.get<components::RenderTextureComponent>(*entityOpt);
                 return value::Value(static_cast<int64_t>(rttComp.width));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_rtt_getHeight",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.empty()) return value::Value(static_cast<int64_t>(0));
                 auto entityOpt = resolveEntity(args[0]);
                 if (!entityOpt) return value::Value(static_cast<int64_t>(0));
@@ -331,6 +330,6 @@ namespace core::api
                     return value::Value(static_cast<int64_t>(0));
                 const auto& rttComp = registry.get<components::RenderTextureComponent>(*entityOpt);
                 return value::Value(static_cast<int64_t>(rttComp.height));
-            });
+            }});
     }
 }

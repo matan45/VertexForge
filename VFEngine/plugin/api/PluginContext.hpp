@@ -38,7 +38,10 @@ namespace plugin {
     // Lambdas are instantiated in the plugin DLL (correct type_index) but stored engine-side.
     struct MetaComponentBridge {
         entt::id_type typeId = 0;
-        const char* name = nullptr;
+        // Owning copy — was previously `const char*`, but the engine stores bridges
+        // by value in a static cache that outlives the plugin DLL's string storage.
+        // A raw pointer would dangle on plugin unload. std::string deep-copies.
+        std::string name;
         std::string pluginName;
         entt::meta_type metaType;  // Resolved from plugin DLL's meta context
         std::function<void*(entt::registry&, entt::entity)> tryGet;

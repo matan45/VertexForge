@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "InputContextAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -14,8 +16,8 @@ namespace core::api
 
         // _native_inputcontext_create(name, blocking) -> void
         interpreter->registerNativeFunction("_native_inputcontext_create",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 std::string name = extractString(args[0], "_native_inputcontext_create");
                 bool blocking = args.size() > 1 ? extractBool(args[1]) : true;
@@ -25,12 +27,12 @@ namespace core::api
                 cmd.blocking = blocking;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_inputcontext_remove(name) -> void
         interpreter->registerNativeFunction("_native_inputcontext_remove",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 std::string name = extractString(args[0], "_native_inputcontext_remove");
 
@@ -38,12 +40,12 @@ namespace core::api
                 cmd.contextName = name;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_inputcontext_push(name) -> void
         interpreter->registerNativeFunction("_native_inputcontext_push",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 std::string name = extractString(args[0], "_native_inputcontext_push");
 
@@ -51,36 +53,36 @@ namespace core::api
                 cmd.contextName = name;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_inputcontext_pop(name) -> void
         interpreter->registerNativeFunction("_native_inputcontext_pop",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 std::string name = args.empty() ? "" : extractString(args[0], "_native_inputcontext_pop");
 
                 events::input::PopContextCommand cmd;
                 cmd.contextName = name;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_inputcontext_isActive(name) -> bool
         interpreter->registerNativeFunction("_native_inputcontext_isActive",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(false);
                 std::string name = extractString(args[0], "_native_inputcontext_isActive");
 
                 events::input::IsContextActiveQuery query;
                 query.contextName = name;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         // _native_inputcontext_setBlocking(name, blocking) -> void
         interpreter->registerNativeFunction("_native_inputcontext_setBlocking",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2) return value::Value(std::monostate{});
                 std::string name = extractString(args[0], "_native_inputcontext_setBlocking");
                 bool blocking = extractBool(args[1]);
@@ -90,6 +92,6 @@ namespace core::api
                 cmd.blocking = blocking;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
     }
 }

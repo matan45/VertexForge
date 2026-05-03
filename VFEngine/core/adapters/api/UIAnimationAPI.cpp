@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "UIAnimationAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -14,8 +16,8 @@ namespace core::api
 
         // _native_ui_playAnimation(entityId) -> void
         interpreter->registerNativeFunction("_native_ui_playAnimation",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError("[Script] UI.playAnimation: missing entityId argument");
@@ -31,12 +33,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_ui_stopAnimation(entityId) -> void
         interpreter->registerNativeFunction("_native_ui_stopAnimation",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError("[Script] UI.stopAnimation: missing entityId argument");
@@ -52,12 +54,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_ui_pauseAnimation(entityId) -> void
         interpreter->registerNativeFunction("_native_ui_pauseAnimation",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError("[Script] UI.pauseAnimation: missing entityId argument");
@@ -73,12 +75,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_ui_resumeAnimation(entityId) -> void
         interpreter->registerNativeFunction("_native_ui_resumeAnimation",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError("[Script] UI.resumeAnimation: missing entityId argument");
@@ -94,12 +96,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_ui_isAnimationPlaying(entityId) -> bool
         interpreter->registerNativeFunction("_native_ui_isAnimationPlaying",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError("[Script] UI.isAnimationPlaying: missing entityId argument");
@@ -115,6 +117,6 @@ namespace core::api
                                                 bool playing = dispatcher.query(query);
 
                                                 return value::Value(playing);
-                                            });
+                                            }});
     }
 }

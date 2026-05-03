@@ -467,7 +467,7 @@ namespace windows::details
             if (!instance)
                 continue;
 
-            std::string displayName = bridge.name ? bridge.name : "Unknown";
+            std::string displayName = bridge.name.empty() ? "Unknown" : bridge.name;
 
             EntityDetailsPanel::pushComponentHeaderStyle();
             std::string headerId = "##meta_" + std::to_string(bridge.typeId);
