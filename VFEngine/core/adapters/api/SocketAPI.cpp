@@ -1,4 +1,6 @@
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "SocketAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -13,8 +15,8 @@ namespace core::api
         auto& dispatcher = events::EventDispatcher::instance();
 
         interpreter->registerNativeFunction("_native_socket_attach",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3)
                 {
                     vfLogError("[Script] Socket.attach: missing arguments (expected childId, parentId, socketName)");
@@ -33,11 +35,11 @@ namespace core::api
                 cmd.parentEntity = intToEntity(parentId);
                 cmd.socketName = socketName;
                 return value::Value(dispatcher.execute(cmd));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_socket_detach",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] Socket.detach: missing entityId argument");
@@ -52,11 +54,11 @@ namespace core::api
                 cmd.childEntity = intToEntity(entityId);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_socket_setActive",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                 {
                     vfLogError("[Script] Socket.setActive: missing arguments");
@@ -74,11 +76,11 @@ namespace core::api
                 cmd.active = active;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_socket_isAttached",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                     return value::Value(false);
 
@@ -89,11 +91,11 @@ namespace core::api
                 events::socket::IsAttachedQuery query;
                 query.entity = intToEntity(entityId);
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_socket_hasSocket",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                     return value::Value(false);
 
@@ -107,11 +109,11 @@ namespace core::api
                 query.entity = intToEntity(entityId);
                 query.socketName = socketName;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_socket_getPosition",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                     return value::Value(std::monostate{});
 
@@ -126,11 +128,11 @@ namespace core::api
                 query.socketName = socketName;
                 glm::vec3 pos = dispatcher.query(query);
                 return makeVec3Array(pos);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_socket_getTransform",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                     return value::Value(std::monostate{});
 
@@ -152,11 +154,11 @@ namespace core::api
                     arr->set(i, value::Value(data[i]));
                 }
                 return value::Value(arr);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_socket_getSockets",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                     return value::Value(std::monostate{});
 
@@ -175,11 +177,11 @@ namespace core::api
                     arr->set(static_cast<int>(i), value::Value(names[i]));
                 }
                 return value::Value(arr);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_socket_getRotation",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                     return value::Value(std::monostate{});
 
@@ -201,11 +203,11 @@ namespace core::api
                 arr->set(2, value::Value(rot.y));
                 arr->set(3, value::Value(rot.z));
                 return value::Value(arr);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_socket_getParentEntity",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                     return value::Value(static_cast<int64_t>(-1));
 
@@ -221,6 +223,6 @@ namespace core::api
                     return value::Value(static_cast<int64_t>(-1));
 
                 return value::Value(static_cast<int64_t>(data->parentEntity.id));
-            });
+            }});
     }
 }

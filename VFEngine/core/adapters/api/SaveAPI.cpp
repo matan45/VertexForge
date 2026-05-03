@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "SaveAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -15,8 +17,8 @@ namespace core::api
 
         // _native_save_createSlot(name) -> void
         interpreter->registerNativeFunction("_native_save_createSlot",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] Save.createSlot: missing name argument");
@@ -29,12 +31,12 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_save_save(slotName) -> void
         interpreter->registerNativeFunction("_native_save_save",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] Save.save: missing slotName argument");
@@ -47,12 +49,12 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_save_load(slotName) -> void
         interpreter->registerNativeFunction("_native_save_load",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] Save.load: missing slotName argument");
@@ -65,12 +67,12 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_save_listSlots() -> array of strings
         interpreter->registerNativeFunction("_native_save_listSlots",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 events::save::ListSaveSlotsQuery query;
                 auto slots = dispatcher.query(query);
 
@@ -81,12 +83,12 @@ namespace core::api
                     arr->set(i, value::Value(slots[i]));
                 }
                 return value::Value(arr);
-            });
+            }});
 
         // _native_save_delete(slotName) -> void
         interpreter->registerNativeFunction("_native_save_delete",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] Save.delete: missing slotName argument");
@@ -99,12 +101,12 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_save_getMetadata(slotName) -> string (JSON)
         interpreter->registerNativeFunction("_native_save_getMetadata",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(std::string("{}"));
@@ -122,6 +124,6 @@ namespace core::api
                 j["playtimeSeconds"] = metadata.playtimeSeconds;
                 j["customData"] = metadata.customData;
                 return value::Value(j.dump());
-            });
+            }});
     }
 }

@@ -1,5 +1,6 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <value/ValueShim.hpp>
 #include <project/ProjectBuilder.hpp>
 #include <project/ProjectConfigParser.hpp>
 
@@ -519,15 +520,17 @@ namespace core
             value::Value restored = deserializer.deserializeAs(jsonState, classIt->second);
 
             // Copy fields from deserialized value to the live instance
-            if (auto restoredObj = std::get_if<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(&restored))
+            if (value::isObject(restored))
             {
+                const auto& restoredObj = value::asObject(restored);
                 auto& liveValue = std::any_cast<value::Value&>(objIt->second);
-                if (auto liveObj = std::get_if<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(&liveValue))
+                if (value::isObject(liveValue))
                 {
-                    const auto& restoredFields = (*restoredObj)->getAllFieldValues();
+                    const auto& liveObj = value::asObject(liveValue);
+                    const auto restoredFields = restoredObj->getAllFields();
                     for (const auto& [fieldName, fieldValue] : restoredFields)
                     {
-                        (*liveObj)->setField(fieldName, fieldValue);
+                        liveObj->setField(fieldName, fieldValue);
                     }
                     return true;
                 }

@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "PostProcessAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -21,31 +23,31 @@ namespace core::api
         // =============================================
 
         interpreter->registerNativeFunction("_native_postprocess_dof_isEnabled",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.depthOfField.enabled);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_setEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.depthOfField.enabled = extractBool(args[0]);
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_getFocusMode",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(static_cast<int64_t>(s.depthOfField.focusMode));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_setFocusMode",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     int64_t mode = extractInt64(args[0], "PostProcess.dof.setFocusMode");
@@ -54,114 +56,114 @@ namespace core::api
                         s.depthOfField.focusMode = static_cast<postprocess::DoFFocusMode>(mode);
                     }
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_getFocalDistance",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.depthOfField.focalDistance);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_setFocalDistance",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.depthOfField.focalDistance = extractFloat(args[0], "PostProcess.dof.setFocalDistance");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_getFocusTargetX",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.depthOfField.focusTargetX);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_getFocusTargetY",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.depthOfField.focusTargetY);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_getFocusTargetZ",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.depthOfField.focusTargetZ);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_setFocusTarget",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.depthOfField.focusTargetX = extractFloat(args[0], "PostProcess.dof.setFocusTarget x");
                     s.depthOfField.focusTargetY = extractFloat(args[1], "PostProcess.dof.setFocusTarget y");
                     s.depthOfField.focusTargetZ = extractFloat(args[2], "PostProcess.dof.setFocusTarget z");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_getFocusSmoothing",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.depthOfField.focusSmoothing);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_setFocusSmoothing",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.depthOfField.focusSmoothing = extractFloat(args[0], "PostProcess.dof.setFocusSmoothing");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_getFocalRange",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.depthOfField.focalRange);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_setFocalRange",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.depthOfField.focalRange = extractFloat(args[0], "PostProcess.dof.setFocalRange");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_getMaxBlurRadius",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.depthOfField.maxBlurRadius);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_setMaxBlurRadius",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.depthOfField.maxBlurRadius = extractFloat(args[0], "PostProcess.dof.setMaxBlurRadius");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_getSampleCount",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(static_cast<int64_t>(s.depthOfField.sampleCount));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_dof_setSampleCount",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     int64_t count = extractInt64(args[0], "PostProcess.dof.setSampleCount");
@@ -170,38 +172,38 @@ namespace core::api
                         s.depthOfField.sampleCount = static_cast<int>(count);
                     }
                 });
-            });
+            }});
 
         // =============================================
         // Volumetric Fog
         // =============================================
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_isEnabled",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.enabled);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.enabled = extractBool(args[0]);
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getQuality",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(static_cast<int64_t>(s.volumetricFog.quality));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setQuality",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     int64_t quality = extractInt64(args[0], "PostProcess.volumetricFog.setQuality");
@@ -210,294 +212,294 @@ namespace core::api
                         s.volumetricFog.quality = static_cast<postprocess::VolumetricQuality>(quality);
                     }
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getDensity",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.uniformDensity);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setDensity",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.uniformDensity = extractFloat(args[0], "PostProcess.volumetricFog.setDensity");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getColorR",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.fogColor[0]);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getColorG",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.fogColor[1]);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getColorB",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.fogColor[2]);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setColor",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.fogColor[0] = extractFloat(args[0], "PostProcess.volumetricFog.setColor r");
                     s.volumetricFog.fogColor[1] = extractFloat(args[1], "PostProcess.volumetricFog.setColor g");
                     s.volumetricFog.fogColor[2] = extractFloat(args[2], "PostProcess.volumetricFog.setColor b");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getHeightFogDensity",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.heightFogDensity);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setHeightFogDensity",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.heightFogDensity = extractFloat(args[0], "PostProcess.volumetricFog.setHeightFogDensity");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getHeightFogFalloff",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.heightFogFalloff);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setHeightFogFalloff",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.heightFogFalloff = extractFloat(args[0], "PostProcess.volumetricFog.setHeightFogFalloff");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getHeightFogOffset",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.heightFogOffset);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setHeightFogOffset",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.heightFogOffset = extractFloat(args[0], "PostProcess.volumetricFog.setHeightFogOffset");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getScatteringCoefficient",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.scatteringCoefficient);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setScatteringCoefficient",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.scatteringCoefficient = extractFloat(args[0], "PostProcess.volumetricFog.setScatteringCoefficient");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getAbsorptionCoefficient",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.absorptionCoefficient);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setAbsorptionCoefficient",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.absorptionCoefficient = extractFloat(args[0], "PostProcess.volumetricFog.setAbsorptionCoefficient");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getAnisotropy",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.anisotropy);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setAnisotropy",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.anisotropy = extractFloat(args[0], "PostProcess.volumetricFog.setAnisotropy");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getIntensity",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.intensity);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setIntensity",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.intensity = extractFloat(args[0], "PostProcess.volumetricFog.setIntensity");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getAmbientIntensity",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.ambientIntensity);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setAmbientIntensity",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.ambientIntensity = extractFloat(args[0], "PostProcess.volumetricFog.setAmbientIntensity");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getMaxDistance",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.maxDistance);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setMaxDistance",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.maxDistance = extractFloat(args[0], "PostProcess.volumetricFog.setMaxDistance");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_getTemporalBlendFactor",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.volumetricFog.temporalBlendFactor);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_volumetricFog_setTemporalBlendFactor",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.volumetricFog.temporalBlendFactor = extractFloat(args[0], "PostProcess.volumetricFog.setTemporalBlendFactor");
                 });
-            });
+            }});
 
         // =============================================
         // SSAO
         // =============================================
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_isEnabled",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.ssao.enabled);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_setEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.ssao.enabled = extractBool(args[0]);
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_getRadius",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.ssao.radius);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_setRadius",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.ssao.radius = extractFloat(args[0], "PostProcess.ssao.setRadius");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_getBias",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.ssao.bias);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_setBias",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.ssao.bias = extractFloat(args[0], "PostProcess.ssao.setBias");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_getIntensity",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.ssao.intensity);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_setIntensity",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.ssao.intensity = extractFloat(args[0], "PostProcess.ssao.setIntensity");
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_getKernelSize",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(static_cast<int64_t>(s.ssao.kernelSize));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_setKernelSize",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     int64_t size = extractInt64(args[0], "PostProcess.ssao.setKernelSize");
@@ -506,18 +508,18 @@ namespace core::api
                         s.ssao.kernelSize = static_cast<int>(size);
                     }
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_getQuality",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(static_cast<int64_t>(s.ssao.quality));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_setQuality",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     int64_t q = extractInt64(args[0], "PostProcess.ssao.setQuality");
@@ -527,23 +529,23 @@ namespace core::api
                         s.ssao.kernelSize = postprocess::ssaoSamplesFromQuality(s.ssao.quality);
                     }
                 });
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_getPower",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
                 return value::Value(s.ssao.power);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_postprocess_ssao_setPower",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.ssao.power = extractFloat(args[0], "PostProcess.ssao.setPower");
                 });
-            });
+            }});
 
     }
 }

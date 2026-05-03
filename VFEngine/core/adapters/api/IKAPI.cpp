@@ -1,4 +1,6 @@
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "IKAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -12,8 +14,8 @@ namespace core::api
         auto& dispatcher = events::EventDispatcher::instance();
 
         interpreter->registerNativeFunction("_native_ik_setTarget",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 5)
                 {
                     vfLogError("[Script] IK.setTarget: missing arguments (expected entityId, chainName, x, y, z)");
@@ -35,11 +37,11 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_ik_setTargetWithRotation",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 9)
                 {
                     vfLogError("[Script] IK.setTargetWithRotation: missing arguments");
@@ -66,11 +68,11 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_ik_setChainWeight",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3)
                 {
                     vfLogError("[Script] IK.setChainWeight: missing arguments");
@@ -90,11 +92,11 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_ik_setChainEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3)
                 {
                     vfLogError("[Script] IK.setChainEnabled: missing arguments");
@@ -114,11 +116,11 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_ik_getChainWeight",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                     return value::Value(0.0f);
 
@@ -131,11 +133,11 @@ namespace core::api
                 query.entity = intToEntity(entityId);
                 query.chainName = chainName;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_ik_isChainEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                     return value::Value(false);
 
@@ -148,11 +150,11 @@ namespace core::api
                 query.entity = intToEntity(entityId);
                 query.chainName = chainName;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_ik_getChainNames",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                     return value::Value(std::monostate{});
 
@@ -170,11 +172,11 @@ namespace core::api
                     arr->set(static_cast<int>(i), value::Value(names[i]));
                 }
                 return value::Value(arr);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_ik_hasComponent",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                     return value::Value(false);
 
@@ -184,6 +186,6 @@ namespace core::api
                 events::ik::HasIKComponentQuery query;
                 query.entity = intToEntity(entityId);
                 return value::Value(dispatcher.query(query));
-            });
+            }});
     }
 }

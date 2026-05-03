@@ -1,5 +1,6 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <value/ValueShim.hpp>
 
 #include "ScriptInputActionEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
@@ -173,7 +174,7 @@ namespace core
                 auto result = interpreter->callMethod(instance, methodName, {value::Value(actionName)});
 
                 // If callback returns true, consume the action and stop propagation
-                if (std::holds_alternative<bool>(result) && std::get<bool>(result))
+                if (value::isBool(result) && value::asBool(result))
                 {
                     ::events::input::ConsumeActionCommand cmd;
                     cmd.actionName = actionName;

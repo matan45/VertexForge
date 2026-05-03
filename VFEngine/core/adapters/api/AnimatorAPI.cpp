@@ -1,4 +1,6 @@
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "AnimatorAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -17,8 +19,8 @@ namespace core::api
 
         // _native_animator_setFloat(entityId, paramName, value) -> void
         interpreter->registerNativeFunction("_native_animator_setFloat",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.size() < 3)
                                                 {
                                                     vfLogError(
@@ -42,12 +44,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_animator_setInt(entityId, paramName, value) -> void
         interpreter->registerNativeFunction("_native_animator_setInt",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.size() < 3)
                                                 {
                                                     vfLogError(
@@ -72,12 +74,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_animator_setBool(entityId, paramName, value) -> void
         interpreter->registerNativeFunction("_native_animator_setBool",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.size() < 3)
                                                 {
                                                     vfLogError(
@@ -92,7 +94,7 @@ namespace core::api
                                                 }
 
                                                 std::string paramName = extractString(args[1], "Animator.setBool");
-                                                bool value = std::get<bool>(args[2]);
+                                                bool value = extractBool(args[2], "Animator.setBool");
 
                                                 services::events::animator::SetEntityAnimatorBoolCommand cmd;
                                                 cmd.entity = intToEntity(entityId);
@@ -101,12 +103,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_animator_setTrigger(entityId, paramName) -> void
         interpreter->registerNativeFunction("_native_animator_setTrigger",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.size() < 2)
                                                 {
                                                     vfLogError(
@@ -128,7 +130,7 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // ============================================================
         // PARAMETER GETTERS
@@ -136,8 +138,8 @@ namespace core::api
 
         // _native_animator_getFloat(entityId, paramName) -> float
         interpreter->registerNativeFunction("_native_animator_getFloat",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.size() < 2)
                                                 {
                                                     vfLogError(
@@ -158,12 +160,12 @@ namespace core::api
                                                 query.parameterName = paramName;
 
                                                 return value::Value(dispatcher.query(query));
-                                            });
+                                            }});
 
         // _native_animator_getInt(entityId, paramName) -> int
         interpreter->registerNativeFunction("_native_animator_getInt",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.size() < 2)
                                                 {
                                                     vfLogError(
@@ -184,12 +186,12 @@ namespace core::api
                                                 query.parameterName = paramName;
 
                                                 return value::Value(static_cast<int64_t>(dispatcher.query(query)));
-                                            });
+                                            }});
 
         // _native_animator_getBool(entityId, paramName) -> bool
         interpreter->registerNativeFunction("_native_animator_getBool",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.size() < 2)
                                                 {
                                                     vfLogError(
@@ -210,7 +212,7 @@ namespace core::api
                                                 query.parameterName = paramName;
 
                                                 return value::Value(dispatcher.query(query));
-                                            });
+                                            }});
 
         // ============================================================
         // PLAYBACK CONTROL
@@ -218,8 +220,8 @@ namespace core::api
 
         // _native_animator_play(entityId) -> void
         interpreter->registerNativeFunction("_native_animator_play",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError("[Script] Animator.play: missing entityId argument");
@@ -237,12 +239,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_animator_pause(entityId) -> void
         interpreter->registerNativeFunction("_native_animator_pause",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError("[Script] Animator.pause: missing entityId argument");
@@ -260,12 +262,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_animator_stop(entityId) -> void
         interpreter->registerNativeFunction("_native_animator_stop",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError("[Script] Animator.stop: missing entityId argument");
@@ -283,12 +285,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_animator_reset(entityId) -> void
         interpreter->registerNativeFunction("_native_animator_reset",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError("[Script] Animator.reset: missing entityId argument");
@@ -306,7 +308,7 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // ============================================================
         // STATE QUERIES
@@ -314,8 +316,8 @@ namespace core::api
 
         // _native_animator_isPlaying(entityId) -> bool
         interpreter->registerNativeFunction("_native_animator_isPlaying",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError(
@@ -333,12 +335,12 @@ namespace core::api
                                                 query.entity = intToEntity(entityId);
 
                                                 return value::Value(dispatcher.query(query));
-                                            });
+                                            }});
 
         // _native_animator_isBlending(entityId) -> bool
         interpreter->registerNativeFunction("_native_animator_isBlending",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError(
@@ -356,12 +358,12 @@ namespace core::api
                                                 query.entity = intToEntity(entityId);
 
                                                 return value::Value(dispatcher.query(query));
-                                            });
+                                            }});
 
         // _native_animator_getCurrentState(entityId) -> string
         interpreter->registerNativeFunction("_native_animator_getCurrentState",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError(
@@ -379,12 +381,12 @@ namespace core::api
                                                 query.entity = intToEntity(entityId);
 
                                                 return value::Value(dispatcher.query(query));
-                                            });
+                                            }});
 
         // _native_animator_getNormalizedTime(entityId) -> float
         interpreter->registerNativeFunction("_native_animator_getNormalizedTime",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError(
@@ -402,12 +404,12 @@ namespace core::api
                                                 query.entity = intToEntity(entityId);
 
                                                 return value::Value(dispatcher.query(query));
-                                            });
+                                            }});
 
         // _native_animator_hasAnimator(entityId) -> bool
         interpreter->registerNativeFunction("_native_animator_hasAnimator",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError(
@@ -425,7 +427,7 @@ namespace core::api
                                                 query.entity = intToEntity(entityId);
 
                                                 return value::Value(dispatcher.query(query));
-                                            });
+                                            }});
 
         // ============================================================
         // TRANSITION CONTROL
@@ -433,8 +435,8 @@ namespace core::api
 
         // _native_animator_forceTransitionTo(entityId, stateName, blendDuration?) -> bool
         interpreter->registerNativeFunction("_native_animator_forceTransitionTo",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.size() < 2)
                                                 {
                                                     vfLogError(
@@ -462,7 +464,7 @@ namespace core::api
                                                 cmd.blendDuration = blendDuration;
 
                                                 return value::Value(dispatcher.execute(cmd));
-                                            });
+                                            }});
 
         // ============================================================
         // ROOT MOTION
@@ -470,8 +472,8 @@ namespace core::api
 
         // _native_animator_setRootMotion(entityId, enabled) -> void
         interpreter->registerNativeFunction("_native_animator_setRootMotion",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.size() < 2)
                                                 {
                                                     vfLogError(
@@ -485,7 +487,7 @@ namespace core::api
                                                     return value::Value(std::monostate{});
                                                 }
 
-                                                bool enabled = std::get<bool>(args[1]);
+                                                bool enabled = extractBool(args[1], "Animator.setRootMotion");
 
                                                 services::events::animator::SetEntityRootMotionCommand cmd;
                                                 cmd.entity = intToEntity(entityId);
@@ -493,12 +495,12 @@ namespace core::api
                                                 dispatcher.execute(cmd);
 
                                                 return value::Value(std::monostate{});
-                                            });
+                                            }});
 
         // _native_animator_getRootMotion(entityId) -> bool
         interpreter->registerNativeFunction("_native_animator_getRootMotion",
-                                            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                                            {
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                auto& dispatcher = events::EventDispatcher::instance();
                                                 if (args.empty())
                                                 {
                                                     vfLogError(
@@ -516,6 +518,6 @@ namespace core::api
                                                 query.entity = intToEntity(entityId);
 
                                                 return value::Value(dispatcher.query(query));
-                                            });
+                                            }});
     }
 }

@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "VFXAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -17,8 +19,8 @@ namespace core::api
 
         // _native_vfx_play(entityId) -> void
         interpreter->registerNativeFunction("_native_vfx_play",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(std::monostate{});
@@ -51,12 +53,12 @@ namespace core::api
                 vfxComp.isPlaying = true;
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_vfx_stop(entityId) -> void
         interpreter->registerNativeFunction("_native_vfx_stop",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(std::monostate{});
@@ -89,12 +91,12 @@ namespace core::api
                 vfxComp.isPlaying = false;
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_vfx_reset(entityId) -> void
         interpreter->registerNativeFunction("_native_vfx_reset",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(std::monostate{});
@@ -126,12 +128,12 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_vfx_isPlaying(entityId) -> bool
         interpreter->registerNativeFunction("_native_vfx_isPlaying",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -161,12 +163,11 @@ namespace core::api
                 services::events::vfxruntime::IsVFXInstancePlayingQuery query;
                 query.instanceId = vfxComp.runtimeInstanceId;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         // _native_vfx_getLoop(entityId) -> bool
         interpreter->registerNativeFunction("_native_vfx_getLoop",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -189,12 +190,11 @@ namespace core::api
 
                 const auto& vfxComp = registry.get<components::VFXComponent>(entity);
                 return value::Value(vfxComp.loop);
-            });
+            }});
 
         // _native_vfx_setLoop(entityId, loop) -> void
         interpreter->registerNativeFunction("_native_vfx_setLoop",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 2)
                 {
                     return value::Value(std::monostate{});
@@ -206,9 +206,9 @@ namespace core::api
                 }
 
                 bool loop = false;
-                if (std::holds_alternative<bool>(args[1]))
+                if (value::isBool(args[1]))
                 {
-                    loop = std::get<bool>(args[1]);
+                    loop = value::asBool(args[1]);
                 }
 
                 auto& registry = scene::EntityRegistry::getRegistry();
@@ -225,12 +225,11 @@ namespace core::api
                 vfxComp.loop = loop;
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_vfx_getPath(entityId) -> string
         interpreter->registerNativeFunction("_native_vfx_getPath",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.empty())
                 {
                     return value::Value(std::string(""));
@@ -253,12 +252,11 @@ namespace core::api
 
                 const auto& vfxComp = registry.get<components::VFXComponent>(entity);
                 return value::Value(vfxComp.vfxRef.resolve());
-            });
+            }});
 
         // _native_vfx_setPath(entityId, path) -> void
         interpreter->registerNativeFunction("_native_vfx_setPath",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 2)
                 {
                     return value::Value(std::monostate{});
@@ -285,12 +283,11 @@ namespace core::api
                 vfxComp.vfxRef = asset::AssetRef::fromPath(path);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_vfx_getAutoPlay(entityId) -> bool
         interpreter->registerNativeFunction("_native_vfx_getAutoPlay",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -313,12 +310,11 @@ namespace core::api
 
                 const auto& vfxComp = registry.get<components::VFXComponent>(entity);
                 return value::Value(vfxComp.autoPlay);
-            });
+            }});
 
         // _native_vfx_setAutoPlay(entityId, autoPlay) -> void
         interpreter->registerNativeFunction("_native_vfx_setAutoPlay",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 2)
                 {
                     return value::Value(std::monostate{});
@@ -330,9 +326,9 @@ namespace core::api
                 }
 
                 bool autoPlay = false;
-                if (std::holds_alternative<bool>(args[1]))
+                if (value::isBool(args[1]))
                 {
-                    autoPlay = std::get<bool>(args[1]);
+                    autoPlay = value::asBool(args[1]);
                 }
 
                 auto& registry = scene::EntityRegistry::getRegistry();
@@ -349,6 +345,6 @@ namespace core::api
                 vfxComp.autoPlay = autoPlay;
 
                 return value::Value(std::monostate{});
-            });
+            }});
     }
 }

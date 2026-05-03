@@ -41,7 +41,7 @@ project "Editor"
 
    includedirs {
 	  "dependencies/imgui",
-	  "dependencies/ImGuizmo",
+	  "dependencies/ImGuizmo/src",
 	  "dependencies/imgui-node-editor",
 	  "dependencies/spdlog/include",
 	  "dependencies/glm",
@@ -142,7 +142,7 @@ project "Core"
       "VFEngine/utilities",              -- Utilities headers
 	  "VFEngine/services",               -- Services layer interfaces
 	  "dependencies/imgui",
-	  "dependencies/ImGuizmo",
+	  "dependencies/ImGuizmo/src",
 	  "dependencies/glm",
 	  "dependencies/glfw/include",
 	  "dependencies/imgui/backends",
@@ -1317,8 +1317,8 @@ project "imgui"
       "dependencies/imgui/*.cpp",
       "dependencies/imgui/backends/imgui_impl_vulkan.*",  -- Only Vulkan part
       "dependencies/imgui/backends/imgui_impl_glfw.*",  -- Only Vulkan part
-      "dependencies/ImGuizmo/*.h",
-      "dependencies/ImGuizmo/*.cpp",
+      "dependencies/ImGuizmo/src/*.h",
+      "dependencies/ImGuizmo/src/*.cpp",
       -- imgui-node-editor v0.9.3 flat structure
       "dependencies/imgui-node-editor/*.h",
       "dependencies/imgui-node-editor/*.cpp",
@@ -1329,7 +1329,7 @@ project "imgui"
    removefiles {
       "dependencies/imgui/misc/**",
       "dependencies/imgui/examples/**",
-      "dependencies/ImGuizmo/examples/**",
+      "dependencies/ImGuizmo/example/**",
       "dependencies/ImGuizmo/vcpkg-example/**",
       "dependencies/imgui-node-editor/examples/**",
       "dependencies/imgui-node-editor/external/**"
@@ -1338,7 +1338,7 @@ project "imgui"
    includedirs {
       "dependencies/imgui",                       -- Core ImGui headers
       "dependencies/imgui/backends",              -- Vulkan backend headers
-      "dependencies/ImGuizmo",
+      "dependencies/ImGuizmo/src",
       "dependencies/imgui-node-editor",           -- imgui-node-editor v0.9.3 headers
 	  "dependencies/glfw/include",
       vulkanLibPath.."/Include"                   -- Vulkan SDK headers

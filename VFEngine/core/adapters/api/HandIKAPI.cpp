@@ -1,4 +1,6 @@
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "HandIKAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -9,8 +11,7 @@ namespace core::api
     void HandIKAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
         interpreter->registerNativeFunction("_native_handik_calculateHandTarget",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 16)
                 {
                     vfLogError("[Script] HandIK.calculateHandTarget: expected 16 arguments");
@@ -77,11 +78,10 @@ namespace core::api
                 arr->set(8, value::Value(result.isReachable ? 1.0f : 0.0f));
 
                 return value::Value(arr);
-            });
+            }});
 
         interpreter->registerNativeFunction("_native_handik_calculateTwoHandedGrip",
-            [](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 15)
                 {
                     vfLogError("[Script] HandIK.calculateTwoHandedGrip: expected 15 arguments");
@@ -143,6 +143,6 @@ namespace core::api
                 arr->set(8, value::Value(result.isReachable ? 1.0f : 0.0f));
 
                 return value::Value(arr);
-            });
+            }});
     }
 }

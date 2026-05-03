@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "DestructionAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -17,8 +19,8 @@ namespace core::api
         {
             // Destruction.applyDamage(entityId, amount, [damageType], [impactX,Y,Z], [dirX,Y,Z])
             interpreter->registerNativeFunction("_native_destruction_applyDamage",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 2) return value::Value(std::monostate{});
 
                     auto entity = intToEntity(extractInt64(args[0]));
@@ -37,12 +39,12 @@ namespace core::api
 
                     dispatcher.execute(cmd);
                     return value::Value(std::monostate{});
-                });
+                }});
 
             // Destruction.destroy(entityId)
             interpreter->registerNativeFunction("_native_destruction_destroy",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(std::monostate{});
 
                     events::destruction::TriggerDestructionCommand cmd;
@@ -50,12 +52,12 @@ namespace core::api
                     cmd.force = 10.0f;
                     dispatcher.execute(cmd);
                     return value::Value(std::monostate{});
-                });
+                }});
 
             // Destruction.explode(cx, cy, cz, radius, damage, force)
             interpreter->registerNativeFunction("_native_destruction_explode",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.size() < 6) return value::Value(std::monostate{});
 
                     events::destruction::ExplosionDamageCommand cmd;
@@ -65,7 +67,7 @@ namespace core::api
                     cmd.force = extractFloat(args[5]);
                     dispatcher.execute(cmd);
                     return value::Value(std::monostate{});
-                });
+                }});
         }
 
         void registerHealthQueries(services::ScriptInterpreter* interpreter,
@@ -73,20 +75,19 @@ namespace core::api
         {
             // Destruction.getHealth(entityId) -> float
             interpreter->registerNativeFunction("_native_destruction_getHealth",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(0.0f);
 
                     events::destruction::GetHealthQuery query;
                     query.entity = intToEntity(extractInt64(args[0]));
                     float health = dispatcher.query(query);
                     return value::Value(health);
-                });
+                }});
 
             // Destruction.setHealth(entityId, hp)
             interpreter->registerNativeFunction("_native_destruction_setHealth",
-                [](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                     if (args.size() < 2) return value::Value(std::monostate{});
 
                     auto entity = resolveEntity(args[0]);
@@ -106,24 +107,23 @@ namespace core::api
                         events::EventDispatcher::instance().publish(notif);
                     }
                     return value::Value(std::monostate{});
-                });
+                }});
 
             // Destruction.isDestroyed(entityId) -> bool
             interpreter->registerNativeFunction("_native_destruction_isDestroyed",
-                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
                     if (args.empty()) return value::Value(false);
 
                     events::destruction::IsDestroyedQuery query;
                     query.entity = intToEntity(extractInt64(args[0]));
                     bool destroyed = dispatcher.query(query);
                     return value::Value(destroyed);
-                });
+                }});
 
             // Destruction.repair(entityId)
             interpreter->registerNativeFunction("_native_destruction_repair",
-                [](const std::vector<value::Value>& args) -> value::Value
-                {
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                     if (args.empty()) return value::Value(std::monostate{});
 
                     auto entity = resolveEntity(args[0]);
@@ -137,7 +137,7 @@ namespace core::api
                         comp->isDestroyed = false;
                     }
                     return value::Value(std::monostate{});
-                });
+                }});
         }
     }
 

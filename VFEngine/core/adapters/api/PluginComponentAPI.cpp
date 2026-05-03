@@ -1,9 +1,11 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
 #include <runtimeTypes/klass/ClassDefinition.hpp>
 #include <runtimeTypes/klass/FieldDefinition.hpp>
 #include <runtimeTypes/klass/ObjectInstance.hpp>
 #include <environment/Environment.hpp>
+#include <value/ValueShim.hpp>
 
 #include "PluginComponentAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -11,6 +13,7 @@
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <sstream>
+#include <span>
 
 namespace core::api
 {
@@ -187,7 +190,7 @@ namespace core::api
     // ── File-static helpers ──
 
     static const plugin::MetaComponentBridge* findBridge(
-        const std::vector<plugin::MetaComponentBridge>& bridges, const std::string& name)
+        const std::vector<plugin::MetaComponentBridge>& bridges, std::string_view name)
     {
         for (const auto& bridge : bridges)
         {
@@ -281,7 +284,7 @@ namespace core::api
                         if (!storedInterpreter) break;
                         auto mapView = fieldVal.as_associative_container();
                         auto hashMap = storedInterpreter->createObject("HashMap");
-                        if (std::holds_alternative<std::monostate>(hashMap)) break;
+                        if (value::isVoid(hashMap)) break;
                         for (auto mapIt = mapView.begin(); mapIt != mapView.end(); ++mapIt) {
                             auto [k, v] = *mapIt;
                             auto keyVal = metaToValue(k, mapView.key_type());
@@ -314,30 +317,33 @@ namespace core::api
         if (type.info() == entt::type_id<std::string>())
             return extractString(val);
         if (type.info() == entt::type_id<glm::vec3>()) {
-            if (auto* arr = std::get_if<std::shared_ptr<value::NativeArray>>(&val)) {
-                if (*arr && (*arr)->size() >= 3)
+            if (value::isNativeArray(val)) {
+                const auto& arr = value::asNativeArray(val);
+                if (arr && arr->size() >= 3)
                     return glm::vec3(
-                        static_cast<float>(std::get<double>((**arr)[0])),
-                        static_cast<float>(std::get<double>((**arr)[1])),
-                        static_cast<float>(std::get<double>((**arr)[2])));
+                        static_cast<float>(value::asFloat((*arr)[0])),
+                        static_cast<float>(value::asFloat((*arr)[1])),
+                        static_cast<float>(value::asFloat((*arr)[2])));
             }
         }
         if (type.info() == entt::type_id<glm::vec2>()) {
-            if (auto* arr = std::get_if<std::shared_ptr<value::NativeArray>>(&val)) {
-                if (*arr && (*arr)->size() >= 2)
+            if (value::isNativeArray(val)) {
+                const auto& arr = value::asNativeArray(val);
+                if (arr && arr->size() >= 2)
                     return glm::vec2(
-                        static_cast<float>(std::get<double>((**arr)[0])),
-                        static_cast<float>(std::get<double>((**arr)[1])));
+                        static_cast<float>(value::asFloat((*arr)[0])),
+                        static_cast<float>(value::asFloat((*arr)[1])));
             }
         }
         if (type.info() == entt::type_id<glm::vec4>()) {
-            if (auto* arr = std::get_if<std::shared_ptr<value::NativeArray>>(&val)) {
-                if (*arr && (*arr)->size() >= 4)
+            if (value::isNativeArray(val)) {
+                const auto& arr = value::asNativeArray(val);
+                if (arr && arr->size() >= 4)
                     return glm::vec4(
-                        static_cast<float>(std::get<double>((**arr)[0])),
-                        static_cast<float>(std::get<double>((**arr)[1])),
-                        static_cast<float>(std::get<double>((**arr)[2])),
-                        static_cast<float>(std::get<double>((**arr)[3])));
+                        static_cast<float>(value::asFloat((*arr)[0])),
+                        static_cast<float>(value::asFloat((*arr)[1])),
+                        static_cast<float>(value::asFloat((*arr)[2])),
+                        static_cast<float>(value::asFloat((*arr)[3])));
             }
         }
 
@@ -345,8 +351,9 @@ namespace core::api
         auto mappingIt = structMappings.find(type.info().hash());
         if (mappingIt != structMappings.end())
         {
-            auto* obj = std::get_if<std::shared_ptr<ObjectInstance>>(&val);
-            if (!obj || !*obj) return {};
+            if (!value::isObject(val)) return {};
+            const auto& obj = value::asObject(val);
+            if (!obj) return {};
             auto constructed = type.construct();
             if (!constructed) return {};
 
@@ -355,8 +362,8 @@ namespace core::api
                 auto member = field.metaMember;
                 if (!member) continue;
 
-                auto fieldVal = (*obj)->getFieldValue(field.name);
-                if (std::holds_alternative<std::monostate>(fieldVal)) continue;
+                auto fieldVal = obj->getFieldValue(field.name);
+                if (value::isVoid(fieldVal)) continue;
 
                 switch (field.kind) {
                     case FieldKind::SCALAR_INT:
@@ -375,11 +382,12 @@ namespace core::api
                         // Rebuild vector from NativeArray
                         auto fieldMeta = member.get(constructed);
                         auto view = fieldMeta.as_sequence_container();
-                        if (auto* arr = std::get_if<std::shared_ptr<value::NativeArray>>(&fieldVal)) {
-                            if (*arr) {
+                        if (value::isNativeArray(fieldVal)) {
+                            const auto& arr = value::asNativeArray(fieldVal);
+                            if (arr) {
                                 view.clear();
-                                for (std::size_t i = 0; i < (*arr)->size(); ++i) {
-                                    auto elemMeta = valueToMeta((**arr)[i], view.value_type());
+                                for (std::size_t i = 0; i < arr->size(); ++i) {
+                                    auto elemMeta = valueToMeta((*arr)[i], view.value_type());
                                     if (elemMeta) view.insert(view.end(), elemMeta);
                                 }
                             }
@@ -395,15 +403,17 @@ namespace core::api
                         view.clear();
                         // Use HashMap.getKeys() -> K[] and HashMap.get(key) -> V
                         auto keysResult = storedInterpreter->callMethod(fieldVal, "getKeys", {});
-                        auto* keysArr = std::get_if<std::shared_ptr<value::NativeArray>>(&keysResult);
-                        if (keysArr && *keysArr) {
-                            for (std::size_t i = 0; i < (*keysArr)->size(); ++i) {
-                                auto keyVal = (**keysArr)[i];
-                                auto valResult = storedInterpreter->callMethod(fieldVal, "get", {keyVal});
-                                auto keyMeta = valueToMeta(keyVal, view.key_type());
-                                auto valMeta = valueToMeta(valResult, view.mapped_type());
-                                if (keyMeta && valMeta)
-                                    view.insert(keyMeta, valMeta);
+                        if (value::isNativeArray(keysResult)) {
+                            const auto& keysArr = value::asNativeArray(keysResult);
+                            if (keysArr) {
+                                for (std::size_t i = 0; i < keysArr->size(); ++i) {
+                                    auto keyVal = (*keysArr)[i];
+                                    auto valResult = storedInterpreter->callMethod(fieldVal, "get", {keyVal});
+                                    auto keyMeta = valueToMeta(keyVal, view.key_type());
+                                    auto valMeta = valueToMeta(valResult, view.mapped_type());
+                                    if (keyMeta && valMeta)
+                                        view.insert(keyMeta, valMeta);
+                                }
                             }
                         }
                         member.set(constructed, fieldMeta);
@@ -439,7 +449,7 @@ namespace core::api
 
     static std::optional<FieldResolution> resolveField(
         const std::vector<plugin::MetaComponentBridge>& bridges,
-        const std::vector<value::Value>& args,
+        std::span<const value::Value> args,
         const char* context)
     {
         if (args.size() < 3) return std::nullopt;
@@ -525,157 +535,159 @@ namespace core::api
         services::ScriptInterpreter* interpreter,
         const std::vector<plugin::MetaComponentBridge>& bridges)
     {
-        // Capture bridges by value (shared copy) so lambdas remain valid
-        auto bridgesCopy = std::make_shared<std::vector<plugin::MetaComponentBridge>>(bridges);
+        // Capture bridges into the static storedBridges so capture-less native
+        // function pointers can access them. Lifetime extends until cleanup().
+        storedBridges = std::make_shared<std::vector<plugin::MetaComponentBridge>>(bridges);
 
         // _plugin_has(entityId, componentName) -> bool
         interpreter->registerNativeFunction("_plugin_has",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 2) return value::Value(false);
                 auto entityOpt = resolveEntity(extractInt64(args[0]));
                 if (!entityOpt) return value::Value(false);
-                const auto* bridge = findBridge(*bridgesCopy, extractString(args[1]));
+                const auto* bridge = findBridge(*storedBridges, extractString(args[1]));
                 if (!bridge) return value::Value(false);
                 auto& reg = scene::EntityRegistry::getRegistry();
                 return value::Value(bridge->has(reg, *entityOpt));
-            });
+            }});
 
         // _plugin_getInt
         interpreter->registerNativeFunction("_plugin_getInt",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getInt");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getInt");
                 if (!res) return value::Value(int64_t(0));
                 auto val = res->member.get(res->instance);
                 if (!val || res->member.type().info() != entt::type_id<int>())
                     return value::Value(int64_t(0));
                 return value::Value(static_cast<int64_t>(val.cast<int>()));
-            });
+            }});
 
         // _plugin_setInt
         interpreter->registerNativeFunction("_plugin_setInt",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_setInt");
+                auto res = resolveField(*storedBridges, args, "_plugin_setInt");
                 if (!res || res->member.type().info() != entt::type_id<int>())
                     return value::Value(false);
                 res->member.set(res->instance, static_cast<int>(extractInt64(args[3])));
                 return value::Value(true);
-            });
+            }});
 
         // _plugin_getFloat
         interpreter->registerNativeFunction("_plugin_getFloat",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getFloat");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getFloat");
                 if (!res) return value::Value(0.0);
                 auto val = res->member.get(res->instance);
                 if (!val || res->member.type().info() != entt::type_id<float>())
                     return value::Value(0.0);
                 return value::Value(static_cast<double>(val.cast<float>()));
-            });
+            }});
 
         // _plugin_setFloat
         interpreter->registerNativeFunction("_plugin_setFloat",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_setFloat");
+                auto res = resolveField(*storedBridges, args, "_plugin_setFloat");
                 if (!res || res->member.type().info() != entt::type_id<float>())
                     return value::Value(false);
                 res->member.set(res->instance, extractFloat(args[3]));
                 return value::Value(true);
-            });
+            }});
 
         // _plugin_getBool
         interpreter->registerNativeFunction("_plugin_getBool",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getBool");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getBool");
                 if (!res) return value::Value(false);
                 auto val = res->member.get(res->instance);
                 if (!val || res->member.type().info() != entt::type_id<bool>())
                     return value::Value(false);
                 return value::Value(val.cast<bool>());
-            });
+            }});
 
         // _plugin_setBool
         interpreter->registerNativeFunction("_plugin_setBool",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_setBool");
+                auto res = resolveField(*storedBridges, args, "_plugin_setBool");
                 if (!res || res->member.type().info() != entt::type_id<bool>())
                     return value::Value(false);
                 res->member.set(res->instance, extractBool(args[3]));
                 return value::Value(true);
-            });
+            }});
 
         // _plugin_getString
         interpreter->registerNativeFunction("_plugin_getString",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getString");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getString");
                 if (!res) return value::Value(std::string(""));
                 auto val = res->member.get(res->instance);
                 if (!val || res->member.type().info() != entt::type_id<std::string>())
                     return value::Value(std::string(""));
                 return value::Value(val.cast<std::string>());
-            });
+            }});
 
         // _plugin_setString
         interpreter->registerNativeFunction("_plugin_setString",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_setString");
+                auto res = resolveField(*storedBridges, args, "_plugin_setString");
                 if (!res || res->member.type().info() != entt::type_id<std::string>())
                     return value::Value(false);
                 res->member.set(res->instance, extractString(args[3]));
                 return value::Value(true);
-            });
+            }});
 
         // _plugin_getVec3
         interpreter->registerNativeFunction("_plugin_getVec3",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getVec3");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getVec3");
                 if (!res) return value::Value(std::monostate{});
                 auto val = res->member.get(res->instance);
                 if (!val || res->member.type().info() != entt::type_id<glm::vec3>())
                     return value::Value(std::monostate{});
                 return makeVec3Array(val.cast<glm::vec3>());
-            });
+            }});
 
         // _plugin_setVec3
         interpreter->registerNativeFunction("_plugin_setVec3",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_setVec3");
+                auto res = resolveField(*storedBridges, args, "_plugin_setVec3");
                 if (!res || res->member.type().info() != entt::type_id<glm::vec3>())
                     return value::Value(false);
-                auto* arrPtr = std::get_if<std::shared_ptr<value::NativeArray>>(&args[3]);
-                if (!arrPtr || !*arrPtr || (*arrPtr)->size() < 3)
+                if (!value::isNativeArray(args[3])) return value::Value(false);
+                const auto& arrPtr = value::asNativeArray(args[3]);
+                if (!arrPtr || arrPtr->size() < 3)
                     return value::Value(false);
-                auto& arr = **arrPtr;
+                auto& arr = *arrPtr;
                 glm::vec3 v(
-                    static_cast<float>(std::get<double>(arr[0])),
-                    static_cast<float>(std::get<double>(arr[1])),
-                    static_cast<float>(std::get<double>(arr[2])));
+                    static_cast<float>(value::asFloat(arr[0])),
+                    static_cast<float>(value::asFloat(arr[1])),
+                    static_cast<float>(value::asFloat(arr[2])));
                 res->member.set(res->instance, v);
                 return value::Value(true);
-            });
+            }});
 
         // ── Container bindings ──
 
         // _plugin_getArraySize
         interpreter->registerNativeFunction("_plugin_getArraySize",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getArraySize");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getArraySize");
                 if (!res || !res->member.type().is_sequence_container())
                     return value::Value(int64_t(0));
                 auto fieldVal = res->member.get(res->instance);
                 auto view = fieldVal.as_sequence_container();
                 return value::Value(static_cast<int64_t>(view.size()));
-            });
+            }});
 
         // _plugin_getArrayElement
         interpreter->registerNativeFunction("_plugin_getArrayElement",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(std::monostate{});
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getArrayElement");
+                auto res = resolveField(*storedBridges, args, "_plugin_getArrayElement");
                 if (!res || !res->member.type().is_sequence_container())
                     return value::Value(std::monostate{});
                 auto fieldVal = res->member.get(res->instance);
@@ -683,13 +695,13 @@ namespace core::api
                 auto idx = static_cast<std::size_t>(extractInt64(args[3]));
                 if (idx >= view.size()) return value::Value(std::monostate{});
                 return metaToValue(view[idx], view.value_type());
-            });
+            }});
 
         // _plugin_setArrayElement
         interpreter->registerNativeFunction("_plugin_setArrayElement",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 5) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_setArrayElement");
+                auto res = resolveField(*storedBridges, args, "_plugin_setArrayElement");
                 if (!res || !res->member.type().is_sequence_container())
                     return value::Value(false);
                 auto fieldVal = res->member.get(res->instance);
@@ -700,13 +712,13 @@ namespace core::api
                 if (!converted) return value::Value(false);
                 view[idx].assign(converted);
                 return value::Value(true);
-            });
+            }});
 
         // _plugin_addArrayElement
         interpreter->registerNativeFunction("_plugin_addArrayElement",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_addArrayElement");
+                auto res = resolveField(*storedBridges, args, "_plugin_addArrayElement");
                 if (!res || !res->member.type().is_sequence_container())
                     return value::Value(false);
                 auto fieldVal = res->member.get(res->instance);
@@ -715,13 +727,13 @@ namespace core::api
                 if (!converted) return value::Value(false);
                 view.insert(view.end(), converted);
                 return value::Value(true);
-            });
+            }});
 
         // _plugin_removeArrayElement
         interpreter->registerNativeFunction("_plugin_removeArrayElement",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_removeArrayElement");
+                auto res = resolveField(*storedBridges, args, "_plugin_removeArrayElement");
                 if (!res || !res->member.type().is_sequence_container())
                     return value::Value(false);
                 auto fieldVal = res->member.get(res->instance);
@@ -732,23 +744,23 @@ namespace core::api
                 for (std::size_t i = 0; i < idx; ++i) ++it;
                 view.erase(it);
                 return value::Value(true);
-            });
+            }});
 
         // _plugin_getMapSize
         interpreter->registerNativeFunction("_plugin_getMapSize",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getMapSize");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getMapSize");
                 if (!res || !res->member.type().is_associative_container())
                     return value::Value(int64_t(0));
                 auto fieldVal = res->member.get(res->instance);
                 auto view = fieldVal.as_associative_container();
                 return value::Value(static_cast<int64_t>(view.size()));
-            });
+            }});
 
         // _plugin_getMapKeys
         interpreter->registerNativeFunction("_plugin_getMapKeys",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getMapKeys");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getMapKeys");
                 if (!res || !res->member.type().is_associative_container())
                     return value::Value(std::monostate{});
                 auto fieldVal = res->member.get(res->instance);
@@ -766,13 +778,13 @@ namespace core::api
                         arr->set(i, value::Value(std::string("?")));
                 }
                 return value::Value(arr);
-            });
+            }});
 
         // _plugin_getMapValue
         interpreter->registerNativeFunction("_plugin_getMapValue",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(std::monostate{});
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getMapValue");
+                auto res = resolveField(*storedBridges, args, "_plugin_getMapValue");
                 if (!res || !res->member.type().is_associative_container())
                     return value::Value(std::monostate{});
                 auto fieldVal = res->member.get(res->instance);
@@ -789,13 +801,13 @@ namespace core::api
                 if (it == view.end()) return value::Value(std::monostate{});
                 auto [k, v] = *it;
                 return metaToValue(v, view.mapped_type());
-            });
+            }});
 
         // _plugin_setMapValue
         interpreter->registerNativeFunction("_plugin_setMapValue",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 5) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_setMapValue");
+                auto res = resolveField(*storedBridges, args, "_plugin_setMapValue");
                 if (!res || !res->member.type().is_associative_container())
                     return value::Value(false);
                 auto fieldVal = res->member.get(res->instance);
@@ -812,13 +824,13 @@ namespace core::api
                 if (!valAny) return value::Value(false);
                 view.insert(keyAny, valAny);
                 return value::Value(true);
-            });
+            }});
 
         // _plugin_removeMapEntry
         interpreter->registerNativeFunction("_plugin_removeMapEntry",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_removeMapEntry");
+                auto res = resolveField(*storedBridges, args, "_plugin_removeMapEntry");
                 if (!res || !res->member.type().is_associative_container())
                     return value::Value(false);
                 auto fieldVal = res->member.get(res->instance);
@@ -832,14 +844,14 @@ namespace core::api
                 }
                 if (!keyAny) return value::Value(false);
                 return value::Value(view.erase(keyAny) > 0);
-            });
+            }});
 
         // ── Enum bindings ──
 
         // _plugin_getEnum(entityId, componentName, fieldName) -> string (current enum value name)
         interpreter->registerNativeFunction("_plugin_getEnum",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getEnum");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getEnum");
                 if (!res || !res->member.type().is_enum())
                     return value::Value(std::string(""));
                 auto val = res->member.get(res->instance);
@@ -852,13 +864,13 @@ namespace core::api
                     }
                 }
                 return value::Value(std::string(""));
-            });
+            }});
 
         // _plugin_setEnum(entityId, componentName, fieldName, valueName) -> bool
         interpreter->registerNativeFunction("_plugin_setEnum",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_setEnum");
+                auto res = resolveField(*storedBridges, args, "_plugin_setEnum");
                 if (!res || !res->member.type().is_enum())
                     return value::Value(false);
                 std::string valName = extractString(args[3]);
@@ -873,12 +885,12 @@ namespace core::api
                 }
                 vfLogWarning("[PluginScript] _plugin_setEnum: unknown value '{}' for enum field", valName);
                 return value::Value(false);
-            });
+            }});
 
         // _plugin_getEnumValues(entityId, componentName, fieldName) -> string[] (all enum value names)
         interpreter->registerNativeFunction("_plugin_getEnumValues",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_getEnumValues");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_getEnumValues");
                 if (!res || !res->member.type().is_enum())
                     return value::Value(std::monostate{});
                 // Collect names
@@ -892,34 +904,31 @@ namespace core::api
                 for (std::size_t i = 0; i < names.size(); ++i)
                     arr->set(i, value::Value(names[i]));
                 return value::Value(arr);
-            });
+            }});
 
         // ── Unified get/set (Godot-style: returns Object, script casts) ──
 
         // _plugin_get(entityId, componentName, fieldName) -> Object (any type)
         interpreter->registerNativeFunction("_plugin_get",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
-                auto res = resolveField(*bridgesCopy, args, "_plugin_get");
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto res = resolveField(*storedBridges, args, "_plugin_get");
                 if (!res) return value::Value(std::monostate{});
                 auto val = res->member.get(res->instance);
                 return metaToValue(val, res->member.type());
-            });
+            }});
 
         // _plugin_set(entityId, componentName, fieldName, value) -> bool
         interpreter->registerNativeFunction("_plugin_set",
-            [bridgesCopy](const std::vector<value::Value>& args) -> value::Value {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 4) return value::Value(false);
-                auto res = resolveField(*bridgesCopy, args, "_plugin_set");
+                auto res = resolveField(*storedBridges, args, "_plugin_set");
                 if (!res) return value::Value(false);
                 auto converted = valueToMeta(args[3], res->member.type());
                 if (!converted) return value::Value(false);
                 res->member.set(res->instance, converted);
                 writeBackChain(*res);
                 return value::Value(true);
-            });
-
-        // Store bridges for later use by registerStructClasses
-        storedBridges = bridgesCopy;
+            }});
 
         vfLogInfo("[Plugin] Registered 26 plugin component script bindings");
     }

@@ -8,6 +8,20 @@
 namespace memory {
 
 	class PoolAllocator : public IAllocator {
+	private:
+		uint8_t* buffer = nullptr;
+		uint64_t blockSize;
+		uint32_t blockCount;
+		std::vector<uint32_t> freeList;
+		uint32_t usedBlocks = 0;
+		uint64_t peakAllocated = 0;
+		uint64_t totalAllocations = 0;
+		uint64_t totalFrees = 0;
+		mutable std::mutex mtx;
+		std::string name;
+		uint32_t allocatorId;
+
+		static std::atomic<uint32_t> nextAllocatorId;
 	public:
 		PoolAllocator(uint64_t blockSize, uint32_t blockCount, const std::string& name = "PoolAllocator");
 		~PoolAllocator() override;
@@ -26,21 +40,6 @@ namespace memory {
 		void* getPointer(const AllocationHandle& handle) const;
 		uint64_t getBlockSize() const { return blockSize; }
 		uint32_t getBlockCount() const { return blockCount; }
-
-	private:
-		uint8_t* buffer = nullptr;
-		uint64_t blockSize;
-		uint32_t blockCount;
-		std::vector<uint32_t> freeList;
-		uint32_t usedBlocks = 0;
-		uint64_t peakAllocated = 0;
-		uint64_t totalAllocations = 0;
-		uint64_t totalFrees = 0;
-		mutable std::mutex mtx;
-		std::string name;
-		uint32_t allocatorId;
-
-		static std::atomic<uint32_t> nextAllocatorId;
 	};
 
 }

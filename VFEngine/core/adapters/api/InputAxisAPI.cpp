@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "InputAxisAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -14,20 +16,20 @@ namespace core::api
 
         // _native_inputaxis_getValue1D(name) -> float
         interpreter->registerNativeFunction("_native_inputaxis_getValue1D",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(0.0);
                 std::string name = extractString(args[0], "_native_inputaxis_getValue1D");
 
                 events::input::GetAxis1DValueQuery query;
                 query.axisName = name;
                 return value::Value(static_cast<double>(dispatcher.query(query)));
-            });
+            }});
 
         // _native_inputaxis_getValue2DX(name) -> float
         interpreter->registerNativeFunction("_native_inputaxis_getValue2DX",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(0.0);
                 std::string name = extractString(args[0], "_native_inputaxis_getValue2DX");
 
@@ -35,12 +37,12 @@ namespace core::api
                 query.axisName = name;
                 auto result = dispatcher.query(query);
                 return value::Value(static_cast<double>(result.x));
-            });
+            }});
 
         // _native_inputaxis_getValue2DY(name) -> float
         interpreter->registerNativeFunction("_native_inputaxis_getValue2DY",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(0.0);
                 std::string name = extractString(args[0], "_native_inputaxis_getValue2DY");
 
@@ -48,12 +50,12 @@ namespace core::api
                 query.axisName = name;
                 auto result = dispatcher.query(query);
                 return value::Value(static_cast<double>(result.y));
-            });
+            }});
 
         // _native_inputaxis_register1D(name, positiveAction, negativeAction)
         interpreter->registerNativeFunction("_native_inputaxis_register1D",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 3) return value::Value(std::monostate{});
                 std::string name = extractString(args[0], "_native_inputaxis_register1D");
                 std::string positive = extractString(args[1], "_native_inputaxis_register1D");
@@ -65,12 +67,12 @@ namespace core::api
                 cmd.negativeAction = negative;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_inputaxis_register2D(name, up, down, left, right, normalize)
         interpreter->registerNativeFunction("_native_inputaxis_register2D",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 5) return value::Value(std::monostate{});
                 std::string name = extractString(args[0], "_native_inputaxis_register2D");
                 std::string up = extractString(args[1], "_native_inputaxis_register2D");
@@ -88,12 +90,12 @@ namespace core::api
                 cmd.normalize = normalize;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_inputaxis_unregister1D(name)
         interpreter->registerNativeFunction("_native_inputaxis_unregister1D",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 std::string name = extractString(args[0], "_native_inputaxis_unregister1D");
 
@@ -101,12 +103,12 @@ namespace core::api
                 cmd.axisName = name;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_inputaxis_unregister2D(name)
         interpreter->registerNativeFunction("_native_inputaxis_unregister2D",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty()) return value::Value(std::monostate{});
                 std::string name = extractString(args[0], "_native_inputaxis_unregister2D");
 
@@ -114,6 +116,6 @@ namespace core::api
                 cmd.axisName = name;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
-            });
+            }});
     }
 }

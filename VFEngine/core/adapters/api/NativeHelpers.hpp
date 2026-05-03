@@ -1,6 +1,7 @@
 #pragma once
 
 #include <value/ValueType.hpp>
+#include <value/ValueShim.hpp>
 #include <value/NativeArray.hpp>
 #include <runtimeTypes/klass/ObjectInstance.hpp>
 #include "../../../services/data/EntityHandle.hpp"
@@ -18,58 +19,59 @@ namespace core::api
 {
     inline std::string extractString(const value::Value& val, const char* context = nullptr)
     {
-        if (std::holds_alternative<std::string>(val))
+        if (value::isString(val))
         {
-            return std::get<std::string>(val);
+            return value::asString(val);
         }
-        if (std::holds_alternative<value::InternedString>(val))
+        if (value::isInternedString(val))
         {
-            return std::get<value::InternedString>(val).getString();
+            return value::asInternedString(val).getString();
         }
         // Check for boxed String object
-        if (std::holds_alternative<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(val))
+        if (value::isObject(val))
         {
-            auto obj = std::get<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(val);
+            const auto& obj = value::asObject(val);
             if (obj)
             {
                 if (obj->getTypeName() == "String")
                 {
                     auto fieldVal = obj->getFieldValue("value");
-                    if (std::holds_alternative<std::string>(fieldVal))
+                    if (value::isString(fieldVal))
                     {
-                        return std::get<std::string>(fieldVal);
+                        return value::asString(fieldVal);
                     }
-                    if (std::holds_alternative<value::InternedString>(fieldVal))
+                    if (value::isInternedString(fieldVal))
                     {
-                        return std::get<value::InternedString>(fieldVal).getString();
+                        return value::asInternedString(fieldVal).getString();
                     }
                 }
                 // Try to get _value field for other wrapper types
                 auto valueField = obj->getFieldValue("_value");
-                if (std::holds_alternative<std::string>(valueField))
+                if (value::isString(valueField))
                 {
-                    return std::get<std::string>(valueField);
+                    return value::asString(valueField);
                 }
-                if (std::holds_alternative<value::InternedString>(valueField))
+                if (value::isInternedString(valueField))
                 {
-                    return std::get<value::InternedString>(valueField).getString();
+                    return value::asInternedString(valueField).getString();
                 }
             }
         }
-        if (context && !std::holds_alternative<std::monostate>(val))
+        if (context && !value::isVoid(val))
         {
-            vfLogError("[Script] {}: expected string argument, got variant index {}", context, val.index());
+            vfLogError("[Script] {}: expected string argument, got tag {}",
+                       context, static_cast<int>(val.tag()));
         }
         return "";
     }
 
     inline int64_t extractInt64(const value::Value& val, const char* context = nullptr)
     {
-        if (std::holds_alternative<int64_t>(val))
+        if (value::isInt(val))
         {
-            return std::get<int64_t>(val);
+            return value::asInt(val);
         }
-        if (context && !std::holds_alternative<std::monostate>(val))
+        if (context && !value::isVoid(val))
         {
             vfLogError("[Script] {}: expected integer argument", context);
         }
@@ -78,15 +80,15 @@ namespace core::api
 
     inline float extractFloat(const value::Value& val, const char* context = nullptr)
     {
-        if (std::holds_alternative<double>(val))
+        if (value::isFloat(val))
         {
-            return static_cast<float>(std::get<double>(val));
+            return static_cast<float>(value::asFloat(val));
         }
-        if (std::holds_alternative<int64_t>(val))
+        if (value::isInt(val))
         {
-            return static_cast<float>(std::get<int64_t>(val));
+            return static_cast<float>(value::asInt(val));
         }
-        if (context && !std::holds_alternative<std::monostate>(val))
+        if (context && !value::isVoid(val))
         {
             vfLogError("[Script] {}: expected number argument", context);
         }
@@ -95,11 +97,11 @@ namespace core::api
 
     inline bool extractBool(const value::Value& val, const char* context = nullptr)
     {
-        if (std::holds_alternative<bool>(val))
+        if (value::isBool(val))
         {
-            return std::get<bool>(val);
+            return value::asBool(val);
         }
-        if (context && !std::holds_alternative<std::monostate>(val))
+        if (context && !value::isVoid(val))
         {
             vfLogError("[Script] {}: expected boolean argument", context);
         }

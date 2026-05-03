@@ -1,5 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <environment/NativeContext.hpp>
+#include <span>
 
 #include "SceneAPI.hpp"
 #include "NativeHelpers.hpp"
@@ -40,8 +42,8 @@ namespace core::api
         // _native_scene_load(path) -> void
         // Replaces the current scene entirely
         interpreter->registerNativeFunction("_native_scene_load",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] Scene.load: missing path argument");
@@ -57,13 +59,13 @@ namespace core::api
                 dispatcher.execute(loadCmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_scene_loadAdditive(path) -> string (scene name)
         // Loads a scene additively without replacing the current one
         interpreter->registerNativeFunction("_native_scene_loadAdditive",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] Scene.loadAdditive: missing path argument");
@@ -95,12 +97,12 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(sceneName);
-            });
+            }});
 
         // _native_scene_unload(name) -> void
         interpreter->registerNativeFunction("_native_scene_unload",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] Scene.unload: missing name argument");
@@ -113,13 +115,13 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_scene_loadAsync(path, callback) -> void
         // Queues an async scene load, callback is invoked when done
         interpreter->registerNativeFunction("_native_scene_loadAsync",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 2)
                 {
                     vfLogError("[Script] Scene.loadAsync: missing path or callback argument");
@@ -136,20 +138,20 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_scene_getActive() -> string
         interpreter->registerNativeFunction("_native_scene_getActive",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 events::scene::GetActiveSceneQuery query;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
 
         // _native_scene_setActive(name) -> void
         interpreter->registerNativeFunction("_native_scene_setActive",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     vfLogError("[Script] Scene.setActive: missing name argument");
@@ -162,12 +164,12 @@ namespace core::api
                 dispatcher.execute(cmd);
 
                 return value::Value(std::monostate{});
-            });
+            }});
 
         // _native_scene_isLoaded(name) -> bool
         interpreter->registerNativeFunction("_native_scene_isLoaded",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
                 if (args.empty())
                 {
                     return value::Value(false);
@@ -177,6 +179,6 @@ namespace core::api
                 events::scene::IsSceneLoadedQuery query;
                 query.sceneName = name;
                 return value::Value(dispatcher.query(query));
-            });
+            }});
     }
 }
