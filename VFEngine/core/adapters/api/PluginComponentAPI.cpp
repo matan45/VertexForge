@@ -194,7 +194,7 @@ namespace core::api
     {
         for (const auto& bridge : bridges)
         {
-            if (bridge.name && name == bridge.name)
+            if (name == bridge.name)
                 return &bridge;
         }
         return nullptr;

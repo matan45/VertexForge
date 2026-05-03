@@ -232,8 +232,8 @@ namespace windows::details
             if (bridge.has(reg, entity))
                 continue;
 
-            const char* name = bridge.name ? bridge.name : "Unknown";
-            if (filter && !matchesFilter(name, filter))
+            std::string name = bridge.name.empty() ? "Unknown" : bridge.name;
+            if (filter && !matchesFilter(name.c_str(), filter))
                 continue;
 
             std::string label = std::string("  ") + name;

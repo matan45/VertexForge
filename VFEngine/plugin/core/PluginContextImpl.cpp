@@ -748,7 +748,7 @@ namespace plugin {
     void PluginContextImpl::registerComponentBridge(MetaComponentBridge bridge)
     {
         bridge.pluginName = pluginName;
-        vfLogInfo("[Plugin:{}] Registered component bridge: {}", pluginName, bridge.name ? bridge.name : "unnamed");
+        vfLogInfo("[Plugin:{}] Registered component bridge: {}", pluginName, bridge.name.empty() ? "unnamed" : bridge.name);
         allBridges.push_back(std::move(bridge));
     }
 

@@ -290,6 +290,12 @@ namespace core
                 return false;
             }
             auto libProgram = project::mtclib::MtcLibSerializer::deserialize(libFile);
+            if (libProgram.bytecodeProgram.getInstructions().empty() &&
+                libProgram.bytecodeProgram.getClasses().empty())
+            {
+                vfLogError("[ScriptingAdapter] Compiled library is empty: {}", libraryPath);
+                return false;
+            }
             interpreter->loadFromProgram(std::move(libProgram.bytecodeProgram));
 
             // Register mType classes for plugin struct types (requires stdlib loaded)
@@ -540,6 +546,9 @@ namespace core
                 if (value::isObject(liveValue))
                 {
                     const auto& liveObj = value::asObject(liveValue);
+                    // mType API: getAllFields() returns vector<pair> by value
+                    // (replaces the old getAllFieldValues() which returned the
+                    // internal map by reference — type changed, copy is intentional).
                     const auto restoredFields = restoredObj->getAllFields();
                     for (const auto& [fieldName, fieldValue] : restoredFields)
                     {
