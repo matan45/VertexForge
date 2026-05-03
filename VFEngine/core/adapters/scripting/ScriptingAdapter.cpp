@@ -3,6 +3,7 @@
 #include <value/ValueShim.hpp>
 #include <project/ProjectBuilder.hpp>
 #include <project/ProjectConfigParser.hpp>
+#include <project/mtclib/MtcLibSerializer.hpp>
 
 #include "ScriptingAdapter.hpp"
 #include "ScriptUIEventBridge.hpp"
@@ -277,7 +278,19 @@ namespace core
             }
 
             vfLogInfo("[ScriptingAdapter] Loading compiled scripts from: {}", libraryPath);
-            interpreter->loadCompiledBytecode(libraryPath);
+
+            // Unwrap the .mtcLib container and load its embedded BytecodeProgram
+            // as the main program so createObject() can find script classes.
+            // (loadLibrary registers classes for cross-library imports only —
+            // it does not set the cached program needed by createObject.)
+            std::ifstream libFile(libraryPath, std::ios::binary);
+            if (!libFile)
+            {
+                vfLogError("[ScriptingAdapter] Could not open compiled library: {}", libraryPath);
+                return false;
+            }
+            auto libProgram = project::mtclib::MtcLibSerializer::deserialize(libFile);
+            interpreter->loadFromProgram(std::move(libProgram.bytecodeProgram));
 
             // Register mType classes for plugin struct types (requires stdlib loaded)
             api::PluginComponentAPI::registerStructClasses(interpreter.get());
