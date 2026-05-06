@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream;
 
 public class ProjectCreator {
 
-    private static final String LIZ_ZIP_RESOURCE = "/templates/liz.zip";
+    private static final String LIZ_ZIP_RESOURCE = "/templates/lib.zip";
     private static final String SCENE_TEMPLATE_RESOURCE = "/templates/Main.vfScene";
     private static final String ENGINE_VERSION = "VertexForge 1.0.0";
 
