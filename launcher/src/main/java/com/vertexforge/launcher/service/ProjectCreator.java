@@ -153,6 +153,11 @@ public class ProjectCreator {
                 @Script
                 public class Main {
                     private int selfId;
+               
+                    constructor() {
+                        // initialization code
+                    }
+              
                     public function onStart(): void {
                         this.selfId = Entity::self();
                         Log::info("Hello from Main script!");
@@ -174,7 +179,7 @@ public class ProjectCreator {
                         // Called when script is destroyed
                     }
                 }
-                """;
+               \s""";
 
         Files.writeString(mainScript, content);
     }
