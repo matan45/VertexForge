@@ -80,6 +80,24 @@ namespace core::api
                 return value::Value(delta.y);
             }});
 
+        // _native_input_getMouseScrollDeltaX() -> float
+        interpreter->registerNativeFunction("_native_input_getMouseScrollDeltaX",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::GetScrollDeltaQuery query;
+                glm::vec2 delta = dispatcher.query(query);
+                return value::Value(delta.x);
+            }});
+
+        // _native_input_getMouseScrollDeltaY() -> float
+        interpreter->registerNativeFunction("_native_input_getMouseScrollDeltaY",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::GetScrollDeltaQuery query;
+                glm::vec2 delta = dispatcher.query(query);
+                return value::Value(delta.y);
+            }});
+
         // _native_input_isKeyReleased(keyCode) -> bool
         interpreter->registerNativeFunction("_native_input_isKeyReleased",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{

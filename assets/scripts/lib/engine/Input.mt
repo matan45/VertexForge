@@ -75,6 +75,20 @@ public class Input {
     }
 
     // ============================================
+    // Mouse Wheel
+    // ============================================
+
+    // Get horizontal scroll delta since last frame (tilt wheel / trackpad)
+    public static function getMouseScrollDeltaX(): float {
+        return _native_input_getMouseScrollDeltaX();
+    }
+
+    // Get vertical scroll delta since last frame (standard scroll wheel)
+    public static function getMouseScrollDeltaY(): float {
+        return _native_input_getMouseScrollDeltaY();
+    }
+
+    // ============================================
     // Input Control
     // ============================================
 

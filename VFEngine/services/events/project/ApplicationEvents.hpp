@@ -13,6 +13,18 @@ namespace events::application {
     };
 
     // ============================================
+    // QUERIES - Window state reads
+    // ============================================
+
+    struct GetWindowWidthQuery : IQuery<uint32_t> {
+        std::string_view getName() const override { return "GetWindowWidth"; }
+    };
+
+    struct GetWindowHeightQuery : IQuery<uint32_t> {
+        std::string_view getName() const override { return "GetWindowHeight"; }
+    };
+
+    // ============================================
     // NOTIFICATIONS - Application state broadcasts
     // ============================================
 

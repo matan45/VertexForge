@@ -141,6 +141,7 @@
     <ClInclude Include="adapters\api\UIValueAPI.hpp" />
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
     <ClInclude Include="adapters\api\WeatherAPI.hpp" />
+    <ClInclude Include="adapters\api\WindowAPI.hpp" />
     <ClInclude Include="adapters\audio\AudioAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\NavmeshAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\TileGraph.hpp" />
@@ -244,6 +245,7 @@
     <ClCompile Include="adapters\api\UIValueAPI.cpp" />
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
     <ClCompile Include="adapters\api\WeatherAPI.cpp" />
+    <ClCompile Include="adapters\api\WindowAPI.cpp" />
     <ClCompile Include="adapters\audio\AudioAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterBuildOps.cpp" />

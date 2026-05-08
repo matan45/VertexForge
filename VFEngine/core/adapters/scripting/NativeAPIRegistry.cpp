@@ -36,6 +36,7 @@
 #include "../api/GameConfigAPI.hpp"
 #include "../api/WeatherAPI.hpp"
 #include "../api/DestructionAPI.hpp"
+#include "../api/WindowAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -104,6 +105,7 @@ namespace core
         api::GameConfigAPI::registerAPI(interpreter);
         api::WeatherAPI::registerAPI(interpreter);
         api::DestructionAPI::registerAPI(interpreter);
+        api::WindowAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }
