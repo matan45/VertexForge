@@ -42,18 +42,18 @@ public class Physics {
     // ============================================
     // Body Type Constants
     // ============================================
-    public static const int BODY_STATIC = 0;
-    public static const int BODY_DYNAMIC = 1;
-    public static const int BODY_KINEMATIC = 2;
+    public static final int BODY_STATIC = 0;
+    public static final int BODY_DYNAMIC = 1;
+    public static final int BODY_KINEMATIC = 2;
 
     // ============================================
     // Collider Shape Constants
     // ============================================
-    public static const int SHAPE_BOX = 0;
-    public static const int SHAPE_SPHERE = 1;
-    public static const int SHAPE_CAPSULE = 2;
-    public static const int SHAPE_CONVEX_MESH = 3;
-    public static const int SHAPE_TRIANGLE_MESH = 4;
+    public static final int SHAPE_BOX = 0;
+    public static final int SHAPE_SPHERE = 1;
+    public static final int SHAPE_CAPSULE = 2;
+    public static final int SHAPE_CONVEX_MESH = 3;
+    public static final int SHAPE_TRIANGLE_MESH = 4;
 
     public constructor() {
     }
