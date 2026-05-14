@@ -57,7 +57,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MTYPE_SIMD_ENABLED;ASMJIT_STATIC;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;..\dependencies\mtype\vendor\asmjit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;..\dependencies\mtype\packagemanager\src;..\dependencies\mtype\vendor\asmjit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -74,7 +74,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MTYPE_SIMD_ENABLED;ASMJIT_STATIC;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;..\dependencies\mtype\vendor\asmjit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;..\dependencies\mtype\packagemanager\src;..\dependencies\mtype\vendor\asmjit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -176,6 +176,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\constants\LambdaConstants.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\constants\SecurityConstants.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\debugger\DebugContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\debugger\DebugExpressionEvaluator.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\debugger\DebugHookHelper.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\debugger\DebugProtocol.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\debugger\DebuggerConstants.hpp" />
@@ -334,6 +335,9 @@
     <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\QualifiedNameParser.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\StatementTypeDetector.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\VisibilityParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\plugin\PluginHost.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\plugin\PluginLoader.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\plugin\PluginNatives.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\project\DependencyGraph.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\project\DependencyGraphBuilder.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\project\DependencyGraphFormatter.hpp" />
@@ -561,6 +565,16 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\NullCheckUtils.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\TypeArgResolution.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\validation\AccessValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\DependencyResolver.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\GitSource.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\Lockfile.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\MtModulesManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\PackageInstaller.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\PackageManifest.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\PackageRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\Publish.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\SemVer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\packagemanager\src\Sha256.hpp" />
     <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\a64.h" />
     <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm.h" />
     <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64archtraits_p.h" />
@@ -739,6 +753,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\circularDependency\DependencyPatternAnalyzer.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\circularDependency\DependencyTypeUtils.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugContext.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugExpressionEvaluator.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugHookHelper.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugProtocol.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector.cpp" />
@@ -848,6 +863,10 @@
     <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\QualifiedNameParser.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\StatementTypeDetector.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\VisibilityParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\plugin\PluginHost.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\plugin\PluginLoader.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\plugin\PluginNatives.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\plugin\WinPluginLoader.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\project\DependencyGraph.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\project\DependencyGraphBuilder.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\project\DependencyGraphFormatter.cpp" />
@@ -1057,6 +1076,18 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\utils\InteropExceptionDecorator.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\utils\MethodResolver.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\validation\AccessValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\DependencyResolver.cpp">
+      <ObjectFileName>$(IntDir)\DependencyResolver1.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\GitSource.cpp" />
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\Lockfile.cpp" />
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\MtModulesManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\PackageInstaller.cpp" />
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\PackageManifest.cpp" />
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\PackageRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\Publish.cpp" />
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\SemVer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\packagemanager\src\Sha256.cpp" />
     <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64assembler.cpp" />
     <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64builder.cpp" />
     <ClCompile Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm\a64compiler.cpp" />

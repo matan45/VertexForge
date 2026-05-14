@@ -58,6 +58,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
+      <DisableSpecificWarnings>5285;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MESHOPTIMIZER_API=__declspec(dllimport);JPH_OBJECT_STREAM;JPH_SHARED_LIBRARY;DEBUG;JPH_ENABLE_ASSERTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\doctest\doctest;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;..\..\dependencies\glfw\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\ispc_texcomp;..\..\dependencies\IconFontCppHeaders;..\..\dependencies\lz4\lib;..\..\dependencies\recastnavigation\Recast\Include;..\..\dependencies\recastnavigation\Detour\Include;..\..\dependencies\recastnavigation\DetourCrowd\Include;..\..\dependencies\JoltPhysics;..\utilities;..\services;..\graphics;..\core;..\window\controllers;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
@@ -88,6 +89,7 @@ IF EXIST ..\..\dependencies\streamline\bin\x64\development\sl.interposer.dll\ (x
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
+      <DisableSpecificWarnings>5285;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MESHOPTIMIZER_API=__declspec(dllimport);JPH_OBJECT_STREAM;JPH_SHARED_LIBRARY;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\doctest\doctest;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;..\..\dependencies\glfw\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\ispc_texcomp;..\..\dependencies\IconFontCppHeaders;..\..\dependencies\lz4\lib;..\..\dependencies\recastnavigation\Recast\Include;..\..\dependencies\recastnavigation\Detour\Include;..\..\dependencies\recastnavigation\DetourCrowd\Include;..\..\dependencies\JoltPhysics;..\utilities;..\services;..\graphics;..\core;..\window\controllers;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
