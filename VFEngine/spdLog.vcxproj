@@ -184,6 +184,7 @@
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\sinks\stdout_sinks-inl.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\sinks\stdout_sinks.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\sinks\syslog_sink.h" />
+    <ClInclude Include="..\dependencies\spdlog\include\spdlog\sinks\systemd_namespace_sink.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\sinks\systemd_sink.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\sinks\tcp_sink.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\sinks\udp_sink.h" />
