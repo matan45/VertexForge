@@ -73,9 +73,10 @@ project "Editor"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   -- Windows-specific libraries for splash screen
+   -- Windows-specific libraries for splash screen and mType net/plugin
    filter "system:windows"
-      links { "gdiplus" }
+      links { "gdiplus", "winhttp", "ws2_32" }
+      linkoptions { "/ignore:4006" }
    filter {}
 
    filter "configurations:Debug"
@@ -335,6 +336,11 @@ project "Runtime"
    -- so shaderc_shared.dll is not needed and never loaded at runtime
    linkoptions { "/DELAYLOAD:shaderc_shared.dll" }
    links { "delayimp" }
+
+   filter "system:windows"
+      links { "winhttp", "ws2_32" }
+      linkoptions { "/ignore:4006" }
+   filter {}
 
    filter "configurations:Debug"
       defines { "DEBUG", "DOCTEST_CONFIG_DISABLE" }
@@ -1193,6 +1199,9 @@ project "Tests"
 
    buildoptions { "/bigobj" }
 
+   -- doctest specializes std::tuple, forbidden under C++20 [tuple.tuple.general]/1
+   disablewarnings { "5285" }
+
    filter "configurations:Debug"
       defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
       symbols "On"
@@ -1413,17 +1422,21 @@ project "mType"
 
    files {
       "dependencies/mtype/mType/**.hpp",
-      "dependencies/mtype/mType/**.cpp"
+      "dependencies/mtype/mType/**.cpp",
+      "dependencies/mtype/packagemanager/src/**.hpp",
+      "dependencies/mtype/packagemanager/src/**.cpp"
    }
 
-   -- Exclude main entry point and tests (for standalone executable)
+   -- Exclude main entry points and tests (kept for standalone executables upstream)
    removefiles {
       "dependencies/mtype/mType/run/**",
-      "dependencies/mtype/mType/tests/**"
+      "dependencies/mtype/mType/tests/**",
+      "dependencies/mtype/packagemanager/src/Main.cpp"
    }
 
    includedirs {
       "dependencies/mtype/mType",
+      "dependencies/mtype/packagemanager/src",
       "dependencies/mtype/vendor/asmjit"
    }
 
@@ -1437,6 +1450,24 @@ project "mType"
    -- Platform-specific SIMD configurations
    filter "system:windows"
       systemversion "latest"
+      removefiles {
+         "dependencies/mtype/mType/net/CurlHttpClient.hpp",
+         "dependencies/mtype/mType/net/CurlHttpClient.cpp",
+         "dependencies/mtype/mType/net/PosixSocket.hpp",
+         "dependencies/mtype/mType/net/PosixSocket.cpp",
+         "dependencies/mtype/mType/plugin/PosixPluginLoader.cpp"
+      }
+
+   filter "system:linux or system:macosx"
+      removefiles {
+         "dependencies/mtype/mType/net/WinHttpClient.hpp",
+         "dependencies/mtype/mType/net/WinHttpClient.cpp",
+         "dependencies/mtype/mType/net/WinSocket.hpp",
+         "dependencies/mtype/mType/net/WinSocket.cpp",
+         "dependencies/mtype/mType/net/WinSockInit.hpp",
+         "dependencies/mtype/mType/net/WinSockInit.cpp",
+         "dependencies/mtype/mType/plugin/WinPluginLoader.cpp"
+      }
 
    filter { "system:windows", "configurations:Release" }
       buildoptions { "/arch:AVX2" }

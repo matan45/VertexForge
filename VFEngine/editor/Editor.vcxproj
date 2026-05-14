@@ -73,7 +73,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gdiplus.lib;winhttp.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/ignore:4006 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>IF EXIST ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Editor\Debug\x64 &gt; nul)
@@ -112,8 +113,9 @@ IF EXIST ..\..\dependencies\streamline\bin\x64\development\NvLowLatencyVk.dll\ (
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>gdiplus.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gdiplus.lib;winhttp.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
+      <AdditionalOptions>/ignore:4006 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>IF EXIST ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll ..\..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll ..\..\bin\Editor\Release\x64 &gt; nul)
