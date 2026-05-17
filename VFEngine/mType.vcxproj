@@ -411,6 +411,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\value\ArrayPool.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\AsyncPromiseValue.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\BoolCache.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\BridgeArena.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\CapturedVariable.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\FlatMultiArray.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\FloatCache.hpp" />
@@ -536,6 +537,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\LibraryLoader.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\VirtualMachine.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\context\ExecutionContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\context\SharedStackFramePool.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\context\TypeArgMapPtr.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ArithmeticExecutor.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ArrayExecutor.hpp" />
