@@ -11,43 +11,76 @@ premake5 vs2022
 # Build from command line (after generating solution)
 msbuild VFEngine/VertexForge.sln /p:Configuration=Debug /p:Platform=x64
 msbuild VFEngine/VertexForge.sln /p:Configuration=Release /p:Platform=x64
+
+# Build a single project (faster iteration)
+msbuild VFEngine/VertexForge.sln /t:Editor /p:Configuration=Debug /p:Platform=x64
+msbuild VFEngine/VertexForge.sln /t:Tests  /p:Configuration=Debug /p:Platform=x64
 ```
 
 **Prerequisites**: Vulkan SDK installed with `VULKAN_SDK` environment variable set.
 
-**Output**: Executables in `bin/Editor/<Config>/x64/` and `bin/Runtime/<Config>/x64/`
+**Toolchain**: C++20, MSVC toolset `v145` (VS2026), latest Windows SDK. Global flags `/utf-8 /MP` (required by spdlog/fmt). Engine-wide defines: `VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1`, `GLM_FORCE_DEPTH_ZERO_TO_ONE` (Vulkan [0,1] depth range).
+
+**Output**: Executables in `bin/Editor/<Config>/x64/`, `bin/Runtime/<Config>/x64/`, `bin/Tests/<Config>/x64/`. Each SharedLib subsystem also lands in `bin/<Subsystem>/<Config>/x64/` and is copied into Editor/Runtime/Tests output dirs via `postbuildcommands`.
+
+## Tests
+
+The `Tests` project (`VFEngine/tests/`) is a doctest-based CPU-only unit test runner — no rendering dependencies. Each `test_*.cpp` registers its own `TEST_CASE`s.
+
+```bash
+# Run the full suite
+bin/Tests/Debug/x64/Tests.exe
+
+# List / filter (doctest CLI)
+bin/Tests/Debug/x64/Tests.exe --list-test-cases
+bin/Tests/Debug/x64/Tests.exe --test-case="*terrain*"
+bin/Tests/Debug/x64/Tests.exe --source-file="*test_terrain*"
+bin/Tests/Debug/x64/Tests.exe --subcase="boundary stitching"
+```
+
+Add new tests by dropping a `test_<feature>.cpp` into `VFEngine/tests/` — premake globs it automatically. `main.cpp` is the doctest entry point; do not add a second.
 
 ## Architecture
 
 ### Module Dependency Graph
 
 ```
-Editor   ──> Services, Import, Core, ProceduralGen, ImageProcessing (ONLY)
+Editor   ──> Services, Import, Core, Plugin, ProceduralGen, ImageProcessing, GameExport, ECSRegistry (ONLY)
 Import   ──> Utilities (SharedLib/DLL, requires CMake-built libs: assimp, freetype, libogg, libvorbis)
 Runtime  ──> Services, Core (ONLY)
 Services ──> Utilities, Terrain, Serialization, World, Window
 Core     ──> Graphics, Audio, Physics, Animation, mType, jolt, recast
 Graphics ──> Window, VFX, imgui
+Plugin   ──> Services, Utilities (engine-side plugin SDK + loader)
 ```
 
-All modules are static libraries except Editor and Runtime (ConsoleApp executables), Import, ProceduralGen, ImageProcessing (SharedLib/DLL), jolt and meshoptimizer (SharedLib/DLL).
+**Premake groups**: `Engine` (Editor, Runtime, Core, Graphics, Window, Import, Services, Plugin, Utilities), `Subsystems` (extracted modules — see table below), `libs` (vendored third-party), `Plugins` (sample/external plugin DLLs under `plugins/`).
+
+Module kinds: Editor/Runtime/Tests are `ConsoleApp`. Most modules are `StaticLib`. `SharedLib/DLL`: Import, ProceduralGen, ImageProcessing, Audio, Terrain, ProceduralGen, ImageProcessing, GameExport, ECSRegistry, jolt, meshoptimizer, and external plugins.
 
 ### Subsystem Extraction
 
 Large modules are split into separately compiled subsystem projects using `removefiles` in the parent and dedicated projects for each subsystem. This reduces compile times and clarifies boundaries.
 
-| Subsystem | Extracted From | Compiles |
-|-----------|---------------|----------|
-| Audio | Core | `core/audio/**` |
-| Physics | Core | `core/physics/**` |
-| Animation | Graphics + Utilities | `graphics/animation/**` + `utilities/animator/**` |
-| VFX | Graphics + Utilities | `graphics/render/vfx/**` + `utilities/vfx/**` |
-| Terrain | Utilities | `utilities/terrain/**` |
-| Serialization | Utilities | `utilities/serialization/**` + `utilities/world/World*Serialization.*` |
-| World | Utilities | `utilities/world/**` (excluding serialization files) |
-| DataTypes | Services | `services/data/**` (header-only, `kind "None"`) |
-| ProceduralGen | Utilities | `utilities/procedural/**` (SharedLib/DLL) |
-| ImageProcessing | Utilities | `utilities/imageprocessing/**` (SharedLib/DLL) |
+| Subsystem | Extracted From | Compiles | Kind |
+|-----------|---------------|----------|------|
+| Audio | Core | `core/audio/**` | SharedLib (`VF_AUDIO_BUILD_DLL`) |
+| Physics | Core | `core/physics/**` | StaticLib |
+| Animation | Graphics + Utilities | `graphics/animation/**` + `utilities/animator/**` | StaticLib |
+| VFX | Graphics + Utilities | `graphics/render/vfx/**` + `utilities/vfx/**` | StaticLib |
+| Terrain | Utilities | `utilities/terrain/**` | SharedLib |
+| Serialization | Utilities | `utilities/serialization/**` + `utilities/world/World*Serialization.*` | StaticLib |
+| World | Utilities | `utilities/world/**` (excluding serialization files) | StaticLib |
+| Memory | Utilities | `utilities/memory/**` | StaticLib |
+| Weather | Utilities | `utilities/weather/**` | StaticLib |
+| Destruction | Utilities | `utilities/destruction/**` (uses v-hacd) | StaticLib |
+| DataTypes | Services | `services/data/**` (header-only, `kind "None"`) | None |
+| ProceduralGen | Utilities | `utilities/procedural/**` | SharedLib (`VF_PROCEDURAL_BUILD_DLL`) |
+| ImageProcessing | Utilities | `utilities/imageprocessing/**` | SharedLib |
+| GameExport | Utilities | `utilities/export/**` + `utilities/archive/VFPakWriter.*` (shader pre-compilation, `.vfpak`) | SharedLib (`VF_GAMEEXPORT_BUILD_DLL`) |
+| ECSRegistry | Utilities | `utilities/scene/EntityRegistry.*` (the EnTT registry singleton) | SharedLib (`VF_ECSREGISTRY_BUILD_DLL`) |
+
+**ECSRegistry rule**: any DLL that touches `EntityRegistry` (Audio, Serialization, World, Terrain, Animation, Tests, etc.) must link `ECSRegistry` so the singleton resolves to one instance across the process. Adding a new SharedLib that uses entities? Add `links { "ECSRegistry" }` and a postbuild copy.
 
 **Key constraints**:
 - Editor accesses rendering/scene/input through Services layer APIs (never directly include Core or Graphics)
@@ -101,10 +134,21 @@ VFEngine/
 │   │   ├── procedural/      # Heightmap generator tool window
 │   │   └── imageprocessing/ # Background removal tool window
 │   └── run/                 # Main.cpp entry point
-└── runtime/                 # Standalone game runtime
-    ├── handlers/            # RuntimeHandler
-    └── run/                 # Main.cpp entry point
+├── runtime/                 # Standalone game runtime
+│   ├── handlers/            # RuntimeHandler
+│   └── run/                 # Main.cpp entry point
+├── plugin/                  # Engine-side plugin SDK + loader (links into Editor)
+│   ├── api/                 # IPlugin, PluginContext, PluginDescriptor, PluginExport, PluginVersion
+│   └── core/                # PluginManager, DynamicLibrary, PluginContextImpl, PluginEventBus
+└── tests/                   # doctest-based unit tests (Tests.exe)
+    ├── main.cpp             # doctest entry point — do not duplicate
+    └── test_*.cpp           # one TU per feature area; auto-globbed by premake
 ```
+
+External plugins live outside `VFEngine/` under `plugins/<PluginName>/` (e.g. `plugins/PluginAPITest/`, `plugins/TestComponentPlugin/`). Each plugin:
+- builds as a `SharedLib` in the `Plugins` premake group, includes `VFEngine/plugin` for the SDK
+- ships a `<PluginName>.vfplugin` descriptor (JSON) alongside the DLL
+- copies its DLL back into `plugins/<PluginName>/` via postbuild, where `PluginManager` discovers it at runtime
 
 ### Services Layer
 
@@ -237,6 +281,17 @@ meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 4. Create events in `services/events/<Name>Events.hpp`
 5. Create adapter in `core/adapters/<Name>Adapter.hpp/cpp`
 6. Wire up in bootstrap classes (`EditorBootstrap`, `RuntimeBootstrap`)
+
+### New External Plugin
+1. Create `plugins/<PluginName>/<PluginName>.cpp` implementing `IPlugin` (see `VFEngine/plugin/api/IPlugin.hpp`); export via `VF_PLUGIN_EXPORT` macros from `PluginExport.hpp`
+2. Author `plugins/<PluginName>/<PluginName>.vfplugin` (JSON descriptor: name, version, entry, dependencies — parsed by `PluginDescriptor`)
+3. Add a `SharedLib` project under `group "Plugins"` in `premake5.lua`, include `VFEngine/plugin`, postbuild-copy the DLL back to `plugins/<PluginName>/`
+4. `PluginManager` discovers and loads it from `plugins/` at editor startup; subscribe to engine events via `PluginEventBus` / `PluginContext`
+
+### New Unit Test
+1. Drop `test_<feature>.cpp` into `VFEngine/tests/` — no premake edit needed (glob)
+2. Use `TEST_CASE("...")` / `SUBCASE("...")`; CPU-only (no Vulkan device, no GLFW window)
+3. Re-run with `Tests.exe --test-case="<feature>*"` while iterating
 
 ### Exposing Graphics Functionality to Editor
 1. Add method to appropriate provider interface (e.g., `IPreviewProvider`)

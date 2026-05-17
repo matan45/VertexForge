@@ -264,6 +264,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\net\AsyncHelper.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\HashMapMarshal.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\HttpClient.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\net\ISocketServer.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\NetErrors.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\NetNatives.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\Socket.hpp" />
@@ -281,8 +282,11 @@
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\ConstantFoldingPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\DeadCodeEliminationPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\EscapeAnalysisPass.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\StructuralEqualitySynthesisPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\structural_equality\StructuralEqualityCodegen.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\structural_equality\StructuralEqualityPolicy.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\parser\AnnotationDeclarationParser.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\parser\ClassParser.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\parser\ExpressionParser.hpp" />
@@ -405,8 +409,11 @@
     <ClInclude Include="..\dependencies\mtype\mType\value\ArrayPool.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\AsyncPromiseValue.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\BoolCache.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\BridgeArena.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\CapturedVariable.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\FlatMultiArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\FloatCache.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\HashUtils.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\IMultiDimensionalArray.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\IntegerCache.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\InternedString.hpp" />
@@ -420,6 +427,8 @@
     <ClInclude Include="..\dependencies\mtype\mType\value\PromiseValue.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\SmallArgsBuffer.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\SparseMultiArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\SpecializedCollections.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\StringCache.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\StringPool.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\ValueBridge.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\ValueObject.hpp" />
@@ -439,6 +448,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\value\simd\SIMDOperationsImpl.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\simd\SIMDPolicies.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\simd\detection\CPUFeatures.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\version\Version.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\MethodSignature.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\bytecode\BytecodeIOHelper.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\bytecode\BytecodeProgram.hpp" />
@@ -482,6 +492,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\LiteralCompiler.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\MethodCompilerHelper.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\ParameterValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\StatementCleanup.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\StatementCompiler.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\TryStatementHelper.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\jit\JitCodeCache.hpp" />
@@ -524,6 +535,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\LibraryLoader.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\VirtualMachine.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\context\ExecutionContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\context\SharedStackFramePool.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\context\TypeArgMapPtr.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ArithmeticExecutor.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ArrayExecutor.hpp" />
@@ -802,8 +814,11 @@
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\ConstantFoldingPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\DeadCodeEliminationPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\EscapeAnalysisPass.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\StructuralEqualitySynthesisPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\structural_equality\StructuralEqualityCodegen.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\structural_equality\StructuralEqualityPolicy.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\parser\AnnotationDeclarationParser.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\parser\ClassParser.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\parser\ExpressionParser.cpp" />
@@ -918,9 +933,13 @@
     <ClCompile Include="..\dependencies\mtype\mType\validation\builtins\BuiltInAnnotations.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\AsyncPromiseValue.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\BoolCache.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\FloatCache.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\IntegerCache.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\InternedString.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\ObjectInstancePool.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\SpecializedCollections.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\SpecializedCollectionsBoxing.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\StringCache.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\StringPool.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\ValueObject.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\value\ValueTypeUtils.cpp" />
@@ -973,6 +992,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\LiteralCompiler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\MethodCompilerHelper.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ParameterValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\StatementCleanup.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\StatementCompiler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\TryStatementHelper.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\jit\JitCodeCache.cpp" />
