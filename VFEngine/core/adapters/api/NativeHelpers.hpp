@@ -3,7 +3,7 @@
 #include <value/ValueType.hpp>
 #include <value/ValueShim.hpp>
 #include <value/NativeArray.hpp>
-#include <runtimeTypes/klass/ObjectInstance.hpp>
+#include <value/ObjectInstance.hpp>
 #include "../../../services/data/EntityHandle.hpp"
 #include "../../../services/data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"

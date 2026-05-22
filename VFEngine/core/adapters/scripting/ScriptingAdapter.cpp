@@ -27,7 +27,7 @@
 #include <vm/runtime/VirtualMachine.hpp>
 #include <json/JsonSerializer.hpp>
 #include <json/JsonDeserializer.hpp>
-#include <runtimeTypes/klass/ObjectInstance.hpp>
+#include <value/ObjectInstance.hpp>
 #include <filesystem>
 #include <fstream>
 #include <regex>
