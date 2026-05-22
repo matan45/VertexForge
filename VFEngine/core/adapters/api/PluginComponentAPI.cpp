@@ -1,9 +1,9 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
 #include <environment/NativeContext.hpp>
-#include <runtimeTypes/klass/ClassDefinition.hpp>
-#include <runtimeTypes/klass/FieldDefinition.hpp>
-#include <runtimeTypes/klass/ObjectInstance.hpp>
+#include <environment/registry/ClassDefinition.hpp>
+#include <environment/registry/FieldDefinition.hpp>
+#include <value/ObjectInstance.hpp>
 #include <environment/Environment.hpp>
 #include <value/ValueShim.hpp>
 
