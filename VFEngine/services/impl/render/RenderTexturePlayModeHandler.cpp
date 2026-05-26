@@ -56,12 +56,8 @@ namespace services
 
     void RenderTexturePlayModeHandler::enterPlayMode()
     {
-        vfLogInfo("[RTTPlayMode] enterPlayMode begin");
         if (!provider)
-        {
-            vfLogWarning("[RTTPlayMode] enterPlayMode: no provider, returning");
             return;
-        }
 
         auto& registry = scene::EntityRegistry::getRegistry();
 
@@ -82,10 +78,6 @@ namespace services
                     continue;
             }
 
-            EntityHandle handle = internal::toHandle(entity);
-            vfLogInfo("[RTTPlayMode] creating RT for entity {} ({}x{})",
-                      handle.id, rtComp.width, rtComp.height);
-
             rendertexture::RenderTextureDesc desc;
             desc.width = rtComp.width;
             desc.height = rtComp.height;
@@ -95,18 +87,16 @@ namespace services
             desc.priority = rtComp.priority;
 
             rendertexture::RenderTextureId textureId = provider->createRenderTexture(desc);
-            vfLogInfo("[RTTPlayMode] createRenderTexture for entity {} returned id={}",
-                      handle.id, textureId);
 
             if (textureId != rendertexture::INVALID_RENDER_TEXTURE_ID)
             {
+                EntityHandle handle = internal::toHandle(entity);
                 activeTextures[handle] = textureId;
                 rtComp.textureId = textureId;
             }
         }
 
         rttActive = true;
-        vfLogInfo("[RTTPlayMode] enterPlayMode done, {} textures active", activeTextures.size());
     }
 
     void RenderTexturePlayModeHandler::exitPlayMode()

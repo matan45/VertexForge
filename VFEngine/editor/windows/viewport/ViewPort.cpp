@@ -23,7 +23,6 @@
 #include "data/DTOs.hpp"
 #include "data/EntityConversion.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
-#include "print/Log.hpp"
 #include <imgui.h>
 #include "ImGuizmo.h"
 #include <filesystem>
@@ -106,43 +105,29 @@ namespace windows
 
     bool ViewPort::tryGetGameCameraState(CameraState& state, float aspectRatio)
     {
-        // Log first 5 play-mode calls so we can see frames running.
-        constexpr int FRAMES_TO_LOG = 5;
-        static int callsLogged = 0;
-        const bool logThisCall = callsLogged < FRAMES_TO_LOG;
-        const int frameTag = callsLogged;
-        auto logStage = [&](const char* stage) {
-            if (logThisCall) vfLogInfo("[ViewPort.tryGetGameCameraState f{}] {}", frameTag, stage);
-        };
-
         auto& dispatcher = events::EventDispatcher::instance();
-        logStage("enter");
         auto primaryCameraOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
-        if (!primaryCameraOpt.has_value()) { logStage("no primary camera, returning false"); if (logThisCall) callsLogged++; return false; }
+        if (!primaryCameraOpt.has_value()) return false;
 
         auto primaryCamera = *primaryCameraOpt;
-        logStage("got primary camera handle");
         events::scene::GetCameraDataQuery cameraQuery;
         cameraQuery.entity = primaryCamera;
-        if (!dispatcher.query(cameraQuery).has_value()) { logStage("GetCameraDataQuery failed"); if (logThisCall) callsLogged++; return false; }
+        if (!dispatcher.query(cameraQuery).has_value()) return false;
 
         events::scene::GetWorldTransformQuery transformQuery;
         transformQuery.entity = primaryCamera;
         auto transformOpt = dispatcher.query(transformQuery);
-        if (!transformOpt.has_value()) { logStage("GetWorldTransformQuery failed"); if (logThisCall) callsLogged++; return false; }
+        if (!transformOpt.has_value()) return false;
 
         auto& transform = *transformOpt;
         auto enttEntity = services::internal::fromHandle(primaryCamera);
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!registry.all_of<components::CameraComponent>(enttEntity)) { logStage("CameraComponent missing"); if (logThisCall) callsLogged++; return false; }
+        if (!registry.all_of<components::CameraComponent>(enttEntity)) return false;
 
         auto& camComp = registry.get<components::CameraComponent>(enttEntity);
-        logStage("about to updateProjectionMatrix");
         camComp.aspectRatio = aspectRatio;
         camComp.updateProjectionMatrix();
-        logStage("about to updateViewMatrix");
         camComp.updateViewMatrix(transform.position, transform.rotation);
-        logStage("matrices updated");
 
         state.viewMatrix = camComp.viewMatrix;
         state.projectionMatrix = camComp.projectionMatrix;
@@ -152,8 +137,6 @@ namespace windows
         rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
         rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
         state.forward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
-        logStage("exit returning true");
-        if (logThisCall) callsLogged++;
         return true;
     }
 
@@ -174,52 +157,27 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Rate-limit per play-mode entry: when mode flips Edit->Play, log the
-        // first PLAY_FRAMES_TO_LOG frames stage-by-stage so we can see whether
-        // an abort fires inside one of the render command dispatches.
-        constexpr int PLAY_FRAMES_TO_LOG = 5;
-        static bool wasPlayMode = false;
-        static int playFramesLogged = PLAY_FRAMES_TO_LOG;
-        bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
-        if (isPlayMode && !wasPlayMode) {
-            playFramesLogged = 0;
-        }
-        wasPlayMode = isPlayMode;
-        const bool logThisFrame = isPlayMode && playFramesLogged < PLAY_FRAMES_TO_LOG;
-        const int frameTag = playFramesLogged;
-        auto logStage = [&](const char* stage) {
-            if (logThisFrame) vfLogInfo("[ViewPort.updateRendererCameras f{}] {}", frameTag, stage);
-        };
-        logStage("enter");
-
         events::render::UpdateIBLCameraCommand cameraCmd;
         cameraCmd.viewMatrix = camera.viewMatrix;
         cameraCmd.projectionMatrix = camera.projectionMatrix;
-        logStage("dispatching UpdateIBLCameraCommand");
         dispatcher.execute(cameraCmd);
-        logStage("UpdateIBLCameraCommand returned");
 
         events::render::UpdateMeshCameraCommand meshCameraCmd;
         meshCameraCmd.viewMatrix = camera.viewMatrix;
         meshCameraCmd.projectionMatrix = camera.projectionMatrix;
         meshCameraCmd.cameraPosition = camera.position;
         meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
-        logStage("dispatching UpdateMeshCameraCommand");
         dispatcher.execute(meshCameraCmd);
-        logStage("UpdateMeshCameraCommand returned");
 
         events::render::CameraPositionUpdatedNotification camPosNotif;
         camPosNotif.position = camera.position;
         dispatcher.publish(camPosNotif);
-        logStage("CameraPositionUpdatedNotification published");
 
         events::audio::SetListenerPositionCommand listenerCmd;
         listenerCmd.position = camera.position;
         listenerCmd.forward = camera.forward;
         listenerCmd.up = glm::vec3(0.0f, 1.0f, 0.0f);
         dispatcher.execute(listenerCmd);
-        logStage("SetListenerPositionCommand returned, exit");
-        if (logThisFrame) playFramesLogged++;
     }
 
     void ViewPort::handlePrefabDrop()

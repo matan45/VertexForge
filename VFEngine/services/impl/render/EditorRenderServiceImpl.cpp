@@ -263,19 +263,10 @@ namespace services
         editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& notification)
             {
-                vfLogInfo("[EditorRenderService] EditorModeChanged: prev={} curr={}",
-                          static_cast<int>(notification.previousMode),
-                          static_cast<int>(notification.currentMode));
                 if (offScreenProvider)
                 {
                     bool isPlayMode = notification.currentMode == services::EditorMode::Play;
-                    vfLogInfo("[EditorRenderService] calling offScreenProvider->setPlayMode({})", isPlayMode);
                     offScreenProvider->setPlayMode(isPlayMode);
-                    vfLogInfo("[EditorRenderService] offScreenProvider->setPlayMode({}) returned", isPlayMode);
-                }
-                else
-                {
-                    vfLogWarning("[EditorRenderService] offScreenProvider null, skipping setPlayMode");
                 }
             });
     }

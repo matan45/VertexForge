@@ -10,33 +10,6 @@
 #include "time/Timer.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/weather/WeatherEvents.hpp"
-#include "print/Log.hpp"
-#include "events/editor/EditorModeEvents.hpp"
-
-namespace
-{
-    // Diagnostic: log first N play-mode invocations of each task so the last
-    // "begin" without a matching "end" identifies the task an abort fires in.
-    // Resets counter on Edit->Play transition so the rate limit isn't burned
-    // through during edit mode.
-    template <typename Fn>
-    auto withTaskLog(const char* name, Fn fn)
-    {
-        return [name, fn = std::move(fn)]() mutable {
-            constexpr int LOG_FIRST_N = 3;
-            static bool wasPlay = false;
-            static int playInvocations = LOG_FIRST_N;
-            bool isPlay = events::EventDispatcher::instance().query(events::editor::IsPlayModeQuery{});
-            if (isPlay && !wasPlay) playInvocations = 0;
-            wasPlay = isPlay;
-            const bool log = isPlay && playInvocations < LOG_FIRST_N;
-            const int tag = playInvocations;
-            if (log) vfLogInfo("[FrameTask {} f{}] begin", name, tag);
-            fn();
-            if (log) { vfLogInfo("[FrameTask {} f{}] end", name, tag); playInvocations++; }
-        };
-    }
-}
 
 namespace handlers
 {
@@ -77,80 +50,81 @@ namespace handlers
             }
         });
 
-        frameTaskGraph->addTask("Scripts", withTaskLog("Scripts", [this]() {
+        frameTaskGraph->addTask("Scripts", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 scriptingService->updateScripts(dt);
             }
-        }));
+        });
 
-        frameTaskGraph->addTask("Controllers", withTaskLog("Controllers", [this]() {
+        frameTaskGraph->addTask("Controllers", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && controllerService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 controllerService->applyControllerMovement(dt);
             }
-        }));
+        });
 
-        frameTaskGraph->addTask("BehaviorTrees", withTaskLog("BehaviorTrees", [this]() {
+        frameTaskGraph->addTask("BehaviorTrees", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && behaviorTreeService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 behaviorTreeService->updateAll(dt);
             }
-        }));
+        });
 
-        frameTaskGraph->addTask("VFX", withTaskLog("VFX", [this]() {
+        frameTaskGraph->addTask("VFX", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && vfxPlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 vfxPlayModeHandler->update(dt);
             }
-        }));
+        });
 
-        frameTaskGraph->addTask("RenderTexture", withTaskLog("RenderTexture", [this]() {
+        frameTaskGraph->addTask("RenderTexture", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && renderTexturePlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 renderTexturePlayModeHandler->update(dt);
             }
-        }));
+        });
 
-        // VK-1330/1333: the audio listener update used to be a parallel task,
-        // but TaskGraph::execute() does not honor the pinned flag — any task
-        // in a multi-task layer runs on an enkiTS worker. The audio backend
+        // VK-1330 / VK-1333: an "AudioListener" task used to live here that
+        // called audioSceneUpdater->updateListenerFromPrimaryCamera() every
+        // frame in Play mode. Multi-task layers in the FrameTaskGraph dispatch
+        // tasks onto enkiTS workers, and the audio backend
         // (SetListenerPositionCommand -> AudioServiceImpl -> AudioAdapter ->
         // AudioController::commandQueue) is not safe to invoke from a worker
-        // thread; doing so aborts under MSVC's CRT debug runtime.
+        // thread — doing so aborts under MSVC's CRT debug runtime as soon as
+        // a scene camera becomes primary.
         //
         // In the editor, ViewPort::updateRendererCameras already dispatches
         // SetListenerPositionCommand every frame from the ImGuiDraw task,
         // which sits in a single-task layer and therefore runs on the main
-        // thread. That makes the AudioListener task strictly redundant here,
-        // and removing it eliminates the worker-thread dispatch path that
-        // caused the abort. Runtime keeps its own AudioListener task because
-        // it has no ViewPort to do the work; that path is a separate fix.
+        // thread. The AudioListener task was strictly redundant here, so the
+        // fix is simply to remove it. Runtime keeps its own AudioListener
+        // task because it has no ViewPort to do the work.
 
-        frameTaskGraph->addTask("Weather", withTaskLog("Weather", [this]() {
+        frameTaskGraph->addTask("Weather", [this]() {
             float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
             events::weather::UpdateWeatherCommand cmd;
             cmd.deltaTime = dt;
             events::EventDispatcher::instance().execute(cmd);
-        }));
+        });
 
-        frameTaskGraph->addTask("WorldSector", withTaskLog("WorldSector", [this]() {
+        frameTaskGraph->addTask("WorldSector", [this]() {
             if (worldSectorService) worldSectorService->update();
-        }));
+        });
 
-        frameTaskGraph->addTask("AssetLifecycle", withTaskLog("AssetLifecycle", [this]() {
+        frameTaskGraph->addTask("AssetLifecycle", [this]() {
             if (assetLifecycleService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 assetLifecycleService->update(dt);
             }
-        }));
+        });
 
-        frameTaskGraph->addTask("Plugins", withTaskLog("Plugins", [this]() {
+        frameTaskGraph->addTask("Plugins", [this]() {
             if (pluginManager) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 pluginManager->updateAll(dt);
             }
-        }));
+        });
 
         frameTaskGraph->addDependency("Weather", "Scene");
         frameTaskGraph->addDependency("PhysicsKick", "Scene");
@@ -164,26 +138,26 @@ namespace handlers
         frameTaskGraph->addDependency("RenderTexture", "Scripts");
 
         auto sceneGraphFn = bootstrap->getSceneGraphUpdateFn();
-        frameTaskGraph->addTask("Transforms", withTaskLog("Transforms", [sceneGraphFn]() {
+        frameTaskGraph->addTask("Transforms", [sceneGraphFn]() {
             if (sceneGraphFn) sceneGraphFn();
-        }));
+        });
 
-        frameTaskGraph->addTask("LateScripts", withTaskLog("LateScripts", [this]() {
+        frameTaskGraph->addTask("LateScripts", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 scriptingService->lateUpdateScripts(dt);
             }
-        }));
+        });
 
         auto imguiDrawFn = bootstrap->getImguiDrawFn();
-        frameTaskGraph->addTask("ImGuiDraw", withTaskLog("ImGuiDraw", [imguiDrawFn]() {
+        frameTaskGraph->addTask("ImGuiDraw", [imguiDrawFn]() {
             if (imguiDrawFn) imguiDrawFn();
-        }));
+        });
 
         auto renderFn = bootstrap->getRenderFn();
-        frameTaskGraph->addTask("Render", withTaskLog("Render", [renderFn]() {
+        frameTaskGraph->addTask("Render", [renderFn]() {
             if (renderFn) renderFn();
-        }));
+        });
 
         frameTaskGraph->addDependency("Transforms", "Weather");
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
