@@ -129,6 +129,18 @@ namespace render
 
         gpuRenderer->dispatchCompute(commandBuffer);
 
+        // Transition RTT color image from the known post-pass layout
+        // (eShaderReadOnlyOptimal — set by createOffscreenResources on first frame and by
+        // the end-of-pass barrier below on subsequent frames) into eColorAttachmentOptimal
+        // so the dynamic-rendering passes below can write to it. Without this barrier,
+        // vkCmdBeginRendering would fail validation VUID-vkCmdBeginRendering-pRenderingInfo-09592.
+        core::ImageUtilities::transitionImageLayout(
+            commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         // Phase 1: Skybox / clear pass (color-only, eClear)
         // Renders the IBL skybox if available, otherwise just clears the color image.
         auto* ibl = mainPassHandler->getIBL();
@@ -199,6 +211,17 @@ namespace render
         }
 
         core::endDynamicRendering(commandBuffer);
+
+        // Transition back to eShaderReadOnlyOptimal so UI consumers (runtime UIImage with
+        // renderTextureSourceName, or the editor ImGui preview descriptor) can sample
+        // immediately, and so the next frame's pre-pass barrier observes the expected
+        // oldLayout regardless of whether a consumer ran this frame.
+        core::ImageUtilities::transitionImageLayout(
+            commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         commandBuffer.end();
 
