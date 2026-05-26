@@ -5,10 +5,7 @@
 #include "../../events/audio/AudioEffectEvents.hpp"
 #include "../../events/audio/AudioSnapshotEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "print/Log.hpp"
 #include <cassert>
-#include <chrono>
-#include <thread>
 
 namespace services {
 
@@ -251,27 +248,7 @@ namespace services {
     void AudioServiceImpl::setListenerPosition(const glm::vec3& position,
                                                 const glm::vec3& forward,
                                                 const glm::vec3& up) {
-        // Diagnostic: log the FIRST 6 dispatches after every detected mode
-        // transition (cheap proxy: reset budget when we see a long quiet gap).
-        // Plus log thread id so we can tell main-thread vs worker dispatches.
-        static int budget = 6;
-        static auto lastCall = std::chrono::steady_clock::time_point{};
-        const auto now = std::chrono::steady_clock::now();
-        if (lastCall != std::chrono::steady_clock::time_point{} &&
-            now - lastCall > std::chrono::seconds(3)) {
-            budget = 6;  // assume mode change / quiet → log again
-        }
-        lastCall = now;
-        const bool logIt = budget > 0;
-        if (logIt) {
-            vfLogInfo("[AudioServiceImpl::setListenerPosition] entry tid={}",
-                      std::hash<std::thread::id>{}(std::this_thread::get_id()));
-        }
         audioProvider->setListenerPosition(position, forward, up);
-        if (logIt) {
-            vfLogInfo("[AudioServiceImpl::setListenerPosition] exit");
-            budget--;
-        }
     }
 
     AudioHandle AudioServiceImpl::playSound3D(const std::string& path, const glm::vec3& position,

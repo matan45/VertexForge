@@ -105,16 +105,12 @@ namespace handlers
             }
         }));
 
-        // VK-1330/1333: RenderTexturePlayModeHandler::update() does Vulkan
-        // command-buffer work via provider->renderAll(); that must not race
-        // with the main render thread. Pin it to the main thread (the engine
-        // task graph now honors the pinned flag in multi-task layers).
         frameTaskGraph->addTask("RenderTexture", withTaskLog("RenderTexture", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && renderTexturePlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 renderTexturePlayModeHandler->update(dt);
             }
-        }), threading::JobPriority::NORMAL, /*mainThread=*/true);
+        }));
 
         // VK-1330/1333: the audio listener update used to be a parallel task,
         // but TaskGraph::execute() does not honor the pinned flag — any task
