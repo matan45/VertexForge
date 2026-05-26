@@ -278,13 +278,11 @@
     <ClInclude Include="..\dependencies\mtype\mType\lexer\SourceLocationTracker.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\lexer\TokenFactory.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\AsyncHelper.hpp" />
-    <ClInclude Include="..\dependencies\mtype\mType\net\CurlHttpClient.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\HashMapMarshal.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\HttpClient.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\ISocketServer.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\NetErrors.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\NetNatives.hpp" />
-    <ClInclude Include="..\dependencies\mtype\mType\net\PosixSocket.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\Socket.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\SocketRegistry.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\net\WinHttpClient.hpp" />
@@ -768,6 +766,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugProtocol.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugProtocol_Dispatch.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector_BoxedPrimitive.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector_Collect.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector_Find.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector_Format.cpp" />
@@ -832,11 +831,9 @@
     <ClCompile Include="..\dependencies\mtype\mType\lexer\Lexer_Tokens.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\lexer\SourceLocationTracker.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\lexer\TokenFactory.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\net\CurlHttpClient.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\net\HashMapMarshal.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\net\NetErrors.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\net\NetNatives.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\net\PosixSocket.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\net\SocketRegistry.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\net\WinHttpClient.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\net\WinSockInit.cpp" />
