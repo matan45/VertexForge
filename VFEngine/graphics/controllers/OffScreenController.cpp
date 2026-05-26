@@ -1,4 +1,5 @@
 #include "OffScreenController.hpp"
+#include "print/Log.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/gpudriven/brush/BrushComputePipeline.hpp"
 #include "../core/VulkanContext.hpp"
@@ -314,7 +315,21 @@ namespace controllers
 
     void* OffScreenController::render()
     {
-        return offScreen->render();
+        // Diagnostic: log first N play-mode frames so we can see whether render()
+        // returns or whether the abort fires inside offScreen->render().
+        constexpr int FRAMES_TO_LOG = 5;
+        static bool wasPlayMode = false;
+        static int playFramesLogged = FRAMES_TO_LOG;
+        bool isPlayMode = playModeActive;
+        if (isPlayMode && !wasPlayMode) { playFramesLogged = 0; }
+        wasPlayMode = isPlayMode;
+        const bool logFrame = isPlayMode && playFramesLogged < FRAMES_TO_LOG;
+        const int frameTag = playFramesLogged;
+        if (logFrame) vfLogInfo("[OffScreenController.render f{}] enter", frameTag);
+        void* result = offScreen->render();
+        if (logFrame) vfLogInfo("[OffScreenController.render f{}] exit", frameTag);
+        if (logFrame) playFramesLogged++;
+        return result;
     }
 
     void* OffScreenController::getColorImage(uint32_t imageIndex) const

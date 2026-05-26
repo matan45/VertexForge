@@ -128,7 +128,17 @@ namespace core {
 
     void AudioAdapter::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
                                             const glm::vec3& up) {
+        static int budget = 4;
+        const bool logIt = budget > 0;
+        if (logIt) {
+            vfLogInfo("[AudioAdapter::setListenerPosition] entry ctrl={}",
+                      static_cast<const void*>(audioController.get()));
+        }
         audioController->setListenerPosition(position, forward, up);
+        if (logIt) {
+            vfLogInfo("[AudioAdapter::setListenerPosition] exit");
+            budget--;
+        }
     }
 
     float AudioAdapter::getPlaybackPosition(services::AudioHandleId handle) const {

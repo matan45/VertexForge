@@ -11,6 +11,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"
 #include "data/EntityConversion.hpp"
+#include "print/Log.hpp"
 
 namespace core::api
 {
@@ -128,19 +129,31 @@ namespace core::api
                 auto& dispatcher = events::EventDispatcher::instance();
                 if (args.size() < 4) return value::Value(std::monostate{});
                 int64_t id = extractInt64(args[0]);
+                vfLogInfo("[rtt_create] enter id={}", id);
                 if (id < 0) return value::Value(std::monostate{});
 
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto entity = services::internal::fromHandle(services::EntityHandle{
                     static_cast<uint64_t>(id)
                 });
-                if (!registry.valid(entity)) return value::Value(std::monostate{});
-                if (!registry.all_of<components::RenderTextureComponent>(entity))
+                if (!registry.valid(entity))
+                {
+                    vfLogWarning("[rtt_create] entity {} invalid", id);
                     return value::Value(std::monostate{});
+                }
+                if (!registry.all_of<components::RenderTextureComponent>(entity))
+                {
+                    vfLogWarning("[rtt_create] entity {} has no RenderTextureComponent", id);
+                    return value::Value(std::monostate{});
+                }
 
                 auto& rttComp = registry.get<components::RenderTextureComponent>(entity);
                 if (rttComp.textureId != rendertexture::INVALID_RENDER_TEXTURE_ID)
+                {
+                    vfLogInfo("[rtt_create] entity {} already has textureId={}, skipping",
+                              id, rttComp.textureId);
                     return value::Value(std::monostate{}); // already created
+                }
 
                 uint32_t width = static_cast<uint32_t>(extractInt64(args[1]));
                 uint32_t height = static_cast<uint32_t>(extractInt64(args[2]));
@@ -159,6 +172,7 @@ namespace core::api
                 rttComp.width = desc.width;
                 rttComp.height = desc.height;
                 rttComp.updateMode = desc.updateMode;
+                vfLogInfo("[rtt_create] entity {} created textureId={}", id, textureId);
 
                 return value::Value(std::monostate{});
             }});
@@ -229,6 +243,7 @@ namespace core::api
                 if (args.size() < 2) return value::Value(std::monostate{});
                 int64_t rttId = extractInt64(args[0]);
                 int64_t camId = extractInt64(args[1]);
+                vfLogInfo("[rtt_setCamera] enter rttId={} camId={}", rttId, camId);
                 if (rttId < 0 || camId < 0) return value::Value(std::monostate{});
 
                 auto& registry = scene::EntityRegistry::getRegistry();
@@ -238,18 +253,27 @@ namespace core::api
                 });
                 if (!registry.valid(rttEntity) ||
                     !registry.all_of<components::RenderTextureComponent>(rttEntity))
+                {
+                    vfLogWarning("[rtt_setCamera] rttEntity {} invalid or missing RTT component", rttId);
                     return value::Value(std::monostate{});
+                }
 
                 auto camEntity = services::internal::fromHandle(services::EntityHandle{
                     static_cast<uint64_t>(camId)
                 });
                 if (!registry.valid(camEntity) ||
                     !registry.all_of<components::CameraComponent, components::TransformComponent>(camEntity))
+                {
+                    vfLogWarning("[rtt_setCamera] camEntity {} invalid or missing Camera/Transform", camId);
                     return value::Value(std::monostate{});
+                }
 
                 const auto& rttComp = registry.get<components::RenderTextureComponent>(rttEntity);
                 if (rttComp.textureId == rendertexture::INVALID_RENDER_TEXTURE_ID)
+                {
+                    vfLogWarning("[rtt_setCamera] rttEntity {} has no textureId yet", rttId);
                     return value::Value(std::monostate{});
+                }
 
                 const auto& cam = registry.get<components::CameraComponent>(camEntity);
                 const auto& transform = registry.get<components::TransformComponent>(camEntity);
@@ -261,7 +285,10 @@ namespace core::api
                 cmd.cameraPos = transform.position;
                 cmd.nearPlane = cam.nearPlane;
                 cmd.farPlane = cam.farPlane;
+                vfLogInfo("[rtt_setCamera] dispatching UpdateRenderTextureCameraCommand textureId={}",
+                          rttComp.textureId);
                 dispatcher.execute(cmd);
+                vfLogInfo("[rtt_setCamera] done rttId={} camId={}", rttId, camId);
 
                 return value::Value(std::monostate{});
             }});

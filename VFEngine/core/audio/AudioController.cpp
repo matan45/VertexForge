@@ -236,8 +236,19 @@ namespace core::audio
     void AudioController::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
                                               const glm::vec3& up)
     {
-        if (!initialized || !commandQueue) return;
+        static int budget = 4;
+        const bool logIt = budget > 0;
+        if (logIt) {
+            vfLogInfo("[AudioController::setListenerPosition] entry init={} queue={}",
+                      initialized, static_cast<const void*>(commandQueue.get()));
+        }
+        if (!initialized || !commandQueue) {
+            if (logIt) { vfLogInfo("[AudioController::setListenerPosition] skipped (not ready)"); budget--; }
+            return;
+        }
+        if (logIt) vfLogInfo("[AudioController::setListenerPosition] about to enqueue");
         commandQueue->enqueue(SetListenerCmd{position, forward, up});
+        if (logIt) { vfLogInfo("[AudioController::setListenerPosition] enqueue done"); budget--; }
     }
 
     // === Playback Position ===
