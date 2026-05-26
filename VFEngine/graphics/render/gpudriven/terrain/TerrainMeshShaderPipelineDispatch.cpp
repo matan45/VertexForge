@@ -1,5 +1,6 @@
 #include "TerrainMeshShaderPipeline.hpp"
 #include "TerrainMeshBuffer.hpp"
+#include "../GPUDrivenRenderer.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/BufferUtilities.hpp"
@@ -188,7 +189,18 @@ namespace render::gpudriven
         pc.brushWorldY = brushWorldY;
         pc.hiZMipLevels = hiZMipLevels;
         pc._pad3 = 0.0f;
-        pc.viewProjection = viewProjection;
+        // VK-1334: if this thread is recording an RTT pre-pass, the renderer published the RTT
+        // view-projection through TLS so we don't have to mutate the shared `viewProjection`
+        // member (which would race with a concurrent main recording on another worker).
+        glm::mat4 rttVP;
+        if (GPUDrivenRenderer::tryGetThreadLocalTerrainViewProjection(rttVP))
+        {
+            pc.viewProjection = rttVP;
+        }
+        else
+        {
+            pc.viewProjection = viewProjection;
+        }
         pc.stampWidth = stampOverlayWidth;
         pc.stampHeight = stampOverlayHeight;
         pc.stampRotation = stampOverlayRotation;

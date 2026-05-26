@@ -23,6 +23,16 @@
 
 namespace render::gpudriven
 {
+    // VK-1334: per-thread RTT state, so concurrent recording of the main pass (Render task)
+    // and an RTT pre-pass (RenderTexture task) cannot stomp on each other's overrides. Each
+    // task runs to completion on one worker thread, so begin/record/end happen on the same TLS.
+    namespace
+    {
+        thread_local vk::DescriptorSet tlsActiveCullDescriptorSet = nullptr;
+        thread_local bool tlsHasTerrainViewProjectionOverride = false;
+        thread_local glm::mat4 tlsTerrainViewProjectionOverride{1.0f};
+    }
+
     void GPUDrivenRenderer::updateScene(
         const std::vector<mesh::MeshRenderData>& opaqueObjects,
         const glm::mat4& view,
@@ -162,6 +172,9 @@ namespace render::gpudriven
             terrain.pipeline->setViewProjection(projection * view);
         }
 
+        vfLogInfo("[VK-1334][MAIN] updateScene: camPos=({:.2f},{:.2f},{:.2f}) terrainVP set to MAIN",
+                  cameraPosition.x, cameraPosition.y, cameraPosition.z);
+
         updateClusterGrid(projection, nearPlane, farPlane);
         updatePipelineDescriptors();
 
@@ -184,6 +197,11 @@ namespace render::gpudriven
         {
             return;
         }
+
+        vfLogInfo("[VK-1334][RTT] beginRTTContext: rttCamBuf={} cullDescSet={} camPos=({:.2f},{:.2f},{:.2f})",
+                  (void*)(VkBuffer)ctx.cameraBuffer->getBuffer(),
+                  (void*)(VkDescriptorSet)ctx.cullDescriptorSet,
+                  params.cameraPosition.x, params.cameraPosition.y, params.cameraPosition.z);
 
         // Fill the per-RTT GPU-cull camera buffer with the RTT camera params. This writes only
         // to the caller-owned buffer; the shared main cameraBuffer is untouched.
@@ -210,19 +228,17 @@ namespace render::gpudriven
         };
         ctx.cameraBuffer->update(cameraParams);
 
-        // Make subsequent cull dispatches use the per-RTT descriptor set (binding 1 -> RTT
-        // camera buffer). Cleared by endRTTContext().
-        activeCullDescriptorSet = ctx.cullDescriptorSet;
+        // Make subsequent cull dispatches on THIS THREAD use the per-RTT descriptor set
+        // (binding 1 -> RTT camera buffer). Thread-local so a concurrently-recording main pass
+        // on another worker thread is not affected. Cleared by endRTTContext().
+        tlsActiveCullDescriptorSet = ctx.cullDescriptorSet;
 
-        // Terrain VP is read into a push constant at recording time, so it is safe to swap on
-        // the CPU between RTT-record and main-record. Save the current main value so the matching
-        // endRTTContext() can put it back before the main pass records.
-        if (terrain.pipeline)
-        {
-            savedTerrainViewProjection = terrain.pipeline->getViewProjection();
-            terrainViewProjectionSaved = true;
-            terrain.pipeline->setViewProjection(params.projection * params.view);
-        }
+        // Per-thread terrain view-projection override. The terrain pipeline's
+        // `viewProjection` member is shared; mutating it would race with a concurrent main
+        // recording. Instead we publish the RTT VP through TLS and read it back at terrain
+        // push-constant build time on this thread only.
+        tlsHasTerrainViewProjectionOverride = true;
+        tlsTerrainViewProjectionOverride = params.projection * params.view;
     }
 
     void GPUDrivenRenderer::endRTTContext()
@@ -232,13 +248,23 @@ namespace render::gpudriven
             return;
         }
 
-        activeCullDescriptorSet = nullptr;
+        tlsActiveCullDescriptorSet = nullptr;
+        tlsHasTerrainViewProjectionOverride = false;
+    }
 
-        if (terrainViewProjectionSaved && terrain.pipeline)
+    vk::DescriptorSet GPUDrivenRenderer::getThreadLocalCullDescriptorSet()
+    {
+        return tlsActiveCullDescriptorSet;
+    }
+
+    bool GPUDrivenRenderer::tryGetThreadLocalTerrainViewProjection(glm::mat4& outVP)
+    {
+        if (!tlsHasTerrainViewProjectionOverride)
         {
-            terrain.pipeline->setViewProjection(savedTerrainViewProjection);
+            return false;
         }
-        terrainViewProjectionSaved = false;
+        outVP = tlsTerrainViewProjectionOverride;
+        return true;
     }
 
     vk::DescriptorSet GPUDrivenRenderer::allocateRTTCullDescriptorSet(vk::DescriptorPool externalPool,

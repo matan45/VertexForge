@@ -79,6 +79,13 @@ namespace controllers::offscreen
         }
 
         // Update shared camera UBO (single buffer used by mesh, billboard, and text pipelines)
+        // view matrix's 3rd row encodes -forward in world space
+        glm::vec3 fwd = -glm::vec3(view[0][2], view[1][2], view[2][2]);
+        vfLogInfo("[VK-1334][CAM] CameraController::updateCamera cameraId={} activeId={} camPos=({:.2f},{:.2f},{:.2f}) fwd=({:.2f},{:.2f},{:.2f})",
+                  cameraId, renderHandler.getActiveCameraId(),
+                  cameraPos.x, cameraPos.y, cameraPos.z,
+                  fwd.x, fwd.y, fwd.z);
+
         if (cameraId == renderHandler.getActiveCameraId())
         {
             renderHandler.updateSharedCameraUBO(view, effectiveProjection, cameraPos, time);

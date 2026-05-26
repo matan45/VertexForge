@@ -113,6 +113,10 @@ namespace render
         uint32_t imageIndex = core::RenderManager::getImageIndex();
         lastRenderedImageIndex = imageIndex;
 
+        // VK-1334 debug
+        vfLogInfo("[VK-1334][RTT] enter render() viewport={} imageIndex={} camPos=({:.2f},{:.2f},{:.2f}) size={}x{}",
+                  (void*)this, imageIndex, cameraPosition.x, cameraPosition.y, cameraPosition.z, width, height);
+
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
@@ -265,6 +269,9 @@ namespace render
         // intact for the previous frame's main GPU work and for this frame's upcoming main pass.
         // The top-of-function fence wait remains the slot-reuse barrier for this viewport.
         gpuRenderer->endRTTContext();
+
+        vfLogInfo("[VK-1334][RTT] submitted+endRTTContext viewport={} imageIndex={}",
+                  (void*)this, imageIndex);
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }

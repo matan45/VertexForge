@@ -9,6 +9,7 @@
 #include "../render/RenderPassHandler.hpp"
 #include "upscaling/UpscaleManager.hpp"
 #include "types/CameraTypes.hpp"
+#include "print/Log.hpp"
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
 
@@ -55,6 +56,8 @@ namespace render
     vk::DescriptorSet OffScreenViewPort::render(const PreRenderCallback& preRenderCallback)
     {
         uint32_t imageIndex = core::RenderManager::getImageIndex();
+
+        vfLogInfo("[VK-1334][MAIN-RENDER] OffScreenViewPort::render imageIndex={}", imageIndex);
 
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);

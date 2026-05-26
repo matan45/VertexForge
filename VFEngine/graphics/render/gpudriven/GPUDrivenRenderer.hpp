@@ -369,14 +369,10 @@ namespace render::gpudriven
         CachedCamera cachedCamera;
         bool wireframeMode = false;
 
-        // VK-1334: active cull descriptor set for the in-progress recording pass. When nullptr,
-        // the cull pipeline uses its own internal (main-camera) descriptor set. Set by
-        // beginRTTContext(), cleared by endRTTContext().
-        vk::DescriptorSet activeCullDescriptorSet;
-        // Saved terrain pipeline view-projection during RTT scope so endRTTContext() can restore
-        // the main-camera value the next main-pass recording will read at terrain dispatch time.
-        glm::mat4 savedTerrainViewProjection{1.0f};
-        bool terrainViewProjectionSaved = false;
+        // VK-1334: the active cull descriptor set and the terrain view-projection override are
+        // held in thread-local storage (see GPUDrivenRendererScene.cpp) so concurrent recording
+        // of the main pass and one or more RTT pre-passes cannot stomp on each other. Access via
+        // getThreadLocalCullDescriptorSet() / tryGetThreadLocalTerrainViewProjection().
 
     public:
         explicit GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -432,6 +428,12 @@ namespace render::gpudriven
         void releaseRTTCullDescriptorSet(vk::DescriptorSet rttSet);
 
         vk::DescriptorSetLayout getCullDescriptorSetLayout() const;
+
+        // VK-1334: thread-local RTT state accessors. Recording sites read these to pick the
+        // correct cull descriptor / terrain view-projection for the current recording thread,
+        // letting main and RTT record concurrently without stomping on each other.
+        static vk::DescriptorSet getThreadLocalCullDescriptorSet();
+        static bool tryGetThreadLocalTerrainViewProjection(glm::mat4& outVP);
 
         void dispatchCompute(vk::CommandBuffer cmd, uint32_t imageIndex = 0);
 

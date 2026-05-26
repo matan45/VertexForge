@@ -3,7 +3,9 @@
 #include "../../core/Device.hpp"
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
+#include <thread>
 
 #ifdef MemoryBarrier
 #undef MemoryBarrier
@@ -309,13 +311,20 @@ namespace render::gpudriven
                                            lightBufferManager->getSpotLightCount());
         }
 
-        if (activeCullDescriptorSet)
         {
-            cullPipeline->dispatchWithSet(cmd, stats.totalObjects, activeCullDescriptorSet);
-        }
-        else
-        {
-            cullPipeline->dispatch(cmd, stats.totalObjects);
+            vk::DescriptorSet pickedCullSet = GPUDrivenRenderer::getThreadLocalCullDescriptorSet();
+            auto tid = std::this_thread::get_id();
+            vfLogInfo("[VK-1334][CULL-DISPATCH] tid={} pickedCullSet={} (NULL=>main, non-null=>RTT)",
+                      std::hash<std::thread::id>{}(tid),
+                      (void*)(VkDescriptorSet)pickedCullSet);
+            if (pickedCullSet)
+            {
+                cullPipeline->dispatchWithSet(cmd, stats.totalObjects, pickedCullSet);
+            }
+            else
+            {
+                cullPipeline->dispatch(cmd, stats.totalObjects);
+            }
         }
         batchManager->insertBarriersAfterCompute(cmd);
         recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);

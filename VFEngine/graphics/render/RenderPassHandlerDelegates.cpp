@@ -6,6 +6,7 @@
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "print/Log.hpp"
 
 namespace render
 {
@@ -28,6 +29,8 @@ namespace render
     {
         if (sharedCameraUBO)
         {
+            vfLogInfo("[VK-1334][SHARED] updateSharedCameraUBO: camPos=({:.2f},{:.2f},{:.2f})",
+                      cameraPos.x, cameraPos.y, cameraPos.z);
             sharedCameraUBO->update(view, projection, cameraPos, time, currentSnowAccumulation, currentWetness);
         }
     }
