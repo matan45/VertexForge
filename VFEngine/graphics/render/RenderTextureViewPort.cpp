@@ -4,15 +4,21 @@
 #include "../core/CommandPool.hpp"
 #include "../core/ImageUtilities.hpp"
 #include "../core/Utilities.hpp"
+#include "../core/BufferUtilities.hpp"
 #include "../core/RenderManager.hpp"
 #include "../core/DynamicRenderingHelpers.hpp"
 #include "RenderPassHandler.hpp"
 #include "IBL.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
+#include "common/CameraTypes.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
+#include "gpudriven/GPUDrivenCameraBuffer.hpp"
+#include "gpudriven/scene/GPUCullLODPipeline.hpp"
+#include "math/Frustum.hpp"
 #include "print/Log.hpp"
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
+#include <cstring>
 
 namespace render
 {
@@ -99,6 +105,11 @@ namespace render
             return nullptr;
         }
 
+        // VK-1334: lazy-init per-RTT camera buffers + descriptor sets the first time we have a
+        // RenderPassHandler in hand. They live for the viewport's lifetime; no shared CameraUBO
+        // is ever mutated by RTT.
+        ensurePerRTTResources(mainPassHandler);
+
         uint32_t imageIndex = core::RenderManager::getImageIndex();
         lastRenderedImageIndex = imageIndex;
 
@@ -107,21 +118,34 @@ namespace render
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
-        // Update both camera buffers for RTT rendering:
-        // 1. GPUDrivenCameraBuffer — used by the compute cull pipeline for object-level frustum culling
-        // 2. StaticMeshPipeline CameraUBO — used by mesh/task/fragment shaders for vertex
-        //    transformation, meshlet-level frustum culling, and lighting calculations
-        gpuRenderer->updateCameraForRTT({
-            .view = view,
-            .projection = projection,
-            .cameraPosition = cameraPosition,
-            .nearPlane = nearPlane,
-            .farPlane = farPlane,
-            .screenWidth = width,
-            .screenHeight = height
-        });
+        // Write per-RTT mesh-pipeline CameraUBO (set 0 / binding 0 of the per-RTT IBL set).
+        // Mirrors the layout of `CameraUBO` consumed by mesh / task / fragment shaders.
+        {
+            common::CameraUBO ubo{};
+            ubo.view = view;
+            ubo.projection = projection;
+            ubo.cameraPos = cameraPosition;
+            ubo.time = 0.0f;
+            math::extractFrustumPlanes(projection * view, ubo.frustumPlanes);
 
-        meshPipeline->updateCameraUBO(view, projection, cameraPosition);
+            void* mapped = rttMeshCameraUBOAllocs[imageIndex].mappedPtr;
+            if (mapped)
+            {
+                std::memcpy(mapped, &ubo, sizeof(ubo));
+            }
+        }
+
+        // Enter the GPU-driven renderer's RTT scope: writes the per-RTT GPU-cull camera buffer
+        // and routes subsequent cull dispatches through the per-RTT cull descriptor set.
+        gpuRenderer->beginRTTContext(
+            { rttGPUDrivenCameraBuffers[imageIndex].get(), rttCullDescSets[imageIndex] },
+            { .view = view,
+              .projection = projection,
+              .cameraPosition = cameraPosition,
+              .nearPlane = nearPlane,
+              .farPlane = farPlane,
+              .screenWidth = width,
+              .screenHeight = height });
 
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();
@@ -189,7 +213,10 @@ namespace render
         vk::Rect2D scissor{{0, 0}, {width, height}};
         commandBuffer.setScissor(0, scissor);
 
-        vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
+        // VK-1334: use per-RTT IBL descriptor set so set 0 / binding 0 references the per-RTT
+        // CameraUBO. Shaders run with RTT matrices; main pass continues to read from the main
+        // descriptor set bound elsewhere.
+        vk::DescriptorSet iblDescriptorSet = rttMeshIBLDescSets[imageIndex];
 
         gpuRenderer->renderDraw(commandBuffer, iblDescriptorSet, width, height);
         gpuRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet, width, height);
@@ -233,24 +260,11 @@ namespace render
 
         device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
 
-        // Wait for THIS submission only (not the entire queue).
-        // A fence wait is required here because restoreMainCamera() and
-        // registerExternalTexture() write to shared HOST_COHERENT buffers
-        // that the GPU is still reading — a GPU-only semaphore cannot
-        // protect against that CPU-side write race.
-        // Full async (semaphore chain) would require per-RTT camera buffers.
-        (void)device.getLogicalDevice().waitForFences(
-            1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
-
-        // Restore the main camera's data so the main render pass uses the correct
-        // frustum/projection. restoreMainCamera() restores GPUDrivenCameraBuffer;
-        // we also restore the mesh pipeline's CameraUBO which shaders read at set 0 binding 0.
-        gpuRenderer->restoreMainCamera();
-        meshPipeline->updateCameraUBO(
-            gpuRenderer->getCachedCameraView(),
-            gpuRenderer->getCachedCameraProjection(),
-            gpuRenderer->getCachedCameraPosition()
-        );
+        // VK-1334: no fence-wait-after-submit and no shared-buffer restore — RTT wrote only to
+        // its own per-RTT camera buffers, so the main pass's HOST_COHERENT buffers are still
+        // intact for the previous frame's main GPU work and for this frame's upcoming main pass.
+        // The top-of-function fence wait remains the slot-reuse barrier for this viewport.
+        gpuRenderer->endRTTContext();
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
@@ -261,6 +275,8 @@ namespace render
             return;
 
         device.getLogicalDevice().waitIdle();
+
+        cleanupPerRTTResources();
 
         commandPool->cleanUp();
 
@@ -303,6 +319,157 @@ namespace render
         if (lastRenderedImageIndex < offscreenResources.colorImages.size())
             return offscreenResources.colorImages[lastRenderedImageIndex].colorImage;
         return {};
+    }
+
+    void RenderTextureViewPort::ensurePerRTTResources(RenderPassHandler* mainPassHandler)
+    {
+        if (perRTTResourcesInitialized || !mainPassHandler)
+        {
+            return;
+        }
+
+        auto* gpuRenderer = mainPassHandler->getGPUDrivenRenderer();
+        auto* meshPipeline = mainPassHandler->getMeshPipeline();
+        if (!gpuRenderer || !meshPipeline)
+        {
+            return;
+        }
+
+        const uint32_t imageCount = swapChain.getImageCount();
+        const auto logicalDevice = device.getLogicalDevice();
+
+        // --- per-image mesh-pipeline CameraUBO ---
+        rttMeshCameraUBOs.resize(imageCount);
+        rttMeshCameraUBOAllocs.resize(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            core::BufferInfoRequest request(logicalDevice, device.getPhysicalDevice());
+            request.size = sizeof(common::CameraUBO);
+            request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                 vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(request,
+                rttMeshCameraUBOs[i], rttMeshCameraUBOAllocs[i], device.getMemoryManager());
+        }
+
+        // --- IBL descriptor pool sized for `imageCount` mirror sets (1 UBO + 3 image-samplers each) ---
+        {
+            std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+            poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+            poolSizes[0].descriptorCount = imageCount;
+            poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+            poolSizes[1].descriptorCount = imageCount * 3;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            poolInfo.maxSets = imageCount;
+            rttMeshIBLDescPool = logicalDevice.createDescriptorPool(poolInfo);
+        }
+
+        rttMeshIBLDescSets.resize(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            rttMeshIBLDescSets[i] = meshPipeline->createExternalIBLDescriptorSet(
+                rttMeshCameraUBOs[i], rttMeshIBLDescPool);
+        }
+
+        // --- per-image GPU-driven cull camera buffer + per-image cull descriptor sets ---
+        rttGPUDrivenCameraBuffers.resize(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            rttGPUDrivenCameraBuffers[i] = std::make_unique<gpudriven::GPUDrivenCameraBuffer>(device, swapChain);
+            rttGPUDrivenCameraBuffers[i]->init();
+        }
+
+        // Cull descriptor pool sized to match GPUCullLODPipeline's layout: bindings 0/2/3/4/6 are
+        // storage buffers, binding 1 is a uniform buffer, binding 5 is a combined image sampler.
+        {
+            std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+            poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
+            poolSizes[0].descriptorCount = imageCount * 5;
+            poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
+            poolSizes[1].descriptorCount = imageCount;
+            poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
+            poolSizes[2].descriptorCount = imageCount;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet |
+                             vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            poolInfo.maxSets = imageCount;
+            rttCullDescPool = logicalDevice.createDescriptorPool(poolInfo);
+        }
+
+        rttCullDescSets.resize(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            rttCullDescSets[i] = gpuRenderer->allocateRTTCullDescriptorSet(
+                rttCullDescPool, rttGPUDrivenCameraBuffers[i]->getBuffer());
+        }
+
+        rttCullDescPoolOwnerRenderer = gpuRenderer;
+        perRTTResourcesInitialized = true;
+    }
+
+    void RenderTextureViewPort::cleanupPerRTTResources()
+    {
+        if (!perRTTResourcesInitialized)
+        {
+            return;
+        }
+
+        const auto logicalDevice = device.getLogicalDevice();
+
+        // Untrack the cull descriptor sets so the cull pipeline stops rewriting them when its
+        // cached buffers change. Descriptor sets themselves are freed implicitly when their pool
+        // is destroyed below.
+        if (rttCullDescPoolOwnerRenderer)
+        {
+            for (auto set : rttCullDescSets)
+            {
+                if (set)
+                {
+                    rttCullDescPoolOwnerRenderer->releaseRTTCullDescriptorSet(set);
+                }
+            }
+        }
+        rttCullDescSets.clear();
+        rttCullDescPoolOwnerRenderer = nullptr;
+
+        if (rttCullDescPool)
+        {
+            logicalDevice.destroyDescriptorPool(rttCullDescPool);
+            rttCullDescPool = nullptr;
+        }
+
+        for (auto& buf : rttGPUDrivenCameraBuffers)
+        {
+            if (buf) buf->cleanup();
+        }
+        rttGPUDrivenCameraBuffers.clear();
+
+        rttMeshIBLDescSets.clear();
+        if (rttMeshIBLDescPool)
+        {
+            logicalDevice.destroyDescriptorPool(rttMeshIBLDescPool);
+            rttMeshIBLDescPool = nullptr;
+        }
+
+        for (uint32_t i = 0; i < rttMeshCameraUBOs.size(); ++i)
+        {
+            if (rttMeshCameraUBOs[i])
+            {
+                core::BufferUtilities::destroyBuffer(logicalDevice,
+                    rttMeshCameraUBOs[i], rttMeshCameraUBOAllocs[i], device.getMemoryManager());
+            }
+        }
+        rttMeshCameraUBOs.clear();
+        rttMeshCameraUBOAllocs.clear();
+
+        perRTTResourcesInitialized = false;
     }
 
     void RenderTextureViewPort::createOffscreenResources()

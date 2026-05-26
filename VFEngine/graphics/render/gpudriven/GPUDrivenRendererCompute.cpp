@@ -309,7 +309,14 @@ namespace render::gpudriven
                                            lightBufferManager->getSpotLightCount());
         }
 
-        cullPipeline->dispatch(cmd, stats.totalObjects);
+        if (activeCullDescriptorSet)
+        {
+            cullPipeline->dispatchWithSet(cmd, stats.totalObjects, activeCullDescriptorSet);
+        }
+        else
+        {
+            cullPipeline->dispatch(cmd, stats.totalObjects);
+        }
         batchManager->insertBarriersAfterCompute(cmd);
         recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
 

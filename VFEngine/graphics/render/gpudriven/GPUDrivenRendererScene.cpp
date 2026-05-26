@@ -178,13 +178,15 @@ namespace render::gpudriven
         stats.totalObjects = currentObjectCount;
     }
 
-    void GPUDrivenRenderer::updateCameraForRTT(const RTTCameraParams& params)
+    void GPUDrivenRenderer::beginRTTContext(const RTTRenderContext& ctx, const RTTCameraParams& params)
     {
-        if (!initialized || !enabled)
+        if (!initialized || !enabled || !ctx.cameraBuffer)
         {
             return;
         }
 
+        // Fill the per-RTT GPU-cull camera buffer with the RTT camera params. This writes only
+        // to the caller-owned buffer; the shared main cameraBuffer is untouched.
         CameraUpdateParams cameraParams{
             .view = params.view,
             .projection = params.projection,
@@ -206,46 +208,64 @@ namespace render::gpudriven
             .screenWidth = params.screenWidth,
             .screenHeight = params.screenHeight
         };
-        cameraBuffer->update(cameraParams);
+        ctx.cameraBuffer->update(cameraParams);
 
+        // Make subsequent cull dispatches use the per-RTT descriptor set (binding 1 -> RTT
+        // camera buffer). Cleared by endRTTContext().
+        activeCullDescriptorSet = ctx.cullDescriptorSet;
+
+        // Terrain VP is read into a push constant at recording time, so it is safe to swap on
+        // the CPU between RTT-record and main-record. Save the current main value so the matching
+        // endRTTContext() can put it back before the main pass records.
         if (terrain.pipeline)
         {
+            savedTerrainViewProjection = terrain.pipeline->getViewProjection();
+            terrainViewProjectionSaved = true;
             terrain.pipeline->setViewProjection(params.projection * params.view);
         }
     }
 
-    void GPUDrivenRenderer::restoreMainCamera()
+    void GPUDrivenRenderer::endRTTContext()
     {
         if (!initialized || !enabled)
         {
             return;
         }
 
-        CameraUpdateParams cameraParams{
-            .view = cachedCamera.view,
-            .projection = cachedCamera.projection,
-            .cameraPosition = cachedCamera.position,
-            .nearPlane = cachedCamera.nearPlane,
-            .farPlane = cachedCamera.farPlane,
-            .time = cachedCamera.time,
-            .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
-            .hiZMipLevels = hiZMipLevels,
-            .frustumCullingEnabled = culling.frustumCullingEnabled,
-            .occlusionCullingEnabled = culling.occlusionCullingEnabled,
-            .lodSelectionEnabled = culling.lodSelectionEnabled,
-            .lodCrossfadeEnabled = culling.lodCrossfadeEnabled,
-            .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
-            .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
-            .globalLodBias = culling.globalLodBias,
-            .batchManager = batchManager.get()
-        };
-        cameraBuffer->update(cameraParams);
+        activeCullDescriptorSet = nullptr;
 
-        if (terrain.pipeline)
+        if (terrainViewProjectionSaved && terrain.pipeline)
         {
-            terrain.pipeline->setViewProjection(cachedCamera.projection * cachedCamera.view);
+            terrain.pipeline->setViewProjection(savedTerrainViewProjection);
         }
+        terrainViewProjectionSaved = false;
+    }
+
+    vk::DescriptorSet GPUDrivenRenderer::allocateRTTCullDescriptorSet(vk::DescriptorPool externalPool,
+                                                                       vk::Buffer externalCameraBuffer)
+    {
+        if (!cullPipeline)
+        {
+            return nullptr;
+        }
+        return cullPipeline->allocateExternalDescriptorSet(externalPool, externalCameraBuffer);
+    }
+
+    void GPUDrivenRenderer::releaseRTTCullDescriptorSet(vk::DescriptorSet rttSet)
+    {
+        if (cullPipeline)
+        {
+            cullPipeline->releaseExternalDescriptorSet(rttSet);
+        }
+    }
+
+    vk::DescriptorSetLayout GPUDrivenRenderer::getCullDescriptorSetLayout() const
+    {
+        if (!cullPipeline)
+        {
+            return nullptr;
+        }
+        return cullPipeline->getDescriptorSetLayout();
     }
 
     void GPUDrivenRenderer::updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,

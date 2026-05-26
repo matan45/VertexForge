@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 #include <memory>
+#include <vector>
 
 namespace core
 {
@@ -42,6 +43,17 @@ namespace render::gpudriven
         vk::Sampler cachedHiZSampler;
         bool hiZDescriptorNeedsUpdate = false;
 
+        // VK-1334: external descriptor sets (allocated by RenderTextureViewPort) that bind a
+        // per-RTT camera buffer at binding 1 but share the other cached buffers/hiZ with the
+        // main set. Tracked here so they get rewritten alongside the main set when any cached
+        // buffer or hiZ binding changes.
+        struct ExternalDescriptorRef
+        {
+            vk::DescriptorSet descriptorSet;
+            vk::Buffer cameraBuffer;
+        };
+        std::vector<ExternalDescriptorRef> externalDescriptorSets;
+
     public:
         explicit GPUCullLODPipeline(core::Device& device);
         ~GPUCullLODPipeline();
@@ -68,6 +80,21 @@ namespace render::gpudriven
 
         void dispatch(vk::CommandBuffer cmd, uint32_t objectCount);
 
+        // VK-1334: dispatch using an explicit descriptor set (must be one previously returned by
+        // allocateExternalDescriptorSet on this pipeline). Used by RTT pre-pass recording.
+        void dispatchWithSet(vk::CommandBuffer cmd, uint32_t objectCount, vk::DescriptorSet externalSet);
+
+        vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
+
+        // VK-1334: allocate a descriptor set from `externalPool` that mirrors the main descriptor
+        // set but binds `externalCameraBuffer` at binding 1. Caller owns the pool; the pipeline
+        // tracks the returned set so it can rewrite it when cached buffers or hiZ change.
+        vk::DescriptorSet allocateExternalDescriptorSet(vk::DescriptorPool externalPool,
+                                                        vk::Buffer externalCameraBuffer);
+
+        // Untrack a previously allocated external set. Does not free; caller frees via its pool.
+        void releaseExternalDescriptorSet(vk::DescriptorSet externalSet);
+
     private:
         void createDescriptorSetLayout();
         void createPipelineLayout();
@@ -75,5 +102,6 @@ namespace render::gpudriven
         void createDescriptorPool();
         void allocateDescriptorSet();
         void writeDescriptors();
+        void writeBindingsToSet(vk::DescriptorSet dst, vk::Buffer cameraBufferOverride);
     };
 }

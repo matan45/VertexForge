@@ -4,6 +4,7 @@
 #include "../../../core/PipelineUtilities.hpp"
 #include "../GPUDrivenTypes.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
 #include <array>
 
 namespace render::gpudriven
@@ -260,6 +261,150 @@ namespace render::gpudriven
         hiZDescriptorNeedsUpdate = true;
     }
 
+    void GPUCullLODPipeline::writeBindingsToSet(vk::DescriptorSet dst, vk::Buffer cameraBufferOverride)
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        vk::DescriptorBufferInfo objectInfo{};
+        objectInfo.buffer = cachedObjectBuffer;
+        objectInfo.offset = 0;
+        objectInfo.range = VK_WHOLE_SIZE;
+
+        vk::DescriptorBufferInfo cameraInfo{};
+        cameraInfo.buffer = cameraBufferOverride;
+        cameraInfo.offset = 0;
+        cameraInfo.range = sizeof(GPUCameraData);
+
+        vk::DescriptorBufferInfo drawCmdInfo{};
+        drawCmdInfo.buffer = cachedDrawCommandBuffer;
+        drawCmdInfo.offset = 0;
+        drawCmdInfo.range = VK_WHOLE_SIZE;
+
+        vk::DescriptorBufferInfo perDrawInfo{};
+        perDrawInfo.buffer = cachedPerDrawDataBuffer;
+        perDrawInfo.offset = 0;
+        perDrawInfo.range = VK_WHOLE_SIZE;
+
+        vk::DescriptorBufferInfo drawCountInfo{};
+        drawCountInfo.buffer = cachedDrawCountBuffer;
+        drawCountInfo.offset = 0;
+        drawCountInfo.range = VK_WHOLE_SIZE;
+
+        vk::DescriptorBufferInfo activeIndexInfo{};
+        activeIndexInfo.buffer = cachedActiveIndexBuffer;
+        activeIndexInfo.offset = 0;
+        activeIndexInfo.range = VK_WHOLE_SIZE;
+
+        vk::DescriptorImageInfo hiZInfo{};
+        hiZInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        hiZInfo.imageView = cachedHiZView;
+        hiZInfo.sampler = cachedHiZSampler;
+
+        bool hasHiZ = cachedHiZView && cachedHiZSampler;
+
+        std::vector<vk::WriteDescriptorSet> writes;
+        writes.reserve(hasHiZ ? 7 : 6);
+
+        vk::WriteDescriptorSet objectWrite{};
+        objectWrite.dstSet = dst;
+        objectWrite.dstBinding = 0;
+        objectWrite.dstArrayElement = 0;
+        objectWrite.descriptorCount = 1;
+        objectWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        objectWrite.pBufferInfo = &objectInfo;
+        writes.push_back(objectWrite);
+
+        vk::WriteDescriptorSet cameraWrite{};
+        cameraWrite.dstSet = dst;
+        cameraWrite.dstBinding = 1;
+        cameraWrite.dstArrayElement = 0;
+        cameraWrite.descriptorCount = 1;
+        cameraWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+        cameraWrite.pBufferInfo = &cameraInfo;
+        writes.push_back(cameraWrite);
+
+        vk::WriteDescriptorSet drawCmdWrite{};
+        drawCmdWrite.dstSet = dst;
+        drawCmdWrite.dstBinding = 2;
+        drawCmdWrite.dstArrayElement = 0;
+        drawCmdWrite.descriptorCount = 1;
+        drawCmdWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        drawCmdWrite.pBufferInfo = &drawCmdInfo;
+        writes.push_back(drawCmdWrite);
+
+        vk::WriteDescriptorSet perDrawWrite{};
+        perDrawWrite.dstSet = dst;
+        perDrawWrite.dstBinding = 3;
+        perDrawWrite.dstArrayElement = 0;
+        perDrawWrite.descriptorCount = 1;
+        perDrawWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        perDrawWrite.pBufferInfo = &perDrawInfo;
+        writes.push_back(perDrawWrite);
+
+        vk::WriteDescriptorSet drawCountWrite{};
+        drawCountWrite.dstSet = dst;
+        drawCountWrite.dstBinding = 4;
+        drawCountWrite.dstArrayElement = 0;
+        drawCountWrite.descriptorCount = 1;
+        drawCountWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        drawCountWrite.pBufferInfo = &drawCountInfo;
+        writes.push_back(drawCountWrite);
+
+        vk::WriteDescriptorSet hiZWrite{};
+        if (hasHiZ)
+        {
+            hiZWrite.dstSet = dst;
+            hiZWrite.dstBinding = 5;
+            hiZWrite.dstArrayElement = 0;
+            hiZWrite.descriptorCount = 1;
+            hiZWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            hiZWrite.pImageInfo = &hiZInfo;
+            writes.push_back(hiZWrite);
+        }
+
+        if (cachedActiveIndexBuffer)
+        {
+            vk::WriteDescriptorSet activeIndexWrite{};
+            activeIndexWrite.dstSet = dst;
+            activeIndexWrite.dstBinding = 6;
+            activeIndexWrite.dstArrayElement = 0;
+            activeIndexWrite.descriptorCount = 1;
+            activeIndexWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+            activeIndexWrite.pBufferInfo = &activeIndexInfo;
+            writes.push_back(activeIndexWrite);
+        }
+
+        vkDevice.updateDescriptorSets(writes, {});
+    }
+
+    vk::DescriptorSet GPUCullLODPipeline::allocateExternalDescriptorSet(vk::DescriptorPool externalPool,
+                                                                         vk::Buffer externalCameraBuffer)
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = externalPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        vk::DescriptorSet outSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+
+        writeBindingsToSet(outSet, externalCameraBuffer);
+
+        externalDescriptorSets.push_back({outSet, externalCameraBuffer});
+        return outSet;
+    }
+
+    void GPUCullLODPipeline::releaseExternalDescriptorSet(vk::DescriptorSet externalSet)
+    {
+        auto it = std::find_if(externalDescriptorSets.begin(), externalDescriptorSets.end(),
+            [externalSet](const ExternalDescriptorRef& r) { return r.descriptorSet == externalSet; });
+        if (it != externalDescriptorSets.end())
+        {
+            externalDescriptorSets.erase(it);
+        }
+    }
+
     void GPUCullLODPipeline::writeDescriptors()
     {
         if (!descriptorsNeedUpdate && !hiZDescriptorNeedsUpdate)
@@ -382,6 +527,13 @@ namespace render::gpudriven
         descriptorsNeedUpdate = false;
         hiZDescriptorNeedsUpdate = false;
 
+        // Keep external (per-RTT) descriptor sets in sync with the cached buffers/hiZ. Each one
+        // mirrors the main set except for binding 1 (camera buffer), which stays at its own
+        // per-RTT buffer handle.
+        for (const auto& ext : externalDescriptorSets)
+        {
+            writeBindingsToSet(ext.descriptorSet, ext.cameraBuffer);
+        }
     }
 
     void GPUCullLODPipeline::dispatch(vk::CommandBuffer cmd, uint32_t objectCount)
@@ -395,6 +547,25 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 0, descriptorSet, {});
+
+        uint32_t groupCount = (objectCount + CULL_WORKGROUP_SIZE - 1) / CULL_WORKGROUP_SIZE;
+        cmd.dispatch(groupCount, 1, 1);
+    }
+
+    void GPUCullLODPipeline::dispatchWithSet(vk::CommandBuffer cmd, uint32_t objectCount,
+                                              vk::DescriptorSet externalSet)
+    {
+        if (!initialized || objectCount == 0 || !externalSet)
+        {
+            return;
+        }
+
+        // External set is kept in sync inside writeDescriptors(); call it to flush any pending
+        // main-side updates (which also propagate to externals).
+        writeDescriptors();
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 0, externalSet, {});
 
         uint32_t groupCount = (objectCount + CULL_WORKGROUP_SIZE - 1) / CULL_WORKGROUP_SIZE;
         cmd.dispatch(groupCount, 1, 1);
