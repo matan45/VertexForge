@@ -147,6 +147,16 @@ namespace render
               .screenWidth = width,
               .screenHeight = height });
 
+        // RAII guard: endRTTContext MUST run before this function returns, even on exception
+        // (the new waitForFences after submit at the bottom can throw vk::DeviceLostError, etc.).
+        // Without this, the GPU-driven renderer would stay in RTT context and the next main-pass
+        // submit would render with the per-RTT camera UBO + cull descriptor still bound, silently
+        // corrupting the main camera until the next successful RTT render.
+        struct RTTScopeGuard {
+            gpudriven::GPUDrivenRenderer* renderer;
+            ~RTTScopeGuard() { if (renderer) renderer->endRTTContext(); }
+        } rttScope{gpuRenderer};
+
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
@@ -268,11 +278,14 @@ namespace render
         // a torn read = visible flicker on the minimap quad. The CPU stall here is small
         // (512x512 RTT renders in well under a millisecond) and only affects RTTs that
         // actually rendered this frame.
-        (void)device.getLogicalDevice().waitForFences(
+        vk::Result waitResult = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+        if (waitResult != vk::Result::eSuccess)
+        {
+            vfLogError("RenderTextureViewPort: post-submit waitForFences returned non-success");
+        }
 
-        gpuRenderer->endRTTContext();
-
+        // endRTTContext is handled by rttScope on function exit.
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
 

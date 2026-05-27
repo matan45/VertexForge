@@ -201,6 +201,15 @@ namespace render
             billboardPipeline->registerExternalTexture(key, imageIndex, imageView, sampler);
     }
 
+    void RenderPassHandler::unregisterExternalTexture(const std::string& key)
+    {
+        if (uiPipelineInitialized && uiPipeline)
+            uiPipeline->unregisterExternalTexture(key);
+
+        if (billboardPipelineInitialized && billboardPipeline)
+            billboardPipeline->unregisterExternalTexture(key);
+    }
+
     void RenderPassHandler::initBillboardPipeline()
     {
         if (billboardPipelineInitialized)

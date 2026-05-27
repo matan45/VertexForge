@@ -66,25 +66,11 @@ namespace controllers
 
         lastRenderedHandle = static_cast<void*>(result);
 
-        // VK-1334: only register the slot we just rendered into. The adapter's per-frame
-        // repoint loop (see RenderTextureAdapter::renderAll) is what keeps other slots up
-        // to date by pointing them at this same fresh view; doing the fan-out from here
-        // would touch slots that may still be referenced by in-flight UI command buffers.
-        if (!textureKey.empty() && mainPassHandler)
-        {
-            auto texSampler = viewport->getTextureSampler();
-            uint32_t currentImageIndex = viewport->getLastRenderedImageIndex();
-            auto imageView = viewport->getImageView(currentImageIndex);
-            if (texSampler && imageView)
-            {
-                mainPassHandler->registerExternalTexture(
-                    textureKey,
-                    currentImageIndex,
-                    imageView,
-                    texSampler);
-            }
-        }
-
+        // External-texture registration is owned exclusively by RenderTextureAdapter::renderAll's
+        // per-frame repoint loop. It runs unconditionally for every enabled controller after this
+        // function returns, so doing the registration here would be (a) redundant and (b) unsafe
+        // on early-return paths in viewport->render where lastRenderedImageIndex was never
+        // updated to the current swapchain slot.
         return lastRenderedHandle;
     }
 
