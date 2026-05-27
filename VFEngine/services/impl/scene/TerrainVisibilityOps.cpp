@@ -152,7 +152,10 @@ namespace services
 
         for (auto& [entityId, grid] : terrainGrids)
         {
-            auto visible = grid->getVisibleTiles(frustum);
+            // VK-1336: use non-mutating query so a secondary (minimap/RTT) camera's
+            // frustum does not stomp the main camera's tile->isVisible flags. Callers
+            // that need isVisible set (the main camera path) use getRawVisibleTiles.
+            auto visible = grid->queryFrustumPure(frustum);
 
             if (distanceCullingEnabled_ && maxTerrainDistSq_ > 0.0f)
             {

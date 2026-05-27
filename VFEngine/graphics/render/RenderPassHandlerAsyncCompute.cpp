@@ -34,6 +34,7 @@
 #include "../../services/data/RenderHookContext.hpp"
 #include "water/OceanFFT.hpp"
 #include "vegetation/WindConfig.hpp"
+#include "terrain/TerrainTile.hpp"
 #include <unordered_set>
 
 namespace render
@@ -57,10 +58,16 @@ namespace render
             std::unordered_set<::terrain::TerrainTile*> terrainSeen(visibleTiles.begin(), visibleTiles.end());
             for (const auto& [rttFrustum, rttCameraPos] : additionalTerrainFrustums)
             {
+                // VK-1336: queryVisibleTiles is now non-mutating (preserves the main camera's
+                // tile->isVisible flags). Re-mark RTT-only tiles as visible here so they get
+                // uploaded for the minimap/RTT pass to render them.
                 for (auto* tile : terrainRenderProvider->queryVisibleTiles(rttFrustum, rttCameraPos))
                 {
                     if (terrainSeen.insert(tile).second)
+                    {
+                        tile->isVisible = true;
                         visibleTiles.push_back(tile);
+                    }
                 }
             }
 
