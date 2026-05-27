@@ -428,7 +428,7 @@ namespace handlers {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 renderTexturePlayModeHandler->update(dt);
             }
-        });
+        }, threading::JobPriority::NORMAL, true);
 
         frameTaskGraph->addTask("AudioListener", [this]() {
             if (audioSceneUpdater) {
@@ -462,7 +462,6 @@ namespace handlers {
         frameTaskGraph->addDependency("Scripts", "PhysicsSync");
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
-        frameTaskGraph->addDependency("RenderTexture", "Scripts");
         frameTaskGraph->addDependency("AudioListener", "Scripts");
 
         // === Full frame pipeline tasks ===
@@ -541,14 +540,14 @@ namespace handlers {
 
         // Transforms depend on all service updates completing
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
-        frameTaskGraph->addDependency("Transforms", "RenderTexture");
         frameTaskGraph->addDependency("Transforms", "AudioListener");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");
 
-        // PostUpdate after Transforms
-        frameTaskGraph->addDependency("PostUpdate", "Transforms");
+        // Render textures after transforms, then update render camera state.
+        frameTaskGraph->addDependency("RenderTexture", "Transforms");
+        frameTaskGraph->addDependency("PostUpdate", "RenderTexture");
 
         // Render after PostUpdate
         frameTaskGraph->addDependency("Render", "PostUpdate");

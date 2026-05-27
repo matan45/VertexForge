@@ -43,9 +43,6 @@ namespace render
         if (!gpuDrivenRendererInitialized || !meshPipelineInitialized)
             return;
 
-        vfLogInfo("[VK-1334][MAIN-DRAW] updateGPUDrivenSceneData: camPos=({:.2f},{:.2f},{:.2f})",
-                  currentCameraPosition.x, currentCameraPosition.y, currentCameraPosition.z);
-
         gpuDrivenRenderer->updateScene(
             currentMeshDrawList, currentView, currentProjection,
             currentCameraPosition, currentNearPlane, currentFarPlane, currentTime);

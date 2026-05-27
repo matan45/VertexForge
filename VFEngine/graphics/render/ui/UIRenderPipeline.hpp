@@ -63,8 +63,14 @@ namespace render::ui
             std::unique_ptr<core::Texture> texture;
             vk::DescriptorSet descriptorSet;
         };
+        struct ExternalTextureEntry
+        {
+            std::vector<vk::DescriptorSet> descriptorSets;
+            std::vector<vk::ImageView> imageViews;
+            std::vector<vk::Sampler> samplers;
+        };
         std::unordered_map<std::string, TextureEntry> textureCache;
-        std::unordered_map<std::string, vk::DescriptorSet> externalTextureCache;
+        std::unordered_map<std::string, ExternalTextureEntry> externalTextureCache;
         static constexpr uint32_t MAX_UI_TEXTURES = 64;
         static constexpr uint32_t MAX_EXTERNAL_TEXTURES = 8;
 
@@ -83,7 +89,8 @@ namespace render::ui
 
         void setUIImageDrawList(const std::vector<UIImageRenderData>& images);
 
-        void registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler externalSampler);
+        void registerExternalTexture(const std::string& key, uint32_t imageIndex,
+                                     vk::ImageView imageView, vk::Sampler externalSampler);
         void unregisterExternalTexture(const std::string& key);
         void clearExternalTextures();
 

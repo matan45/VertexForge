@@ -105,7 +105,7 @@ namespace render::ui
 
     void UIRenderPipeline::createDescriptorPool()
     {
-        uint32_t totalSets = 1 + MAX_UI_TEXTURES + MAX_EXTERNAL_TEXTURES;
+        uint32_t totalSets = 1 + MAX_UI_TEXTURES + (MAX_EXTERNAL_TEXTURES * swapChain.getImageCount());
         vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler, totalSets};
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;

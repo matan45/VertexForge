@@ -434,10 +434,6 @@ namespace render::gpudriven
         // internal (main-camera) descriptor.
         {
             vk::DescriptorSet pickedCullSet = GPUDrivenRenderer::getThreadLocalCullDescriptorSet();
-            auto tid = std::this_thread::get_id();
-            vfLogInfo("[VK-1334][CULL-DISPATCH-GFX] tid={} pickedCullSet={} (NULL=>main, non-null=>RTT)",
-                      std::hash<std::thread::id>{}(tid),
-                      (void*)(VkDescriptorSet)pickedCullSet);
             if (pickedCullSet)
             {
                 cullPipeline->dispatchWithSet(cmd, stats.totalObjects, pickedCullSet);

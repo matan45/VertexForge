@@ -57,8 +57,6 @@ namespace render
     {
         uint32_t imageIndex = core::RenderManager::getImageIndex();
 
-        vfLogInfo("[VK-1334][MAIN-RENDER] OffScreenViewPort::render imageIndex={}", imageIndex);
-
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
 

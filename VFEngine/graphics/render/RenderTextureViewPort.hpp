@@ -88,6 +88,9 @@ namespace render
 
         vk::ImageView getLastRenderedImageView() const;
         vk::Image getLastRenderedImage() const;
+        uint32_t getLastRenderedImageIndex() const { return lastRenderedImageIndex; }
+        uint32_t getImageCount() const { return static_cast<uint32_t>(offscreenResources.colorImages.size()); }
+        vk::ImageView getImageView(uint32_t imageIndex) const;
         vk::Sampler getTextureSampler() const { return sampler; }
 
     private:

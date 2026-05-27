@@ -68,11 +68,21 @@ namespace controllers
 
         if (!textureKey.empty() && mainPassHandler)
         {
-            auto imageView = viewport->getLastRenderedImageView();
             auto texSampler = viewport->getTextureSampler();
-            if (imageView && texSampler)
+            if (texSampler)
             {
-                mainPassHandler->registerExternalTexture(textureKey, imageView, texSampler);
+                for (uint32_t imageIndex = 0; imageIndex < viewport->getImageCount(); ++imageIndex)
+                {
+                    auto imageView = viewport->getImageView(imageIndex);
+                    if (imageView)
+                    {
+                        mainPassHandler->registerExternalTexture(
+                            textureKey,
+                            imageIndex,
+                            imageView,
+                            texSampler);
+                    }
+                }
             }
         }
 

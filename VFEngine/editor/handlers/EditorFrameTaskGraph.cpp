@@ -83,7 +83,7 @@ namespace handlers
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 renderTexturePlayModeHandler->update(dt);
             }
-        });
+        }, threading::JobPriority::NORMAL, true);
 
         // VK-1330 / VK-1333: an "AudioListener" task used to live here that
         // called audioSceneUpdater->updateListenerFromPrimaryCamera() every
@@ -135,7 +135,6 @@ namespace handlers
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("VFX", "Scripts");
-        frameTaskGraph->addDependency("RenderTexture", "Scripts");
 
         auto sceneGraphFn = bootstrap->getSceneGraphUpdateFn();
         frameTaskGraph->addTask("Transforms", [sceneGraphFn]() {
@@ -162,11 +161,11 @@ namespace handlers
         frameTaskGraph->addDependency("Transforms", "Weather");
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
         frameTaskGraph->addDependency("Transforms", "VFX");
-        frameTaskGraph->addDependency("Transforms", "RenderTexture");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");
-        frameTaskGraph->addDependency("LateScripts", "Transforms");
+        frameTaskGraph->addDependency("RenderTexture", "Transforms");
+        frameTaskGraph->addDependency("LateScripts", "RenderTexture");
         frameTaskGraph->addDependency("ImGuiDraw", "LateScripts");
         frameTaskGraph->addDependency("Render", "ImGuiDraw");
 

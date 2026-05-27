@@ -172,9 +172,6 @@ namespace render::gpudriven
             terrain.pipeline->setViewProjection(projection * view);
         }
 
-        vfLogInfo("[VK-1334][MAIN] updateScene: camPos=({:.2f},{:.2f},{:.2f}) terrainVP set to MAIN",
-                  cameraPosition.x, cameraPosition.y, cameraPosition.z);
-
         updateClusterGrid(projection, nearPlane, farPlane);
         updatePipelineDescriptors();
 
@@ -197,11 +194,6 @@ namespace render::gpudriven
         {
             return;
         }
-
-        vfLogInfo("[VK-1334][RTT] beginRTTContext: rttCamBuf={} cullDescSet={} camPos=({:.2f},{:.2f},{:.2f})",
-                  (void*)(VkBuffer)ctx.cameraBuffer->getBuffer(),
-                  (void*)(VkDescriptorSet)ctx.cullDescriptorSet,
-                  params.cameraPosition.x, params.cameraPosition.y, params.cameraPosition.z);
 
         // Fill the per-RTT GPU-cull camera buffer with the RTT camera params. This writes only
         // to the caller-owned buffer; the shared main cameraBuffer is untouched.
