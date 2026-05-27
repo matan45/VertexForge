@@ -164,12 +164,12 @@ namespace render
 
     void RenderPassHandler::executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const
     {
-        occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
-
-        if (!cameraOcclusionManager->isHiZInitialized(activeCameraId))
+        // VK-1336: main-scene HiZ generation and occlusion always target the primary camera.
+        // RTT cameras run their own cull/HiZ inside RenderTextureViewPort's per-RTT context.
+        if (!cameraOcclusionManager->isHiZInitialized(occlusion::MAIN_CAMERA_ID))
             return;
 
-        cameraOcclusionManager->generateHiZ(activeCameraId, commandBuffer);
+        cameraOcclusionManager->generateHiZ(occlusion::MAIN_CAMERA_ID, commandBuffer);
 
         if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
             dispatchTerrainRaycast(commandBuffer);
