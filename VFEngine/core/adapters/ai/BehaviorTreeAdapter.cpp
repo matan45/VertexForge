@@ -11,6 +11,7 @@
 
 namespace core
 {
+    
     using namespace behaviortree;
 
     BehaviorTreeAdapter::BehaviorTreeAdapter(services::IScriptingProvider* scriptingProvider)
