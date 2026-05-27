@@ -79,6 +79,10 @@ namespace render::mesh
         core::VulkanAllocation cameraUBOAllocation;
         bool externalCameraBuffer = false;
 
+        ibl::ImageData cachedIrradianceMap;
+        ibl::ImageData cachedPrefilterMap;
+        ibl::ImageData cachedBrdfLUT;
+
         mutable float currentTime{0.0f};
 
         std::unique_ptr<MaterialCacheManager> materialCacheManager;
@@ -153,6 +157,12 @@ namespace render::mesh
             cameraUBO = buffer;
             externalCameraBuffer = true;
         }
+
+        // VK-1334: build an additional IBL descriptor set that binds an external CameraUBO at
+        // binding 0 (matching `descriptorSetLayout`), reusing the cached IBL images for bindings
+        // 1-3. Used by RenderTextureViewPort so RTT passes don't write the shared CameraUBO.
+        vk::DescriptorSet createExternalIBLDescriptorSet(vk::Buffer externalCameraUBO,
+                                                         vk::DescriptorPool externalPool) const;
 
         std::string loadMesh(std::string_view meshPath);
         std::string uploadMesh(const std::string& meshId, const resource::MeshesData& meshData);

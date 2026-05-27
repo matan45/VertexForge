@@ -6,6 +6,7 @@
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "print/Log.hpp"
 
 namespace render
 {

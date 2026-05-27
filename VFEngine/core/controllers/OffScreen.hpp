@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstdint>
 #include <optional>
+#include <functional>
 #include <utility>
 #include <entt/entt.hpp>
 #include "providers/render/IOffScreenProvider.hpp"
@@ -56,6 +57,7 @@ namespace controllers
         void cleanUp();
 
         void* render();
+        void* render(const std::function<void()>& preRenderCallback);
 
         // Get the offscreen color image for runtime blit (returns VkImage as void*)
         void* getColorImage(uint32_t imageIndex) const;

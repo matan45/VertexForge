@@ -3,6 +3,7 @@
 #include "../../events/render/PostProcessEvents.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
+#include <utility>
 
 namespace services
 {
@@ -25,7 +26,9 @@ namespace services
         prepareSceneData();
         prepareFrameUIImages();
 
-        void* descriptorSet = offScreenProvider->render();
+        void* descriptorSet = preOffscreenRenderCallback
+            ? offScreenProvider->render(preOffscreenRenderCallback)
+            : offScreenProvider->render();
 
         ViewportTextureHandle handle;
         handle.imguiDescriptorSet = descriptorSet;
@@ -114,6 +117,11 @@ namespace services
     uint64_t RuntimeRenderServiceImpl::getFrameNumber() const
     {
         return frameCounter;
+    }
+
+    void RuntimeRenderServiceImpl::setPreOffscreenRenderCallback(std::function<void()> callback)
+    {
+        preOffscreenRenderCallback = std::move(callback);
     }
 
     void RuntimeRenderServiceImpl::registerEventHandlers()

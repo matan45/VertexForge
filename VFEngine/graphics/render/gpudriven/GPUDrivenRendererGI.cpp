@@ -7,6 +7,7 @@
 #include "types/RenderSettings.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <thread>
 
 #ifdef MemoryBarrier
 #undef MemoryBarrier
@@ -428,7 +429,20 @@ namespace render::gpudriven
             }
         }
 
-        cullPipeline->dispatch(cmd, stats.totalObjects);
+        // VK-1334: pick per-RTT cull descriptor when this thread is recording an RTT pre-pass.
+        // Defaults to nullptr on the main render thread, so main keeps using the cull pipeline's
+        // internal (main-camera) descriptor.
+        {
+            vk::DescriptorSet pickedCullSet = GPUDrivenRenderer::getThreadLocalCullDescriptorSet();
+            if (pickedCullSet)
+            {
+                cullPipeline->dispatchWithSet(cmd, stats.totalObjects, pickedCullSet);
+            }
+            else
+            {
+                cullPipeline->dispatch(cmd, stats.totalObjects);
+            }
+        }
         batchManager->insertBarriersAfterCompute(cmd);
         recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
         dispatchVolumetricFog(cmd);

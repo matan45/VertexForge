@@ -3,6 +3,7 @@
 #include <string>
 #include <cstdint>
 #include "../asset/AssetRef.hpp"
+#include "UIComponents.hpp"
 
 namespace components
 {
@@ -80,6 +81,7 @@ namespace components
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
         float maxWidth = 0.0f;
+        FontStyle fontStyle = FontStyle::Normal;
     };
 
 }

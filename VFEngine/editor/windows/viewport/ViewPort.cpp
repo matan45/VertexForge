@@ -144,7 +144,9 @@ namespace windows
     {
         CameraState state;
         if (isPlayMode && tryGetGameCameraState(state, aspectRatio))
+        {
             return state;
+        }
 
         state.viewMatrix = editorCamera->getViewMatrix();
         state.projectionMatrix = editorCamera->getProjectionMatrix();

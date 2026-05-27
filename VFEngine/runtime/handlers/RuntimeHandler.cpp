@@ -55,7 +55,7 @@ namespace handlers {
         resource::VirtualFileSystem::instance().initialize();
         bootstrap->init();
 
-        // Runtime is always in play mode — hide editor-only overlays (grid, gizmos, etc.)
+        // Runtime is always in play mode - hide editor-only overlays (grid, gizmos, etc.)
         if (auto* offScreen = bootstrap->getOffScreenProvider())
         {
             offScreen->setPlayMode(true);
@@ -316,6 +316,19 @@ namespace handlers {
             renderTexturePlayModeHandler->subscribeToEvents();
         }
 
+        if (auto* runtimeRenderService =
+                dynamic_cast<services::RuntimeRenderServiceImpl*>(renderService.get()))
+        {
+            runtimeRenderService->setPreOffscreenRenderCallback([this]()
+            {
+                if (renderTexturePlayModeHandler)
+                {
+                    float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                    renderTexturePlayModeHandler->update(dt);
+                }
+            });
+        }
+
         sceneService->registerEventHandlers();
         projectService->registerEventHandlers();
         renderService->registerEventHandlers();
@@ -423,13 +436,6 @@ namespace handlers {
             }
         });
 
-        frameTaskGraph->addTask("RenderTexture", [this]() {
-            if (renderTexturePlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                renderTexturePlayModeHandler->update(dt);
-            }
-        });
-
         frameTaskGraph->addTask("AudioListener", [this]() {
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
@@ -462,7 +468,6 @@ namespace handlers {
         frameTaskGraph->addDependency("Scripts", "PhysicsSync");
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
-        frameTaskGraph->addDependency("RenderTexture", "Scripts");
         frameTaskGraph->addDependency("AudioListener", "Scripts");
 
         // === Full frame pipeline tasks ===
@@ -541,13 +546,12 @@ namespace handlers {
 
         // Transforms depend on all service updates completing
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
-        frameTaskGraph->addDependency("Transforms", "RenderTexture");
         frameTaskGraph->addDependency("Transforms", "AudioListener");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");
 
-        // PostUpdate after Transforms
+        // PostUpdate after transforms.
         frameTaskGraph->addDependency("PostUpdate", "Transforms");
 
         // Render after PostUpdate

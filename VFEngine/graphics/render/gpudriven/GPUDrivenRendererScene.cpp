@@ -23,6 +23,16 @@
 
 namespace render::gpudriven
 {
+    // VK-1334: per-thread RTT state, so concurrent recording of the main pass (Render task)
+    // and an RTT pre-pass (RenderTexture task) cannot stomp on each other's overrides. Each
+    // task runs to completion on one worker thread, so begin/record/end happen on the same TLS.
+    namespace
+    {
+        thread_local vk::DescriptorSet tlsActiveCullDescriptorSet = nullptr;
+        thread_local bool tlsHasTerrainViewProjectionOverride = false;
+        thread_local glm::mat4 tlsTerrainViewProjectionOverride{1.0f};
+    }
+
     void GPUDrivenRenderer::updateScene(
         const std::vector<mesh::MeshRenderData>& opaqueObjects,
         const glm::mat4& view,
@@ -178,13 +188,15 @@ namespace render::gpudriven
         stats.totalObjects = currentObjectCount;
     }
 
-    void GPUDrivenRenderer::updateCameraForRTT(const RTTCameraParams& params)
+    void GPUDrivenRenderer::beginRTTContext(const RTTRenderContext& ctx, const RTTCameraParams& params)
     {
-        if (!initialized || !enabled)
+        if (!initialized || !enabled || !ctx.cameraBuffer)
         {
             return;
         }
 
+        // Fill the per-RTT GPU-cull camera buffer with the RTT camera params. This writes only
+        // to the caller-owned buffer; the shared main cameraBuffer is untouched.
         CameraUpdateParams cameraParams{
             .view = params.view,
             .projection = params.projection,
@@ -206,46 +218,72 @@ namespace render::gpudriven
             .screenWidth = params.screenWidth,
             .screenHeight = params.screenHeight
         };
-        cameraBuffer->update(cameraParams);
+        ctx.cameraBuffer->update(cameraParams);
 
-        if (terrain.pipeline)
-        {
-            terrain.pipeline->setViewProjection(params.projection * params.view);
-        }
+        // Make subsequent cull dispatches on THIS THREAD use the per-RTT descriptor set
+        // (binding 1 -> RTT camera buffer). Thread-local so a concurrently-recording main pass
+        // on another worker thread is not affected. Cleared by endRTTContext().
+        tlsActiveCullDescriptorSet = ctx.cullDescriptorSet;
+
+        // Per-thread terrain view-projection override. The terrain pipeline's
+        // `viewProjection` member is shared; mutating it would race with a concurrent main
+        // recording. Instead we publish the RTT VP through TLS and read it back at terrain
+        // push-constant build time on this thread only.
+        tlsHasTerrainViewProjectionOverride = true;
+        tlsTerrainViewProjectionOverride = params.projection * params.view;
     }
 
-    void GPUDrivenRenderer::restoreMainCamera()
+    void GPUDrivenRenderer::endRTTContext()
     {
         if (!initialized || !enabled)
         {
             return;
         }
 
-        CameraUpdateParams cameraParams{
-            .view = cachedCamera.view,
-            .projection = cachedCamera.projection,
-            .cameraPosition = cachedCamera.position,
-            .nearPlane = cachedCamera.nearPlane,
-            .farPlane = cachedCamera.farPlane,
-            .time = cachedCamera.time,
-            .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
-            .hiZMipLevels = hiZMipLevels,
-            .frustumCullingEnabled = culling.frustumCullingEnabled,
-            .occlusionCullingEnabled = culling.occlusionCullingEnabled,
-            .lodSelectionEnabled = culling.lodSelectionEnabled,
-            .lodCrossfadeEnabled = culling.lodCrossfadeEnabled,
-            .distanceCullingEnabled = culling.distanceCullingEnabled,
-            .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
-            .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
-            .globalLodBias = culling.globalLodBias,
-            .batchManager = batchManager.get()
-        };
-        cameraBuffer->update(cameraParams);
+        tlsActiveCullDescriptorSet = nullptr;
+        tlsHasTerrainViewProjectionOverride = false;
+    }
 
-        if (terrain.pipeline)
+    vk::DescriptorSet GPUDrivenRenderer::getThreadLocalCullDescriptorSet()
+    {
+        return tlsActiveCullDescriptorSet;
+    }
+
+    bool GPUDrivenRenderer::tryGetThreadLocalTerrainViewProjection(glm::mat4& outVP)
+    {
+        if (!tlsHasTerrainViewProjectionOverride)
         {
-            terrain.pipeline->setViewProjection(cachedCamera.projection * cachedCamera.view);
+            return false;
         }
+        outVP = tlsTerrainViewProjectionOverride;
+        return true;
+    }
+
+    vk::DescriptorSet GPUDrivenRenderer::allocateRTTCullDescriptorSet(vk::DescriptorPool externalPool,
+                                                                       vk::Buffer externalCameraBuffer)
+    {
+        if (!cullPipeline)
+        {
+            return nullptr;
+        }
+        return cullPipeline->allocateExternalDescriptorSet(externalPool, externalCameraBuffer);
+    }
+
+    void GPUDrivenRenderer::releaseRTTCullDescriptorSet(vk::DescriptorSet rttSet)
+    {
+        if (cullPipeline)
+        {
+            cullPipeline->releaseExternalDescriptorSet(rttSet);
+        }
+    }
+
+    vk::DescriptorSetLayout GPUDrivenRenderer::getCullDescriptorSetLayout() const
+    {
+        if (!cullPipeline)
+        {
+            return nullptr;
+        }
+        return cullPipeline->getDescriptorSetLayout();
     }
 
     void GPUDrivenRenderer::updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,

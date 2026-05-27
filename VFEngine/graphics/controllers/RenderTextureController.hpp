@@ -73,5 +73,12 @@ namespace controllers
         const glm::vec3& getCameraPosition() const { return cameraPosition; }
 
         void setTextureKey(const std::string& key) { textureKey = key; }
+        const std::string& getTextureKey() const { return textureKey; }
+
+        // VK-1334 minimap flicker fix: accessors used by the adapter's per-frame repoint loop
+        // to point the current swapchain slot's external descriptor at the most recently
+        // produced RTT image view.
+        vk::ImageView getLatestImageView() const;
+        vk::Sampler getTextureSampler() const;
     };
 }

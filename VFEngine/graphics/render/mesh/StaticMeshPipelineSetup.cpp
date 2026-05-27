@@ -79,6 +79,10 @@ namespace render::mesh
                                                  const ibl::ImageData& prefilterMap,
                                                  const ibl::ImageData& brdfLUT)
     {
+        cachedIrradianceMap = irradianceMap;
+        cachedPrefilterMap = prefilterMap;
+        cachedBrdfLUT = brdfLUT;
+
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = 1;
@@ -142,6 +146,76 @@ namespace render::mesh
             uboWrite, irradianceWrite, prefilterWrite, brdfWrite
         };
         device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
+    }
+
+    vk::DescriptorSet StaticMeshPipeline::createExternalIBLDescriptorSet(vk::Buffer externalCameraUBO,
+                                                                          vk::DescriptorPool externalPool) const
+    {
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = externalPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        vk::DescriptorSet outSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+
+        vk::DescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = externalCameraUBO;
+        uboBufferInfo.offset = 0;
+        uboBufferInfo.range = sizeof(CameraUBO);
+
+        vk::WriteDescriptorSet uboWrite{};
+        uboWrite.dstSet = outSet;
+        uboWrite.dstBinding = 0;
+        uboWrite.dstArrayElement = 0;
+        uboWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+        uboWrite.descriptorCount = 1;
+        uboWrite.pBufferInfo = &uboBufferInfo;
+
+        vk::DescriptorImageInfo irradianceImageInfo{};
+        irradianceImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        irradianceImageInfo.imageView = cachedIrradianceMap.imageView;
+        irradianceImageInfo.sampler = cachedIrradianceMap.sampler;
+
+        vk::WriteDescriptorSet irradianceWrite{};
+        irradianceWrite.dstSet = outSet;
+        irradianceWrite.dstBinding = 1;
+        irradianceWrite.dstArrayElement = 0;
+        irradianceWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        irradianceWrite.descriptorCount = 1;
+        irradianceWrite.pImageInfo = &irradianceImageInfo;
+
+        vk::DescriptorImageInfo prefilterImageInfo{};
+        prefilterImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        prefilterImageInfo.imageView = cachedPrefilterMap.imageView;
+        prefilterImageInfo.sampler = cachedPrefilterMap.sampler;
+
+        vk::WriteDescriptorSet prefilterWrite{};
+        prefilterWrite.dstSet = outSet;
+        prefilterWrite.dstBinding = 2;
+        prefilterWrite.dstArrayElement = 0;
+        prefilterWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        prefilterWrite.descriptorCount = 1;
+        prefilterWrite.pImageInfo = &prefilterImageInfo;
+
+        vk::DescriptorImageInfo brdfImageInfo{};
+        brdfImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        brdfImageInfo.imageView = cachedBrdfLUT.imageView;
+        brdfImageInfo.sampler = cachedBrdfLUT.sampler;
+
+        vk::WriteDescriptorSet brdfWrite{};
+        brdfWrite.dstSet = outSet;
+        brdfWrite.dstBinding = 3;
+        brdfWrite.dstArrayElement = 0;
+        brdfWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        brdfWrite.descriptorCount = 1;
+        brdfWrite.pImageInfo = &brdfImageInfo;
+
+        std::array<vk::WriteDescriptorSet, 4> descriptorWrites = {
+            uboWrite, irradianceWrite, prefilterWrite, brdfWrite
+        };
+        device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
+
+        return outSet;
     }
 
     void StaticMeshPipeline::createTextureDescriptorSetLayout()

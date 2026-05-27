@@ -45,11 +45,23 @@ namespace threading {
 				entryPtr->threadId = 0;
 			}
 			else {
-				// Multiple tasks - dispatch in parallel via enkiTS
-				std::vector<std::unique_ptr<enki::TaskSet>> taskSets(layer.size());
+				// Multiple tasks in this layer. Honor the `pinned` flag:
+				// non-pinned tasks go to enkiTS worker threads; pinned tasks
+				// run on the calling (main) thread sequentially. We dispatch
+				// the worker tasks first so they execute in parallel with
+				// the pinned-task work, then wait for them.
+				std::vector<uint32_t> workerIndices;
+				std::vector<uint32_t> pinnedIndices;
+				workerIndices.reserve(layer.size());
+				pinnedIndices.reserve(layer.size());
+				for (uint32_t idx : layer) {
+					if (pImpl->nodes[idx].pinned) pinnedIndices.push_back(idx);
+					else workerIndices.push_back(idx);
+				}
 
-				for (size_t t = 0; t < layer.size(); ++t) {
-					uint32_t idx = layer[t];
+				std::vector<std::unique_ptr<enki::TaskSet>> taskSets(workerIndices.size());
+				for (size_t t = 0; t < workerIndices.size(); ++t) {
+					uint32_t idx = workerIndices[t];
 					auto& node = pImpl->nodes[idx];
 					auto* entryPtr = &pImpl->profileData[idx];
 
@@ -73,6 +85,21 @@ namespace threading {
 				for (auto& task : taskSets) {
 					pImpl->scheduler->AddTaskSetToPipe(task.get());
 				}
+
+				// Run pinned tasks on the calling thread while workers execute.
+				for (uint32_t idx : pinnedIndices) {
+					auto& node = pImpl->nodes[idx];
+					auto* entryPtr = &pImpl->profileData[idx];
+					auto start = std::chrono::high_resolution_clock::now();
+					node.fn();
+					auto end = std::chrono::high_resolution_clock::now();
+					entryPtr->startTimeNs = static_cast<uint64_t>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+					entryPtr->endTimeNs = static_cast<uint64_t>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+					entryPtr->threadId = 0;
+				}
+
 				for (auto& task : taskSets) {
 					pImpl->scheduler->WaitforTask(task.get());
 				}

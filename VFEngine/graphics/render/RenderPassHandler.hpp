@@ -292,7 +292,13 @@ namespace render
         void setTextDrawList(std::vector<text::TextRenderData>&& textEntities);
         void appendTextDrawList(std::vector<text::TextRenderData>&& textEntities);
 
-        void registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler sampler);
+        void registerExternalTexture(const std::string& key, uint32_t imageIndex,
+                                     vk::ImageView imageView, vk::Sampler sampler);
+
+        // Drops the entry in both UI and Billboard external-texture caches. Required when the
+        // underlying vk::ImageView/vk::Sampler are about to be destroyed (RTT teardown or resize),
+        // otherwise the cached descriptor sets reference freed handles.
+        void unregisterExternalTexture(const std::string& key);
 
         void initUIRenderPipeline();
         ui::UIRenderPipeline* getUIRenderPipeline() const { return uiPipeline.get(); }

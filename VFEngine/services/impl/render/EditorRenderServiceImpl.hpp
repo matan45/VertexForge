@@ -6,6 +6,7 @@
 #include "../../providers/render/IEditorTextureProvider.hpp"
 #include "../../providers/render/IPostProcessProvider.hpp"
 #include "../../data/EntityHandle.hpp"
+#include <functional>
 #include <unordered_map>
 
 namespace events
@@ -50,6 +51,7 @@ namespace services
 
         // Called by render thread to execute the deferred GPU render
         void renderViewportDeferred();
+        void renderViewportDeferred(const std::function<void()>& preRenderCallback);
         void getViewportSize(uint32_t& width, uint32_t& height) const override;
 
         bool setIBL(const std::string& hdrPath) override;

@@ -77,12 +77,19 @@ namespace services
 
     void EditorRenderServiceImpl::renderViewportDeferred()
     {
+        renderViewportDeferred({});
+    }
+
+    void EditorRenderServiceImpl::renderViewportDeferred(const std::function<void()>& preRenderCallback)
+    {
         if (!viewportPrepared || !offScreenProvider)
             return;
 
         viewportPrepared = false;
 
-        void* descriptorSet = offScreenProvider->render();
+        void* descriptorSet = preRenderCallback
+            ? offScreenProvider->render(preRenderCallback)
+            : offScreenProvider->render();
 
         ViewportTextureHandle handle;
         handle.imguiDescriptorSet = descriptorSet;
@@ -102,7 +109,7 @@ namespace services
         viewportWidth = width;
         viewportHeight = height;
 
-        // Clear stale descriptor set — old offscreen resources will be destroyed during recreate
+        // Clear stale descriptor set - old offscreen resources will be destroyed during recreate
         lastViewportHandle = ViewportTextureHandle{};
     }
 

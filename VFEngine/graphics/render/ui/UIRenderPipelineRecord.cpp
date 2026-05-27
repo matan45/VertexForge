@@ -54,15 +54,35 @@ namespace render::ui
         return true;
     }
 
-    void UIRenderPipeline::registerExternalTexture(const std::string& key,
+    void UIRenderPipeline::registerExternalTexture(const std::string& key, uint32_t imageIndex,
                                                      vk::ImageView imageView, vk::Sampler externalSampler)
     {
         if (!initialized || !imageView || !externalSampler) return;
+        if (imageIndex >= swapChain.getImageCount()) return;
 
         auto it = externalTextureCache.find(key);
         if (it != externalTextureCache.end())
         {
-            updateDescriptorSet(it->second, imageView, externalSampler);
+            auto& entry = it->second;
+            if (imageIndex >= entry.descriptorSets.size())
+                return;
+
+            if (!entry.descriptorSets[imageIndex])
+            {
+                vk::DescriptorSetAllocateInfo allocInfo{};
+                allocInfo.descriptorPool = descriptorPool;
+                allocInfo.descriptorSetCount = 1;
+                allocInfo.pSetLayouts = &descriptorSetLayout;
+
+                entry.descriptorSets[imageIndex] = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+            }
+
+            if (entry.imageViews[imageIndex] != imageView || entry.samplers[imageIndex] != externalSampler)
+            {
+                updateDescriptorSet(entry.descriptorSets[imageIndex], imageView, externalSampler);
+                entry.imageViews[imageIndex] = imageView;
+                entry.samplers[imageIndex] = externalSampler;
+            }
             return;
         }
 
@@ -73,9 +93,15 @@ namespace render::ui
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &descriptorSetLayout;
 
-        vk::DescriptorSet newDescSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-        updateDescriptorSet(newDescSet, imageView, externalSampler);
-        externalTextureCache[key] = newDescSet;
+        ExternalTextureEntry entry;
+        entry.descriptorSets.resize(swapChain.getImageCount());
+        entry.imageViews.resize(swapChain.getImageCount());
+        entry.samplers.resize(swapChain.getImageCount());
+        entry.descriptorSets[imageIndex] = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        updateDescriptorSet(entry.descriptorSets[imageIndex], imageView, externalSampler);
+        entry.imageViews[imageIndex] = imageView;
+        entry.samplers[imageIndex] = externalSampler;
+        externalTextureCache[key] = std::move(entry);
     }
 
     void UIRenderPipeline::unregisterExternalTexture(const std::string& key)
@@ -83,15 +109,25 @@ namespace render::ui
         auto it = externalTextureCache.find(key);
         if (it != externalTextureCache.end())
         {
-            device.getLogicalDevice().freeDescriptorSets(descriptorPool, it->second);
+            for (auto descSet : it->second.descriptorSets)
+            {
+                if (descSet)
+                    device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+            }
             externalTextureCache.erase(it);
         }
     }
 
     void UIRenderPipeline::clearExternalTextures()
     {
-        for (auto& [key, descSet] : externalTextureCache)
-            device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+        for (auto& [key, entry] : externalTextureCache)
+        {
+            for (auto descSet : entry.descriptorSets)
+            {
+                if (descSet)
+                    device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+            }
+        }
         externalTextureCache.clear();
     }
 
@@ -234,7 +270,12 @@ namespace render::ui
                 else
                 {
                     auto extIt = externalTextureCache.find(batch.texturePath);
-                    if (extIt != externalTextureCache.end()) texDescSet = extIt->second;
+                    if (extIt != externalTextureCache.end() &&
+                        imageIndex < extIt->second.descriptorSets.size() &&
+                        extIt->second.descriptorSets[imageIndex])
+                    {
+                        texDescSet = extIt->second.descriptorSets[imageIndex];
+                    }
                     else continue;
                 }
 
@@ -330,7 +371,12 @@ namespace render::ui
                 else
                 {
                     auto extIt = externalTextureCache.find(batch.texturePath);
-                    if (extIt != externalTextureCache.end()) texDescSet = extIt->second;
+                    if (extIt != externalTextureCache.end() &&
+                        imageIndex < extIt->second.descriptorSets.size() &&
+                        extIt->second.descriptorSets[imageIndex])
+                    {
+                        texDescSet = extIt->second.descriptorSets[imageIndex];
+                    }
                     else continue;
                 }
 

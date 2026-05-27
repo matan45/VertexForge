@@ -191,13 +191,23 @@ namespace render
         rebuildCombinedMeshDrawList();
     }
 
-    void RenderPassHandler::registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler sampler)
+    void RenderPassHandler::registerExternalTexture(const std::string& key, uint32_t imageIndex,
+                                                    vk::ImageView imageView, vk::Sampler sampler)
     {
         if (uiPipelineInitialized && uiPipeline)
-            uiPipeline->registerExternalTexture(key, imageView, sampler);
+            uiPipeline->registerExternalTexture(key, imageIndex, imageView, sampler);
 
         if (billboardPipelineInitialized && billboardPipeline)
-            billboardPipeline->registerExternalTexture(key, imageView, sampler);
+            billboardPipeline->registerExternalTexture(key, imageIndex, imageView, sampler);
+    }
+
+    void RenderPassHandler::unregisterExternalTexture(const std::string& key)
+    {
+        if (uiPipelineInitialized && uiPipeline)
+            uiPipeline->unregisterExternalTexture(key);
+
+        if (billboardPipelineInitialized && billboardPipeline)
+            billboardPipeline->unregisterExternalTexture(key);
     }
 
     void RenderPassHandler::initBillboardPipeline()

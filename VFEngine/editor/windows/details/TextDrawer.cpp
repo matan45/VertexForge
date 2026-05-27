@@ -54,6 +54,8 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawFontSize(data);
             ImGui::Spacing();
+            changed |= drawFontStyle(data);
+            ImGui::Spacing();
             changed |= drawColor(data);
             ImGui::Spacing();
             changed |= drawLineSpacing(data);
@@ -181,6 +183,22 @@ namespace windows::details
 
         if (ImGui::DragFloat("Font Size##Text", &data.fontSize, 0.5f, 1.0f, 256.0f, "%.1f"))
         {
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    bool TextDrawer::drawFontStyle(services::TextData& data)
+    {
+        bool changed = false;
+
+        const char* styles[] = {"Normal", "Bold", "Italic", "BoldItalic"};
+        int style = static_cast<int>(data.fontStyle);
+
+        if (ImGui::Combo("Font Style##Text", &style, styles, 4))
+        {
+            data.fontStyle = static_cast<uint8_t>(style);
             changed = true;
         }
 

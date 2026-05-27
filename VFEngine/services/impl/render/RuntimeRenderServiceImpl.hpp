@@ -4,6 +4,7 @@
 #include "../../events/project/SceneEvents.hpp"
 #include "../../providers/render/IOffScreenProvider.hpp"
 #include "../../providers/render/IPostProcessProvider.hpp"
+#include <functional>
 
 namespace services {
 
@@ -15,6 +16,7 @@ namespace services {
         uint32_t viewportWidth = 0;
         uint32_t viewportHeight = 0;
         uint64_t frameCounter = 0;
+        std::function<void()> preOffscreenRenderCallback;
 
         events::SubscriptionToken meshDataChangedToken;
     public:
@@ -36,6 +38,7 @@ namespace services {
 
         bool isReady() const override;
         uint64_t getFrameNumber() const override;
+        void setPreOffscreenRenderCallback(std::function<void()> callback);
 
     private:
         std::string loadMesh(const std::string& meshPath);

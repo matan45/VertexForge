@@ -74,10 +74,7 @@ namespace controllers {
 			entries.push_back(entry);
 		};
 
-		if (preRenderCallback)
-			profileBlock("OffScreenRender", preRenderCallback);
-
-		profileBlock("SwapchainPresent", [this] { renderManager->render(); });
+		profileBlock("SwapchainPresent", [this] { renderManager->render(preRenderCallback); });
 
 		threading::TaskProfiler::instance().appendToLatestFrame(entries);
 	}

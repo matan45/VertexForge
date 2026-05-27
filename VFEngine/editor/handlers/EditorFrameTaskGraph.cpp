@@ -2,7 +2,6 @@
 #include "editor/EditorBootstrap.hpp"
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/vfx/VFXPlayModeHandler.hpp"
-#include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
 #include "core/PluginManager.hpp"
@@ -78,18 +77,21 @@ namespace handlers
             }
         });
 
-        frameTaskGraph->addTask("RenderTexture", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && renderTexturePlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                renderTexturePlayModeHandler->update(dt);
-            }
-        });
-
-        frameTaskGraph->addTask("AudioListener", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && audioSceneUpdater) {
-                audioSceneUpdater->updateListenerFromPrimaryCamera();
-            }
-        });
+        // VK-1330 / VK-1333: an "AudioListener" task used to live here that
+        // called audioSceneUpdater->updateListenerFromPrimaryCamera() every
+        // frame in Play mode. Multi-task layers in the FrameTaskGraph dispatch
+        // tasks onto enkiTS workers, and the audio backend
+        // (SetListenerPositionCommand -> AudioServiceImpl -> AudioAdapter ->
+        // AudioController::commandQueue) is not safe to invoke from a worker
+        // thread - doing so aborts under MSVC's CRT debug runtime as soon as
+        // a scene camera becomes primary.
+        //
+        // In the editor, ViewPort::updateRendererCameras already dispatches
+        // SetListenerPositionCommand every frame from the ImGuiDraw task,
+        // which sits in a single-task layer and therefore runs on the main
+        // thread. The AudioListener task was strictly redundant here, so the
+        // fix is simply to remove it. Runtime keeps its own AudioListener
+        // task because it has no ViewPort to do the work.
 
         frameTaskGraph->addTask("Weather", [this]() {
             float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
@@ -125,8 +127,6 @@ namespace handlers
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("VFX", "Scripts");
-        frameTaskGraph->addDependency("RenderTexture", "Scripts");
-        frameTaskGraph->addDependency("AudioListener", "Scripts");
 
         auto sceneGraphFn = bootstrap->getSceneGraphUpdateFn();
         frameTaskGraph->addTask("Transforms", [sceneGraphFn]() {
@@ -153,8 +153,6 @@ namespace handlers
         frameTaskGraph->addDependency("Transforms", "Weather");
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
         frameTaskGraph->addDependency("Transforms", "VFX");
-        frameTaskGraph->addDependency("Transforms", "RenderTexture");
-        frameTaskGraph->addDependency("Transforms", "AudioListener");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");

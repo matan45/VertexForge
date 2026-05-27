@@ -13,6 +13,7 @@
 #include "../render/gpudriven/scene/GPUObjectStreamTypes.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
+#include <functional>
 #include <memory>
 #include <string_view>
 #include <string>
@@ -149,6 +150,7 @@ namespace controllers
         void removeCamera(render::occlusion::CameraId id);
 
         void* render();
+        void* render(const std::function<void()>& preRenderCallback);
 
         // Get the offscreen color image for runtime blit (returns VkImage as void*)
         void* getColorImage(uint32_t imageIndex) const;
