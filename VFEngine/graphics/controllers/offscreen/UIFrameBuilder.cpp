@@ -549,6 +549,7 @@ namespace controllers::offscreen
             renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
             renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
             renderData.rectHeight = params.worldRectHeight;
+            renderData.fontStyle = labelComp.fontStyle;
             drawList.push_back(std::move(renderData));
         }
 

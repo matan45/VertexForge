@@ -83,7 +83,7 @@ void main() {
         float edge = fragSdfParams.x;
         float smoothWidth = fragSdfParams.y;
 
-        float boldBias = ((vStyleFlags & 1u) != 0u) ? 0.08 : 0.0;
+        float boldBias = ((vStyleFlags & 1u) != 0u) ? 0.15 : 0.0;
         float alpha = smoothstep(edge - smoothWidth - boldBias,
                                  edge + smoothWidth - boldBias, sdfValue);
 

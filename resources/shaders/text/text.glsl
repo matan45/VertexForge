@@ -116,14 +116,14 @@ void main() {
         }
         outColor = vec4(texColor.rgb, texColor.a * fragColor.a);
     } else {
-        // SDF mode: existing smoothstep logic.
+        // SDF mode: smoothstep anti-aliasing.
         // Bold synthesis: bias the threshold so more of the field passes -> thicker strokes.
         float sdfValue = texture(fontAtlas, fragTexCoord).r;
 
         float edge = fragSdfParams.x;
         float smoothWidth = fragSdfParams.y;
 
-        float boldBias = ((vStyleFlags & 1u) != 0u) ? 0.08 : 0.0;
+        float boldBias = ((vStyleFlags & 1u) != 0u) ? 0.15 : 0.0;
         float alpha = smoothstep(edge - smoothWidth - boldBias,
                                  edge + smoothWidth - boldBias, sdfValue);
 
