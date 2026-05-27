@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UIRenderTypes.hpp"
+#include "components/UIComponents.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
@@ -76,7 +77,7 @@ namespace render::ui
         glm::vec2 size{0.0f};            // pixel size of label rect (for maxWidth + alignment)
         uint8_t horizontalAlignment = 0;  // 0=Left, 1=Center, 2=Right
         uint8_t verticalAlignment = 0;    // 0=Top, 1=Middle, 2=Bottom
-        uint8_t overflow = 0;             // 0=Overflow, 1=Clip, 2=Ellipsis
+        components::TextOverflow overflow = components::TextOverflow::Overflow;
         bool wordWrap = true;
         glm::vec4 scissorRect{0.0f};     // x, y, width, height (0,0,0,0 = full viewport)
 

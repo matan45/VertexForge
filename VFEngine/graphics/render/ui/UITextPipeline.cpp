@@ -175,6 +175,20 @@ namespace render::ui
                 continue;
             }
 
+            // Ellipsis truncation: per-line. Runs after word-wrap so both
+            // wordWrap=true (truncate each wrapped line) and wordWrap=false
+            // (truncate the single line) are covered.
+            if (label.overflow == components::TextOverflow::Ellipsis &&
+                label.size.x > 0.0f)
+            {
+                ::text::applyEllipsis(layout, fontData, label.fontSize,
+                                      label.size.x, label.letterSpacing);
+                if (layout.glyphs.empty())
+                {
+                    continue;
+                }
+            }
+
             // Apply horizontal alignment per line
             struct LineInfo
             {
