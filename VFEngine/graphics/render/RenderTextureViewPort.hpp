@@ -94,6 +94,11 @@ namespace render
         vk::ImageView getImageView(uint32_t imageIndex) const;
         vk::Sampler getTextureSampler() const { return sampler; }
 
+        // VK-1334 minimap flicker fix: returns the view for the slot most recently rendered.
+        // Cold slots are pre-cleared to clearColor at create/resize time, so this is always a
+        // safe-to-sample image even before any render() call.
+        vk::ImageView getLatestImageView() const { return getImageView(lastRenderedImageIndex); }
+
     private:
         void createOffscreenResources();
         void cleanupOffscreenResources();

@@ -1,5 +1,7 @@
 #include "RenderTextureAdapter.hpp"
 #include "../../graphics/controllers/RenderTextureController.hpp"
+#include "../../graphics/render/RenderPassHandler.hpp"
+#include "../../graphics/core/RenderManager.hpp"
 #include "../../controllers/OffScreen.hpp"
 #include <algorithm>
 #include <cassert>
@@ -112,6 +114,25 @@ namespace core
         for (auto& [id, ctrl] : toRender)
         {
             ctrl->render(passHandler);
+        }
+
+        // VK-1334 minimap flicker fix: for every enabled controller (including those that did
+        // NOT render this frame), point the external descriptor for the current swapchain slot
+        // at the most recently produced RTT view. Cold-slot images were pre-cleared to clearColor
+        // at viewport init so this is always a valid image to sample. Safe to update slot I here:
+        // RenderManager already waited imagesInFlight[I] before invoking preRenderCallback, so no
+        // in-flight UI command buffer is referencing the descriptor for slot I.
+        const uint32_t currentImageIndex = ::core::RenderManager::getImageIndex();
+        for (auto& [id, ctrl] : enabled)
+        {
+            const auto& key = ctrl->getTextureKey();
+            if (key.empty()) continue;
+
+            auto sampler = ctrl->getTextureSampler();
+            auto view = ctrl->getLatestImageView();
+            if (!sampler || !view) continue;
+
+            passHandler->registerExternalTexture(key, currentImageIndex, view, sampler);
         }
     }
 

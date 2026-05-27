@@ -66,27 +66,36 @@ namespace controllers
 
         lastRenderedHandle = static_cast<void*>(result);
 
+        // VK-1334: only register the slot we just rendered into. The adapter's per-frame
+        // repoint loop (see RenderTextureAdapter::renderAll) is what keeps other slots up
+        // to date by pointing them at this same fresh view; doing the fan-out from here
+        // would touch slots that may still be referenced by in-flight UI command buffers.
         if (!textureKey.empty() && mainPassHandler)
         {
             auto texSampler = viewport->getTextureSampler();
-            if (texSampler)
+            uint32_t currentImageIndex = viewport->getLastRenderedImageIndex();
+            auto imageView = viewport->getImageView(currentImageIndex);
+            if (texSampler && imageView)
             {
-                for (uint32_t imageIndex = 0; imageIndex < viewport->getImageCount(); ++imageIndex)
-                {
-                    auto imageView = viewport->getImageView(imageIndex);
-                    if (imageView)
-                    {
-                        mainPassHandler->registerExternalTexture(
-                            textureKey,
-                            imageIndex,
-                            imageView,
-                            texSampler);
-                    }
-                }
+                mainPassHandler->registerExternalTexture(
+                    textureKey,
+                    currentImageIndex,
+                    imageView,
+                    texSampler);
             }
         }
 
         return lastRenderedHandle;
+    }
+
+    vk::ImageView RenderTextureController::getLatestImageView() const
+    {
+        return viewport ? viewport->getLatestImageView() : vk::ImageView{};
+    }
+
+    vk::Sampler RenderTextureController::getTextureSampler() const
+    {
+        return viewport ? viewport->getTextureSampler() : vk::Sampler{};
     }
 
     bool RenderTextureController::shouldRenderThisFrame(float deltaTime)

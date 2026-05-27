@@ -260,10 +260,17 @@ namespace render
 
         device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
 
-        // VK-1334: no fence-wait-after-submit and no shared-buffer restore - RTT wrote only to
-        // its own per-RTT camera buffers, so the main pass's HOST_COHERENT buffers are still
-        // intact for the previous frame's main GPU work and for this frame's upcoming main pass.
-        // The top-of-function fence wait remains the slot-reuse barrier for this viewport.
+        // Minimap flicker fix: wait for the RTT submit to complete on the GPU BEFORE returning.
+        // The follow-up offscreen submit (which contains the UI sample of this colorImages[I])
+        // is on the same graphics queue but has no semaphore dependency on this submit, so
+        // without this wait the GPU is free to execute the UI's fragment-shader read of
+        // colorImages[I] concurrently with the RTT's writes/layout-transition. The result is
+        // a torn read = visible flicker on the minimap quad. The CPU stall here is small
+        // (512x512 RTT renders in well under a millisecond) and only affects RTTs that
+        // actually rendered this frame.
+        (void)device.getLogicalDevice().waitForFences(
+            1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+
         gpuRenderer->endRTTContext();
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
@@ -530,13 +537,26 @@ namespace render
             imageColorViewRequest.format = colorFormat;
             core::ImageUtilities::createImageView(imageColorViewRequest, color.colorImageView);
 
-            vk::UniqueCommandBuffer transitionColorImage = core::Utilities::beginSingleTimeCommands(
+            // VK-1334 cold-slot init: transition Undefined -> TransferDst, clear to clearColor,
+            // then transition to ShaderReadOnly. Without this, UI sampling a slot the RTT has
+            // not yet rendered (FixedInterval/OnDemand modes) would sample undefined contents.
+            vk::UniqueCommandBuffer initColorImage = core::Utilities::beginSingleTimeCommands(
                 device.getLogicalDevice(), commandPool->getCommandPool());
-            core::ImageUtilities::transitionImageLayout(transitionColorImage.get(), color.colorImage,
+            core::ImageUtilities::transitionImageLayout(initColorImage.get(), color.colorImage,
                                                         vk::ImageLayout::eUndefined,
+                                                        vk::ImageLayout::eTransferDstOptimal,
+                                                        vk::ImageAspectFlagBits::eColor);
+
+            vk::ClearColorValue clearValue{std::array<float, 4>{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
+            vk::ImageSubresourceRange clearRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            initColorImage->clearColorImage(color.colorImage, vk::ImageLayout::eTransferDstOptimal,
+                                            &clearValue, 1, &clearRange);
+
+            core::ImageUtilities::transitionImageLayout(initColorImage.get(), color.colorImage,
+                                                        vk::ImageLayout::eTransferDstOptimal,
                                                         vk::ImageLayout::eShaderReadOnlyOptimal,
                                                         vk::ImageAspectFlagBits::eColor);
-            core::Utilities::endSingleTimeCommands(device, transitionColorImage);
+            core::Utilities::endSingleTimeCommands(device, initColorImage);
 
             updateDescriptorSets(color.descriptorSet, color.colorImageView);
 
