@@ -196,7 +196,7 @@ namespace render
 
         // Phase 2: Mesh render pass (eLoad color from skybox/clear, eClear depth)
         auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
-        auto depthAttach = core::depthClear(offscreenResources.depthImage.depthImageView, 1.0f, 0);
+        auto depthAttach = core::depthClear(depthImages[imageIndex].depthImageView, 1.0f, 0);
 
         core::DynamicRenderingInfo dynInfo{};
         dynInfo.extent = vk::Extent2D{width, height};
@@ -504,27 +504,26 @@ namespace render
                              | vk::ImageUsageFlagBits::eSampled;
         imageDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        core::DepthImage depth;
-        core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageAllocation, device.getMemoryManager());
-        core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), depth.depthImage);
-        imageDepthRequest.format = depthFormat;
-        imageDepthRequest.aspectFlags = vk::ImageAspectFlagBits::eDepth;
-        core::ImageUtilities::createImageView(imageDepthRequest, depth.depthImageView);
-
-        vk::UniqueCommandBuffer transitionDepthImage = core::Utilities::beginSingleTimeCommands(
-            device.getLogicalDevice(), commandPool->getCommandPool());
-        core::ImageUtilities::transitionImageLayout(transitionDepthImage.get(), depth.depthImage,
-                                                    vk::ImageLayout::eUndefined,
-                                                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
-                                                    vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
-        core::Utilities::endSingleTimeCommands(device, transitionDepthImage);
-
-        offscreenResources.depthImage = std::move(depth);
-
         offscreenResources.colorImages.reserve(swapChain.getImageCount());
+        depthImages.reserve(swapChain.getImageCount());
 
         for (size_t i = 0; i < swapChain.getImageCount(); i++)
         {
+            core::DepthImage depth;
+            core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageAllocation, device.getMemoryManager());
+            core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), depth.depthImage);
+            imageDepthRequest.format = depthFormat;
+            imageDepthRequest.aspectFlags = vk::ImageAspectFlagBits::eDepth;
+            core::ImageUtilities::createImageView(imageDepthRequest, depth.depthImageView);
+
+            vk::UniqueCommandBuffer transitionDepthImage = core::Utilities::beginSingleTimeCommands(
+                device.getLogicalDevice(), commandPool->getCommandPool());
+            core::ImageUtilities::transitionImageLayout(transitionDepthImage.get(), depth.depthImage,
+                                                        vk::ImageLayout::eUndefined,
+                                                        vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                                                        vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+            core::Utilities::endSingleTimeCommands(device, transitionDepthImage);
+
             core::ColorImage color;
             core::ImageUtilities::createImage(imageColorInfo, color.colorImage, color.colorImageAllocation, device.getMemoryManager());
             core::ImageViewInfoRequest imageColorViewRequest(device.getLogicalDevice(), color.colorImage);
@@ -541,6 +540,7 @@ namespace render
 
             updateDescriptorSets(color.descriptorSet, color.colorImageView);
 
+            depthImages.push_back(std::move(depth));
             offscreenResources.colorImages.push_back(std::move(color));
         }
     }
@@ -554,6 +554,14 @@ namespace render
             device.getMemoryManager().free(resources.colorImageAllocation);
         }
         offscreenResources.colorImages.clear();
+
+        for (auto const& depth : depthImages)
+        {
+            device.getLogicalDevice().destroyImageView(depth.depthImageView);
+            device.getLogicalDevice().destroyImage(depth.depthImage);
+            device.getMemoryManager().free(depth.depthImageAllocation);
+        }
+        depthImages.clear();
 
         if (offscreenResources.depthImage.depthImageView)
         {

@@ -32,6 +32,7 @@ namespace render
 
         vk::Sampler sampler;
         core::OffscreenResources offscreenResources;
+        std::vector<core::DepthImage> depthImages;
         std::vector<vk::Fence> inFlightFences;
 
         uint32_t width = 512;

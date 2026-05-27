@@ -71,15 +71,17 @@ namespace controllers
             auto texSampler = viewport->getTextureSampler();
             if (texSampler)
             {
-                const uint32_t imageIndex = viewport->getLastRenderedImageIndex();
-                auto imageView = viewport->getImageView(imageIndex);
-                if (imageView)
+                for (uint32_t imageIndex = 0; imageIndex < viewport->getImageCount(); ++imageIndex)
                 {
-                    mainPassHandler->registerExternalTexture(
-                        textureKey,
-                        imageIndex,
-                        imageView,
-                        texSampler);
+                    auto imageView = viewport->getImageView(imageIndex);
+                    if (imageView)
+                    {
+                        mainPassHandler->registerExternalTexture(
+                            textureKey,
+                            imageIndex,
+                            imageView,
+                            texSampler);
+                    }
                 }
             }
         }

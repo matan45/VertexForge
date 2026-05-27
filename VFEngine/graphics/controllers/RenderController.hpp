@@ -54,7 +54,7 @@ namespace controllers
         void setResizeCallback(core::ResizeCallback callback);
         void setBlitSourceProvider(core::BlitSourceProvider provider);
 
-        /// Set a callback to run on the render thread BEFORE swapchain present.
+        /// Set a callback to run on the render thread after swapchain image acquisition.
         /// Use this to move GPU work (e.g. offscreen scene rendering) to the render thread.
         void setPreRenderCallback(std::function<void()> callback) { preRenderCallback = std::move(callback); }
 
