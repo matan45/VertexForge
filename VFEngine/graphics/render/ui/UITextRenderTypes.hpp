@@ -16,6 +16,7 @@ namespace render::ui
         glm::vec4 uvRect;       // u0, v0, u1, v1 in font atlas
         glm::vec4 color;        // RGBA
         glm::vec2 sdfParams;    // x = sdfEdge, y = sdfSmooth
+        uint32_t styleFlags;    // bit0 = bold, bit1 = italic
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -26,9 +27,9 @@ namespace render::ui
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 5> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 4> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 5> attributes{};
 
             // location 2: posAndSize (vec4)
             attributes[0].binding = 1;
@@ -54,6 +55,12 @@ namespace render::ui
             attributes[3].format = vk::Format::eR32G32Sfloat;
             attributes[3].offset = offsetof(UITextCharInstance, sdfParams);
 
+            // location 6: styleFlags (uint)
+            attributes[4].binding = 1;
+            attributes[4].location = 6;
+            attributes[4].format = vk::Format::eR32Uint;
+            attributes[4].offset = offsetof(UITextCharInstance, styleFlags);
+
             return attributes;
         }
     };
@@ -78,6 +85,7 @@ namespace render::ui
         uint8_t horizontalAlignment = 0;  // 0=Left, 1=Center, 2=Right
         uint8_t verticalAlignment = 0;    // 0=Top, 1=Middle, 2=Bottom
         components::TextOverflow overflow = components::TextOverflow::Overflow;
+        components::FontStyle fontStyle = components::FontStyle::Normal;
         bool wordWrap = true;
         glm::vec4 scissorRect{0.0f};     // x, y, width, height (0,0,0,0 = full viewport)
 

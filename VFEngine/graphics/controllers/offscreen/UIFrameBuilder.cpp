@@ -195,6 +195,7 @@ namespace controllers::offscreen
                 renderData.text = labelComp.text;
                 renderData.fontSize = labelComp.fontSize * scale;
                 renderData.color = labelComp.color;
+                renderData.fontStyle = labelComp.fontStyle;
                 renderData.lineSpacing = labelComp.lineSpacing;
                 renderData.letterSpacing = labelComp.letterSpacing;
                 renderData.wordWrap = labelComp.wordWrap;

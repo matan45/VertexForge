@@ -313,6 +313,7 @@ namespace services
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
         float maxWidth = 0.0f;
+        uint8_t fontStyle = 0;  // 0=Normal, 1=Bold, 2=Italic, 3=BoldItalic
     };
 
     struct DirectionalLightData

@@ -311,6 +311,7 @@ namespace serialization
         j["lineSpacing"] = text.lineSpacing;
         j["letterSpacing"] = text.letterSpacing;
         j["maxWidth"] = text.maxWidth;
+        j["fontStyle"] = fontStyleToString(text.fontStyle);
         return j;
     }
 
@@ -329,5 +330,6 @@ namespace serialization
         text.lineSpacing = j.value("lineSpacing", 1.0f);
         text.letterSpacing = j.value("letterSpacing", 0.0f);
         text.maxWidth = j.value("maxWidth", 0.0f);
+        text.fontStyle = stringToFontStyle(j.value("fontStyle", "normal"));
     }
 }

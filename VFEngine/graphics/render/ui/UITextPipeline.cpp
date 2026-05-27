@@ -269,6 +269,12 @@ namespace render::ui
                 static_cast<int32_t>(label.scissorRect.w)
             };
 
+            uint32_t styleFlags = 0;
+            if (label.fontStyle == components::FontStyle::Bold ||
+                label.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x1u;
+            if (label.fontStyle == components::FontStyle::Italic ||
+                label.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x2u;
+
             size_t glyphIdx = 0;
             for (size_t li = 0; li < lines.size(); ++li)
             {
@@ -290,6 +296,7 @@ namespace render::ui
                     inst.uvRect = glyph.uvRect;
                     inst.color = label.color;
                     inst.sdfParams = glm::vec2(sdfEdge, sdfSmooth);
+                    inst.styleFlags = styleFlags;
 
                     scissorMap[scissorKey].push_back({label.fontPath, inst,
                         label.stencilOp, label.stencilRef});
