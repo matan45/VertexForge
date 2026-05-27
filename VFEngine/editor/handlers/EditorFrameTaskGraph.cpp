@@ -2,7 +2,6 @@
 #include "editor/EditorBootstrap.hpp"
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/vfx/VFXPlayModeHandler.hpp"
-#include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
 #include "core/PluginManager.hpp"
@@ -78,20 +77,13 @@ namespace handlers
             }
         });
 
-        frameTaskGraph->addTask("RenderTexture", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && renderTexturePlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                renderTexturePlayModeHandler->update(dt);
-            }
-        }, threading::JobPriority::NORMAL, true);
-
         // VK-1330 / VK-1333: an "AudioListener" task used to live here that
         // called audioSceneUpdater->updateListenerFromPrimaryCamera() every
         // frame in Play mode. Multi-task layers in the FrameTaskGraph dispatch
         // tasks onto enkiTS workers, and the audio backend
         // (SetListenerPositionCommand -> AudioServiceImpl -> AudioAdapter ->
         // AudioController::commandQueue) is not safe to invoke from a worker
-        // thread — doing so aborts under MSVC's CRT debug runtime as soon as
+        // thread - doing so aborts under MSVC's CRT debug runtime as soon as
         // a scene camera becomes primary.
         //
         // In the editor, ViewPort::updateRendererCameras already dispatches
@@ -164,8 +156,7 @@ namespace handlers
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");
-        frameTaskGraph->addDependency("RenderTexture", "Transforms");
-        frameTaskGraph->addDependency("LateScripts", "RenderTexture");
+        frameTaskGraph->addDependency("LateScripts", "Transforms");
         frameTaskGraph->addDependency("ImGuiDraw", "LateScripts");
         frameTaskGraph->addDependency("Render", "ImGuiDraw");
 

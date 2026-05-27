@@ -1,6 +1,7 @@
 #pragma once
 #include "../../services/providers/render/IOffScreenProvider.hpp"
 #include "../../services/events/EventTypes.hpp"
+#include <functional>
 
 namespace controllers
 {
@@ -35,6 +36,7 @@ namespace core
         void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
 
         void* render() override;
+        void* render(const std::function<void()>& preRenderCallback) override;
 
         void iblSet(std::string_view iblPath) override;
         void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection) override;

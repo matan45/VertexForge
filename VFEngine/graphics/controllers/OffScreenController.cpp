@@ -317,6 +317,11 @@ namespace controllers
         return offScreen->render();
     }
 
+    void* OffScreenController::render(const std::function<void()>& preRenderCallback)
+    {
+        return offScreen->render(preRenderCallback);
+    }
+
     void* OffScreenController::getColorImage(uint32_t imageIndex) const
     {
         vk::Image img = offScreen->getColorImage(imageIndex);

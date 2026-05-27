@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <optional>
+#include <functional>
 #include "types/CameraTypes.hpp"
 #include "types/RenderSettings.hpp"
 
@@ -204,6 +205,7 @@ namespace services {
         virtual ~IOffScreenProvider() = default;
 
         virtual void* render() = 0;
+        virtual void* render(const std::function<void()>& preRenderCallback) = 0;
 
         virtual void iblSet(std::string_view iblPath) = 0;
         virtual void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection) = 0;

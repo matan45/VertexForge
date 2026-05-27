@@ -55,7 +55,7 @@ namespace handlers {
         resource::VirtualFileSystem::instance().initialize();
         bootstrap->init();
 
-        // Runtime is always in play mode — hide editor-only overlays (grid, gizmos, etc.)
+        // Runtime is always in play mode - hide editor-only overlays (grid, gizmos, etc.)
         if (auto* offScreen = bootstrap->getOffScreenProvider())
         {
             offScreen->setPlayMode(true);
@@ -316,6 +316,19 @@ namespace handlers {
             renderTexturePlayModeHandler->subscribeToEvents();
         }
 
+        if (auto* runtimeRenderService =
+                dynamic_cast<services::RuntimeRenderServiceImpl*>(renderService.get()))
+        {
+            runtimeRenderService->setPreOffscreenRenderCallback([this]()
+            {
+                if (renderTexturePlayModeHandler)
+                {
+                    float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                    renderTexturePlayModeHandler->update(dt);
+                }
+            });
+        }
+
         sceneService->registerEventHandlers();
         projectService->registerEventHandlers();
         renderService->registerEventHandlers();
@@ -422,13 +435,6 @@ namespace handlers {
                 behaviorTreeService->updateAll(dt);
             }
         });
-
-        frameTaskGraph->addTask("RenderTexture", [this]() {
-            if (renderTexturePlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                renderTexturePlayModeHandler->update(dt);
-            }
-        }, threading::JobPriority::NORMAL, true);
 
         frameTaskGraph->addTask("AudioListener", [this]() {
             if (audioSceneUpdater) {
@@ -545,9 +551,8 @@ namespace handlers {
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");
 
-        // Render textures after transforms, then update render camera state.
-        frameTaskGraph->addDependency("RenderTexture", "Transforms");
-        frameTaskGraph->addDependency("PostUpdate", "RenderTexture");
+        // PostUpdate after transforms.
+        frameTaskGraph->addDependency("PostUpdate", "Transforms");
 
         // Render after PostUpdate
         frameTaskGraph->addDependency("Render", "PostUpdate");

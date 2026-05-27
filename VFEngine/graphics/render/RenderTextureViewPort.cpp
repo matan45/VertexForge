@@ -154,7 +154,7 @@ namespace render
         gpuRenderer->dispatchCompute(commandBuffer);
 
         // Transition RTT color image from the known post-pass layout
-        // (eShaderReadOnlyOptimal — set by createOffscreenResources on first frame and by
+        // (eShaderReadOnlyOptimal - set by createOffscreenResources on first frame and by
         // the end-of-pass barrier below on subsequent frames) into eColorAttachmentOptimal
         // so the dynamic-rendering passes below can write to it. Without this barrier,
         // vkCmdBeginRendering would fail validation VUID-vkCmdBeginRendering-pRenderingInfo-09592.
@@ -181,7 +181,7 @@ namespace render
         }
         else
         {
-            // No IBL — just clear the color image via dynamic rendering
+            // No IBL - just clear the color image via dynamic rendering
             auto colorAttach = core::colorClear(
                 offscreenResources.colorImages[imageIndex].colorImageView,
                 vk::ClearColorValue{std::array{clearColor.r, clearColor.g, clearColor.b, clearColor.a}});
@@ -260,7 +260,7 @@ namespace render
 
         device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
 
-        // VK-1334: no fence-wait-after-submit and no shared-buffer restore — RTT wrote only to
+        // VK-1334: no fence-wait-after-submit and no shared-buffer restore - RTT wrote only to
         // its own per-RTT camera buffers, so the main pass's HOST_COHERENT buffers are still
         // intact for the previous frame's main GPU work and for this frame's upcoming main pass.
         // The top-of-function fence wait remains the slot-reuse barrier for this viewport.
