@@ -76,6 +76,7 @@ namespace services {
         data.referenceHeight = comp.referenceHeight;
         data.scaleMode = static_cast<uint8_t>(comp.scaleMode);
         data.pixelsPerUnit = comp.pixelsPerUnit;
+        data.sortOrder = comp.sortOrder;
         return data;
     }
 
@@ -95,6 +96,7 @@ namespace services {
         comp.referenceHeight = canvasData.referenceHeight;
         comp.scaleMode = static_cast<components::UIScaleMode>(canvasData.scaleMode);
         comp.pixelsPerUnit = canvasData.pixelsPerUnit;
+        comp.sortOrder = canvasData.sortOrder;
         return true;
     }
 

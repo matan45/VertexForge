@@ -20,6 +20,7 @@ namespace components
         float referenceHeight = 1080.0f;
         UIScaleMode scaleMode = UIScaleMode::ScaleWithScreenSize;
         float pixelsPerUnit = 100.0f;
+        int sortOrder = 0;
     };
 
     struct UIRectComponent

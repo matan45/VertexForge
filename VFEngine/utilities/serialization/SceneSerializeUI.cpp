@@ -14,6 +14,7 @@ namespace serialization {
         j["referenceHeight"] = canvas.referenceHeight;
         j["scaleMode"] = uiScaleModeToString(canvas.scaleMode);
         j["pixelsPerUnit"] = canvas.pixelsPerUnit;
+        j["sortOrder"] = canvas.sortOrder;
         return j;
     }
 
@@ -23,6 +24,7 @@ namespace serialization {
         canvas.referenceHeight = j.value("referenceHeight", 1080.0f);
         canvas.scaleMode = stringToUIScaleMode(j.value("scaleMode", "scaleWithScreenSize"));
         canvas.pixelsPerUnit = j.value("pixelsPerUnit", 100.0f);
+        canvas.sortOrder = j.value("sortOrder", 0);
     }
 
     // ---- Rect ----

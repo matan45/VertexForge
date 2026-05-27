@@ -14,5 +14,6 @@ namespace windows::details
         bool drawReferenceResolution(services::UICanvasData& data);
         bool drawScaleMode(services::UICanvasData& data);
         bool drawPixelsPerUnit(services::UICanvasData& data);
+        bool drawSortOrder(services::UICanvasData& data);
     };
 }
