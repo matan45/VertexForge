@@ -3,6 +3,8 @@
 #include "../types/PhysicsTypes.hpp"
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
+#include <optional>
+#include <string>
 
 namespace scene {
 
@@ -13,6 +15,7 @@ namespace scene {
 		types::PhysicsSettings physicsSettings = types::PhysicsSettings::createDefault();
 		types::AudioSettings audioSettings = types::AudioSettings::createDefault();
 		types::RenderSettings renderSettings = types::RenderSettings::createDefault();
+		std::optional<std::string> inputMappingPath;
 	public:
 		explicit SceneGraphSystem();
 		~SceneGraphSystem() = default;
@@ -67,6 +70,14 @@ namespace scene {
 
 		void setRenderSettings(const types::RenderSettings& settings) {
 			renderSettings = settings;
+		}
+
+		const std::optional<std::string>& getInputMappingPath() const {
+			return inputMappingPath;
+		}
+
+		void setInputMappingPath(std::optional<std::string> path) {
+			inputMappingPath = std::move(path);
 		}
 
 	private:

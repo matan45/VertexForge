@@ -1,5 +1,6 @@
 #pragma once
 #include "../../interfaces/input/IActionMappingService.hpp"
+#include "../../events/EventDispatcher.hpp"
 #include <glm/vec2.hpp>
 #include <unordered_map>
 #include <unordered_set>
@@ -12,7 +13,7 @@ namespace services {
     public:
         ActionMappingServiceImpl();
 
-        ~ActionMappingServiceImpl() override = default;
+        ~ActionMappingServiceImpl() override;
 
         void registerEventHandlers() override;
 
@@ -95,6 +96,8 @@ namespace services {
         std::vector<std::string> contextStack;
         std::unordered_map<std::string, ContextState> contexts;
         std::unordered_set<std::string> consumedActions;
+
+        std::vector<events::SubscriptionToken> subscriptions;
     };
 
 }

@@ -215,5 +215,22 @@ namespace serialization
         {
             sceneGraph.setRenderSettings(types::RenderSettings::createDefault());
         }
+
+        if (sceneJson.contains("inputMapping") && sceneJson["inputMapping"].is_string())
+        {
+            std::string mappingPath = sceneJson["inputMapping"].get<std::string>();
+            if (!mappingPath.empty())
+            {
+                sceneGraph.setInputMappingPath(std::move(mappingPath));
+            }
+            else
+            {
+                sceneGraph.setInputMappingPath(std::nullopt);
+            }
+        }
+        else
+        {
+            sceneGraph.setInputMappingPath(std::nullopt);
+        }
     }
 }
