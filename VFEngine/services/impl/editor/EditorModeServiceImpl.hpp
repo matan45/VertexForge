@@ -22,6 +22,7 @@ namespace services
         std::string currentScenePath;
         std::string savedScenePath;
         ::events::SubscriptionToken sceneLoadedToken;
+        ::events::SubscriptionToken sceneClearedToken;
 
     public:
         explicit EditorModeServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
