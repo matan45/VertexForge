@@ -72,6 +72,16 @@ namespace windows
                 dispatcher.execute(offsetCmd);
             }
 
+            // Always publish — zero panelSize outside play mode clears stale state in subscribers
+            // (e.g. WindowStateServiceImpl, which serves script-side viewport-relative input queries).
+            events::render::PlayViewportRectChangedNotification rectNotif;
+            if (isPlayMode)
+            {
+                rectNotif.offset = vp;
+                rectNotif.panelSize = vs;
+            }
+            dispatcher.publish(rectNotif);
+
             updateBrushCursors(vp, vs);
 
             events::render::GetViewportTextureQuery query;

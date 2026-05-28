@@ -27,6 +27,10 @@ namespace events::input {
         std::string_view getName() const override { return "GetMousePosition"; }
     };
 
+    struct GetViewportMousePositionQuery : IQuery<glm::vec2> {
+        std::string_view getName() const override { return "GetViewportMousePosition"; }
+    };
+
     struct GetMouseDeltaQuery : IQuery<glm::vec2> {
         std::string_view getName() const override { return "GetMouseDelta"; }
     };
