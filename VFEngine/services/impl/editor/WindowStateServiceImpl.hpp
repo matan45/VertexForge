@@ -1,5 +1,7 @@
 #pragma once
 #include "../../interfaces/editor/IWindowStateService.hpp"
+#include "../../events/EventDispatcher.hpp"
+#include <glm/glm.hpp>
 #include <memory>
 
 // Forward declaration - Window library
@@ -34,6 +36,10 @@ namespace services {
     private:
         window::Window* window;
         std::unique_ptr<window::WindowStateController> windowStateController;
+
+        glm::vec2 playViewportOffset{0.0f, 0.0f};
+        glm::vec2 playViewportSize{0.0f, 0.0f};
+        events::ScopedSubscription playViewportSub;
     };
 
 }

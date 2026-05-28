@@ -255,6 +255,13 @@ namespace terrain
         return result;
     }
 
+    std::vector<TerrainTile*> TerrainGrid::queryFrustumPure(const math::Frustum& frustum) const
+    {
+        std::vector<TerrainTile*> result;
+        quadtree.queryFrustum(frustum, config.worldTileSize, result);
+        return result;
+    }
+
     std::vector<TerrainTile*> TerrainGrid::getTilesInRange(const glm::vec3& center, float radius)
     {
         std::vector<TerrainTile*> result;

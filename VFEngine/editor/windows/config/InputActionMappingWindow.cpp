@@ -105,12 +105,6 @@ namespace windows
         if (!visible)
             return;
 
-        if (needsRefresh)
-        {
-            refresh();
-            needsRefresh = false;
-        }
-
         ImGui::SetNextWindowSize(ImVec2(550, 450), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Input Action Mapping", &visible))
         {
@@ -121,6 +115,12 @@ namespace windows
 
     void InputActionMappingWindow::drawContent()
     {
+        if (needsRefresh)
+        {
+            refresh();
+            needsRefresh = false;
+        }
+
         if (ImGui::Button("Reset All"))
         {
             auto& dispatcher = events::EventDispatcher::instance();

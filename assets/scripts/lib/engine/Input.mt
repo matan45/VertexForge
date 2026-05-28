@@ -60,6 +60,17 @@ public class Input {
         return _native_input_getMouseY();
     }
 
+    // Get mouse X position relative to the active viewport.
+    // Editor play mode: relative to the ViewPort panel. Standalone runtime: same as getMouseX.
+    public static function getViewportMouseX(): float {
+        return _native_input_getViewportMouseX();
+    }
+
+    // Get mouse Y position relative to the active viewport.
+    public static function getViewportMouseY(): float {
+        return _native_input_getViewportMouseY();
+    }
+
     // ============================================
     // Mouse Movement (Delta)
     // ============================================

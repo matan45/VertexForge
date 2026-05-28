@@ -17,4 +17,15 @@ public class Window {
     public static function getHeight(): int {
         return _native_window_getHeight();
     }
+
+    // Active viewport width in pixels.
+    // Editor play mode: the ViewPort panel size. Standalone runtime: same as getWidth.
+    public static function getViewportWidth(): int {
+        return _native_window_getViewportWidth();
+    }
+
+    // Active viewport height in pixels.
+    public static function getViewportHeight(): int {
+        return _native_window_getViewportHeight();
+    }
 }

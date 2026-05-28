@@ -34,6 +34,10 @@ namespace terrain
         [[nodiscard]] const TerrainTile* getTile(const TileCoord& coord) const;
 
         [[nodiscard]] std::vector<TerrainTile*> getVisibleTiles(const math::Frustum& frustum);
+        // VK-1336: non-mutating frustum query. Does NOT touch tile->isVisible or
+        // lastVisibleTiles — safe to call alongside getVisibleTiles for additional
+        // camera frustums (minimap / RTT) without stomping the main camera's flags.
+        [[nodiscard]] std::vector<TerrainTile*> queryFrustumPure(const math::Frustum& frustum) const;
         [[nodiscard]] std::vector<TerrainTile*> getTilesInRange(const glm::vec3& center, float radius);
         [[nodiscard]] std::vector<TerrainTile*> getTilesInCone(const glm::vec3& apex, const glm::vec3& dir,
                                                                float halfAngle, float maxDist);

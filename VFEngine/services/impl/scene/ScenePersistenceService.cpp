@@ -21,8 +21,11 @@
 #include "../../events/render/AtmosphereEvents.hpp"
 #include "../../events/render/CloudEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/project/ProjectEvents.hpp"
+#include "../../events/input/ActionMappingEvents.hpp"
 #include <functional>
 #include <fstream>
+#include <filesystem>
 
 namespace services
 {
@@ -438,6 +441,29 @@ namespace services
             events::cloud::ApplyCloudSettingsCommand cloudCmd;
             cloudCmd.settings = sceneGraph->getRenderSettings().cloud;
             dispatcher.execute(cloudCmd);
+
+            const auto& sceneInputMapping = sceneGraph->getInputMappingPath();
+            if (sceneInputMapping.has_value() && !sceneInputMapping->empty())
+            {
+                auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
+                std::filesystem::path mappingPath = *sceneInputMapping;
+                if (projectOpt.has_value() && !projectOpt->workingDirectory.empty() && mappingPath.is_relative())
+                {
+                    mappingPath = std::filesystem::path(projectOpt->workingDirectory) / mappingPath;
+                }
+
+                if (std::filesystem::exists(mappingPath))
+                {
+                    events::input::LoadActionBindingsCommand mappingCmd;
+                    mappingCmd.filePath = mappingPath.string();
+                    dispatcher.execute(mappingCmd);
+                    vfLogInfo("Scene input mapping loaded: {}", mappingPath.string());
+                }
+                else
+                {
+                    vfLogWarning("Scene input mapping not found: {}", mappingPath.string());
+                }
+            }
 
             events::scene::SceneLoadedNotification notification;
             notification.scenePath = filePath;

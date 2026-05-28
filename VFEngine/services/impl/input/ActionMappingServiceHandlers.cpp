@@ -2,6 +2,9 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
 #include "../../events/input/InputContextEvents.hpp"
+#include "../../events/project/ProjectEvents.hpp"
+#include "print/Log.hpp"
+#include <filesystem>
 
 namespace services {
 
@@ -198,6 +201,25 @@ namespace services {
             [this](const events::input::ClearConsumedActionsCommand&) {
                 clearConsumedActions();
             });
+
+        subscriptions.push_back(
+            dispatcher.subscribe<events::project::ProjectLoadedNotification>(
+                [this](const events::project::ProjectLoadedNotification& n) {
+                    if (!n.project.inputMapping.has_value() || n.project.inputMapping->empty()) {
+                        return;
+                    }
+                    std::filesystem::path mappingPath = *n.project.inputMapping;
+                    if (mappingPath.is_relative() && !n.project.workingDirectory.empty()) {
+                        mappingPath = std::filesystem::path(n.project.workingDirectory) / mappingPath;
+                    }
+                    if (!std::filesystem::exists(mappingPath)) {
+                        vfLogWarning("Project input mapping not found: {}", mappingPath.string());
+                        return;
+                    }
+                    if (loadBindings(mappingPath.string())) {
+                        vfLogInfo("Project input mapping loaded: {}", mappingPath.string());
+                    }
+                }));
     }
 
 }

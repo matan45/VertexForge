@@ -45,6 +45,14 @@ namespace events::scene {
     };
 
     // ============================================
+    // Scene Queries
+    // ============================================
+
+    struct GetCurrentScenePathQuery : IQuery<std::string> {
+        std::string_view getName() const override { return "GetCurrentScenePath"; }
+    };
+
+    // ============================================
     // Scene Notifications
     // ============================================
 

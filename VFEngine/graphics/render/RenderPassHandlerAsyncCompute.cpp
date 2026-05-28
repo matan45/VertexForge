@@ -34,6 +34,7 @@
 #include "../../services/data/RenderHookContext.hpp"
 #include "water/OceanFFT.hpp"
 #include "vegetation/WindConfig.hpp"
+#include "terrain/TerrainTile.hpp"
 #include <unordered_set>
 
 namespace render
@@ -57,10 +58,16 @@ namespace render
             std::unordered_set<::terrain::TerrainTile*> terrainSeen(visibleTiles.begin(), visibleTiles.end());
             for (const auto& [rttFrustum, rttCameraPos] : additionalTerrainFrustums)
             {
+                // VK-1336: queryVisibleTiles is now non-mutating (preserves the main camera's
+                // tile->isVisible flags). Re-mark RTT-only tiles as visible here so they get
+                // uploaded for the minimap/RTT pass to render them.
                 for (auto* tile : terrainRenderProvider->queryVisibleTiles(rttFrustum, rttCameraPos))
                 {
                     if (terrainSeen.insert(tile).second)
+                    {
+                        tile->isVisible = true;
                         visibleTiles.push_back(tile);
+                    }
                 }
             }
 
@@ -164,12 +171,12 @@ namespace render
 
     void RenderPassHandler::executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const
     {
-        occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
-
-        if (!cameraOcclusionManager->isHiZInitialized(activeCameraId))
+        // VK-1336: main-scene HiZ generation and occlusion always target the primary camera.
+        // RTT cameras run their own cull/HiZ inside RenderTextureViewPort's per-RTT context.
+        if (!cameraOcclusionManager->isHiZInitialized(occlusion::MAIN_CAMERA_ID))
             return;
 
-        cameraOcclusionManager->generateHiZ(activeCameraId, commandBuffer);
+        cameraOcclusionManager->generateHiZ(occlusion::MAIN_CAMERA_ID, commandBuffer);
 
         if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
             dispatchTerrainRaycast(commandBuffer);

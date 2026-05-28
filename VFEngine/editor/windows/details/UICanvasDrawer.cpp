@@ -48,6 +48,8 @@ namespace windows::details
             changed |= drawScaleMode(data);
             ImGui::Spacing();
             changed |= drawPixelsPerUnit(data);
+            ImGui::Spacing();
+            changed |= drawSortOrder(data);
 
             if (changed)
             {
@@ -132,6 +134,22 @@ namespace windows::details
         if (ImGui::DragFloat("Pixels Per Unit##UICanvas", &data.pixelsPerUnit, 1.0f, 1.0f, 1000.0f, "%.0f"))
         {
             changed = true;
+        }
+
+        return changed;
+    }
+
+    bool UICanvasDrawer::drawSortOrder(services::UICanvasData& data)
+    {
+        bool changed = false;
+
+        if (ImGui::DragInt("Sort Order##UICanvas", &data.sortOrder, 1.0f, -1000, 1000))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Higher draws on top. Ties keep registry order.");
         }
 
         return changed;

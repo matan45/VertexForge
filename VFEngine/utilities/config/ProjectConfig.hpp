@@ -51,6 +51,7 @@ namespace config
         std::string startupScene;
 
         std::string exeIconPath;
+        std::optional<std::string> inputMapping;
         std::optional<std::string> engineVersion;
         std::optional<std::string> lastModified;
 

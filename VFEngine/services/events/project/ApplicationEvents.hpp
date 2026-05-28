@@ -24,6 +24,14 @@ namespace events::application {
         std::string_view getName() const override { return "GetWindowHeight"; }
     };
 
+    struct GetViewportWidthQuery : IQuery<uint32_t> {
+        std::string_view getName() const override { return "GetViewportWidth"; }
+    };
+
+    struct GetViewportHeightQuery : IQuery<uint32_t> {
+        std::string_view getName() const override { return "GetViewportHeight"; }
+    };
+
     // ============================================
     // NOTIFICATIONS - Application state broadcasts
     // ============================================

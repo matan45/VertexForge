@@ -362,6 +362,7 @@ namespace services
         float referenceHeight = 1080.0f;
         uint8_t scaleMode = 1; // 0=ConstantPixelSize, 1=ScaleWithScreenSize
         float pixelsPerUnit = 100.0f;
+        int sortOrder = 0;
     };
 
     struct UIRectData
