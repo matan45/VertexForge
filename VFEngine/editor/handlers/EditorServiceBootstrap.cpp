@@ -41,6 +41,7 @@
 #include "impl/render/GIServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
+#include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/asset/AssetDatabaseServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
@@ -274,6 +275,10 @@ namespace handlers
             behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
             behaviorTreePlayModeHandler->subscribeToEvents();
         }
+
+        runtimePickerService = std::make_shared<services::RuntimePickerServiceImpl>(
+            bootstrap->getRuntimePickerProvider()
+        );
     }
 
     void EditorHandler::createWeatherServices()
@@ -331,6 +336,7 @@ namespace handlers
         objectStreamingService->registerEventHandlers();
         giService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
+        runtimePickerService->registerEventHandlers();
         weatherService->registerEventHandlers();
         if (destructionService) destructionService->registerEventHandlers();
         saveService->registerEventHandlers(events::EventDispatcher::instance());

@@ -26,6 +26,7 @@
 #include "../../adapters/render/ObjectStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/input/RuntimePickerAdapter.hpp"
 
 namespace core
 {
@@ -172,5 +173,10 @@ namespace core
     services::IBehaviorTreeProvider* EditorBootstrap::getBehaviorTreeProvider()
     {
         return behaviorTreeAdapter.get();
+    }
+
+    services::IRuntimePickerProvider* EditorBootstrap::getRuntimePickerProvider()
+    {
+        return runtimePickerAdapter.get();
     }
 }

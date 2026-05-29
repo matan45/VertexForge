@@ -33,6 +33,7 @@ namespace services
     class IObjectStreamingProvider;
     class IGIProvider;
     class IBehaviorTreeProvider;
+    class IRuntimePickerProvider;
 }
 
 namespace window
@@ -86,6 +87,7 @@ namespace core
         class GIAdapter;
     }
     class BehaviorTreeAdapter;
+    class RuntimePickerAdapter;
 
     class EditorBootstrap
     {
@@ -122,6 +124,7 @@ namespace core
         std::unique_ptr<adapters::ObjectStreamingAdapter> objectStreamingAdapter;
         std::unique_ptr<adapters::GIAdapter> giAdapter;
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
+        std::unique_ptr<RuntimePickerAdapter> runtimePickerAdapter;
 
     public:
         explicit EditorBootstrap();
@@ -196,6 +199,8 @@ namespace core
         services::IGIProvider* getGIProvider();
 
         services::IBehaviorTreeProvider* getBehaviorTreeProvider();
+
+        services::IRuntimePickerProvider* getRuntimePickerProvider();
 
         // === Other Accessors ===
 

@@ -19,6 +19,7 @@
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
 #include "../../adapters/render/DecalRenderAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/input/RuntimePickerAdapter.hpp"
 
 namespace core
 {
@@ -52,6 +53,7 @@ namespace core
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
         decalRenderAdapter = std::make_unique<adapters::DecalRenderAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
+        runtimePickerAdapter = std::make_unique<RuntimePickerAdapter>();
 
         offScreen->init();
 

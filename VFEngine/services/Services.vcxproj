@@ -134,6 +134,7 @@
     <ClInclude Include="events\input\ActionMappingEvents.hpp" />
     <ClInclude Include="events\input\InputContextEvents.hpp" />
     <ClInclude Include="events\input\InputEvents.hpp" />
+    <ClInclude Include="events\input\RuntimePickerEvents.hpp" />
     <ClInclude Include="events\lifecycle\AssetLifecycleEvents.hpp" />
     <ClInclude Include="events\meshbrush\MeshBrushEvents.hpp" />
     <ClInclude Include="events\navmesh\NavmeshEvents.hpp" />
@@ -245,6 +246,7 @@
     <ClInclude Include="impl\editor\WindowStateServiceImpl.hpp" />
     <ClInclude Include="impl\input\ActionMappingServiceImpl.hpp" />
     <ClInclude Include="impl\input\InputServiceImpl.hpp" />
+    <ClInclude Include="impl\input\RuntimePickerServiceImpl.hpp" />
     <ClInclude Include="impl\lifecycle\AssetLifecycleServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushModeServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushServiceImpl.hpp" />
@@ -317,6 +319,7 @@
     <ClInclude Include="interfaces\editor\IWindowStateService.hpp" />
     <ClInclude Include="interfaces\input\IActionMappingService.hpp" />
     <ClInclude Include="interfaces\input\IInputService.hpp" />
+    <ClInclude Include="interfaces\input\IRuntimePickerService.hpp" />
     <ClInclude Include="interfaces\lifecycle\IAssetLifecycleService.hpp" />
     <ClInclude Include="interfaces\meshbrush\IMeshBrushModeService.hpp" />
     <ClInclude Include="interfaces\meshbrush\IMeshBrushService.hpp" />
@@ -362,6 +365,7 @@
     <ClInclude Include="providers\animation\IAnimationPreviewProvider.hpp" />
     <ClInclude Include="providers\animation\IAnimatorProvider.hpp" />
     <ClInclude Include="providers\audio\IAudioProvider.hpp" />
+    <ClInclude Include="providers\input\IRuntimePickerProvider.hpp" />
     <ClInclude Include="providers\navmesh\INavmeshProvider.hpp" />
     <ClInclude Include="providers\physics\IIKProvider.hpp" />
     <ClInclude Include="providers\physics\IPhysicsProvider.hpp" />
@@ -438,6 +442,7 @@
     <ClCompile Include="impl\input\ActionMappingServiceHandlers.cpp" />
     <ClCompile Include="impl\input\ActionMappingServiceImpl.cpp" />
     <ClCompile Include="impl\input\InputServiceImpl.cpp" />
+    <ClCompile Include="impl\input\RuntimePickerServiceImpl.cpp" />
     <ClCompile Include="impl\lifecycle\AssetLifecycleServiceImpl.cpp" />
     <ClCompile Include="impl\meshbrush\MeshBrushModeServiceImpl.cpp" />
     <ClCompile Include="impl\meshbrush\MeshBrushServiceImpl.cpp" />

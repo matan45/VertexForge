@@ -21,6 +21,7 @@
 #include "interfaces/lifecycle/IAssetLifecycleService.hpp"
 #include "interfaces/world/IWorldSectorService.hpp"
 #include "interfaces/ai/IBehaviorTreeService.hpp"
+#include "interfaces/input/IRuntimePickerService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace services {
@@ -75,6 +76,7 @@ namespace handlers {
         std::shared_ptr<services::IWorldSectorService> worldSectorService;
         std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
         std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
+        std::shared_ptr<services::IRuntimePickerService> runtimePickerService;
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 

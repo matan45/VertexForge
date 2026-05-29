@@ -27,6 +27,7 @@
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
+#include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -304,6 +305,10 @@ namespace handlers {
             bootstrap->getBehaviorTreeProvider()
         );
 
+        runtimePickerService = std::make_shared<services::RuntimePickerServiceImpl>(
+            bootstrap->getRuntimePickerProvider()
+        );
+
         if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
         {
             behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
@@ -357,6 +362,7 @@ namespace handlers {
         worldSectorService->registerEventHandlers();
         controllerService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
+        runtimePickerService->registerEventHandlers();
         if (ikComponentService)
         {
             ikComponentService->registerEventHandlers();

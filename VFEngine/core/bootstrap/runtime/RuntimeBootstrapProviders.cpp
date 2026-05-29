@@ -15,6 +15,7 @@
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/input/RuntimePickerAdapter.hpp"
 
 namespace core
 {
@@ -101,5 +102,10 @@ namespace core
     services::IBehaviorTreeProvider* RuntimeBootstrap::getBehaviorTreeProvider()
     {
         return behaviorTreeAdapter.get();
+    }
+
+    services::IRuntimePickerProvider* RuntimeBootstrap::getRuntimePickerProvider()
+    {
+        return runtimePickerAdapter.get();
     }
 }
