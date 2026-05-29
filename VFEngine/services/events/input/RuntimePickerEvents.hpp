@@ -15,13 +15,6 @@ namespace events::input
         std::string_view getName() const override { return "ScreenToWorldRay"; }
     };
 
-    // World-space point on the terrain under the given screen pixel. nullopt on miss.
-    struct PickTerrainQuery : ::events::IQuery<std::optional<glm::vec3>>
-    {
-        glm::vec2 screenPos{0.0f};
-        std::string_view getName() const override { return "PickTerrain"; }
-    };
-
     // Physics raycast against entities under the given screen pixel. hit=false on miss.
     struct PickEntityQuery : ::events::IQuery<services::RaycastHit>
     {

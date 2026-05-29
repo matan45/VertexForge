@@ -25,15 +25,6 @@ namespace services
                 return ray;
             });
 
-        dispatcher.registerQueryHandler<::events::input::PickTerrainQuery>(
-            [this](const ::events::input::PickTerrainQuery& q) -> std::optional<glm::vec3>
-            {
-                PickRay ray;
-                if (!pickerProvider->screenToWorldRay(q.screenPos, ray))
-                    return std::nullopt;
-                return pickerProvider->pickTerrain(ray);
-            });
-
         dispatcher.registerQueryHandler<::events::input::PickEntityQuery>(
             [this](const ::events::input::PickEntityQuery& q) -> RaycastHit
             {

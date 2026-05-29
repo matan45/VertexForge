@@ -86,26 +86,6 @@ namespace core::api
                 return value::Value(result);
             }});
 
-        // _native_picker_pickTerrainPoint(screenX, screenY)
-        //   miss -> [0.0]; hit -> [1.0, x, y, z]
-        interpreter->registerNativeFunction("_native_picker_pickTerrainPoint",
-            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
-                auto& dispatcher = events::EventDispatcher::instance();
-                if (args.size() < 2) return missArray();
-
-                events::input::PickTerrainQuery q;
-                q.screenPos = glm::vec2(extractFloat(args[0]), extractFloat(args[1]));
-                auto hit = dispatcher.query(q);
-                if (!hit.has_value()) return missArray();
-
-                auto result = std::make_shared<value::NativeArray>(4, value::ValueType::FLOAT);
-                result->set(0, value::Value(1.0f));
-                result->set(1, value::Value(hit->x));
-                result->set(2, value::Value(hit->y));
-                result->set(3, value::Value(hit->z));
-                return value::Value(result);
-            }});
-
         // _native_picker_pickEntity(screenX, screenY, layerMask)
         //   miss -> [0.0]; hit -> [1.0, entityId, px, py, pz, nx, ny, nz, distance]
         //   (same 9-float layout as _native_physics_raycast so scripts reuse RaycastHit)

@@ -26,9 +26,6 @@ namespace services
         // Screen pixel -> world ray. Returns false if there is no primary camera/viewport.
         virtual bool screenToWorldRay(const glm::vec2& screenPos, PickRay& outRay) = 0;
 
-        // Ray-march the terrain heightfield. nullopt if the ray misses loaded terrain.
-        virtual std::optional<glm::vec3> pickTerrain(const PickRay& ray) = 0;
-
         // Physics raycast against scene entities. hit=false on miss.
         virtual RaycastHit pickEntity(const PickRay& ray, uint16_t layerMask) = 0;
     };
