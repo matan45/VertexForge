@@ -1,7 +1,7 @@
 // Vec3f - 3D floating-point vector
 // Provides common 3D vector operations for graphics and math
 
-import * from "Vec2f.mt";
+import * from "./Vec2f.mt";
 
 public value class Vec3f {
     public float x;
@@ -179,30 +179,6 @@ public value class Vec3f {
     }
 
     public static function unitZ(): Vec3f {
-        return new Vec3f(0.0, 0.0, 1.0);
-    }
-
-    public static function up(): Vec3f {
-        return new Vec3f(0.0, 1.0, 0.0);
-    }
-
-    public static function down(): Vec3f {
-        return new Vec3f(0.0, -1.0, 0.0);
-    }
-
-    public static function left(): Vec3f {
-        return new Vec3f(-1.0, 0.0, 0.0);
-    }
-
-    public static function right(): Vec3f {
-        return new Vec3f(1.0, 0.0, 0.0);
-    }
-
-    public static function forward(): Vec3f {
-        return new Vec3f(0.0, 0.0, -1.0);
-    }
-
-    public static function back(): Vec3f {
         return new Vec3f(0.0, 0.0, 1.0);
     }
 }

@@ -1,6 +1,7 @@
 // Matrix3f - 3x3 floating-point matrix
 // Row-major order: m[row][col] = data[row * 3 + col]
 // Used for 2D transformations, rotations, and normal transformations
+import * from "./Vec3f.mt";
 
 public value class Matrix3f {
     // Matrix elements stored in row-major order
@@ -109,7 +110,7 @@ public value class Matrix3f {
     public function inverse(): Matrix3f {
         float det = this.determinant();
         if (det == 0.0) {
-            return Matrix3f.identity();
+            return Matrix3f::identity();
         }
 
         float invDet = 1.0 / det;

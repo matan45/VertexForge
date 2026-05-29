@@ -1,8 +1,10 @@
+import * from "../math/Vec3f.mt";
+
 public class Destruction {
-    public static const int DAMAGE_ANY = 0;
-    public static const int DAMAGE_EXPLOSIVE = 1;
-    public static const int DAMAGE_BALLISTIC = 2;
-    public static const int DAMAGE_MELEE = 3;
+    public static final int DAMAGE_ANY = 0;
+    public static final int DAMAGE_EXPLOSIVE = 1;
+    public static final int DAMAGE_BALLISTIC = 2;
+    public static final int DAMAGE_MELEE = 3;
 
     public static function applyDamage(int entityId, float amount, int damageType, Vec3f impactPoint, Vec3f direction): void {
         _native_destruction_applyDamage(entityId, amount, damageType,
