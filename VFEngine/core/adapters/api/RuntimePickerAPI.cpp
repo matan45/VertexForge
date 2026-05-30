@@ -8,6 +8,7 @@
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/input/RuntimePickerEvents.hpp"
 #include "../../../services/events/physics/PhysicsSettingsEvents.hpp"
+#include "../../../services/events/terrain/TerrainEvents.hpp"
 
 #include <glm/glm.hpp>
 #include <string>
@@ -111,6 +112,87 @@ namespace core::api
                 result->set(6, value::Value(hit.normal.y));
                 result->set(7, value::Value(hit.normal.z));
                 result->set(8, value::Value(hit.distance));
+                return value::Value(result);
+            }});
+
+        // _native_picker_pickTerrainPoint(screenX, screenY)
+        //   miss -> [0.0]; hit -> [1.0, px, py, pz]
+        //   Heightfield pick: builds the screen ray, then ray-marches the CPU
+        //   heightfield (GetTerrainHeightAtQuery, no physics) so it works at runtime
+        //   even when the terrain has no physics collider. Complements pickEntity's
+        //   physics raycast (Picker::pickTerrainPhysics).
+        interpreter->registerNativeFunction("_native_picker_pickTerrainPoint",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return missArray();
+
+                events::input::ScreenToWorldRayQuery rayQuery;
+                rayQuery.screenPos = glm::vec2(extractFloat(args[0]), extractFloat(args[1]));
+                auto ray = dispatcher.query(rayQuery);
+                if (!ray.has_value()) return missArray();
+
+                const glm::vec3 origin = ray->origin;
+                glm::vec3 dir = ray->direction;
+                const float dirLen = glm::length(dir);
+                if (dirLen < 1e-6f) return missArray();
+                dir /= dirLen;
+
+                auto sampleGap = [&](float t, bool& valid) -> float
+                {
+                    const glm::vec3 p = origin + dir * t;
+                    events::terrain::GetTerrainHeightAtQuery hq;
+                    hq.worldX = p.x;
+                    hq.worldZ = p.z;
+                    terrain::TerrainHeightAtResult r = dispatcher.query(hq);
+                    valid = r.valid;
+                    return p.y - r.height;   // >0 above surface, <=0 below
+                };
+
+                // Coarse march to bracket the surface crossing, then bisect.
+                const float maxDist = 2000.0f;
+                const float step = 2.0f;
+                bool havePrev = false;
+                float prevT = 0.0f;
+                bool hit = false;
+                float lo = 0.0f;
+                float hi = 0.0f;
+
+                for (float t = 0.0f; t <= maxDist; t += step)
+                {
+                    bool valid = false;
+                    const float gap = sampleGap(t, valid);
+                    if (!valid)
+                    {
+                        havePrev = false;   // off the loaded terrain; reset the bracket
+                        continue;
+                    }
+                    if (havePrev && gap <= 0.0f)
+                    {
+                        lo = prevT;   // last point above the surface
+                        hi = t;       // first point at/below the surface
+                        hit = true;
+                        break;
+                    }
+                    prevT = t;
+                    havePrev = true;
+                }
+
+                if (!hit) return missArray();
+
+                for (int i = 0; i < 24; ++i)
+                {
+                    const float mid = 0.5f * (lo + hi);
+                    bool valid = false;
+                    const float gap = sampleGap(mid, valid);
+                    if (valid && gap > 0.0f) lo = mid; else hi = mid;
+                }
+
+                const glm::vec3 p = origin + dir * hi;
+                auto result = std::make_shared<value::NativeArray>(4, value::ValueType::FLOAT);
+                result->set(0, value::Value(1.0f));
+                result->set(1, value::Value(p.x));
+                result->set(2, value::Value(p.y));
+                result->set(3, value::Value(p.z));
                 return value::Value(result);
             }});
 

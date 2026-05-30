@@ -34,6 +34,19 @@ public class Picker {
         return h;
     }
 
+    // Terrain pick via a Jolt physics raycast against the "Static" layer (the terrain
+    // heightfield collider). Returns hit entity + point + surface normal. Requires the
+    // terrain to have a physics collider; use pickTerrain for a collider-free pick.
+    public static function pickTerrainPhysics(float screenX, float screenY): RaycastHit {
+        return Picker::pickEntity(screenX, screenY, "Static");
+    }
+
+    // Physics terrain pick filtered by comma-separated layer names
+    // (e.g. "Static" or "Static,Dynamic").
+    public static function pickTerrainPhysics(float screenX, float screenY, string layerMask): RaycastHit {
+        return Picker::pickEntity(screenX, screenY, layerMask);
+    }
+
     // First entity under the screen pixel (physics raycast, all layers).
     public static function pickEntity(float screenX, float screenY): RaycastHit {
         float[] raw = _native_picker_pickEntity(screenX, screenY, "");
