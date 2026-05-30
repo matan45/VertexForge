@@ -31,6 +31,7 @@
 #include "../../adapters/render/ObjectStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/input/RuntimePickerAdapter.hpp"
 #include "types/PhysicsTypes.hpp"
 
 namespace core
@@ -77,6 +78,7 @@ namespace core
         objectStreamingAdapter = std::make_unique<adapters::ObjectStreamingAdapter>();
         giAdapter = std::make_unique<adapters::GIAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
+        runtimePickerAdapter = std::make_unique<RuntimePickerAdapter>();
 
         offScreen->init();
 

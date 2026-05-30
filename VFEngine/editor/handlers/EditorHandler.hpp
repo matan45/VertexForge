@@ -45,6 +45,7 @@
 #include "interfaces/render/IObjectStreamingService.hpp"
 #include "interfaces/render/IGIService.hpp"
 #include "interfaces/ai/IBehaviorTreeService.hpp"
+#include "interfaces/input/IRuntimePickerService.hpp"
 #include "interfaces/weather/IWeatherService.hpp"
 #include "interfaces/destruction/IDestructionService.hpp"
 #include "impl/components/IKComponentService.hpp"
@@ -148,6 +149,7 @@ namespace handlers {
 		std::shared_ptr<services::IGIService> giService;
 		std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
 		std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
+		std::shared_ptr<services::IRuntimePickerService> runtimePickerService;
 		std::shared_ptr<services::IWeatherService> weatherService;
 		std::shared_ptr<services::IDestructionService> destructionService;
 

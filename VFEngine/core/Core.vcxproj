@@ -129,11 +129,13 @@
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPIHelpers.hpp" />
     <ClInclude Include="adapters\api\RenderTextureAPI.hpp" />
+    <ClInclude Include="adapters\api\RuntimePickerAPI.hpp" />
     <ClInclude Include="adapters\api\SaveAPI.hpp" />
     <ClInclude Include="adapters\api\SceneAPI.hpp" />
     <ClInclude Include="adapters\api\ScriptCommunicationAPI.hpp" />
     <ClInclude Include="adapters\api\SocketAPI.hpp" />
     <ClInclude Include="adapters\api\StreamingAPI.hpp" />
+    <ClInclude Include="adapters\api\TerrainAPI.hpp" />
     <ClInclude Include="adapters\api\UIAPI.hpp" />
     <ClInclude Include="adapters\api\UIAnimationAPI.hpp" />
     <ClInclude Include="adapters\api\UIButtonLabelAPI.hpp" />
@@ -143,6 +145,7 @@
     <ClInclude Include="adapters\api\WeatherAPI.hpp" />
     <ClInclude Include="adapters\api\WindowAPI.hpp" />
     <ClInclude Include="adapters\audio\AudioAdapter.hpp" />
+    <ClInclude Include="adapters\input\RuntimePickerAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\NavmeshAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\TileGraph.hpp" />
     <ClInclude Include="adapters\physics\IKAdapter.hpp" />
@@ -233,11 +236,13 @@
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced2.cpp" />
     <ClCompile Include="adapters\api\RenderTextureAPI.cpp" />
+    <ClCompile Include="adapters\api\RuntimePickerAPI.cpp" />
     <ClCompile Include="adapters\api\SaveAPI.cpp" />
     <ClCompile Include="adapters\api\SceneAPI.cpp" />
     <ClCompile Include="adapters\api\ScriptCommunicationAPI.cpp" />
     <ClCompile Include="adapters\api\SocketAPI.cpp" />
     <ClCompile Include="adapters\api\StreamingAPI.cpp" />
+    <ClCompile Include="adapters\api\TerrainAPI.cpp" />
     <ClCompile Include="adapters\api\UIAPI.cpp" />
     <ClCompile Include="adapters\api\UIAnimationAPI.cpp" />
     <ClCompile Include="adapters\api\UIButtonLabelAPI.cpp" />
@@ -247,6 +252,7 @@
     <ClCompile Include="adapters\api\WeatherAPI.cpp" />
     <ClCompile Include="adapters\api\WindowAPI.cpp" />
     <ClCompile Include="adapters\audio\AudioAdapter.cpp" />
+    <ClCompile Include="adapters\input\RuntimePickerAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterBuildOps.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterCrowd.cpp" />

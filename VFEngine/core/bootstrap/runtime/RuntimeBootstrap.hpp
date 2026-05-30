@@ -20,6 +20,7 @@ namespace services
     class IBillboardRenderProvider;
     class IDecalRenderProvider;
     class IBehaviorTreeProvider;
+    class IRuntimePickerProvider;
 }
 
 namespace window
@@ -61,6 +62,7 @@ namespace core
         class DecalRenderAdapter;
     }
     class BehaviorTreeAdapter;
+    class RuntimePickerAdapter;
 
     class RuntimeBootstrap
     {
@@ -85,6 +87,7 @@ namespace core
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
         std::unique_ptr<adapters::DecalRenderAdapter> decalRenderAdapter;
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
+        std::unique_ptr<RuntimePickerAdapter> runtimePickerAdapter;
 
     public:
         explicit RuntimeBootstrap();
@@ -131,6 +134,8 @@ namespace core
         services::IDecalRenderProvider* getDecalRenderProvider();
 
         services::IBehaviorTreeProvider* getBehaviorTreeProvider();
+
+        services::IRuntimePickerProvider* getRuntimePickerProvider();
 
         // For late binding - allows RuntimeHandler to connect services
         TerrainRenderAdapter* getTerrainRenderAdapterInternal();
