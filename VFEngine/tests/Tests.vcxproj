@@ -131,6 +131,7 @@ IF EXIST ..\..\dependencies\streamline\bin\x64\sl.interposer.dll\ (xcopy /Q /E /
     <ClCompile Include="test_animation.cpp" />
     <ClCompile Include="test_animation_layers.cpp" />
     <ClCompile Include="test_archive_format.cpp" />
+    <ClCompile Include="test_asset_path_resolution.cpp" />
     <ClCompile Include="test_async_loading.cpp" />
     <ClCompile Include="test_audio_types.cpp" />
     <ClCompile Include="test_convex_hull.cpp" />
