@@ -3,6 +3,7 @@
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "components/ComponentClone.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../data/ScriptTypes.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -189,37 +190,16 @@ namespace services
                 newTransform.isDirty = true;
             }
 
-            if (orig.hasComponent<components::CameraComponent>())
-            {
-                auto& origCamera = orig.getComponent<components::CameraComponent>();
-                auto& newCamera = newEntity.addComponent<components::CameraComponent>();
-                newCamera.isPerspective = origCamera.isPerspective;
-                newCamera.isPrimary = false;
-                newCamera.showFrustum = origCamera.showFrustum;
-                newCamera.fieldOfView = origCamera.fieldOfView;
-                newCamera.orthoSize = origCamera.orthoSize;
-                newCamera.nearPlane = origCamera.nearPlane;
-                newCamera.farPlane = origCamera.farPlane;
-                newCamera.aspectRatio = origCamera.aspectRatio;
-                newCamera.enableOcclusionCulling = origCamera.enableOcclusionCulling;
-                newCamera.updateProjectionMatrix();
-            }
+            // Deep-copy every optional component (UI + non-UI), resetting runtime-only state.
+            // Picks up new components automatically via components::OptionalComponents.
+            // ScriptComponent is excluded here and reattached below so script instances spawn.
+            components::cloneOptionalComponents(orig, newEntity);
 
-            if (orig.hasComponent<components::IBLComponent>())
+            // MeshComponent registration side-effect: notify so the duplicate registers with the
+            // GPU-driven renderer (the component data itself was already copied above).
+            if (newEntity.hasComponent<components::MeshComponent>())
             {
-                auto& origIBL = orig.getComponent<components::IBLComponent>();
-                auto& newIBL = newEntity.addComponent<components::IBLComponent>();
-                newIBL.hdrRef = origIBL.hdrRef;
-            }
-
-            if (orig.hasComponent<components::MeshComponent>())
-            {
-                auto& origMesh = orig.getComponent<components::MeshComponent>();
-                auto& newMesh = newEntity.addComponent<components::MeshComponent>();
-                newMesh.meshRef = origMesh.meshRef;
-                newMesh.animatorRef = origMesh.animatorRef;
-                newMesh.showBoundingBox = origMesh.showBoundingBox;
-
+                auto& newMesh = newEntity.getComponent<components::MeshComponent>();
                 if (newMesh.meshRef.isValid())
                 {
                     events::scene::MeshDataChangedNotification meshNotif;
@@ -230,38 +210,8 @@ namespace services
                 }
             }
 
-            if (orig.hasComponent<components::MaterialComponent>())
-            {
-                auto& origMat = orig.getComponent<components::MaterialComponent>();
-                auto& newMat = newEntity.addComponent<components::MaterialComponent>();
-                newMat.defaultMaterialRef = origMat.defaultMaterialRef;
-                newMat.subMeshMaterials = origMat.subMeshMaterials;
-                newMat.parameterOverrides = origMat.parameterOverrides;
-            }
-
-            if (orig.hasComponent<components::AudioSource2DComponent>())
-            {
-                auto& origAudio = orig.getComponent<components::AudioSource2DComponent>();
-                auto& newAudio = newEntity.addComponent<components::AudioSource2DComponent>();
-                newAudio.audioRef = origAudio.audioRef;
-                newAudio.volume = origAudio.volume;
-                newAudio.pitch = origAudio.pitch;
-                newAudio.loop = origAudio.loop;
-            }
-
-            if (orig.hasComponent<components::AudioSource3DComponent>())
-            {
-                auto& origAudio = orig.getComponent<components::AudioSource3DComponent>();
-                auto& newAudio = newEntity.addComponent<components::AudioSource3DComponent>();
-                newAudio.audioRef = origAudio.audioRef;
-                newAudio.volume = origAudio.volume;
-                newAudio.pitch = origAudio.pitch;
-                newAudio.loop = origAudio.loop;
-                newAudio.minDistance = origAudio.minDistance;
-                newAudio.maxDistance = origAudio.maxDistance;
-                newAudio.showDebugSpheres = origAudio.showDebugSpheres;
-            }
-
+            // ScriptComponent: reattach via the scripting system (instantiates runtime script
+            // instances) rather than value-copying the component.
             if (orig.hasComponent<components::ScriptComponent>())
             {
                 auto& origScripts = orig.getComponent<components::ScriptComponent>();
@@ -273,97 +223,6 @@ namespace services
                     cmd.data.enabled = entry.enabled;
                     dispatcher.execute(cmd);
                 }
-            }
-
-            if (orig.hasComponent<components::ColliderComponent>())
-            {
-                auto& origCollider = orig.getComponent<components::ColliderComponent>();
-                auto& newCollider = newEntity.addComponent<components::ColliderComponent>();
-                newCollider.shape = origCollider.shape;
-                newCollider.size = origCollider.size;
-                newCollider.height = origCollider.height;
-                newCollider.offset = origCollider.offset;
-                newCollider.meshRef = origCollider.meshRef;
-                newCollider.isTrigger = origCollider.isTrigger;
-                newCollider.collisionLayer = origCollider.collisionLayer;
-                newCollider.friction = origCollider.friction;
-                newCollider.restitution = origCollider.restitution;
-            }
-
-            if (orig.hasComponent<components::RigidBodyComponent>())
-            {
-                auto& origRB = orig.getComponent<components::RigidBodyComponent>();
-                auto& newRB = newEntity.addComponent<components::RigidBodyComponent>();
-                newRB.type = origRB.type;
-                newRB.mass = origRB.mass;
-                newRB.linearDamping = origRB.linearDamping;
-                newRB.angularDamping = origRB.angularDamping;
-                newRB.freezePositionX = origRB.freezePositionX;
-                newRB.freezePositionY = origRB.freezePositionY;
-                newRB.freezePositionZ = origRB.freezePositionZ;
-                newRB.freezeRotationX = origRB.freezeRotationX;
-                newRB.freezeRotationY = origRB.freezeRotationY;
-                newRB.freezeRotationZ = origRB.freezeRotationZ;
-            }
-
-            if (orig.hasComponent<components::DirectionalLightComponent>())
-            {
-                auto& origLight = orig.getComponent<components::DirectionalLightComponent>();
-                auto& newLight = newEntity.addComponent<components::DirectionalLightComponent>();
-                newLight.color = origLight.color;
-                newLight.intensity = origLight.intensity;
-                newLight.showGizmo = origLight.showGizmo;
-            }
-
-            if (orig.hasComponent<components::PointLightComponent>())
-            {
-                auto& origLight = orig.getComponent<components::PointLightComponent>();
-                auto& newLight = newEntity.addComponent<components::PointLightComponent>();
-                newLight.color = origLight.color;
-                newLight.intensity = origLight.intensity;
-                newLight.radius = origLight.radius;
-                newLight.showGizmo = origLight.showGizmo;
-            }
-
-            if (orig.hasComponent<components::SpotLightComponent>())
-            {
-                auto& origLight = orig.getComponent<components::SpotLightComponent>();
-                auto& newLight = newEntity.addComponent<components::SpotLightComponent>();
-                newLight.color = origLight.color;
-                newLight.intensity = origLight.intensity;
-                newLight.innerAngle = origLight.innerAngle;
-                newLight.outerAngle = origLight.outerAngle;
-                newLight.range = origLight.range;
-                newLight.showGizmo = origLight.showGizmo;
-            }
-
-            if (orig.hasComponent<components::VFXComponent>())
-            {
-                auto& origVFX = orig.getComponent<components::VFXComponent>();
-                auto& newVFX = newEntity.addComponent<components::VFXComponent>();
-                newVFX.vfxRef = origVFX.vfxRef;
-                newVFX.autoPlay = origVFX.autoPlay;
-                newVFX.loop = origVFX.loop;
-            }
-
-            if (orig.hasComponent<components::AnimatorComponent>())
-            {
-                auto& origAnim = orig.getComponent<components::AnimatorComponent>();
-                auto& newAnim = newEntity.addComponent<components::AnimatorComponent>();
-                newAnim.animatorRef = origAnim.animatorRef;
-            }
-
-            if (orig.hasComponent<components::BillboardComponent>())
-            {
-                auto& origBillboard = orig.getComponent<components::BillboardComponent>();
-                auto& newBillboard = newEntity.addComponent<components::BillboardComponent>();
-                newBillboard.iconType = origBillboard.iconType;
-                newBillboard.atlasIndex = origBillboard.atlasIndex;
-                newBillboard.sizeMode = origBillboard.sizeMode;
-                newBillboard.size = origBillboard.size;
-                newBillboard.colorTint = origBillboard.colorTint;
-                newBillboard.editorOnly = origBillboard.editorOnly;
-                newBillboard.selectable = origBillboard.selectable;
             }
 
             for (auto& child : orig.getChildren())

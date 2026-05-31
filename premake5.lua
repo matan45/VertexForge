@@ -11,8 +11,10 @@ workspace "VertexForge"
    filter {}
 
    -- Enable UTF-8 support for all C++ projects (required by spdlog/fmt)
+   -- /bigobj: some TUs (e.g. HierarchyService.cpp, Tests) instantiate large template folds
+   -- over the full component inventory and exceed the default COFF section limit.
    filter "language:C++"
-      buildoptions { "/utf-8", "/MP" }
+      buildoptions { "/utf-8", "/MP", "/bigobj" }
       defines {
          "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1",
          "GLM_FORCE_DEPTH_ZERO_TO_ONE"  -- Vulkan uses [0,1] depth range, not OpenGL's [-1,1]

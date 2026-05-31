@@ -62,7 +62,7 @@
       <AdditionalIncludeDirectories>..\dependencies\JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -89,7 +89,7 @@ IF EXIST ..\bin\jolt\Debug\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Debug\x6
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
-      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>

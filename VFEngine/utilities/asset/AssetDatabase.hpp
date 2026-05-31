@@ -59,6 +59,11 @@ namespace asset
         bool loadIndex(const std::string& projectRoot);
         bool rebuildFromMetaFiles(const std::string& searchRoot);
 
+        // Resolve a (possibly project-relative) path to a normalized absolute
+        // forward-slash path using the project root. "" for empty input;
+        // falls back to normalizePath(path) when no project root is set.
+        std::string resolveAssetPath(const std::string& path) const;
+
         // Fallback: scan .vfmeta files for a GUID not in the database
         std::optional<std::string> tryResolveByMetaScan(const AssetGUID& guid);
 
@@ -69,6 +74,7 @@ namespace asset
 
         std::string normalizePath(const std::string& path) const;
         std::string lastSearchRoot;
+        std::string projectRoot;   // normalized project root for relative-path resolution
 
         std::unordered_map<AssetGUID, AssetDatabaseEntry, AssetGUID::Hash> guidToEntry;
         std::unordered_map<std::string, AssetGUID> pathToGuid;

@@ -30,6 +30,8 @@ namespace components
                                                UILayoutGroupComponent, UILabelComponent, UIButtonComponent,
                                                UITextInputComponent, UIDropdownComponent,
                                                UITabsComponent, UISliderComponent,
+                                               UICheckboxComponent, UIProgressBarComponent, UIMaskComponent,
+                                               UIDraggableComponent, UIDropTargetComponent, UIAnimationComponent,
                                                SocketAttachmentComponent, SocketOverrideComponent,
                                                NavmeshAgentComponent, NavmeshComponent, OffMeshLinkComponent, NavmeshObstacleComponent, NavmeshModifierVolumeComponent, NavInvokerComponent, ControllerComponent,
                                                IKTargetComponent, WorldSectorComponent,
