@@ -43,11 +43,11 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <NMakeOutput>$(OutDir)DataTypes</NMakeOutput>
-    <AdditionalOptions>/utf-8 /MP /std:c++latest %(AdditionalOptions)</AdditionalOptions>
+    <AdditionalOptions>/utf-8 /MP /bigobj /std:c++latest %(AdditionalOptions)</AdditionalOptions>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <NMakeOutput>$(OutDir)DataTypes</NMakeOutput>
-    <AdditionalOptions>/utf-8 /MP /std:c++latest %(AdditionalOptions)</AdditionalOptions>
+    <AdditionalOptions>/utf-8 /MP /bigobj /std:c++latest %(AdditionalOptions)</AdditionalOptions>
   </PropertyGroup>
   <ItemDefinitionGroup>
   </ItemDefinitionGroup>

@@ -67,7 +67,11 @@ TEST_SUITE("EntityDuplication")
         CHECK(dBtn.currentDisplayColor.r == doctest::Approx(dBtn.normalColor.r));
         CHECK(dBtn.currentDisplayColor.g == doctest::Approx(dBtn.normalColor.g));
         CHECK(dBtn.currentDisplayColor.b == doctest::Approx(dBtn.normalColor.b));
-        CHECK(dst.getComponent<components::UIImageComponent>().renderTextureSource == entt::null);
+        // Compare outside CHECK: doctest's expression decomposition is ambiguous against
+        // entt's operator==(entity, null_t).
+        const bool renderTextureSourceReset =
+            dst.getComponent<components::UIImageComponent>().renderTextureSource == entt::null;
+        CHECK(renderTextureSourceReset);
 
         scene::EntityRegistry::getRegistry().destroy(src.getHandle());
         scene::EntityRegistry::getRegistry().destroy(dst.getHandle());
