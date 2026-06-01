@@ -151,7 +151,7 @@ namespace services
             glm::vec3 worldPos;
             if (registry.all_of<components::WorldTransformComponent>(enttEntity)) {
                 const auto& worldTransform = registry.get<components::WorldTransformComponent>(enttEntity);
-                camera.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, transform.rotation);
+                camera.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, transform);
                 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
             } else {
                 camera.updateViewMatrix(transform.position, transform.rotation);

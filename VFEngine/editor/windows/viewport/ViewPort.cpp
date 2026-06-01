@@ -134,30 +134,37 @@ namespace windows
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!registry.all_of<components::CameraComponent>(enttEntity)) return false;
 
+        if (!registry.all_of<components::TransformComponent>(enttEntity)) return false;
+
         auto& camComp = registry.get<components::CameraComponent>(enttEntity);
         camComp.aspectRatio = aspectRatio;
         camComp.updateProjectionMatrix();
 
-        // Use the world-space eye position but the camera's LOCAL Euler rotation. transform.rotation
-        // here is the world matrix decomposed via extractEulerAngleXYZ, whose gimbal singularity is on
-        // the middle (yaw) axis at ±90° — feeding that back through updateViewMatrix flips a yawing
-        // fixed-pitch camera to the sky as it crosses ±90°. The stored local rotation has no such
-        // singularity (VK-1350).
-        glm::vec3 localRotation = transform.rotation;
-        if (registry.all_of<components::TransformComponent>(enttEntity))
+        // Derive the view from the camera's LOCAL rotation (camera Y·X·Z order), not from the world
+        // transform's decomposed Euler. `transform` here is a TransformData DTO from
+        // GetWorldTransformQuery, whose rotation is the world matrix decomposed via
+        // extractEulerAngleXYZ — that extraction's gimbal singularity is on the yaw axis at ±90°,
+        // which flips a yawing fixed-pitch camera to the sky. updateViewMatrixFromWorldEye keeps any
+        // parent orientation while interpreting the local rotation in camera order (VK-1350).
+        const auto& localTransform = registry.get<components::TransformComponent>(enttEntity);
+        if (registry.all_of<components::WorldTransformComponent>(enttEntity))
         {
-            localRotation = registry.get<components::TransformComponent>(enttEntity).rotation;
+            const auto& worldMatrix = registry.get<components::WorldTransformComponent>(enttEntity).worldMatrix;
+            camComp.updateViewMatrixFromWorldEye(worldMatrix, localTransform);
         }
-        camComp.updateViewMatrix(transform.position, localRotation);
+        else
+        {
+            camComp.updateViewMatrix(localTransform.position, localTransform.rotation);
+        }
 
         state.viewMatrix = camComp.viewMatrix;
         state.projectionMatrix = camComp.projectionMatrix;
         state.position = transform.position;
 
-        glm::mat4 rotMat = glm::mat4(1.0f);
-        rotMat = glm::rotate(rotMat, glm::radians(localRotation.y), glm::vec3(0, 1, 0));
-        rotMat = glm::rotate(rotMat, glm::radians(localRotation.x), glm::vec3(1, 0, 0));
-        state.forward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
+        // Forward from the resolved camera world orientation (inverse of the view), so a child camera
+        // under a rotating parent reports the correct listener direction too.
+        glm::mat4 cameraWorld = glm::inverse(camComp.viewMatrix);
+        state.forward = glm::normalize(-glm::vec3(cameraWorld[2]));
         return true;
     }
 

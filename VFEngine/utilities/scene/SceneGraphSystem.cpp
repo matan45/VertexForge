@@ -175,7 +175,7 @@ namespace scene
                 // (or decomposing it to Euler) bakes in the object X·Y·Z order / extractEulerAngleXYZ
                 // yaw singularity, flipping a yawing fixed-pitch camera to the sky past ±90° (VK-1350).
                 const auto& worldTransform = entity.getComponent<components::WorldTransformComponent>();
-                camera.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, transform.rotation);
+                camera.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, transform);
             }
             else
             {

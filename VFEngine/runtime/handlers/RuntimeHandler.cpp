@@ -521,7 +521,7 @@ namespace handlers {
                 // world matrix to Euler (extractEulerAngleXYZ) has its gimbal singularity on the middle
                 // (yaw) axis at ±90°, which flips a yawing fixed-pitch camera to the sky (VK-1350).
                 const auto& localTransform = registry.get<components::TransformComponent>(entity);
-                camComp.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, localTransform.rotation);
+                camComp.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, localTransform);
                 glm::vec3 cameraPos = glm::vec3(worldTransform.worldMatrix[3]);
 
                 events::render::UpdateMeshCameraCommand meshCameraCmd;
