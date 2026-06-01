@@ -17,9 +17,12 @@
 #include "offscreen/CullingStatsCollector.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/render/MaterialEvents.hpp"
+#include "../../services/events/editor/EditorModeEvents.hpp"
+#include "../../services/events/scene/ScenePersistenceEvents.hpp"
 #include "../../services/events/terrain/TerrainEvents.hpp"
 #include "../../services/events/terrain/OceanEvents.hpp"
 #include "../../services/events/scene/EntityTransformEvents.hpp"
+#include "material/MaterialManager.hpp"
 
 namespace controllers
 {
@@ -35,6 +38,14 @@ namespace controllers
         if (materialSavedSubscription && materialSavedSubscription->isValid())
         {
             events::EventDispatcher::instance().unsubscribe(*materialSavedSubscription);
+        }
+        if (editorModeChangedSubscription && editorModeChangedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*editorModeChangedSubscription);
+        }
+        if (sceneClearedSubscription && sceneClearedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*sceneClearedSubscription);
         }
         if (terrainDeletedSubscription && terrainDeletedSubscription->isValid())
         {
@@ -93,9 +104,42 @@ namespace controllers
         auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
             [this](const events::material::MaterialFileSavedNotification& notification)
             {
+                if (!framePreparation) return;
                 framePreparation->invalidateMaterialCache(notification.materialPath);
+                // VK-1347: a saved PARENT material leaves derived instances' cached
+                // (parent-inherited) PBR values stale. Invalidate each dependent instance.
+                for (const auto& instancePath :
+                     material::MaterialManager::instance().getInstancesOfParent(notification.materialPath))
+                {
+                    framePreparation->invalidateMaterialCache(instancePath);
+                }
             });
         materialSavedSubscription = std::make_unique<events::SubscriptionToken>(token);
+
+        // VK-1347: entering Play does not reload the scene, so no scene event fires.
+        // Flush the entire PBR cache on the Edit->Play transition so material edits
+        // made in Edit mode are picked up on the first Play frame.
+        auto editorModeToken = events::EventDispatcher::instance().subscribe<
+            events::editor::EditorModeChangedNotification>(
+            [this](const events::editor::EditorModeChangedNotification& notification)
+            {
+                if (notification.currentMode == services::EditorMode::Play && framePreparation)
+                {
+                    framePreparation->clearAllMaterialCache();
+                }
+            });
+        editorModeChangedSubscription = std::make_unique<events::SubscriptionToken>(editorModeToken);
+
+        auto sceneClearedToken = events::EventDispatcher::instance().subscribe<
+            events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&)
+            {
+                if (framePreparation)
+                {
+                    framePreparation->clearAllMaterialCache();
+                }
+            });
+        sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneClearedToken);
 
         auto terrainToken = events::EventDispatcher::instance().subscribe<events::terrain::TerrainDeletedNotification>(
             [this](const events::terrain::TerrainDeletedNotification&)
