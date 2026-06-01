@@ -6,6 +6,8 @@
 #include "VulkanMemoryManager.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
+#include "resource/TextureResource.hpp"
+#include "resource/PathResolver.hpp"
 #include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
 #include <imgui_impl_vulkan.h>
@@ -218,8 +220,25 @@ namespace core
 
     bool Texture::loadTextureFromFile(std::string_view filePath, vk::Format format, bool isEditor)
     {
-        auto textureData = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(std::string(filePath)));
-        auto texturePtr = textureData.get();
+        std::shared_ptr<resource::TextureData> texturePtr;
+
+        if (isEditor)
+        {
+            // Built-in engine resource (e.g. "../../resources/editor/atlasIcons.vfImage").
+            // Bypass AssetRef/AssetDatabase: no GUID, no .vfmeta. Resolve via PathResolver
+            // (dev: unchanged; exported: ../../resources/ -> resources/) and read directly,
+            // mirroring BRDFLUTGenerator::loadFromFile. NOTE: here isEditor doubles as
+            // "this is an engine resource" in addition to its ImGui-descriptor meaning below.
+            std::string resolvedPath = resource::PathResolver::resolveEnginePath(std::string(filePath));
+            auto data = resource::TextureResource::loadTexture(resolvedPath);
+            if (!data.mipData.empty())
+                texturePtr = std::make_shared<resource::TextureData>(std::move(data));
+        }
+        else
+        {
+            texturePtr = resource::ResourceManager::loadTextureAsync(
+                asset::AssetRef::fromPath(std::string(filePath))).get();
+        }
 
         if (!texturePtr || texturePtr->mipData.empty())
         {
