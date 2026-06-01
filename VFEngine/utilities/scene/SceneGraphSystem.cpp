@@ -168,14 +168,17 @@ namespace scene
             auto entity = Entity(entityHandle);
             auto& camera = entity.getComponent<components::CameraComponent>();
 
+            const auto& transform = entity.getComponent<components::TransformComponent>();
             if (entity.hasComponent<components::WorldTransformComponent>())
             {
+                // World-space eye position with the LOCAL Euler rotation: inverting the world matrix
+                // (or decomposing it to Euler) bakes in the object X·Y·Z order / extractEulerAngleXYZ
+                // yaw singularity, flipping a yawing fixed-pitch camera to the sky past ±90° (VK-1350).
                 const auto& worldTransform = entity.getComponent<components::WorldTransformComponent>();
-                camera.updateViewMatrixFromWorld(worldTransform.worldMatrix);
+                camera.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, transform.rotation);
             }
             else
             {
-                const auto& transform = entity.getComponent<components::TransformComponent>();
                 camera.updateViewMatrix(transform.position, transform.rotation);
             }
         }

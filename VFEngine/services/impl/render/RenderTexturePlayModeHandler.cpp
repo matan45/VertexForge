@@ -143,14 +143,17 @@ namespace services
 
             auto& camera = registry.get<components::CameraComponent>(enttEntity);
 
-            // Use world transform to support child cameras that inherit parent movement
+            // Use the world-space eye position (to support child cameras that inherit parent movement)
+            // with the camera's LOCAL Euler rotation. Decomposing/inverting the world matrix for the
+            // rotation hits the extractEulerAngleXYZ yaw singularity and flips the view to the sky past
+            // ±90° of yaw (VK-1350).
+            const auto& transform = registry.get<components::TransformComponent>(enttEntity);
             glm::vec3 worldPos;
             if (registry.all_of<components::WorldTransformComponent>(enttEntity)) {
                 const auto& worldTransform = registry.get<components::WorldTransformComponent>(enttEntity);
-                camera.updateViewMatrixFromWorld(worldTransform.worldMatrix);
+                camera.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, transform.rotation);
                 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
             } else {
-                const auto& transform = registry.get<components::TransformComponent>(enttEntity);
                 camera.updateViewMatrix(transform.position, transform.rotation);
                 worldPos = transform.position;
             }

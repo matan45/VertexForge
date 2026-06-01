@@ -137,15 +137,26 @@ namespace windows
         auto& camComp = registry.get<components::CameraComponent>(enttEntity);
         camComp.aspectRatio = aspectRatio;
         camComp.updateProjectionMatrix();
-        camComp.updateViewMatrix(transform.position, transform.rotation);
+
+        // Use the world-space eye position but the camera's LOCAL Euler rotation. transform.rotation
+        // here is the world matrix decomposed via extractEulerAngleXYZ, whose gimbal singularity is on
+        // the middle (yaw) axis at ±90° — feeding that back through updateViewMatrix flips a yawing
+        // fixed-pitch camera to the sky as it crosses ±90°. The stored local rotation has no such
+        // singularity (VK-1350).
+        glm::vec3 localRotation = transform.rotation;
+        if (registry.all_of<components::TransformComponent>(enttEntity))
+        {
+            localRotation = registry.get<components::TransformComponent>(enttEntity).rotation;
+        }
+        camComp.updateViewMatrix(transform.position, localRotation);
 
         state.viewMatrix = camComp.viewMatrix;
         state.projectionMatrix = camComp.projectionMatrix;
         state.position = transform.position;
 
         glm::mat4 rotMat = glm::mat4(1.0f);
-        rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
-        rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
+        rotMat = glm::rotate(rotMat, glm::radians(localRotation.y), glm::vec3(0, 1, 0));
+        rotMat = glm::rotate(rotMat, glm::radians(localRotation.x), glm::vec3(1, 0, 0));
         state.forward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
         return true;
     }

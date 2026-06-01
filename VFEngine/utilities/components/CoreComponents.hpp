@@ -170,6 +170,16 @@ namespace components
         {
             viewMatrix = glm::inverse(worldMatrix);
         }
+
+        // Build the camera view from a world-space eye position and the camera's local Euler
+        // rotation. Cameras MUST use this (not a decomposed world matrix): decomposing to Euler
+        // goes through extractEulerAngleXYZ, whose gimbal singularity is on the middle (yaw) axis
+        // at ±90°, so a yawing fixed-pitch camera flips to the sky as it crosses ±90° (VK-1350).
+        // The local Euler rotation is the authoritative, singularity-free source.
+        void updateViewMatrixFromWorldEye(const glm::mat4& worldMatrix, const glm::vec3& localRotation)
+        {
+            updateViewMatrix(glm::vec3(worldMatrix[3]), localRotation);
+        }
     };
 
     struct RenderTextureComponent
