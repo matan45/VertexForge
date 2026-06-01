@@ -57,6 +57,12 @@ namespace controllers::offscreen
         instanceBatchCache.erase(materialPath);
     }
 
+    void FramePreparationSystem::clearAllMaterialCache()
+    {
+        pbrCache.clear();
+        instanceBatchCache.clear();
+    }
+
     void FramePreparationSystem::prepareMeshes(const FrameContext& ctx)
     {
         auto* renderHandler = ctx.renderHandler;
