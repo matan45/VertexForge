@@ -170,6 +170,31 @@ namespace components
         {
             viewMatrix = glm::inverse(worldMatrix);
         }
+
+        // Build the camera view from the entity's world transform while interpreting the camera's
+        // OWN rotation in camera (Y·X·Z) order. Two traps this avoids (VK-1350):
+        //   * Inverting worldMatrix directly bakes in TransformComponent::getMatrix()'s object
+        //     X·Y·Z order, whose fixed-pitch vertical look is cos(yaw)·sin(pitch) — it zeroes at
+        //     yaw=±90° and flips sign past it (the sky-flip).
+        //   * Decomposing worldMatrix to Euler goes through extractEulerAngleXYZ, whose gimbal
+        //     singularity is on the middle (yaw) axis at ±90°, producing the same flip.
+        // Instead, strip the local object-order rotation back out of the world matrix (recovering
+        // the parent's world transform exactly) and re-apply the local rotation in camera order.
+        // This keeps a rotating parent's orientation (child/vehicle cameras) and never extracts an
+        // Euler angle, so there is no singularity. For a root camera the parent term is identity and
+        // this reduces to a plain camera-order local view.
+        void updateViewMatrixFromWorldEye(const glm::mat4& worldMatrix, const TransformComponent& localTransform)
+        {
+            glm::mat4 parentWorld = worldMatrix * glm::inverse(localTransform.getMatrix());
+
+            glm::mat4 localCamera = glm::translate(glm::mat4(1.0f), localTransform.position);
+            localCamera = glm::rotate(localCamera, glm::radians(localTransform.rotation.y), glm::vec3(0, 1, 0));
+            localCamera = glm::rotate(localCamera, glm::radians(localTransform.rotation.x), glm::vec3(1, 0, 0));
+            localCamera = glm::rotate(localCamera, glm::radians(localTransform.rotation.z), glm::vec3(0, 0, 1));
+            localCamera = glm::scale(localCamera, localTransform.scale);
+
+            viewMatrix = glm::inverse(parentWorld * localCamera);
+        }
     };
 
     struct RenderTextureComponent

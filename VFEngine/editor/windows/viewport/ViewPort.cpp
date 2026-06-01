@@ -134,19 +134,37 @@ namespace windows
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!registry.all_of<components::CameraComponent>(enttEntity)) return false;
 
+        if (!registry.all_of<components::TransformComponent>(enttEntity)) return false;
+
         auto& camComp = registry.get<components::CameraComponent>(enttEntity);
         camComp.aspectRatio = aspectRatio;
         camComp.updateProjectionMatrix();
-        camComp.updateViewMatrix(transform.position, transform.rotation);
+
+        // Derive the view from the camera's LOCAL rotation (camera Y·X·Z order), not from the world
+        // transform's decomposed Euler. `transform` here is a TransformData DTO from
+        // GetWorldTransformQuery, whose rotation is the world matrix decomposed via
+        // extractEulerAngleXYZ — that extraction's gimbal singularity is on the yaw axis at ±90°,
+        // which flips a yawing fixed-pitch camera to the sky. updateViewMatrixFromWorldEye keeps any
+        // parent orientation while interpreting the local rotation in camera order (VK-1350).
+        const auto& localTransform = registry.get<components::TransformComponent>(enttEntity);
+        if (registry.all_of<components::WorldTransformComponent>(enttEntity))
+        {
+            const auto& worldMatrix = registry.get<components::WorldTransformComponent>(enttEntity).worldMatrix;
+            camComp.updateViewMatrixFromWorldEye(worldMatrix, localTransform);
+        }
+        else
+        {
+            camComp.updateViewMatrix(localTransform.position, localTransform.rotation);
+        }
 
         state.viewMatrix = camComp.viewMatrix;
         state.projectionMatrix = camComp.projectionMatrix;
         state.position = transform.position;
 
-        glm::mat4 rotMat = glm::mat4(1.0f);
-        rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
-        rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
-        state.forward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
+        // Forward from the resolved camera world orientation (inverse of the view), so a child camera
+        // under a rotating parent reports the correct listener direction too.
+        glm::mat4 cameraWorld = glm::inverse(camComp.viewMatrix);
+        state.forward = glm::normalize(-glm::vec3(cameraWorld[2]));
         return true;
     }
 
