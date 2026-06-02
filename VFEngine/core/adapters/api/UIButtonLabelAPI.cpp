@@ -171,6 +171,450 @@ namespace core::api
                 return value::Value(data->textureRef.resolve());
             }});
 
+        // ---- UILabel property setters/getters (VK-1352) ----
+        // Each mirrors _native_ui_setLabelText: query the full UILabelData,
+        // mutate one field, write it back via SetUILabelDataCommand. The UI
+        // renderer re-reads the label data per-frame, so changes are live.
+
+        interpreter->registerNativeFunction("_native_ui_setLabelFontSize",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelFontSize"));
+                float size = extractFloat(args[1], "_native_ui_setLabelFontSize");
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.fontSize = size;
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelFontSize",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(0.0f);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelFontSize"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return value::Value(0.0f);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value(0.0f);
+
+                return value::Value(data->fontSize);
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setLabelColor",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 5) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelColor"));
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.color.r = extractFloat(args[1], "_native_ui_setLabelColor");
+                labelData.color.g = extractFloat(args[2], "_native_ui_setLabelColor");
+                labelData.color.b = extractFloat(args[3], "_native_ui_setLabelColor");
+                labelData.color.a = extractFloat(args[4], "_native_ui_setLabelColor");
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelColor",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto makeColor = [](float r, float g, float b, float a) -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(4, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(r));
+                    arr->set(1, value::Value(g));
+                    arr->set(2, value::Value(b));
+                    arr->set(3, value::Value(a));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return makeColor(0.0f, 0.0f, 0.0f, 0.0f);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelColor"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return makeColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return makeColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+                return makeColor(data->color.r, data->color.g, data->color.b, data->color.a);
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setLabelStyle",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelStyle"));
+                int64_t style = extractInt64(args[1], "_native_ui_setLabelStyle");
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.fontStyle = static_cast<uint8_t>(style);
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelStyle",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(static_cast<int64_t>(0));
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelStyle"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return value::Value(static_cast<int64_t>(0));
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value(static_cast<int64_t>(0));
+
+                return value::Value(static_cast<int64_t>(data->fontStyle));
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setLabelAlignment",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 3) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelAlignment"));
+                int64_t horizontal = extractInt64(args[1], "_native_ui_setLabelAlignment");
+                int64_t vertical = extractInt64(args[2], "_native_ui_setLabelAlignment");
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.horizontalAlignment = static_cast<uint8_t>(horizontal);
+                labelData.verticalAlignment = static_cast<uint8_t>(vertical);
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelAlignment",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto makeAlign = [](float h, float v) -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(2, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(h));
+                    arr->set(1, value::Value(v));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return makeAlign(0.0f, 0.0f);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelAlignment"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return makeAlign(0.0f, 0.0f);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return makeAlign(0.0f, 0.0f);
+
+                return makeAlign(static_cast<float>(data->horizontalAlignment),
+                                 static_cast<float>(data->verticalAlignment));
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setLabelOverflow",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelOverflow"));
+                int64_t overflow = extractInt64(args[1], "_native_ui_setLabelOverflow");
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.overflow = static_cast<uint8_t>(overflow);
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelOverflow",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(static_cast<int64_t>(0));
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelOverflow"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return value::Value(static_cast<int64_t>(0));
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value(static_cast<int64_t>(0));
+
+                return value::Value(static_cast<int64_t>(data->overflow));
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setLabelWordWrap",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelWordWrap"));
+                bool wrap = extractBool(args[1], "_native_ui_setLabelWordWrap");
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.wordWrap = wrap;
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelWordWrap",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(false);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelWordWrap"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return value::Value(false);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value(false);
+
+                return value::Value(data->wordWrap);
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setLabelSpacing",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 3) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelSpacing"));
+                float line = extractFloat(args[1], "_native_ui_setLabelSpacing");
+                float letter = extractFloat(args[2], "_native_ui_setLabelSpacing");
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.lineSpacing = line;
+                labelData.letterSpacing = letter;
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelSpacing",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto makeSpacing = [](float line, float letter) -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(2, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(line));
+                    arr->set(1, value::Value(letter));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return makeSpacing(0.0f, 0.0f);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelSpacing"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return makeSpacing(0.0f, 0.0f);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return makeSpacing(0.0f, 0.0f);
+
+                return makeSpacing(data->lineSpacing, data->letterSpacing);
+            }});
+
+        // Set the label's font by asset path (e.g. an imported .vfFont). Like
+        // setImageTexture, the path must resolve to a registered asset GUID.
+        interpreter->registerNativeFunction("_native_ui_setLabelFont",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelFont"));
+                std::string path = extractString(args[1], "_native_ui_setLabelFont");
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.fontRef = asset::AssetRef::fromPath(path);
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelFont",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(std::string(""));
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelFont"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return value::Value(std::string(""));
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value(std::string(""));
+
+                return value::Value(data->fontRef.resolve());
+            }});
+
+        // ---- UIImage colorTint + UIButton state colors ----
+        // Companions to _native_ui_setImageTexture / _native_ui_setButtonInteractable:
+        // needed so scripts can skin textured HUD images/buttons at runtime (a dark
+        // authored colorTint would otherwise multiply and darken the new texture).
+
+        interpreter->registerNativeFunction("_native_ui_setImageColor",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 5) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setImageColor"));
+
+                events::ui::GetUIImageDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto imageData = data.value();
+                imageData.colorTint.r = extractFloat(args[1], "_native_ui_setImageColor");
+                imageData.colorTint.g = extractFloat(args[2], "_native_ui_setImageColor");
+                imageData.colorTint.b = extractFloat(args[3], "_native_ui_setImageColor");
+                imageData.colorTint.a = extractFloat(args[4], "_native_ui_setImageColor");
+
+                events::ui::SetUIImageDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.imageData = imageData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getImageColor",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto makeColor = [](float r, float g, float b, float a) -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(4, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(r));
+                    arr->set(1, value::Value(g));
+                    arr->set(2, value::Value(b));
+                    arr->set(3, value::Value(a));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return makeColor(1.0f, 1.0f, 1.0f, 1.0f);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getImageColor"));
+
+                events::ui::HasUIImageComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return makeColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+                events::ui::GetUIImageDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return makeColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+                return makeColor(data->colorTint.r, data->colorTint.g,
+                                 data->colorTint.b, data->colorTint.a);
+            }});
+
+        // Set a UIButton's three interactive-state colors (normal/hovered/pressed)
+        // in one call. 13 args: id, then 3 RGBA quads.
+        interpreter->registerNativeFunction("_native_ui_setButtonColors",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 13) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setButtonColors"));
+
+                events::ui::GetUIButtonDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto buttonData = data.value();
+                buttonData.normalColor = glm::vec4(extractFloat(args[1], "_native_ui_setButtonColors"),
+                                                   extractFloat(args[2], "_native_ui_setButtonColors"),
+                                                   extractFloat(args[3], "_native_ui_setButtonColors"),
+                                                   extractFloat(args[4], "_native_ui_setButtonColors"));
+                buttonData.hoveredColor = glm::vec4(extractFloat(args[5], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[6], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[7], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[8], "_native_ui_setButtonColors"));
+                buttonData.pressedColor = glm::vec4(extractFloat(args[9], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[10], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[11], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[12], "_native_ui_setButtonColors"));
+
+                events::ui::SetUIButtonDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.buttonData = buttonData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
         vfLogInfo("[UIButtonLabelAPI] Registered Button/Label native functions");
     }
 }
