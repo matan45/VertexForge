@@ -256,6 +256,7 @@
     <ClInclude Include="impl\navmesh\NavmeshTileManager.hpp" />
     <ClInclude Include="impl\physics\ControllerServiceImpl.hpp" />
     <ClInclude Include="impl\physics\PhysicsAnimationServiceImpl.hpp" />
+    <ClInclude Include="impl\physics\PhysicsBodyBuilder.hpp" />
     <ClInclude Include="impl\physics\PhysicsPlayModeHandler.hpp" />
     <ClInclude Include="impl\physics\PhysicsServiceImpl.hpp" />
     <ClInclude Include="impl\project\FileOperationsServiceImpl.hpp" />
