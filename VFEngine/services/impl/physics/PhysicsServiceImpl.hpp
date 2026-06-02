@@ -2,6 +2,7 @@
 
 #include "../../interfaces/physics/IPhysicsService.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
+#include "../../events/EventTypes.hpp"
 
 namespace services {
 
@@ -55,6 +56,7 @@ namespace services {
 
     private:
         IPhysicsProvider* physicsProvider;
+        ::events::SubscriptionToken entityDeletedToken;
     };
 
 }

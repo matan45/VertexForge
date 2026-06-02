@@ -6,6 +6,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/physics/PhysicsEvents.hpp"
 
 namespace services
 {
@@ -45,6 +46,11 @@ namespace services
         if (sceneEntity.hasComponent<components::ColliderComponent>())
         {
             sceneEntity.removeComponent<components::ColliderComponent>();
+            // VK-1351: tear down the Jolt body so it doesn't leak when the collider is removed
+            // at runtime. The handler no-ops if no body exists, so this is safe.
+            events::physics::RemoveRigidBodyCommand removeBody;
+            removeBody.entity = entity;
+            ::events::EventDispatcher::instance().execute(removeBody);
             return true;
         }
         return false;
@@ -150,6 +156,11 @@ namespace services
         if (sceneEntity.hasComponent<components::RigidBodyComponent>())
         {
             sceneEntity.removeComponent<components::RigidBodyComponent>();
+            // VK-1351: tear down the Jolt body so it doesn't leak when the rigid body is
+            // removed at runtime. The handler no-ops if no body exists, so this is safe.
+            events::physics::RemoveRigidBodyCommand removeBody;
+            removeBody.entity = entity;
+            ::events::EventDispatcher::instance().execute(removeBody);
             return true;
         }
         return false;

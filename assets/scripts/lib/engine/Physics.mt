@@ -272,6 +272,32 @@ public class Physics {
     }
 
     // ============================================
+    // Body Lifecycle (VK-1351)
+    // ============================================
+
+    // Build the real physics body from this entity's already-configured Collider
+    // (+ optional RigidBody) component, positioned at the entity's current transform.
+    // Call AFTER the entity is positioned and AFTER addComponent("Collider") +
+    // setColliderSize / setCollisionLayer. Required for runtime-spawned entities to be
+    // mouse-pickable and collidable. Returns false if a body already exists or the entity
+    // has no physics components.
+    public static function createBody(int entityId): bool {
+        return _native_physics_createBody(entityId);
+    }
+
+    // Tear down then re-create the body. Use after changing size/layer/shape at runtime
+    // (createBody is a no-op when a body already exists). Returns false on failure.
+    public static function rebuildBody(int entityId): bool {
+        return _native_physics_rebuildBody(entityId);
+    }
+
+    // Destroy the physics body without removing the ECS components. Returns false if there
+    // was no body to destroy.
+    public static function destroyBody(int entityId): bool {
+        return _native_physics_destroyBody(entityId);
+    }
+
+    // ============================================
     // Raycasting
     // ============================================
 

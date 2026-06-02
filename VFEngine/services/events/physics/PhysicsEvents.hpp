@@ -38,6 +38,21 @@ namespace events::physics {
         std::string_view getName() const override { return "RemoveCollider"; }
     };
 
+    // Build a real physics body from an entity's already-configured Collider (+ optional
+    // RigidBody) component, positioned at the entity's current transform. Lets scripts spawn
+    // a pickable/collidable body for an entity created at runtime. (VK-1351)
+    struct CreatePhysicsBodyCommand : ::events::ICommand<bool> {
+        services::EntityHandle entity;
+        bool rebuild = false;   // true = tear down an existing body first, then re-create
+        std::string_view getName() const override { return "CreatePhysicsBody"; }
+    };
+
+    // Tear down an entity's physics body without removing its ECS components. (VK-1351)
+    struct DestroyPhysicsBodyCommand : ::events::ICommand<bool> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "DestroyPhysicsBody"; }
+    };
+
     struct ApplyForceCommand : ::events::ICommand<void> {
         services::EntityHandle entity;
         glm::vec3 force;
