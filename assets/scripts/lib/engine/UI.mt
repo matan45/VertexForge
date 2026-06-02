@@ -204,6 +204,30 @@ public class UI {
     }
 
     // ============================================
+    // Image / Button Tint Colors
+    // ============================================
+
+    // Set a UIImage's color tint (RGBA 0..1). The tint multiplies the texture,
+    // so use white (1,1,1,1) to show a texture at full brightness.
+    public static function setImageColor(int entityId, float r, float g, float b, float a): void {
+        _native_ui_setImageColor(entityId, r, g, b, a);
+    }
+
+    // Get a UIImage's color tint as a float[4] = [r, g, b, a]
+    public static function getImageColor(int entityId): float[] {
+        return _native_ui_getImageColor(entityId);
+    }
+
+    // Set a UIButton's normal/hovered/pressed colors in one call (each RGBA 0..1).
+    // These multiply the button's image, so use light colors over a texture skin.
+    public static function setButtonColors(int entityId,
+        float nr, float ng, float nb, float na,
+        float hr, float hg, float hb, float ha,
+        float pr, float pg, float pb, float pa): void {
+        _native_ui_setButtonColors(entityId, nr, ng, nb, na, hr, hg, hb, ha, pr, pg, pb, pa);
+    }
+
+    // ============================================
     // Checkbox State Constants
     // ============================================
     public static final int CHECKBOX_NORMAL = 0;

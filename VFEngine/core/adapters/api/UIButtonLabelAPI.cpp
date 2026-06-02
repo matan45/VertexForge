@@ -525,6 +525,96 @@ namespace core::api
                 return value::Value(data->fontRef.resolve());
             }});
 
+        // ---- UIImage colorTint + UIButton state colors ----
+        // Companions to _native_ui_setImageTexture / _native_ui_setButtonInteractable:
+        // needed so scripts can skin textured HUD images/buttons at runtime (a dark
+        // authored colorTint would otherwise multiply and darken the new texture).
+
+        interpreter->registerNativeFunction("_native_ui_setImageColor",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 5) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setImageColor"));
+
+                events::ui::GetUIImageDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto imageData = data.value();
+                imageData.colorTint.r = extractFloat(args[1], "_native_ui_setImageColor");
+                imageData.colorTint.g = extractFloat(args[2], "_native_ui_setImageColor");
+                imageData.colorTint.b = extractFloat(args[3], "_native_ui_setImageColor");
+                imageData.colorTint.a = extractFloat(args[4], "_native_ui_setImageColor");
+
+                events::ui::SetUIImageDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.imageData = imageData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getImageColor",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto makeColor = [](float r, float g, float b, float a) -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(4, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(r));
+                    arr->set(1, value::Value(g));
+                    arr->set(2, value::Value(b));
+                    arr->set(3, value::Value(a));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return makeColor(1.0f, 1.0f, 1.0f, 1.0f);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getImageColor"));
+
+                events::ui::HasUIImageComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return makeColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+                events::ui::GetUIImageDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return makeColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+                return makeColor(data->colorTint.r, data->colorTint.g,
+                                 data->colorTint.b, data->colorTint.a);
+            }});
+
+        // Set a UIButton's three interactive-state colors (normal/hovered/pressed)
+        // in one call. 13 args: id, then 3 RGBA quads.
+        interpreter->registerNativeFunction("_native_ui_setButtonColors",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 13) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setButtonColors"));
+
+                events::ui::GetUIButtonDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto buttonData = data.value();
+                buttonData.normalColor = glm::vec4(extractFloat(args[1], "_native_ui_setButtonColors"),
+                                                   extractFloat(args[2], "_native_ui_setButtonColors"),
+                                                   extractFloat(args[3], "_native_ui_setButtonColors"),
+                                                   extractFloat(args[4], "_native_ui_setButtonColors"));
+                buttonData.hoveredColor = glm::vec4(extractFloat(args[5], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[6], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[7], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[8], "_native_ui_setButtonColors"));
+                buttonData.pressedColor = glm::vec4(extractFloat(args[9], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[10], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[11], "_native_ui_setButtonColors"),
+                                                    extractFloat(args[12], "_native_ui_setButtonColors"));
+
+                events::ui::SetUIButtonDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.buttonData = buttonData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
         vfLogInfo("[UIButtonLabelAPI] Registered Button/Label native functions");
     }
 }
