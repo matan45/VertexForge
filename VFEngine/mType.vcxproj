@@ -466,6 +466,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\registration\InterfaceRegistrar.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\ExpectedTypeContext.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\GenericPatternAnalyzer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\NullConditionFacts.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\NullNarrowingTracker.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\TypeInferenceEngine.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\TypeNameValidator.hpp" />
