@@ -7,6 +7,7 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/ui/UIEvents.hpp"
+#include "asset/AssetRef.hpp"
 
 namespace core::api
 {
@@ -122,6 +123,52 @@ namespace core::api
                 setCmd.labelData = labelData;
                 dispatcher.execute(setCmd);
                 return value::Value();
+            }});
+
+        // Point a UIImage at a texture asset by path at runtime. Mirrors
+        // _native_ui_setLabelText: query the current image data, swap the
+        // textureRef, and write it back. The UI renderer resolves textureRef
+        // per-frame, so the swap is live (used by the RTS selection portrait
+        // + command-card icons). Path must be a registered asset (AssetRef
+        // ::fromPath resolves path -> GUID via the AssetDatabase).
+        interpreter->registerNativeFunction("_native_ui_setImageTexture",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setImageTexture"));
+                std::string path = extractString(args[1], "_native_ui_setImageTexture");
+
+                events::ui::GetUIImageDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto imageData = data.value();
+                imageData.textureRef = asset::AssetRef::fromPath(path);
+
+                events::ui::SetUIImageDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.imageData = imageData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getImageTexture",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(std::string(""));
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getImageTexture"));
+
+                events::ui::HasUIImageComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return value::Value(std::string(""));
+
+                events::ui::GetUIImageDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value(std::string(""));
+
+                return value::Value(data->textureRef.resolve());
             }});
 
         vfLogInfo("[UIButtonLabelAPI] Registered Button/Label native functions");
