@@ -133,7 +133,7 @@ project (PLUGIN_NAME)
 
       io.writefile(sdk .. "/template/MyPlugin.vfplugin", [[
 {
-    "apiVersion": 6,
+    "apiVersion": 7,
     "author": "you",
     "capabilities": ["graphics", "terrain", "input", "editor"],
     "dependencies": [],

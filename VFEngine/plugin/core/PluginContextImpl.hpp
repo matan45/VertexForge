@@ -31,6 +31,8 @@ namespace plugin {
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
         std::vector<plugin::CustomPipelineHandle> managedCustomPipelines;
         std::vector<plugin::CustomMeshHandle> managedCustomMeshes;
+        struct HeightFieldBodyKey { entt::entity entity; int32_t tileX; int32_t tileZ; };
+        std::vector<HeightFieldBodyKey> managedHeightFieldBodies;
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
         std::vector<services::AudioHandle> managedAudioHandles;
         std::vector<services::VFXInstanceId> managedVFXInstances;
@@ -99,6 +101,13 @@ namespace plugin {
         bool isGrounded(entt::entity entity) override;
         bool hasRigidBody(entt::entity entity) override;
         glm::vec3 getPhysicsPosition(entt::entity entity) override;
+        bool createPhysicsBody(entt::entity entity, bool rebuild) override;
+        bool destroyPhysicsBody(entt::entity entity) override;
+        bool createHeightFieldBody(entt::entity entity, int32_t tileX, int32_t tileZ,
+                                   std::vector<float> heightSamples, uint32_t sampleCount,
+                                   glm::vec3 worldOrigin, float vertexSpacing,
+                                   float friction, float restitution) override;
+        void destroyHeightFieldBody(entt::entity entity, int32_t tileX, int32_t tileZ) override;
 
         // Terrain API
         terrain::TerrainHeightAtResult getTerrainHeightAt(float worldX, float worldZ) override;
@@ -115,6 +124,7 @@ namespace plugin {
         bool isActionPressed(const std::string& actionName) override;
         float getAxis1DValue(const std::string& axisName) override;
         glm::vec2 getAxis2DValue(const std::string& axisName) override;
+        bool screenToWorldRay(glm::vec2 screenPos, glm::vec3& outOrigin, glm::vec3& outDirection) override;
 
         // NavMesh API
         void setAgentDestination(entt::entity entity, glm::vec3 target) override;

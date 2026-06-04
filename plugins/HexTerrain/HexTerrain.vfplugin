@@ -1,7 +1,7 @@
 {
-    "apiVersion": 6,
+    "apiVersion": 7,
     "author": "VertexForge",
-    "capabilities": ["graphics", "terrain", "input", "editor"],
+    "capabilities": ["graphics", "terrain", "input", "editor", "physics"],
     "dependencies": [],
     "description": "Civilization-style hexagonal tile overlay rendered with a custom shader via the plugin custom render pipeline API (F7 to toggle)",
     "enabled": true,

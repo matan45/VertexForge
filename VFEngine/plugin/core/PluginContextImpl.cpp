@@ -14,6 +14,7 @@
 #include "events/terrain/TerrainRaycastEvents.hpp"
 #include "events/input/InputEvents.hpp"
 #include "events/input/ActionMappingEvents.hpp"
+#include "events/input/RuntimePickerEvents.hpp"
 #include "events/navmesh/NavmeshEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "data/EntityConversion.hpp"
@@ -491,6 +492,71 @@ namespace plugin {
         events::EventDispatcher::instance().execute(cmd);
     }
 
+    bool PluginContextImpl::createPhysicsBody(entt::entity entity, bool rebuild)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            vfLogWarning("[Plugin:{}] Cannot create physics body - physics capability not available", pluginName);
+            return false;
+        }
+        events::physics::CreatePhysicsBodyCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.rebuild = rebuild;
+        return events::EventDispatcher::instance().execute(cmd);
+    }
+
+    bool PluginContextImpl::destroyPhysicsBody(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return false;
+        }
+        events::physics::DestroyPhysicsBodyCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().execute(cmd);
+    }
+
+    bool PluginContextImpl::createHeightFieldBody(entt::entity entity, int32_t tileX, int32_t tileZ,
+                                                  std::vector<float> heightSamples, uint32_t sampleCount,
+                                                  glm::vec3 worldOrigin, float vertexSpacing,
+                                                  float friction, float restitution)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            vfLogWarning("[Plugin:{}] Cannot create height-field body - physics capability not available", pluginName);
+            return false;
+        }
+        events::physics::CreateHeightFieldBodyCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.tileX = tileX;
+        cmd.tileZ = tileZ;
+        cmd.heightSamples = std::move(heightSamples);
+        cmd.sampleCount = sampleCount;
+        cmd.worldOrigin = worldOrigin;
+        cmd.vertexSpacing = vertexSpacing;
+        cmd.friction = friction;
+        cmd.restitution = restitution;
+        const bool created = events::EventDispatcher::instance().execute(cmd);
+
+        if (created) {
+            managedHeightFieldBodies.push_back({entity, tileX, tileZ});
+            vfLogInfo("[Plugin:{}] Created height-field body ({}x{} samples)", pluginName, sampleCount, sampleCount);
+        }
+        return created;
+    }
+
+    void PluginContextImpl::destroyHeightFieldBody(entt::entity entity, int32_t tileX, int32_t tileZ)
+    {
+        if (!hasCapability(std::string(capability::physics))) return;
+
+        events::physics::DestroyHeightFieldBodyCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.tileX = tileX;
+        cmd.tileZ = tileZ;
+        events::EventDispatcher::instance().execute(cmd);
+
+        std::erase_if(managedHeightFieldBodies, [&](const HeightFieldBodyKey& key) {
+            return key.entity == entity && key.tileX == tileX && key.tileZ == tileZ;
+        });
+    }
+
     void PluginContextImpl::setLinearVelocity(entt::entity entity, glm::vec3 velocity)
     {
         if (!hasCapability(std::string(capability::physics))) {
@@ -676,6 +742,21 @@ namespace plugin {
         events::input::GetAxis2DValueQuery q;
         q.axisName = axisName;
         return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::screenToWorldRay(glm::vec2 screenPos, glm::vec3& outOrigin, glm::vec3& outDirection)
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return false;
+        }
+        events::input::ScreenToWorldRayQuery q;
+        q.screenPos = screenPos;
+        auto ray = events::EventDispatcher::instance().query(q);
+        if (!ray.has_value()) return false;
+
+        outOrigin = ray->origin;
+        outDirection = ray->direction;
+        return true;
     }
 
     // ========================================================================
@@ -903,6 +984,18 @@ namespace plugin {
             }
         }
         managedCustomMeshes.clear();
+
+        for (const auto& key : managedHeightFieldBodies) {
+            events::physics::DestroyHeightFieldBodyCommand cmd;
+            cmd.entity = services::internal::toHandle(key.entity);
+            cmd.tileX = key.tileX;
+            cmd.tileZ = key.tileZ;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        managedHeightFieldBodies.clear();
 
         for (const auto& window : registeredWindows) {
             controllers::imguiHandler::ImguiWindowHandler::remove(window);

@@ -53,6 +53,30 @@ namespace events::physics {
         std::string_view getName() const override { return "DestroyPhysicsBody"; }
     };
 
+    // Create a static Jolt height-field body from raw height samples (square
+    // row-major sampleCount x sampleCount grid of absolute Y heights). Reuses the
+    // terrain-tile collider machinery; tileX/tileZ key multiple fields per entity.
+    struct CreateHeightFieldBodyCommand : ::events::ICommand<bool> {
+        services::EntityHandle entity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        mutable std::vector<float> heightSamples;
+        uint32_t sampleCount = 0;
+        glm::vec3 worldOrigin{0.0f};
+        float vertexSpacing = 1.0f;
+        float friction = 0.5f;
+        float restitution = 0.0f;
+        uint8_t collisionLayer = 0;
+        std::string_view getName() const override { return "CreateHeightFieldBody"; }
+    };
+
+    struct DestroyHeightFieldBodyCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        std::string_view getName() const override { return "DestroyHeightFieldBody"; }
+    };
+
     struct ApplyForceCommand : ::events::ICommand<void> {
         services::EntityHandle entity;
         glm::vec3 force;

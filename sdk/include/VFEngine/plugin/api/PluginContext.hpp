@@ -208,6 +208,30 @@ namespace plugin {
         virtual bool hasRigidBody(entt::entity entity) = 0;
         virtual glm::vec3 getPhysicsPosition(entt::entity entity) = 0;
 
+        // === Runtime Physics Body Creation ===
+        // Only available when hasCapability(capability::physics) is true.
+
+        // Build a real Jolt body for an entity from its Transform + Collider (+ optional
+        // RigidBody) components — attach those via getRegistry() first. Supported shapes
+        // (components::ColliderComponent::shape): Box, Sphere, Capsule, ConvexMesh,
+        // TriangleMesh. Without a RigidBodyComponent the body is Static.
+        // rebuild=true tears down an existing body first. Returns false on failure.
+        virtual bool createPhysicsBody(entt::entity entity, bool rebuild = false) = 0;
+
+        // Tear down the entity's physics body (its ECS components are left untouched).
+        virtual bool destroyPhysicsBody(entt::entity entity) = 0;
+
+        // Create a static Jolt height-field body from raw samples: a row-major
+        // sampleCount x sampleCount grid of absolute Y heights, cell size vertexSpacing,
+        // placed at worldOrigin. tileX/tileZ key multiple fields under one entity.
+        // Destroyed automatically on plugin unload.
+        virtual bool createHeightFieldBody(entt::entity entity, int32_t tileX, int32_t tileZ,
+                                           std::vector<float> heightSamples, uint32_t sampleCount,
+                                           glm::vec3 worldOrigin, float vertexSpacing,
+                                           float friction = 0.5f, float restitution = 0.0f) = 0;
+
+        virtual void destroyHeightFieldBody(entt::entity entity, int32_t tileX, int32_t tileZ) = 0;
+
         // === Terrain API ===
         // Only available when hasCapability(capability::terrain) is true.
 
@@ -230,6 +254,11 @@ namespace plugin {
         virtual bool isActionPressed(const std::string& actionName) = 0;
         virtual float getAxis1DValue(const std::string& axisName) = 0;
         virtual glm::vec2 getAxis2DValue(const std::string& axisName) = 0;
+
+        // Screen pixel -> world-space picking ray via the primary camera + active
+        // viewport (works in both edit and play mode — pass getMousePosition()).
+        // Returns false when no camera/viewport is available.
+        virtual bool screenToWorldRay(glm::vec2 screenPos, glm::vec3& outOrigin, glm::vec3& outDirection) = 0;
 
         // === NavMesh API ===
         // Only available when hasCapability(capability::navmesh) is true.
