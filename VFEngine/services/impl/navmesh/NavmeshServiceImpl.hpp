@@ -57,6 +57,7 @@ namespace services
 
     private:
         void pollBakeCompletion();
+        void attachNavmeshAssetToSceneRoot(const std::string& assetPath);
 
         void collectSceneGeometry(const types::NavmeshBakeSettings& settings,
                                   navigation::NavmeshInputGeometry& outGeometry);
