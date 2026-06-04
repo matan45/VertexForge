@@ -1,0 +1,13 @@
+﻿{
+    "apiVersion": 6,
+    "author": "you",
+    "capabilities": ["graphics", "terrain", "input", "editor"],
+    "dependencies": [],
+    "description": "Out-of-tree plugin built against the VertexForge SDK",
+    "enabled": true,
+    "library": "SDKPluginTest.dll",
+    "loadOrder": 200,
+    "name": "SDKPluginTest",
+    "version": "1.0.0"
+}
+

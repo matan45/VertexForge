@@ -1636,6 +1636,7 @@ project "ispc_texcomp"
 -- then re-run `premake5 vs2022`. No edits to this file needed.
 -- ============================================================================
 include "plugins/plugin_sdk.lua"  -- defines vfPluginProject() used by each plugin's premake5.lua
+include "tools/export_sdk.lua"   -- adds `premake5 export-sdk` (packages the out-of-tree plugin SDK)
 
 group "Plugins"
 for _, pluginDir in ipairs(os.matchdirs("plugins/*")) do
