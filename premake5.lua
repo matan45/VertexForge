@@ -1691,8 +1691,11 @@ project "HexTerrain"
       vulkanLibPath.."/Include",
       "VFEngine/plugin",
       "VFEngine/utilities",
-      "VFEngine/services"
+      "VFEngine/services",
+      "VFEngine/core/controllers"
    }
+
+   links { "imgui" }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
