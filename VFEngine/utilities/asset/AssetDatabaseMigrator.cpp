@@ -26,6 +26,7 @@ namespace asset
         if (ext == ".vfvfx")           return resource::AssetType::VFX;
         if (ext == ".vffont")          return resource::AssetType::Font;
         if (ext == ".vfnavmesh")       return resource::AssetType::Navmesh;
+        if (ext == ".vfnavindex")      return resource::AssetType::Navmesh;
         if (ext == ".vfinputmapping") return resource::AssetType::InputMapping;
         if (ext == ".vfterrain")      return resource::AssetType::Terrain;
         if (ext == ".vfterrainmat")   return resource::AssetType::TerrainMaterial;
@@ -51,7 +52,7 @@ namespace asset
             ".vfimage", ".vfhdr", ".vfmesh", ".vfaudio", ".vfanim",
             ".vfmat", ".vfmatinstance", ".vfanimator", ".vfvfx",
             ".vffont", ".vfscene", ".vfprefab", ".vfterrain",
-            ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfimposter",
+            ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfnavindex", ".vfimposter",
             ".vfinputmapping", ".vfbehaviortree", ".vfphysanim",
             ".mt"
         };

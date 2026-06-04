@@ -365,20 +365,28 @@ namespace services
         bool result = navigation::NavmeshSerializer::save(filePath, header, tiles);
         if (result)
         {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
-            if (rootHandle.isValid())
-            {
-                auto rootEntity = internal::fromHandle(rootHandle);
-                registry.emplace_or_replace<components::NavmeshComponent>(rootEntity,
-                    components::NavmeshComponent{asset::AssetRef::fromPath(filePath)});
-            }
+            attachNavmeshAssetToSceneRoot(filePath);
 
             events::resource::AssetSavedNotification notif;
             notif.filePath = filePath;
             ::events::EventDispatcher::instance().publish(notif);
         }
         return result;
+    }
+
+    void NavmeshServiceImpl::attachNavmeshAssetToSceneRoot(const std::string& assetPath)
+    {
+        auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
+        if (!rootHandle.isValid())
+        {
+            vfLogWarning("NavmeshService: No scene root to attach navmesh asset '{}'", assetPath);
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto rootEntity = internal::fromHandle(rootHandle);
+        registry.emplace_or_replace<components::NavmeshComponent>(rootEntity,
+            components::NavmeshComponent{asset::AssetRef::fromPath(assetPath)});
     }
 
     bool NavmeshServiceImpl::loadNavmesh(const std::string& filePath)
@@ -584,12 +592,34 @@ namespace services
 
     bool NavmeshServiceImpl::saveNavmeshTiled(const std::string& directory)
     {
-        return tileManager.saveNavmeshTiled(directory);
+        bool result = tileManager.saveNavmeshTiled(directory);
+        if (result)
+        {
+            std::string indexPath = directory + "/index.vfNavIndex";
+            attachNavmeshAssetToSceneRoot(indexPath);
+
+            events::resource::AssetSavedNotification notif;
+            notif.filePath = indexPath;
+            ::events::EventDispatcher::instance().publish(notif);
+        }
+        return result;
     }
 
     bool NavmeshServiceImpl::loadNavmeshTiled(const std::string& directory)
     {
-        return tileManager.loadNavmeshTiled(directory, lastBakeSettings);
+        bool success = tileManager.loadNavmeshTiled(directory, lastBakeSettings);
+        if (success)
+        {
+            // Re-attach the asset ref so a manual load also links the navmesh
+            // to the scene (e.g. after the scene was saved without it)
+            attachNavmeshAssetToSceneRoot(directory + "/index.vfNavIndex");
+
+            events::navmesh::NavmeshBakeCompleteNotification notification;
+            notification.success = true;
+            notification.message = "Navmesh loaded from tiled directory";
+            ::events::EventDispatcher::instance().publish(notification);
+        }
+        return success;
     }
 
     void NavmeshServiceImpl::drawOffMeshLinkDebug()
