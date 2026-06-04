@@ -58,6 +58,7 @@ namespace windows
 
         
         bool isPlaying = false;
+        bool isScrubbing = false;
         float playbackPosition = 0.0f;
         float volume = 1.0f;
         bool loopEnabled = false;

@@ -115,6 +115,9 @@ namespace windows
                     frames = result.frames;
                     dataSizeBytes = result.dataSizeBytes;
                     waveformCache = std::move(result.waveformCache);
+                    audioDurationSeconds = (sampleRate > 0)
+                        ? static_cast<float>(frames) / static_cast<float>(sampleRate)
+                        : 0.0f;
                     audioLoaded = true;
                 }
                 else
@@ -318,15 +321,12 @@ namespace windows
                 playingQuery.handle = currentAudioHandle;
                 isPlaying = dispatcher.query(playingQuery);
                 
-                if (isPlaying)
+                if (isPlaying && !isScrubbing && audioDurationSeconds > 0.0f)
                 {
                     events::audio::GetPlaybackPositionQuery posQuery;
                     posQuery.handle = currentAudioHandle;
                     float currentPos = dispatcher.query(posQuery);
-                    if (audioDurationSeconds > 0.0f)
-                    {
-                        playbackPosition = currentPos / audioDurationSeconds;
-                    }
+                    playbackPosition = currentPos / audioDurationSeconds;
                 }
             }
             else
@@ -352,13 +352,6 @@ namespace windows
                         playCmd.params.loop = loopEnabled;
                         playCmd.params.pitch = pitch;
                         currentAudioHandle = dispatcher.execute(playCmd);
-                        
-                        if (currentAudioHandle.isValid())
-                        {
-                            events::audio::GetDurationQuery durQuery;
-                            durQuery.handle = currentAudioHandle;
-                            audioDurationSeconds = dispatcher.query(durQuery);
-                        }
                     }
                     else
                     {
@@ -383,16 +376,25 @@ namespace windows
 
             ImGui::Checkbox("Loop", &loopEnabled);
             
-            if (ImGui::SliderFloat("##Position", &playbackPosition, 0.0f, 1.0f, ""))
+            ImGui::SliderFloat("##Position", &playbackPosition, 0.0f, 1.0f, "");
+            if (ImGui::IsItemActive())
             {
+                isScrubbing = true;
+            }
+            if (ImGui::IsItemDeactivatedAfterEdit())
+            {
+                isScrubbing = false;
                 if (currentAudioHandle.isValid() && audioDurationSeconds > 0.0f)
                 {
-                    float seekSeconds = playbackPosition * audioDurationSeconds;
                     events::audio::SetPlaybackPositionCommand seekCmd;
                     seekCmd.handle = currentAudioHandle;
-                    seekCmd.seconds = seekSeconds;
+                    seekCmd.seconds = playbackPosition * audioDurationSeconds;
                     dispatcher.execute(seekCmd);
                 }
+            }
+            else if (ImGui::IsItemDeactivated())
+            {
+                isScrubbing = false;
             }
             
             if (audioDurationSeconds > 0.0f)
@@ -492,15 +494,18 @@ namespace windows
         ImGui::InvisibleButton("##WaveformCanvas", canvasSize);
         if (ImGui::IsItemActive())
         {
+            isScrubbing = true;
             float clickX = (ImGui::GetIO().MousePos.x - canvasPos.x) / canvasSize.x;
-            clickX = std::clamp(clickX, 0.0f, 1.0f);
-            playbackPosition = clickX;
-
+            playbackPosition = std::clamp(clickX, 0.0f, 1.0f);
+        }
+        if (ImGui::IsItemDeactivated())
+        {
+            isScrubbing = false;
             if (currentAudioHandle.isValid() && audioDurationSeconds > 0.0f)
             {
                 events::audio::SetPlaybackPositionCommand seekCmd;
                 seekCmd.handle = currentAudioHandle;
-                seekCmd.seconds = clickX * audioDurationSeconds;
+                seekCmd.seconds = playbackPosition * audioDurationSeconds;
                 events::EventDispatcher::instance().execute(seekCmd);
             }
         }

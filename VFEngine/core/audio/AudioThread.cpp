@@ -369,12 +369,14 @@ namespace core::audio
         {
             AudioHandle internal = resolveHandle(extHandle);
             AudioStateSnapshot::SourceState state;
+            bool sourceFinished = false;
 
             if (StreamingAudioManager::isStreamingHandle(internal))
             {
                 state.playing = deps.streamingManager->isPlaying(internal);
                 state.playbackPosition = deps.streamingManager->getPlaybackPosition(internal);
                 state.duration = deps.streamingManager->getDuration(internal);
+                sourceFinished = deps.streamingManager->isFinished(internal);
             }
             else
             {
@@ -383,6 +385,7 @@ namespace core::audio
                 {
                     state.playing = source->isPlaying();
                     state.playbackPosition = source->getPlaybackPosition();
+                    sourceFinished = source->isStopped();
                 }
                 else
                 {
@@ -393,7 +396,9 @@ namespace core::audio
 
             snapshot.sources[extHandle] = state;
 
-            if (!state.playing)
+            // Only GC truly finished sources — paused sources must keep their
+            // handle mappings so resume/seek commands still resolve
+            if (sourceFinished)
             {
                 finished.push_back(extHandle);
             }

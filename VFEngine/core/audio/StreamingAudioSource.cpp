@@ -411,7 +411,7 @@ namespace core::audio
         // Clamp to valid range (must match what seekToTime does internally)
         seconds = std::max(0.0f, std::min(seconds, streamHandle->getDuration()));
 
-        bool wasPlaying = (state == StreamingState::Playing);
+        StreamingState prevState = state;
 
         if (sourceId != 0)
         {
@@ -441,9 +441,14 @@ namespace core::audio
             queueBuffer(bufferId);
         }
 
-        if (wasPlaying)
+        if (prevState == StreamingState::Playing)
         {
             play();
+        }
+        else if (prevState == StreamingState::Paused)
+        {
+            // Buffers are queued at the new offset; stay paused so resume plays from there
+            state = StreamingState::Paused;
         }
         else
         {
