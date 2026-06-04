@@ -1630,86 +1630,18 @@ project "ispc_texcomp"
 
 
 -- ============================================================================
--- Plugin: PluginAPITest (tests VK-1276, VK-1277, VK-1279, VK-1287)
+-- External plugins — each plugin folder under plugins/ carries its own
+-- premake5.lua and is auto-discovered here. To add a plugin: create
+-- plugins/<Name>/ with <Name>.cpp, <Name>.vfplugin and a premake5.lua,
+-- then re-run `premake5 vs2022`. No edits to this file needed.
 -- ============================================================================
 group "Plugins"
-
-project "PluginAPITest"
-   kind "SharedLib"
-   language "C++"
-   cppdialect "C++20"
-   location "plugins/PluginAPITest"
-   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
-
-   files { "plugins/PluginAPITest/**.hpp", "plugins/PluginAPITest/**.cpp" }
-
-   includedirs {
-      "dependencies/spdlog/include",
-      "dependencies/glm",
-      "dependencies/entt/single_include",
-      "dependencies/imgui",
-      "dependencies/json/single_include",
-      vulkanLibPath.."/Include",
-      "VFEngine/plugin",
-      "VFEngine/utilities",
-      "VFEngine/services"
-   }
-
-   defines { "_CRT_SECURE_NO_WARNINGS" }
-
-   postbuildcommands {
-      "{COPY} ../../bin/PluginAPITest/%{cfg.buildcfg}/%{cfg.platform}/PluginAPITest.dll ../../plugins/PluginAPITest/"
-   }
-
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-
-
--- ============================================================================
--- Plugin: HexTerrain (hex tile overlay via custom render pipeline API)
--- ============================================================================
-project "HexTerrain"
-   kind "SharedLib"
-   language "C++"
-   cppdialect "C++20"
-   location "plugins/HexTerrain"
-   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
-
-   files { "plugins/HexTerrain/**.hpp", "plugins/HexTerrain/**.cpp" }
-
-   includedirs {
-      "dependencies/spdlog/include",
-      "dependencies/glm",
-      "dependencies/entt/single_include",
-      "dependencies/imgui",
-      "dependencies/json/single_include",
-      vulkanLibPath.."/Include",
-      "VFEngine/plugin",
-      "VFEngine/utilities",
-      "VFEngine/services",
-      "VFEngine/core/controllers"
-   }
-
-   links { "imgui" }
-
-   defines { "_CRT_SECURE_NO_WARNINGS" }
-
-   postbuildcommands {
-      "{COPY} ../../bin/HexTerrain/%{cfg.buildcfg}/%{cfg.platform}/HexTerrain.dll ../../plugins/HexTerrain/"
-   }
-
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+for _, pluginDir in ipairs(os.matchdirs("plugins/*")) do
+   if os.isfile(pluginDir .. "/premake5.lua") then
+      include(pluginDir)
+   end
+end
+group ""
 
 
 -- Project: assimp and softal need to build with cmake...
