@@ -140,6 +140,37 @@ namespace services {
                 return true;
             });
 
+        // Static Jolt height-field body from raw samples (plugin/runtime custom terrain).
+        // Reuses the terrain-tile collider machinery, keyed by (entity, tileX, tileZ).
+        dispatcher.registerCommandHandler<events::physics::CreateHeightFieldBodyCommand>(
+            [this](const events::physics::CreateHeightFieldBodyCommand& cmd) -> bool {
+                if (cmd.sampleCount == 0
+                    || cmd.heightSamples.size() < static_cast<size_t>(cmd.sampleCount) * cmd.sampleCount)
+                {
+                    vfLogWarning("CreateHeightFieldBody: invalid samples ({} provided, {}x{} required)",
+                                 cmd.heightSamples.size(), cmd.sampleCount, cmd.sampleCount);
+                    return false;
+                }
+
+                TerrainTileColliderInfo info;
+                info.tileX = cmd.tileX;
+                info.tileZ = cmd.tileZ;
+                info.heightSamples = cmd.heightSamples.data();
+                info.sampleCount = cmd.sampleCount;
+                info.worldOrigin = cmd.worldOrigin;
+                info.vertexSpacing = cmd.vertexSpacing;
+                info.friction = cmd.friction;
+                info.restitution = cmd.restitution;
+                info.collisionLayer = cmd.collisionLayer;
+                physicsProvider->addTerrainTileCollider(cmd.entity, info);
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<events::physics::DestroyHeightFieldBodyCommand>(
+            [this](const events::physics::DestroyHeightFieldBodyCommand& cmd) {
+                physicsProvider->removeTerrainTileCollider(cmd.entity, cmd.tileX, cmd.tileZ);
+            });
+
         // VK-1351: tear down the physics body when its entity is destroyed, so runtime-spawned
         // (and load-time) bodies don't leak in the physics world / PhysicsBodyRegistry.
         entityDeletedToken = dispatcher.subscribe<events::scene::EntityDeletedNotification>(

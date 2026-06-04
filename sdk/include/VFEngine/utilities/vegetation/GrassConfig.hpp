@@ -1,0 +1,37 @@
+#pragma once
+#include <glm/glm.hpp>
+
+namespace vegetation
+{
+    struct GrassRenderConfig
+    {
+        // Legacy fields - kept for serialization compatibility
+        glm::vec4 baseColor{0.1f, 0.4f, 0.05f, 1.0f};
+        glm::vec4 tipColor{0.2f, 0.6f, 0.1f, 1.0f};
+        float heightMin = 0.3f;
+        float heightMax = 0.8f;
+        float widthMin = 0.02f;
+        float widthMax = 0.05f;
+        float windStrength = 1.0f;
+        float slopeLimit = 0.7f;
+        float fadeStartDistance = 150.0f;
+        float fadeEndDistance = 300.0f;
+        float densityMultiplier = 1.0f;
+
+        glm::vec3 windDirection{1.0f, 0.0f, 0.0f};
+        float windSpeed = 1.0f;
+        float gustStrength = 0.3f;
+        float gustFrequency = 0.5f;
+
+        // Distance-based density fadeout
+        float densityFadeStartFactor = 0.5f;  // density fade starts at fadeStartDistance * this factor
+        float minDensityScale = 0.1f;         // minimum density fraction at max distance
+        bool terrainLODIntegration = true;     // scale density with terrain LOD
+
+        // Subsurface scattering
+        float sssDistortion = 0.2f;   // normal distortion for translucency (0-1)
+        float sssPower = 4.0f;        // falloff exponent for translucency highlight (1-16)
+        float sssScale = 0.5f;        // overall SSS intensity (0-1)
+
+    };
+}

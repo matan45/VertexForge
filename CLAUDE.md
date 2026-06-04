@@ -145,10 +145,12 @@ VFEngine/
     └── test_*.cpp           # one TU per feature area; auto-globbed by premake
 ```
 
-External plugins live outside `VFEngine/` under `plugins/<PluginName>/` (e.g. `plugins/PluginAPITest/`, `plugins/TestComponentPlugin/`). Each plugin:
-- builds as a `SharedLib` in the `Plugins` premake group, includes `VFEngine/plugin` for the SDK
+External plugins live outside `VFEngine/` under `plugins/<PluginName>/` (e.g. `plugins/PluginAPITest/`, `plugins/HexTerrain/`). Each plugin folder is self-contained:
+- carries its own `premake5.lua` (one line: `vfPluginProject("<Name>")` — shared setup in `plugins/plugin_sdk.lua`) — auto-discovered by the root `premake5.lua` under `group "Plugins"`, no root edits needed
+- compiles against the exported SDK headers in `sdk/` (NOT engine source) — `premake5 vs2022` auto-refreshes `sdk/` on every run, so **after editing engine headers re-run premake before building plugins**
 - ships a `<PluginName>.vfplugin` descriptor (JSON) alongside the DLL
 - copies its DLL back into `plugins/<PluginName>/` via postbuild, where `PluginManager` discovers it at runtime
+- out-of-tree development: `premake5 export-sdk` packages `sdk/` (headers + imgui.lib + project template); see `sdk/README.md`
 
 ### Services Layer
 
@@ -285,8 +287,9 @@ meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 ### New External Plugin
 1. Create `plugins/<PluginName>/<PluginName>.cpp` implementing `IPlugin` (see `VFEngine/plugin/api/IPlugin.hpp`); export via `VF_PLUGIN_EXPORT` macros from `PluginExport.hpp`
 2. Author `plugins/<PluginName>/<PluginName>.vfplugin` (JSON descriptor: name, version, entry, dependencies — parsed by `PluginDescriptor`)
-3. Add a `SharedLib` project under `group "Plugins"` in `premake5.lua`, include `VFEngine/plugin`, postbuild-copy the DLL back to `plugins/<PluginName>/`
+3. Add `plugins/<PluginName>/premake5.lua` containing just `vfPluginProject("<PluginName>")` (+ `links { "imgui" }` if it has editor UI) — all common setup lives in `plugins/plugin_sdk.lua`. The root `premake5.lua` auto-discovers it — just re-run `premake5 vs2022`
 4. `PluginManager` discovers and loads it from `plugins/` at editor startup; subscribe to engine events via `PluginEventBus` / `PluginContext`
+5. Custom shaders/geometry: `ctx->createCustomPipeline` / `uploadCustomMesh` / `drawCustomMesh` (graphics capability). Editor UI: implement `ImguiWindow`, `links { "imgui" }`, `ImGui::SetCurrentContext(ctx->getImGuiContext())`, then `ctx->registerEditorWindow(window, "Title")` — titled windows appear in the editor's Plugins menu
 
 ### New Unit Test
 1. Drop `test_<feature>.cpp` into `VFEngine/tests/` — no premake edit needed (glob)

@@ -153,6 +153,7 @@
     <ClInclude Include="adapters\physics\PhysicsConversions.hpp" />
     <ClInclude Include="adapters\physics\SocketAdapter.hpp" />
     <ClInclude Include="adapters\render\BillboardRenderAdapter.hpp" />
+    <ClInclude Include="adapters\render\CustomPipelineAdapter.hpp" />
     <ClInclude Include="adapters\render\DebugDrawAdapter.hpp" />
     <ClInclude Include="adapters\render\DecalRenderAdapter.hpp" />
     <ClInclude Include="adapters\render\EditorTextureAdapter.hpp" />
@@ -194,6 +195,7 @@
     <ClInclude Include="controllers\OffScreen.hpp" />
     <ClInclude Include="controllers\imguiHandler\ImguiWindow.hpp" />
     <ClInclude Include="controllers\imguiHandler\ImguiWindowHandler.hpp" />
+    <ClInclude Include="controllers\imguiHandler\PluginWindowRegistry.hpp" />
     <ClInclude Include="controllers\texture\EditorTexture.hpp" />
     <ClInclude Include="core\MainLoop.hpp" />
   </ItemGroup>
@@ -262,6 +264,7 @@
     <ClCompile Include="adapters\physics\PhysicsAdapterAnimationOps.cpp" />
     <ClCompile Include="adapters\physics\SocketAdapter.cpp" />
     <ClCompile Include="adapters\render\BillboardRenderAdapter.cpp" />
+    <ClCompile Include="adapters\render\CustomPipelineAdapter.cpp" />
     <ClCompile Include="adapters\render\DebugDrawAdapter.cpp" />
     <ClCompile Include="adapters\render\DecalRenderAdapter.cpp" />
     <ClCompile Include="adapters\render\EditorTextureAdapter.cpp" />
@@ -312,6 +315,7 @@
     <ClCompile Include="controllers\OffScreen.cpp" />
     <ClCompile Include="controllers\OffScreenSettings.cpp" />
     <ClCompile Include="controllers\imguiHandler\ImguiWindowHandler.cpp" />
+    <ClCompile Include="controllers\imguiHandler\PluginWindowRegistry.cpp" />
     <ClCompile Include="controllers\texture\EditorTexture.cpp" />
     <ClCompile Include="core\MainLoop.cpp" />
   </ItemGroup>

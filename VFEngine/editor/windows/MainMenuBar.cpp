@@ -24,6 +24,7 @@
 #include "world/WorldSectorWindow.hpp"
 #include "vfx/VFXDebugWindow.hpp"
 #include "plugin/PluginManagerWindow.hpp"
+#include "imguiHandler/PluginWindowRegistry.hpp"
 #include "debug/TaskGraphWindow.hpp"
 #include "config/InputActionMappingWindow.hpp"
 #include "animation/AnimationDebugWindow.hpp"
@@ -86,6 +87,7 @@ namespace windows
             handleWindowMenu();
             handleAddMenu();
             handleToolsMenu();
+            handlePluginsMenu();
             handleScriptsMenu();
             handleDebug();
             ImGui::EndMainMenuBar();
@@ -285,6 +287,28 @@ namespace windows
         if (!ImGui::BeginMenu("Tools")) return;
         if (ImGui::MenuItem("Generate Heightmap") && heightmapGeneratorWindow) heightmapGeneratorWindow->show();
         if (ImGui::MenuItem("Remove Background") && backgroundRemovalWindow) backgroundRemovalWindow->show();
+        ImGui::EndMenu();
+    }
+
+    void MainMenuBar::handlePluginsMenu()
+    {
+        auto& entries = controllers::imguiHandler::PluginWindowRegistry::getEntries();
+        if (entries.empty()) return;
+
+        if (!ImGui::BeginMenu("Plugins")) return;
+
+        const std::string* lastPlugin = nullptr;
+        for (auto& entry : entries)
+        {
+            // Group windows under their plugin's name when more than one plugin registers
+            if (!lastPlugin || *lastPlugin != entry.pluginName)
+            {
+                if (lastPlugin) ImGui::Separator();
+                ImGui::SeparatorText(entry.pluginName.c_str());
+                lastPlugin = &entry.pluginName;
+            }
+            ImGui::MenuItem(entry.title.c_str(), nullptr, &entry.visible);
+        }
         ImGui::EndMenu();
     }
 

@@ -33,6 +33,7 @@
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "impl/render/RenderHookServiceImpl.hpp"
+#include "impl/render/CustomPipelineServiceImpl.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
 #include "impl/render/BillboardRenderServiceImpl.hpp"
 #include "impl/render/DecalRenderServiceImpl.hpp"
@@ -123,6 +124,7 @@ namespace handlers
         }
 
         renderHookService = std::make_shared<services::RenderHookServiceImpl>(bootstrap->getRenderHookProvider());
+        customPipelineService = std::make_shared<services::CustomPipelineServiceImpl>(bootstrap->getCustomPipelineProvider());
         debugDrawService = std::make_shared<services::DebugDrawServiceImpl>(bootstrap->getDebugDrawProvider());
         billboardRenderService = std::make_shared<services::BillboardRenderServiceImpl>(bootstrap->getBillboardRenderProvider());
         decalRenderService = std::make_shared<services::DecalRenderServiceImpl>(bootstrap->getDecalRenderProvider());
@@ -322,6 +324,7 @@ namespace handlers
         if (ikComponentService) ikComponentService->registerEventHandlers();
         exportHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();
+        customPipelineService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
         assetLifecycleService->registerEventHandlers();
         worldSectorService->registerEventHandlers();

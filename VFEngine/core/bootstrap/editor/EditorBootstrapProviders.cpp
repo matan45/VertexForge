@@ -18,6 +18,7 @@
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
+#include "../../adapters/render/CustomPipelineAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
@@ -123,6 +124,11 @@ namespace core
     services::IRenderHookProvider* EditorBootstrap::getRenderHookProvider()
     {
         return renderHookAdapter.get();
+    }
+
+    services::ICustomPipelineProvider* EditorBootstrap::getCustomPipelineProvider()
+    {
+        return customPipelineAdapter.get();
     }
 
     services::IDebugDrawProvider* EditorBootstrap::getDebugDrawProvider()

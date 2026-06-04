@@ -1630,44 +1630,28 @@ project "ispc_texcomp"
 
 
 -- ============================================================================
--- Plugin: PluginAPITest (tests VK-1276, VK-1277, VK-1279, VK-1287)
+-- External plugins — each plugin folder under plugins/ carries its own
+-- premake5.lua and is auto-discovered here. To add a plugin: create
+-- plugins/<Name>/ with <Name>.cpp, <Name>.vfplugin and a premake5.lua,
+-- then re-run `premake5 vs2022`. No edits to this file needed.
 -- ============================================================================
+include "plugins/plugin_sdk.lua"  -- defines vfPluginProject() used by each plugin's premake5.lua
+include "tools/export_sdk.lua"   -- adds `premake5 export-sdk` (packages the out-of-tree plugin SDK)
+
+-- In-tree plugins compile against sdk/ (not engine source) so they continuously
+-- validate the SDK package. Refresh it on every solution generation — after
+-- changing engine headers, re-run `premake5 vs2022` before building plugins.
+if _ACTION and _ACTION:startswith("vs") then
+   vfExportPluginSDK()
+end
+
 group "Plugins"
-
-project "PluginAPITest"
-   kind "SharedLib"
-   language "C++"
-   cppdialect "C++20"
-   location "plugins/PluginAPITest"
-   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
-
-   files { "plugins/PluginAPITest/**.hpp", "plugins/PluginAPITest/**.cpp" }
-
-   includedirs {
-      "dependencies/spdlog/include",
-      "dependencies/glm",
-      "dependencies/entt/single_include",
-      "dependencies/imgui",
-      "dependencies/json/single_include",
-      vulkanLibPath.."/Include",
-      "VFEngine/plugin",
-      "VFEngine/utilities",
-      "VFEngine/services"
-   }
-
-   defines { "_CRT_SECURE_NO_WARNINGS" }
-
-   postbuildcommands {
-      "{COPY} ../../bin/PluginAPITest/%{cfg.buildcfg}/%{cfg.platform}/PluginAPITest.dll ../../plugins/PluginAPITest/"
-   }
-
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+for _, pluginDir in ipairs(os.matchdirs("plugins/*")) do
+   if os.isfile(pluginDir .. "/premake5.lua") then
+      include(pluginDir)
+   end
+end
+group ""
 
 
 -- Project: assimp and softal need to build with cmake...

@@ -22,6 +22,7 @@
 #include "ssr/SSRPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
+#include "custom/CustomPipelineManager.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "cloud/CloudPipeline.hpp"
@@ -48,6 +49,7 @@ namespace render
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
         , terrainRaycastPipeline{std::make_unique<gpudriven::TerrainRaycastPipeline>(device)}
         , postProcessPipeline{std::make_unique<postprocess::PostProcessPipeline>(device, swapChain, offscreenResources)}
+        , customPipelineManager{std::make_unique<custom::CustomPipelineManager>(device, swapChain)}
         , frameGraph{std::make_unique<graph::RenderGraph>(device)}
         , graphProfiler{std::make_unique<graph::RenderGraphProfiler>()}
     {
@@ -160,6 +162,32 @@ namespace render
         if (textPipelineInitialized) textPipeline->recreate();
         if (uiPipelineInitialized) uiPipeline->recreate();
         if (uiTextPipelineInitialized) uiTextPipeline->recreate();
+        if (customPipelineManager) customPipelineManager->recreatePipelines();
+    }
+
+    plugin::CustomPipelineHandle RenderPassHandler::createCustomPipeline(const plugin::CustomPipelineDesc& desc)
+    {
+        return customPipelineManager->createPipeline(desc);
+    }
+
+    plugin::CustomMeshHandle RenderPassHandler::uploadCustomMesh(plugin::CustomMeshData&& data)
+    {
+        return customPipelineManager->uploadMesh(std::move(data));
+    }
+
+    void RenderPassHandler::enqueueCustomDraw(plugin::CustomDrawItem&& item)
+    {
+        customPipelineManager->enqueueDraw(std::move(item));
+    }
+
+    void RenderPassHandler::destroyCustomPipeline(plugin::CustomPipelineHandle handle)
+    {
+        customPipelineManager->destroyPipeline(handle);
+    }
+
+    void RenderPassHandler::destroyCustomMesh(plugin::CustomMeshHandle handle)
+    {
+        customPipelineManager->destroyMesh(handle);
     }
 
     void RenderPassHandler::recreate()
@@ -231,6 +259,7 @@ namespace render
         if (wboitPipeline) wboitPipeline->cleanup();
         if (decalPipeline) decalPipeline->cleanup();
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer) gpuDrivenRenderer->cleanup();
+        if (customPipelineManager) customPipelineManager->cleanUp();
         if (cameraOcclusionManager) cameraOcclusionManager->cleanup();
         cleanUpPipelines();
         if (volumetricFogComposite) volumetricFogComposite->cleanup();
