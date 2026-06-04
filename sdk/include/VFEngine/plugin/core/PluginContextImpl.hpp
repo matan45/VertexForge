@@ -124,6 +124,7 @@ namespace plugin {
         bool isActionPressed(const std::string& actionName) override;
         float getAxis1DValue(const std::string& axisName) override;
         glm::vec2 getAxis2DValue(const std::string& axisName) override;
+        glm::vec2 getViewportMousePosition() override;
         bool screenToWorldRay(glm::vec2 screenPos, glm::vec3& outOrigin, glm::vec3& outDirection) override;
 
         // NavMesh API

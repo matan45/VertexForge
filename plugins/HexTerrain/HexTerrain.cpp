@@ -217,7 +217,7 @@ public:
         if (!ctx->hasCapability(std::string(plugin::capability::input))) return;
 
         glm::vec3 origin, direction;
-        if (!ctx->screenToWorldRay(ctx->getMousePosition(), origin, direction)) return;
+        if (!ctx->screenToWorldRay(ctx->getViewportMousePosition(), origin, direction)) return;
 
         glm::vec3 hitPos;
         if (raymarchHeight(origin, direction, hitPos))

@@ -255,9 +255,16 @@ namespace plugin {
         virtual float getAxis1DValue(const std::string& axisName) = 0;
         virtual glm::vec2 getAxis2DValue(const std::string& axisName) = 0;
 
+        // Mouse position relative to the active game viewport: the play-mode panel
+        // inside the editor (panel offset subtracted), or the full window in the
+        // standalone runtime. This is the coordinate space screenToWorldRay expects —
+        // getMousePosition() returns raw window coordinates and will be offset by the
+        // editor panel position.
+        virtual glm::vec2 getViewportMousePosition() = 0;
+
         // Screen pixel -> world-space picking ray via the primary camera + active
-        // viewport (works in both edit and play mode — pass getMousePosition()).
-        // Returns false when no camera/viewport is available.
+        // viewport. Pass getViewportMousePosition() (viewport-relative), NOT
+        // getMousePosition(). Returns false when no camera/viewport is available.
         virtual bool screenToWorldRay(glm::vec2 screenPos, glm::vec3& outOrigin, glm::vec3& outDirection) = 0;
 
         // === NavMesh API ===

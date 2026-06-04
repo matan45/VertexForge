@@ -744,6 +744,15 @@ namespace plugin {
         return events::EventDispatcher::instance().query(q);
     }
 
+    glm::vec2 PluginContextImpl::getViewportMousePosition()
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return glm::vec2(0.0f);
+        }
+        events::input::GetViewportMousePositionQuery q;
+        return events::EventDispatcher::instance().query(q);
+    }
+
     bool PluginContextImpl::screenToWorldRay(glm::vec2 screenPos, glm::vec3& outOrigin, glm::vec3& outDirection)
     {
         if (!hasCapability(std::string(capability::input))) {
