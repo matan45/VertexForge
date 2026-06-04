@@ -286,7 +286,7 @@ meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 ### New External Plugin
 1. Create `plugins/<PluginName>/<PluginName>.cpp` implementing `IPlugin` (see `VFEngine/plugin/api/IPlugin.hpp`); export via `VF_PLUGIN_EXPORT` macros from `PluginExport.hpp`
 2. Author `plugins/<PluginName>/<PluginName>.vfplugin` (JSON descriptor: name, version, entry, dependencies — parsed by `PluginDescriptor`)
-3. Add `plugins/<PluginName>/premake5.lua` (copy from `plugins/HexTerrain/premake5.lua`: SharedLib, paths relative to the plugin folder, postbuild-copy the DLL back to `plugins/<PluginName>/`). The root `premake5.lua` auto-discovers it — just re-run `premake5 vs2022`
+3. Add `plugins/<PluginName>/premake5.lua` containing just `vfPluginProject("<PluginName>")` (+ `links { "imgui" }` if it has editor UI) — all common setup lives in `plugins/plugin_sdk.lua`. The root `premake5.lua` auto-discovers it — just re-run `premake5 vs2022`
 4. `PluginManager` discovers and loads it from `plugins/` at editor startup; subscribe to engine events via `PluginEventBus` / `PluginContext`
 5. Custom shaders/geometry: `ctx->createCustomPipeline` / `uploadCustomMesh` / `drawCustomMesh` (graphics capability). Editor UI: implement `ImguiWindow`, `links { "imgui" }`, `ImGui::SetCurrentContext(ctx->getImGuiContext())`, then `ctx->registerEditorWindow(window, "Title")` — titled windows appear in the editor's Plugins menu
 
