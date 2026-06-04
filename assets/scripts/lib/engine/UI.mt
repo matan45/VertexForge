@@ -59,6 +59,16 @@ public class UI {
     }
 
     // ============================================
+    // Pointer Queries
+    // ============================================
+
+    // True when the cursor is over any visible UI element this frame.
+    // Use to skip world raycasts/picking while the pointer is on the HUD.
+    public static function isPointerOverUI(): bool {
+        return _native_ui_isPointerOverUI();
+    }
+
+    // ============================================
     // Button Control
     // ============================================
 

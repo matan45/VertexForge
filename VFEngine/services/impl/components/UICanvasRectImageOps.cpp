@@ -162,6 +162,7 @@ namespace services {
         data.pivot = comp.pivot;
         data.sizeDelta = comp.sizeDelta;
         data.anchoredPosition = comp.anchoredPosition;
+        data.blocksRaycast = comp.blocksRaycast;
         return data;
     }
 
@@ -182,6 +183,7 @@ namespace services {
         comp.pivot = rectData.pivot;
         comp.sizeDelta = rectData.sizeDelta;
         comp.anchoredPosition = rectData.anchoredPosition;
+        comp.blocksRaycast = rectData.blocksRaycast;
         return true;
     }
 

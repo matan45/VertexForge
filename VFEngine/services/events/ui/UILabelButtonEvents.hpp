@@ -92,6 +92,12 @@ namespace events::ui {
         std::string_view getName() const override { return "GetUIButtonData"; }
     };
 
+    // True when the cursor is over any visible UI element this frame
+    // (play mode only) — lets game scripts skip world raycasts over the HUD.
+    struct IsPointerOverUIQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsPointerOverUI"; }
+    };
+
     // ============================================
     // UI Button Notifications
     // ============================================

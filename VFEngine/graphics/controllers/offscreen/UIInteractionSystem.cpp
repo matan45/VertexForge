@@ -266,6 +266,62 @@ namespace controllers::offscreen
         }
     }
 
+    void UIInteractionSystem::computePointerOverUI(const FrameContext& ctx)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& pointerState = registry.ctx().emplace<components::UIPointerState>();
+
+        // Only meaningful in play mode — editor viewport picking is unaffected.
+        if (!ctx.playModeActive)
+        {
+            pointerState.overUI = false;
+            return;
+        }
+
+        float vw = static_cast<float>(ctx.viewportWidth);
+        float vh = static_cast<float>(ctx.viewportHeight);
+
+        auto scrollContainers = buildScrollContainerMap(registry, vw, vh);
+
+        bool found = false;
+        auto rectView = registry.view<components::UIRectComponent>();
+        for (auto entity : rectView)
+        {
+            // Bare layout rects don't block — only elements with visible content.
+            if (!registry.any_of<components::UIImageComponent, components::UILabelComponent,
+                                 components::UIButtonComponent, components::UICheckboxComponent,
+                                 components::UITextInputComponent, components::UIDropdownComponent,
+                                 components::UISliderComponent, components::UIProgressBarComponent>(entity))
+                continue;
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
+                continue;
+
+            const auto* canvas = findCanvasForEntity(registry, entity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+            if (!canvas)
+                continue;
+
+            const auto& rectComp = rectView.get<components::UIRectComponent>(entity);
+            if (!rectComp.blocksRaycast)
+                continue;
+
+            float scale = computeCanvasScale(canvas, vw, vh);
+            PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            auto [scrollAncestor, scissor] = findScrollInfo(registry, entity, scrollContainers);
+            applyScrollOffset(rect, scrollAncestor, scrollContainers);
+
+            if (hitTestRect(ctx.mousePosition, rect, scissor))
+            {
+                found = true;
+                break;
+            }
+        }
+
+        pointerState.overUI = found;
+    }
+
     void UIInteractionSystem::processCheckboxInteraction(const FrameContext& ctx)
     {
         auto& registry = scene::EntityRegistry::getRegistry();

@@ -57,6 +57,13 @@ namespace core::api
                 return value::Value(false);
             }});
 
+        interpreter->registerNativeFunction("_native_ui_isPointerOverUI",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::ui::IsPointerOverUIQuery query;
+                return value::Value(dispatcher.query(query));
+            }});
+
         interpreter->registerNativeFunction("_native_ui_getButtonState",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();

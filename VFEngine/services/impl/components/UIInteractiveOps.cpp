@@ -540,6 +540,13 @@ namespace services {
                 return getUIButtonData(query.entity);
             });
 
+        dispatcher.registerQueryHandler<events::ui::IsPointerOverUIQuery>(
+            [](const events::ui::IsPointerOverUIQuery&) {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                const auto* pointerState = registry.ctx().find<components::UIPointerState>();
+                return pointerState != nullptr && pointerState->overUI;
+            });
+
         // TextInput commands
         dispatcher.registerCommandHandler<events::ui::AddUITextInputComponentCommand>(
             [this](const events::ui::AddUITextInputComponentCommand& cmd) {

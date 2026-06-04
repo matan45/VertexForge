@@ -456,6 +456,7 @@ namespace controllers::offscreen
         interactionSystem.processTabsInteraction(ctx);
         interactionSystem.processSliderInteraction(ctx);
         interactionSystem.processDragDropInteraction(ctx);
+        interactionSystem.computePointerOverUI(ctx);
 
         std::vector<render::ui::UIImageRenderData> drawList;
         auto& registry = scene::EntityRegistry::getRegistry();

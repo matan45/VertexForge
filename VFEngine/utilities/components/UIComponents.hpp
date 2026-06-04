@@ -14,6 +14,14 @@ namespace components
         ScaleWithScreenSize
     };
 
+    // Registry-context singleton (registry.ctx()) updated each UI frame:
+    // true when the cursor is over any visible UI element. Lets game scripts
+    // skip world raycasts while the pointer is on the HUD.
+    struct UIPointerState
+    {
+        bool overUI = false;
+    };
+
     struct UICanvasComponent
     {
         float referenceWidth = 1920.0f;
@@ -30,6 +38,9 @@ namespace components
         glm::vec2 pivot{0.5f, 0.5f};
         glm::vec2 sizeDelta{0.0f, 0.0f};
         glm::vec2 anchoredPosition{0.0f, 0.0f};
+        // When false this element is ignored by the pointer-over-UI test
+        // (UI::isPointerOverUI), e.g. decorative full-screen overlays.
+        bool blocksRaycast = true;
     };
 
     enum class UIImageType : uint8_t

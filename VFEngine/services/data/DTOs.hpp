@@ -372,6 +372,7 @@ namespace services
         glm::vec2 pivot{0.5f, 0.5f};
         glm::vec2 sizeDelta{0.0f, 0.0f};
         glm::vec2 anchoredPosition{0.0f, 0.0f};
+        bool blocksRaycast = true;
     };
 
     struct UIImageData
