@@ -2,6 +2,7 @@
 #include "EditorRenderServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
+#include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -30,6 +31,11 @@ namespace services
         if (editorModeChangedToken.isValid())
         {
             dispatcher.unsubscribe(editorModeChangedToken);
+        }
+
+        if (navmeshBakeCompleteToken.isValid())
+        {
+            dispatcher.unsubscribe(navmeshBakeCompleteToken);
         }
     }
 
@@ -274,6 +280,24 @@ namespace services
                 {
                     bool isPlayMode = notification.currentMode == services::EditorMode::Play;
                     offScreenProvider->setPlayMode(isPlayMode);
+                }
+            });
+
+        navmeshBakeCompleteToken = dispatcher.subscribe<events::navmesh::NavmeshBakeCompleteNotification>(
+            [this](const events::navmesh::NavmeshBakeCompleteNotification& notification)
+            {
+                // Refresh the debug overlay when a navmesh finishes baking or loading
+                // while "Show Navmesh" is already enabled (e.g. scene auto-load).
+                if (!notification.success || !showNavmeshDebug || !offScreenProvider)
+                {
+                    return;
+                }
+
+                auto debugMesh = events::EventDispatcher::instance().query(
+                    events::navmesh::GetNavmeshDebugMeshQuery{});
+                if (!debugMesh.vertices.empty() && !debugMesh.indices.empty())
+                {
+                    offScreenProvider->updateNavmeshDebugMesh(debugMesh.vertices, debugMesh.indices);
                 }
             });
     }

@@ -36,6 +36,7 @@ namespace services
         std::unordered_map<void*, EditorTextureHandle> loadedTextures;
         events::SubscriptionToken meshDataChangedToken;
         events::SubscriptionToken editorModeChangedToken;
+        events::SubscriptionToken navmeshBakeCompleteToken;
         EntityHandle autoCreatedSunEntity;  // tracks auto-created Sun for cleanup
 
     public:

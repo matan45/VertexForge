@@ -23,6 +23,7 @@
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
+#include <algorithm>
 #include <functional>
 #include <fstream>
 #include <filesystem>
@@ -360,9 +361,23 @@ namespace services
                 const auto& navmeshComp = root.getComponent<components::NavmeshComponent>();
                 if (navmeshComp.navmeshRef.isValid())
                 {
-                    events::navmesh::LoadNavmeshCommand loadNavCmd;
-                    loadNavCmd.filePath = navmeshComp.navmeshRef.resolve();
-                    dispatcher.execute(loadNavCmd);
+                    const std::string& navmeshPath = navmeshComp.navmeshRef.resolve();
+                    std::string ext = std::filesystem::path(navmeshPath).extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                    if (ext == ".vfnavindex")
+                    {
+                        // Tiled navmesh: the asset is the index file, tiles live beside it
+                        events::navmesh::LoadNavmeshTiledCommand loadTiledCmd;
+                        loadTiledCmd.directory = std::filesystem::path(navmeshPath).parent_path().string();
+                        dispatcher.execute(loadTiledCmd);
+                    }
+                    else
+                    {
+                        events::navmesh::LoadNavmeshCommand loadNavCmd;
+                        loadNavCmd.filePath = navmeshPath;
+                        dispatcher.execute(loadNavCmd);
+                    }
                 }
             }
 
