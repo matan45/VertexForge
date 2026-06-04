@@ -146,10 +146,11 @@ VFEngine/
 ```
 
 External plugins live outside `VFEngine/` under `plugins/<PluginName>/` (e.g. `plugins/PluginAPITest/`, `plugins/HexTerrain/`). Each plugin folder is self-contained:
-- carries its own `premake5.lua` (SharedLib project, paths relative to the plugin folder) — auto-discovered by the root `premake5.lua` under `group "Plugins"`, no root edits needed
-- includes `VFEngine/plugin` for the SDK
+- carries its own `premake5.lua` (one line: `vfPluginProject("<Name>")` — shared setup in `plugins/plugin_sdk.lua`) — auto-discovered by the root `premake5.lua` under `group "Plugins"`, no root edits needed
+- compiles against the exported SDK headers in `sdk/` (NOT engine source) — `premake5 vs2022` auto-refreshes `sdk/` on every run, so **after editing engine headers re-run premake before building plugins**
 - ships a `<PluginName>.vfplugin` descriptor (JSON) alongside the DLL
 - copies its DLL back into `plugins/<PluginName>/` via postbuild, where `PluginManager` discovers it at runtime
+- out-of-tree development: `premake5 export-sdk` packages `sdk/` (headers + imgui.lib + project template); see `sdk/README.md`
 
 ### Services Layer
 

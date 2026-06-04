@@ -11,10 +11,9 @@
 --   sdk/template/              ready-to-copy out-of-tree plugin project
 --   sdk/README.md              usage + ABI requirements
 
-newaction {
-   trigger = "export-sdk",
-   description = "Package the VertexForge plugin SDK (headers + libs + template) into sdk/",
-   execute = function()
+-- Callable directly (root premake runs this on every solution generation so the
+-- in-tree plugins always compile against a fresh SDK) and via `premake5 export-sdk`.
+function vfExportPluginSDK()
       local sdk = "sdk"
 
       local function copyTree(srcBase, pattern, dstBase)
@@ -180,5 +179,10 @@ engine repo (re-run a Debug/Release build first so `lib/` is current).
 ]])
 
       print("Done. SDK at " .. path.getabsolute(sdk))
-   end
+end
+
+newaction {
+   trigger = "export-sdk",
+   description = "Package the VertexForge plugin SDK (headers + libs + template) into sdk/",
+   execute = vfExportPluginSDK
 }

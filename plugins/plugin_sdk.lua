@@ -23,17 +23,21 @@ function vfPluginProject(name)
 
       files { "**.hpp", "**.cpp" }
 
+      -- Plugins compile against the exported SDK (sdk/), exactly like an
+      -- out-of-tree plugin would — this keeps the SDK package honest: a header
+      -- missing from the export breaks the in-tree build immediately.
+      -- The root premake5.lua re-exports sdk/ on every solution generation.
       includedirs {
-         "../../dependencies/spdlog/include",
-         "../../dependencies/glm",
-         "../../dependencies/entt/single_include",
-         "../../dependencies/imgui",
-         "../../dependencies/json/single_include",
-         vulkanSDK.."/Include",
-         "../../VFEngine/plugin",
-         "../../VFEngine/utilities",
-         "../../VFEngine/services",
-         "../../VFEngine/core/controllers"
+         "../../sdk/include/VFEngine/plugin",
+         "../../sdk/include/VFEngine/utilities",
+         "../../sdk/include/VFEngine/services",
+         "../../sdk/include/VFEngine/core/controllers",
+         "../../sdk/deps/glm",
+         "../../sdk/deps/entt",
+         "../../sdk/deps/json",
+         "../../sdk/deps/spdlog",
+         "../../sdk/deps/imgui",
+         vulkanSDK.."/Include"
       }
 
       defines { "_CRT_SECURE_NO_WARNINGS" }

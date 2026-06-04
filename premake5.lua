@@ -1638,6 +1638,13 @@ project "ispc_texcomp"
 include "plugins/plugin_sdk.lua"  -- defines vfPluginProject() used by each plugin's premake5.lua
 include "tools/export_sdk.lua"   -- adds `premake5 export-sdk` (packages the out-of-tree plugin SDK)
 
+-- In-tree plugins compile against sdk/ (not engine source) so they continuously
+-- validate the SDK package. Refresh it on every solution generation — after
+-- changing engine headers, re-run `premake5 vs2022` before building plugins.
+if _ACTION and _ACTION:startswith("vs") then
+   vfExportPluginSDK()
+end
+
 group "Plugins"
 for _, pluginDir in ipairs(os.matchdirs("plugins/*")) do
    if os.isfile(pluginDir .. "/premake5.lua") then
