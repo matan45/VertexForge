@@ -44,7 +44,8 @@ namespace plugin {
 
         events::EventDispatcher& getEventDispatcher() override;
         events::SubscriptionToken managedSubscribe(events::SubscriptionToken token) override;
-        void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window) override;
+        void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window,
+                                  const std::string& title) override;
         void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) override;
         void publishEvent(const std::string& eventName, const nlohmann::json& data) override;
         events::SubscriptionToken subscribeEvent(const std::string& eventName,

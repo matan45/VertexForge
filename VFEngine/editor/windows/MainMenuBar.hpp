@@ -231,6 +231,7 @@ namespace windows
         void handleAddMenu();
         void handleScriptsMenu();
         void handleToolsMenu();
+        void handlePluginsMenu();
         void handleDebug();
     };
 }

@@ -80,7 +80,11 @@ namespace plugin {
 
         // === Editor Window Registration ===
         // Only available when hasCapability(capability::editor) is true.
-        virtual void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window) = 0;
+        // With a non-empty title, the window appears in the editor's "Plugins"
+        // main-menu dropdown and can be opened/closed there (starts visible).
+        // With an empty title it is always drawn (legacy behavior).
+        virtual void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window,
+                                          const std::string& title = "") = 0;
 
         // === Import Pipeline Extension ===
         // Only available when hasCapability(capability::import_) is true.

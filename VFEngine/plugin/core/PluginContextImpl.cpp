@@ -18,6 +18,7 @@
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "data/EntityConversion.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
+#include "imguiHandler/PluginWindowRegistry.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "Pipeline.hpp"
 #include <imgui.h>
@@ -55,14 +56,19 @@ namespace plugin {
         return token;
     }
 
-    void PluginContextImpl::registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window)
+    void PluginContextImpl::registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window,
+                                                 const std::string& title)
     {
         if (!hasCapability(std::string(capability::editor))) {
             vfLogWarning("[Plugin:{}] Cannot register editor window - editor capability not available", pluginName);
             return;
         }
 
-        controllers::imguiHandler::ImguiWindowHandler::add(window);
+        if (title.empty()) {
+            controllers::imguiHandler::ImguiWindowHandler::add(window);
+        } else {
+            controllers::imguiHandler::PluginWindowRegistry::add(pluginName, title, window);
+        }
         registeredWindows.push_back(std::move(window));
     }
 
@@ -901,6 +907,7 @@ namespace plugin {
         for (const auto& window : registeredWindows) {
             controllers::imguiHandler::ImguiWindowHandler::remove(window);
         }
+        controllers::imguiHandler::PluginWindowRegistry::removeByPlugin(pluginName);
         registeredWindows.clear();
 
         for (const auto& token : pluginEventSubscriptions) {

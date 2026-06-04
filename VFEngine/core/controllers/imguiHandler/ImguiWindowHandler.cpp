@@ -1,4 +1,5 @@
 #include "ImguiWindowHandler.hpp"
+#include "PluginWindowRegistry.hpp"
 #include "../../../graphics/core/VulkanContext.hpp"
 #include <ranges>
 #include <algorithm>
@@ -23,6 +24,9 @@ namespace controllers::imguiHandler {
 				window->draw();
 			}
 		}
+
+		// Titled plugin windows (visibility toggled via the Plugins menu)
+		PluginWindowRegistry::draw();
 
 		// Check if any windows need to be closed
 		bool hasClosingWindows = std::ranges::any_of(imguiWindows, [](const auto& window) {
@@ -49,6 +53,7 @@ namespace controllers::imguiHandler {
 			device->getLogicalDevice().waitIdle();
 		}
 		imguiWindows.clear();
+		PluginWindowRegistry::cleanUp();
 	}
 }
 

@@ -195,6 +195,7 @@
     <ClInclude Include="controllers\OffScreen.hpp" />
     <ClInclude Include="controllers\imguiHandler\ImguiWindow.hpp" />
     <ClInclude Include="controllers\imguiHandler\ImguiWindowHandler.hpp" />
+    <ClInclude Include="controllers\imguiHandler\PluginWindowRegistry.hpp" />
     <ClInclude Include="controllers\texture\EditorTexture.hpp" />
     <ClInclude Include="core\MainLoop.hpp" />
   </ItemGroup>
@@ -314,6 +315,7 @@
     <ClCompile Include="controllers\OffScreen.cpp" />
     <ClCompile Include="controllers\OffScreenSettings.cpp" />
     <ClCompile Include="controllers\imguiHandler\ImguiWindowHandler.cpp" />
+    <ClCompile Include="controllers\imguiHandler\PluginWindowRegistry.cpp" />
     <ClCompile Include="controllers\texture\EditorTexture.cpp" />
     <ClCompile Include="core\MainLoop.cpp" />
   </ItemGroup>

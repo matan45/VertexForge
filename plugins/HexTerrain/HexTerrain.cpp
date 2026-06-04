@@ -107,10 +107,10 @@ public:
         if (ctx->hasCapability(std::string(plugin::capability::editor)))
         {
             ImGui::SetCurrentContext(ctx->getImGuiContext());
-            ctx->registerEditorWindow(std::make_shared<HexTerrainWindow>(settings));
+            ctx->registerEditorWindow(std::make_shared<HexTerrainWindow>(settings), "Hex Terrain");
         }
 
-        ctx->logInfo("[HexTerrain] Hex grid ready - F7 toggle, F6 re-drape, 'Hex Terrain' panel for settings");
+        ctx->logInfo("[HexTerrain] Hex grid ready - F7 toggle, F6 re-drape, Plugins > Hex Terrain for settings");
         return true;
     }
 
