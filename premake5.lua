@@ -1670,4 +1670,43 @@ project "PluginAPITest"
       optimize "On"
 
 
+-- ============================================================================
+-- Plugin: HexTerrain (hex tile overlay via custom render pipeline API)
+-- ============================================================================
+project "HexTerrain"
+   kind "SharedLib"
+   language "C++"
+   cppdialect "C++20"
+   location "plugins/HexTerrain"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "plugins/HexTerrain/**.hpp", "plugins/HexTerrain/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/imgui",
+      "dependencies/json/single_include",
+      vulkanLibPath.."/Include",
+      "VFEngine/plugin",
+      "VFEngine/utilities",
+      "VFEngine/services"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   postbuildcommands {
+      "{COPY} ../../bin/HexTerrain/%{cfg.buildcfg}/%{cfg.platform}/HexTerrain.dll ../../plugins/HexTerrain/"
+   }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
 -- Project: assimp and softal need to build with cmake...

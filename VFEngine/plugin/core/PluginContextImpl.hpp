@@ -29,6 +29,8 @@ namespace plugin {
         std::vector<std::shared_ptr<controllers::imguiHandler::ImguiWindow>> registeredWindows;
         std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
+        std::vector<plugin::CustomPipelineHandle> managedCustomPipelines;
+        std::vector<plugin::CustomMeshHandle> managedCustomMeshes;
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
         std::vector<services::AudioHandle> managedAudioHandles;
         std::vector<services::VFXInstanceId> managedVFXInstances;
@@ -52,6 +54,13 @@ namespace plugin {
             plugin::RenderPassHookPoint hookPoint,
             plugin::RenderHookCallback callback) override;
         void unregisterRenderPassHook(plugin::RenderHookHandle handle) override;
+        plugin::CustomPipelineHandle createCustomPipeline(const plugin::CustomPipelineDesc& desc) override;
+        plugin::CustomMeshHandle uploadCustomMesh(plugin::CustomMeshData data) override;
+        void drawCustomMesh(plugin::CustomPipelineHandle pipeline, plugin::CustomMeshHandle mesh,
+                            const glm::mat4& model,
+                            const std::vector<std::byte>& pushConstants) override;
+        void destroyCustomPipeline(plugin::CustomPipelineHandle handle) override;
+        void destroyCustomMesh(plugin::CustomMeshHandle handle) override;
         entt::registry& getRegistry() override;
         bool hasCapability(const std::string& capability) const override;
         ImGuiContext* getImGuiContext() override;

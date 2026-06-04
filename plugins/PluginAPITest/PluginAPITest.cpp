@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <cstring>
 
 enum class ElementType : int { Fire = 0, Water, Earth, Wind };
 
@@ -74,7 +75,70 @@ public:
             .data<&TestComponent::namedBuffs>("namedBuffs");
 
         ctx->logInfo("PluginAPITest initialized - TestComponent registered via meta");
+
+        // ================================================================
+        // Custom render pipeline test: vertex-colored triangle (toggle F8)
+        // ================================================================
+        if (ctx->hasCapability(std::string(plugin::capability::graphics)))
+        {
+            initCustomPipelineTest();
+        }
+
         return true;
+    }
+
+    void initCustomPipelineTest()
+    {
+        plugin::CustomPipelineDesc desc;
+        desc.glslSource = R"(#type VERTEX
+#version 450
+layout(location = 0) in vec3 inPosition;
+layout(location = 1) in vec4 inColor;
+layout(push_constant) uniform PC { mat4 mvp; } pc;
+layout(location = 0) out vec4 fragColor;
+void main() {
+    gl_Position = pc.mvp * vec4(inPosition, 1.0);
+    fragColor = inColor;
+}
+
+#type FRAGMENT
+#version 450
+layout(location = 0) in vec4 fragColor;
+layout(location = 0) out vec4 outColor;
+void main() {
+    outColor = fragColor;
+}
+)";
+        desc.vertexLayout = {plugin::CustomVertexAttribute::Float3, plugin::CustomVertexAttribute::Float4};
+        desc.cullMode = plugin::CustomCullMode::None;
+
+        trianglePipeline = ctx->createCustomPipeline(desc);
+        if (!trianglePipeline.isValid())
+        {
+            ctx->logError("[CustomPipeline] Pipeline creation failed");
+            return;
+        }
+
+        struct Vertex { glm::vec3 position; glm::vec4 color; };
+        const Vertex vertices[] = {
+            {{0.0f, 8.0f, 0.0f},  {1.0f, 0.0f, 0.0f, 1.0f}},
+            {{-4.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f, 1.0f}},
+            {{4.0f, 0.0f, 0.0f},  {0.0f, 0.0f, 1.0f, 1.0f}},
+        };
+
+        plugin::CustomMeshData meshData;
+        meshData.vertexData.resize(sizeof(vertices));
+        std::memcpy(meshData.vertexData.data(), vertices, sizeof(vertices));
+        meshData.vertexCount = 3;
+
+        triangleMesh = ctx->uploadCustomMesh(std::move(meshData));
+        if (!triangleMesh.isValid())
+        {
+            ctx->logError("[CustomPipeline] Mesh upload failed");
+            return;
+        }
+
+        ctx->logInfo("[CustomPipeline] Test triangle ready - press F8 to toggle");
     }
 
     void onUpdate(float deltaTime) override
@@ -146,6 +210,18 @@ public:
                 ctx->logInfo("[Input] Mouse: (" +
                     std::to_string(pos.x) + ", " + std::to_string(pos.y) + ")");
             }
+
+            // F8: Toggle custom pipeline test triangle
+            if (ctx->isKeyPressed(297))
+            {
+                showTriangle = !showTriangle;
+                ctx->logInfo(std::string("[CustomPipeline] Triangle ") + (showTriangle ? "shown" : "hidden"));
+            }
+        }
+
+        if (showTriangle && trianglePipeline.isValid() && triangleMesh.isValid())
+        {
+            ctx->drawCustomMesh(trianglePipeline, triangleMesh, glm::mat4(1.0f));
         }
     }
 
@@ -156,6 +232,9 @@ public:
 
 private:
     plugin::PluginContext* ctx = nullptr;
+    plugin::CustomPipelineHandle trianglePipeline;
+    plugin::CustomMeshHandle triangleMesh;
+    bool showTriangle = false;
 };
 
 VF_IMPLEMENT_PLUGIN(PluginAPITest)

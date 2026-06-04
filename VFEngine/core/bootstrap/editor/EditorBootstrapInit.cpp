@@ -23,6 +23,7 @@
 #include "../../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
+#include "../../adapters/render/CustomPipelineAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
@@ -70,6 +71,7 @@ namespace core
         oceanRenderAdapter = std::make_unique<OceanRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         renderHookAdapter = std::make_unique<RenderHookAdapter>(offScreen.get());
+        customPipelineAdapter = std::make_unique<CustomPipelineAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
         grassRenderAdapter = std::make_unique<adapters::GrassRenderAdapter>();
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();

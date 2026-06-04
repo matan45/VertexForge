@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
+#include "events/render/CustomPipelineEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/audio/AudioBusEvents.hpp"
@@ -146,6 +147,85 @@ namespace plugin {
 
         std::erase_if(registeredRenderHooks,
             [&](const plugin::RenderHookHandle& h) { return h.id == handle.id; });
+    }
+
+    plugin::CustomPipelineHandle PluginContextImpl::createCustomPipeline(const plugin::CustomPipelineDesc& desc)
+    {
+        if (!hasCapability(std::string(capability::graphics))) {
+            vfLogWarning("[Plugin:{}] Cannot create custom pipeline - graphics capability not available", pluginName);
+            return {};
+        }
+
+        events::custompipeline::CreateCustomPipelineCommand cmd;
+        cmd.desc = desc;
+        auto handle = events::EventDispatcher::instance().execute(cmd);
+
+        if (handle.isValid()) {
+            managedCustomPipelines.push_back(handle);
+            vfLogInfo("[Plugin:{}] Created custom pipeline {}", pluginName, handle.id);
+        } else {
+            vfLogError("[Plugin:{}] Custom pipeline creation failed (see engine log)", pluginName);
+        }
+
+        return handle;
+    }
+
+    plugin::CustomMeshHandle PluginContextImpl::uploadCustomMesh(plugin::CustomMeshData data)
+    {
+        if (!hasCapability(std::string(capability::graphics))) {
+            vfLogWarning("[Plugin:{}] Cannot upload custom mesh - graphics capability not available", pluginName);
+            return {};
+        }
+
+        events::custompipeline::UploadCustomMeshCommand cmd;
+        cmd.data = std::move(data);
+        auto handle = events::EventDispatcher::instance().execute(cmd);
+
+        if (handle.isValid()) {
+            managedCustomMeshes.push_back(handle);
+        } else {
+            vfLogError("[Plugin:{}] Custom mesh upload failed (see engine log)", pluginName);
+        }
+
+        return handle;
+    }
+
+    void PluginContextImpl::drawCustomMesh(plugin::CustomPipelineHandle pipeline, plugin::CustomMeshHandle mesh,
+                                           const glm::mat4& model,
+                                           const std::vector<std::byte>& pushConstants)
+    {
+        if (!pipeline.isValid() || !mesh.isValid()) return;
+
+        events::custompipeline::EnqueueCustomDrawCommand cmd;
+        cmd.item.pipeline = pipeline;
+        cmd.item.mesh = mesh;
+        cmd.item.model = model;
+        cmd.item.pushConstants = pushConstants;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::destroyCustomPipeline(plugin::CustomPipelineHandle handle)
+    {
+        if (!handle.isValid()) return;
+
+        events::custompipeline::DestroyCustomPipelineCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+
+        std::erase_if(managedCustomPipelines,
+            [&](const plugin::CustomPipelineHandle& h) { return h.id == handle.id; });
+    }
+
+    void PluginContextImpl::destroyCustomMesh(plugin::CustomMeshHandle handle)
+    {
+        if (!handle.isValid()) return;
+
+        events::custompipeline::DestroyCustomMeshCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+
+        std::erase_if(managedCustomMeshes,
+            [&](const plugin::CustomMeshHandle& h) { return h.id == handle.id; });
     }
 
     entt::registry& PluginContextImpl::getRegistry()
@@ -797,6 +877,26 @@ namespace plugin {
             }
         }
         registeredRenderHooks.clear();
+
+        for (const auto& handle : managedCustomPipelines) {
+            events::custompipeline::DestroyCustomPipelineCommand cmd;
+            cmd.handle = handle;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        managedCustomPipelines.clear();
+
+        for (const auto& handle : managedCustomMeshes) {
+            events::custompipeline::DestroyCustomMeshCommand cmd;
+            cmd.handle = handle;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        managedCustomMeshes.clear();
 
         for (const auto& window : registeredWindows) {
             controllers::imguiHandler::ImguiWindowHandler::remove(window);

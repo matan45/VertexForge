@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 #include <glm/glm.hpp>
 #include "../../services/data/RenderHookTypes.hpp"
+#include "../../services/data/CustomPipelineTypes.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/interfaces/audio/IAudioService.hpp"
 #include "../../services/interfaces/physics/IPhysicsService.hpp"
@@ -100,6 +101,29 @@ namespace plugin {
 
         // Unregister a previously registered render hook. Also cleaned up automatically on unload.
         virtual void unregisterRenderPassHook(RenderHookHandle handle) = 0;
+
+        // === Custom Render Pipelines ===
+        // Only available when hasCapability(capability::graphics) is true.
+        // Handle-based custom shader rendering: the engine compiles the GLSL, owns all
+        // Vulkan objects, and records the draws inside the scene pass (depth-tested
+        // against scene geometry). No Vulkan calls ever cross the plugin DLL boundary.
+        // All handles are cleaned up automatically on plugin unload.
+
+        // Compile a custom shader and create a pipeline against the scene formats.
+        // Returns an invalid handle on compile/creation failure (error is logged).
+        virtual CustomPipelineHandle createCustomPipeline(const CustomPipelineDesc& desc) = 0;
+
+        // Upload geometry to device-local GPU memory. Call at init time, not per frame.
+        virtual CustomMeshHandle uploadCustomMesh(CustomMeshData data) = 0;
+
+        // Enqueue one draw for the current frame (call each frame from onUpdate).
+        // pushConstants must match the pipeline's pushConstantSize (may be empty if 0).
+        virtual void drawCustomMesh(CustomPipelineHandle pipeline, CustomMeshHandle mesh,
+                                    const glm::mat4& model,
+                                    const std::vector<std::byte>& pushConstants = {}) = 0;
+
+        virtual void destroyCustomPipeline(CustomPipelineHandle handle) = 0;
+        virtual void destroyCustomMesh(CustomMeshHandle handle) = 0;
 
         // === Plugin Events ===
         // Dynamic event system for plugin-to-plugin and plugin-to-engine communication.
