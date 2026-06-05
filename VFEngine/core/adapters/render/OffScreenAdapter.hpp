@@ -72,6 +72,7 @@ namespace core
         services::GPUPipelineStatus getGPUPipelineStatus() const override;
 
         void setPlayMode(bool playMode) override;
+        void waitForIdle() override;
 
         void setShowDebugRendering(bool show) override;
         bool getShowDebugRendering() const override;

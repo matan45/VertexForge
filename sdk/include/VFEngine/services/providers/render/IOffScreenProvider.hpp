@@ -241,6 +241,7 @@ namespace services {
         virtual GPUPipelineStatus getGPUPipelineStatus() const = 0;
 
         virtual void setPlayMode(bool playMode) = 0;
+        virtual void waitForIdle() = 0;
 
         virtual void setShowDebugRendering(bool show) = 0;
         virtual bool getShowDebugRendering() const = 0;

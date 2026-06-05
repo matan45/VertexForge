@@ -165,6 +165,7 @@ namespace controllers
         services::GPUPipelineStatus getGPUPipelineStatus() const;
 
         void setPlayMode(bool playMode);
+        void waitForIdle();
 
         void setShowDebugRendering(bool show) { showDebugRendering = show; }
         bool getShowDebugRendering() const { return showDebugRendering; }

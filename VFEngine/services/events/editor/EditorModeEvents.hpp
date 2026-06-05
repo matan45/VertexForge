@@ -52,6 +52,13 @@ namespace events::editor {
     // NOTIFICATIONS - State change broadcasts
     // ============================================
 
+    struct EditorModePreChangeNotification : INotification {
+        services::EditorMode previousMode;
+        services::EditorMode currentMode;
+
+        std::string_view getName() const override { return "EditorModePreChange"; }
+    };
+
     struct EditorModeChangedNotification : INotification {
         services::EditorMode previousMode;
         services::EditorMode currentMode;

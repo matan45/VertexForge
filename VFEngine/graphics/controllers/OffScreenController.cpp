@@ -235,6 +235,16 @@ namespace controllers
         }
     }
 
+    void OffScreenController::waitForIdle()
+    {
+        if (asyncComputeManager)
+        {
+            asyncComputeManager->waitIdle();
+        }
+
+        device.getLogicalDevice().waitIdle();
+    }
+
     void OffScreenController::iblSet(std::string_view iblPath)
     {
         iblController->set(iblPath);

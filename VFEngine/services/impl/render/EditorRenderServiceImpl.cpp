@@ -6,6 +6,7 @@
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "scene/EntityRegistry.hpp"
+#include <exception>
 #include <filesystem>
 
 namespace services
@@ -26,6 +27,11 @@ namespace services
         if (meshDataChangedToken.isValid())
         {
             dispatcher.unsubscribe(meshDataChangedToken);
+        }
+
+        if (editorModePreChangeToken.isValid())
+        {
+            dispatcher.unsubscribe(editorModePreChangeToken);
         }
 
         if (editorModeChangedToken.isValid())
@@ -273,6 +279,16 @@ namespace services
                 }
             });
 
+        editorModePreChangeToken = dispatcher.subscribe<events::editor::EditorModePreChangeNotification>(
+            [this](const events::editor::EditorModePreChangeNotification& notification)
+            {
+                if (notification.previousMode == services::EditorMode::Play &&
+                    notification.currentMode == services::EditorMode::Edit)
+                {
+                    waitForOffScreenIdleDuringPlayModeStop();
+                }
+            });
+
         editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& notification)
             {
@@ -490,6 +506,23 @@ namespace services
         result.min = bounds->min;
         result.max = bounds->max;
         return result;
+    }
+
+    void EditorRenderServiceImpl::waitForOffScreenIdleDuringPlayModeStop()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        try
+        {
+            offScreenProvider->waitForIdle();
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to wait for offscreen GPU idle during play-mode stop: {}", e.what());
+        }
     }
 
 }
