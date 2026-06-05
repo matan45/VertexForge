@@ -15,6 +15,23 @@
 
 namespace render
 {
+    void OffScreenViewPort::addPendingRenderWait(PendingRenderWait wait)
+    {
+        if (!wait.semaphore)
+            return;
+
+        std::lock_guard lock(pendingRenderWaitsMutex);
+        pendingRenderWaits.push_back(wait);
+    }
+
+    std::vector<OffScreenViewPort::PendingRenderWait> OffScreenViewPort::consumePendingRenderWaits()
+    {
+        std::lock_guard lock(pendingRenderWaitsMutex);
+        std::vector<PendingRenderWait> waits;
+        waits.swap(pendingRenderWaits);
+        return waits;
+    }
+
     OffScreenViewPort::OffScreenViewPort(core::Device& device, core::SwapChain& swapChain) : device{device}
         , swapChain{swapChain}
         , commandPool{std::make_unique<core::CommandPool>(device, swapChain)}
@@ -87,6 +104,8 @@ namespace render
             preRenderCallback();
         }
 
+        auto pendingWaits = consumePendingRenderWaits();
+
         if (skipAsyncComputeFrames > 0)
         {
             skipAsyncComputeFrames--;
@@ -122,17 +141,25 @@ namespace render
         if (useAsyncCompute)
         {
             // Graphics submit waits on async compute completion before fragment shading
-            std::array<vk::Semaphore, 1> waitSemaphores = {
-                asyncComputeManager->getComputeTimelineSemaphore()
-            };
-            std::array<vk::PipelineStageFlags, 1> waitStages = {
-                vk::PipelineStageFlagBits::eFragmentShader |
-                vk::PipelineStageFlagBits::eComputeShader |
-                vk::PipelineStageFlagBits::eTaskShaderEXT
-            };
-            std::array<uint64_t, 1> waitValues = {
-                asyncComputeManager->getComputeWaitValue()
-            };
+            std::vector<vk::Semaphore> waitSemaphores;
+            std::vector<vk::PipelineStageFlags> waitStages;
+            std::vector<uint64_t> waitValues;
+            waitSemaphores.reserve(1 + pendingWaits.size());
+            waitStages.reserve(1 + pendingWaits.size());
+            waitValues.reserve(1 + pendingWaits.size());
+
+            waitSemaphores.push_back(asyncComputeManager->getComputeTimelineSemaphore());
+            waitStages.push_back(vk::PipelineStageFlagBits::eFragmentShader |
+                                 vk::PipelineStageFlagBits::eComputeShader |
+                                 vk::PipelineStageFlagBits::eTaskShaderEXT);
+            waitValues.push_back(asyncComputeManager->getComputeWaitValue());
+
+            for (const auto& wait : pendingWaits)
+            {
+                waitSemaphores.push_back(wait.semaphore);
+                waitStages.push_back(wait.stageMask);
+                waitValues.push_back(wait.timelineValue);
+            }
 
             vk::TimelineSemaphoreSubmitInfo timelineInfo{};
             timelineInfo.waitSemaphoreValueCount = static_cast<uint32_t>(waitValues.size());
@@ -154,11 +181,25 @@ namespace render
         }
         else
         {
-            vk::SubmitInfo submitInfo(
-                0, nullptr, nullptr,
-                1, &commandBuffer,
-                0, nullptr
-            );
+            std::vector<vk::Semaphore> waitSemaphores;
+            std::vector<vk::PipelineStageFlags> waitStages;
+            waitSemaphores.reserve(pendingWaits.size());
+            waitStages.reserve(pendingWaits.size());
+
+            for (const auto& wait : pendingWaits)
+            {
+                waitSemaphores.push_back(wait.semaphore);
+                waitStages.push_back(wait.stageMask);
+            }
+
+            vk::SubmitInfo submitInfo{};
+            submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
+            submitInfo.pWaitSemaphores = waitSemaphores.empty() ? nullptr : waitSemaphores.data();
+            submitInfo.pWaitDstStageMask = waitStages.empty() ? nullptr : waitStages.data();
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffer;
+            submitInfo.signalSemaphoreCount = 0;
+            submitInfo.pSignalSemaphores = nullptr;
 
             device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
         }

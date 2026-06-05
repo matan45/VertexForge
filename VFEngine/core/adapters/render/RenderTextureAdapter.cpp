@@ -2,6 +2,7 @@
 #include "../../graphics/controllers/RenderTextureController.hpp"
 #include "../../graphics/render/RenderPassHandler.hpp"
 #include "../../graphics/core/RenderManager.hpp"
+#include "../../graphics/render/OffScreenViewPort.hpp"
 #include "../../controllers/OffScreen.hpp"
 #include <algorithm>
 #include <cassert>
@@ -141,6 +142,14 @@ namespace core
         for (auto& [id, ctrl] : toRender)
         {
             ctrl->render(passHandler);
+            if (ctrl->didSubmitLastRender())
+            {
+                render::OffScreenViewPort::addPendingRenderWait({
+                    ctrl->getLastRenderCompleteSemaphore(),
+                    vk::PipelineStageFlagBits::eFragmentShader,
+                    0
+                });
+            }
         }
 
         // VK-1334 minimap flicker fix: for every enabled controller (including those that did

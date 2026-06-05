@@ -52,6 +52,12 @@ namespace controllers {
 
 	void RenderController::renderThreadCallback()
 	{
+		if (!threading::TaskProfiler::instance().isEnabled())
+		{
+			renderManager->render(preRenderCallback);
+			return;
+		}
+
 		using Clock = std::chrono::high_resolution_clock;
 
 		static uint32_t renderThreadId = threading::TaskProfiler::instance().getMaxThreadId() + 1;

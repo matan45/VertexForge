@@ -24,4 +24,13 @@ namespace events::threading {
 		std::string_view getName() const override { return "GetTaskGraphStructureQuery"; }
 	};
 
+	struct SetTaskGraphProfilingEnabledCommand : ICommand<> {
+		bool enabled = false;
+		std::string_view getName() const override { return "SetTaskGraphProfilingEnabledCommand"; }
+	};
+
+	struct IsTaskGraphProfilingEnabledQuery : IQuery<bool> {
+		std::string_view getName() const override { return "IsTaskGraphProfilingEnabledQuery"; }
+	};
+
 }

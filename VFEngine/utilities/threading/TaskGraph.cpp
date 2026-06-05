@@ -8,18 +8,18 @@ namespace threading {
 	TaskGraph::TaskGraph(TaskGraph&&) noexcept = default;
 	TaskGraph& TaskGraph::operator=(TaskGraph&&) noexcept = default;
 
-	void TaskGraph::execute()
+	void TaskGraph::execute(bool profilingEnabled)
 	{
 		if (!pImpl->scheduler || pImpl->nodes.empty()) return;
 
-		// Record base time for profiling
-		pImpl->baseTime = std::chrono::high_resolution_clock::now();
+		if (profilingEnabled) {
+			pImpl->baseTime = std::chrono::high_resolution_clock::now();
 
-		// Reset profile entries
-		for (auto& entry : pImpl->profileData) {
-			entry.startTimeNs = 0;
-			entry.endTimeNs = 0;
-			entry.threadId = 0;
+			for (auto& entry : pImpl->profileData) {
+				entry.startTimeNs = 0;
+				entry.endTimeNs = 0;
+				entry.threadId = 0;
+			}
 		}
 
 		auto* baseTimePtr = &pImpl->baseTime;
@@ -32,17 +32,22 @@ namespace threading {
 				// Single task - execute directly on this thread
 				uint32_t idx = layer[0];
 				auto& node = pImpl->nodes[idx];
-				auto* entryPtr = &pImpl->profileData[idx];
 
-				auto start = std::chrono::high_resolution_clock::now();
-				node.fn();
-				auto end = std::chrono::high_resolution_clock::now();
+				if (profilingEnabled) {
+					auto* entryPtr = &pImpl->profileData[idx];
+					auto start = std::chrono::high_resolution_clock::now();
+					node.fn();
+					auto end = std::chrono::high_resolution_clock::now();
 
-				entryPtr->startTimeNs = static_cast<uint64_t>(
-					std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-				entryPtr->endTimeNs = static_cast<uint64_t>(
-					std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-				entryPtr->threadId = 0;
+					entryPtr->startTimeNs = static_cast<uint64_t>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+					entryPtr->endTimeNs = static_cast<uint64_t>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+					entryPtr->threadId = 0;
+				}
+				else {
+					node.fn();
+				}
 			}
 			else {
 				// Multiple tasks in this layer. Honor the `pinned` flag:
@@ -63,21 +68,30 @@ namespace threading {
 				for (size_t t = 0; t < workerIndices.size(); ++t) {
 					uint32_t idx = workerIndices[t];
 					auto& node = pImpl->nodes[idx];
-					auto* entryPtr = &pImpl->profileData[idx];
 
-					taskSets[t] = std::make_unique<enki::TaskSet>(1,
-						[&fn = node.fn, entryPtr, baseTimePtr](
-							enki::TaskSetPartition, uint32_t threadNum) {
-							auto start = std::chrono::high_resolution_clock::now();
+					if (profilingEnabled) {
+						auto* entryPtr = &pImpl->profileData[idx];
+						taskSets[t] = std::make_unique<enki::TaskSet>(1,
+							[&fn = node.fn, entryPtr, baseTimePtr](
+								enki::TaskSetPartition, uint32_t threadNum) {
+								auto start = std::chrono::high_resolution_clock::now();
+								fn();
+								auto end = std::chrono::high_resolution_clock::now();
+								entryPtr->startTimeNs = static_cast<uint64_t>(
+									std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+								entryPtr->endTimeNs = static_cast<uint64_t>(
+									std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+								entryPtr->threadId = threadNum;
+							}
+						);
+					}
+					else {
+						taskSets[t] = std::make_unique<enki::TaskSet>(1,
+							[&fn = node.fn](enki::TaskSetPartition, uint32_t) {
 							fn();
-							auto end = std::chrono::high_resolution_clock::now();
-							entryPtr->startTimeNs = static_cast<uint64_t>(
-								std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-							entryPtr->endTimeNs = static_cast<uint64_t>(
-								std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-							entryPtr->threadId = threadNum;
-						}
-					);
+							}
+						);
+					}
 					taskSets[t]->m_Priority = static_cast<enki::TaskPriority>(
 						static_cast<uint32_t>(node.priority));
 				}
@@ -89,15 +103,20 @@ namespace threading {
 				// Run pinned tasks on the calling thread while workers execute.
 				for (uint32_t idx : pinnedIndices) {
 					auto& node = pImpl->nodes[idx];
-					auto* entryPtr = &pImpl->profileData[idx];
-					auto start = std::chrono::high_resolution_clock::now();
-					node.fn();
-					auto end = std::chrono::high_resolution_clock::now();
-					entryPtr->startTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-					entryPtr->endTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-					entryPtr->threadId = 0;
+					if (profilingEnabled) {
+						auto* entryPtr = &pImpl->profileData[idx];
+						auto start = std::chrono::high_resolution_clock::now();
+						node.fn();
+						auto end = std::chrono::high_resolution_clock::now();
+						entryPtr->startTimeNs = static_cast<uint64_t>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+						entryPtr->endTimeNs = static_cast<uint64_t>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+						entryPtr->threadId = 0;
+					}
+					else {
+						node.fn();
+					}
 				}
 
 				for (auto& task : taskSets) {

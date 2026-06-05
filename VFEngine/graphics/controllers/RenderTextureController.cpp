@@ -84,6 +84,16 @@ namespace controllers
         return viewport ? viewport->getTextureSampler() : vk::Sampler{};
     }
 
+    vk::Semaphore RenderTextureController::getLastRenderCompleteSemaphore() const
+    {
+        return viewport ? viewport->getLastRenderCompleteSemaphore() : vk::Semaphore{};
+    }
+
+    bool RenderTextureController::didSubmitLastRender() const
+    {
+        return viewport && viewport->didSubmitLastRender();
+    }
+
     bool RenderTextureController::shouldRenderThisFrame(float deltaTime)
     {
         if (!enabled)

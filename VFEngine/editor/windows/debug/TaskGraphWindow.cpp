@@ -47,6 +47,28 @@ namespace windows
 		if (ImGui::Begin("Task Graph Profiler", &visible))
 		{
 			// Toolbar
+			bool enabled = profilingEnabled;
+			if (ImGui::Checkbox("Profiling", &enabled))
+			{
+				profilingEnabled = enabled;
+				events::threading::SetTaskGraphProfilingEnabledCommand cmd;
+				cmd.enabled = profilingEnabled;
+				try
+				{
+					events::EventDispatcher::instance().execute(cmd);
+				}
+				catch (const std::exception&)
+				{
+				}
+
+				if (!profilingEnabled)
+				{
+					latestFrame = {};
+					stats.clear();
+					maxThreadId = 0;
+				}
+			}
+			ImGui::SameLine();
 			if (ImGui::Button(paused ? "Resume" : "Pause"))
 			{
 				paused = !paused;
@@ -59,7 +81,10 @@ namespace windows
 			else
 			{
 				float frameDurationMs = static_cast<float>(latestFrame.frameDurationNs) / 1e6f;
-				ImGui::Text("Frame: %.3f ms | Tasks: %zu", frameDurationMs, latestFrame.entries.size());
+				if (profilingEnabled)
+					ImGui::Text("Frame: %.3f ms | Tasks: %zu", frameDurationMs, latestFrame.entries.size());
+				else
+					ImGui::TextDisabled("Profiling disabled");
 			}
 
 			ImGui::Separator();
@@ -93,14 +118,24 @@ namespace windows
 		{
 			auto& dispatcher = events::EventDispatcher::instance();
 
-			latestFrame = dispatcher.query(events::threading::GetTaskGraphProfileQuery{});
-			stats = dispatcher.query(events::threading::GetTaskGraphStatsQuery{});
+			profilingEnabled = dispatcher.query(events::threading::IsTaskGraphProfilingEnabledQuery{});
 
 			auto structure = dispatcher.query(events::threading::GetTaskGraphStructureQuery{});
 			taskNames = structure.taskNames;
 			adjacency = structure.adjacency;
 
-			maxThreadId = threading::TaskProfiler::instance().getMaxThreadId();
+			if (profilingEnabled)
+			{
+				latestFrame = dispatcher.query(events::threading::GetTaskGraphProfileQuery{});
+				stats = dispatcher.query(events::threading::GetTaskGraphStatsQuery{});
+				maxThreadId = threading::TaskProfiler::instance().getMaxThreadId();
+			}
+			else
+			{
+				latestFrame = {};
+				stats.clear();
+				maxThreadId = 0;
+			}
 		}
 		catch (const std::exception&)
 		{

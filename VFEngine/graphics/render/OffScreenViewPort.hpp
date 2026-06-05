@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <mutex>
 
 namespace core
 {
@@ -22,6 +23,14 @@ namespace render
 
     class OffScreenViewPort
     {
+    public:
+        struct PendingRenderWait
+        {
+            vk::Semaphore semaphore{};
+            vk::PipelineStageFlags stageMask{vk::PipelineStageFlagBits::eFragmentShader};
+            uint64_t timelineValue = 0;
+        };
+
     private:
         core::Device& device;
         core::SwapChain& swapChain;
@@ -37,6 +46,9 @@ namespace render
         core::AsyncComputeManager* asyncComputeManager = nullptr;
         uint32_t skipAsyncComputeFrames = 0;
         bool upscaleResourcesDirty = false;
+
+        inline static std::mutex pendingRenderWaitsMutex;
+        inline static std::vector<PendingRenderWait> pendingRenderWaits;
 
     public:
         explicit OffScreenViewPort(core::Device& device, core::SwapChain& swapChain);
@@ -67,8 +79,11 @@ namespace render
         void setUpscaleResourcesDirty(bool dirty) { upscaleResourcesDirty = dirty; }
         bool isUpscaleResourcesDirty() const { return upscaleResourcesDirty; }
 
+        static void addPendingRenderWait(PendingRenderWait wait);
+
     private:
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        static std::vector<PendingRenderWait> consumePendingRenderWaits();
 
         void createOffscreenResources();
         void cleanupOffscreenResources();

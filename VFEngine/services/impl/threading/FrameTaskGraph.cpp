@@ -74,13 +74,13 @@ namespace services {
 	{
 		if (!graph) return;
 
-		graph->execute();
+		const bool profilingEnabled = threading::TaskProfiler::instance().isEnabled();
+		graph->execute(profilingEnabled);
 
-		// Record profiling data (TaskProfiler computes frameDurationNs)
+		if (!profilingEnabled) return;
+
 		auto& profileData = graph->getProfileData();
 		threading::TaskProfiler::instance().recordFrame(profileData);
-
-		// Use TaskProfiler as single source of truth for frame duration
 		latestProfile = threading::TaskProfiler::instance().getLatestFrame();
 	}
 
@@ -123,6 +123,18 @@ namespace services {
 				return structure;
 			}
 		);
+
+		dispatcher.registerCommandHandler<events::threading::SetTaskGraphProfilingEnabledCommand>(
+			[](const events::threading::SetTaskGraphProfilingEnabledCommand& cmd) {
+				threading::TaskProfiler::instance().setEnabled(cmd.enabled);
+			}
+		);
+
+		dispatcher.registerQueryHandler<events::threading::IsTaskGraphProfilingEnabledQuery>(
+			[](const events::threading::IsTaskGraphProfilingEnabledQuery&) {
+				return threading::TaskProfiler::instance().isEnabled();
+			}
+		);
 	}
 
 	void FrameTaskGraph::unregisterEventHandlers()
@@ -131,6 +143,8 @@ namespace services {
 		dispatcher.unregisterQueryHandler<events::threading::GetTaskGraphProfileQuery>();
 		dispatcher.unregisterQueryHandler<events::threading::GetTaskGraphStatsQuery>();
 		dispatcher.unregisterQueryHandler<events::threading::GetTaskGraphStructureQuery>();
+		dispatcher.unregisterCommandHandler<events::threading::SetTaskGraphProfilingEnabledCommand>();
+		dispatcher.unregisterQueryHandler<events::threading::IsTaskGraphProfilingEnabledQuery>();
 	}
 
 }

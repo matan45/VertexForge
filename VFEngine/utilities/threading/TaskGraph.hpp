@@ -34,7 +34,7 @@ namespace threading {
 
 		// Execute the entire graph, blocking until all tasks complete.
 		// Must be called from the main thread (thread that initialized JobSystem).
-		void execute();
+		void execute(bool profilingEnabled = true);
 
 		const std::vector<TaskProfileEntry>& getProfileData() const;
 		const std::vector<std::string>& getTaskNames() const;
