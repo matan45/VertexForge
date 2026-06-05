@@ -20,6 +20,11 @@ namespace windows
         }
     }
 
+    void PhysicsConfigWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
+    }
+
     void PhysicsConfigWindow::draw()
     {
         if (!visible)
@@ -37,6 +42,11 @@ namespace windows
 
     void PhysicsConfigWindow::drawContent()
     {
+        if (!settingsLoaded)
+        {
+            loadFromScene();
+        }
+
         drawGravitySection();
         ImGui::Spacing();
         drawSimulationSection();

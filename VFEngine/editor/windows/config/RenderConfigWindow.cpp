@@ -23,6 +23,11 @@ namespace windows
         }
     }
 
+    void RenderConfigWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
+    }
+
     void RenderConfigWindow::markDirty()
     {
         isDirty = true;
@@ -383,6 +388,11 @@ namespace windows
 
     void RenderConfigWindow::drawContent()
     {
+        if (!settingsLoaded)
+        {
+            loadFromScene();
+        }
+
         drawPresetSection();
         drawCullingSection();
         drawTerrainSection();

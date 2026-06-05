@@ -19,6 +19,11 @@ namespace windows
         }
     }
 
+    void AudioConfigWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
+    }
+
     void AudioConfigWindow::draw()
     {
         if (!visible)
@@ -36,6 +41,11 @@ namespace windows
 
     void AudioConfigWindow::drawContent()
     {
+        if (!settingsLoaded)
+        {
+            loadFromScene();
+        }
+
         drawListenerSection();
         ImGui::Spacing();
         drawDistanceModelSection();
