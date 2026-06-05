@@ -20,6 +20,8 @@ namespace render::ibl
 
     void SkyboxRenderer::init(const ImageData& irradianceCube)
     {
+        skyboxImage = irradianceCube;
+
         // Dynamic rendering format for pipeline creation
         vk::Format colorFormat = swapChain.getSceneColorFormat();
 
@@ -358,6 +360,86 @@ namespace render::ibl
         commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
 
         core::endDynamicRendering(commandBuffer);
+    }
+
+    void SkyboxRenderer::renderToTarget(const vk::CommandBuffer& commandBuffer,
+                                         const SkyboxTargetParams& target,
+                                         vk::DescriptorSet targetDescriptorSet) const
+    {
+        if (!initialized || !targetDescriptorSet)
+            return;
+
+        core::DynamicRenderingInfo renderingInfo{};
+        renderingInfo.extent = vk::Extent2D{target.width, target.height};
+        renderingInfo.colorAttachments = {
+            core::colorClear(target.colorImageView, vk::ClearColorValue{std::array{target.clearColor.r, target.clearColor.g, target.clearColor.b, target.clearColor.a}})
+        };
+
+        core::beginDynamicRendering(commandBuffer, renderingInfo);
+
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        vk::Viewport viewport{0.0f, 0.0f,
+                               static_cast<float>(target.width), static_cast<float>(target.height),
+                               0.0f, 1.0f};
+        commandBuffer.setViewport(0, 1, &viewport);
+
+        vk::Rect2D scissor{{0, 0}, {target.width, target.height}};
+        commandBuffer.setScissor(0, 1, &scissor);
+
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
+            targetDescriptorSet, {});
+
+        vk::DeviceSize offsets[] = {0};
+        commandBuffer.bindVertexBuffers(0, vertexBuffer, offsets);
+        commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
+
+        core::endDynamicRendering(commandBuffer);
+    }
+
+    vk::DescriptorSet SkyboxRenderer::createExternalDescriptorSet(vk::Buffer externalCameraUBO,
+                                                                   vk::DescriptorPool externalPool) const
+    {
+        if (!initialized || !externalCameraUBO || !externalPool)
+            return {};
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = externalPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        vk::DescriptorSet outSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+
+        vk::DescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = externalCameraUBO;
+        uboBufferInfo.offset = 0;
+        uboBufferInfo.range = sizeof(UniformBufferObject);
+
+        vk::WriteDescriptorSet uboWrite{};
+        uboWrite.dstSet = outSet;
+        uboWrite.dstBinding = 0;
+        uboWrite.dstArrayElement = 0;
+        uboWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+        uboWrite.descriptorCount = 1;
+        uboWrite.pBufferInfo = &uboBufferInfo;
+
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfo.imageView = skyboxImage.imageView;
+        imageInfo.sampler = skyboxImage.sampler;
+
+        vk::WriteDescriptorSet imageWrite{};
+        imageWrite.dstSet = outSet;
+        imageWrite.dstBinding = 1;
+        imageWrite.dstArrayElement = 0;
+        imageWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        imageWrite.descriptorCount = 1;
+        imageWrite.pImageInfo = &imageInfo;
+
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {uboWrite, imageWrite};
+        device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
+
+        return outSet;
     }
 
     void SkyboxRenderer::updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix) const

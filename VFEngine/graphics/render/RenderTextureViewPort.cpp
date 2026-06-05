@@ -144,6 +144,18 @@ namespace render
             }
         }
 
+        {
+            UniformBufferObject ubo{};
+            ubo.view = view;
+            ubo.projection = projection;
+
+            void* mapped = rttSkyboxCameraUBOAllocs[imageIndex].mappedPtr;
+            if (mapped)
+            {
+                std::memcpy(mapped, &ubo, sizeof(ubo));
+            }
+        }
+
         // Enter the GPU-driven renderer's RTT scope: writes the per-RTT GPU-cull camera buffer
         // and routes subsequent cull dispatches through the per-RTT cull descriptor set.
         gpuRenderer->beginRTTContext(
@@ -187,7 +199,8 @@ namespace render
         // Phase 1: Skybox / clear pass (color-only, eClear)
         // Renders the IBL skybox if available, otherwise just clears the color image.
         auto* ibl = mainPassHandler->getIBL();
-        if (ibl && ibl->isInitialized())
+        if (ibl && ibl->isInitialized() &&
+            imageIndex < rttSkyboxDescSets.size() && rttSkyboxDescSets[imageIndex])
         {
             ibl->renderSkyboxToTarget(commandBuffer, {
                 .colorImageView = offscreenResources.colorImages[imageIndex].colorImageView,
@@ -196,7 +209,7 @@ namespace render
                 .view = view,
                 .projection = projection,
                 .clearColor = clearColor
-            });
+            }, rttSkyboxDescSets[imageIndex]);
         }
         else
         {
@@ -360,8 +373,14 @@ namespace render
 
     void RenderTextureViewPort::ensurePerRTTResources(RenderPassHandler* mainPassHandler)
     {
-        if (perRTTResourcesInitialized || !mainPassHandler)
+        if (!mainPassHandler)
         {
+            return;
+        }
+
+        if (perRTTResourcesInitialized)
+        {
+            ensurePerRTTDescriptorResources(mainPassHandler);
             return;
         }
 
@@ -389,27 +408,18 @@ namespace render
                 rttMeshCameraUBOs[i], rttMeshCameraUBOAllocs[i], device.getMemoryManager());
         }
 
-        // --- IBL descriptor pool sized for `imageCount` mirror sets (1 UBO + 3 image-samplers each) ---
-        {
-            std::array<vk::DescriptorPoolSize, 2> poolSizes{};
-            poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
-            poolSizes[0].descriptorCount = imageCount;
-            poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-            poolSizes[1].descriptorCount = imageCount * 3;
-
-            vk::DescriptorPoolCreateInfo poolInfo{};
-            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-            poolInfo.pPoolSizes = poolSizes.data();
-            poolInfo.maxSets = imageCount;
-            rttMeshIBLDescPool = logicalDevice.createDescriptorPool(poolInfo);
-        }
-
-        rttMeshIBLDescSets.resize(imageCount);
+        // --- per-image skybox CameraUBO ---
+        rttSkyboxCameraUBOs.resize(imageCount);
+        rttSkyboxCameraUBOAllocs.resize(imageCount);
         for (uint32_t i = 0; i < imageCount; ++i)
         {
-            rttMeshIBLDescSets[i] = meshPipeline->createExternalIBLDescriptorSet(
-                rttMeshCameraUBOs[i], rttMeshIBLDescPool);
+            core::BufferInfoRequest request(logicalDevice, device.getPhysicalDevice());
+            request.size = sizeof(UniformBufferObject);
+            request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                 vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(request,
+                rttSkyboxCameraUBOs[i], rttSkyboxCameraUBOAllocs[i], device.getMemoryManager());
         }
 
         // --- per-image GPU-driven cull camera buffer + per-image cull descriptor sets ---
@@ -449,6 +459,108 @@ namespace render
 
         rttCullDescPoolOwnerRenderer = gpuRenderer;
         perRTTResourcesInitialized = true;
+
+        ensurePerRTTDescriptorResources(mainPassHandler);
+    }
+
+    void RenderTextureViewPort::ensurePerRTTDescriptorResources(RenderPassHandler* mainPassHandler)
+    {
+        if (!mainPassHandler || !perRTTResourcesInitialized)
+        {
+            return;
+        }
+
+        auto* meshPipeline = mainPassHandler->getMeshPipeline();
+        if (!meshPipeline)
+        {
+            return;
+        }
+
+        const uint64_t currentVersion = meshPipeline->getIBLDescriptorVersion();
+        if (rttMeshIBLDescPool && rttIBLDescriptorVersion == currentVersion)
+        {
+            return;
+        }
+
+        cleanupPerRTTDescriptorResources();
+
+        const uint32_t imageCount = swapChain.getImageCount();
+        const auto logicalDevice = device.getLogicalDevice();
+
+        // Mesh IBL descriptor pool sized for `imageCount` mirror sets
+        // (1 CameraUBO + 3 image samplers each).
+        {
+            std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+            poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+            poolSizes[0].descriptorCount = imageCount;
+            poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+            poolSizes[1].descriptorCount = imageCount * 3;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            poolInfo.maxSets = imageCount;
+            rttMeshIBLDescPool = logicalDevice.createDescriptorPool(poolInfo);
+        }
+
+        rttMeshIBLDescSets.resize(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            rttMeshIBLDescSets[i] = meshPipeline->createExternalIBLDescriptorSet(
+                rttMeshCameraUBOs[i], rttMeshIBLDescPool);
+        }
+
+        auto* ibl = mainPassHandler->getIBL();
+        if (ibl && ibl->isInitialized())
+        {
+            std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+            poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+            poolSizes[0].descriptorCount = imageCount;
+            poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+            poolSizes[1].descriptorCount = imageCount;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            poolInfo.maxSets = imageCount;
+            rttSkyboxDescPool = logicalDevice.createDescriptorPool(poolInfo);
+
+            rttSkyboxDescSets.resize(imageCount);
+            for (uint32_t i = 0; i < imageCount; ++i)
+            {
+                rttSkyboxDescSets[i] = ibl->createExternalSkyboxDescriptorSet(
+                    rttSkyboxCameraUBOs[i], rttSkyboxDescPool);
+            }
+        }
+        else
+        {
+            rttSkyboxDescSets.assign(imageCount, vk::DescriptorSet{});
+        }
+
+        rttIBLDescriptorVersion = currentVersion;
+    }
+
+    void RenderTextureViewPort::cleanupPerRTTDescriptorResources()
+    {
+        const auto logicalDevice = device.getLogicalDevice();
+
+        rttMeshIBLDescSets.clear();
+        if (rttMeshIBLDescPool)
+        {
+            logicalDevice.destroyDescriptorPool(rttMeshIBLDescPool);
+            rttMeshIBLDescPool = nullptr;
+        }
+
+        rttSkyboxDescSets.clear();
+        if (rttSkyboxDescPool)
+        {
+            logicalDevice.destroyDescriptorPool(rttSkyboxDescPool);
+            rttSkyboxDescPool = nullptr;
+        }
+
+        rttIBLDescriptorVersion = 0;
     }
 
     void RenderTextureViewPort::cleanupPerRTTResources()
@@ -488,12 +600,18 @@ namespace render
         }
         rttGPUDrivenCameraBuffers.clear();
 
-        rttMeshIBLDescSets.clear();
-        if (rttMeshIBLDescPool)
+        cleanupPerRTTDescriptorResources();
+
+        for (uint32_t i = 0; i < rttSkyboxCameraUBOs.size(); ++i)
         {
-            logicalDevice.destroyDescriptorPool(rttMeshIBLDescPool);
-            rttMeshIBLDescPool = nullptr;
+            if (rttSkyboxCameraUBOs[i])
+            {
+                core::BufferUtilities::destroyBuffer(logicalDevice,
+                    rttSkyboxCameraUBOs[i], rttSkyboxCameraUBOAllocs[i], device.getMemoryManager());
+            }
         }
+        rttSkyboxCameraUBOs.clear();
+        rttSkyboxCameraUBOAllocs.clear();
 
         for (uint32_t i = 0; i < rttMeshCameraUBOs.size(); ++i)
         {

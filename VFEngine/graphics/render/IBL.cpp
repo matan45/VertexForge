@@ -47,8 +47,34 @@ namespace render
         }
     }
 
+    void IBL::renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
+                                    const ibl::SkyboxTargetParams& target,
+                                    vk::DescriptorSet targetDescriptorSet) const
+    {
+        if (skyboxRenderer && iblInitialized)
+        {
+            skyboxRenderer->renderToTarget(commandBuffer, target, targetDescriptorSet);
+        }
+    }
+
+    vk::DescriptorSet IBL::createExternalSkyboxDescriptorSet(vk::Buffer externalCameraUBO,
+                                                              vk::DescriptorPool externalPool) const
+    {
+        if (!skyboxRenderer || !iblInitialized)
+        {
+            return {};
+        }
+
+        return skyboxRenderer->createExternalDescriptorSet(externalCameraUBO, externalPool);
+    }
+
     void IBL::init(std::string_view path)
     {
+        if (iblInitialized)
+        {
+            remove();
+        }
+
         hdrTexture = std::make_shared<core::Texture>(device);
         hdrTexture->loadHDRFromFile(path, false);
 

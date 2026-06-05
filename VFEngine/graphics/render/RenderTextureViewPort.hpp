@@ -55,6 +55,14 @@ namespace render
         std::vector<core::VulkanAllocation> rttMeshCameraUBOAllocs;
         vk::DescriptorPool rttMeshIBLDescPool;
         std::vector<vk::DescriptorSet> rttMeshIBLDescSets;
+        uint64_t rttIBLDescriptorVersion = 0;
+
+        // Per-image skybox CameraUBO. The shared IBL skybox UBO belongs to the main viewport;
+        // RTT submits may execute later, so they must not depend on that mutable buffer.
+        std::vector<vk::Buffer> rttSkyboxCameraUBOs;
+        std::vector<core::VulkanAllocation> rttSkyboxCameraUBOAllocs;
+        vk::DescriptorPool rttSkyboxDescPool;
+        std::vector<vk::DescriptorSet> rttSkyboxDescSets;
 
         // Per-image GPU-driven cull camera buffer (binds at set 0 / binding 1 of the cull set).
         std::vector<std::unique_ptr<gpudriven::GPUDrivenCameraBuffer>> rttGPUDrivenCameraBuffers;
@@ -112,6 +120,8 @@ namespace render
 
         // VK-1334
         void ensurePerRTTResources(RenderPassHandler* mainPassHandler);
+        void ensurePerRTTDescriptorResources(RenderPassHandler* mainPassHandler);
+        void cleanupPerRTTDescriptorResources();
         void cleanupPerRTTResources();
     };
 }
