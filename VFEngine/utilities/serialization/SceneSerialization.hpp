@@ -3,6 +3,7 @@
 #include <string_view>
 #include <functional>
 #include <shared_mutex>
+#include <filesystem>
 #include <nlohmann/json.hpp>
 #include "../scene/Entity.hpp"
 #include "../asset/AssetRef.hpp"
@@ -14,6 +15,7 @@
 #include "../weather/WeatherTypes.hpp"
 #include "../weather/WeatherSerialization.hpp"
 #include "../weather/WeatherAudioController.hpp"
+#include "../asset/AssetGUID.hpp"
 
 namespace scene
 {
@@ -60,7 +62,11 @@ namespace serialization
         static bool saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename);
 
         static json createSnapshot(scene::SceneGraphSystem& sceneGraph);
+        static json createSnapshot(scene::SceneGraphSystem& sceneGraph, std::string_view filename);
         static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph,
+                                        SceneLoadProgressCallback progressCallback = nullptr);
+        static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph,
+                                        std::string_view filename,
                                         SceneLoadProgressCallback progressCallback = nullptr);
 
         static json serializeEntity(scene::Entity& entity);
@@ -90,7 +96,20 @@ namespace serialization
         static void serializeUIInteractiveComponents(scene::Entity& entity, json& out);
         static void serializeMiscComponents(scene::Entity& entity, json& out);
 
-        static void deserializeSceneSettings(const json& sceneJson, scene::SceneGraphSystem& sceneGraph);
+        static std::filesystem::path getSettingsPathForScene(std::string_view sceneFilename);
+        static std::filesystem::path resolveSettingsRefPath(std::string_view sceneFilename,
+                                                            const std::string& settingsRefPath);
+        static std::string makeSettingsRefPath(std::string_view sceneFilename,
+                                               const std::filesystem::path& settingsPath);
+        static json serializeSceneSettings(scene::SceneGraphSystem& sceneGraph);
+        static bool saveSceneSettings(scene::SceneGraphSystem& sceneGraph,
+                                      const std::filesystem::path& settingsPath);
+        static asset::AssetGUID saveSceneSettingsMetadata(const std::filesystem::path& settingsPath);
+        static bool writeSceneSettingsRef(json& sceneJson, std::string_view sceneFilename,
+                                          const std::filesystem::path& settingsPath);
+        static bool readLinkedSceneSettings(const json& sceneJson, std::string_view sceneFilename,
+                                            json& outSettingsJson);
+        static bool deserializeSceneSettings(const json& settingsJson, scene::SceneGraphSystem& sceneGraph);
 
         static size_t countEntities(const json& entityJson);
 

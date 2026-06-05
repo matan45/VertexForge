@@ -38,12 +38,14 @@ namespace serialization
 		// Load binary scene from pre-read bytes
 		static bool loadBinarySceneInto(const std::vector<uint8_t>& data,
 		                                 scene::SceneGraphSystem& sceneGraph,
+		                                 std::string_view filename = {},
 		                                 SceneLoadProgressCallback progressCallback = nullptr);
 
 		// Load binary scene additively from pre-read bytes
 		static bool loadBinarySceneAdditive(const std::vector<uint8_t>& data,
 		                                     scene::SceneGraphSystem& sceneGraph,
 		                                     scene::Entity& containerParent,
+		                                     std::string_view filename = {},
 		                                     SceneLoadProgressCallback progressCallback = nullptr);
 
 		// Convert JSON .vfscene to binary (used by GameExporter)

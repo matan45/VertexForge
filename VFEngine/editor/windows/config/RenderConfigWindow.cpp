@@ -423,6 +423,6 @@ namespace windows
         }
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Save to Scene writes these settings to the active scene file.");
+        ImGui::TextDisabled("Save to Scene writes these settings to the active scene's linked settings asset.");
     }
 }
