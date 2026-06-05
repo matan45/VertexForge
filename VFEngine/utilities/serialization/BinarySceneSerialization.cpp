@@ -79,7 +79,7 @@ namespace serialization
 	{
 		try
 		{
-			json snapshot = SceneSerialization::createSnapshot(sceneGraph);
+			json snapshot = SceneSerialization::createSnapshot(sceneGraph, filename);
 			if (snapshot.is_null() || !snapshot.contains("root"))
 			{
 				vfLogError("BinaryScene: Failed to create scene snapshot");
@@ -121,6 +121,7 @@ namespace serialization
 
 	bool BinarySceneSerialization::loadBinarySceneInto(const std::vector<uint8_t>& data,
 	                                                    scene::SceneGraphSystem& sceneGraph,
+	                                                    std::string_view filename,
 	                                                    SceneLoadProgressCallback progressCallback)
 	{
 		json snapshot = decodePayload(data);
@@ -129,12 +130,13 @@ namespace serialization
 			return false;
 		}
 
-		return SceneSerialization::restoreFromSnapshot(snapshot, sceneGraph, progressCallback);
+		return SceneSerialization::restoreFromSnapshot(snapshot, sceneGraph, filename, progressCallback);
 	}
 
 	bool BinarySceneSerialization::loadBinarySceneAdditive(const std::vector<uint8_t>& data,
 	                                                       scene::SceneGraphSystem& sceneGraph,
 	                                                       scene::Entity& containerParent,
+	                                                       std::string_view,
 	                                                       SceneLoadProgressCallback progressCallback)
 	{
 		json snapshot = decodePayload(data);

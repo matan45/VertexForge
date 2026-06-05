@@ -19,6 +19,11 @@ namespace windows
         }
     }
 
+    void AudioConfigWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
+    }
+
     void AudioConfigWindow::draw()
     {
         if (!visible)
@@ -36,6 +41,11 @@ namespace windows
 
     void AudioConfigWindow::drawContent()
     {
+        if (!settingsLoaded)
+        {
+            loadFromScene();
+        }
+
         drawListenerSection();
         ImGui::Spacing();
         drawDistanceModelSection();
@@ -73,7 +83,7 @@ namespace windows
         }
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Save to Scene writes these settings to the active scene file.");
+        ImGui::TextDisabled("Save to Scene writes these settings to the active scene's linked settings asset.");
     }
 
     void AudioConfigWindow::drawListenerSection()

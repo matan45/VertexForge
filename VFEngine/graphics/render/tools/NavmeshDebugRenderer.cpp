@@ -3,6 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/DeferredDeletionQueue.hpp"
 #include "../../core/PipelineUtilities.hpp"
 
 namespace render::mesh
@@ -88,8 +89,27 @@ namespace render::mesh
 
     void NavmeshDebugRenderer::destroyMeshBuffers()
     {
-        destroyBufferPair(vertexBuffer, vertexAllocation);
-        destroyBufferPair(indexBuffer, indexAllocation);
+        auto releaseBuffer = [this](vk::Buffer& buffer, core::VulkanAllocation& allocation)
+        {
+            if (!buffer && !allocation.isValid())
+            {
+                return;
+            }
+
+            if (deletionQueue)
+            {
+                deletionQueue->queueBuffer(buffer, allocation, device.getMemoryManager());
+                buffer = nullptr;
+                allocation = {};
+                return;
+            }
+
+            core::BufferUtilities::destroyBuffer(
+                device.getLogicalDevice(), buffer, allocation, device.getMemoryManager());
+        };
+
+        releaseBuffer(vertexBuffer, vertexAllocation);
+        releaseBuffer(indexBuffer, indexAllocation);
         indexCount = 0;
         hasData = false;
     }

@@ -20,6 +20,11 @@ namespace windows
         }
     }
 
+    void PhysicsConfigWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
+    }
+
     void PhysicsConfigWindow::draw()
     {
         if (!visible)
@@ -37,6 +42,11 @@ namespace windows
 
     void PhysicsConfigWindow::drawContent()
     {
+        if (!settingsLoaded)
+        {
+            loadFromScene();
+        }
+
         drawGravitySection();
         ImGui::Spacing();
         drawSimulationSection();
@@ -80,7 +90,7 @@ namespace windows
         }
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Save to Scene writes these settings to the active scene file.");
+        ImGui::TextDisabled("Save to Scene writes these settings to the active scene's linked settings asset.");
     }
 
     void PhysicsConfigWindow::drawGravitySection()

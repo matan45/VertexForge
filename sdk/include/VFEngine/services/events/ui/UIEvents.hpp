@@ -8,3 +8,4 @@
 #include "UIAnimationEvents.hpp"
 #include "UIMaskEvents.hpp"
 #include "UIDragDropEvents.hpp"
+#include "UIPickEvents.hpp"

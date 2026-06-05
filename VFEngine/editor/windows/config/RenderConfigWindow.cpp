@@ -23,6 +23,11 @@ namespace windows
         }
     }
 
+    void RenderConfigWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
+    }
+
     void RenderConfigWindow::markDirty()
     {
         isDirty = true;
@@ -383,6 +388,11 @@ namespace windows
 
     void RenderConfigWindow::drawContent()
     {
+        if (!settingsLoaded)
+        {
+            loadFromScene();
+        }
+
         drawPresetSection();
         drawCullingSection();
         drawTerrainSection();
@@ -413,6 +423,6 @@ namespace windows
         }
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Save to Scene writes these settings to the active scene file.");
+        ImGui::TextDisabled("Save to Scene writes these settings to the active scene's linked settings asset.");
     }
 }

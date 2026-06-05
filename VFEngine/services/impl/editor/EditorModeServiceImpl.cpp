@@ -42,6 +42,11 @@ namespace services
         {
             paused = false;
 
+            events::editor::EditorModePreChangeNotification preChangeNotification;
+            preChangeNotification.previousMode = previousMode;
+            preChangeNotification.currentMode = mode;
+            events::EventDispatcher::instance().publish(preChangeNotification);
+
             events::editor::EditorModeChangedNotification notification;
             notification.previousMode = previousMode;
             notification.currentMode = mode;

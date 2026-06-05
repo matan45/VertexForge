@@ -7,6 +7,7 @@
 
 namespace core
 {
+    class DeferredDeletionQueue;
     class Shader;
 }
 
@@ -32,6 +33,7 @@ namespace render::mesh
         core::VulkanAllocation indexAllocation;
         uint32_t indexCount = 0;
 
+        core::DeferredDeletionQueue* deletionQueue = nullptr;
         bool hasData = false;
 
     public:
@@ -45,6 +47,7 @@ namespace render::mesh
 
         void updateMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& triangleIndices);
         void clearMesh();
+        void setDeletionQueue(core::DeferredDeletionQueue* queue) { deletionQueue = queue; }
 
         void render(const vk::CommandBuffer& commandBuffer,
                     const glm::mat4& view,

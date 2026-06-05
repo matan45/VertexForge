@@ -375,6 +375,13 @@ namespace services
         bool blocksRaycast = true;
     };
 
+    // World-space corners of a UI element's quad as rendered in edit mode
+    // (TL, TR, BR, BL) — used by the editor viewport selection outline.
+    struct UIQuadCorners
+    {
+        glm::vec3 corners[4]{};
+    };
+
     struct UIImageData
     {
         asset::AssetRef textureRef;

@@ -19,58 +19,9 @@ namespace controllers::offscreen
 {
     namespace
     {
-        // --- World-space image: compute model matrix for a UI element on a canvas ---
-        glm::mat4 computeCanvasImageModelMatrix(
-            const components::UICanvasComponent& canvas,
-            const glm::mat4& worldMatrix,
-            const components::UIRectComponent& rectComp)
-        {
-            float canvasW = canvas.referenceWidth / canvas.pixelsPerUnit;
-            float canvasH = canvas.referenceHeight / canvas.pixelsPerUnit;
-
-            float anchorLeft = rectComp.anchorMin.x * canvas.referenceWidth;
-            float anchorRight = rectComp.anchorMax.x * canvas.referenceWidth;
-            float anchorBottom = rectComp.anchorMin.y * canvas.referenceHeight;
-            float anchorTop = rectComp.anchorMax.y * canvas.referenceHeight;
-
-            float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
-            float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
-            float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
-            float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
-
-            float localCX = cx / canvas.referenceWidth - 0.5f;
-            float localCY = cy / canvas.referenceHeight - 0.5f;
-            float normW = w / canvas.referenceWidth;
-            float normH = h / canvas.referenceHeight;
-
-            glm::mat4 canvasScaled = worldMatrix
-                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
-
-            return canvasScaled
-                * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, 0.001f))
-                * glm::scale(glm::mat4(1.0f), glm::vec3(normW, normH, 1.0f));
-        }
-
-        // Compute model matrix for an arbitrary sub-rect within the canvas (in canvas pixel coords)
-        glm::mat4 computeCanvasSubRectModelMatrix(
-            const components::UICanvasComponent& canvas,
-            const glm::mat4& worldMatrix,
-            float patchCX, float patchCY, float patchW, float patchH)
-        {
-            float canvasW = canvas.referenceWidth / canvas.pixelsPerUnit;
-            float canvasH = canvas.referenceHeight / canvas.pixelsPerUnit;
-            float localCX = patchCX / canvas.referenceWidth - 0.5f;
-            float localCY = patchCY / canvas.referenceHeight - 0.5f;
-            float normW = patchW / canvas.referenceWidth;
-            float normH = patchH / canvas.referenceHeight;
-
-            glm::mat4 canvasScaled = worldMatrix
-                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
-
-            return canvasScaled
-                * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, 0.001f))
-                * glm::scale(glm::mat4(1.0f), glm::vec3(normW, normH, 1.0f));
-        }
+        // World-space model matrices (computeCanvasImageModelMatrix /
+        // computeCanvasSubRectModelMatrix) live in utilities ui/UIRectMath.hpp,
+        // re-exported via UICommon.hpp — shared with editor viewport UI picking.
 
         // --- World-space label: compute world position + font parameters ---
         struct WorldLabelParams

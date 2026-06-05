@@ -35,6 +35,7 @@ namespace services
 
         std::unordered_map<void*, EditorTextureHandle> loadedTextures;
         events::SubscriptionToken meshDataChangedToken;
+        events::SubscriptionToken editorModePreChangeToken;
         events::SubscriptionToken editorModeChangedToken;
         events::SubscriptionToken navmeshBakeCompleteToken;
         EntityHandle autoCreatedSunEntity;  // tracks auto-created Sun for cleanup
@@ -75,6 +76,7 @@ namespace services
                               const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::optional<MeshBoundingBox> getMeshBoundingBox(const std::string& meshPath) const;
+        void waitForOffScreenIdleDuringPlayModeStop();
 
         void registerIBLHandlers(events::EventDispatcher& dispatcher);
         void registerTextureHandlers(events::EventDispatcher& dispatcher);

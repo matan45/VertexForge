@@ -85,6 +85,9 @@ namespace windows
         sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
             [this](const events::scene::SceneLoadedNotification&)
             {
+                renderConfigWindow.notifySceneLoaded();
+                physicsConfigWindow.notifySceneLoaded();
+                audioConfigWindow.notifySceneLoaded();
                 postProcessConfigWindow.notifySceneLoaded();
                 volumetricFogConfigWindow.notifySceneLoaded();
                 atmosphereConfigWindow.notifySceneLoaded();

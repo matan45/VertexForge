@@ -2,6 +2,15 @@
 #include "JsonConverters.hpp"
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"
+#include "../asset/AssetDatabase.hpp"
+#include "../asset/AssetRef.hpp"
+#include "../asset/AssetMetadataSerializer.hpp"
+#include "../print/Log.hpp"
+#include "../resource/VFSHelpers.hpp"
+#include <chrono>
+#include <iomanip>
+#include <fstream>
+#include <sstream>
 
 namespace serialization
 {
@@ -181,7 +190,211 @@ namespace serialization
         return componentsJson;
     }
 
-    void SceneSerialization::deserializeSceneSettings(const json& sceneJson, scene::SceneGraphSystem& sceneGraph)
+    std::filesystem::path SceneSerialization::getSettingsPathForScene(std::string_view sceneFilename)
+    {
+        std::filesystem::path scenePath{std::string(sceneFilename)};
+        scenePath.replace_extension(".vfSettings");
+        return scenePath;
+    }
+
+    std::filesystem::path SceneSerialization::resolveSettingsRefPath(std::string_view sceneFilename,
+                                                                     const std::string& settingsRefPath)
+    {
+        std::filesystem::path path{settingsRefPath};
+        if (path.is_relative() && !sceneFilename.empty())
+        {
+            path = std::filesystem::path{std::string(sceneFilename)}.parent_path() / path;
+        }
+        return path.lexically_normal();
+    }
+
+    std::string SceneSerialization::makeSettingsRefPath(std::string_view sceneFilename,
+                                                        const std::filesystem::path& settingsPath)
+    {
+        std::filesystem::path scenePath{std::string(sceneFilename)};
+        if (!scenePath.empty())
+        {
+            std::error_code ec;
+            auto relativePath = std::filesystem::relative(settingsPath, scenePath.parent_path(), ec);
+            if (!ec && !relativePath.empty())
+            {
+                return relativePath.generic_string();
+            }
+        }
+
+        return settingsPath.generic_string();
+    }
+
+    json SceneSerialization::serializeSceneSettings(scene::SceneGraphSystem& sceneGraph)
+    {
+        json settingsJson;
+        settingsJson["version"] = "1.0";
+        settingsJson["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
+        settingsJson["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
+        settingsJson["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
+
+        const auto& inputMappingPath = sceneGraph.getInputMappingPath();
+        if (inputMappingPath.has_value() && !inputMappingPath->empty())
+        {
+            settingsJson["inputMapping"] = *inputMappingPath;
+        }
+
+        return settingsJson;
+    }
+
+    bool SceneSerialization::saveSceneSettings(scene::SceneGraphSystem& sceneGraph,
+                                               const std::filesystem::path& settingsPath)
+    {
+        try
+        {
+            auto parentPath = settingsPath.parent_path();
+            if (!parentPath.empty())
+            {
+                std::filesystem::create_directories(parentPath);
+            }
+
+            std::ofstream file{settingsPath};
+            if (!file.is_open())
+            {
+                vfLogError("Failed to open scene settings file for writing: {}", settingsPath.string());
+                return false;
+            }
+
+            file << serializeSceneSettings(sceneGraph).dump(2);
+            file.close();
+
+            return saveSceneSettingsMetadata(settingsPath).isValid();
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to save scene settings {}: {}", settingsPath.string(), e.what());
+            return false;
+        }
+    }
+
+    asset::AssetGUID SceneSerialization::saveSceneSettingsMetadata(const std::filesystem::path& settingsPath)
+    {
+        auto metaPath = asset::AssetMetadataSerializer::getMetaPath(settingsPath);
+        auto existingMeta = asset::AssetMetadataSerializer::load(metaPath);
+
+        asset::AssetMetadata metadata;
+        metadata.guid = existingMeta.has_value() ? existingMeta->guid : asset::AssetGUID::generate();
+        metadata.type = resource::AssetType::Scene;
+        metadata.importSourcePath = settingsPath.string();
+
+        {
+            auto now = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now);
+            std::tm tm{};
+            localtime_s(&tm, &time);
+            std::ostringstream oss;
+            oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+            metadata.importTimestamp = oss.str();
+        }
+
+        if (!asset::AssetMetadataSerializer::save(metadata, metaPath))
+        {
+            return asset::AssetGUID::invalid();
+        }
+
+        auto& db = asset::AssetDatabase::instance();
+        auto pathString = settingsPath.string();
+        if (!db.getGUID(pathString).has_value())
+        {
+            db.registerAssetWithGUID(metadata.guid, pathString, resource::AssetType::Scene);
+        }
+
+        return metadata.guid;
+    }
+
+    bool SceneSerialization::writeSceneSettingsRef(json& sceneJson, std::string_view sceneFilename,
+                                                   const std::filesystem::path& settingsPath)
+    {
+        asset::AssetGUID guid = saveSceneSettingsMetadata(settingsPath);
+        if (!guid.isValid())
+        {
+            vfLogError("Failed to write scene settings metadata: {}", settingsPath.string());
+            return false;
+        }
+
+        sceneJson["settingsRef"] = guid.toString();
+        sceneJson["settingsRefPath"] = makeSettingsRefPath(sceneFilename, settingsPath);
+        return true;
+    }
+
+    bool SceneSerialization::readLinkedSceneSettings(const json& sceneJson, std::string_view sceneFilename,
+                                                     json& outSettingsJson)
+    {
+        if (!sceneJson.contains("settingsRef") || !sceneJson["settingsRef"].is_string())
+        {
+            vfLogError("Invalid scene file: missing or invalid 'settingsRef'");
+            return false;
+        }
+
+        if (!sceneJson.contains("settingsRefPath") || !sceneJson["settingsRefPath"].is_string())
+        {
+            vfLogError("Invalid scene file: missing or invalid 'settingsRefPath'");
+            return false;
+        }
+
+        std::string settingsPathString;
+        auto settingsRef = asset::AssetRef::fromHexString(sceneJson["settingsRef"].get<std::string>());
+        if (settingsRef.isValid())
+        {
+            settingsPathString = settingsRef.resolve();
+        }
+
+        if (settingsPathString.empty())
+        {
+            settingsPathString = resolveSettingsRefPath(
+                sceneFilename, sceneJson["settingsRefPath"].get<std::string>()).string();
+
+            if (settingsRef.isValid() && std::filesystem::exists(settingsPathString))
+            {
+                asset::AssetDatabase::instance().registerAssetWithGUID(
+                    settingsRef.getGUID(), settingsPathString, resource::AssetType::Scene);
+                settingsRef.invalidateCache();
+            }
+        }
+
+        if (settingsPathString.empty())
+        {
+            vfLogError("Invalid scene file: empty linked scene settings path");
+            return false;
+        }
+
+        try
+        {
+            auto rawData = resource::readFileBytes(settingsPathString);
+            if (rawData.empty())
+            {
+                vfLogError("Failed to read linked scene settings: {}", settingsPathString);
+                return false;
+            }
+
+            outSettingsJson = json::parse(rawData.begin(), rawData.end());
+            if (!outSettingsJson.is_object())
+            {
+                vfLogError("Invalid scene settings file: root is not a JSON object");
+                return false;
+            }
+
+            return true;
+        }
+        catch (const json::parse_error& e)
+        {
+            vfLogError("JSON parse error while loading scene settings {}: {}",
+                       settingsPathString, e.what());
+            return false;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to load scene settings {}: {}", settingsPathString, e.what());
+            return false;
+        }
+    }
+
+    bool SceneSerialization::deserializeSceneSettings(const json& sceneJson, scene::SceneGraphSystem& sceneGraph)
     {
         if (sceneJson.contains("physicsSettings") && sceneJson["physicsSettings"].is_object())
         {
@@ -232,5 +445,7 @@ namespace serialization
         {
             sceneGraph.setInputMappingPath(std::nullopt);
         }
+
+        return true;
     }
 }

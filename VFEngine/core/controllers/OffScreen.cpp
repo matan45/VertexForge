@@ -190,6 +190,11 @@ namespace controllers {
 		offScreenController->setPlayMode(playMode);
 	}
 
+	void OffScreen::waitForIdle()
+	{
+		offScreenController->waitForIdle();
+	}
+
 	void OffScreen::setShowDebugRendering(bool show)
 	{
 		offScreenController->setShowDebugRendering(show);

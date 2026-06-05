@@ -43,6 +43,7 @@ namespace render
         if (uiTextPipeline) uiTextPipeline->setDeletionQueue(queue);
         if (billboardPipeline) billboardPipeline->setDeletionQueue(queue);
         if (postProcessPipeline) postProcessPipeline->setDeletionQueue(queue);
+        if (debugRenderer) debugRenderer->setDeletionQueue(queue);
     }
 
     void RenderPassHandler::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) { vfxRuntimeProvider = provider; }

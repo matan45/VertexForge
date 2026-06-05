@@ -196,6 +196,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::waitForIdle() {
+        if (offScreen) {
+            offScreen->waitForIdle();
+        }
+    }
+
     void OffScreenAdapter::setShowDebugRendering(bool show) {
         if (offScreen) {
             offScreen->setShowDebugRendering(show);
