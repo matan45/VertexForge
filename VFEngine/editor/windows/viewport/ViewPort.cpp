@@ -15,6 +15,7 @@
 #include "events/terrain/CaveBrushEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/meshbrush/MeshBrushEvents.hpp"
+#include "events/ui/UIPickEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include "time/Timer.hpp"
@@ -99,6 +100,7 @@ namespace windows
             {
                 picker.updateBillboardScreenPositions(*editorCamera, vp, vs);
                 picker.updateMeshPickData();
+                drawSelectedUIOutline(vp, vs);
             }
 
             handleEntityPicking(isPlayMode, vp, vs);
@@ -301,6 +303,10 @@ namespace windows
         auto picked = picker.pickBillboardAt(mp);
         if (!picked.has_value())
         {
+            picked = picker.pickUIAt(*editorCamera, mp, viewportPos, viewportSize);
+        }
+        if (!picked.has_value())
+        {
             picked = picker.pickMeshAt(*editorCamera, mp, viewportPos, viewportSize);
         }
 
@@ -311,6 +317,37 @@ namespace windows
             cmd.entity = *picked;
             dispatcher.execute(cmd);
         }
+    }
+
+    void ViewPort::drawSelectedUIOutline(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f) return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto selected = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+        if (!selected.has_value()) return;
+
+        events::ui::GetUIEntityWorldQuadQuery quadQuery;
+        quadQuery.entity = *selected;
+        auto quad = dispatcher.query(quadQuery);
+        if (!quad.has_value()) return;
+
+        glm::mat4 viewProj = editorCamera->getProjectionMatrix() * editorCamera->getViewMatrix();
+
+        ImVec2 points[4];
+        for (int i = 0; i < 4; ++i)
+        {
+            glm::vec4 clip = viewProj * glm::vec4(quad->corners[i], 1.0f);
+            if (clip.w <= 0.0f) return; // a corner behind the camera — skip drawing
+
+            // No Y flip — EditorCamera's projection already flips Y for Vulkan
+            glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            points[i] = ImVec2((ndc.x * 0.5f + 0.5f) * viewportSize.x + viewportPos.x,
+                               (ndc.y * 0.5f + 0.5f) * viewportSize.y + viewportPos.y);
+        }
+
+        ImGui::GetWindowDrawList()->AddPolyline(points, 4, IM_COL32(255, 161, 0, 255),
+                                                ImDrawFlags_Closed, 2.0f);
     }
 
     void ViewPort::handleCameraInput()

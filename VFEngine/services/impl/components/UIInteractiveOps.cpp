@@ -2,9 +2,12 @@
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "ui/UIRectMath.hpp"
+#include "math/Frustum.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/ui/UIEvents.hpp"
+#include <limits>
 
 namespace services {
 
@@ -480,6 +483,130 @@ namespace services {
         return true;
     }
 
+    // ========== Editor Viewport UI Picking ==========
+    // In edit mode UI is rendered as world-space quads on the canvas entity's
+    // world transform (UIFrameBuilder::prepareUIImagesWorldSpace), so picking
+    // is a 3D ray test against each element's quad.
+
+    namespace {
+
+        // Entities with a UIRect but no visible content (bare layout rects)
+        // are not pickable — mirrors UIInteractionSystem::computePointerOverUI.
+        bool hasVisibleUIContent(entt::registry& registry, entt::entity entity) {
+            return registry.any_of<components::UIImageComponent, components::UILabelComponent,
+                                   components::UIButtonComponent, components::UICheckboxComponent,
+                                   components::UITextInputComponent, components::UIDropdownComponent,
+                                   components::UISliderComponent, components::UIProgressBarComponent>(entity);
+        }
+
+        // World-space corners (TL, TR, BR, BL) of the element's unit quad.
+        std::optional<UIQuadCorners> computeUIWorldQuad(entt::registry& registry, entt::entity entity) {
+            if (!registry.all_of<components::UIRectComponent>(entity)) {
+                return std::nullopt;
+            }
+
+            auto canvasInfo = utilities::ui::findCanvasWithEntity(registry, entity);
+            if (!canvasInfo.canvas || canvasInfo.canvasEntity == entt::null) {
+                return std::nullopt;
+            }
+            if (!registry.all_of<components::WorldTransformComponent>(canvasInfo.canvasEntity)) {
+                return std::nullopt;
+            }
+
+            const auto& worldTransform = registry.get<components::WorldTransformComponent>(canvasInfo.canvasEntity);
+            const auto& rectComp = registry.get<components::UIRectComponent>(entity);
+
+            glm::mat4 model = utilities::ui::computeCanvasImageModelMatrix(
+                *canvasInfo.canvas, worldTransform.worldMatrix, rectComp);
+
+            UIQuadCorners quad;
+            utilities::ui::computeWorldQuadCorners(model, quad.corners);
+            return quad;
+        }
+
+        std::optional<EntityHandle> pickUIEntityAt(const events::ui::PickUIEntityAtQuery& query) {
+            if (query.viewportSize.x <= 0.0f || query.viewportSize.y <= 0.0f) {
+                return std::nullopt;
+            }
+
+            // Screen position -> world ray (same math as ViewPortPicker::screenToWorldRay;
+            // no extra Y-flip — the editor projection already applies the Vulkan flip).
+            glm::vec2 screenPos = glm::clamp(query.screenPos, query.viewportPos,
+                                             query.viewportPos + query.viewportSize);
+            glm::vec2 normalized = (screenPos - query.viewportPos) / query.viewportSize;
+            float ndcX = normalized.x * 2.0f - 1.0f;
+            float ndcY = normalized.y * 2.0f - 1.0f;
+
+            glm::mat4 invProj = glm::inverse(query.projMatrix);
+            glm::mat4 invView = glm::inverse(query.viewMatrix);
+
+            glm::vec4 nearPoint = invProj * glm::vec4(ndcX, ndcY, 0.0f, 1.0f);
+            glm::vec4 farPoint = invProj * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+            nearPoint /= nearPoint.w;
+            farPoint /= farPoint.w;
+
+            glm::vec3 worldNear = glm::vec3(invView * nearPoint);
+            glm::vec3 worldFar = glm::vec3(invView * farPoint);
+            math::Ray ray(worldNear, worldFar - worldNear);
+
+            auto& registry = scene::EntityRegistry::getRegistry();
+
+            // Nearest hit wins; smallest quad area breaks coplanar ties
+            // (mirrors the runtime smallest-area widget hit-test).
+            std::optional<EntityHandle> bestEntity;
+            float bestT = std::numeric_limits<float>::max();
+            float bestArea = std::numeric_limits<float>::max();
+
+            auto rectView = registry.view<components::UIRectComponent>();
+            for (auto entity : rectView) {
+                if (!hasVisibleUIContent(registry, entity)) {
+                    continue;
+                }
+                if (!scene::Entity::isEffectivelyActive(registry, entity)) {
+                    continue;
+                }
+
+                auto quad = computeUIWorldQuad(registry, entity);
+                if (!quad.has_value()) {
+                    continue;
+                }
+
+                auto t = utilities::ui::intersectRayQuad(ray.origin, ray.direction, quad->corners);
+                if (!t.has_value()) {
+                    continue;
+                }
+
+                glm::vec3 u = quad->corners[1] - quad->corners[0];
+                glm::vec3 v = quad->corners[3] - quad->corners[0];
+                float area = glm::length(glm::cross(u, v));
+
+                float epsilon = 1e-4f * glm::max(1.0f, bestT);
+                bool closer = *t < bestT - epsilon;
+                bool coplanarSmaller = std::abs(*t - bestT) <= epsilon && area < bestArea;
+                if (closer || coplanarSmaller) {
+                    bestT = *t;
+                    bestArea = area;
+                    bestEntity = internal::toHandle(entity);
+                }
+            }
+
+            return bestEntity;
+        }
+
+        std::optional<UIQuadCorners> getUIEntityWorldQuad(EntityHandle entity) {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (!internal::isValidHandle(entity, registry)) {
+                return std::nullopt;
+            }
+
+            entt::entity enttEntity = internal::fromHandle(entity);
+            if (!hasVisibleUIContent(registry, enttEntity)) {
+                return std::nullopt;
+            }
+            return computeUIWorldQuad(registry, enttEntity);
+        }
+    }
+
     // ========== Event Handler Registration ==========
 
     void UIComponentService::registerInteractiveHandlers(events::EventDispatcher& dispatcher) {
@@ -597,6 +724,17 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUICheckboxDataQuery>(
             [this](const events::ui::GetUICheckboxDataQuery& query) {
                 return getUICheckboxData(query.entity);
+            });
+
+        // Editor viewport UI picking (edit mode)
+        dispatcher.registerQueryHandler<events::ui::PickUIEntityAtQuery>(
+            [](const events::ui::PickUIEntityAtQuery& query) {
+                return pickUIEntityAt(query);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUIEntityWorldQuadQuery>(
+            [](const events::ui::GetUIEntityWorldQuadQuery& query) {
+                return getUIEntityWorldQuad(query.entity);
             });
     }
 

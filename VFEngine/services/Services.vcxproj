@@ -199,6 +199,7 @@
     <ClInclude Include="events\ui\UIInputCheckboxEvents.hpp" />
     <ClInclude Include="events\ui\UILabelButtonEvents.hpp" />
     <ClInclude Include="events\ui\UIMaskEvents.hpp" />
+    <ClInclude Include="events\ui\UIPickEvents.hpp" />
     <ClInclude Include="events\ui\UIScrollLayoutEvents.hpp" />
     <ClInclude Include="events\ui\UISliderProgressEvents.hpp" />
     <ClInclude Include="events\vegetation\GrassEvents.hpp" />
