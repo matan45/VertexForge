@@ -2,9 +2,11 @@
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "ui/UIRectMath.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/ui/UIEvents.hpp"
+#include "../../events/project/ApplicationEvents.hpp"
 
 namespace services {
 
@@ -187,6 +189,49 @@ namespace services {
         return true;
     }
 
+    bool UIComponentService::setUIRectPixels(EntityHandle entity, float x, float y, float w, float h) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        entt::entity e = internal::fromHandle(entity);
+        scene::Entity sceneEntity(e);
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            return false;
+        }
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        float vw = static_cast<float>(dispatcher.query(::events::application::GetViewportWidthQuery{}));
+        float vh = static_cast<float>(dispatcher.query(::events::application::GetViewportHeightQuery{}));
+        if (vw <= 0.0f || vh <= 0.0f) {
+            return false;
+        }
+
+        const auto* canvas = utilities::ui::findCanvasForEntity(registry, e);
+        float scale = utilities::ui::computeCanvasScale(canvas, vw, vh);
+        if (scale <= 0.0f) {
+            return false;
+        }
+
+        // Invert resolvePixelRect (UIRectMath.hpp): solve anchoredPosition/sizeDelta so
+        // the runtime screen-space pass lands on (x, y, w, h) in viewport pixels.
+        auto& comp = sceneEntity.getComponent<components::UIRectComponent>();
+        float anchorLeftPx  = comp.anchorMin.x * vw;
+        float anchorRightPx = comp.anchorMax.x * vw;
+        float anchorTopPx   = (1.0f - comp.anchorMax.y) * vh;
+        float anchorBotPx   = (1.0f - comp.anchorMin.y) * vh;
+
+        comp.sizeDelta.x = (w - (anchorRightPx - anchorLeftPx)) / scale;
+        comp.sizeDelta.y = (h - (anchorBotPx - anchorTopPx)) / scale;
+
+        float cx = x + comp.pivot.x * w;
+        float cy = y + comp.pivot.y * h;
+        comp.anchoredPosition.x = (cx - (anchorLeftPx + anchorRightPx) * 0.5f) / scale;
+        comp.anchoredPosition.y = ((anchorTopPx + anchorBotPx) * 0.5f - cy) / scale;
+        return true;
+    }
+
     // ========== UI Image Operations ==========
 
     bool UIComponentService::addUIImageComponent(EntityHandle entity) {
@@ -335,6 +380,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::ui::SetUIRectDataCommand>(
             [this](const events::ui::SetUIRectDataCommand& cmd) {
                 return setUIRectData(cmd.entity, cmd.rectData);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUIRectPixelsCommand>(
+            [this](const events::ui::SetUIRectPixelsCommand& cmd) {
+                return setUIRectPixels(cmd.entity, cmd.x, cmd.y, cmd.w, cmd.h);
             });
 
         dispatcher.registerQueryHandler<events::ui::HasUIRectComponentQuery>(

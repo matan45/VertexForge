@@ -62,6 +62,38 @@ namespace core
         return true;
     }
 
+    bool RuntimePickerAdapter::worldToScreen(const glm::vec3& worldPos, glm::vec2& outScreen)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto camEntity = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
+        if (!camEntity.has_value())
+            return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity cam = services::internal::fromHandle(*camEntity);
+        if (!registry.valid(cam) || !registry.all_of<components::CameraComponent>(cam))
+            return false;
+
+        const auto& camComp = registry.get<components::CameraComponent>(cam);
+
+        float w = static_cast<float>(dispatcher.query(events::application::GetViewportWidthQuery{}));
+        float h = static_cast<float>(dispatcher.query(events::application::GetViewportHeightQuery{}));
+        if (w <= 0.0f || h <= 0.0f)
+            return false;
+
+        // Exact inverse of screenToWorldRay's NDC mapping: no manual Y flip — the
+        // runtime projection already uses the Vulkan flipped-Y convention.
+        glm::vec4 clip = camComp.projectionMatrix * camComp.viewMatrix * glm::vec4(worldPos, 1.0f);
+        if (clip.w <= 1e-6f)
+            return false; // behind the camera
+
+        glm::vec3 ndc = glm::vec3(clip) / clip.w;
+        outScreen.x = (ndc.x * 0.5f + 0.5f) * w;
+        outScreen.y = (ndc.y * 0.5f + 0.5f) * h;
+        return true;
+    }
+
     services::RaycastHit RuntimePickerAdapter::pickEntity(const services::PickRay& ray, uint16_t layerMask)
     {
         auto& dispatcher = events::EventDispatcher::instance();

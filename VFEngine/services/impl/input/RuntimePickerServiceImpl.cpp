@@ -25,6 +25,15 @@ namespace services
                 return ray;
             });
 
+        dispatcher.registerQueryHandler<::events::input::WorldToScreenQuery>(
+            [this](const ::events::input::WorldToScreenQuery& q) -> std::optional<glm::vec2>
+            {
+                glm::vec2 screen;
+                if (!pickerProvider->worldToScreen(q.worldPos, screen))
+                    return std::nullopt;
+                return screen;
+            });
+
         dispatcher.registerQueryHandler<::events::input::PickEntityQuery>(
             [this](const ::events::input::PickEntityQuery& q) -> RaycastHit
             {

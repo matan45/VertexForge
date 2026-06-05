@@ -87,6 +87,27 @@ namespace core::api
                 return value::Value(result);
             }});
 
+        // _native_picker_worldToScreen(worldX, worldY, worldZ)
+        //   miss (no camera / behind camera) -> [0.0]; hit -> [1.0, screenX, screenY]
+        //   Inverse of screenToWorldRay; coordinates may lie outside the viewport
+        //   for in-front-but-offscreen points.
+        interpreter->registerNativeFunction("_native_picker_worldToScreen",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 3) return missArray();
+
+                events::input::WorldToScreenQuery q;
+                q.worldPos = glm::vec3(extractFloat(args[0]), extractFloat(args[1]), extractFloat(args[2]));
+                auto screen = dispatcher.query(q);
+                if (!screen.has_value()) return missArray();
+
+                auto result = std::make_shared<value::NativeArray>(3, value::ValueType::FLOAT);
+                result->set(0, value::Value(1.0f));
+                result->set(1, value::Value(screen->x));
+                result->set(2, value::Value(screen->y));
+                return value::Value(result);
+            }});
+
         // _native_picker_pickEntity(screenX, screenY, layerMask)
         //   miss -> [0.0]; hit -> [1.0, entityId, px, py, pz, nx, ny, nz, distance]
         //   (same 9-float layout as _native_physics_raycast so scripts reuse RaycastHit)

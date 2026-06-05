@@ -15,6 +15,14 @@ namespace events::input
         std::string_view getName() const override { return "ScreenToWorldRay"; }
     };
 
+    // World position -> viewport pixel via the primary camera (inverse of
+    // ScreenToWorldRayQuery). nullopt if no primary camera or behind the camera.
+    struct WorldToScreenQuery : ::events::IQuery<std::optional<glm::vec2>>
+    {
+        glm::vec3 worldPos{0.0f};
+        std::string_view getName() const override { return "WorldToScreen"; }
+    };
+
     // Physics raycast against entities under the given screen pixel. hit=false on miss.
     struct PickEntityQuery : ::events::IQuery<services::RaycastHit>
     {

@@ -16,6 +16,7 @@
 
 import * from "../math/Vec3f.mt";
 import * from "RaycastHit.mt";
+import * from "ScreenPoint.mt";
 
 public class Picker {
     public constructor() {
@@ -76,5 +77,17 @@ public class Picker {
             new Vec3f(raw[5], raw[6], raw[7]),
             raw[8]
         );
+    }
+
+    // World position -> viewport pixel (inverse of the screen ray; same pixel space
+    // as Input::getViewportMouseX/Y). ScreenPoint.visible is false when there is no
+    // primary camera or the point is behind the camera; x/y may lie outside the
+    // viewport for in-front-but-offscreen points.
+    public static function worldToScreen(float worldX, float worldY, float worldZ): ScreenPoint {
+        float[] raw = _native_picker_worldToScreen(worldX, worldY, worldZ);
+        if (raw[0] < 0.5) {
+            return new ScreenPoint();
+        }
+        return new ScreenPoint(true, raw[1], raw[2]);
     }
 }

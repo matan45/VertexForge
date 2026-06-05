@@ -37,6 +37,7 @@ namespace services {
         bool hasUIRectComponent(EntityHandle entity) const;
         std::optional<UIRectData> getUIRectData(EntityHandle entity) const;
         bool setUIRectData(EntityHandle entity, const UIRectData& rectData);
+        bool setUIRectPixels(EntityHandle entity, float x, float y, float w, float h);
 
         // UI Image Operations
         bool addUIImageComponent(EntityHandle entity);

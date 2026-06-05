@@ -68,6 +68,20 @@ namespace events::ui {
         std::string_view getName() const override { return "SetUIRectData"; }
     };
 
+    // Position/size a UIRect in viewport pixels (top-left origin, y down) regardless
+    // of its authored anchors/pivot. Solves anchoredPosition/sizeDelta so the runtime
+    // screen-space pass (resolvePixelRect) lands exactly on the requested rect —
+    // keeps scripts in the same pixel space as Input::getViewportMouseX/Y.
+    struct SetUIRectPixelsCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        float x = 0.0f;
+        float y = 0.0f;
+        float w = 0.0f;
+        float h = 0.0f;
+
+        std::string_view getName() const override { return "SetUIRectPixels"; }
+    };
+
     // ============================================
     // UI Rect Queries
     // ============================================

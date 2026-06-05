@@ -40,6 +40,21 @@ public class PluginComponent {
         return _plugin_has(entityId, componentName);
     }
 
+    // Add a plugin component to an entity (no-op if already present)
+    public static function add(int entityId, string componentName): bool {
+        return _plugin_addComponent(entityId, componentName);
+    }
+
+    // Remove a plugin component from an entity (no-op if absent)
+    public static function remove(int entityId, string componentName): bool {
+        return _plugin_removeComponent(entityId, componentName);
+    }
+
+    // Find all entities that have the given plugin component
+    public static function findAll(string componentName): int[] {
+        return _plugin_findAll(componentName);
+    }
+
     // ============================================
     // Unified Get/Set (returns Object — cast to target type)
     // Usage: int hp = (int)PluginComponent.get(self, "Stats", "health");
