@@ -1,7 +1,8 @@
 // Matrix4f - 4x4 floating-point matrix
 // Row-major order: m[row][col] = data[row * 4 + col]
 // Used for 3D transformations, projections, and view matrices
-
+import * from "./Vec4f.mt";
+import * from "./Matrix3f.mt";
 public value class Matrix4f {
     // Matrix elements stored in row-major order
     // | m00 m01 m02 m03 |
@@ -161,7 +162,7 @@ public value class Matrix4f {
 
         float det = a * l - b * k + c * j + d * i - e * h + f * g;
         if (det == 0.0) {
-            return Matrix4f.identity();
+            return Matrix4f::identity();
         }
 
         float invDet = 1.0 / det;
@@ -241,7 +242,7 @@ public value class Matrix4f {
     }
 
     public static function translationFromVec(Vec3f t): Matrix4f {
-        return Matrix4f.translation(t.x, t.y, t.z);
+        return Matrix4f::translation(t.x, t.y, t.z);
     }
 
     public static function scale(float sx, float sy, float sz): Matrix4f {
@@ -254,11 +255,11 @@ public value class Matrix4f {
     }
 
     public static function scaleUniform(float s): Matrix4f {
-        return Matrix4f.scale(s, s, s);
+        return Matrix4f::scale(s, s, s);
     }
 
     public static function scaleFromVec(Vec3f s): Matrix4f {
-        return Matrix4f.scale(s.x, s.y, s.z);
+        return Matrix4f::scale(s.x, s.y, s.z);
     }
 
     public static function rotationX(float radians): Matrix4f {

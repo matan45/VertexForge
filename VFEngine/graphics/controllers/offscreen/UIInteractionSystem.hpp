@@ -18,6 +18,10 @@ namespace controllers::offscreen
         void processSliderInteraction(const FrameContext& ctx);
         void processDragDropInteraction(const FrameContext& ctx);
 
+        // Updates the registry-context UIPointerState: true when the cursor is
+        // over any visible UI element (so scripts can skip world raycasts).
+        void computePointerOverUI(const FrameContext& ctx);
+
         entt::entity getFocusedTextInput() const { return focusedTextInput; }
 
     private:

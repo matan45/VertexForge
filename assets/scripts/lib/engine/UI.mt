@@ -59,6 +59,16 @@ public class UI {
     }
 
     // ============================================
+    // Pointer Queries
+    // ============================================
+
+    // True when the cursor is over any visible UI element this frame.
+    // Use to skip world raycasts/picking while the pointer is on the HUD.
+    public static function isPointerOverUI(): bool {
+        return _native_ui_isPointerOverUI();
+    }
+
+    // ============================================
     // Button Control
     // ============================================
 
@@ -79,6 +89,152 @@ public class UI {
     // Set the text of a UILabel on the given entity
     public static function setLabelText(int entityId, string text): void {
         _native_ui_setLabelText(entityId, text);
+    }
+
+    // ============================================
+    // Label Style Constants (VK-1352)
+    // ============================================
+    // Font style (UILabelData.fontStyle)
+    public static final int LABEL_STYLE_NORMAL = 0;
+    public static final int LABEL_STYLE_BOLD = 1;
+    public static final int LABEL_STYLE_ITALIC = 2;
+    public static final int LABEL_STYLE_BOLD_ITALIC = 3;
+    // Horizontal alignment (UILabelData.horizontalAlignment)
+    public static final int LABEL_ALIGN_LEFT = 0;
+    public static final int LABEL_ALIGN_CENTER = 1;
+    public static final int LABEL_ALIGN_RIGHT = 2;
+    // Vertical alignment (UILabelData.verticalAlignment)
+    public static final int LABEL_VALIGN_TOP = 0;
+    public static final int LABEL_VALIGN_MIDDLE = 1;
+    public static final int LABEL_VALIGN_BOTTOM = 2;
+    // Overflow (UILabelData.overflow)
+    public static final int LABEL_OVERFLOW = 0;
+    public static final int LABEL_CLIP = 1;
+    public static final int LABEL_ELLIPSIS = 2;
+
+    // ============================================
+    // Label Properties (VK-1352)
+    // ============================================
+    // Each restyles a UILabel at runtime; the change is reflected next frame.
+
+    // Set the font size (in points) of a UILabel
+    public static function setLabelFontSize(int entityId, float size): void {
+        _native_ui_setLabelFontSize(entityId, size);
+    }
+
+    // Get the font size of a UILabel (0 if no label)
+    public static function getLabelFontSize(int entityId): float {
+        return _native_ui_getLabelFontSize(entityId);
+    }
+
+    // Set the text color (RGBA, each channel 0..1)
+    public static function setLabelColor(int entityId, float r, float g, float b, float a): void {
+        _native_ui_setLabelColor(entityId, r, g, b, a);
+    }
+
+    // Get the text color as a float[4] = [r, g, b, a]
+    public static function getLabelColor(int entityId): float[] {
+        return _native_ui_getLabelColor(entityId);
+    }
+
+    // Set the font style (LABEL_STYLE_NORMAL / BOLD / ITALIC / BOLD_ITALIC)
+    public static function setLabelStyle(int entityId, int style): void {
+        _native_ui_setLabelStyle(entityId, style);
+    }
+
+    // Get the font style as int (see LABEL_STYLE_* constants)
+    public static function getLabelStyle(int entityId): int {
+        return _native_ui_getLabelStyle(entityId);
+    }
+
+    // Set horizontal + vertical alignment (LABEL_ALIGN_* / LABEL_VALIGN_*)
+    public static function setLabelAlignment(int entityId, int horizontal, int vertical): void {
+        _native_ui_setLabelAlignment(entityId, horizontal, vertical);
+    }
+
+    // Get alignment as a float[2] = [horizontal, vertical] (see LABEL_ALIGN_* / LABEL_VALIGN_*)
+    public static function getLabelAlignment(int entityId): float[] {
+        return _native_ui_getLabelAlignment(entityId);
+    }
+
+    // Set the overflow mode (LABEL_OVERFLOW / LABEL_CLIP / LABEL_ELLIPSIS)
+    public static function setLabelOverflow(int entityId, int overflow): void {
+        _native_ui_setLabelOverflow(entityId, overflow);
+    }
+
+    // Get the overflow mode as int (see LABEL_OVERFLOW / LABEL_CLIP / LABEL_ELLIPSIS)
+    public static function getLabelOverflow(int entityId): int {
+        return _native_ui_getLabelOverflow(entityId);
+    }
+
+    // Enable/disable word wrapping
+    public static function setLabelWordWrap(int entityId, bool wrap): void {
+        _native_ui_setLabelWordWrap(entityId, wrap);
+    }
+
+    // Get whether word wrapping is enabled
+    public static function getLabelWordWrap(int entityId): bool {
+        return _native_ui_getLabelWordWrap(entityId);
+    }
+
+    // Set line + letter spacing multipliers
+    public static function setLabelSpacing(int entityId, float line, float letter): void {
+        _native_ui_setLabelSpacing(entityId, line, letter);
+    }
+
+    // Get spacing as a float[2] = [lineSpacing, letterSpacing]
+    public static function getLabelSpacing(int entityId): float[] {
+        return _native_ui_getLabelSpacing(entityId);
+    }
+
+    // Set the font by asset path (e.g. an imported font). Must be a registered asset.
+    public static function setLabelFont(int entityId, string fontPath): void {
+        _native_ui_setLabelFont(entityId, fontPath);
+    }
+
+    // Get the current font asset path (empty string if none)
+    public static function getLabelFont(int entityId): string {
+        return _native_ui_getLabelFont(entityId);
+    }
+
+    // ============================================
+    // Image Texture
+    // ============================================
+
+    // Point a UIImage on the given entity at a texture asset by path at runtime.
+    // The path must be a registered/imported asset (e.g. an .vfImage). The UI
+    // renderer resolves the texture per-frame, so the swap takes effect live.
+    public static function setImageTexture(int entityId, string assetPath): void {
+        _native_ui_setImageTexture(entityId, assetPath);
+    }
+
+    // Get the current texture asset path of a UIImage (empty string if none).
+    public static function getImageTexture(int entityId): string {
+        return _native_ui_getImageTexture(entityId);
+    }
+
+    // ============================================
+    // Image / Button Tint Colors
+    // ============================================
+
+    // Set a UIImage's color tint (RGBA 0..1). The tint multiplies the texture,
+    // so use white (1,1,1,1) to show a texture at full brightness.
+    public static function setImageColor(int entityId, float r, float g, float b, float a): void {
+        _native_ui_setImageColor(entityId, r, g, b, a);
+    }
+
+    // Get a UIImage's color tint as a float[4] = [r, g, b, a]
+    public static function getImageColor(int entityId): float[] {
+        return _native_ui_getImageColor(entityId);
+    }
+
+    // Set a UIButton's normal/hovered/pressed colors in one call (each RGBA 0..1).
+    // These multiply the button's image, so use light colors over a texture skin.
+    public static function setButtonColors(int entityId,
+        float nr, float ng, float nb, float na,
+        float hr, float hg, float hb, float ha,
+        float pr, float pg, float pb, float pa): void {
+        _native_ui_setButtonColors(entityId, nr, ng, nb, na, hr, hg, hb, ha, pr, pg, pb, pa);
     }
 
     // ============================================

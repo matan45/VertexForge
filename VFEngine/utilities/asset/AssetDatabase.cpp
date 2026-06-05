@@ -30,6 +30,37 @@ namespace asset
         return normalized;
     }
 
+    std::string AssetDatabase::resolveAssetPath(const std::string& path) const
+    {
+        if (path.empty()) return "";
+
+        // Convert separators first so is_absolute / lexically_normal behave
+        // consistently regardless of input slash style.
+        std::string converted = path;
+        std::replace(converted.begin(), converted.end(), '\\', '/');
+
+        fs::path p(converted);
+        if (p.is_absolute())
+        {
+            return normalizePath(converted);
+        }
+
+        std::string root;
+        {
+            std::shared_lock lock(dbMutex);
+            root = projectRoot;
+        }
+
+        if (root.empty())
+        {
+            // No project loaded yet: preserve legacy behavior.
+            return normalizePath(converted);
+        }
+
+        fs::path resolved = (fs::path(root) / p).lexically_normal();
+        return normalizePath(resolved.string());
+    }
+
     AssetGUID AssetDatabase::registerAsset(const std::string& path, resource::AssetType type,
                                            const std::string& importSource)
     {
@@ -352,6 +383,8 @@ namespace asset
 
             std::unique_lock lock(dbMutex);
 
+            this->projectRoot = normalizePath(projectRoot);   // function arg
+
             guidToEntry.clear();
             pathToGuid.clear();
             dependencies.clear();
@@ -414,9 +447,10 @@ namespace asset
             dependencies.clear();
             dependents.clear();
 
-            lock.unlock();
-
             lastSearchRoot = normalizePath(searchRoot);
+            projectRoot = lastSearchRoot;
+
+            lock.unlock();
 
             uint32_t count = 0;
             std::error_code ec;
@@ -522,5 +556,7 @@ namespace asset
         pathToGuid.clear();
         dependencies.clear();
         dependents.clear();
+        lastSearchRoot.clear();
+        projectRoot.clear();
     }
 }

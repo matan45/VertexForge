@@ -60,6 +60,17 @@ public class Input {
         return _native_input_getMouseY();
     }
 
+    // Get mouse X position relative to the active viewport.
+    // Editor play mode: relative to the ViewPort panel. Standalone runtime: same as getMouseX.
+    public static function getViewportMouseX(): float {
+        return _native_input_getViewportMouseX();
+    }
+
+    // Get mouse Y position relative to the active viewport.
+    public static function getViewportMouseY(): float {
+        return _native_input_getViewportMouseY();
+    }
+
     // ============================================
     // Mouse Movement (Delta)
     // ============================================
@@ -72,6 +83,20 @@ public class Input {
     // Get mouse Y movement since last frame
     public static function getMouseDeltaY(): float {
         return _native_input_getMouseDeltaY();
+    }
+
+    // ============================================
+    // Mouse Wheel
+    // ============================================
+
+    // Get horizontal scroll delta since last frame (tilt wheel / trackpad)
+    public static function getMouseScrollDeltaX(): float {
+        return _native_input_getMouseScrollDeltaX();
+    }
+
+    // Get vertical scroll delta since last frame (standard scroll wheel)
+    public static function getMouseScrollDeltaY(): float {
+        return _native_input_getMouseScrollDeltaY();
     }
 
     // ============================================

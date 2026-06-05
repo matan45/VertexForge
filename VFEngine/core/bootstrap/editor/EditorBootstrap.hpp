@@ -25,6 +25,7 @@ namespace services
     class IOceanRenderProvider;
     class IRenderTextureProvider;
     class IRenderHookProvider;
+    class ICustomPipelineProvider;
     class IDebugDrawProvider;
     class IGrassRenderProvider;
     class IBillboardRenderProvider;
@@ -33,6 +34,7 @@ namespace services
     class IObjectStreamingProvider;
     class IGIProvider;
     class IBehaviorTreeProvider;
+    class IRuntimePickerProvider;
 }
 
 namespace window
@@ -74,6 +76,7 @@ namespace core
     class OceanRenderAdapter;
     class RenderTextureAdapter;
     class RenderHookAdapter;
+    class CustomPipelineAdapter;
     class DebugDrawAdapter;
 
     namespace adapters
@@ -86,6 +89,7 @@ namespace core
         class GIAdapter;
     }
     class BehaviorTreeAdapter;
+    class RuntimePickerAdapter;
 
     class EditorBootstrap
     {
@@ -114,6 +118,7 @@ namespace core
         std::unique_ptr<OceanRenderAdapter> oceanRenderAdapter;
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
         std::unique_ptr<RenderHookAdapter> renderHookAdapter;
+        std::unique_ptr<CustomPipelineAdapter> customPipelineAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
         std::unique_ptr<adapters::GrassRenderAdapter> grassRenderAdapter;
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
@@ -122,6 +127,7 @@ namespace core
         std::unique_ptr<adapters::ObjectStreamingAdapter> objectStreamingAdapter;
         std::unique_ptr<adapters::GIAdapter> giAdapter;
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
+        std::unique_ptr<RuntimePickerAdapter> runtimePickerAdapter;
 
     public:
         explicit EditorBootstrap();
@@ -179,6 +185,8 @@ namespace core
 
         services::IRenderHookProvider* getRenderHookProvider();
 
+        services::ICustomPipelineProvider* getCustomPipelineProvider();
+
         services::IDebugDrawProvider* getDebugDrawProvider();
 
         // For late binding - allows EditorHandler to connect OceanService
@@ -196,6 +204,8 @@ namespace core
         services::IGIProvider* getGIProvider();
 
         services::IBehaviorTreeProvider* getBehaviorTreeProvider();
+
+        services::IRuntimePickerProvider* getRuntimePickerProvider();
 
         // === Other Accessors ===
 

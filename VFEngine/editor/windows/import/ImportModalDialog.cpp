@@ -179,55 +179,55 @@ namespace windows
                             ImGui::EndDisabled();
                         }
                     }
-                    ImGui::Unindent();
-                }
 
-                // Fracture Data Generation
-                {
-                    auto& fracCfg = meshConfigs[i].fractureConfig;
-                    ImGui::Checkbox("Generate Fracture Data", &fracCfg.generateFractureData);
-
-                    if (fracCfg.generateFractureData)
+                    // Fracture Data Generation
                     {
-                        ImGui::Indent();
-                        ImGui::Separator();
-                        ImGui::Text("Fracture Settings");
+                        auto& fracCfg = meshConfig.fractureConfig;
+                        ImGui::Checkbox("Generate Fracture Data", &fracCfg.generateFractureData);
 
-                        int fragCount = static_cast<int>(fracCfg.fragmentCount);
-                        ImGui::SliderInt("Fragment Count", &fragCount, 2, 100);
-                        fracCfg.fragmentCount = static_cast<uint32_t>(fragCount);
-
-                        const char* seedNames[] = {"Uniform", "Clustered"};
-                        int seedIdx = static_cast<int>(fracCfg.seedDistribution);
-                        ImGui::Combo("Seed Distribution", &seedIdx, seedNames, IM_ARRAYSIZE(seedNames));
-                        fracCfg.seedDistribution = static_cast<importConfig::FractureSeedDistribution>(seedIdx);
-
-                        int seed = static_cast<int>(fracCfg.randomSeed);
-                        ImGui::InputInt("Random Seed", &seed);
-                        fracCfg.randomSeed = static_cast<uint32_t>(seed);
-
-                        float uvScale = fracCfg.innerUVScale;
-                        ImGui::SliderFloat("Inner UV Scale", &uvScale, 0.1f, 10.0f);
-                        fracCfg.innerUVScale = uvScale;
-
-                        ImGui::Checkbox("Generate Convex Hulls Per Fragment", &fracCfg.generateConvexHulls);
-
-                        if (fracCfg.seedDistribution == importConfig::FractureSeedDistribution::Clustered)
+                        if (fracCfg.generateFractureData)
                         {
-                            if (ImGui::TreeNode("Cluster Parameters"))
-                            {
-                                int cc = static_cast<int>(fracCfg.clusterCount);
-                                ImGui::SliderInt("Cluster Count", &cc, 1, 20);
-                                fracCfg.clusterCount = static_cast<uint32_t>(cc);
-                                float cr = fracCfg.clusterRadius;
-                                ImGui::SliderFloat("Cluster Radius", &cr, 0.01f, 1.0f);
-                                fracCfg.clusterRadius = cr;
-                                ImGui::TreePop();
-                            }
-                        }
+                            ImGui::Indent();
+                            ImGui::Separator();
+                            ImGui::Text("Fracture Settings");
 
-                        ImGui::Unindent();
+                            int fragCount = static_cast<int>(fracCfg.fragmentCount);
+                            ImGui::SliderInt("Fragment Count", &fragCount, 2, 100);
+                            fracCfg.fragmentCount = static_cast<uint32_t>(fragCount);
+
+                            const char* seedNames[] = {"Uniform", "Clustered"};
+                            int seedIdx = static_cast<int>(fracCfg.seedDistribution);
+                            ImGui::Combo("Seed Distribution", &seedIdx, seedNames, IM_ARRAYSIZE(seedNames));
+                            fracCfg.seedDistribution = static_cast<importConfig::FractureSeedDistribution>(seedIdx);
+
+                            int seed = static_cast<int>(fracCfg.randomSeed);
+                            ImGui::InputInt("Random Seed", &seed);
+                            fracCfg.randomSeed = static_cast<uint32_t>(seed);
+
+                            float uvScale = fracCfg.innerUVScale;
+                            ImGui::SliderFloat("Inner UV Scale", &uvScale, 0.1f, 10.0f);
+                            fracCfg.innerUVScale = uvScale;
+
+                            ImGui::Checkbox("Generate Convex Hulls Per Fragment", &fracCfg.generateConvexHulls);
+
+                            if (fracCfg.seedDistribution == importConfig::FractureSeedDistribution::Clustered)
+                            {
+                                if (ImGui::TreeNode("Cluster Parameters"))
+                                {
+                                    int cc = static_cast<int>(fracCfg.clusterCount);
+                                    ImGui::SliderInt("Cluster Count", &cc, 1, 20);
+                                    fracCfg.clusterCount = static_cast<uint32_t>(cc);
+                                    float cr = fracCfg.clusterRadius;
+                                    ImGui::SliderFloat("Cluster Radius", &cr, 0.01f, 1.0f);
+                                    fracCfg.clusterRadius = cr;
+                                    ImGui::TreePop();
+                                }
+                            }
+
+                            ImGui::Unindent();
+                        }
                     }
+                    ImGui::Unindent();
                 }
 
                 services::ImportFileRequest request;

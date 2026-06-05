@@ -9,9 +9,11 @@
 #include "../../render/ui/UISliceHelper.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace controllers::offscreen::ui_common;
 
@@ -370,84 +372,59 @@ namespace controllers::offscreen
             }
         }
 
+        // Dedupes orphan warnings across frames. Best-effort: not cleared on scene
+        // reload, so if a scene change recycles an entity id into a new orphan we
+        // may miss it. Acceptable since this is an authoring-mistake hint, not load-bearing.
+        std::unordered_set<uint32_t> g_orphanWarnedIds;
+
+        void warnOrphanUIEntities(entt::registry& registry)
+        {
+            auto view = registry.view<components::UIImageComponent, components::UIRectComponent>();
+            for (auto entity : view)
+            {
+                if (registry.all_of<components::UICanvasComponent>(entity))
+                    continue;
+                if (findCanvasForEntity(registry, entity) != nullptr)
+                    continue;
+
+                uint32_t id = static_cast<uint32_t>(entity);
+                if (g_orphanWarnedIds.insert(id).second)
+                {
+                    vfLogWarning("UI entity {} has no UICanvasComponent ancestor - will not render", id);
+                }
+            }
+        }
+
         void emitUIImagePasses(
             entt::registry& registry, const FrameContext& ctx,
             const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers,
             std::vector<render::ui::UIImageRenderData>& drawList)
         {
-            // Check if any UIMaskComponent exists - if so, use hierarchy traversal
-            bool hasMasks = registry.storage<components::UIMaskComponent>().size() > 0;
-
-            if (hasMasks)
+            // Collect active canvases, then stable-sort by UICanvasComponent.sortOrder
+            // so author-controllable z is honored (ascending: lower = behind, higher = on top).
+            // Stable sort preserves registry order for ties.
+            auto canvasView = registry.view<components::UICanvasComponent>();
+            std::vector<entt::entity> sortedCanvases;
+            sortedCanvases.reserve(canvasView.size());
+            for (auto e : canvasView)
             {
-                // Hierarchy-ordered traversal starting from canvas roots
-                auto canvasView = registry.view<components::UICanvasComponent>();
-                for (auto canvasEntity : canvasView)
-                {
-                    if (!isEntityActive(registry, canvasEntity))
-                        continue;
-
-                    const auto* canvas = &registry.get<components::UICanvasComponent>(canvasEntity);
-
-                    // Traverse canvas entity itself
-                    traverseEntity(registry, canvasEntity, entt::null, canvas, ctx,
-                        scrollContainers, drawList, 0);
-                }
+                if (isEntityActive(registry, e))
+                    sortedCanvases.push_back(e);
             }
-            else
+            std::stable_sort(sortedCanvases.begin(), sortedCanvases.end(),
+                [&registry](entt::entity a, entt::entity b) {
+                    return registry.get<components::UICanvasComponent>(a).sortOrder
+                         < registry.get<components::UICanvasComponent>(b).sortOrder;
+                });
+
+            for (auto canvasEntity : sortedCanvases)
             {
-                // Original flat passes (no masks in scene - fast path)
-                auto view = registry.view<components::UIImageComponent, components::UIRectComponent>();
-
-                // Pass 1: Scroll container backgrounds
-                for (auto entity : view)
-                {
-                    if (!registry.all_of<components::UIScrollComponent>(entity))
-                        continue;
-                    if (!isEntityActive(registry, entity))
-                        continue;
-
-                    const auto* canvas = findCanvasForEntity(registry, entity);
-                    if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
-                        canvas = &registry.get<components::UICanvasComponent>(entity);
-                    if (!canvas) continue;
-
-                    emitUIImageEntity(registry, entity, entt::null, canvas, ctx, scrollContainers, drawList);
-                }
-
-                // Pass 2: All other UIImage entities
-                for (auto entity : view)
-                {
-                    if (registry.all_of<components::UIScrollComponent>(entity))
-                        continue;
-                    if (!isEntityActive(registry, entity))
-                        continue;
-
-                    const components::UICanvasComponent* canvas = nullptr;
-                    entt::entity scrollAncestor = entt::null;
-                    entt::entity current = entity;
-                    while (registry.all_of<components::ParentComponent>(current))
-                    {
-                        entt::entity parentEntity = registry.get<components::ParentComponent>(current).parent;
-                        if (parentEntity == entt::null || !registry.valid(parentEntity))
-                            break;
-                        if (scrollAncestor == entt::null
-                            && registry.all_of<components::UIScrollComponent>(parentEntity))
-                            scrollAncestor = parentEntity;
-                        if (registry.all_of<components::UICanvasComponent>(parentEntity))
-                        {
-                            canvas = &registry.get<components::UICanvasComponent>(parentEntity);
-                            break;
-                        }
-                        current = parentEntity;
-                    }
-                    if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
-                        canvas = &registry.get<components::UICanvasComponent>(entity);
-                    if (!canvas) continue;
-
-                    emitUIImageEntity(registry, entity, scrollAncestor, canvas, ctx, scrollContainers, drawList);
-                }
+                const auto* canvas = &registry.get<components::UICanvasComponent>(canvasEntity);
+                traverseEntity(registry, canvasEntity, entt::null, canvas, ctx,
+                    scrollContainers, drawList, 0);
             }
+
+            warnOrphanUIEntities(registry);
         }
 
     } // anonymous namespace
@@ -479,6 +456,7 @@ namespace controllers::offscreen
         interactionSystem.processTabsInteraction(ctx);
         interactionSystem.processSliderInteraction(ctx);
         interactionSystem.processDragDropInteraction(ctx);
+        interactionSystem.computePointerOverUI(ctx);
 
         std::vector<render::ui::UIImageRenderData> drawList;
         auto& registry = scene::EntityRegistry::getRegistry();

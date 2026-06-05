@@ -68,7 +68,7 @@ namespace core {
 
 		void init();
 
-		void render();
+		void render(const std::function<void()>& preRenderCallback = {});
 
 		void recreate(uint32_t width, uint32_t height);
 

@@ -66,17 +66,22 @@ namespace controllers
 
         lastRenderedHandle = static_cast<void*>(result);
 
-        if (!textureKey.empty() && mainPassHandler)
-        {
-            auto imageView = viewport->getLastRenderedImageView();
-            auto texSampler = viewport->getTextureSampler();
-            if (imageView && texSampler)
-            {
-                mainPassHandler->registerExternalTexture(textureKey, imageView, texSampler);
-            }
-        }
-
+        // External-texture registration is owned exclusively by RenderTextureAdapter::renderAll's
+        // per-frame repoint loop. It runs unconditionally for every enabled controller after this
+        // function returns, so doing the registration here would be (a) redundant and (b) unsafe
+        // on early-return paths in viewport->render where lastRenderedImageIndex was never
+        // updated to the current swapchain slot.
         return lastRenderedHandle;
+    }
+
+    vk::ImageView RenderTextureController::getLatestImageView() const
+    {
+        return viewport ? viewport->getLatestImageView() : vk::ImageView{};
+    }
+
+    vk::Sampler RenderTextureController::getTextureSampler() const
+    {
+        return viewport ? viewport->getTextureSampler() : vk::Sampler{};
     }
 
     bool RenderTextureController::shouldRenderThisFrame(float deltaTime)

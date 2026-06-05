@@ -21,8 +21,12 @@
 #include "../../events/render/AtmosphereEvents.hpp"
 #include "../../events/render/CloudEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/project/ProjectEvents.hpp"
+#include "../../events/input/ActionMappingEvents.hpp"
+#include <algorithm>
 #include <functional>
 #include <fstream>
+#include <filesystem>
 
 namespace services
 {
@@ -357,9 +361,23 @@ namespace services
                 const auto& navmeshComp = root.getComponent<components::NavmeshComponent>();
                 if (navmeshComp.navmeshRef.isValid())
                 {
-                    events::navmesh::LoadNavmeshCommand loadNavCmd;
-                    loadNavCmd.filePath = navmeshComp.navmeshRef.resolve();
-                    dispatcher.execute(loadNavCmd);
+                    const std::string& navmeshPath = navmeshComp.navmeshRef.resolve();
+                    std::string ext = std::filesystem::path(navmeshPath).extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                    if (ext == ".vfnavindex")
+                    {
+                        // Tiled navmesh: the asset is the index file, tiles live beside it
+                        events::navmesh::LoadNavmeshTiledCommand loadTiledCmd;
+                        loadTiledCmd.directory = std::filesystem::path(navmeshPath).parent_path().string();
+                        dispatcher.execute(loadTiledCmd);
+                    }
+                    else
+                    {
+                        events::navmesh::LoadNavmeshCommand loadNavCmd;
+                        loadNavCmd.filePath = navmeshPath;
+                        dispatcher.execute(loadNavCmd);
+                    }
                 }
             }
 
@@ -438,6 +456,29 @@ namespace services
             events::cloud::ApplyCloudSettingsCommand cloudCmd;
             cloudCmd.settings = sceneGraph->getRenderSettings().cloud;
             dispatcher.execute(cloudCmd);
+
+            const auto& sceneInputMapping = sceneGraph->getInputMappingPath();
+            if (sceneInputMapping.has_value() && !sceneInputMapping->empty())
+            {
+                auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
+                std::filesystem::path mappingPath = *sceneInputMapping;
+                if (projectOpt.has_value() && !projectOpt->workingDirectory.empty() && mappingPath.is_relative())
+                {
+                    mappingPath = std::filesystem::path(projectOpt->workingDirectory) / mappingPath;
+                }
+
+                if (std::filesystem::exists(mappingPath))
+                {
+                    events::input::LoadActionBindingsCommand mappingCmd;
+                    mappingCmd.filePath = mappingPath.string();
+                    dispatcher.execute(mappingCmd);
+                    vfLogInfo("Scene input mapping loaded: {}", mappingPath.string());
+                }
+                else
+                {
+                    vfLogWarning("Scene input mapping not found: {}", mappingPath.string());
+                }
+            }
 
             events::scene::SceneLoadedNotification notification;
             notification.scenePath = filePath;

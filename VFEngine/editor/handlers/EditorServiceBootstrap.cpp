@@ -33,6 +33,7 @@
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "impl/render/RenderHookServiceImpl.hpp"
+#include "impl/render/CustomPipelineServiceImpl.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
 #include "impl/render/BillboardRenderServiceImpl.hpp"
 #include "impl/render/DecalRenderServiceImpl.hpp"
@@ -41,6 +42,7 @@
 #include "impl/render/GIServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
+#include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/asset/AssetDatabaseServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
@@ -122,6 +124,7 @@ namespace handlers
         }
 
         renderHookService = std::make_shared<services::RenderHookServiceImpl>(bootstrap->getRenderHookProvider());
+        customPipelineService = std::make_shared<services::CustomPipelineServiceImpl>(bootstrap->getCustomPipelineProvider());
         debugDrawService = std::make_shared<services::DebugDrawServiceImpl>(bootstrap->getDebugDrawProvider());
         billboardRenderService = std::make_shared<services::BillboardRenderServiceImpl>(bootstrap->getBillboardRenderProvider());
         decalRenderService = std::make_shared<services::DecalRenderServiceImpl>(bootstrap->getDecalRenderProvider());
@@ -274,6 +277,10 @@ namespace handlers
             behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
             behaviorTreePlayModeHandler->subscribeToEvents();
         }
+
+        runtimePickerService = std::make_shared<services::RuntimePickerServiceImpl>(
+            bootstrap->getRuntimePickerProvider()
+        );
     }
 
     void EditorHandler::createWeatherServices()
@@ -317,6 +324,7 @@ namespace handlers
         if (ikComponentService) ikComponentService->registerEventHandlers();
         exportHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();
+        customPipelineService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
         assetLifecycleService->registerEventHandlers();
         worldSectorService->registerEventHandlers();
@@ -331,6 +339,7 @@ namespace handlers
         objectStreamingService->registerEventHandlers();
         giService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
+        runtimePickerService->registerEventHandlers();
         weatherService->registerEventHandlers();
         if (destructionService) destructionService->registerEventHandlers();
         saveService->registerEventHandlers(events::EventDispatcher::instance());

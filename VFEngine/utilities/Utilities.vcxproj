@@ -108,6 +108,7 @@
     <ClInclude Include="behaviortree\BehaviorTreeTypes.hpp" />
     <ClInclude Include="behaviortree\Blackboard.hpp" />
     <ClInclude Include="cloud\CloudSettings.hpp" />
+    <ClInclude Include="components\ComponentClone.hpp" />
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="components\ControllerComponents.hpp" />
     <ClInclude Include="components\CoreComponents.hpp" />
@@ -227,6 +228,7 @@
     <ClInclude Include="types\PhysicsAnimationTypes.hpp" />
     <ClInclude Include="types\PhysicsTypes.hpp" />
     <ClInclude Include="types\RenderSettings.hpp" />
+    <ClInclude Include="ui\UIRectMath.hpp" />
     <ClInclude Include="uuid\UUID.hpp" />
     <ClInclude Include="vegetation\GrassConfig.hpp" />
     <ClInclude Include="vegetation\VegetationSerializer.hpp" />

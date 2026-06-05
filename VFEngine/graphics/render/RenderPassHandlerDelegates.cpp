@@ -6,6 +6,7 @@
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "print/Log.hpp"
 
 namespace render
 {
@@ -310,13 +311,14 @@ namespace render
             return;
         }
 
-        occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
-        if (!cameraOcclusionManager->isHiZInitialized(activeCameraId))
+        // VK-1336: main-scene HiZ pyramid always belongs to the primary camera.
+        // RTT cameras run their HiZ inside RenderTextureViewPort's per-RTT context.
+        if (!cameraOcclusionManager->isHiZInitialized(occlusion::MAIN_CAMERA_ID))
         {
             return;
         }
 
-        auto* camera = cameraOcclusionManager->getCamera(activeCameraId);
+        auto* camera = cameraOcclusionManager->getCamera(occlusion::MAIN_CAMERA_ID);
         if (!camera || !camera->hiZBuffer || !camera->hiZBuffer->isInitialized())
         {
             return;

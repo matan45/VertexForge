@@ -21,6 +21,7 @@
 #include "../../adapters/terrain/TerrainBrushComputeAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
+#include "../../adapters/render/CustomPipelineAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
@@ -74,6 +75,7 @@ namespace core
         terrainBrushComputeAdapter.reset();
         renderTextureAdapter.reset();
         renderHookAdapter.reset();
+        customPipelineAdapter.reset();
         debugDrawAdapter.reset();
         oceanRenderAdapter.reset();
         grassRenderAdapter.reset();

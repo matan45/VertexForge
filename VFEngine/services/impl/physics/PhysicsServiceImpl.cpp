@@ -1,8 +1,14 @@
 #include "PhysicsServiceImpl.hpp"
+#include "PhysicsBodyBuilder.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../events/physics/PhysicsSettingsEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "../../data/EntityConversion.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 #include "print/Log.hpp"
+#include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cassert>
 
@@ -13,7 +19,9 @@ namespace services {
         assert(physicsProvider && "PhysicsProvider must not be null");
     }
 
-    PhysicsServiceImpl::~PhysicsServiceImpl() = default;
+    PhysicsServiceImpl::~PhysicsServiceImpl() {
+        ::events::EventDispatcher::instance().unsubscribe(entityDeletedToken);
+    }
 
     void PhysicsServiceImpl::registerEventHandlers() {
         auto& dispatcher = ::events::EventDispatcher::instance();
@@ -53,6 +61,127 @@ namespace services {
         dispatcher.registerCommandHandler<events::physics::RemoveColliderCommand>(
             [this](const auto& cmd) {
                 removeCollider(cmd.entity);
+            });
+
+        // VK-1351: build a real physics body from an entity's runtime-configured
+        // Collider/RigidBody components, positioned at its current transform.
+        dispatcher.registerCommandHandler<events::physics::CreatePhysicsBodyCommand>(
+            [this](const events::physics::CreatePhysicsBodyCommand& cmd) -> bool {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                if (!internal::isValidHandle(cmd.entity, registry)) return false;
+                entt::entity entity = internal::fromHandle(cmd.entity);
+                if (!registry.all_of<components::TransformComponent>(entity)) return false;
+
+                const bool hasCollider = registry.all_of<components::ColliderComponent>(entity);
+                const bool hasBody = registry.all_of<components::RigidBodyComponent>(entity);
+                if (!hasCollider && !hasBody) return false;
+
+                if (physicsProvider->hasRigidBody(cmd.entity))
+                {
+                    if (!cmd.rebuild) return false;   // idempotent: createBody is a no-op if a body exists
+                    physicsProvider->removeRigidBody(cmd.entity);
+                }
+
+                const auto& transform = registry.get<components::TransformComponent>(entity);
+
+                RigidBodyData rbData;
+                if (hasBody)
+                    rbData = buildRigidBodyData(registry.get<components::RigidBodyComponent>(entity));
+                else
+                    rbData.type = RigidBodyData::Type::Static;
+
+                ColliderData colData;
+                if (hasCollider)
+                {
+                    const auto& collider = registry.get<components::ColliderComponent>(entity);
+                    if (hasBody)
+                    {
+                        const std::string entityName = registry.all_of<components::NameComponent>(entity)
+                            ? registry.get<components::NameComponent>(entity).name : std::string("Runtime");
+                        const std::string validationError = validateCollider(
+                            collider, registry.get<components::RigidBodyComponent>(entity), entityName);
+                        if (!validationError.empty())
+                        {
+                            vfLogWarning("{} - skipping runtime physics body creation", validationError);
+                            return false;
+                        }
+                    }
+                    colData = buildColliderData(collider, entity, registry);
+                }
+                else
+                {
+                    colData.shape = ColliderData::Shape::Box;
+                    colData.size = glm::vec3(1.0f);
+                }
+                applyScaleToCollider(colData, transform.scale);
+
+                try {
+                    physicsProvider->addRigidBody(cmd.entity, rbData, colData);
+                    physicsProvider->setPosition(cmd.entity, transform.position);
+                    physicsProvider->setRotation(cmd.entity, glm::quat(glm::radians(transform.rotation)));
+                } catch (const std::exception& e) {
+                    vfLogError("Failed to create runtime physics body for entity {}: {}", cmd.entity.id, e.what());
+                    return false;
+                }
+
+                events::physics::RigidBodyAddedNotification notification;
+                notification.entity = cmd.entity;
+                ::events::EventDispatcher::instance().publish(notification);
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<events::physics::DestroyPhysicsBodyCommand>(
+            [this](const events::physics::DestroyPhysicsBodyCommand& cmd) -> bool {
+                if (!physicsProvider->hasRigidBody(cmd.entity)) return false;
+                removeRigidBody(cmd.entity);
+                events::physics::RigidBodyRemovedNotification notification;
+                notification.entity = cmd.entity;
+                ::events::EventDispatcher::instance().publish(notification);
+                return true;
+            });
+
+        // Static Jolt height-field body from raw samples (plugin/runtime custom terrain).
+        // Reuses the terrain-tile collider machinery, keyed by (entity, tileX, tileZ).
+        dispatcher.registerCommandHandler<events::physics::CreateHeightFieldBodyCommand>(
+            [this](const events::physics::CreateHeightFieldBodyCommand& cmd) -> bool {
+                if (cmd.sampleCount == 0
+                    || cmd.heightSamples.size() < static_cast<size_t>(cmd.sampleCount) * cmd.sampleCount)
+                {
+                    vfLogWarning("CreateHeightFieldBody: invalid samples ({} provided, {}x{} required)",
+                                 cmd.heightSamples.size(), cmd.sampleCount, cmd.sampleCount);
+                    return false;
+                }
+
+                TerrainTileColliderInfo info;
+                info.tileX = cmd.tileX;
+                info.tileZ = cmd.tileZ;
+                info.heightSamples = cmd.heightSamples.data();
+                info.sampleCount = cmd.sampleCount;
+                info.worldOrigin = cmd.worldOrigin;
+                info.vertexSpacing = cmd.vertexSpacing;
+                info.friction = cmd.friction;
+                info.restitution = cmd.restitution;
+                info.collisionLayer = cmd.collisionLayer;
+                physicsProvider->addTerrainTileCollider(cmd.entity, info);
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<events::physics::DestroyHeightFieldBodyCommand>(
+            [this](const events::physics::DestroyHeightFieldBodyCommand& cmd) {
+                physicsProvider->removeTerrainTileCollider(cmd.entity, cmd.tileX, cmd.tileZ);
+            });
+
+        // VK-1351: tear down the physics body when its entity is destroyed, so runtime-spawned
+        // (and load-time) bodies don't leak in the physics world / PhysicsBodyRegistry.
+        entityDeletedToken = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
+            [this](const events::scene::EntityDeletedNotification& notif) {
+                if (physicsProvider->hasRigidBody(notif.entity))
+                {
+                    removeRigidBody(notif.entity);
+                    events::physics::RigidBodyRemovedNotification notification;
+                    notification.entity = notif.entity;
+                    ::events::EventDispatcher::instance().publish(notification);
+                }
             });
 
         dispatcher.registerCommandHandler<events::physics::ApplyForceCommand>(

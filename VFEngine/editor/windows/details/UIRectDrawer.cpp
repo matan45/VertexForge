@@ -50,6 +50,8 @@ namespace windows::details
             changed |= drawSizeDelta(data);
             ImGui::Spacing();
             changed |= drawAnchoredPosition(data);
+            ImGui::Spacing();
+            changed |= drawBlocksRaycast(data);
 
             if (changed)
             {
@@ -142,6 +144,22 @@ namespace windows::details
         if (ImGui::DragFloat2("Anchored Position##UIRect", &data.anchoredPosition.x, 1.0f, 0.0f, 0.0f, "%.1f"))
         {
             changed = true;
+        }
+
+        return changed;
+    }
+
+    bool UIRectDrawer::drawBlocksRaycast(services::UIRectData& data)
+    {
+        bool changed = false;
+
+        if (ImGui::Checkbox("Blocks Raycast##UIRect", &data.blocksRaycast))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("When checked, the cursor over this element makes UI::isPointerOverUI()\nreturn true so game scripts skip world raycasts/picking behind it.");
         }
 
         return changed;

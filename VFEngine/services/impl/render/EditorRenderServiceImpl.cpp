@@ -2,9 +2,11 @@
 #include "EditorRenderServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
+#include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "scene/EntityRegistry.hpp"
+#include <exception>
 #include <filesystem>
 
 namespace services
@@ -27,9 +29,19 @@ namespace services
             dispatcher.unsubscribe(meshDataChangedToken);
         }
 
+        if (editorModePreChangeToken.isValid())
+        {
+            dispatcher.unsubscribe(editorModePreChangeToken);
+        }
+
         if (editorModeChangedToken.isValid())
         {
             dispatcher.unsubscribe(editorModeChangedToken);
+        }
+
+        if (navmeshBakeCompleteToken.isValid())
+        {
+            dispatcher.unsubscribe(navmeshBakeCompleteToken);
         }
     }
 
@@ -77,12 +89,19 @@ namespace services
 
     void EditorRenderServiceImpl::renderViewportDeferred()
     {
+        renderViewportDeferred({});
+    }
+
+    void EditorRenderServiceImpl::renderViewportDeferred(const std::function<void()>& preRenderCallback)
+    {
         if (!viewportPrepared || !offScreenProvider)
             return;
 
         viewportPrepared = false;
 
-        void* descriptorSet = offScreenProvider->render();
+        void* descriptorSet = preRenderCallback
+            ? offScreenProvider->render(preRenderCallback)
+            : offScreenProvider->render();
 
         ViewportTextureHandle handle;
         handle.imguiDescriptorSet = descriptorSet;
@@ -102,7 +121,7 @@ namespace services
         viewportWidth = width;
         viewportHeight = height;
 
-        // Clear stale descriptor set — old offscreen resources will be destroyed during recreate
+        // Clear stale descriptor set - old offscreen resources will be destroyed during recreate
         lastViewportHandle = ViewportTextureHandle{};
     }
 
@@ -260,6 +279,16 @@ namespace services
                 }
             });
 
+        editorModePreChangeToken = dispatcher.subscribe<events::editor::EditorModePreChangeNotification>(
+            [this](const events::editor::EditorModePreChangeNotification& notification)
+            {
+                if (notification.previousMode == services::EditorMode::Play &&
+                    notification.currentMode == services::EditorMode::Edit)
+                {
+                    waitForOffScreenIdleDuringPlayModeStop();
+                }
+            });
+
         editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& notification)
             {
@@ -267,6 +296,24 @@ namespace services
                 {
                     bool isPlayMode = notification.currentMode == services::EditorMode::Play;
                     offScreenProvider->setPlayMode(isPlayMode);
+                }
+            });
+
+        navmeshBakeCompleteToken = dispatcher.subscribe<events::navmesh::NavmeshBakeCompleteNotification>(
+            [this](const events::navmesh::NavmeshBakeCompleteNotification& notification)
+            {
+                // Refresh the debug overlay when a navmesh finishes baking or loading
+                // while "Show Navmesh" is already enabled (e.g. scene auto-load).
+                if (!notification.success || !showNavmeshDebug || !offScreenProvider)
+                {
+                    return;
+                }
+
+                auto debugMesh = events::EventDispatcher::instance().query(
+                    events::navmesh::GetNavmeshDebugMeshQuery{});
+                if (!debugMesh.vertices.empty() && !debugMesh.indices.empty())
+                {
+                    offScreenProvider->updateNavmeshDebugMesh(debugMesh.vertices, debugMesh.indices);
                 }
             });
     }
@@ -459,6 +506,23 @@ namespace services
         result.min = bounds->min;
         result.max = bounds->max;
         return result;
+    }
+
+    void EditorRenderServiceImpl::waitForOffScreenIdleDuringPlayModeStop()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        try
+        {
+            offScreenProvider->waitForIdle();
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to wait for offscreen GPU idle during play-mode stop: {}", e.what());
+        }
     }
 
 }

@@ -1,0 +1,44 @@
+#pragma once
+#include "TerrainExport.hpp"
+
+#include "TerrainMaterialTypes.hpp"
+#include <vector>
+#include <array>
+#include <cstdint>
+
+namespace terrain
+{
+    static constexpr uint8_t WEIGHT_CHANNELS = 8;
+
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    struct VF_TERRAIN_API TileWeightMapData
+    {
+        // layerWeights[channel] = flat vector of size resolution*resolution
+        // Values in [0.0, 1.0], sum across channels at each texel should be 1.0
+        std::vector<std::vector<float>> layerWeights;
+        uint32_t resolution = 0; // matches tile vertex count (33, 65, 129)
+
+        // Per-tile palette indirection: channel N maps to palette layer layerIndices[N].
+        // Inactive channels may reference palette indices beyond activeLayerCount —
+        // these are safely ignored by the weight loop (w < 0.001 or paletteIdx >= layers.size()).
+        std::array<uint8_t, WEIGHT_CHANNELS> layerIndices = {0, 1, 2, 3, 4, 5, 6, 7};
+
+        [[nodiscard]] bool isInitialized() const { return resolution > 0 && !layerWeights.empty(); }
+        [[nodiscard]] size_t getTexelCount() const { return static_cast<size_t>(resolution) * resolution; }
+
+        [[nodiscard]] float getWeight(uint32_t channel, uint32_t x, uint32_t z) const;
+        void setWeight(uint32_t channel, uint32_t x, uint32_t z, float value);
+
+        void normalizeAt(uint32_t x, uint32_t z);
+        void normalizeAll();
+        void initializeDefault(uint32_t vertexResolution);
+
+        // Returns channel [0-7] if paletteLayer is assigned, else 0xFF
+        [[nodiscard]] uint8_t findChannel(uint8_t paletteLayer) const;
+
+        // Assigns paletteLayer to a free or least-used channel. Returns channel index.
+        uint8_t assignChannel(uint8_t paletteLayer);
+    };
+#pragma warning(pop)
+}

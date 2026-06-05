@@ -9,6 +9,7 @@
 
 namespace core
 {
+    class DeferredDeletionQueue;
     class Device;
     class SwapChain;
 }
@@ -92,6 +93,7 @@ namespace render
         void recreate(vk::Format colorFormat, vk::Format depthFormat);
         void cleanUp();
         void cleanUpShaders();
+        void setDeletionQueue(core::DeferredDeletionQueue* queue);
 
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
 

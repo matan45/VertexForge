@@ -1,5 +1,6 @@
 #include "InputServiceImpl.hpp"
 #include "../../Window/controllers/InputController.hpp"
+#include "../../Window/window/Window.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "input/KeyCodes.hpp"
 #include "../../events/project/ApplicationEvents.hpp"
@@ -335,6 +336,20 @@ namespace services {
         dispatcher.registerQueryHandler<events::input::IsCursorVisibleQuery>(
             [this](const events::input::IsCursorVisibleQuery&) {
                 return isCursorVisible();
+            });
+
+        dispatcher.registerQueryHandler<events::application::GetWindowWidthQuery>(
+            [this](const events::application::GetWindowWidthQuery&) -> uint32_t {
+                if (!inputController) return 0u;
+                auto* w = inputController->getWindow();
+                return w ? w->getWidth() : 0u;
+            });
+
+        dispatcher.registerQueryHandler<events::application::GetWindowHeightQuery>(
+            [this](const events::application::GetWindowHeightQuery&) -> uint32_t {
+                if (!inputController) return 0u;
+                auto* w = inputController->getWindow();
+                return w ? w->getHeight() : 0u;
             });
     }
 

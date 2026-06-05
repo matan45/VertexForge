@@ -37,6 +37,7 @@ namespace core::audio
         void setLooping(AudioHandle handle, bool loop);
 
         bool isPlaying(AudioHandle handle) const;
+        bool isFinished(AudioHandle handle) const;
         float getPlaybackPosition(AudioHandle handle) const;
         bool setPlaybackPosition(AudioHandle handle, float seconds);
         float getDuration(AudioHandle handle) const;

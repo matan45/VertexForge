@@ -63,6 +63,11 @@ namespace serialization
                 project.exeIconPath = projectJson["exeIconPath"].get<std::string>();
             }
 
+            if (projectJson.contains("inputMapping") && projectJson["inputMapping"].is_string())
+            {
+                project.inputMapping = projectJson["inputMapping"].get<std::string>();
+            }
+
             if (projectJson.contains("engineVersion") && projectJson["engineVersion"].is_string())
             {
                 project.engineVersion = projectJson["engineVersion"].get<std::string>();
@@ -103,6 +108,11 @@ namespace serialization
             if (!project.exeIconPath.empty())
             {
                 projectJson["exeIconPath"] = project.exeIconPath;
+            }
+
+            if (project.inputMapping.has_value() && !project.inputMapping->empty())
+            {
+                projectJson["inputMapping"] = *project.inputMapping;
             }
 
             projectJson["engineVersion"] = getEngineVersionString();

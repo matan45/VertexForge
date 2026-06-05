@@ -5,9 +5,12 @@
 #include "events/save/ConfigEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/animation/AnimationBudgetEvents.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 namespace windows
 {
@@ -18,6 +21,11 @@ namespace windows
         {
             loadFromScene();
         }
+    }
+
+    void RenderConfigWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
     }
 
     void RenderConfigWindow::markDirty()
@@ -74,6 +82,24 @@ namespace windows
         presetCmd.key = "renderPreset";
         presetCmd.value = static_cast<int64_t>(settings.activePreset);
         dispatcher.execute(presetCmd);
+
+        std::string path = dispatcher.query(events::scene::GetCurrentScenePathQuery{});
+        if (path.empty())
+        {
+            const std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                {L"VF Scene Files (*.vfScene)", L"*.vfScene"}
+            };
+            const nfd::FileDialog fileDialog;
+            path = fileDialog.saveFileDialog(fileTypes, L"vfScene");
+            if (path.empty())
+            {
+                return;
+            }
+        }
+
+        events::scene::SaveSceneCommand saveCmd;
+        saveCmd.filePath = path;
+        dispatcher.execute(saveCmd);
 
         isDirty = false;
     }
@@ -362,6 +388,11 @@ namespace windows
 
     void RenderConfigWindow::drawContent()
     {
+        if (!settingsLoaded)
+        {
+            loadFromScene();
+        }
+
         drawPresetSection();
         drawCullingSection();
         drawTerrainSection();
@@ -392,6 +423,6 @@ namespace windows
         }
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Render settings are saved with the scene file.");
+        ImGui::TextDisabled("Save to Scene writes these settings to the active scene's linked settings asset.");
     }
 }

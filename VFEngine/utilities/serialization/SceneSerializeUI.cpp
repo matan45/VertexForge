@@ -14,6 +14,7 @@ namespace serialization {
         j["referenceHeight"] = canvas.referenceHeight;
         j["scaleMode"] = uiScaleModeToString(canvas.scaleMode);
         j["pixelsPerUnit"] = canvas.pixelsPerUnit;
+        j["sortOrder"] = canvas.sortOrder;
         return j;
     }
 
@@ -23,6 +24,7 @@ namespace serialization {
         canvas.referenceHeight = j.value("referenceHeight", 1080.0f);
         canvas.scaleMode = stringToUIScaleMode(j.value("scaleMode", "scaleWithScreenSize"));
         canvas.pixelsPerUnit = j.value("pixelsPerUnit", 100.0f);
+        canvas.sortOrder = j.value("sortOrder", 0);
     }
 
     // ---- Rect ----
@@ -35,6 +37,7 @@ namespace serialization {
         j["pivot"] = writeVec2(rect.pivot);
         j["sizeDelta"] = writeVec2(rect.sizeDelta);
         j["anchoredPosition"] = writeVec2(rect.anchoredPosition);
+        j["blocksRaycast"] = rect.blocksRaycast;
         return j;
     }
 
@@ -45,6 +48,7 @@ namespace serialization {
         readVec2(j, "pivot", rect.pivot);
         readVec2(j, "sizeDelta", rect.sizeDelta);
         readVec2(j, "anchoredPosition", rect.anchoredPosition);
+        rect.blocksRaycast = j.value("blocksRaycast", true);
     }
 
     // ---- Image ----

@@ -254,6 +254,8 @@ namespace render::gpudriven
             viewProjection = viewProj;
         }
 
+        const glm::mat4& getViewProjection() const { return viewProjection; }
+
         // Caustic integration (Set 12)
         void setCausticEnabled(bool enabled, vk::DescriptorSetLayout layout = nullptr)
         {

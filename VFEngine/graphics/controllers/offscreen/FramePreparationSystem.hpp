@@ -109,5 +109,6 @@ namespace controllers::offscreen
         void prepareUILabels(const FrameContext& ctx) { uiFrameBuilder.prepareUILabels(ctx); }
 
         void invalidateMaterialCache(const std::string& materialPath);
+        void clearAllMaterialCache();
     };
 }

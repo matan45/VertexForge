@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 #include "../common/CameraTypes.hpp"
+#include "components/UIComponents.hpp"
 
 namespace render::text
 {
@@ -53,6 +54,7 @@ namespace render::text
         uint32_t entityId;
         float sdfEdge;
         float sdfSmooth;
+        uint32_t styleFlags;    // bit0 = bold, bit1 = italic
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -63,9 +65,9 @@ namespace render::text
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 6> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 7> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 6> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 7> attributes{};
 
             // location 2: worldPosition (vec3) + fontSize (float) packed as vec4
             attributes[0].binding = 1;
@@ -103,6 +105,12 @@ namespace render::text
             attributes[5].format = vk::Format::eR32G32Sfloat;
             attributes[5].offset = offsetof(TextCharInstance, sdfEdge);
 
+            // location 8: styleFlags (uint)
+            attributes[6].binding = 1;
+            attributes[6].location = 8;
+            attributes[6].format = vk::Format::eR32Uint;
+            attributes[6].offset = offsetof(TextCharInstance, styleFlags);
+
             return attributes;
         }
     };
@@ -131,5 +139,6 @@ namespace render::text
         uint8_t horizontalAlignment = 0; // 0=Left, 1=Center, 2=Right
         uint8_t verticalAlignment = 0;   // 0=Top, 1=Middle, 2=Bottom
         float rectHeight = 0.0f;         // Bounding rect height for vertical alignment
+        components::FontStyle fontStyle = components::FontStyle::Normal;
     };
 }

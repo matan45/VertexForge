@@ -15,6 +15,7 @@
 #include "events/terrain/CaveBrushEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/meshbrush/MeshBrushEvents.hpp"
+#include "events/ui/UIPickEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include "time/Timer.hpp"
@@ -72,6 +73,16 @@ namespace windows
                 dispatcher.execute(offsetCmd);
             }
 
+            // Always publish — zero panelSize outside play mode clears stale state in subscribers
+            // (e.g. WindowStateServiceImpl, which serves script-side viewport-relative input queries).
+            events::render::PlayViewportRectChangedNotification rectNotif;
+            if (isPlayMode)
+            {
+                rectNotif.offset = vp;
+                rectNotif.panelSize = vs;
+            }
+            dispatcher.publish(rectNotif);
+
             updateBrushCursors(vp, vs);
 
             events::render::GetViewportTextureQuery query;
@@ -89,6 +100,7 @@ namespace windows
             {
                 picker.updateBillboardScreenPositions(*editorCamera, vp, vs);
                 picker.updateMeshPickData();
+                drawSelectedUIOutline(vp, vs);
             }
 
             handleEntityPicking(isPlayMode, vp, vs);
@@ -124,19 +136,37 @@ namespace windows
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!registry.all_of<components::CameraComponent>(enttEntity)) return false;
 
+        if (!registry.all_of<components::TransformComponent>(enttEntity)) return false;
+
         auto& camComp = registry.get<components::CameraComponent>(enttEntity);
         camComp.aspectRatio = aspectRatio;
         camComp.updateProjectionMatrix();
-        camComp.updateViewMatrix(transform.position, transform.rotation);
+
+        // Derive the view from the camera's LOCAL rotation (camera Y·X·Z order), not from the world
+        // transform's decomposed Euler. `transform` here is a TransformData DTO from
+        // GetWorldTransformQuery, whose rotation is the world matrix decomposed via
+        // extractEulerAngleXYZ — that extraction's gimbal singularity is on the yaw axis at ±90°,
+        // which flips a yawing fixed-pitch camera to the sky. updateViewMatrixFromWorldEye keeps any
+        // parent orientation while interpreting the local rotation in camera order (VK-1350).
+        const auto& localTransform = registry.get<components::TransformComponent>(enttEntity);
+        if (registry.all_of<components::WorldTransformComponent>(enttEntity))
+        {
+            const auto& worldMatrix = registry.get<components::WorldTransformComponent>(enttEntity).worldMatrix;
+            camComp.updateViewMatrixFromWorldEye(worldMatrix, localTransform);
+        }
+        else
+        {
+            camComp.updateViewMatrix(localTransform.position, localTransform.rotation);
+        }
 
         state.viewMatrix = camComp.viewMatrix;
         state.projectionMatrix = camComp.projectionMatrix;
         state.position = transform.position;
 
-        glm::mat4 rotMat = glm::mat4(1.0f);
-        rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
-        rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
-        state.forward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
+        // Forward from the resolved camera world orientation (inverse of the view), so a child camera
+        // under a rotating parent reports the correct listener direction too.
+        glm::mat4 cameraWorld = glm::inverse(camComp.viewMatrix);
+        state.forward = glm::normalize(-glm::vec3(cameraWorld[2]));
         return true;
     }
 
@@ -144,7 +174,9 @@ namespace windows
     {
         CameraState state;
         if (isPlayMode && tryGetGameCameraState(state, aspectRatio))
+        {
             return state;
+        }
 
         state.viewMatrix = editorCamera->getViewMatrix();
         state.projectionMatrix = editorCamera->getProjectionMatrix();
@@ -271,6 +303,10 @@ namespace windows
         auto picked = picker.pickBillboardAt(mp);
         if (!picked.has_value())
         {
+            picked = picker.pickUIAt(*editorCamera, mp, viewportPos, viewportSize);
+        }
+        if (!picked.has_value())
+        {
             picked = picker.pickMeshAt(*editorCamera, mp, viewportPos, viewportSize);
         }
 
@@ -281,6 +317,60 @@ namespace windows
             cmd.entity = *picked;
             dispatcher.execute(cmd);
         }
+    }
+
+    void ViewPort::drawSelectedUIOutline(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f) return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto selected = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+        if (!selected.has_value()) return;
+
+        events::ui::GetUIEntityWorldQuadQuery quadQuery;
+        quadQuery.entity = *selected;
+        auto quad = dispatcher.query(quadQuery);
+        if (!quad.has_value()) return;
+
+        glm::mat4 viewProj = editorCamera->getProjectionMatrix() * editorCamera->getViewMatrix();
+
+        glm::vec4 clipCorners[4];
+        for (int i = 0; i < 4; ++i)
+        {
+            clipCorners[i] = viewProj * glm::vec4(quad->corners[i], 1.0f);
+        }
+
+        // No Y flip — EditorCamera's projection already flips Y for Vulkan
+        auto project = [&](const glm::vec4& clip) {
+            glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            return ImVec2((ndc.x * 0.5f + 0.5f) * viewportSize.x + viewportPos.x,
+                          (ndc.y * 0.5f + 0.5f) * viewportSize.y + viewportPos.y);
+        };
+
+        // Corners behind the camera (clip.w <= 0) project to garbage — clip each
+        // edge against the near plane and draw the surviving polygon instead
+        constexpr float nearW = 1e-4f;
+        ImVec2 points[8];
+        int pointCount = 0;
+        for (int i = 0; i < 4; ++i)
+        {
+            const glm::vec4& a = clipCorners[i];
+            const glm::vec4& b = clipCorners[(i + 1) % 4];
+            bool aIn = a.w > nearW;
+            bool bIn = b.w > nearW;
+            if (!aIn && !bIn) continue;
+
+            if (aIn) points[pointCount++] = project(a);
+            if (aIn != bIn)
+            {
+                float tEdge = (nearW - a.w) / (b.w - a.w);
+                points[pointCount++] = project(a + (b - a) * tEdge);
+            }
+        }
+        if (pointCount < 2) return; // fully behind the camera
+
+        ImGui::GetWindowDrawList()->AddPolyline(points, pointCount, IM_COL32(255, 161, 0, 255),
+                                                ImDrawFlags_Closed, 2.0f);
     }
 
     void ViewPort::handleCameraInput()

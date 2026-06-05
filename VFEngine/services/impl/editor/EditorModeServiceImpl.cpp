@@ -11,9 +11,14 @@ namespace services
 
     EditorModeServiceImpl::~EditorModeServiceImpl()
     {
+        auto& dispatcher = events::EventDispatcher::instance();
         if (sceneLoadedToken.isValid())
         {
-            events::EventDispatcher::instance().unsubscribe(sceneLoadedToken);
+            dispatcher.unsubscribe(sceneLoadedToken);
+        }
+        if (sceneClearedToken.isValid())
+        {
+            dispatcher.unsubscribe(sceneClearedToken);
         }
     }
 
@@ -36,6 +41,11 @@ namespace services
         if (mode == EditorMode::Edit && previousMode == EditorMode::Play)
         {
             paused = false;
+
+            events::editor::EditorModePreChangeNotification preChangeNotification;
+            preChangeNotification.previousMode = previousMode;
+            preChangeNotification.currentMode = mode;
+            events::EventDispatcher::instance().publish(preChangeNotification);
 
             events::editor::EditorModeChangedNotification notification;
             notification.previousMode = previousMode;
@@ -159,6 +169,18 @@ namespace services
             [this](const events::scene::SceneLoadedNotification& n)
             {
                 currentScenePath = n.scenePath;
+            });
+
+        sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&)
+            {
+                currentScenePath.clear();
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetCurrentScenePathQuery>(
+            [this](const events::scene::GetCurrentScenePathQuery&)
+            {
+                return currentScenePath;
             });
     }
 }

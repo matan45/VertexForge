@@ -50,6 +50,7 @@ namespace windows
         void updateRendererCameras(const CameraState& camera);
         void handlePrefabDrop();
         void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void drawSelectedUIOutline(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void updateBrushCursors(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void sendCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);

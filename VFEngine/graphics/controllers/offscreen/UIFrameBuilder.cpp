@@ -19,58 +19,9 @@ namespace controllers::offscreen
 {
     namespace
     {
-        // --- World-space image: compute model matrix for a UI element on a canvas ---
-        glm::mat4 computeCanvasImageModelMatrix(
-            const components::UICanvasComponent& canvas,
-            const glm::mat4& worldMatrix,
-            const components::UIRectComponent& rectComp)
-        {
-            float canvasW = canvas.referenceWidth / canvas.pixelsPerUnit;
-            float canvasH = canvas.referenceHeight / canvas.pixelsPerUnit;
-
-            float anchorLeft = rectComp.anchorMin.x * canvas.referenceWidth;
-            float anchorRight = rectComp.anchorMax.x * canvas.referenceWidth;
-            float anchorBottom = rectComp.anchorMin.y * canvas.referenceHeight;
-            float anchorTop = rectComp.anchorMax.y * canvas.referenceHeight;
-
-            float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
-            float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
-            float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
-            float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
-
-            float localCX = cx / canvas.referenceWidth - 0.5f;
-            float localCY = cy / canvas.referenceHeight - 0.5f;
-            float normW = w / canvas.referenceWidth;
-            float normH = h / canvas.referenceHeight;
-
-            glm::mat4 canvasScaled = worldMatrix
-                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
-
-            return canvasScaled
-                * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, 0.001f))
-                * glm::scale(glm::mat4(1.0f), glm::vec3(normW, normH, 1.0f));
-        }
-
-        // Compute model matrix for an arbitrary sub-rect within the canvas (in canvas pixel coords)
-        glm::mat4 computeCanvasSubRectModelMatrix(
-            const components::UICanvasComponent& canvas,
-            const glm::mat4& worldMatrix,
-            float patchCX, float patchCY, float patchW, float patchH)
-        {
-            float canvasW = canvas.referenceWidth / canvas.pixelsPerUnit;
-            float canvasH = canvas.referenceHeight / canvas.pixelsPerUnit;
-            float localCX = patchCX / canvas.referenceWidth - 0.5f;
-            float localCY = patchCY / canvas.referenceHeight - 0.5f;
-            float normW = patchW / canvas.referenceWidth;
-            float normH = patchH / canvas.referenceHeight;
-
-            glm::mat4 canvasScaled = worldMatrix
-                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
-
-            return canvasScaled
-                * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, 0.001f))
-                * glm::scale(glm::mat4(1.0f), glm::vec3(normW, normH, 1.0f));
-        }
+        // World-space model matrices (computeCanvasImageModelMatrix /
+        // computeCanvasSubRectModelMatrix) live in utilities ui/UIRectMath.hpp,
+        // re-exported via UICommon.hpp — shared with editor viewport UI picking.
 
         // --- World-space label: compute world position + font parameters ---
         struct WorldLabelParams
@@ -163,6 +114,28 @@ namespace controllers::offscreen
                 PixelRect rect = resolvePixelRect(rectComp, viewportW, viewportH, scale);
 
                 auto [scrollAncestor, scissor] = findScrollInfo(registry, entity, scrollContainers);
+
+                // If the label opts into Clip overflow, intersect the label's own rect
+                // into the scissor. Done in pre-scroll-offset space — both `scissor` and
+                // `rect` are in viewport coords at this point.
+                if (labelComp.overflow == components::TextOverflow::Clip)
+                {
+                    if (scissor.z <= 0.0f || scissor.w <= 0.0f)
+                    {
+                        scissor = glm::vec4(rect.x, rect.y, rect.w, rect.h);
+                    }
+                    else
+                    {
+                        float sx = std::max(scissor.x, static_cast<float>(rect.x));
+                        float sy = std::max(scissor.y, static_cast<float>(rect.y));
+                        float sw = std::min(scissor.x + scissor.z,
+                                             static_cast<float>(rect.x + rect.w)) - sx;
+                        float sh = std::min(scissor.y + scissor.w,
+                                             static_cast<float>(rect.y + rect.h)) - sy;
+                        scissor = glm::vec4(sx, sy, std::max(0.0f, sw), std::max(0.0f, sh));
+                    }
+                }
+
                 applyScrollOffset(rect, scrollAncestor, scrollContainers);
 
                 // Determine stencil depth for this label
@@ -173,12 +146,13 @@ namespace controllers::offscreen
                 renderData.text = labelComp.text;
                 renderData.fontSize = labelComp.fontSize * scale;
                 renderData.color = labelComp.color;
+                renderData.fontStyle = labelComp.fontStyle;
                 renderData.lineSpacing = labelComp.lineSpacing;
                 renderData.letterSpacing = labelComp.letterSpacing;
                 renderData.wordWrap = labelComp.wordWrap;
                 renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
                 renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
-                renderData.overflow = static_cast<uint8_t>(labelComp.overflow);
+                renderData.overflow = labelComp.overflow;
                 renderData.position = glm::vec2(rect.x, rect.y);
                 renderData.size = glm::vec2(rect.w, rect.h);
                 renderData.scissorRect = scissor;
@@ -248,7 +222,7 @@ namespace controllers::offscreen
                 renderData.wordWrap = false;
                 renderData.horizontalAlignment = 0; // Left
                 renderData.verticalAlignment = 1;   // Middle
-                renderData.overflow = 1;             // Clip
+                renderData.overflow = components::TextOverflow::Clip;
                 renderData.position = glm::vec2(rect.x + padding - tiComp.scrollOffsetX, rect.y);
                 renderData.size = glm::vec2(rect.w - padding * 2.0f + tiComp.scrollOffsetX, rect.h);
                 renderData.scissorRect = scissor;
@@ -337,7 +311,7 @@ namespace controllers::offscreen
                     renderData.wordWrap = false;
                     renderData.horizontalAlignment = 0; // Left
                     renderData.verticalAlignment = 1;   // Middle
-                    renderData.overflow = 1;             // Clip
+                    renderData.overflow = components::TextOverflow::Clip;
                     renderData.position = glm::vec2(listX + padding, optionY);
                     renderData.size = glm::vec2(headerRect.w - padding * 2.0f, itemHeight);
                     renderData.scissorRect = listScissor;
@@ -526,6 +500,7 @@ namespace controllers::offscreen
             renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
             renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
             renderData.rectHeight = params.worldRectHeight;
+            renderData.fontStyle = labelComp.fontStyle;
             drawList.push_back(std::move(renderData));
         }
 

@@ -62,6 +62,25 @@ namespace core::api
                 return value::Value(pos.y);
             }});
 
+        // _native_input_getViewportMouseX() -> float
+        // Editor play mode: panel-relative. Standalone runtime / non-play: same as getMouseX.
+        interpreter->registerNativeFunction("_native_input_getViewportMouseX",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::GetViewportMousePositionQuery query;
+                glm::vec2 pos = dispatcher.query(query);
+                return value::Value(pos.x);
+            }});
+
+        // _native_input_getViewportMouseY() -> float
+        interpreter->registerNativeFunction("_native_input_getViewportMouseY",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::GetViewportMousePositionQuery query;
+                glm::vec2 pos = dispatcher.query(query);
+                return value::Value(pos.y);
+            }});
+
         // _native_input_getMouseDeltaX() -> float
         interpreter->registerNativeFunction("_native_input_getMouseDeltaX",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
@@ -76,6 +95,24 @@ namespace core::api
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();
                 events::input::GetMouseDeltaQuery query;
+                glm::vec2 delta = dispatcher.query(query);
+                return value::Value(delta.y);
+            }});
+
+        // _native_input_getMouseScrollDeltaX() -> float
+        interpreter->registerNativeFunction("_native_input_getMouseScrollDeltaX",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::GetScrollDeltaQuery query;
+                glm::vec2 delta = dispatcher.query(query);
+                return value::Value(delta.x);
+            }});
+
+        // _native_input_getMouseScrollDeltaY() -> float
+        interpreter->registerNativeFunction("_native_input_getMouseScrollDeltaY",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::GetScrollDeltaQuery query;
                 glm::vec2 delta = dispatcher.query(query);
                 return value::Value(delta.y);
             }});

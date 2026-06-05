@@ -3,10 +3,12 @@
 #include "../../events/input/InputEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
+#include "../../events/project/ProjectEvents.hpp"
 #include "../../serialization/InputMappingSerialization.hpp"
 #include "input/KeyCodes.hpp"
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <filesystem>
 
 #include "print/Log.hpp"
 namespace services {
@@ -42,6 +44,16 @@ namespace services {
     ActionMappingServiceImpl::ActionMappingServiceImpl() {
         contexts["Default"] = {{"Default", false}, true};
         contextStack.push_back("Default");
+    }
+
+    ActionMappingServiceImpl::~ActionMappingServiceImpl() {
+        auto& dispatcher = events::EventDispatcher::instance();
+        for (auto& token : subscriptions) {
+            if (token.isValid()) {
+                dispatcher.unsubscribe(token);
+            }
+        }
+        subscriptions.clear();
     }
 
     bool ActionMappingServiceImpl::isActionContextActive(const std::string& contextName) const {

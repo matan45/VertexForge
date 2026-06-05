@@ -61,7 +61,7 @@ namespace core {
 		}
 	}
 
-	void RenderManager::render()
+	void RenderManager::render(const std::function<void()>& preRenderCallback)
 	{
 		if (window->isWindowMinimized()) return;
 
@@ -95,6 +95,12 @@ namespace core {
 				vfLogError("failed to wait for image in flight fence");
 			}
 		}
+
+		if (preRenderCallback)
+		{
+			preRenderCallback();
+		}
+
 		// Mark this image as now being in use by this frame
 		imagesInFlight[acquiredImageIndex] = inFlightFences[currentFrame];
 

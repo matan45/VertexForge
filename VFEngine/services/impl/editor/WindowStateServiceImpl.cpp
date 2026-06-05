@@ -3,6 +3,8 @@
 #include "../../Window/window/Window.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/ApplicationEvents.hpp"
+#include "../../events/input/InputEvents.hpp"
+#include "../../events/render/RenderEvents.hpp"
 
 namespace services {
 
@@ -84,6 +86,40 @@ namespace services {
         dispatcher.registerCommandHandler<events::application::CloseCommand>(
             [this](const events::application::CloseCommand&) {
                 requestClose();
+            });
+
+        // Track the editor's play-viewport rect so scripts can query panel-relative coords.
+        // Publisher: editor/windows/viewport/ViewPort.cpp. Runtime never publishes -> stays (0,0) -> fallback.
+        playViewportSub = events::ScopedSubscription(
+            dispatcher.subscribe<events::render::PlayViewportRectChangedNotification>(
+                [this](const events::render::PlayViewportRectChangedNotification& n) {
+                    playViewportOffset = n.offset;
+                    playViewportSize = n.panelSize;
+                }));
+
+        dispatcher.registerQueryHandler<events::input::GetViewportMousePositionQuery>(
+            [this](const events::input::GetViewportMousePositionQuery&) -> glm::vec2 {
+                auto raw = events::EventDispatcher::instance().query(events::input::GetMousePositionQuery{});
+                if (playViewportSize.x > 0.0f && playViewportSize.y > 0.0f) {
+                    return raw - playViewportOffset;
+                }
+                return raw;
+            });
+
+        dispatcher.registerQueryHandler<events::application::GetViewportWidthQuery>(
+            [this](const events::application::GetViewportWidthQuery&) -> uint32_t {
+                if (playViewportSize.x > 0.0f) {
+                    return static_cast<uint32_t>(playViewportSize.x);
+                }
+                return getWidth();
+            });
+
+        dispatcher.registerQueryHandler<events::application::GetViewportHeightQuery>(
+            [this](const events::application::GetViewportHeightQuery&) -> uint32_t {
+                if (playViewportSize.y > 0.0f) {
+                    return static_cast<uint32_t>(playViewportSize.y);
+                }
+                return getHeight();
             });
     }
 

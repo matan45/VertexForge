@@ -60,7 +60,7 @@
       <AdditionalIncludeDirectories>..\dependencies\mtype\mType;..\dependencies\mtype\packagemanager\src;..\dependencies\mtype\vendor\asmjit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -80,7 +80,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
-      <AdditionalOptions>/utf-8 /MP /arch:AVX2 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj /arch:AVX2 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -299,9 +299,16 @@
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\DeadCodeEliminationPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\EscapeAnalysisPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\EscapeAnalysisPass_Internal.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\LombokSynthesisPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\StructuralEqualitySynthesisPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\lombok\LombokAstBuilders.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\lombok\LombokBuilderCodegen.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\lombok\LombokCodegen.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\lombok\LombokPolicy.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\shared\AccessorNaming.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\shared\ClassShapePolicy.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\structural_equality\StructuralEqualityCodegen.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\structural_equality\StructuralEqualityPolicy.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\parser\AnnotationDeclarationParser.hpp" />
@@ -459,6 +466,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\registration\InterfaceRegistrar.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\ExpectedTypeContext.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\GenericPatternAnalyzer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\NullConditionFacts.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\NullNarrowingTracker.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\TypeInferenceEngine.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\TypeNameValidator.hpp" />
@@ -766,6 +774,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugProtocol.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugProtocol_Dispatch.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector_BoxedPrimitive.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector_Collect.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector_Find.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector_Format.cpp" />
@@ -851,9 +860,13 @@
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\DeadCodeEliminationPass_Statements.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\EscapeAnalysisPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\EscapeAnalysisPass_Detection.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\LombokSynthesisPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\StructuralEqualitySynthesisPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\lombok\LombokBuilderCodegen.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\lombok\LombokCodegen.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\lombok\LombokPolicy.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\structural_equality\StructuralEqualityCodegen.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\structural_equality\StructuralEqualityPolicy.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\parser\AnnotationDeclarationParser.cpp" />

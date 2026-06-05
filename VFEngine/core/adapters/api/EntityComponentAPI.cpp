@@ -235,5 +235,55 @@ namespace core::api
                 }
                 return value::Value(it->second(dispatcher, intToEntity(id)));
             }});
+
+        // _native_mesh_setMesh(entityId, meshPath) -> bool
+        // Points an entity's MeshComponent at a .vfMesh asset by path (adding the
+        // component first if absent). Routes through SetMeshDataCommand so the mesh
+        // service handles asset lifecycle + streaming (GPU upload happens at render).
+        interpreter->registerNativeFunction("_native_mesh_setMesh",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2)
+                {
+                    vfLogError("[Script] Mesh.setMesh: missing arguments");
+                    return value::Value(false);
+                }
+                int64_t id = extractInt64(args[0], "Mesh.setMesh");
+                std::string path = extractString(args[1], "Mesh.setMesh");
+                if (id < 0 || path.empty()) return value::Value(false);
+
+                auto entity = intToEntity(id);
+
+                events::scene::AddMeshComponentCommand addCmd;
+                addCmd.entity = entity;
+                dispatcher.execute(addCmd);
+
+                events::scene::SetMeshDataCommand setCmd;
+                setCmd.entity = entity;
+                setCmd.meshData.meshRef = asset::AssetRef::fromPath(path);
+                return value::Value(dispatcher.execute(setCmd));
+            }});
+
+        // _native_material_setMaterial(entityId, materialPath) -> bool
+        // Points an entity's MaterialComponent default material at a .vfMaterial
+        // asset by path. SetDefaultMaterialCommand adds the component if absent and
+        // takes the path directly (handles AssetRef::fromPath + lifecycle).
+        interpreter->registerNativeFunction("_native_material_setMaterial",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2)
+                {
+                    vfLogError("[Script] Material.setMaterial: missing arguments");
+                    return value::Value(false);
+                }
+                int64_t id = extractInt64(args[0], "Material.setMaterial");
+                std::string path = extractString(args[1], "Material.setMaterial");
+                if (id < 0 || path.empty()) return value::Value(false);
+
+                events::material::SetDefaultMaterialCommand cmd;
+                cmd.entity = intToEntity(id);
+                cmd.materialPath = path;
+                return value::Value(dispatcher.execute(cmd));
+            }});
     }
 }

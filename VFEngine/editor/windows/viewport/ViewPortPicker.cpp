@@ -2,6 +2,7 @@
 #include "../../camera/EditorCamera.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/ui/UIPickEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "data/EntityConversion.hpp"
@@ -232,5 +233,26 @@ namespace windows
         }
 
         return bestEntity;
+    }
+
+    std::optional<services::EntityHandle> ViewPortPicker::pickUIAt(const editor::EditorCamera& camera,
+                                                                   glm::vec2 screenPos,
+                                                                   glm::vec2 viewportPos,
+                                                                   glm::vec2 viewportSize)
+    {
+        if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
+        {
+            return std::nullopt;
+        }
+
+        // UI is rendered as world-space quads in edit mode — the ray test
+        // against each element's canvas quad lives in the services layer.
+        events::ui::PickUIEntityAtQuery query;
+        query.screenPos = screenPos;
+        query.viewportPos = viewportPos;
+        query.viewportSize = viewportSize;
+        query.viewMatrix = camera.getViewMatrix();
+        query.projMatrix = camera.getProjectionMatrix();
+        return events::EventDispatcher::instance().query(query);
     }
 }

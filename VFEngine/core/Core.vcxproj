@@ -60,7 +60,7 @@
       <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo\src;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;..\..\dependencies\mtype\mType;C:\VulkanSDK\1.4.341.1\Include;..\..\dependencies\json\single_include;..\..\dependencies\JoltPhysics;..\..\dependencies\recastnavigation\Recast\Include;..\..\dependencies\recastnavigation\Detour\Include;..\..\dependencies\recastnavigation\DetourCrowd\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -80,7 +80,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
-      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -129,11 +129,13 @@
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPIHelpers.hpp" />
     <ClInclude Include="adapters\api\RenderTextureAPI.hpp" />
+    <ClInclude Include="adapters\api\RuntimePickerAPI.hpp" />
     <ClInclude Include="adapters\api\SaveAPI.hpp" />
     <ClInclude Include="adapters\api\SceneAPI.hpp" />
     <ClInclude Include="adapters\api\ScriptCommunicationAPI.hpp" />
     <ClInclude Include="adapters\api\SocketAPI.hpp" />
     <ClInclude Include="adapters\api\StreamingAPI.hpp" />
+    <ClInclude Include="adapters\api\TerrainAPI.hpp" />
     <ClInclude Include="adapters\api\UIAPI.hpp" />
     <ClInclude Include="adapters\api\UIAnimationAPI.hpp" />
     <ClInclude Include="adapters\api\UIButtonLabelAPI.hpp" />
@@ -141,7 +143,9 @@
     <ClInclude Include="adapters\api\UIValueAPI.hpp" />
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
     <ClInclude Include="adapters\api\WeatherAPI.hpp" />
+    <ClInclude Include="adapters\api\WindowAPI.hpp" />
     <ClInclude Include="adapters\audio\AudioAdapter.hpp" />
+    <ClInclude Include="adapters\input\RuntimePickerAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\NavmeshAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\TileGraph.hpp" />
     <ClInclude Include="adapters\physics\IKAdapter.hpp" />
@@ -149,6 +153,7 @@
     <ClInclude Include="adapters\physics\PhysicsConversions.hpp" />
     <ClInclude Include="adapters\physics\SocketAdapter.hpp" />
     <ClInclude Include="adapters\render\BillboardRenderAdapter.hpp" />
+    <ClInclude Include="adapters\render\CustomPipelineAdapter.hpp" />
     <ClInclude Include="adapters\render\DebugDrawAdapter.hpp" />
     <ClInclude Include="adapters\render\DecalRenderAdapter.hpp" />
     <ClInclude Include="adapters\render\EditorTextureAdapter.hpp" />
@@ -190,6 +195,7 @@
     <ClInclude Include="controllers\OffScreen.hpp" />
     <ClInclude Include="controllers\imguiHandler\ImguiWindow.hpp" />
     <ClInclude Include="controllers\imguiHandler\ImguiWindowHandler.hpp" />
+    <ClInclude Include="controllers\imguiHandler\PluginWindowRegistry.hpp" />
     <ClInclude Include="controllers\texture\EditorTexture.hpp" />
     <ClInclude Include="core\MainLoop.hpp" />
   </ItemGroup>
@@ -232,11 +238,13 @@
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced2.cpp" />
     <ClCompile Include="adapters\api\RenderTextureAPI.cpp" />
+    <ClCompile Include="adapters\api\RuntimePickerAPI.cpp" />
     <ClCompile Include="adapters\api\SaveAPI.cpp" />
     <ClCompile Include="adapters\api\SceneAPI.cpp" />
     <ClCompile Include="adapters\api\ScriptCommunicationAPI.cpp" />
     <ClCompile Include="adapters\api\SocketAPI.cpp" />
     <ClCompile Include="adapters\api\StreamingAPI.cpp" />
+    <ClCompile Include="adapters\api\TerrainAPI.cpp" />
     <ClCompile Include="adapters\api\UIAPI.cpp" />
     <ClCompile Include="adapters\api\UIAnimationAPI.cpp" />
     <ClCompile Include="adapters\api\UIButtonLabelAPI.cpp" />
@@ -244,7 +252,9 @@
     <ClCompile Include="adapters\api\UIValueAPI.cpp" />
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
     <ClCompile Include="adapters\api\WeatherAPI.cpp" />
+    <ClCompile Include="adapters\api\WindowAPI.cpp" />
     <ClCompile Include="adapters\audio\AudioAdapter.cpp" />
+    <ClCompile Include="adapters\input\RuntimePickerAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterBuildOps.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterCrowd.cpp" />
@@ -254,6 +264,7 @@
     <ClCompile Include="adapters\physics\PhysicsAdapterAnimationOps.cpp" />
     <ClCompile Include="adapters\physics\SocketAdapter.cpp" />
     <ClCompile Include="adapters\render\BillboardRenderAdapter.cpp" />
+    <ClCompile Include="adapters\render\CustomPipelineAdapter.cpp" />
     <ClCompile Include="adapters\render\DebugDrawAdapter.cpp" />
     <ClCompile Include="adapters\render\DecalRenderAdapter.cpp" />
     <ClCompile Include="adapters\render\EditorTextureAdapter.cpp" />
@@ -304,6 +315,7 @@
     <ClCompile Include="controllers\OffScreen.cpp" />
     <ClCompile Include="controllers\OffScreenSettings.cpp" />
     <ClCompile Include="controllers\imguiHandler\ImguiWindowHandler.cpp" />
+    <ClCompile Include="controllers\imguiHandler\PluginWindowRegistry.cpp" />
     <ClCompile Include="controllers\texture\EditorTexture.cpp" />
     <ClCompile Include="core\MainLoop.cpp" />
   </ItemGroup>

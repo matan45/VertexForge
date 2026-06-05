@@ -365,5 +365,39 @@ namespace core::api
         registerQueryFunctions(interpreter, dispatcher);
         registerSetterFunctions(interpreter, dispatcher);
         registerForceFunctions(interpreter, dispatcher);
+
+        // VK-1351: build/destroy the real Jolt body from an entity's runtime-configured
+        // Collider/RigidBody components so runtime-spawned entities are pickable/collidable.
+        interpreter->registerNativeFunction("_native_physics_createBody",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value {
+                if (args.empty()) return value::Value(false);
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(false);
+                events::physics::CreatePhysicsBodyCommand cmd;
+                cmd.entity = services::internal::toHandle(*entity);
+                cmd.rebuild = false;
+                return value::Value(events::EventDispatcher::instance().execute(cmd));
+            }});
+
+        interpreter->registerNativeFunction("_native_physics_rebuildBody",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value {
+                if (args.empty()) return value::Value(false);
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(false);
+                events::physics::CreatePhysicsBodyCommand cmd;
+                cmd.entity = services::internal::toHandle(*entity);
+                cmd.rebuild = true;
+                return value::Value(events::EventDispatcher::instance().execute(cmd));
+            }});
+
+        interpreter->registerNativeFunction("_native_physics_destroyBody",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value {
+                if (args.empty()) return value::Value(false);
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(false);
+                events::physics::DestroyPhysicsBodyCommand cmd;
+                cmd.entity = services::internal::toHandle(*entity);
+                return value::Value(events::EventDispatcher::instance().execute(cmd));
+            }});
     }
 }

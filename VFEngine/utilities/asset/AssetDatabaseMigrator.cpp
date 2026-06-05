@@ -26,12 +26,14 @@ namespace asset
         if (ext == ".vfvfx")           return resource::AssetType::VFX;
         if (ext == ".vffont")          return resource::AssetType::Font;
         if (ext == ".vfnavmesh")       return resource::AssetType::Navmesh;
+        if (ext == ".vfnavindex")      return resource::AssetType::Navmesh;
         if (ext == ".vfinputmapping") return resource::AssetType::InputMapping;
         if (ext == ".vfterrain")      return resource::AssetType::Terrain;
         if (ext == ".vfterrainmat")   return resource::AssetType::TerrainMaterial;
         if (ext == ".vfbehaviortree") return resource::AssetType::BehaviorTree;
         if (ext == ".vfphysanim")  return resource::AssetType::PhysicsShape;
         if (ext == ".vfscene")     return resource::AssetType::Scene;
+        if (ext == ".vfsettings")  return resource::AssetType::Scene;
         if (ext == ".mt")          return resource::AssetType::Script;
         return resource::AssetType::COUNT;
     }
@@ -50,8 +52,8 @@ namespace asset
         static const std::unordered_set<std::string> assetExtensions = {
             ".vfimage", ".vfhdr", ".vfmesh", ".vfaudio", ".vfanim",
             ".vfmat", ".vfmatinstance", ".vfanimator", ".vfvfx",
-            ".vffont", ".vfscene", ".vfprefab", ".vfterrain",
-            ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfimposter",
+            ".vffont", ".vfscene", ".vfsettings", ".vfprefab", ".vfterrain",
+            ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfnavindex", ".vfimposter",
             ".vfinputmapping", ".vfbehaviortree", ".vfphysanim",
             ".mt"
         };

@@ -27,6 +27,7 @@
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
+#include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -55,7 +56,7 @@ namespace handlers {
         resource::VirtualFileSystem::instance().initialize();
         bootstrap->init();
 
-        // Runtime is always in play mode — hide editor-only overlays (grid, gizmos, etc.)
+        // Runtime is always in play mode - hide editor-only overlays (grid, gizmos, etc.)
         if (auto* offScreen = bootstrap->getOffScreenProvider())
         {
             offScreen->setPlayMode(true);
@@ -304,6 +305,10 @@ namespace handlers {
             bootstrap->getBehaviorTreeProvider()
         );
 
+        runtimePickerService = std::make_shared<services::RuntimePickerServiceImpl>(
+            bootstrap->getRuntimePickerProvider()
+        );
+
         if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
         {
             behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
@@ -314,6 +319,19 @@ namespace handlers {
         {
             renderTexturePlayModeHandler = std::make_unique<services::RenderTexturePlayModeHandler>(rttProvider);
             renderTexturePlayModeHandler->subscribeToEvents();
+        }
+
+        if (auto* runtimeRenderService =
+                dynamic_cast<services::RuntimeRenderServiceImpl*>(renderService.get()))
+        {
+            runtimeRenderService->setPreOffscreenRenderCallback([this]()
+            {
+                if (renderTexturePlayModeHandler)
+                {
+                    float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                    renderTexturePlayModeHandler->update(dt);
+                }
+            });
         }
 
         sceneService->registerEventHandlers();
@@ -344,6 +362,7 @@ namespace handlers {
         worldSectorService->registerEventHandlers();
         controllerService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
+        runtimePickerService->registerEventHandlers();
         if (ikComponentService)
         {
             ikComponentService->registerEventHandlers();
@@ -423,13 +442,6 @@ namespace handlers {
             }
         });
 
-        frameTaskGraph->addTask("RenderTexture", [this]() {
-            if (renderTexturePlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                renderTexturePlayModeHandler->update(dt);
-            }
-        });
-
         frameTaskGraph->addTask("AudioListener", [this]() {
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
@@ -462,7 +474,6 @@ namespace handlers {
         frameTaskGraph->addDependency("Scripts", "PhysicsSync");
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
-        frameTaskGraph->addDependency("RenderTexture", "Scripts");
         frameTaskGraph->addDependency("AudioListener", "Scripts");
 
         // === Full frame pipeline tasks ===
@@ -506,9 +517,12 @@ namespace handlers {
                     }
                 }
 
-                auto decomposed = math::decomposeMatrix(worldTransform.worldMatrix);
-                camComp.updateViewMatrix(decomposed.position, decomposed.rotation);
-                glm::vec3 cameraPos = decomposed.position;
+                // World-space eye position with the camera's LOCAL Euler rotation. Decomposing the
+                // world matrix to Euler (extractEulerAngleXYZ) has its gimbal singularity on the middle
+                // (yaw) axis at ±90°, which flips a yawing fixed-pitch camera to the sky (VK-1350).
+                const auto& localTransform = registry.get<components::TransformComponent>(entity);
+                camComp.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, localTransform);
+                glm::vec3 cameraPos = glm::vec3(worldTransform.worldMatrix[3]);
 
                 events::render::UpdateMeshCameraCommand meshCameraCmd;
                 meshCameraCmd.viewMatrix = camComp.viewMatrix;
@@ -541,13 +555,12 @@ namespace handlers {
 
         // Transforms depend on all service updates completing
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
-        frameTaskGraph->addDependency("Transforms", "RenderTexture");
         frameTaskGraph->addDependency("Transforms", "AudioListener");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");
 
-        // PostUpdate after Transforms
+        // PostUpdate after transforms.
         frameTaskGraph->addDependency("PostUpdate", "Transforms");
 
         // Render after PostUpdate

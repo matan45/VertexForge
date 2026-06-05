@@ -60,7 +60,7 @@
       <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\glfw\include;..\..\dependencies\imgui;..\..\dependencies\json\single_include;..\utilities;..\window\controllers;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -80,7 +80,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
-      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -95,6 +95,7 @@
     <ClInclude Include="data\AnimatorDebugTypes.hpp" />
     <ClInclude Include="data\AsyncLoadingTypes.hpp" />
     <ClInclude Include="data\CullingCategories.hpp" />
+    <ClInclude Include="data\CustomPipelineTypes.hpp" />
     <ClInclude Include="data\DTOs.hpp" />
     <ClInclude Include="data\EditorKeybindingTypes.hpp" />
     <ClInclude Include="data\EditorMode.hpp" />
@@ -134,6 +135,7 @@
     <ClInclude Include="events\input\ActionMappingEvents.hpp" />
     <ClInclude Include="events\input\InputContextEvents.hpp" />
     <ClInclude Include="events\input\InputEvents.hpp" />
+    <ClInclude Include="events\input\RuntimePickerEvents.hpp" />
     <ClInclude Include="events\lifecycle\AssetLifecycleEvents.hpp" />
     <ClInclude Include="events\meshbrush\MeshBrushEvents.hpp" />
     <ClInclude Include="events\navmesh\NavmeshEvents.hpp" />
@@ -152,6 +154,7 @@
     <ClInclude Include="events\render\AtmosphereEvents.hpp" />
     <ClInclude Include="events\render\BillboardEvents.hpp" />
     <ClInclude Include="events\render\CloudEvents.hpp" />
+    <ClInclude Include="events\render\CustomPipelineEvents.hpp" />
     <ClInclude Include="events\render\DebugDrawEvents.hpp" />
     <ClInclude Include="events\render\DecalEvents.hpp" />
     <ClInclude Include="events\render\GIEvents.hpp" />
@@ -196,6 +199,7 @@
     <ClInclude Include="events\ui\UIInputCheckboxEvents.hpp" />
     <ClInclude Include="events\ui\UILabelButtonEvents.hpp" />
     <ClInclude Include="events\ui\UIMaskEvents.hpp" />
+    <ClInclude Include="events\ui\UIPickEvents.hpp" />
     <ClInclude Include="events\ui\UIScrollLayoutEvents.hpp" />
     <ClInclude Include="events\ui\UISliderProgressEvents.hpp" />
     <ClInclude Include="events\vegetation\GrassEvents.hpp" />
@@ -245,6 +249,7 @@
     <ClInclude Include="impl\editor\WindowStateServiceImpl.hpp" />
     <ClInclude Include="impl\input\ActionMappingServiceImpl.hpp" />
     <ClInclude Include="impl\input\InputServiceImpl.hpp" />
+    <ClInclude Include="impl\input\RuntimePickerServiceImpl.hpp" />
     <ClInclude Include="impl\lifecycle\AssetLifecycleServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushModeServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushServiceImpl.hpp" />
@@ -254,12 +259,14 @@
     <ClInclude Include="impl\navmesh\NavmeshTileManager.hpp" />
     <ClInclude Include="impl\physics\ControllerServiceImpl.hpp" />
     <ClInclude Include="impl\physics\PhysicsAnimationServiceImpl.hpp" />
+    <ClInclude Include="impl\physics\PhysicsBodyBuilder.hpp" />
     <ClInclude Include="impl\physics\PhysicsPlayModeHandler.hpp" />
     <ClInclude Include="impl\physics\PhysicsServiceImpl.hpp" />
     <ClInclude Include="impl\project\FileOperationsServiceImpl.hpp" />
     <ClInclude Include="impl\project\ProjectServiceImpl.hpp" />
     <ClInclude Include="impl\project\SceneServiceImpl.hpp" />
     <ClInclude Include="impl\render\BillboardRenderServiceImpl.hpp" />
+    <ClInclude Include="impl\render\CustomPipelineServiceImpl.hpp" />
     <ClInclude Include="impl\render\DebugDrawServiceImpl.hpp" />
     <ClInclude Include="impl\render\DecalRenderServiceImpl.hpp" />
     <ClInclude Include="impl\render\EditorRenderServiceImpl.hpp" />
@@ -317,6 +324,7 @@
     <ClInclude Include="interfaces\editor\IWindowStateService.hpp" />
     <ClInclude Include="interfaces\input\IActionMappingService.hpp" />
     <ClInclude Include="interfaces\input\IInputService.hpp" />
+    <ClInclude Include="interfaces\input\IRuntimePickerService.hpp" />
     <ClInclude Include="interfaces\lifecycle\IAssetLifecycleService.hpp" />
     <ClInclude Include="interfaces\meshbrush\IMeshBrushModeService.hpp" />
     <ClInclude Include="interfaces\meshbrush\IMeshBrushService.hpp" />
@@ -328,6 +336,7 @@
     <ClInclude Include="interfaces\project\IProjectService.hpp" />
     <ClInclude Include="interfaces\project\ISceneService.hpp" />
     <ClInclude Include="interfaces\render\IBillboardRenderService.hpp" />
+    <ClInclude Include="interfaces\render\ICustomPipelineService.hpp" />
     <ClInclude Include="interfaces\render\IDebugDrawService.hpp" />
     <ClInclude Include="interfaces\render\IDecalRenderService.hpp" />
     <ClInclude Include="interfaces\render\IEditorRenderService.hpp" />
@@ -362,11 +371,13 @@
     <ClInclude Include="providers\animation\IAnimationPreviewProvider.hpp" />
     <ClInclude Include="providers\animation\IAnimatorProvider.hpp" />
     <ClInclude Include="providers\audio\IAudioProvider.hpp" />
+    <ClInclude Include="providers\input\IRuntimePickerProvider.hpp" />
     <ClInclude Include="providers\navmesh\INavmeshProvider.hpp" />
     <ClInclude Include="providers\physics\IIKProvider.hpp" />
     <ClInclude Include="providers\physics\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\physics\ISocketProvider.hpp" />
     <ClInclude Include="providers\render\IBillboardRenderProvider.hpp" />
+    <ClInclude Include="providers\render\ICustomPipelineProvider.hpp" />
     <ClInclude Include="providers\render\IDebugDrawProvider.hpp" />
     <ClInclude Include="providers\render\IDecalRenderProvider.hpp" />
     <ClInclude Include="providers\render\IEditorTextureProvider.hpp" />
@@ -438,6 +449,7 @@
     <ClCompile Include="impl\input\ActionMappingServiceHandlers.cpp" />
     <ClCompile Include="impl\input\ActionMappingServiceImpl.cpp" />
     <ClCompile Include="impl\input\InputServiceImpl.cpp" />
+    <ClCompile Include="impl\input\RuntimePickerServiceImpl.cpp" />
     <ClCompile Include="impl\lifecycle\AssetLifecycleServiceImpl.cpp" />
     <ClCompile Include="impl\meshbrush\MeshBrushModeServiceImpl.cpp" />
     <ClCompile Include="impl\meshbrush\MeshBrushServiceImpl.cpp" />
@@ -456,6 +468,7 @@
     <ClCompile Include="impl\project\ProjectServiceImpl.cpp" />
     <ClCompile Include="impl\project\SceneServiceImpl.cpp" />
     <ClCompile Include="impl\render\BillboardRenderServiceImpl.cpp" />
+    <ClCompile Include="impl\render\CustomPipelineServiceImpl.cpp" />
     <ClCompile Include="impl\render\DebugDrawServiceImpl.cpp" />
     <ClCompile Include="impl\render\DecalRenderServiceImpl.cpp" />
     <ClCompile Include="impl\render\EditorRenderServiceCulling.cpp" />

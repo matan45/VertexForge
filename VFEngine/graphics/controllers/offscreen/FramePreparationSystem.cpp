@@ -8,7 +8,6 @@
 #include "../../render/mesh/StaticMeshPipeline.hpp"
 #include "../../render/mesh/MeshTypes.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
-#include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "scene/Entity.hpp"
@@ -58,6 +57,12 @@ namespace controllers::offscreen
         instanceBatchCache.erase(materialPath);
     }
 
+    void FramePreparationSystem::clearAllMaterialCache()
+    {
+        pbrCache.clear();
+        instanceBatchCache.clear();
+    }
+
     void FramePreparationSystem::prepareMeshes(const FrameContext& ctx)
     {
         auto* renderHandler = ctx.renderHandler;
@@ -89,10 +94,13 @@ namespace controllers::offscreen
             animatorSystem.updateSocketAttachments();
         }
 
-        auto* cameraManager = renderHandler->getCameraOcclusionManager();
-        auto* activeCamera = cameraManager->getCamera(cameraManager->getActiveCameraId());
-        const math::Frustum* activeFrustum = activeCamera ? &activeCamera->frustum : nullptr;
-        bool frustumReady = activeFrustum && activeFrustum->isInitialized();
+        // VK-1336: main-scene culling must always use the primary camera frustum.
+        // CameraController::currentFrustum is only updated for MAIN_CAMERA_ID
+        // (see CameraController.cpp). RTT/minimap cameras have their own isolated
+        // per-RTT cull context in RenderTextureViewPort and must not influence
+        // main-scene visibility.
+        const math::Frustum& mainFrustum = ctx.cameraController->getCurrentFrustum();
+        bool frustumReady = mainFrustum.isInitialized();
 
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -315,7 +323,7 @@ namespace controllers::offscreen
         else if (ctx.bvhManager->isBuilt() && frustumReady)
         {
             std::vector<uint32_t> visibleEntities;
-            ctx.bvhManager->queryFrustum(*activeFrustum, visibleEntities);
+            ctx.bvhManager->queryFrustum(mainFrustum, visibleEntities);
             for (uint32_t entityId : visibleEntities)
             {
                 auto entity = static_cast<entt::entity>(entityId);
@@ -338,7 +346,7 @@ namespace controllers::offscreen
                 if (frustumReady)
                 {
                     const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshRef.resolve());
-                    if (boundingBox && !activeFrustum->intersectsAABB(*boundingBox, worldTransform.worldMatrix))
+                    if (boundingBox && !mainFrustum.intersectsAABB(*boundingBox, worldTransform.worldMatrix))
                         continue;
                 }
                 collectEntity(entity, meshComp, worldTransform);
@@ -349,7 +357,7 @@ namespace controllers::offscreen
         {
             ctx.lightBvhManager->update();
             std::vector<uint32_t> visibleLights;
-            ctx.lightBvhManager->queryFrustum(*activeFrustum, visibleLights);
+            ctx.lightBvhManager->queryFrustum(mainFrustum, visibleLights);
             renderHandler->setVisibleLightsFromBVH(visibleLights);
         }
         else if (useGPUDrivenCulling)

@@ -7,6 +7,7 @@
 #include "terrain/TerrainHitResult.hpp"
 #include "../../services/data/RenderHookTypes.hpp"
 #include "../../services/data/RenderHookContext.hpp"
+#include "../../services/data/CustomPipelineTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include "common/SharedCameraUBO.hpp"
 #include "graph/RenderGraphTypes.hpp"
@@ -52,6 +53,11 @@ namespace render::transparency
 namespace render::decal
 {
     class DecalPipeline;
+}
+
+namespace render::custom
+{
+    class CustomPipelineManager;
 }
 
 namespace render::vfx
@@ -250,6 +256,9 @@ namespace render
         std::vector<RegisteredRenderHook> renderHooks;
         uint64_t nextRenderHookId = 1;
 
+        // Plugin-owned custom pipelines/meshes (handle-based, all Vulkan engine-side)
+        std::unique_ptr<custom::CustomPipelineManager> customPipelineManager;
+
         // Additional frustums for RTT cameras — merged with main when loading terrain tiles.
         // Mutable because they are consumed (cleared) inside the const updateGPUDrivenSceneData().
         mutable std::vector<std::pair<math::Frustum, glm::vec3>> additionalTerrainFrustums;
@@ -292,7 +301,13 @@ namespace render
         void setTextDrawList(std::vector<text::TextRenderData>&& textEntities);
         void appendTextDrawList(std::vector<text::TextRenderData>&& textEntities);
 
-        void registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler sampler);
+        void registerExternalTexture(const std::string& key, uint32_t imageIndex,
+                                     vk::ImageView imageView, vk::Sampler sampler);
+
+        // Drops the entry in both UI and Billboard external-texture caches. Required when the
+        // underlying vk::ImageView/vk::Sampler are about to be destroyed (RTT teardown or resize),
+        // otherwise the cached descriptor sets reference freed handles.
+        void unregisterExternalTexture(const std::string& key);
 
         void initUIRenderPipeline();
         ui::UIRenderPipeline* getUIRenderPipeline() const { return uiPipeline.get(); }
@@ -437,6 +452,14 @@ namespace render
         plugin::RenderHookHandle registerRenderHook(plugin::RenderPassHookPoint hookPoint,
                                                      plugin::RenderHookCallback callback);
         void unregisterRenderHook(plugin::RenderHookHandle handle);
+
+        // Plugin custom render pipelines — draws are enqueued per frame and recorded
+        // inside the scene pass (depth-tested against scene geometry).
+        plugin::CustomPipelineHandle createCustomPipeline(const plugin::CustomPipelineDesc& desc);
+        plugin::CustomMeshHandle uploadCustomMesh(plugin::CustomMeshData&& data);
+        void enqueueCustomDraw(plugin::CustomDrawItem&& item);
+        void destroyCustomPipeline(plugin::CustomPipelineHandle handle);
+        void destroyCustomMesh(plugin::CustomMeshHandle handle);
 
         void initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline);
         void resetVolumetricFogComposite();

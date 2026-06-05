@@ -18,6 +18,7 @@
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
+#include "../../adapters/render/CustomPipelineAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
@@ -26,6 +27,7 @@
 #include "../../adapters/render/ObjectStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/input/RuntimePickerAdapter.hpp"
 
 namespace core
 {
@@ -124,6 +126,11 @@ namespace core
         return renderHookAdapter.get();
     }
 
+    services::ICustomPipelineProvider* EditorBootstrap::getCustomPipelineProvider()
+    {
+        return customPipelineAdapter.get();
+    }
+
     services::IDebugDrawProvider* EditorBootstrap::getDebugDrawProvider()
     {
         return debugDrawAdapter.get();
@@ -172,5 +179,10 @@ namespace core
     services::IBehaviorTreeProvider* EditorBootstrap::getBehaviorTreeProvider()
     {
         return behaviorTreeAdapter.get();
+    }
+
+    services::IRuntimePickerProvider* EditorBootstrap::getRuntimePickerProvider()
+    {
+        return runtimePickerAdapter.get();
     }
 }

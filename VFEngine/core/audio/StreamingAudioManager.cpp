@@ -83,6 +83,11 @@ namespace core::audio {
         return false;
     }
 
+    bool StreamingAudioManager::isFinished(AudioHandle handle) const {
+        // Finished sources are erased by cleanupFinishedSources, so "not found" means finished
+        return activeSources.find(handle) == activeSources.end();
+    }
+
     float StreamingAudioManager::getPlaybackPosition(AudioHandle handle) const {
         auto it = activeSources.find(handle);
         if (it != activeSources.end()) {

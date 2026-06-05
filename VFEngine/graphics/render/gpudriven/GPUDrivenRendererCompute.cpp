@@ -3,7 +3,9 @@
 #include "../../core/Device.hpp"
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
+#include <thread>
 
 #ifdef MemoryBarrier
 #undef MemoryBarrier
@@ -309,7 +311,17 @@ namespace render::gpudriven
                                            lightBufferManager->getSpotLightCount());
         }
 
-        cullPipeline->dispatch(cmd, stats.totalObjects);
+        {
+            vk::DescriptorSet pickedCullSet = GPUDrivenRenderer::getThreadLocalCullDescriptorSet();
+            if (pickedCullSet)
+            {
+                cullPipeline->dispatchWithSet(cmd, stats.totalObjects, pickedCullSet);
+            }
+            else
+            {
+                cullPipeline->dispatch(cmd, stats.totalObjects);
+            }
+        }
         batchManager->insertBarriersAfterCompute(cmd);
         recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
 

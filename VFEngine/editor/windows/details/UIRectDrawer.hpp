@@ -15,5 +15,6 @@ namespace windows::details
         bool drawPivot(services::UIRectData& data);
         bool drawSizeDelta(services::UIRectData& data);
         bool drawAnchoredPosition(services::UIRectData& data);
+        bool drawBlocksRaycast(services::UIRectData& data);
     };
 }

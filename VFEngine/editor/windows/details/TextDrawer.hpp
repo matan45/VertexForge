@@ -14,6 +14,7 @@ namespace windows::details
         bool drawFontPath(services::TextData& data);
         bool drawTextInput(services::TextData& data);
         bool drawFontSize(services::TextData& data);
+        bool drawFontStyle(services::TextData& data);
         bool drawColor(services::TextData& data);
         bool drawLineSpacing(services::TextData& data);
         bool drawLetterSpacing(services::TextData& data);

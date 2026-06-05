@@ -76,6 +76,7 @@ namespace services {
         data.referenceHeight = comp.referenceHeight;
         data.scaleMode = static_cast<uint8_t>(comp.scaleMode);
         data.pixelsPerUnit = comp.pixelsPerUnit;
+        data.sortOrder = comp.sortOrder;
         return data;
     }
 
@@ -95,6 +96,7 @@ namespace services {
         comp.referenceHeight = canvasData.referenceHeight;
         comp.scaleMode = static_cast<components::UIScaleMode>(canvasData.scaleMode);
         comp.pixelsPerUnit = canvasData.pixelsPerUnit;
+        comp.sortOrder = canvasData.sortOrder;
         return true;
     }
 
@@ -160,6 +162,7 @@ namespace services {
         data.pivot = comp.pivot;
         data.sizeDelta = comp.sizeDelta;
         data.anchoredPosition = comp.anchoredPosition;
+        data.blocksRaycast = comp.blocksRaycast;
         return data;
     }
 
@@ -180,6 +183,7 @@ namespace services {
         comp.pivot = rectData.pivot;
         comp.sizeDelta = rectData.sizeDelta;
         comp.anchoredPosition = rectData.anchoredPosition;
+        comp.blocksRaycast = rectData.blocksRaycast;
         return true;
     }
 

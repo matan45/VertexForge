@@ -1,0 +1,64 @@
+#pragma once
+#include "../EventTypes.hpp"
+#include "resource/AssetTypes.hpp"
+#include <string>
+#include <vector>
+
+namespace events::lifecycle {
+
+	// ============================================================
+	// NOTIFICATIONS
+	// ============================================================
+
+	struct AssetReleaseReadyNotification : INotification {
+		std::string path;
+		resource::AssetType type{};
+
+		std::string_view getName() const override { return "AssetReleaseReady"; }
+	};
+
+	struct AssetAcquiredNotification : INotification {
+		std::string path;
+		resource::AssetType type{};
+		uint32_t newRefCount = 0;
+
+		std::string_view getName() const override { return "AssetAcquired"; }
+	};
+
+	struct AssetReleasedNotification : INotification {
+		std::string path;
+		resource::AssetType type{};
+		uint32_t newRefCount = 0;
+
+		std::string_view getName() const override { return "AssetReleased"; }
+	};
+
+	// ============================================================
+	// COMMANDS
+	// ============================================================
+
+	struct ForceReleaseAssetCommand : ::events::ICommand<void> {
+		std::string path;
+
+		std::string_view getName() const override { return "ForceReleaseAsset"; }
+	};
+
+	// ============================================================
+	// QUERIES
+	// ============================================================
+
+	struct QueryAssetStatsQuery : ::events::IQuery<std::vector<resource::AssetEntry>> {
+		std::string_view getName() const override { return "QueryAssetStats"; }
+	};
+
+	struct QueryPendingReleasesQuery : ::events::IQuery<std::vector<resource::AssetEntry>> {
+		std::string_view getName() const override { return "QueryPendingReleases"; }
+	};
+
+	struct QueryAssetEntryQuery : ::events::IQuery<resource::AssetEntry> {
+		std::string path;
+
+		std::string_view getName() const override { return "QueryAssetEntry"; }
+	};
+
+}

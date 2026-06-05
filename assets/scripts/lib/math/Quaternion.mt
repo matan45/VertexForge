@@ -2,6 +2,10 @@
 // Represents rotations without gimbal lock
 // Format: q = w + xi + yj + zk (w is the scalar part, xyz is the vector part)
 
+import * from "./Vec3f.mt";
+import * from "./Matrix3f.mt";
+import * from "./Matrix4f.mt";
+
 public value class Quaternion {
     public float x;
     public float y;
@@ -85,7 +89,7 @@ public value class Quaternion {
                 this.w * invLen
             );
         }
-        return Quaternion.identity();
+        return Quaternion::identity();
     }
 
     public function inverse(): Quaternion {
@@ -99,7 +103,7 @@ public value class Quaternion {
                 this.w * invLenSq
             );
         }
-        return Quaternion.identity();
+        return Quaternion::identity();
     }
 
     public function dot(Quaternion other): float {
@@ -330,19 +334,19 @@ public value class Quaternion {
     }
 
     public static function fromEulerAnglesVec(Vec3f angles): Quaternion {
-        return Quaternion.fromEulerAngles(angles.x, angles.y, angles.z);
+        return Quaternion::fromEulerAngles(angles.x, angles.y, angles.z);
     }
 
     // Create rotation from one vector to another
-    public static function fromToRotation(Vec3f from, Vec3f to): Quaternion {
-        Vec3f fromNorm = from.normalize();
+    public static function fromToRotation(Vec3f fromVec, Vec3f to): Quaternion {
+        Vec3f fromNorm = fromVec.normalize();
         Vec3f toNorm = to.normalize();
 
         float d = fromNorm.dot(toNorm);
 
         // Vectors are parallel (same direction)
         if (d > 0.9999) {
-            return Quaternion.identity();
+            return Quaternion::identity();
         }
 
         // Vectors are parallel (opposite direction)
@@ -353,7 +357,7 @@ public value class Quaternion {
                 axis = new Vec3f(0.0, 1.0, 0.0).cross(fromNorm);
             }
             axis = axis.normalize();
-            return Quaternion.fromAxisAngle(axis, 3.14159265);
+            return Quaternion::fromAxisAngle(axis, 3.14159265);
         }
 
         Vec3f axis = fromNorm.cross(toNorm);

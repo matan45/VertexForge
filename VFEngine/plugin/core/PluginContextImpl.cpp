@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
+#include "events/render/CustomPipelineEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/audio/AudioBusEvents.hpp"
@@ -13,10 +14,12 @@
 #include "events/terrain/TerrainRaycastEvents.hpp"
 #include "events/input/InputEvents.hpp"
 #include "events/input/ActionMappingEvents.hpp"
+#include "events/input/RuntimePickerEvents.hpp"
 #include "events/navmesh/NavmeshEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "data/EntityConversion.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
+#include "imguiHandler/PluginWindowRegistry.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "Pipeline.hpp"
 #include <imgui.h>
@@ -54,14 +57,19 @@ namespace plugin {
         return token;
     }
 
-    void PluginContextImpl::registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window)
+    void PluginContextImpl::registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window,
+                                                 const std::string& title)
     {
         if (!hasCapability(std::string(capability::editor))) {
             vfLogWarning("[Plugin:{}] Cannot register editor window - editor capability not available", pluginName);
             return;
         }
 
-        controllers::imguiHandler::ImguiWindowHandler::add(window);
+        if (title.empty()) {
+            controllers::imguiHandler::ImguiWindowHandler::add(window);
+        } else {
+            controllers::imguiHandler::PluginWindowRegistry::add(pluginName, title, window);
+        }
         registeredWindows.push_back(std::move(window));
     }
 
@@ -146,6 +154,85 @@ namespace plugin {
 
         std::erase_if(registeredRenderHooks,
             [&](const plugin::RenderHookHandle& h) { return h.id == handle.id; });
+    }
+
+    plugin::CustomPipelineHandle PluginContextImpl::createCustomPipeline(const plugin::CustomPipelineDesc& desc)
+    {
+        if (!hasCapability(std::string(capability::graphics))) {
+            vfLogWarning("[Plugin:{}] Cannot create custom pipeline - graphics capability not available", pluginName);
+            return {};
+        }
+
+        events::custompipeline::CreateCustomPipelineCommand cmd;
+        cmd.desc = desc;
+        auto handle = events::EventDispatcher::instance().execute(cmd);
+
+        if (handle.isValid()) {
+            managedCustomPipelines.push_back(handle);
+            vfLogInfo("[Plugin:{}] Created custom pipeline {}", pluginName, handle.id);
+        } else {
+            vfLogError("[Plugin:{}] Custom pipeline creation failed (see engine log)", pluginName);
+        }
+
+        return handle;
+    }
+
+    plugin::CustomMeshHandle PluginContextImpl::uploadCustomMesh(plugin::CustomMeshData data)
+    {
+        if (!hasCapability(std::string(capability::graphics))) {
+            vfLogWarning("[Plugin:{}] Cannot upload custom mesh - graphics capability not available", pluginName);
+            return {};
+        }
+
+        events::custompipeline::UploadCustomMeshCommand cmd;
+        cmd.data = std::move(data);
+        auto handle = events::EventDispatcher::instance().execute(cmd);
+
+        if (handle.isValid()) {
+            managedCustomMeshes.push_back(handle);
+        } else {
+            vfLogError("[Plugin:{}] Custom mesh upload failed (see engine log)", pluginName);
+        }
+
+        return handle;
+    }
+
+    void PluginContextImpl::drawCustomMesh(plugin::CustomPipelineHandle pipeline, plugin::CustomMeshHandle mesh,
+                                           const glm::mat4& model,
+                                           const std::vector<std::byte>& pushConstants)
+    {
+        if (!pipeline.isValid() || !mesh.isValid()) return;
+
+        events::custompipeline::EnqueueCustomDrawCommand cmd;
+        cmd.item.pipeline = pipeline;
+        cmd.item.mesh = mesh;
+        cmd.item.model = model;
+        cmd.item.pushConstants = pushConstants;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::destroyCustomPipeline(plugin::CustomPipelineHandle handle)
+    {
+        if (!handle.isValid()) return;
+
+        events::custompipeline::DestroyCustomPipelineCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+
+        std::erase_if(managedCustomPipelines,
+            [&](const plugin::CustomPipelineHandle& h) { return h.id == handle.id; });
+    }
+
+    void PluginContextImpl::destroyCustomMesh(plugin::CustomMeshHandle handle)
+    {
+        if (!handle.isValid()) return;
+
+        events::custompipeline::DestroyCustomMeshCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+
+        std::erase_if(managedCustomMeshes,
+            [&](const plugin::CustomMeshHandle& h) { return h.id == handle.id; });
     }
 
     entt::registry& PluginContextImpl::getRegistry()
@@ -405,6 +492,71 @@ namespace plugin {
         events::EventDispatcher::instance().execute(cmd);
     }
 
+    bool PluginContextImpl::createPhysicsBody(entt::entity entity, bool rebuild)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            vfLogWarning("[Plugin:{}] Cannot create physics body - physics capability not available", pluginName);
+            return false;
+        }
+        events::physics::CreatePhysicsBodyCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.rebuild = rebuild;
+        return events::EventDispatcher::instance().execute(cmd);
+    }
+
+    bool PluginContextImpl::destroyPhysicsBody(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return false;
+        }
+        events::physics::DestroyPhysicsBodyCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().execute(cmd);
+    }
+
+    bool PluginContextImpl::createHeightFieldBody(entt::entity entity, int32_t tileX, int32_t tileZ,
+                                                  std::vector<float> heightSamples, uint32_t sampleCount,
+                                                  glm::vec3 worldOrigin, float vertexSpacing,
+                                                  float friction, float restitution)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            vfLogWarning("[Plugin:{}] Cannot create height-field body - physics capability not available", pluginName);
+            return false;
+        }
+        events::physics::CreateHeightFieldBodyCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.tileX = tileX;
+        cmd.tileZ = tileZ;
+        cmd.heightSamples = std::move(heightSamples);
+        cmd.sampleCount = sampleCount;
+        cmd.worldOrigin = worldOrigin;
+        cmd.vertexSpacing = vertexSpacing;
+        cmd.friction = friction;
+        cmd.restitution = restitution;
+        const bool created = events::EventDispatcher::instance().execute(cmd);
+
+        if (created) {
+            managedHeightFieldBodies.push_back({entity, tileX, tileZ});
+            vfLogInfo("[Plugin:{}] Created height-field body ({}x{} samples)", pluginName, sampleCount, sampleCount);
+        }
+        return created;
+    }
+
+    void PluginContextImpl::destroyHeightFieldBody(entt::entity entity, int32_t tileX, int32_t tileZ)
+    {
+        if (!hasCapability(std::string(capability::physics))) return;
+
+        events::physics::DestroyHeightFieldBodyCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.tileX = tileX;
+        cmd.tileZ = tileZ;
+        events::EventDispatcher::instance().execute(cmd);
+
+        std::erase_if(managedHeightFieldBodies, [&](const HeightFieldBodyKey& key) {
+            return key.entity == entity && key.tileX == tileX && key.tileZ == tileZ;
+        });
+    }
+
     void PluginContextImpl::setLinearVelocity(entt::entity entity, glm::vec3 velocity)
     {
         if (!hasCapability(std::string(capability::physics))) {
@@ -590,6 +742,30 @@ namespace plugin {
         events::input::GetAxis2DValueQuery q;
         q.axisName = axisName;
         return events::EventDispatcher::instance().query(q);
+    }
+
+    glm::vec2 PluginContextImpl::getViewportMousePosition()
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return glm::vec2(0.0f);
+        }
+        events::input::GetViewportMousePositionQuery q;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::screenToWorldRay(glm::vec2 screenPos, glm::vec3& outOrigin, glm::vec3& outDirection)
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return false;
+        }
+        events::input::ScreenToWorldRayQuery q;
+        q.screenPos = screenPos;
+        auto ray = events::EventDispatcher::instance().query(q);
+        if (!ray.has_value()) return false;
+
+        outOrigin = ray->origin;
+        outDirection = ray->direction;
+        return true;
     }
 
     // ========================================================================
@@ -798,9 +974,42 @@ namespace plugin {
         }
         registeredRenderHooks.clear();
 
+        for (const auto& handle : managedCustomPipelines) {
+            events::custompipeline::DestroyCustomPipelineCommand cmd;
+            cmd.handle = handle;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        managedCustomPipelines.clear();
+
+        for (const auto& handle : managedCustomMeshes) {
+            events::custompipeline::DestroyCustomMeshCommand cmd;
+            cmd.handle = handle;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        managedCustomMeshes.clear();
+
+        for (const auto& key : managedHeightFieldBodies) {
+            events::physics::DestroyHeightFieldBodyCommand cmd;
+            cmd.entity = services::internal::toHandle(key.entity);
+            cmd.tileX = key.tileX;
+            cmd.tileZ = key.tileZ;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        managedHeightFieldBodies.clear();
+
         for (const auto& window : registeredWindows) {
             controllers::imguiHandler::ImguiWindowHandler::remove(window);
         }
+        controllers::imguiHandler::PluginWindowRegistry::removeByPlugin(pluginName);
         registeredWindows.clear();
 
         for (const auto& token : pluginEventSubscriptions) {

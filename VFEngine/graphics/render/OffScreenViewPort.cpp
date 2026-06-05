@@ -9,6 +9,7 @@
 #include "../render/RenderPassHandler.hpp"
 #include "upscaling/UpscaleManager.hpp"
 #include "types/CameraTypes.hpp"
+#include "print/Log.hpp"
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
 

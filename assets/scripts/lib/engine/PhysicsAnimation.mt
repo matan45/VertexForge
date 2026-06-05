@@ -34,9 +34,9 @@ public class PhysicsAnimation {
     // ============================================
     // Mode Constants
     // ============================================
-    public static const int MODE_ANIMATED = 0;
-    public static const int MODE_KINEMATIC = 1;
-    public static const int MODE_RAGDOLL = 2;
+    public static final int MODE_ANIMATED = 0;
+    public static final int MODE_KINEMATIC = 1;
+    public static final int MODE_RAGDOLL = 2;
 
     public constructor() {
     }

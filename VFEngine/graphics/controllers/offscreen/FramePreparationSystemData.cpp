@@ -84,6 +84,7 @@ namespace controllers::offscreen
             renderData.lineSpacing = textComp.lineSpacing;
             renderData.letterSpacing = textComp.letterSpacing;
             renderData.maxWidth = textComp.maxWidth;
+            renderData.fontStyle = textComp.fontStyle;
 
             textDrawList.push_back(std::move(renderData));
         }

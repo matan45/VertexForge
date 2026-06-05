@@ -3,6 +3,7 @@
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "print/Log.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
@@ -57,18 +58,44 @@ namespace services {
         comp.showFrustum = camera.showFrustum;
         comp.orthoSize = camera.orthoSize;
 
-        // If setting this camera as primary, clear isPrimary from all other cameras
+        // Narrow primary-camera handoff (VK-1330 / VK-1333): clear only the
+        // previously-primary camera instead of sweeping every CameraComponent.
+        // Emit a breadcrumb so a missing log line is never the reason a Play
+        // abort is hard to triage.
         if (camera.isPrimary && !comp.isPrimary) {
-            auto view = registry.view<components::CameraComponent>();
-            for (auto otherEntity : view) {
-                if (otherEntity != internal::fromHandle(entity)) {
-                    auto& otherComp = view.get<components::CameraComponent>(otherEntity);
-                    otherComp.isPrimary = false;
+            auto previousPrimary = getPrimaryCamera();
+            if (previousPrimary.has_value() && previousPrimary->id != entity.id) {
+                auto prevEntity = internal::fromHandle(*previousPrimary);
+                if (registry.valid(prevEntity) &&
+                    registry.all_of<components::CameraComponent>(prevEntity)) {
+                    registry.get<components::CameraComponent>(prevEntity).isPrimary = false;
                 }
+                vfLogInfo("[CameraComponentService] Promoting entity {} to primary (previous: {})",
+                          entity.id, previousPrimary->id);
+            } else {
+                vfLogInfo("[CameraComponentService] Promoting entity {} to primary (no previous primary)",
+                          entity.id);
             }
         }
         comp.isPrimary = camera.isPrimary;
-        comp.updateProjectionMatrix();
+
+        // Guard updateProjectionMatrix against malformed inputs that would
+        // produce NaN/Inf matrices and trip downstream render asserts.
+        const bool projectionInputsValid =
+            comp.aspectRatio > 0.0f &&
+            comp.nearPlane > 0.0f &&
+            comp.farPlane > comp.nearPlane &&
+            comp.fieldOfView > 0.0f &&
+            comp.fieldOfView < 180.0f &&
+            comp.orthoSize > 0.0f;
+        if (projectionInputsValid) {
+            comp.updateProjectionMatrix();
+        } else {
+            vfLogWarning("[CameraComponentService] Skipping updateProjectionMatrix for entity {}: invalid inputs "
+                         "(aspect={}, near={}, far={}, fov={}, ortho={})",
+                         entity.id, comp.aspectRatio, comp.nearPlane, comp.farPlane,
+                         comp.fieldOfView, comp.orthoSize);
+        }
 
         return true;
     }
@@ -103,6 +130,7 @@ namespace services {
             return internal::toHandle(entity);
         }
 
+        vfLogWarning("[CameraComponentService] getPrimaryCamera() fell through: no active CameraComponent in registry");
         return std::nullopt;
     }
 

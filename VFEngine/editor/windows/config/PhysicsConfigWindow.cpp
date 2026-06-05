@@ -3,9 +3,11 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/physics/PhysicsSettingsEvents.hpp"
 #include "../../services/events/project/SceneEvents.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <vector>
 #include <cstring>
+#include <utility>
 
 namespace windows
 {
@@ -16,6 +18,11 @@ namespace windows
         {
             loadFromScene();
         }
+    }
+
+    void PhysicsConfigWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
     }
 
     void PhysicsConfigWindow::draw()
@@ -35,6 +42,11 @@ namespace windows
 
     void PhysicsConfigWindow::drawContent()
     {
+        if (!settingsLoaded)
+        {
+            loadFromScene();
+        }
+
         drawGravitySection();
         ImGui::Spacing();
         drawSimulationSection();
@@ -78,7 +90,7 @@ namespace windows
         }
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Physics settings are saved with the scene file.");
+        ImGui::TextDisabled("Save to Scene writes these settings to the active scene's linked settings asset.");
     }
 
     void PhysicsConfigWindow::drawGravitySection()
@@ -368,6 +380,25 @@ namespace windows
             events::scene::SetPhysicsSettingsCommand cmd;
             cmd.settings = settings;
             dispatcher.execute(cmd);
+
+            std::string path = dispatcher.query(events::scene::GetCurrentScenePathQuery{});
+            if (path.empty())
+            {
+                const std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Scene Files (*.vfScene)", L"*.vfScene"}
+                };
+                const nfd::FileDialog fileDialog;
+                path = fileDialog.saveFileDialog(fileTypes, L"vfScene");
+                if (path.empty())
+                {
+                    return;
+                }
+            }
+
+            events::scene::SaveSceneCommand saveCmd;
+            saveCmd.filePath = path;
+            dispatcher.execute(saveCmd);
+
             isDirty = false;
         }
         catch (const std::exception& e)

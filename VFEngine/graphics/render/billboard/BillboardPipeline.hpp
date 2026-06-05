@@ -52,8 +52,14 @@ namespace render::billboard
             std::unique_ptr<core::Texture> texture;
             vk::DescriptorSet descriptorSet;
         };
+        struct ExternalTextureEntry
+        {
+            std::vector<vk::DescriptorSet> descriptorSets;
+            std::vector<vk::ImageView> imageViews;
+            std::vector<vk::Sampler> samplers;
+        };
         std::unordered_map<std::string, CustomTextureEntry> customTextureCache;
-        std::unordered_map<std::string, vk::DescriptorSet> externalTextureCache;
+        std::unordered_map<std::string, ExternalTextureEntry> externalTextureCache;
         static constexpr uint32_t MAX_CUSTOM_TEXTURES = 32;
         static constexpr uint32_t MAX_EXTERNAL_TEXTURES = 8;
 
@@ -83,7 +89,8 @@ namespace render::billboard
 
         void setBillboardList(const std::vector<BillboardRenderData>& billboards);
 
-        void registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler externalSampler);
+        void registerExternalTexture(const std::string& key, uint32_t imageIndex,
+                                     vk::ImageView imageView, vk::Sampler externalSampler);
         void unregisterExternalTexture(const std::string& key);
         void clearExternalTextures();
 

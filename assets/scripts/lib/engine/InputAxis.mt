@@ -15,42 +15,42 @@ public class InputAxis {
     }
 
     // Get the current value of a 1D axis: -1, 0, or +1
-    public static function getValue1D(String axisName): float {
+    public static function getValue1D(string axisName): float {
         return _native_inputaxis_getValue1D(axisName);
     }
 
     // Get the X component of a 2D axis value
-    public static function getValue2DX(String axisName): float {
+    public static function getValue2DX(string axisName): float {
         return _native_inputaxis_getValue2DX(axisName);
     }
 
     // Get the Y component of a 2D axis value
-    public static function getValue2DY(String axisName): float {
+    public static function getValue2DY(string axisName): float {
         return _native_inputaxis_getValue2DY(axisName);
     }
 
     // Register a 1D axis from two actions (positive = +1, negative = -1)
-    public static function register1D(String axisName, String positiveAction, String negativeAction): void {
+    public static function register1D(string axisName, string positiveAction, string negativeAction): void {
         _native_inputaxis_register1D(axisName, positiveAction, negativeAction);
     }
 
     // Register a 2D axis from four actions, normalized to prevent diagonal speed boost
-    public static function register2D(String axisName, String upAction, String downAction, String leftAction, String rightAction): void {
+    public static function register2D(string axisName, string upAction, string downAction, string leftAction, string rightAction): void {
         _native_inputaxis_register2D(axisName, upAction, downAction, leftAction, rightAction, true);
     }
 
     // Register a 2D axis from four actions, without normalization
-    public static function register2DRaw(String axisName, String upAction, String downAction, String leftAction, String rightAction): void {
+    public static function register2DRaw(string axisName, string upAction, string downAction, string leftAction, string rightAction): void {
         _native_inputaxis_register2D(axisName, upAction, downAction, leftAction, rightAction, false);
     }
 
     // Unregister a 1D axis
-    public static function unregister1D(String axisName): void {
+    public static function unregister1D(string axisName): void {
         _native_inputaxis_unregister1D(axisName);
     }
 
     // Unregister a 2D axis
-    public static function unregister2D(String axisName): void {
+    public static function unregister2D(string axisName): void {
         _native_inputaxis_unregister2D(axisName);
     }
 }

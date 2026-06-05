@@ -42,18 +42,18 @@ public class Physics {
     // ============================================
     // Body Type Constants
     // ============================================
-    public static const int BODY_STATIC = 0;
-    public static const int BODY_DYNAMIC = 1;
-    public static const int BODY_KINEMATIC = 2;
+    public static final int BODY_STATIC = 0;
+    public static final int BODY_DYNAMIC = 1;
+    public static final int BODY_KINEMATIC = 2;
 
     // ============================================
     // Collider Shape Constants
     // ============================================
-    public static const int SHAPE_BOX = 0;
-    public static const int SHAPE_SPHERE = 1;
-    public static const int SHAPE_CAPSULE = 2;
-    public static const int SHAPE_CONVEX_MESH = 3;
-    public static const int SHAPE_TRIANGLE_MESH = 4;
+    public static final int SHAPE_BOX = 0;
+    public static final int SHAPE_SPHERE = 1;
+    public static final int SHAPE_CAPSULE = 2;
+    public static final int SHAPE_CONVEX_MESH = 3;
+    public static final int SHAPE_TRIANGLE_MESH = 4;
 
     public constructor() {
     }
@@ -272,6 +272,32 @@ public class Physics {
     }
 
     // ============================================
+    // Body Lifecycle (VK-1351)
+    // ============================================
+
+    // Build the real physics body from this entity's already-configured Collider
+    // (+ optional RigidBody) component, positioned at the entity's current transform.
+    // Call AFTER the entity is positioned and AFTER addComponent("Collider") +
+    // setColliderSize / setCollisionLayer. Required for runtime-spawned entities to be
+    // mouse-pickable and collidable. Returns false if a body already exists or the entity
+    // has no physics components.
+    public static function createBody(int entityId): bool {
+        return _native_physics_createBody(entityId);
+    }
+
+    // Tear down then re-create the body. Use after changing size/layer/shape at runtime
+    // (createBody is a no-op when a body already exists). Returns false on failure.
+    public static function rebuildBody(int entityId): bool {
+        return _native_physics_rebuildBody(entityId);
+    }
+
+    // Destroy the physics body without removing the ECS components. Returns false if there
+    // was no body to destroy.
+    public static function destroyBody(int entityId): bool {
+        return _native_physics_destroyBody(entityId);
+    }
+
+    // ============================================
     // Raycasting
     // ============================================
 
@@ -296,7 +322,7 @@ public class Physics {
         }
         return new RaycastHit(
             true,
-            raw[1] as int,
+            (int)raw[1],
             new Vec3f(raw[2], raw[3], raw[4]),
             new Vec3f(raw[5], raw[6], raw[7]),
             raw[8]
@@ -312,7 +338,7 @@ public class Physics {
         }
         return new RaycastHit(
             true,
-            raw[1] as int,
+            (int)raw[1],
             new Vec3f(raw[2], raw[3], raw[4]),
             new Vec3f(raw[5], raw[6], raw[7]),
             raw[8]
@@ -323,13 +349,13 @@ public class Physics {
     // Returns empty array if nothing was hit
     public static function raycastAll(Vec3f origin, Vec3f direction, float maxDistance): RaycastHit[] {
         float[] raw = _native_physics_raycastAll(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, maxDistance);
-        int count = raw[0] as int;
+        int count = (int)raw[0];
         RaycastHit[] hits = new RaycastHit[count];
         for (int i = 0; i < count; i = i + 1) {
             int base = 1 + i * 8;
             hits[i] = new RaycastHit(
                 true,
-                raw[base] as int,
+                (int)raw[base],
                 new Vec3f(raw[base + 1], raw[base + 2], raw[base + 3]),
                 new Vec3f(raw[base + 4], raw[base + 5], raw[base + 6]),
                 raw[base + 7]
@@ -342,13 +368,13 @@ public class Physics {
     // layers: comma-separated layer names (e.g. "Dynamic,Sensor")
     public static function raycastAll(Vec3f origin, Vec3f direction, float maxDistance, string layers): RaycastHit[] {
         float[] raw = _native_physics_raycastAll(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, maxDistance, layers);
-        int count = raw[0] as int;
+        int count = (int)raw[0];
         RaycastHit[] hits = new RaycastHit[count];
         for (int i = 0; i < count; i = i + 1) {
             int base = 1 + i * 8;
             hits[i] = new RaycastHit(
                 true,
-                raw[base] as int,
+                (int)raw[base],
                 new Vec3f(raw[base + 1], raw[base + 2], raw[base + 3]),
                 new Vec3f(raw[base + 4], raw[base + 5], raw[base + 6]),
                 raw[base + 7]

@@ -22,6 +22,7 @@
 #include "Import.hpp"
 #include "core/PluginManager.hpp"
 #include "resource/PathResolver.hpp"
+#include "time/Timer.hpp"
 #include <filesystem>
 
 namespace handlers
@@ -83,7 +84,17 @@ namespace handlers
         bootstrap->setPreRenderCallback([this]()
         {
             if (editorRenderServiceImpl)
-                editorRenderServiceImpl->renderViewportDeferred();
+            {
+                editorRenderServiceImpl->renderViewportDeferred([this]()
+                {
+                    if (editorModeService && editorModeService->isPlayMode() &&
+                        !editorModeService->isPaused() && renderTexturePlayModeHandler)
+                    {
+                        float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                        renderTexturePlayModeHandler->update(dt);
+                    }
+                });
+            }
         });
 
         if (physicsPlayModeHandler && scriptingService)
@@ -137,6 +148,7 @@ namespace handlers
         controllerService.reset();
         ikComponentService.reset();
         renderHookService.reset();
+        customPipelineService.reset();
         debugDrawService.reset();
         audioSceneUpdater.reset();
         worldSectorService.reset();

@@ -23,6 +23,7 @@
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
+#include "custom/CustomPipelineManager.hpp"
 #include "upscaling/UpscaleManager.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -43,6 +44,10 @@ namespace render
         buildFrameGraph(commandBuffer, imageIndex);
         frameGraph->compile();
         frameGraph->execute(commandBuffer, imageIndex);
+
+        // Plugin custom draws are enqueued per frame — drop them whether or not
+        // the scene pass consumed them (e.g. GPU-driven renderer disabled).
+        if (customPipelineManager) customPipelineManager->endFrame();
     }
 
     void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
@@ -162,6 +167,7 @@ namespace render
         bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized()
             && vfxRuntimeProvider->getInstanceCount() > 0;
         bool hasCustomShaderMeshes = !customShaderMeshDrawList.empty();
+        bool hasPluginDraws = customPipelineManager && customPipelineManager->hasDraws();
 
         if (hasVFX)
         {
@@ -198,7 +204,7 @@ namespace render
             && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
 
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes
-            || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender);
+            || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender || hasPluginDraws);
 
         updateGPUDrivenSceneData();
 
@@ -219,7 +225,7 @@ namespace render
 
         bool hasMeshesToRender = !currentMeshDrawList.empty();
 
-        if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender)
+        if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender || hasPluginDraws)
             && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
         {
             drawGPUDrivenMeshPassGraphManaged(commandBuffer, imageIndex, debugRendererPtr, hasCustomShaderMeshes, hasVFX);
@@ -410,6 +416,8 @@ namespace render
             setupSecondary(overlayCmd);
             if (hasCustomShaderMeshes)
                 meshPipeline->renderMeshList(overlayCmd, imageIndex, customShaderMeshDrawList, currentFrustum);
+            if (customPipelineManager)
+                customPipelineManager->render(overlayCmd, currentView, currentProjection);
             gpuDrivenRenderer->renderGIDebug(overlayCmd, currentProjection * currentView);
             if (debugRendererPtr)
             {
@@ -461,6 +469,9 @@ namespace render
 
             if (hasCustomShaderMeshes)
                 meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+
+            if (customPipelineManager)
+                customPipelineManager->render(commandBuffer, currentView, currentProjection);
 
             gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
 
@@ -537,6 +548,9 @@ namespace render
 
         if (hasCustomShaderMeshes)
             meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+
+        if (customPipelineManager)
+            customPipelineManager->render(commandBuffer, currentView, currentProjection);
 
         gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
 

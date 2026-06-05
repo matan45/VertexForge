@@ -14,77 +14,77 @@ public class InputAction {
     }
 
     // Check if any binding for this action is currently held down
-    public static function isDown(String actionName): bool {
+    public static function isDown(string actionName): bool {
         return _native_inputaction_isDown(actionName);
     }
 
     // Check if any binding for this action was just pressed this frame
-    public static function isPressed(String actionName): bool {
+    public static function isPressed(string actionName): bool {
         return _native_inputaction_isPressed(actionName);
     }
 
     // Check if any binding for this action was just released this frame
-    public static function isReleased(String actionName): bool {
+    public static function isReleased(string actionName): bool {
         return _native_inputaction_isReleased(actionName);
     }
 
     // Register a new action with a single default binding
-    public static function register(String actionName, int bindingType, int code): void {
+    public static function register(string actionName, int bindingType, int code): void {
         _native_inputaction_register(actionName, bindingType, code);
     }
 
     // Register a new action in a specific input context
-    public static function registerInContext(String actionName, String context, int bindingType, int code): void {
+    public static function registerInContext(string actionName, string context, int bindingType, int code): void {
         _native_inputaction_registerInContext(actionName, context, bindingType, code);
     }
 
     // Register a new action with a combo binding (e.g., Shift+W)
-    public static function registerCombo(String actionName, int bindingType, int code, bool shift, bool ctrl, bool alt): void {
+    public static function registerCombo(string actionName, int bindingType, int code, bool shift, bool ctrl, bool alt): void {
         _native_inputaction_register(actionName, bindingType, code, shift, ctrl, alt);
     }
 
     // Add an additional binding to an existing action
-    public static function addBinding(String actionName, int bindingType, int code): void {
+    public static function addBinding(string actionName, int bindingType, int code): void {
         _native_inputaction_addBinding(actionName, bindingType, code);
     }
 
     // Add a combo binding to an existing action (e.g., Shift+W)
-    public static function addComboBinding(String actionName, int bindingType, int code, bool shift, bool ctrl, bool alt): void {
+    public static function addComboBinding(string actionName, int bindingType, int code, bool shift, bool ctrl, bool alt): void {
         _native_inputaction_addBinding(actionName, bindingType, code, shift, ctrl, alt);
     }
 
     // Remove a specific binding from an action
-    public static function removeBinding(String actionName, int bindingType, int code): void {
+    public static function removeBinding(string actionName, int bindingType, int code): void {
         _native_inputaction_removeBinding(actionName, bindingType, code);
     }
 
     // Remove a specific combo binding from an action
-    public static function removeComboBinding(String actionName, int bindingType, int code, bool shift, bool ctrl, bool alt): void {
+    public static function removeComboBinding(string actionName, int bindingType, int code, bool shift, bool ctrl, bool alt): void {
         _native_inputaction_removeBinding(actionName, bindingType, code, shift, ctrl, alt);
     }
 
     // Reset an action back to its default bindings
-    public static function resetBindings(String actionName): void {
+    public static function resetBindings(string actionName): void {
         _native_inputaction_resetBindings(actionName);
     }
 
     // Save custom bindings to a JSON file
-    public static function save(String filePath): bool {
+    public static function save(string filePath): bool {
         return _native_inputaction_save(filePath);
     }
 
     // Load custom bindings from a JSON file
-    public static function load(String filePath): bool {
+    public static function load(string filePath): bool {
         return _native_inputaction_load(filePath);
     }
 
     // Consume an action so lower-priority scripts don't see it this frame
-    public static function consume(String actionName): void {
+    public static function consume(string actionName): void {
         _native_inputaction_consume(actionName);
     }
 
     // Check if an action has been consumed this frame
-    public static function isConsumed(String actionName): bool {
+    public static function isConsumed(string actionName): bool {
         return _native_inputaction_isConsumed(actionName);
     }
 }

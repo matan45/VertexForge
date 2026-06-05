@@ -171,6 +171,14 @@ namespace render
         }
     }
 
+    void DebugRenderer::setDeletionQueue(core::DeferredDeletionQueue* queue)
+    {
+        if (navmeshDebugRenderer)
+        {
+            navmeshDebugRenderer->setDeletionQueue(queue);
+        }
+    }
+
     void DebugRenderer::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
     {
         cameraFrustumDrawList = std::move(frustums);

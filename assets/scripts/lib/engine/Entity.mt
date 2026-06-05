@@ -223,4 +223,21 @@ public class Entity {
     public static function broadcastMessage(int entityId, ScriptCallback callback): void {
         _native_entity_broadcastMessage(entityId, callback);
     }
+
+    // ============================================
+    // Renderable Assets (mesh + material)
+    // ============================================
+
+    // Point an entity's MeshComponent at a .vfMesh asset by path (adds the
+    // component if absent). Combine with setMaterial to make a created entity
+    // renderable at runtime. Returns true on success.
+    public static function setMesh(int entityId, string meshPath): bool {
+        return _native_mesh_setMesh(entityId, meshPath);
+    }
+
+    // Point an entity's MaterialComponent default material at a .vfMaterial
+    // asset by path (adds the component if absent). Returns true on success.
+    public static function setMaterial(int entityId, string materialPath): bool {
+        return _native_material_setMaterial(entityId, materialPath);
+    }
 }

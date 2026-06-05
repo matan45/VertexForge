@@ -149,10 +149,11 @@ namespace serialization
         auto rawData = resource::readFileBytes(std::string(filename));
         if (BinarySceneSerialization::isBinaryScene(rawData))
         {
-            return BinarySceneSerialization::loadBinarySceneInto(rawData, sceneGraph, progressCallback);
+            return BinarySceneSerialization::loadBinarySceneInto(rawData, sceneGraph, filename, progressCallback);
         }
 
         json sceneJson;
+        json settingsJson;
 
         try
         {
@@ -178,6 +179,11 @@ namespace serialization
                 vfLogError("Invalid scene file: missing or invalid 'root' object");
                 return false;
             }
+
+            if (!readLinkedSceneSettings(sceneJson, filename, settingsJson))
+            {
+                return false;
+            }
         }
         catch (const json::parse_error& e)
         {
@@ -196,7 +202,12 @@ namespace serialization
             size_t entitiesLoaded = 0;
 
             sceneGraph.clearScene();
-            deserializeSceneSettings(sceneJson, sceneGraph);
+            if (!deserializeSceneSettings(settingsJson, sceneGraph))
+            {
+                vfLogError("Failed to deserialize linked scene settings: {}", filename);
+                sceneGraph.clearScene();
+                return false;
+            }
 
             scene::Entity& root = sceneGraph.GetRoot();
             DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded, totalEntities};
@@ -222,7 +233,8 @@ namespace serialization
         auto rawData = resource::readFileBytes(std::string(filename));
         if (BinarySceneSerialization::isBinaryScene(rawData))
         {
-            return BinarySceneSerialization::loadBinarySceneAdditive(rawData, sceneGraph, containerParent, progressCallback);
+            return BinarySceneSerialization::loadBinarySceneAdditive(rawData, sceneGraph, containerParent,
+                                                                    filename, progressCallback);
         }
 
         json sceneJson;
@@ -368,12 +380,20 @@ namespace serialization
     {
         try
         {
+            std::filesystem::path settingsPath = getSettingsPathForScene(filename);
+            if (!saveSceneSettings(sceneGraph, settingsPath))
+            {
+                return false;
+            }
+
             json sceneJson;
             sceneJson["version"] = "1.0";
+            if (!writeSceneSettingsRef(sceneJson, filename, settingsPath))
+            {
+                return false;
+            }
             sceneJson["root"] = serializeRootEntity(sceneGraph.GetRoot());
-            sceneJson["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
-            sceneJson["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
-            sceneJson["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
+
             std::string filePath{filename};
             std::ofstream file{filePath};
             if (!file.is_open())
@@ -405,6 +425,40 @@ namespace serialization
             snapshot["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
             snapshot["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
             snapshot["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
+
+            const auto& inputMappingPath = sceneGraph.getInputMappingPath();
+            if (inputMappingPath.has_value() && !inputMappingPath->empty())
+            {
+                snapshot["inputMapping"] = *inputMappingPath;
+            }
+
+            return snapshot;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to create scene snapshot: {}", e.what());
+            return json();
+        }
+    }
+
+    json SceneSerialization::createSnapshot(scene::SceneGraphSystem& sceneGraph, std::string_view filename)
+    {
+        try
+        {
+            std::filesystem::path settingsPath = getSettingsPathForScene(filename);
+            if (!saveSceneSettings(sceneGraph, settingsPath))
+            {
+                return json();
+            }
+
+            json snapshot;
+            snapshot["version"] = "1.0";
+            if (!writeSceneSettingsRef(snapshot, filename, settingsPath))
+            {
+                return json();
+            }
+            snapshot["root"] = serializeRootEntity(sceneGraph.GetRoot());
+
             return snapshot;
         }
         catch (const std::exception& e)
@@ -432,7 +486,63 @@ namespace serialization
             }
 
             sceneGraph.clearScene();
-            deserializeSceneSettings(snapshot, sceneGraph);
+            if (!deserializeSceneSettings(snapshot, sceneGraph))
+            {
+                vfLogError("Invalid scene settings in snapshot");
+                sceneGraph.clearScene();
+                return false;
+            }
+
+            scene::Entity& root = sceneGraph.GetRoot();
+            size_t entitiesLoaded = 0;
+            size_t totalEntities = countEntities(snapshot["root"]);
+            DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded, totalEntities};
+            deserializeEntity(snapshot["root"], root, ctx);
+
+            resolveRenderTextureSourceNames();
+
+            vfLogInfo("Scene restored from snapshot successfully");
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to restore scene from snapshot: {}", e.what());
+            sceneGraph.clearScene();
+            return false;
+        }
+    }
+
+    bool SceneSerialization::restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph,
+                                                  std::string_view filename,
+                                                  SceneLoadProgressCallback progressCallback)
+    {
+        try
+        {
+            if (!snapshot.is_object())
+            {
+                vfLogError("Invalid snapshot: not a JSON object");
+                return false;
+            }
+
+            if (!snapshot.contains("root") || !snapshot["root"].is_object())
+            {
+                vfLogError("Invalid snapshot: missing or invalid 'root' object");
+                return false;
+            }
+
+            json settingsJson;
+            if (!readLinkedSceneSettings(snapshot, filename, settingsJson))
+            {
+                return false;
+            }
+
+            sceneGraph.clearScene();
+            if (!deserializeSceneSettings(settingsJson, sceneGraph))
+            {
+                vfLogError("Invalid linked scene settings in snapshot");
+                sceneGraph.clearScene();
+                return false;
+            }
 
             scene::Entity& root = sceneGraph.GetRoot();
             size_t entitiesLoaded = 0;

@@ -23,6 +23,7 @@
 #include "../../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
+#include "../../adapters/render/CustomPipelineAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
@@ -31,6 +32,7 @@
 #include "../../adapters/render/ObjectStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/input/RuntimePickerAdapter.hpp"
 #include "types/PhysicsTypes.hpp"
 
 namespace core
@@ -69,6 +71,7 @@ namespace core
         oceanRenderAdapter = std::make_unique<OceanRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         renderHookAdapter = std::make_unique<RenderHookAdapter>(offScreen.get());
+        customPipelineAdapter = std::make_unique<CustomPipelineAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
         grassRenderAdapter = std::make_unique<adapters::GrassRenderAdapter>();
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
@@ -77,6 +80,7 @@ namespace core
         objectStreamingAdapter = std::make_unique<adapters::ObjectStreamingAdapter>();
         giAdapter = std::make_unique<adapters::GIAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
+        runtimePickerAdapter = std::make_unique<RuntimePickerAdapter>();
 
         offScreen->init();
 

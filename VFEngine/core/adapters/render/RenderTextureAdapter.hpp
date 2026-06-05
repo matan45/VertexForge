@@ -1,6 +1,7 @@
 #pragma once
 #include "../../services/providers/render/IRenderTextureProvider.hpp"
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 
 namespace controllers
@@ -24,6 +25,13 @@ namespace core
         rendertexture::RenderTextureId nextId = 1;
 
         ::controllers::OffScreen* mainOffScreen = nullptr;
+
+        // Serializes mutation of `controllers` (create/destroy/resize from the main thread on
+        // play-mode transitions and user resize) against iteration on the render thread inside
+        // renderAll(). Without this, Stop-button → exitPlayMode → destroyRenderTexture can erase
+        // an entry while the render thread holds a raw RenderTextureController* in its local
+        // toRender/enabled vectors → UAF.
+        mutable std::mutex controllersMutex;
 
     public:
         explicit RenderTextureAdapter(::controllers::OffScreen* offScreen);

@@ -49,6 +49,10 @@ namespace core {
         return offScreen ? offScreen->render() : nullptr;
     }
 
+    void* OffScreenAdapter::render(const std::function<void()>& preRenderCallback) {
+        return offScreen ? offScreen->render(preRenderCallback) : nullptr;
+    }
+
     void OffScreenAdapter::iblSet(std::string_view iblPath) {
         if (offScreen) {
             offScreen->iblSet(iblPath);
@@ -189,6 +193,12 @@ namespace core {
     void OffScreenAdapter::setPlayMode(bool playMode) {
         if (offScreen) {
             offScreen->setPlayMode(playMode);
+        }
+    }
+
+    void OffScreenAdapter::waitForIdle() {
+        if (offScreen) {
+            offScreen->waitForIdle();
         }
     }
 

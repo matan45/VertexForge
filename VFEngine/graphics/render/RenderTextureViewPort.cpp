@@ -4,15 +4,21 @@
 #include "../core/CommandPool.hpp"
 #include "../core/ImageUtilities.hpp"
 #include "../core/Utilities.hpp"
+#include "../core/BufferUtilities.hpp"
 #include "../core/RenderManager.hpp"
 #include "../core/DynamicRenderingHelpers.hpp"
 #include "RenderPassHandler.hpp"
 #include "IBL.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
+#include "common/CameraTypes.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
+#include "gpudriven/GPUDrivenCameraBuffer.hpp"
+#include "gpudriven/scene/GPUCullLODPipeline.hpp"
+#include "math/Frustum.hpp"
 #include "print/Log.hpp"
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
+#include <cstring>
 
 namespace render
 {
@@ -99,6 +105,11 @@ namespace render
             return nullptr;
         }
 
+        // VK-1334: lazy-init per-RTT camera buffers + descriptor sets the first time we have a
+        // RenderPassHandler in hand. They live for the viewport's lifetime; no shared CameraUBO
+        // is ever mutated by RTT.
+        ensurePerRTTResources(mainPassHandler);
+
         uint32_t imageIndex = core::RenderManager::getImageIndex();
         lastRenderedImageIndex = imageIndex;
 
@@ -107,27 +118,62 @@ namespace render
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
-        // Update both camera buffers for RTT rendering:
-        // 1. GPUDrivenCameraBuffer — used by the compute cull pipeline for object-level frustum culling
-        // 2. StaticMeshPipeline CameraUBO — used by mesh/task/fragment shaders for vertex
-        //    transformation, meshlet-level frustum culling, and lighting calculations
-        gpuRenderer->updateCameraForRTT({
-            .view = view,
-            .projection = projection,
-            .cameraPosition = cameraPosition,
-            .nearPlane = nearPlane,
-            .farPlane = farPlane,
-            .screenWidth = width,
-            .screenHeight = height
-        });
+        // Write per-RTT mesh-pipeline CameraUBO (set 0 / binding 0 of the per-RTT IBL set).
+        // Mirrors the layout of `CameraUBO` consumed by mesh / task / fragment shaders.
+        {
+            common::CameraUBO ubo{};
+            ubo.view = view;
+            ubo.projection = projection;
+            ubo.cameraPos = cameraPosition;
+            ubo.time = 0.0f;
+            math::extractFrustumPlanes(projection * view, ubo.frustumPlanes);
 
-        meshPipeline->updateCameraUBO(view, projection, cameraPosition);
+            void* mapped = rttMeshCameraUBOAllocs[imageIndex].mappedPtr;
+            if (mapped)
+            {
+                std::memcpy(mapped, &ubo, sizeof(ubo));
+            }
+        }
+
+        // Enter the GPU-driven renderer's RTT scope: writes the per-RTT GPU-cull camera buffer
+        // and routes subsequent cull dispatches through the per-RTT cull descriptor set.
+        gpuRenderer->beginRTTContext(
+            { rttGPUDrivenCameraBuffers[imageIndex].get(), rttCullDescSets[imageIndex] },
+            { .view = view,
+              .projection = projection,
+              .cameraPosition = cameraPosition,
+              .nearPlane = nearPlane,
+              .farPlane = farPlane,
+              .screenWidth = width,
+              .screenHeight = height });
+
+        // RAII guard: endRTTContext MUST run before this function returns, even on exception
+        // (the new waitForFences after submit at the bottom can throw vk::DeviceLostError, etc.).
+        // Without this, the GPU-driven renderer would stay in RTT context and the next main-pass
+        // submit would render with the per-RTT camera UBO + cull descriptor still bound, silently
+        // corrupting the main camera until the next successful RTT render.
+        struct RTTScopeGuard {
+            gpudriven::GPUDrivenRenderer* renderer;
+            ~RTTScopeGuard() { if (renderer) renderer->endRTTContext(); }
+        } rttScope{gpuRenderer};
 
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
         gpuRenderer->dispatchCompute(commandBuffer);
+
+        // Transition RTT color image from the known post-pass layout
+        // (eShaderReadOnlyOptimal - set by createOffscreenResources on first frame and by
+        // the end-of-pass barrier below on subsequent frames) into eColorAttachmentOptimal
+        // so the dynamic-rendering passes below can write to it. Without this barrier,
+        // vkCmdBeginRendering would fail validation VUID-vkCmdBeginRendering-pRenderingInfo-09592.
+        core::ImageUtilities::transitionImageLayout(
+            commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         // Phase 1: Skybox / clear pass (color-only, eClear)
         // Renders the IBL skybox if available, otherwise just clears the color image.
@@ -145,7 +191,7 @@ namespace render
         }
         else
         {
-            // No IBL — just clear the color image via dynamic rendering
+            // No IBL - just clear the color image via dynamic rendering
             auto colorAttach = core::colorClear(
                 offscreenResources.colorImages[imageIndex].colorImageView,
                 vk::ClearColorValue{std::array{clearColor.r, clearColor.g, clearColor.b, clearColor.a}});
@@ -160,7 +206,7 @@ namespace render
 
         // Phase 2: Mesh render pass (eLoad color from skybox/clear, eClear depth)
         auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
-        auto depthAttach = core::depthClear(offscreenResources.depthImage.depthImageView, 1.0f, 0);
+        auto depthAttach = core::depthClear(depthImages[imageIndex].depthImageView, 1.0f, 0);
 
         core::DynamicRenderingInfo dynInfo{};
         dynInfo.extent = vk::Extent2D{width, height};
@@ -177,7 +223,10 @@ namespace render
         vk::Rect2D scissor{{0, 0}, {width, height}};
         commandBuffer.setScissor(0, scissor);
 
-        vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
+        // VK-1334: use per-RTT IBL descriptor set so set 0 / binding 0 references the per-RTT
+        // CameraUBO. Shaders run with RTT matrices; main pass continues to read from the main
+        // descriptor set bound elsewhere.
+        vk::DescriptorSet iblDescriptorSet = rttMeshIBLDescSets[imageIndex];
 
         gpuRenderer->renderDraw(commandBuffer, iblDescriptorSet, width, height);
         gpuRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet, width, height);
@@ -200,6 +249,17 @@ namespace render
 
         core::endDynamicRendering(commandBuffer);
 
+        // Transition back to eShaderReadOnlyOptimal so UI consumers (runtime UIImage with
+        // renderTextureSourceName, or the editor ImGui preview descriptor) can sample
+        // immediately, and so the next frame's pre-pass barrier observes the expected
+        // oldLayout regardless of whether a consumer ran this frame.
+        core::ImageUtilities::transitionImageLayout(
+            commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         commandBuffer.end();
 
         vk::SubmitInfo submitInfo(
@@ -210,25 +270,22 @@ namespace render
 
         device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
 
-        // Wait for THIS submission only (not the entire queue).
-        // A fence wait is required here because restoreMainCamera() and
-        // registerExternalTexture() write to shared HOST_COHERENT buffers
-        // that the GPU is still reading — a GPU-only semaphore cannot
-        // protect against that CPU-side write race.
-        // Full async (semaphore chain) would require per-RTT camera buffers.
-        (void)device.getLogicalDevice().waitForFences(
+        // Minimap flicker fix: wait for the RTT submit to complete on the GPU BEFORE returning.
+        // The follow-up offscreen submit (which contains the UI sample of this colorImages[I])
+        // is on the same graphics queue but has no semaphore dependency on this submit, so
+        // without this wait the GPU is free to execute the UI's fragment-shader read of
+        // colorImages[I] concurrently with the RTT's writes/layout-transition. The result is
+        // a torn read = visible flicker on the minimap quad. The CPU stall here is small
+        // (512x512 RTT renders in well under a millisecond) and only affects RTTs that
+        // actually rendered this frame.
+        vk::Result waitResult = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+        if (waitResult != vk::Result::eSuccess)
+        {
+            vfLogError("RenderTextureViewPort: post-submit waitForFences returned non-success");
+        }
 
-        // Restore the main camera's data so the main render pass uses the correct
-        // frustum/projection. restoreMainCamera() restores GPUDrivenCameraBuffer;
-        // we also restore the mesh pipeline's CameraUBO which shaders read at set 0 binding 0.
-        gpuRenderer->restoreMainCamera();
-        meshPipeline->updateCameraUBO(
-            gpuRenderer->getCachedCameraView(),
-            gpuRenderer->getCachedCameraProjection(),
-            gpuRenderer->getCachedCameraPosition()
-        );
-
+        // endRTTContext is handled by rttScope on function exit.
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
 
@@ -238,6 +295,8 @@ namespace render
             return;
 
         device.getLogicalDevice().waitIdle();
+
+        cleanupPerRTTResources();
 
         commandPool->cleanUp();
 
@@ -282,6 +341,164 @@ namespace render
         return {};
     }
 
+    vk::ImageView RenderTextureViewPort::getImageView(uint32_t imageIndex) const
+    {
+        if (imageIndex < offscreenResources.colorImages.size())
+            return offscreenResources.colorImages[imageIndex].colorImageView;
+        return {};
+    }
+
+    void RenderTextureViewPort::ensurePerRTTResources(RenderPassHandler* mainPassHandler)
+    {
+        if (perRTTResourcesInitialized || !mainPassHandler)
+        {
+            return;
+        }
+
+        auto* gpuRenderer = mainPassHandler->getGPUDrivenRenderer();
+        auto* meshPipeline = mainPassHandler->getMeshPipeline();
+        if (!gpuRenderer || !meshPipeline)
+        {
+            return;
+        }
+
+        const uint32_t imageCount = swapChain.getImageCount();
+        const auto logicalDevice = device.getLogicalDevice();
+
+        // --- per-image mesh-pipeline CameraUBO ---
+        rttMeshCameraUBOs.resize(imageCount);
+        rttMeshCameraUBOAllocs.resize(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            core::BufferInfoRequest request(logicalDevice, device.getPhysicalDevice());
+            request.size = sizeof(common::CameraUBO);
+            request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                 vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(request,
+                rttMeshCameraUBOs[i], rttMeshCameraUBOAllocs[i], device.getMemoryManager());
+        }
+
+        // --- IBL descriptor pool sized for `imageCount` mirror sets (1 UBO + 3 image-samplers each) ---
+        {
+            std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+            poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+            poolSizes[0].descriptorCount = imageCount;
+            poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+            poolSizes[1].descriptorCount = imageCount * 3;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            poolInfo.maxSets = imageCount;
+            rttMeshIBLDescPool = logicalDevice.createDescriptorPool(poolInfo);
+        }
+
+        rttMeshIBLDescSets.resize(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            rttMeshIBLDescSets[i] = meshPipeline->createExternalIBLDescriptorSet(
+                rttMeshCameraUBOs[i], rttMeshIBLDescPool);
+        }
+
+        // --- per-image GPU-driven cull camera buffer + per-image cull descriptor sets ---
+        rttGPUDrivenCameraBuffers.resize(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            rttGPUDrivenCameraBuffers[i] = std::make_unique<gpudriven::GPUDrivenCameraBuffer>(device, swapChain);
+            rttGPUDrivenCameraBuffers[i]->init();
+        }
+
+        // Cull descriptor pool sized to match GPUCullLODPipeline's layout: bindings 0/2/3/4/6 are
+        // storage buffers, binding 1 is a uniform buffer, binding 5 is a combined image sampler.
+        {
+            std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+            poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
+            poolSizes[0].descriptorCount = imageCount * 5;
+            poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
+            poolSizes[1].descriptorCount = imageCount;
+            poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
+            poolSizes[2].descriptorCount = imageCount;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet |
+                             vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            poolInfo.maxSets = imageCount;
+            rttCullDescPool = logicalDevice.createDescriptorPool(poolInfo);
+        }
+
+        rttCullDescSets.resize(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            rttCullDescSets[i] = gpuRenderer->allocateRTTCullDescriptorSet(
+                rttCullDescPool, rttGPUDrivenCameraBuffers[i]->getBuffer());
+        }
+
+        rttCullDescPoolOwnerRenderer = gpuRenderer;
+        perRTTResourcesInitialized = true;
+    }
+
+    void RenderTextureViewPort::cleanupPerRTTResources()
+    {
+        if (!perRTTResourcesInitialized)
+        {
+            return;
+        }
+
+        const auto logicalDevice = device.getLogicalDevice();
+
+        // Untrack the cull descriptor sets so the cull pipeline stops rewriting them when its
+        // cached buffers change. Descriptor sets themselves are freed implicitly when their pool
+        // is destroyed below.
+        if (rttCullDescPoolOwnerRenderer)
+        {
+            for (auto set : rttCullDescSets)
+            {
+                if (set)
+                {
+                    rttCullDescPoolOwnerRenderer->releaseRTTCullDescriptorSet(set);
+                }
+            }
+        }
+        rttCullDescSets.clear();
+        rttCullDescPoolOwnerRenderer = nullptr;
+
+        if (rttCullDescPool)
+        {
+            logicalDevice.destroyDescriptorPool(rttCullDescPool);
+            rttCullDescPool = nullptr;
+        }
+
+        for (auto& buf : rttGPUDrivenCameraBuffers)
+        {
+            if (buf) buf->cleanup();
+        }
+        rttGPUDrivenCameraBuffers.clear();
+
+        rttMeshIBLDescSets.clear();
+        if (rttMeshIBLDescPool)
+        {
+            logicalDevice.destroyDescriptorPool(rttMeshIBLDescPool);
+            rttMeshIBLDescPool = nullptr;
+        }
+
+        for (uint32_t i = 0; i < rttMeshCameraUBOs.size(); ++i)
+        {
+            if (rttMeshCameraUBOs[i])
+            {
+                core::BufferUtilities::destroyBuffer(logicalDevice,
+                    rttMeshCameraUBOs[i], rttMeshCameraUBOAllocs[i], device.getMemoryManager());
+            }
+        }
+        rttMeshCameraUBOs.clear();
+        rttMeshCameraUBOAllocs.clear();
+
+        perRTTResourcesInitialized = false;
+    }
+
     void RenderTextureViewPort::createOffscreenResources()
     {
         vk::Format colorFormat = swapChain.getSceneColorFormat();
@@ -307,43 +524,56 @@ namespace render
                              | vk::ImageUsageFlagBits::eSampled;
         imageDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        core::DepthImage depth;
-        core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageAllocation, device.getMemoryManager());
-        core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), depth.depthImage);
-        imageDepthRequest.format = depthFormat;
-        imageDepthRequest.aspectFlags = vk::ImageAspectFlagBits::eDepth;
-        core::ImageUtilities::createImageView(imageDepthRequest, depth.depthImageView);
-
-        vk::UniqueCommandBuffer transitionDepthImage = core::Utilities::beginSingleTimeCommands(
-            device.getLogicalDevice(), commandPool->getCommandPool());
-        core::ImageUtilities::transitionImageLayout(transitionDepthImage.get(), depth.depthImage,
-                                                    vk::ImageLayout::eUndefined,
-                                                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
-                                                    vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
-        core::Utilities::endSingleTimeCommands(device, transitionDepthImage);
-
-        offscreenResources.depthImage = std::move(depth);
-
         offscreenResources.colorImages.reserve(swapChain.getImageCount());
+        depthImages.reserve(swapChain.getImageCount());
 
         for (size_t i = 0; i < swapChain.getImageCount(); i++)
         {
+            core::DepthImage depth;
+            core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageAllocation, device.getMemoryManager());
+            core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), depth.depthImage);
+            imageDepthRequest.format = depthFormat;
+            imageDepthRequest.aspectFlags = vk::ImageAspectFlagBits::eDepth;
+            core::ImageUtilities::createImageView(imageDepthRequest, depth.depthImageView);
+
+            vk::UniqueCommandBuffer transitionDepthImage = core::Utilities::beginSingleTimeCommands(
+                device.getLogicalDevice(), commandPool->getCommandPool());
+            core::ImageUtilities::transitionImageLayout(transitionDepthImage.get(), depth.depthImage,
+                                                        vk::ImageLayout::eUndefined,
+                                                        vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                                                        vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+            core::Utilities::endSingleTimeCommands(device, transitionDepthImage);
+
             core::ColorImage color;
             core::ImageUtilities::createImage(imageColorInfo, color.colorImage, color.colorImageAllocation, device.getMemoryManager());
             core::ImageViewInfoRequest imageColorViewRequest(device.getLogicalDevice(), color.colorImage);
             imageColorViewRequest.format = colorFormat;
             core::ImageUtilities::createImageView(imageColorViewRequest, color.colorImageView);
 
-            vk::UniqueCommandBuffer transitionColorImage = core::Utilities::beginSingleTimeCommands(
+            // VK-1334 cold-slot init: transition Undefined -> TransferDst, clear to clearColor,
+            // then transition to ShaderReadOnly. Without this, UI sampling a slot the RTT has
+            // not yet rendered (FixedInterval/OnDemand modes) would sample undefined contents.
+            vk::UniqueCommandBuffer initColorImage = core::Utilities::beginSingleTimeCommands(
                 device.getLogicalDevice(), commandPool->getCommandPool());
-            core::ImageUtilities::transitionImageLayout(transitionColorImage.get(), color.colorImage,
+            core::ImageUtilities::transitionImageLayout(initColorImage.get(), color.colorImage,
                                                         vk::ImageLayout::eUndefined,
+                                                        vk::ImageLayout::eTransferDstOptimal,
+                                                        vk::ImageAspectFlagBits::eColor);
+
+            vk::ClearColorValue clearValue{std::array<float, 4>{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
+            vk::ImageSubresourceRange clearRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            initColorImage->clearColorImage(color.colorImage, vk::ImageLayout::eTransferDstOptimal,
+                                            &clearValue, 1, &clearRange);
+
+            core::ImageUtilities::transitionImageLayout(initColorImage.get(), color.colorImage,
+                                                        vk::ImageLayout::eTransferDstOptimal,
                                                         vk::ImageLayout::eShaderReadOnlyOptimal,
                                                         vk::ImageAspectFlagBits::eColor);
-            core::Utilities::endSingleTimeCommands(device, transitionColorImage);
+            core::Utilities::endSingleTimeCommands(device, initColorImage);
 
             updateDescriptorSets(color.descriptorSet, color.colorImageView);
 
+            depthImages.push_back(std::move(depth));
             offscreenResources.colorImages.push_back(std::move(color));
         }
     }
@@ -357,6 +587,14 @@ namespace render
             device.getMemoryManager().free(resources.colorImageAllocation);
         }
         offscreenResources.colorImages.clear();
+
+        for (auto const& depth : depthImages)
+        {
+            device.getLogicalDevice().destroyImageView(depth.depthImageView);
+            device.getLogicalDevice().destroyImage(depth.depthImage);
+            device.getMemoryManager().free(depth.depthImageAllocation);
+        }
+        depthImages.clear();
 
         if (offscreenResources.depthImage.depthImageView)
         {

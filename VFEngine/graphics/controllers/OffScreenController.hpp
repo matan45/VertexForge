@@ -13,6 +13,7 @@
 #include "../render/gpudriven/scene/GPUObjectStreamTypes.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
+#include <functional>
 #include <memory>
 #include <string_view>
 #include <string>
@@ -83,6 +84,8 @@ namespace controllers
         std::unique_ptr<offscreen::CullingStatsCollector> statsCollector;
 
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
+        std::unique_ptr<events::SubscriptionToken> editorModeChangedSubscription;
+        std::unique_ptr<events::SubscriptionToken> sceneClearedSubscription;
         std::unique_ptr<events::SubscriptionToken> terrainDeletedSubscription;
         std::unique_ptr<events::SubscriptionToken> tileRemovedSubscription;
         std::unique_ptr<events::SubscriptionToken> waterDeletedSubscription;
@@ -149,6 +152,7 @@ namespace controllers
         void removeCamera(render::occlusion::CameraId id);
 
         void* render();
+        void* render(const std::function<void()>& preRenderCallback);
 
         // Get the offscreen color image for runtime blit (returns VkImage as void*)
         void* getColorImage(uint32_t imageIndex) const;
@@ -161,6 +165,7 @@ namespace controllers
         services::GPUPipelineStatus getGPUPipelineStatus() const;
 
         void setPlayMode(bool playMode);
+        void waitForIdle();
 
         void setShowDebugRendering(bool show) { showDebugRendering = show; }
         bool getShowDebugRendering() const { return showDebugRendering; }

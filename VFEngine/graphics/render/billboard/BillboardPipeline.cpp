@@ -111,7 +111,7 @@ namespace render::billboard
 
     void BillboardPipeline::createDescriptorPool()
     {
-        uint32_t totalSets = 1 + MAX_CUSTOM_TEXTURES + MAX_EXTERNAL_TEXTURES;
+        uint32_t totalSets = 1 + MAX_CUSTOM_TEXTURES + (MAX_EXTERNAL_TEXTURES * swapChain.getImageCount());
 
         std::vector<vk::DescriptorPoolSize> poolSizes(2);
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
@@ -264,16 +264,37 @@ namespace render::billboard
         return true;
     }
 
-    void BillboardPipeline::registerExternalTexture(const std::string& key,
+    void BillboardPipeline::registerExternalTexture(const std::string& key, uint32_t imageIndex,
                                                        vk::ImageView imageView, vk::Sampler externalSampler)
     {
         if (!initialized || !imageView || !externalSampler)
+            return;
+        if (imageIndex >= swapChain.getImageCount())
             return;
 
         auto it = externalTextureCache.find(key);
         if (it != externalTextureCache.end())
         {
-            updateDescriptorSet(it->second, imageView, externalSampler);
+            auto& entry = it->second;
+            if (imageIndex >= entry.descriptorSets.size())
+                return;
+
+            if (!entry.descriptorSets[imageIndex])
+            {
+                vk::DescriptorSetAllocateInfo allocInfo{};
+                allocInfo.descriptorPool = descriptorPool;
+                allocInfo.descriptorSetCount = 1;
+                allocInfo.pSetLayouts = &descriptorSetLayout;
+
+                entry.descriptorSets[imageIndex] = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+            }
+
+            if (entry.imageViews[imageIndex] != imageView || entry.samplers[imageIndex] != externalSampler)
+            {
+                updateDescriptorSet(entry.descriptorSets[imageIndex], imageView, externalSampler);
+                entry.imageViews[imageIndex] = imageView;
+                entry.samplers[imageIndex] = externalSampler;
+            }
             return;
         }
 
@@ -285,9 +306,15 @@ namespace render::billboard
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &descriptorSetLayout;
 
-        vk::DescriptorSet newDescSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-        updateDescriptorSet(newDescSet, imageView, externalSampler);
-        externalTextureCache[key] = newDescSet;
+        ExternalTextureEntry entry;
+        entry.descriptorSets.resize(swapChain.getImageCount());
+        entry.imageViews.resize(swapChain.getImageCount());
+        entry.samplers.resize(swapChain.getImageCount());
+        entry.descriptorSets[imageIndex] = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        updateDescriptorSet(entry.descriptorSets[imageIndex], imageView, externalSampler);
+        entry.imageViews[imageIndex] = imageView;
+        entry.samplers[imageIndex] = externalSampler;
+        externalTextureCache[key] = std::move(entry);
     }
 
     void BillboardPipeline::unregisterExternalTexture(const std::string& key)
@@ -295,16 +322,24 @@ namespace render::billboard
         auto it = externalTextureCache.find(key);
         if (it != externalTextureCache.end())
         {
-            device.getLogicalDevice().freeDescriptorSets(descriptorPool, it->second);
+            for (auto descSet : it->second.descriptorSets)
+            {
+                if (descSet)
+                    device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+            }
             externalTextureCache.erase(it);
         }
     }
 
     void BillboardPipeline::clearExternalTextures()
     {
-        for (auto& [key, descSet] : externalTextureCache)
+        for (auto& [key, entry] : externalTextureCache)
         {
-            device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+            for (auto descSet : entry.descriptorSets)
+            {
+                if (descSet)
+                    device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+            }
         }
         externalTextureCache.clear();
     }
@@ -454,9 +489,11 @@ namespace render::billboard
             else
             {
                 auto extIt = externalTextureCache.find(batch.texturePath);
-                if (extIt != externalTextureCache.end())
+                if (extIt != externalTextureCache.end() &&
+                    imageIndex < extIt->second.descriptorSets.size() &&
+                    extIt->second.descriptorSets[imageIndex])
                 {
-                    texDescSet = extIt->second;
+                    texDescSet = extIt->second.descriptorSets[imageIndex];
                 }
                 else
                 {
@@ -548,9 +585,11 @@ namespace render::billboard
             else
             {
                 auto extIt = externalTextureCache.find(batch.texturePath);
-                if (extIt != externalTextureCache.end())
+                if (extIt != externalTextureCache.end() &&
+                    imageIndex < extIt->second.descriptorSets.size() &&
+                    extIt->second.descriptorSets[imageIndex])
                 {
-                    texDescSet = extIt->second;
+                    texDescSet = extIt->second.descriptorSets[imageIndex];
                 }
                 else
                 {

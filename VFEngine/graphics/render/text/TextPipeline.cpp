@@ -198,6 +198,12 @@ namespace render::text
 
             auto& instances = fontInstances[textEntity.fontPath];
 
+            uint32_t styleFlags = 0;
+            if (textEntity.fontStyle == components::FontStyle::Bold ||
+                textEntity.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x1u;
+            if (textEntity.fontStyle == components::FontStyle::Italic ||
+                textEntity.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x2u;
+
             if (!lineOffsetX.empty() || verticalOffset != 0.0f)
             {
                 size_t lineIdx = 0;
@@ -227,6 +233,7 @@ namespace render::text
                     inst.entityId = textEntity.entityId;
                     inst.sdfEdge = sdfEdge;
                     inst.sdfSmooth = sdfSmooth;
+                    inst.styleFlags = styleFlags;
                     instances.push_back(inst);
                 }
             }
@@ -245,6 +252,7 @@ namespace render::text
                     inst.entityId = textEntity.entityId;
                     inst.sdfEdge = sdfEdge;
                     inst.sdfSmooth = sdfSmooth;
+                    inst.styleFlags = styleFlags;
                     instances.push_back(inst);
                 }
             }
