@@ -69,6 +69,17 @@ public class UI {
     }
 
     // ============================================
+    // Rect Control
+    // ============================================
+
+    // Position/size a UIRect in viewport pixels (top-left origin, y down) — the same
+    // pixel space as Input::getViewportMouseX/Y. Works regardless of the rect's
+    // authored anchors/pivot. Used for runtime-driven overlays (e.g. drag boxes).
+    public static function setRectPixels(int entityId, float x, float y, float w, float h): bool {
+        return _native_ui_setRectPixels(entityId, x, y, w, h);
+    }
+
+    // ============================================
     // Button Control
     // ============================================
 
