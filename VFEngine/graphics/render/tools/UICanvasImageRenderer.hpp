@@ -41,11 +41,13 @@ namespace render::mesh
             glm::vec2 texCoord;
         };
 
+        // V flipped vs the play-mode quad (UIRenderTypes.hpp): the editor camera's
+        // Y-flipped projection inverts the quad's screen Y, so compensate in the UVs.
         inline static constexpr std::array<Vertex, 4> vertices = {{
-            {{-0.5f, -0.5f}, {0.0f, 0.0f}},
-            {{ 0.5f, -0.5f}, {1.0f, 0.0f}},
-            {{ 0.5f,  0.5f}, {1.0f, 1.0f}},
-            {{-0.5f,  0.5f}, {0.0f, 1.0f}},
+            {{-0.5f, -0.5f}, {0.0f, 1.0f}},
+            {{ 0.5f, -0.5f}, {1.0f, 1.0f}},
+            {{ 0.5f,  0.5f}, {1.0f, 0.0f}},
+            {{-0.5f,  0.5f}, {0.0f, 0.0f}},
         }};
 
         inline static constexpr std::array<uint32_t, 6> indices = {0, 1, 2, 2, 3, 0};
