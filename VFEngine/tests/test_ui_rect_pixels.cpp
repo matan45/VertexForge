@@ -3,97 +3,88 @@
 #include <ui/UIRectMath.hpp>
 #include <glm/glm.hpp>
 
-// VK-1302: UI::setRectPixels positions a UIRect in viewport pixels by inverting
-// resolvePixelRect (UIRectMath.hpp). This mirrors the inversion implemented in
-// UIComponentService::setUIRectPixels and asserts the round-trip lands exactly
-// on the requested viewport rect for various anchor/pivot/scale setups.
+// VK-1302: UI::setRectPixels positions a UIRect in viewport pixels by writing
+// pure NORMALIZED anchors (sizeDelta/anchoredPosition zeroed). This mirrors
+// UIComponentService::setUIRectPixels (UICanvasRectImageOps.cpp) and asserts:
+//  (a) resolvePixelRect lands exactly on the requested rect in the same space,
+//  (b) the rect stays proportionally correct when the UI pass resolves against
+//      a DIFFERENT extent than the mouse/viewport space (editor play panel vs
+//      swapchain render extent) — the bug behind the drag-box cursor offset.
 
 namespace
 {
-    // Same math as UIComponentService::setUIRectPixels (UICanvasRectImageOps.cpp).
+    // Same math as UIComponentService::setUIRectPixels.
     void applyRectPixels(components::UIRectComponent& comp,
                          float x, float y, float w, float h,
-                         float vw, float vh, float scale)
+                         float vw, float vh)
     {
-        float anchorLeftPx  = comp.anchorMin.x * vw;
-        float anchorRightPx = comp.anchorMax.x * vw;
-        float anchorTopPx   = (1.0f - comp.anchorMax.y) * vh;
-        float anchorBotPx   = (1.0f - comp.anchorMin.y) * vh;
-
-        comp.sizeDelta.x = (w - (anchorRightPx - anchorLeftPx)) / scale;
-        comp.sizeDelta.y = (h - (anchorBotPx - anchorTopPx)) / scale;
-
-        float cx = x + comp.pivot.x * w;
-        float cy = y + comp.pivot.y * h;
-        comp.anchoredPosition.x = (cx - (anchorLeftPx + anchorRightPx) * 0.5f) / scale;
-        comp.anchoredPosition.y = ((anchorTopPx + anchorBotPx) * 0.5f - cy) / scale;
-    }
-
-    void checkRoundTrip(const components::UIRectComponent& comp,
-                        float x, float y, float w, float h,
-                        float vw, float vh, float scale)
-    {
-        utilities::ui::PixelRect rect = utilities::ui::resolvePixelRect(comp, vw, vh, scale);
-        CHECK(rect.x == doctest::Approx(x));
-        CHECK(rect.y == doctest::Approx(y));
-        CHECK(rect.w == doctest::Approx(w));
-        CHECK(rect.h == doctest::Approx(h));
+        comp.anchorMin = glm::vec2(x / vw, 1.0f - (y + h) / vh);
+        comp.anchorMax = glm::vec2((x + w) / vw, 1.0f - y / vh);
+        comp.pivot = glm::vec2(0.5f, 0.5f);
+        comp.sizeDelta = glm::vec2(0.0f, 0.0f);
+        comp.anchoredPosition = glm::vec2(0.0f, 0.0f);
     }
 }
 
 TEST_SUITE("UIRectPixels")
 {
-    TEST_CASE("top-left anchored rect (drag-box authoring) round-trips at scale 1")
+    TEST_CASE("resolves to the exact requested rect in the same extent")
     {
         components::UIRectComponent comp;
-        comp.anchorMin = {0.0f, 1.0f};
-        comp.anchorMax = {0.0f, 1.0f};
-        comp.pivot = {0.0f, 0.0f};
+        applyRectPixels(comp, 120.0f, 80.0f, 300.0f, 200.0f, 1920.0f, 1080.0f);
 
-        applyRectPixels(comp, 120.0f, 80.0f, 300.0f, 200.0f, 1920.0f, 1080.0f, 1.0f);
-        checkRoundTrip(comp, 120.0f, 80.0f, 300.0f, 200.0f, 1920.0f, 1080.0f, 1.0f);
+        // Canvas scale must not matter for pure-anchor rects: check several.
+        for (float scale : {1.0f, 0.6667f, 1.5f})
+        {
+            utilities::ui::PixelRect rect =
+                utilities::ui::resolvePixelRect(comp, 1920.0f, 1080.0f, scale);
+            CHECK(rect.x == doctest::Approx(120.0f));
+            CHECK(rect.y == doctest::Approx(80.0f));
+            CHECK(rect.w == doctest::Approx(300.0f));
+            CHECK(rect.h == doctest::Approx(200.0f));
+        }
     }
 
-    TEST_CASE("round-trips under a non-unit canvas scale")
+    TEST_CASE("rect is extent-invariant: render extent != mouse viewport")
     {
         components::UIRectComponent comp;
-        comp.anchorMin = {0.0f, 1.0f};
-        comp.anchorMax = {0.0f, 1.0f};
-        comp.pivot = {0.0f, 0.0f};
+        // Mouse space: a 1280x720 play panel; drag rect at (200, 150) size 320x180.
+        applyRectPixels(comp, 200.0f, 150.0f, 320.0f, 180.0f, 1280.0f, 720.0f);
 
-        // e.g. 1280x720 viewport against a 1920x1080 reference canvas
-        float scale = 1280.0f / 1920.0f;
-        applyRectPixels(comp, 50.0f, 40.0f, 250.0f, 125.0f, 1280.0f, 720.0f, scale);
-        checkRoundTrip(comp, 50.0f, 40.0f, 250.0f, 125.0f, 1280.0f, 720.0f, scale);
-    }
+        // UI pass resolves against a larger swapchain extent (2560x1440).
+        utilities::ui::PixelRect rect =
+            utilities::ui::resolvePixelRect(comp, 2560.0f, 1440.0f, 1.3333f);
 
-    TEST_CASE("round-trips regardless of authored anchors and pivot")
-    {
-        components::UIRectComponent comp;
-        comp.anchorMin = {0.5f, 0.5f};
-        comp.anchorMax = {0.5f, 0.5f};
-        comp.pivot = {0.5f, 0.5f};
-
-        applyRectPixels(comp, 400.0f, 300.0f, 160.0f, 90.0f, 1920.0f, 1080.0f, 1.0f);
-        checkRoundTrip(comp, 400.0f, 300.0f, 160.0f, 90.0f, 1920.0f, 1080.0f, 1.0f);
-
-        // Stretched anchors: sizeDelta turns into a delta against the anchor box.
-        comp.anchorMin = {0.25f, 0.0f};
-        comp.anchorMax = {0.75f, 1.0f};
-        comp.pivot = {0.0f, 1.0f};
-
-        applyRectPixels(comp, 10.0f, 20.0f, 600.0f, 400.0f, 1920.0f, 1080.0f, 0.75f);
-        checkRoundTrip(comp, 10.0f, 20.0f, 600.0f, 400.0f, 1920.0f, 1080.0f, 0.75f);
+        // Same normalized rect: 2x panel coordinates in a 2x extent.
+        CHECK(rect.x == doctest::Approx(400.0f));
+        CHECK(rect.y == doctest::Approx(300.0f));
+        CHECK(rect.w == doctest::Approx(640.0f));
+        CHECK(rect.h == doctest::Approx(360.0f));
     }
 
     TEST_CASE("zero-size rect collapses cleanly (drag start frame)")
     {
         components::UIRectComponent comp;
-        comp.anchorMin = {0.0f, 1.0f};
-        comp.anchorMax = {0.0f, 1.0f};
-        comp.pivot = {0.0f, 0.0f};
+        applyRectPixels(comp, 640.0f, 360.0f, 0.0f, 0.0f, 1920.0f, 1080.0f);
 
-        applyRectPixels(comp, 640.0f, 360.0f, 0.0f, 0.0f, 1920.0f, 1080.0f, 1.0f);
-        checkRoundTrip(comp, 640.0f, 360.0f, 0.0f, 0.0f, 1920.0f, 1080.0f, 1.0f);
+        utilities::ui::PixelRect rect =
+            utilities::ui::resolvePixelRect(comp, 1920.0f, 1080.0f, 1.0f);
+        CHECK(rect.x == doctest::Approx(640.0f));
+        CHECK(rect.y == doctest::Approx(360.0f));
+        CHECK(rect.w == doctest::Approx(0.0f));
+        CHECK(rect.h == doctest::Approx(0.0f));
+    }
+
+    TEST_CASE("y axis maps top-down: y=0 is the top edge")
+    {
+        components::UIRectComponent comp;
+        applyRectPixels(comp, 0.0f, 0.0f, 100.0f, 50.0f, 1920.0f, 1080.0f);
+
+        utilities::ui::PixelRect rect =
+            utilities::ui::resolvePixelRect(comp, 1920.0f, 1080.0f, 1.0f);
+        CHECK(rect.x == doctest::Approx(0.0f));
+        CHECK(rect.y == doctest::Approx(0.0f)); // top-left corner of the screen
+        CHECK(rect.w == doctest::Approx(100.0f));
+        CHECK(rect.h == doctest::Approx(50.0f));
     }
 }

@@ -2,7 +2,6 @@
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "ui/UIRectMath.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/ui/UIEvents.hpp"
@@ -208,27 +207,21 @@ namespace services {
             return false;
         }
 
-        const auto* canvas = utilities::ui::findCanvasForEntity(registry, e);
-        float scale = utilities::ui::computeCanvasScale(canvas, vw, vh);
-        if (scale <= 0.0f) {
-            return false;
-        }
-
-        // Invert resolvePixelRect (UIRectMath.hpp): solve anchoredPosition/sizeDelta so
-        // the runtime screen-space pass lands on (x, y, w, h) in viewport pixels.
+        // Express the rect purely through NORMALIZED anchors (sizeDelta and
+        // anchoredPosition zeroed). resolvePixelRect then lands on the same
+        // normalized rect whatever extent the UI pass renders against — in the
+        // editor the play panel (mouse space, what vw/vh report) and the UI
+        // render extent (swapchain) differ, and absolute canvas-unit math would
+        // shift the rect. Normalized anchors are extent- and canvas-scale-
+        // invariant, exactly like the picker's normalized ray math.
+        // Note: this overwrites the authored anchors/pivot — setRectPixels is
+        // for fully script-driven overlays (drag boxes), not authored layout.
         auto& comp = sceneEntity.getComponent<components::UIRectComponent>();
-        float anchorLeftPx  = comp.anchorMin.x * vw;
-        float anchorRightPx = comp.anchorMax.x * vw;
-        float anchorTopPx   = (1.0f - comp.anchorMax.y) * vh;
-        float anchorBotPx   = (1.0f - comp.anchorMin.y) * vh;
-
-        comp.sizeDelta.x = (w - (anchorRightPx - anchorLeftPx)) / scale;
-        comp.sizeDelta.y = (h - (anchorBotPx - anchorTopPx)) / scale;
-
-        float cx = x + comp.pivot.x * w;
-        float cy = y + comp.pivot.y * h;
-        comp.anchoredPosition.x = (cx - (anchorLeftPx + anchorRightPx) * 0.5f) / scale;
-        comp.anchoredPosition.y = ((anchorTopPx + anchorBotPx) * 0.5f - cy) / scale;
+        comp.anchorMin = glm::vec2(x / vw, 1.0f - (y + h) / vh);
+        comp.anchorMax = glm::vec2((x + w) / vw, 1.0f - y / vh);
+        comp.pivot = glm::vec2(0.5f, 0.5f);
+        comp.sizeDelta = glm::vec2(0.0f, 0.0f);
+        comp.anchoredPosition = glm::vec2(0.0f, 0.0f);
         return true;
     }
 
