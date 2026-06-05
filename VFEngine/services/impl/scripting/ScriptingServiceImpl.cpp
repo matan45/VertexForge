@@ -25,9 +25,26 @@ namespace services
     {
         assert(scriptingProvider && "ScriptingProvider must not be null");
         assert(sceneGraph && "SceneGraphSystem must not be null");
+
+        // Catch every mutation path that adds/removes ScriptComponents
+        // (scene load/clear, entity destruction, runtime spawns) so the cached
+        // update list rebuilds on demand
+        auto& registry = scene::EntityRegistry::getRegistry();
+        registry.on_construct<components::ScriptComponent>().connect<&ScriptingServiceImpl::onScriptComponentChanged>(this);
+        registry.on_destroy<components::ScriptComponent>().connect<&ScriptingServiceImpl::onScriptComponentChanged>(this);
     }
 
-    ScriptingServiceImpl::~ScriptingServiceImpl() = default;
+    ScriptingServiceImpl::~ScriptingServiceImpl()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        registry.on_construct<components::ScriptComponent>().disconnect<&ScriptingServiceImpl::onScriptComponentChanged>(this);
+        registry.on_destroy<components::ScriptComponent>().disconnect<&ScriptingServiceImpl::onScriptComponentChanged>(this);
+    }
+
+    void ScriptingServiceImpl::onScriptComponentChanged(entt::registry&, entt::entity)
+    {
+        scriptListDirty = true;
+    }
 
     void ScriptingServiceImpl::registerEventHandlers()
     {
@@ -125,6 +142,7 @@ namespace services
                 {
                     scriptingProvider->setInstancePriority(cmd.instanceId, cmd.priority);
                 }
+                scriptListDirty = true;  // priority drives the cached update order
             });
 
         // === Mode Change Subscription ===
@@ -231,6 +249,7 @@ namespace services
         entry.enabled = data.enabled;
 
         scriptComp.scripts.push_back(entry);
+        scriptListDirty = true;
 
         vfLogInfo("[Script] Attached script '{}' to entity (total scripts: {})",
                   data.scriptPath, scriptComp.scripts.size());
@@ -264,8 +283,9 @@ namespace services
         // Unload from provider
         scriptingProvider->unloadScript(entry->instanceId);
 
-        // Remove from component
+        // Remove from component (shifts the remaining entries' indices)
         scriptComp.removeByPath(scriptPath);
+        scriptListDirty = true;
 
         // Remove component entirely if no scripts left
         if (scriptComp.scripts.empty())
@@ -348,89 +368,17 @@ namespace services
         return entry ? entry->enabled : false;
     }
 
-    void ScriptingServiceImpl::updateScripts(float deltaTime)
+    void ScriptingServiceImpl::rebuildScriptUpdateList(entt::registry& registry)
     {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        // Clear per-frame action consumption (guard against handler being unregistered during shutdown)
-        try { dispatcher.execute(events::input::ClearConsumedActionsCommand{}); }
-        catch (...) {}
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::ScriptComponent>();
-
         cachedUpdateList.clear();
 
+        auto view = registry.view<components::ScriptComponent>();
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
-            {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive) continue;
-            }
-
             auto& scriptComp = view.get<components::ScriptComponent>(entity);
-            for (auto& entry : scriptComp.scripts)
+            for (size_t i = 0; i < scriptComp.scripts.size(); ++i)
             {
-                if (!entry.enabled) continue;
-
-                // Load script if needed
-                if (entry.instanceId == 0 && (!entry.scriptPath.empty() || entry.scriptRef.isValid()))
-                {
-                    // Prefer resolved asset ref (absolute path) over stored scriptPath (may be relative)
-                    std::string path;
-                    if (entry.scriptRef.isValid())
-                    {
-                        std::string resolved = entry.scriptRef.resolve();
-                        if (!resolved.empty())
-                            path = resolved;
-                    }
-                    if (path.empty())
-                        path = entry.scriptPath;
-
-                    // Resolve relative paths against project working directory
-                    if (!path.empty() && !std::filesystem::path(path).is_absolute())
-                    {
-                        auto& disp = ::events::EventDispatcher::instance();
-                        auto projectOpt = disp.query(events::project::GetCurrentProjectQuery{});
-                        if (projectOpt.has_value())
-                        {
-                            auto absPath = std::filesystem::path(projectOpt->workingDirectory) / path;
-                            if (std::filesystem::exists(absPath))
-                                path = absPath.string();
-                        }
-                    }
-
-                    auto info = scriptingProvider->loadScript(path, toHandle(entity));
-                    if (info.has_value())
-                    {
-                        entry.instanceId = info->instanceId;
-                        entry.playbackState = ScriptPlaybackState::Playing;
-                        scriptingProvider->setInstancePriority(entry.instanceId, entry.inputPriority);
-                        scriptingProvider->playVFX(entry.instanceId);
-                    }
-                    else
-                    {
-                        continue;
-                    }
-                }
-
-                if (!entry.started && entry.playbackState == ScriptPlaybackState::Stopped)
-                {
-                    entry.playbackState = ScriptPlaybackState::Playing;
-                    scriptingProvider->playVFX(entry.instanceId);
-                }
-
-                if (entry.playbackState == ScriptPlaybackState::Playing && !entry.started)
-                {
-                    entry.started = true;
-                    if (entry.enabled)
-                    {
-                        scriptingProvider->callOnEnable(entry.instanceId);
-                    }
-                }
-
-                cachedUpdateList.push_back({entity, &entry, entry.inputPriority});
+                cachedUpdateList.push_back({entity, i, scriptComp.scripts[i].inputPriority});
             }
         }
 
@@ -441,9 +389,107 @@ namespace services
                 return a.priority > b.priority;
             });
 
-        for (auto& [entity, entry, priority] : cachedUpdateList)
+        scriptListDirty = false;
+    }
+
+    void ScriptingServiceImpl::updateScripts(float deltaTime)
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        // Clear per-frame action consumption (guard against handler being unregistered during shutdown)
+        try { dispatcher.execute(events::input::ClearConsumedActionsCommand{}); }
+        catch (...) {}
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (scriptListDirty)
         {
-            scriptingProvider->callOnUpdate(entry->instanceId, deltaTime);
+            rebuildScriptUpdateList(registry);
+        }
+
+        for (const auto& [entity, scriptIndex, priority] : cachedUpdateList)
+        {
+            // Entities/scripts can be destroyed mid-frame by other scripts —
+            // validate the cached entry and queue a rebuild if it went stale
+            if (!registry.valid(entity) || !registry.all_of<components::ScriptComponent>(entity))
+            {
+                scriptListDirty = true;
+                continue;
+            }
+
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive) continue;
+            }
+
+            auto& scriptComp = registry.get<components::ScriptComponent>(entity);
+            if (scriptIndex >= scriptComp.scripts.size())
+            {
+                scriptListDirty = true;
+                continue;
+            }
+
+            auto& entry = scriptComp.scripts[scriptIndex];
+            if (!entry.enabled) continue;
+
+            // Load script if needed
+            if (entry.instanceId == 0 && (!entry.scriptPath.empty() || entry.scriptRef.isValid()))
+            {
+                // Prefer resolved asset ref (absolute path) over stored scriptPath (may be relative)
+                std::string path;
+                if (entry.scriptRef.isValid())
+                {
+                    std::string resolved = entry.scriptRef.resolve();
+                    if (!resolved.empty())
+                        path = resolved;
+                }
+                if (path.empty())
+                    path = entry.scriptPath;
+
+                // Resolve relative paths against project working directory
+                if (!path.empty() && !std::filesystem::path(path).is_absolute())
+                {
+                    auto& disp = ::events::EventDispatcher::instance();
+                    auto projectOpt = disp.query(events::project::GetCurrentProjectQuery{});
+                    if (projectOpt.has_value())
+                    {
+                        auto absPath = std::filesystem::path(projectOpt->workingDirectory) / path;
+                        if (std::filesystem::exists(absPath))
+                            path = absPath.string();
+                    }
+                }
+
+                auto info = scriptingProvider->loadScript(path, toHandle(entity));
+                if (info.has_value())
+                {
+                    entry.instanceId = info->instanceId;
+                    entry.playbackState = ScriptPlaybackState::Playing;
+                    scriptingProvider->setInstancePriority(entry.instanceId, entry.inputPriority);
+                    scriptingProvider->playVFX(entry.instanceId);
+                }
+                else
+                {
+                    continue;
+                }
+            }
+
+            if (!entry.started && entry.playbackState == ScriptPlaybackState::Stopped)
+            {
+                entry.playbackState = ScriptPlaybackState::Playing;
+                scriptingProvider->playVFX(entry.instanceId);
+            }
+
+            if (entry.playbackState == ScriptPlaybackState::Playing && !entry.started)
+            {
+                entry.started = true;
+                if (entry.enabled)
+                {
+                    scriptingProvider->callOnEnable(entry.instanceId);
+                }
+            }
+
+            scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
         }
 
         scriptingProvider->tickCoroutines(deltaTime);
@@ -522,6 +568,7 @@ namespace services
         }
 
         scriptingProvider->unloadAllScripts();
+        scriptListDirty = true;
         vfLogInfo("[Script] All scripts stopped");
     }
 }

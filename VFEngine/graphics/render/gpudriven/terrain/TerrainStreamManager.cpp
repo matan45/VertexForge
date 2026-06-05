@@ -19,6 +19,21 @@ namespace render::gpudriven
     void TerrainStreamManager::update(const std::vector<terrain::TerrainTile*>& visibleTiles,
                                       const glm::vec3& cameraPosition)
     {
+        // Early-out: when the previous pass finished with no work left (no
+        // uploads, no evictions, nothing in flight), the camera hasn't moved
+        // and no tile was marked dirty, the streaming state cannot change —
+        // skip the per-frame scan/sort entirely
+        constexpr float cameraMoveEpsilon = 0.25f;
+        if (streamingSettled && pendingLoads.empty()
+            && visibleTiles.size() == lastVisibleTileCount
+            && glm::length(cameraPosition - lastStreamCameraPos) < cameraMoveEpsilon
+            && !hasDirtyTiles(visibleTiles))
+        {
+            return;
+        }
+        lastStreamCameraPos = cameraPosition;
+        lastVisibleTileCount = visibleTiles.size();
+
         currentFrame++;
         stats.uploadsThisFrame = 0;
         stats.bytesUploadedThisFrame = 0;
@@ -39,9 +54,26 @@ namespace render::gpudriven
         updateGPUDirtyLODs(visibleTiles, fileReadsThisFrame);
         updateWeightMapsAndCaves(visibleTiles);
         updateDetailLODs();
+
+        // Evictions free budget that may unblock detail uploads next pass, so a
+        // pass that evicted does not count as settled
+        size_t memoryBeforeEvictions = currentMemoryUsage;
         processEvictions(cameraPosition);
         updateStats();
+        streamingSettled = (stats.uploadsThisFrame == 0) && pendingLoads.empty()
+                           && (currentMemoryUsage == memoryBeforeEvictions);
         tileMap_.clear();
+    }
+
+    bool TerrainStreamManager::hasDirtyTiles(const std::vector<terrain::TerrainTile*>& visibleTiles) const
+    {
+        for (auto* tile : visibleTiles)
+        {
+            if (!tile) continue;
+            if (tile->hasAnyGPUDirtyLOD() || tile->caveGPUDirty) return true;
+            if (tile->weightMapGPUDirty && tile->hasWeightMap()) return true;
+        }
+        return false;
     }
 
     void TerrainStreamManager::buildSortedTileList(const std::vector<terrain::TerrainTile*>& visibleTiles,
@@ -338,10 +370,12 @@ namespace render::gpudriven
         pendingMemoryReserved = 0;
         currentMemoryUsage = 0;
         stats = TerrainStreamingStats{};
+        streamingSettled = false;
     }
 
     void TerrainStreamManager::evictTile(int32_t coordX, int32_t coordZ)
     {
+        streamingSettled = false;
         TerrainTileKey key{coordX, coordZ};
         cancelPendingLoadsForTile(key);
         auto infoIt = tileInfos.find(key);

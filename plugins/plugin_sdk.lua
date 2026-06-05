@@ -46,13 +46,8 @@ function vfPluginProject(name)
          "{COPY} ../../bin/" .. name .. "/%{cfg.buildcfg}/%{cfg.platform}/" .. name .. ".dll ../../plugins/" .. name .. "/"
       }
 
-      filter "configurations:Debug"
-         defines { "DEBUG" }
-         symbols "On"
-
-      filter "configurations:Release"
-         defines { "NDEBUG" }
-         optimize "On"
-
-      filter {}
+      -- Same per-config settings as the engine (vfStandardConfigs is defined in
+      -- the root premake5.lua, which includes this file). Plugins must be built
+      -- in the same config as the Editor (/MDd vs /MD ABI).
+      vfStandardConfigs()
 end

@@ -16,10 +16,17 @@ namespace services
         struct ScriptUpdateEntry
         {
             entt::entity entity;
-            components::ScriptEntry* entry;
+            size_t scriptIndex;
             int priority;
         };
         std::vector<ScriptUpdateEntry> cachedUpdateList;
+        // Rebuild + sort cachedUpdateList only when the script set changes
+        // (attach/detach, entity create/destroy, priority edits) instead of
+        // every frame — set by mutators and the ScriptComponent registry hooks
+        bool scriptListDirty = true;
+
+        void rebuildScriptUpdateList(entt::registry& registry);
+        void onScriptComponentChanged(entt::registry& registry, entt::entity entity);
 
         std::string getManifestPath() const;
 

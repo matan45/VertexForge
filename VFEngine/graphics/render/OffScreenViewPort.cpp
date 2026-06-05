@@ -51,8 +51,11 @@ namespace render
         createSampler();
         createOffscreenResources();
 
+        // One fence per frame-in-flight slot (not per swapchain image): the
+        // per-frame resources this fence guards (secondary command buffers in
+        // ThreadCommandPoolManager, etc.) are keyed by imageIndex % MAX_FRAMES_IN_FLIGHT
         vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
-        inFlightFences.resize(swapChain.getImageCount());
+        inFlightFences.resize(core::MAX_FRAMES_IN_FLIGHT);
         for (auto& fence : inFlightFences)
         {
             fence = device.getLogicalDevice().createFence(fenceInfo);
@@ -73,24 +76,16 @@ namespace render
     vk::DescriptorSet OffScreenViewPort::render(const PreRenderCallback& preRenderCallback)
     {
         uint32_t imageIndex = core::RenderManager::getImageIndex();
+        uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
 
+        // Fences are keyed by frame-in-flight slot, so this single wait covers the
+        // previous submission that used this slot's resources (secondary command
+        // buffers etc.) — and, by queue submission order, every earlier offscreen
+        // submission too (including the last render to this swapchain image).
         vk::Result result = device.getLogicalDevice().waitForFences(
-            1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+            1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
-        // Also wait for any other swapchain image that shares the same frame-in-flight
-        // secondary command buffer slot (e.g., images 0 and 2 both map to fi=0 when
-        // MAX_FRAMES_IN_FLIGHT=2). Without this, resetFrame() may reset secondary
-        // command buffers still pending from a different image's submission.
-        uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
-        for (uint32_t i = 0; i < static_cast<uint32_t>(inFlightFences.size()); i++)
-        {
-            if (i != imageIndex && (i % core::MAX_FRAMES_IN_FLIGHT) == fi)
-            {
-                (void)device.getLogicalDevice().waitForFences(1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
-            }
-        }
-
-        result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
+        result = device.getLogicalDevice().resetFences(1, &inFlightFences[currentFrame]);
         (void)result;
 
         // Read back previous frame's results and update brush overlay BEFORE rendering
@@ -120,8 +115,6 @@ namespace render
             renderPassHandler->setAsyncComputeActive(useAsyncCompute);
         }
 
-        uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
-        
         if (useAsyncCompute)
         {
             vk::CommandBuffer asyncCmd = asyncComputeManager->beginFrame(currentFrame);
@@ -177,7 +170,7 @@ namespace render
             submitInfo.signalSemaphoreCount = 0;
             submitInfo.pSignalSemaphores = nullptr;
 
-            device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
+            device.submitGraphics(submitInfo, inFlightFences[currentFrame]);
         }
         else
         {
@@ -201,11 +194,11 @@ namespace render
             submitInfo.signalSemaphoreCount = 0;
             submitInfo.pSignalSemaphores = nullptr;
 
-            device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
+            device.submitGraphics(submitInfo, inFlightFences[currentFrame]);
         }
 
-        // Fence-based sync: inFlightFences[imageIndex] is waited on at the top of render()
-        // when this imageIndex comes around again. No need to stall the entire queue.
+        // Fence-based sync: inFlightFences[currentFrame] is waited on at the top of render()
+        // when this frame-in-flight slot comes around again. No need to stall the entire queue.
 
         auto* upscaleManager = device.getUpscaleManager();
         if (upscaleManager && upscaleManager->isActive() && !offscreenResources.displayColorImages.empty())
