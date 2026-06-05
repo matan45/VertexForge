@@ -134,9 +134,10 @@ project "Editor"
       }
 
    -- Streamline production DLLs (requires NVIDIA App ID for shipping)
+   -- NOTE: Editor stays a ConsoleApp in Release too — console logs visible in
+   -- every config (user preference). The exported game is built by GameExport
+   -- from Runtime, so this does not affect shipped games.
    filter "configurations:Release"
-      kind "WindowedApp"
-      entrypoint "mainCRTStartup"
       postbuildcommands {
          "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/sl.common.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
@@ -322,8 +323,14 @@ project "Graphics"
    -- Suppress LNK4006: __NULL_IMPORT_DESCRIPTOR collision between sl.interposer.lib and shaderc_shared.lib
    linkoptions { "/ignore:4006" }
 
-   -- VF_ENABLE_VALIDATION: Vulkan validation layers + debug messenger (Debug only)
+   -- VF_ENABLE_VALIDATION: Vulkan validation layers + debug messenger.
+   -- Enabled in Debug and Development (user preference: keep validation while
+   -- play-testing); Release stays validation-free. Remove the Development
+   -- filter below for a max-speed Development build.
    vfStandardConfigs({ "VF_ENABLE_VALIDATION" })
+   filter "configurations:Development"
+      defines { "VF_ENABLE_VALIDATION" }
+   filter {}
 
 -- Project 4: Runtime (Standalone game runtime - NO Editor/Import dependencies)
 project "Runtime"
