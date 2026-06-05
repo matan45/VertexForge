@@ -580,10 +580,7 @@ namespace services {
                 glm::vec3 v = quad->corners[3] - quad->corners[0];
                 float area = glm::length(glm::cross(u, v));
 
-                float epsilon = 1e-4f * glm::max(1.0f, bestT);
-                bool closer = *t < bestT - epsilon;
-                bool coplanarSmaller = std::abs(*t - bestT) <= epsilon && area < bestArea;
-                if (closer || coplanarSmaller) {
+                if (utilities::ui::isBetterQuadHit(bestEntity.has_value(), bestT, bestArea, *t, area)) {
                     bestT = *t;
                     bestArea = area;
                     bestEntity = internal::toHandle(entity);

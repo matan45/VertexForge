@@ -295,4 +295,17 @@ namespace utilities::ui
             return std::nullopt;
         return t;
     }
+
+    // Pick tie-break: nearest hit wins; smallest quad area breaks coplanar ties
+    // (mirrors the runtime smallest-area widget hit-test). hasBest must be false
+    // until the first hit is accepted — bestT/bestArea are unset before that.
+    inline bool isBetterQuadHit(bool hasBest, float bestT, float bestArea, float t, float area)
+    {
+        if (!hasBest)
+            return true;
+        float epsilon = 1e-4f * glm::max(1.0f, t);
+        bool closer = t < bestT - epsilon;
+        bool coplanarSmaller = std::abs(t - bestT) <= epsilon && area < bestArea;
+        return closer || coplanarSmaller;
+    }
 }

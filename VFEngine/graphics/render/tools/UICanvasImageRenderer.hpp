@@ -43,6 +43,9 @@ namespace render::mesh
 
         // V flipped vs the play-mode quad (UIRenderTypes.hpp): the editor camera's
         // Y-flipped projection inverts the quad's screen Y, so compensate in the UVs.
+        // NOTE: this bakes the editor convention into the vertex data — this renderer
+        // is edit-mode only; driving it with a non-Y-flipped (play-mode) projection
+        // would render textures vertically flipped.
         inline static constexpr std::array<Vertex, 4> vertices = {{
             {{-0.5f, -0.5f}, {0.0f, 1.0f}},
             {{ 0.5f, -0.5f}, {1.0f, 1.0f}},

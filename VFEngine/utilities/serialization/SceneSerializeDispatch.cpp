@@ -327,8 +327,11 @@ namespace serialization
     {
         if (!sceneJson.contains("settingsRef") || !sceneJson["settingsRef"].is_string())
         {
-            vfLogError("Invalid scene file: missing or invalid 'settingsRef'");
-            return false;
+            // Legacy format: settings stored inline at the scene JSON root under the
+            // same keys deserializeSceneSettings reads (missing keys fall back to defaults)
+            vfLogInfo("Scene file has no 'settingsRef'; falling back to inline scene settings");
+            outSettingsJson = sceneJson;
+            return true;
         }
 
         if (!sceneJson.contains("settingsRefPath") || !sceneJson["settingsRefPath"].is_string())

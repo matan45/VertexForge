@@ -6,6 +6,8 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 
+#include <limits>
+
 // Editor viewport UI picking: in edit mode UI elements render as world-space
 // quads (computeCanvasImageModelMatrix maps the unit quad onto the canvas at
 // the canvas entity's world transform). Picking ray-tests those quads.
@@ -132,6 +134,37 @@ TEST_SUITE("UIPickMath")
         REQUIRE(tNear.has_value());
         REQUIRE(tFar.has_value());
         CHECK(*tNear < *tFar);
+    }
+
+    TEST_CASE("pick tie-break: nearest wins, coplanar ties go to smaller area")
+    {
+        SUBCASE("first hit is always accepted")
+        {
+            // bestT/bestArea are unset (FLT_MAX) before the first hit; the helper
+            // must not derive an epsilon from them (regression: 1e-4 * FLT_MAX)
+            CHECK(utilities::ui::isBetterQuadHit(
+                false, std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                12.0f, 100.0f));
+        }
+
+        SUBCASE("nearer quad beats an earlier farther hit regardless of area")
+        {
+            // far quad (t=12) accepted first, near quad (t=5) with equal area must win
+            CHECK(utilities::ui::isBetterQuadHit(true, 12.0f, 100.0f, 5.0f, 100.0f));
+            // even with a larger area
+            CHECK(utilities::ui::isBetterQuadHit(true, 12.0f, 100.0f, 5.0f, 500.0f));
+        }
+
+        SUBCASE("farther quad never replaces a nearer hit")
+        {
+            CHECK_FALSE(utilities::ui::isBetterQuadHit(true, 5.0f, 100.0f, 12.0f, 1.0f));
+        }
+
+        SUBCASE("coplanar quads tie-break by smaller area")
+        {
+            CHECK(utilities::ui::isBetterQuadHit(true, 5.0f, 100.0f, 5.0f, 50.0f));
+            CHECK_FALSE(utilities::ui::isBetterQuadHit(true, 5.0f, 50.0f, 5.0f, 100.0f));
+        }
     }
 
     TEST_CASE("findCanvasWithEntity walks the parent chain to the canvas")

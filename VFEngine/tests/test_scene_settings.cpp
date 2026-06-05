@@ -115,7 +115,7 @@ TEST_SUITE("SceneSettingsSerialization")
         CHECK(loaded.getRenderSettings().distanceCulling.enabled);
     }
 
-    TEST_CASE("loadScene fails when settings asset ref is missing")
+    TEST_CASE("loadScene falls back to defaults when settings asset ref is missing")
     {
         resetTestRoot();
 
@@ -135,6 +135,39 @@ TEST_SUITE("SceneSettingsSerialization")
         file.close();
 
         scene::SceneGraphSystem sceneGraph;
-        CHECK_FALSE(serialization::SceneSerialization::loadSceneInto(scenePath.string(), sceneGraph));
+        CHECK(serialization::SceneSerialization::loadSceneInto(scenePath.string(), sceneGraph));
+        CHECK(sceneGraph.getPhysicsSettings().gravityScale ==
+              doctest::Approx(types::PhysicsSettings::createDefault().gravityScale));
+    }
+
+    TEST_CASE("loadScene reads legacy inline settings when settingsRef is missing")
+    {
+        resetTestRoot();
+
+        // Legacy pre-settingsRef format: settings stored at the scene JSON root
+        scene::SceneGraphSystem source;
+        auto physics = types::PhysicsSettings::createDefault();
+        physics.gravityScale = 4.0f;
+        source.setPhysicsSettings(physics);
+
+        json sceneJson;
+        sceneJson["version"] = "1.0";
+        sceneJson["physicsSettings"] = json{{"gravityScale", 4.0f}};
+        sceneJson["root"] = {
+            {"name", "Root"},
+            {"isActive", true},
+            {"components", json::object()},
+            {"children", json::array()}
+        };
+
+        fs::path scenePath = testRoot() / "LegacyInlineSettings.vfScene";
+        std::ofstream file(scenePath);
+        REQUIRE(file.is_open());
+        file << sceneJson.dump(2);
+        file.close();
+
+        scene::SceneGraphSystem loaded;
+        CHECK(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
+        CHECK(loaded.getPhysicsSettings().gravityScale == doctest::Approx(4.0f));
     }
 }

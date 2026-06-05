@@ -334,19 +334,42 @@ namespace windows
 
         glm::mat4 viewProj = editorCamera->getProjectionMatrix() * editorCamera->getViewMatrix();
 
-        ImVec2 points[4];
+        glm::vec4 clipCorners[4];
         for (int i = 0; i < 4; ++i)
         {
-            glm::vec4 clip = viewProj * glm::vec4(quad->corners[i], 1.0f);
-            if (clip.w <= 0.0f) return; // a corner behind the camera — skip drawing
-
-            // No Y flip — EditorCamera's projection already flips Y for Vulkan
-            glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            points[i] = ImVec2((ndc.x * 0.5f + 0.5f) * viewportSize.x + viewportPos.x,
-                               (ndc.y * 0.5f + 0.5f) * viewportSize.y + viewportPos.y);
+            clipCorners[i] = viewProj * glm::vec4(quad->corners[i], 1.0f);
         }
 
-        ImGui::GetWindowDrawList()->AddPolyline(points, 4, IM_COL32(255, 161, 0, 255),
+        // No Y flip — EditorCamera's projection already flips Y for Vulkan
+        auto project = [&](const glm::vec4& clip) {
+            glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            return ImVec2((ndc.x * 0.5f + 0.5f) * viewportSize.x + viewportPos.x,
+                          (ndc.y * 0.5f + 0.5f) * viewportSize.y + viewportPos.y);
+        };
+
+        // Corners behind the camera (clip.w <= 0) project to garbage — clip each
+        // edge against the near plane and draw the surviving polygon instead
+        constexpr float nearW = 1e-4f;
+        ImVec2 points[8];
+        int pointCount = 0;
+        for (int i = 0; i < 4; ++i)
+        {
+            const glm::vec4& a = clipCorners[i];
+            const glm::vec4& b = clipCorners[(i + 1) % 4];
+            bool aIn = a.w > nearW;
+            bool bIn = b.w > nearW;
+            if (!aIn && !bIn) continue;
+
+            if (aIn) points[pointCount++] = project(a);
+            if (aIn != bIn)
+            {
+                float tEdge = (nearW - a.w) / (b.w - a.w);
+                points[pointCount++] = project(a + (b - a) * tEdge);
+            }
+        }
+        if (pointCount < 2) return; // fully behind the camera
+
+        ImGui::GetWindowDrawList()->AddPolyline(points, pointCount, IM_COL32(255, 161, 0, 255),
                                                 ImDrawFlags_Closed, 2.0f);
     }
 
