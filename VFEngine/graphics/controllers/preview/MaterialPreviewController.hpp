@@ -6,6 +6,7 @@
 #include "../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <string>
+#include <vector>
 
 
 namespace core
@@ -96,9 +97,10 @@ namespace controllers
 
         // Deferred descriptor update state
         bool pendingDescriptorUpdate = false;
+        std::vector<bool> pendingDescriptorUpdateFrames;
 
         // Update texture descriptors (called when safe after fence wait)
-        void updateTextureDescriptorsIfPending();
+        void updateTextureDescriptorsIfPending(uint32_t imageIndex);
 
     public:
         explicit MaterialPreviewController();

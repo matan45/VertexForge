@@ -15,7 +15,7 @@ namespace render::preview
 {
     class PreviewRenderHandler;
 
-    using PreRenderCallback = std::function<void()>;
+    using PreRenderCallback = std::function<void(uint32_t imageIndex)>;
 
     class PreviewViewPort
     {
@@ -40,6 +40,7 @@ namespace render::preview
         void cleanUp();
 
         PreviewRenderHandler* getRenderHandler() const { return renderHandler.get(); }
+        uint32_t getImageCount() const { return static_cast<uint32_t>(offscreenResources.colorImages.size()); }
 
     private:
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;

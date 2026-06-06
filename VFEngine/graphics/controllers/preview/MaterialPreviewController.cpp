@@ -12,6 +12,7 @@
 #include "geometry/SphereGenerator.hpp"
 #include "resource/ResourceManager.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
 #include <cmath>
 #include <optional>
 
@@ -433,6 +434,8 @@ namespace controllers
         if (shouldUpdateBindings)
         {
             pendingDescriptorUpdate = true;
+            uint32_t imageCount = offScreen ? offScreen->getImageCount() : 0;
+            pendingDescriptorUpdateFrames.assign(imageCount, true);
         }
     }
 
@@ -465,9 +468,23 @@ namespace controllers
         }
     }
 
-    void MaterialPreviewController::updateTextureDescriptorsIfPending()
+    void MaterialPreviewController::updateTextureDescriptorsIfPending(uint32_t imageIndex)
     {
         if (!pendingDescriptorUpdate || !textureManager->defaultTexture.valid)
+        {
+            return;
+        }
+
+        if (pendingDescriptorUpdateFrames.empty())
+        {
+            uint32_t imageCount = offScreen ? offScreen->getImageCount() : 0;
+            pendingDescriptorUpdateFrames.assign(imageCount, true);
+        }
+
+        const size_t frameIndex = pendingDescriptorUpdateFrames.empty()
+            ? 0
+            : imageIndex % pendingDescriptorUpdateFrames.size();
+        if (!pendingDescriptorUpdateFrames.empty() && !pendingDescriptorUpdateFrames[frameIndex])
         {
             return;
         }
@@ -498,9 +515,16 @@ namespace controllers
             samplers[i] = textureManager->defaultTexture.sampler;
         }
 
-        meshPipeline->updatePreviewTextureDescriptors(imageViews, samplers);
+        meshPipeline->updatePreviewTextureDescriptors(imageIndex, imageViews, samplers);
         textureManager->texturesNeedUpdate = false;
-        pendingDescriptorUpdate = false;
+        if (!pendingDescriptorUpdateFrames.empty())
+        {
+            pendingDescriptorUpdateFrames[frameIndex] = false;
+        }
+        pendingDescriptorUpdate = std::any_of(
+            pendingDescriptorUpdateFrames.begin(),
+            pendingDescriptorUpdateFrames.end(),
+            [](bool pending) { return pending; });
     }
 
     void MaterialPreviewController::cleanUp()
@@ -617,9 +641,9 @@ namespace controllers
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&currentFrustum);
 
-        vk::DescriptorSet descriptorSet = offScreen->render([this]()
+        vk::DescriptorSet descriptorSet = offScreen->render([this](uint32_t imageIndex)
         {
-            updateTextureDescriptorsIfPending();
+            updateTextureDescriptorsIfPending(imageIndex);
         });
         return static_cast<void*>(descriptorSet);
     }

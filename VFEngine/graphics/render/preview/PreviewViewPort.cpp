@@ -52,7 +52,7 @@ namespace render::preview
 
         if (preRenderCallback)
         {
-            preRenderCallback();
+            preRenderCallback(imageIndex);
         }
 
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);

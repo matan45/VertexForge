@@ -237,15 +237,17 @@ namespace render::mesh
 
     void StaticMeshPipeline::createTextureDescriptorPool()
     {
+        const uint32_t imageCount = static_cast<uint32_t>(swapChain.getImageCount());
+
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = material::MAX_MATERIAL_TEXTURES;
+        poolSize.descriptorCount = material::MAX_MATERIAL_TEXTURES * imageCount;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
-        poolInfo.maxSets = 1;
+        poolInfo.maxSets = imageCount;
 
         textureDescriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
@@ -261,13 +263,16 @@ namespace render::mesh
             return;
         }
 
-        if (!textureDescriptorSet)
+        if (textureDescriptorSets.empty())
         {
+            const uint32_t imageCount = static_cast<uint32_t>(swapChain.getImageCount());
+            std::vector<vk::DescriptorSetLayout> layouts(imageCount, textureDescriptorSetLayout);
+
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = textureDescriptorPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &textureDescriptorSetLayout;
-            textureDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+            allocInfo.descriptorSetCount = imageCount;
+            allocInfo.pSetLayouts = layouts.data();
+            textureDescriptorSets = device.getLogicalDevice().allocateDescriptorSets(allocInfo);
 
             std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
             for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
@@ -277,15 +282,21 @@ namespace render::mesh
                 imageInfos[i].sampler = textureCache->getDefaultSampler();
             }
 
-            vk::WriteDescriptorSet writeSet{};
-            writeSet.dstSet = textureDescriptorSet;
-            writeSet.dstBinding = 0;
-            writeSet.dstArrayElement = 0;
-            writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            writeSet.descriptorCount = material::MAX_MATERIAL_TEXTURES;
-            writeSet.pImageInfo = imageInfos.data();
+            std::vector<vk::WriteDescriptorSet> writes;
+            writes.reserve(textureDescriptorSets.size());
+            for (vk::DescriptorSet set : textureDescriptorSets)
+            {
+                vk::WriteDescriptorSet writeSet{};
+                writeSet.dstSet = set;
+                writeSet.dstBinding = 0;
+                writeSet.dstArrayElement = 0;
+                writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+                writeSet.descriptorCount = material::MAX_MATERIAL_TEXTURES;
+                writeSet.pImageInfo = imageInfos.data();
+                writes.push_back(writeSet);
+            }
 
-            device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
+            device.getLogicalDevice().updateDescriptorSets(writes, nullptr);
         }
         textureDescriptorsInitialized = true;
     }
