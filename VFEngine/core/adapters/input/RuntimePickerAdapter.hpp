@@ -14,6 +14,7 @@ namespace core
     {
     public:
         bool screenToWorldRay(const glm::vec2& screenPos, services::PickRay& outRay) override;
+        bool worldToScreen(const glm::vec3& worldPos, glm::vec2& outScreen) override;
         services::RaycastHit pickEntity(const services::PickRay& ray, uint16_t layerMask) override;
     };
 }

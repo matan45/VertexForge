@@ -34,11 +34,14 @@ namespace render
         core::OffscreenResources offscreenResources;
         std::vector<core::DepthImage> depthImages;
         std::vector<vk::Fence> inFlightFences;
+        std::vector<vk::Semaphore> renderCompleteSemaphores;
 
         uint32_t width = 512;
         uint32_t height = 512;
         glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
         uint32_t lastRenderedImageIndex = 0;
+        vk::Semaphore lastRenderCompleteSemaphore{};
+        bool lastRenderSubmitted = false;
         bool initialized = false;
 
         // VK-1334: per-RTT camera resources. Lazily allocated on the first render() call once
@@ -52,6 +55,14 @@ namespace render
         std::vector<core::VulkanAllocation> rttMeshCameraUBOAllocs;
         vk::DescriptorPool rttMeshIBLDescPool;
         std::vector<vk::DescriptorSet> rttMeshIBLDescSets;
+        uint64_t rttIBLDescriptorVersion = 0;
+
+        // Per-image skybox CameraUBO. The shared IBL skybox UBO belongs to the main viewport;
+        // RTT submits may execute later, so they must not depend on that mutable buffer.
+        std::vector<vk::Buffer> rttSkyboxCameraUBOs;
+        std::vector<core::VulkanAllocation> rttSkyboxCameraUBOAllocs;
+        vk::DescriptorPool rttSkyboxDescPool;
+        std::vector<vk::DescriptorSet> rttSkyboxDescSets;
 
         // Per-image GPU-driven cull camera buffer (binds at set 0 / binding 1 of the cull set).
         std::vector<std::unique_ptr<gpudriven::GPUDrivenCameraBuffer>> rttGPUDrivenCameraBuffers;
@@ -93,6 +104,8 @@ namespace render
         uint32_t getImageCount() const { return static_cast<uint32_t>(offscreenResources.colorImages.size()); }
         vk::ImageView getImageView(uint32_t imageIndex) const;
         vk::Sampler getTextureSampler() const { return sampler; }
+        vk::Semaphore getLastRenderCompleteSemaphore() const { return lastRenderCompleteSemaphore; }
+        bool didSubmitLastRender() const { return lastRenderSubmitted; }
 
         // VK-1334 minimap flicker fix: returns the view for the slot most recently rendered.
         // Cold slots are pre-cleared to clearColor at create/resize time, so this is always a
@@ -107,6 +120,8 @@ namespace render
 
         // VK-1334
         void ensurePerRTTResources(RenderPassHandler* mainPassHandler);
+        void ensurePerRTTDescriptorResources(RenderPassHandler* mainPassHandler);
+        void cleanupPerRTTDescriptorResources();
         void cleanupPerRTTResources();
     };
 }

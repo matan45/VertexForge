@@ -11,7 +11,7 @@ local engineDir = os.getenv("VERTEXFORGE_PATH") or error("VERTEXFORGE_PATH not s
 local vulkanSDK = os.getenv("VULKAN_SDK")       or error("VULKAN_SDK not set")
 
 workspace (PLUGIN_NAME)
-   configurations { "Debug", "Release" }
+   configurations { "Debug", "Development", "Release" }
    platforms { "x64" }
    location "."
 
@@ -60,6 +60,11 @@ project (PLUGIN_NAME)
 
    filter "configurations:Debug"
       defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Development"
+      defines { "NDEBUG", "VF_DEVELOPMENT" }
+      optimize "On"
       symbols "On"
 
    filter "configurations:Release"

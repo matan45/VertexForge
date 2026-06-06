@@ -26,6 +26,11 @@ namespace services
         // Screen pixel -> world ray. Returns false if there is no primary camera/viewport.
         virtual bool screenToWorldRay(const glm::vec2& screenPos, PickRay& outRay) = 0;
 
+        // World position -> viewport pixel (inverse of screenToWorldRay). Returns false
+        // when there is no primary camera/viewport or the point is behind the camera.
+        // outScreen may lie outside the viewport bounds for visible-but-offscreen points.
+        virtual bool worldToScreen(const glm::vec3& worldPos, glm::vec2& outScreen) = 0;
+
         // Physics raycast against scene entities. hit=false on miss.
         virtual RaycastHit pickEntity(const PickRay& ray, uint16_t layerMask) = 0;
     };

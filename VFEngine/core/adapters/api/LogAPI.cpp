@@ -17,7 +17,7 @@ namespace core::api
                     std::string message = extractString(args[0]);
                     if (!message.empty())
                     {
-                        vfLogInfo("[Script] {}", message);
+                        vfLogScriptInfo("[Script] {}", message);
                     }
                 }
                 return value::Value(std::monostate{});
@@ -30,7 +30,7 @@ namespace core::api
                     std::string message = extractString(args[0]);
                     if (!message.empty())
                     {
-                        vfLogWarning("[Script] {}", message);
+                        vfLogScriptWarning("[Script] {}", message);
                     }
                 }
                 return value::Value(std::monostate{});
@@ -43,7 +43,7 @@ namespace core::api
                     std::string message = extractString(args[0]);
                     if (!message.empty())
                     {
-                        vfLogError("[Script] {}", message);
+                        vfLogScriptError("[Script] {}", message);
                     }
                 }
                 return value::Value(std::monostate{});

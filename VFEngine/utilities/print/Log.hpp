@@ -25,6 +25,12 @@
 #define vfLogError(...) util::logError(__VA_ARGS__)
 #define vfLogAssert(condition, ...) util::logAssert(__FILENAME__, __LINE__, condition, __VA_ARGS__)
 
+// Script log channel (mType script output, see core/adapters/api/LogAPI.cpp).
+// Not gated by engineLogsEnabled - script logs always flow in every config.
+#define vfLogScriptInfo(...) util::logScriptInfo(__VA_ARGS__)
+#define vfLogScriptWarning(...) util::logScriptWarning(__VA_ARGS__)
+#define vfLogScriptError(...) util::logScriptError(__VA_ARGS__)
+
 
 namespace util {
 
@@ -32,6 +38,17 @@ namespace util {
 	// Set to LogLevel::Debug or LogLevel::Trace for verbose output.
 	// Set to LogLevel::Error for shipped/exported games (errors always log).
 	inline LogLevel minLogLevel = LogLevel::Info;
+
+	// Engine log gate: when false, engine Trace/Debug/Info/Warning are
+	// suppressed everywhere (console, spdlog, ImGui console buffer) - only
+	// engine errors and the script channel (vfLogScript*) get through.
+	// Release defaults to script-logs-only; Debug/Development show everything.
+	// Runtime-mutable so it can be wired to an editor preference later.
+#if defined(NDEBUG) && !defined(VF_DEVELOPMENT)
+	inline bool engineLogsEnabled = false;
+#else
+	inline bool engineLogsEnabled = true;
+#endif
 
 	inline std::string getCurrentTime() {
 		auto now = std::chrono::system_clock::now();
@@ -67,6 +84,7 @@ namespace util {
 
 	template<typename... Args>
 	inline void logTrace(format_string_t<Args...> fmt, Args&&... args) {
+		if (!engineLogsEnabled) return;
 		if (minLogLevel > LogLevel::Trace) return;
 		std::string currentTime = getCurrentTime();
 		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
@@ -82,6 +100,7 @@ namespace util {
 
 	template<typename... Args>
 	inline void logDebug(format_string_t<Args...> fmt, Args&&... args) {
+		if (!engineLogsEnabled) return;
 		if (minLogLevel > LogLevel::Debug) return;
 		std::string currentTime = getCurrentTime();
 		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
@@ -97,6 +116,7 @@ namespace util {
 
 	template<typename... Args>
 	inline void logInfo(format_string_t<Args...> fmt, Args&&... args) {
+		if (!engineLogsEnabled) return;
 		if (minLogLevel > LogLevel::Info) return;
 		std::string currentTime = getCurrentTime();
 		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
@@ -112,6 +132,7 @@ namespace util {
 
 	template<typename... Args>
 	inline void logWarning(format_string_t<Args...> fmt, Args&&... args) {
+		if (!engineLogsEnabled) return;
 		if (minLogLevel > LogLevel::Warning) return;
 		std::string currentTime = getCurrentTime();
 		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
@@ -127,6 +148,54 @@ namespace util {
 
 	template<typename... Args>
 	inline void logError(format_string_t<Args...> fmt, Args&&... args) {
+		std::string currentTime = getCurrentTime();
+		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
+		std::string fullMessage = fmt::format("{}ERROR: {}", currentTime, formattedMessage);
+
+		setConsoleColor(FOREGROUND_RED);
+		printf("%s\n", fullMessage.c_str());
+		resetConsoleColor();
+
+		spdlog::error(formattedMessage);
+		appendToConsoleBuffer(fullMessage, LogLevel::Error);
+	}
+
+	// === Script log channel (mType script output) ===
+	// Same pipeline as the engine functions, but never gated by
+	// engineLogsEnabled - script logs always show, in every config.
+
+	template<typename... Args>
+	inline void logScriptInfo(format_string_t<Args...> fmt, Args&&... args) {
+		if (minLogLevel > LogLevel::Info) return;
+		std::string currentTime = getCurrentTime();
+		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
+		std::string fullMessage = fmt::format("{}INFO: {}", currentTime, formattedMessage);
+
+		setConsoleColor(FOREGROUND_GREEN);
+		printf("%s\n", fullMessage.c_str());
+		resetConsoleColor();
+
+		spdlog::info(formattedMessage);
+		appendToConsoleBuffer(fullMessage, LogLevel::Info);
+	}
+
+	template<typename... Args>
+	inline void logScriptWarning(format_string_t<Args...> fmt, Args&&... args) {
+		if (minLogLevel > LogLevel::Warning) return;
+		std::string currentTime = getCurrentTime();
+		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
+		std::string fullMessage = fmt::format("{}WARNING: {}", currentTime, formattedMessage);
+
+		setConsoleColor(FOREGROUND_GREEN | FOREGROUND_RED);
+		printf("%s\n", fullMessage.c_str());
+		resetConsoleColor();
+
+		spdlog::warn(formattedMessage);
+		appendToConsoleBuffer(fullMessage, LogLevel::Warning);
+	}
+
+	template<typename... Args>
+	inline void logScriptError(format_string_t<Args...> fmt, Args&&... args) {
 		std::string currentTime = getCurrentTime();
 		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
 		std::string fullMessage = fmt::format("{}ERROR: {}", currentTime, formattedMessage);

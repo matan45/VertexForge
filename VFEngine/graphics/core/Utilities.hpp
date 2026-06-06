@@ -2,10 +2,13 @@
 #include <optional>
 
 #include <vulkan/vulkan.hpp>
-#ifdef NDEBUG
-constexpr bool debug = false;
-#else
+// Vulkan validation layers + debug messenger. Decoupled from the build config:
+// VF_ENABLE_VALIDATION is defined only in the Graphics project's Debug filter
+// (premake5.lua), so Debug = validation ON, Development/Release = OFF.
+#ifdef VF_ENABLE_VALIDATION
 constexpr bool debug = true;
+#else
+constexpr bool debug = false;
 #endif
 
 namespace core

@@ -49,6 +49,8 @@ namespace plugin {
         std::function<void(entt::registry&, entt::entity)> emplace;
         std::function<void(entt::registry&, entt::entity)> remove;
         std::function<bool(entt::registry&, entt::entity)> has;
+        // Collect all entities holding this component (view<T> instantiated in the plugin DLL).
+        std::function<std::vector<entt::entity>(entt::registry&)> findAll;
     };
 
     namespace capability {
@@ -325,6 +327,12 @@ namespace plugin {
             };
             bridge.has = [](entt::registry& r, entt::entity e) -> bool {
                 return r.all_of<T>(e);
+            };
+            bridge.findAll = [](entt::registry& r) -> std::vector<entt::entity> {
+                std::vector<entt::entity> out;
+                for (auto e : r.view<T>())
+                    out.push_back(e);
+                return out;
             };
             // Register meta type in plugin DLL's local context
             auto factory = entt::meta_factory<T>().type(id, name);

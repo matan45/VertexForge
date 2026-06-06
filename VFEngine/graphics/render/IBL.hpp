@@ -58,6 +58,11 @@ namespace render
 
         void renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
                                   const ibl::SkyboxTargetParams& target) const;
+        void renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
+                                  const ibl::SkyboxTargetParams& target,
+                                  vk::DescriptorSet targetDescriptorSet) const;
+        vk::DescriptorSet createExternalSkyboxDescriptorSet(vk::Buffer externalCameraUBO,
+                                                            vk::DescriptorPool externalPool) const;
 
         void init(std::string_view path);
         void remove();

@@ -80,5 +80,7 @@ namespace controllers
         // produced RTT image view.
         vk::ImageView getLatestImageView() const;
         vk::Sampler getTextureSampler() const;
+        vk::Semaphore getLastRenderCompleteSemaphore() const;
+        bool didSubmitLastRender() const;
     };
 }

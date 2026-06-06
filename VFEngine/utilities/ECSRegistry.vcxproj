@@ -5,6 +5,10 @@
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Development|x64">
+      <Configuration>Development</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|x64">
       <Configuration>Release</Configuration>
       <Platform>x64</Platform>
@@ -24,6 +28,12 @@
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -36,6 +46,9 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -44,6 +57,13 @@
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(ProjectDir)..\..\bin\ECSRegistry\Debug\x64\</OutDir>
     <IntDir>$(ProjectDir)obj\x64\Debug\ECSRegistry\</IntDir>
+    <TargetName>ECSRegistry</TargetName>
+    <TargetExt>.dll</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(ProjectDir)..\..\bin\ECSRegistry\Development\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Development\ECSRegistry\</IntDir>
     <TargetName>ECSRegistry</TargetName>
     <TargetExt>.dll</TargetExt>
   </PropertyGroup>
@@ -76,6 +96,36 @@
 IF NOT EXIST ..\..\bin\Runtime\Debug\x64 (mkdir ..\..\bin\Runtime\Debug\x64)
 IF EXIST ..\..\bin\ECSRegistry\Debug\x64\ECSRegistry.dll\ (xcopy /Q /E /Y /I ..\..\bin\ECSRegistry\Debug\x64\ECSRegistry.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\ECSRegistry\Debug\x64\ECSRegistry.dll ..\..\bin\Editor\Debug\x64 &gt; nul)
 IF EXIST ..\..\bin\ECSRegistry\Debug\x64\ECSRegistry.dll\ (xcopy /Q /E /Y /I ..\..\bin\ECSRegistry\Debug\x64\ECSRegistry.dll ..\..\bin\Runtime\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\ECSRegistry\Debug\x64\ECSRegistry.dll ..\..\bin\Runtime\Debug\x64 &gt; nul)</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_ECSREGISTRY_BUILD_DLL;NDEBUG;VF_DEVELOPMENT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <Optimization>Full</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <StringPooling>true</StringPooling>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <ImportLibrary>..\..\bin\ECSRegistry\Development\x64\ECSRegistry.lib</ImportLibrary>
+    </Link>
+    <PostBuildEvent>
+      <Command>IF NOT EXIST ..\..\bin\Editor\Development\x64 (mkdir ..\..\bin\Editor\Development\x64)
+IF NOT EXIST ..\..\bin\Runtime\Development\x64 (mkdir ..\..\bin\Runtime\Development\x64)
+IF EXIST ..\..\bin\ECSRegistry\Development\x64\ECSRegistry.dll\ (xcopy /Q /E /Y /I ..\..\bin\ECSRegistry\Development\x64\ECSRegistry.dll ..\..\bin\Editor\Development\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\ECSRegistry\Development\x64\ECSRegistry.dll ..\..\bin\Editor\Development\x64 &gt; nul)
+IF EXIST ..\..\bin\ECSRegistry\Development\x64\ECSRegistry.dll\ (xcopy /Q /E /Y /I ..\..\bin\ECSRegistry\Development\x64\ECSRegistry.dll ..\..\bin\Runtime\Development\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\ECSRegistry\Development\x64\ECSRegistry.dll ..\..\bin\Runtime\Development\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

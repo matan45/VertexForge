@@ -5,6 +5,10 @@
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Development|x64">
+      <Configuration>Development</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|x64">
       <Configuration>Release</Configuration>
       <Platform>x64</Platform>
@@ -24,6 +28,12 @@
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -36,6 +46,9 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -43,6 +56,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(ProjectDir)..\bin\mType\Debug\x64\</OutDir>
     <IntDir>$(ProjectDir)obj\x64\Debug\mType\</IntDir>
+    <TargetName>mType</TargetName>
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <OutDir>$(ProjectDir)..\bin\mType\Development\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Development\mType\</IntDir>
     <TargetName>mType</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -67,6 +86,29 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MTYPE_SIMD_ENABLED;ASMJIT_STATIC;NDEBUG;VF_DEVELOPMENT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;..\dependencies\mtype\packagemanager\src;..\dependencies\mtype\vendor\asmjit;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <Optimization>Full</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <StringPooling>true</StringPooling>
+      <AdditionalOptions>/utf-8 /MP /bigobj /arch:AVX2 %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -301,6 +343,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\EscapeAnalysisPass_Internal.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\LombokSynthesisPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\StructuralEqualitySynthesisPass.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\annotation_folding\AnnotationConstantResolver.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\lombok\LombokAstBuilders.hpp" />
@@ -862,6 +905,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\EscapeAnalysisPass_Detection.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\LombokSynthesisPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\StructuralEqualitySynthesisPass.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\annotation_folding\AnnotationConstantResolver.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\lombok\LombokBuilderCodegen.cpp" />

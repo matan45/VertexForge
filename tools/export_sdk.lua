@@ -48,7 +48,7 @@ function vfExportPluginSDK()
       print("  third-party headers: " .. n)
 
       -- imgui.lib (only needed by plugins that register editor ImGui windows)
-      for _, cfg in ipairs({"Debug", "Release"}) do
+      for _, cfg in ipairs({"Debug", "Development", "Release"}) do
          local lib = "bin/imgui/" .. cfg .. "/x64/imgui.lib"
          if os.isfile(lib) then
             os.mkdir(sdk .. "/lib/" .. cfg)
@@ -75,7 +75,7 @@ local engineDir = os.getenv("VERTEXFORGE_PATH") or error("VERTEXFORGE_PATH not s
 local vulkanSDK = os.getenv("VULKAN_SDK")       or error("VULKAN_SDK not set")
 
 workspace (PLUGIN_NAME)
-   configurations { "Debug", "Release" }
+   configurations { "Debug", "Development", "Release" }
    platforms { "x64" }
    location "."
 
@@ -124,6 +124,11 @@ project (PLUGIN_NAME)
 
    filter "configurations:Debug"
       defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Development"
+      defines { "NDEBUG", "VF_DEVELOPMENT" }
+      optimize "On"
       symbols "On"
 
    filter "configurations:Release"

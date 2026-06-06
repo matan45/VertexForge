@@ -82,6 +82,7 @@ namespace render::mesh
         ibl::ImageData cachedIrradianceMap;
         ibl::ImageData cachedPrefilterMap;
         ibl::ImageData cachedBrdfLUT;
+        uint64_t iblDescriptorVersion = 0;
 
         mutable float currentTime{0.0f};
 
@@ -163,6 +164,7 @@ namespace render::mesh
         // 1-3. Used by RenderTextureViewPort so RTT passes don't write the shared CameraUBO.
         vk::DescriptorSet createExternalIBLDescriptorSet(vk::Buffer externalCameraUBO,
                                                          vk::DescriptorPool externalPool) const;
+        uint64_t getIBLDescriptorVersion() const { return iblDescriptorVersion; }
 
         std::string loadMesh(std::string_view meshPath);
         std::string uploadMesh(const std::string& meshId, const resource::MeshesData& meshData);

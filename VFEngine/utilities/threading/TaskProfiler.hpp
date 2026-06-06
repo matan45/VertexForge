@@ -26,6 +26,9 @@ namespace threading {
 
 		static TaskProfiler& instance();
 
+		void setEnabled(bool enabled);
+		bool isEnabled() const;
+
 		// Record one frame's profile data
 		void recordFrame(const std::vector<TaskProfileEntry>& entries);
 
@@ -52,6 +55,7 @@ namespace threading {
 		size_t writeIndex = 0;
 		bool wrapped = false;
 		uint32_t maxThreadId = 0;
+		bool enabled = false;
 	};
 
 }

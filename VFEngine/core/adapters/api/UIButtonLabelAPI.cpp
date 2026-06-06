@@ -561,6 +561,23 @@ namespace core::api
                 return value::Value();
             }});
 
+        // _native_ui_setRectPixels(entityId, x, y, w, h) — position/size a UIRect in
+        // viewport pixels (top-left origin, y down), same pixel space as
+        // Input::getViewportMouseX/Y. Used for runtime-driven overlays (drag boxes).
+        interpreter->registerNativeFunction("_native_ui_setRectPixels",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 5) return value::Value(false);
+
+                events::ui::SetUIRectPixelsCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0], "_native_ui_setRectPixels"));
+                cmd.x = extractFloat(args[1], "_native_ui_setRectPixels");
+                cmd.y = extractFloat(args[2], "_native_ui_setRectPixels");
+                cmd.w = extractFloat(args[3], "_native_ui_setRectPixels");
+                cmd.h = extractFloat(args[4], "_native_ui_setRectPixels");
+                return value::Value(dispatcher.execute(cmd));
+            }});
+
         interpreter->registerNativeFunction("_native_ui_getImageColor",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();

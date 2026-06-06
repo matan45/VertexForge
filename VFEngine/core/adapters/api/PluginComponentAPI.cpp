@@ -551,6 +551,59 @@ namespace core::api
                 return value::Value(bridge->has(reg, *entityOpt));
             }});
 
+        // _plugin_addComponent(entityId, componentName) -> bool
+        interpreter->registerNativeFunction("_plugin_addComponent",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 2) return value::Value(false);
+                auto entityOpt = resolveEntity(extractInt64(args[0]));
+                if (!entityOpt) return value::Value(false);
+                std::string compName = extractString(args[1]);
+                const auto* bridge = findBridge(*storedBridges, compName);
+                if (!bridge || !bridge->emplace) {
+                    vfLogWarning("[PluginScript] _plugin_addComponent: unknown component '{}'", compName);
+                    return value::Value(false);
+                }
+                auto& reg = scene::EntityRegistry::getRegistry();
+                bridge->emplace(reg, *entityOpt);
+                return value::Value(true);
+            }});
+
+        // _plugin_removeComponent(entityId, componentName) -> bool
+        interpreter->registerNativeFunction("_plugin_removeComponent",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 2) return value::Value(false);
+                auto entityOpt = resolveEntity(extractInt64(args[0]));
+                if (!entityOpt) return value::Value(false);
+                std::string compName = extractString(args[1]);
+                const auto* bridge = findBridge(*storedBridges, compName);
+                if (!bridge || !bridge->remove) {
+                    vfLogWarning("[PluginScript] _plugin_removeComponent: unknown component '{}'", compName);
+                    return value::Value(false);
+                }
+                auto& reg = scene::EntityRegistry::getRegistry();
+                bridge->remove(reg, *entityOpt);
+                return value::Value(true);
+            }});
+
+        // _plugin_findAll(componentName) -> int[] (entity IDs holding the component)
+        interpreter->registerNativeFunction("_plugin_findAll",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto empty = std::make_shared<value::NativeArray>(0, value::ValueType::INT);
+                if (args.empty()) return value::Value(empty);
+                std::string compName = extractString(args[0]);
+                const auto* bridge = findBridge(*storedBridges, compName);
+                if (!bridge || !bridge->findAll) {
+                    vfLogWarning("[PluginScript] _plugin_findAll: unknown component '{}'", compName);
+                    return value::Value(empty);
+                }
+                auto& reg = scene::EntityRegistry::getRegistry();
+                auto entities = bridge->findAll(reg);
+                auto arr = std::make_shared<value::NativeArray>(entities.size(), value::ValueType::INT);
+                for (std::size_t i = 0; i < entities.size(); ++i)
+                    arr->set(i, value::Value(static_cast<int64_t>(static_cast<uint32_t>(entities[i]))));
+                return value::Value(arr);
+            }});
+
         // _plugin_getInt
         interpreter->registerNativeFunction("_plugin_getInt",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
@@ -930,7 +983,7 @@ namespace core::api
                 return value::Value(true);
             }});
 
-        vfLogInfo("[Plugin] Registered 26 plugin component script bindings");
+        vfLogInfo("[Plugin] Registered 29 plugin component script bindings");
     }
 
     void PluginComponentAPI::registerStructClasses(services::ScriptInterpreter* interpreter)

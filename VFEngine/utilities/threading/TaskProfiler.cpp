@@ -12,8 +12,29 @@ namespace threading {
 		return inst;
 	}
 
+	void TaskProfiler::setEnabled(bool enabledValue)
+	{
+		std::lock_guard<std::mutex> lock(mutex);
+		enabled = enabledValue;
+		if (!enabled)
+		{
+			history.clear();
+			writeIndex = 0;
+			wrapped = false;
+			maxThreadId = 0;
+		}
+	}
+
+	bool TaskProfiler::isEnabled() const
+	{
+		std::lock_guard<std::mutex> lock(mutex);
+		return enabled;
+	}
+
 	void TaskProfiler::recordFrame(const std::vector<TaskProfileEntry>& entries)
 	{
+		if (!isEnabled()) return;
+
 		FrameProfileSnapshot snapshot;
 		snapshot.entries = entries;
 
@@ -106,6 +127,7 @@ namespace threading {
 
 	void TaskProfiler::appendToLatestFrame(const std::vector<TaskProfileEntry>& entries)
 	{
+		if (!isEnabled()) return;
 		if (entries.empty()) return;
 
 		std::lock_guard<std::mutex> lock(mutex);

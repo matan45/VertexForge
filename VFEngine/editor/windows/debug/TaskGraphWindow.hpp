@@ -12,6 +12,7 @@ namespace windows
 	private:
 		bool visible = false;
 		bool paused = false;
+		bool profilingEnabled = false;
 		float refreshTimer = 0.0f;
 		static constexpr float REFRESH_INTERVAL = 0.5f;
 

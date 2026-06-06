@@ -15,6 +15,23 @@
 
 namespace render
 {
+    void OffScreenViewPort::addPendingRenderWait(PendingRenderWait wait)
+    {
+        if (!wait.semaphore)
+            return;
+
+        std::lock_guard lock(pendingRenderWaitsMutex);
+        pendingRenderWaits.push_back(wait);
+    }
+
+    std::vector<OffScreenViewPort::PendingRenderWait> OffScreenViewPort::consumePendingRenderWaits()
+    {
+        std::lock_guard lock(pendingRenderWaitsMutex);
+        std::vector<PendingRenderWait> waits;
+        waits.swap(pendingRenderWaits);
+        return waits;
+    }
+
     OffScreenViewPort::OffScreenViewPort(core::Device& device, core::SwapChain& swapChain) : device{device}
         , swapChain{swapChain}
         , commandPool{std::make_unique<core::CommandPool>(device, swapChain)}
@@ -34,8 +51,11 @@ namespace render
         createSampler();
         createOffscreenResources();
 
+        // One fence per frame-in-flight slot (not per swapchain image): the
+        // per-frame resources this fence guards (secondary command buffers in
+        // ThreadCommandPoolManager, etc.) are keyed by imageIndex % MAX_FRAMES_IN_FLIGHT
         vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
-        inFlightFences.resize(swapChain.getImageCount());
+        inFlightFences.resize(core::MAX_FRAMES_IN_FLIGHT);
         for (auto& fence : inFlightFences)
         {
             fence = device.getLogicalDevice().createFence(fenceInfo);
@@ -56,24 +76,16 @@ namespace render
     vk::DescriptorSet OffScreenViewPort::render(const PreRenderCallback& preRenderCallback)
     {
         uint32_t imageIndex = core::RenderManager::getImageIndex();
+        uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
 
+        // Fences are keyed by frame-in-flight slot, so this single wait covers the
+        // previous submission that used this slot's resources (secondary command
+        // buffers etc.) — and, by queue submission order, every earlier offscreen
+        // submission too (including the last render to this swapchain image).
         vk::Result result = device.getLogicalDevice().waitForFences(
-            1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+            1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
-        // Also wait for any other swapchain image that shares the same frame-in-flight
-        // secondary command buffer slot (e.g., images 0 and 2 both map to fi=0 when
-        // MAX_FRAMES_IN_FLIGHT=2). Without this, resetFrame() may reset secondary
-        // command buffers still pending from a different image's submission.
-        uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
-        for (uint32_t i = 0; i < static_cast<uint32_t>(inFlightFences.size()); i++)
-        {
-            if (i != imageIndex && (i % core::MAX_FRAMES_IN_FLIGHT) == fi)
-            {
-                (void)device.getLogicalDevice().waitForFences(1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
-            }
-        }
-
-        result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
+        result = device.getLogicalDevice().resetFences(1, &inFlightFences[currentFrame]);
         (void)result;
 
         // Read back previous frame's results and update brush overlay BEFORE rendering
@@ -86,6 +98,8 @@ namespace render
         {
             preRenderCallback();
         }
+
+        auto pendingWaits = consumePendingRenderWaits();
 
         if (skipAsyncComputeFrames > 0)
         {
@@ -101,8 +115,6 @@ namespace render
             renderPassHandler->setAsyncComputeActive(useAsyncCompute);
         }
 
-        uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
-        
         if (useAsyncCompute)
         {
             vk::CommandBuffer asyncCmd = asyncComputeManager->beginFrame(currentFrame);
@@ -122,17 +134,25 @@ namespace render
         if (useAsyncCompute)
         {
             // Graphics submit waits on async compute completion before fragment shading
-            std::array<vk::Semaphore, 1> waitSemaphores = {
-                asyncComputeManager->getComputeTimelineSemaphore()
-            };
-            std::array<vk::PipelineStageFlags, 1> waitStages = {
-                vk::PipelineStageFlagBits::eFragmentShader |
-                vk::PipelineStageFlagBits::eComputeShader |
-                vk::PipelineStageFlagBits::eTaskShaderEXT
-            };
-            std::array<uint64_t, 1> waitValues = {
-                asyncComputeManager->getComputeWaitValue()
-            };
+            std::vector<vk::Semaphore> waitSemaphores;
+            std::vector<vk::PipelineStageFlags> waitStages;
+            std::vector<uint64_t> waitValues;
+            waitSemaphores.reserve(1 + pendingWaits.size());
+            waitStages.reserve(1 + pendingWaits.size());
+            waitValues.reserve(1 + pendingWaits.size());
+
+            waitSemaphores.push_back(asyncComputeManager->getComputeTimelineSemaphore());
+            waitStages.push_back(vk::PipelineStageFlagBits::eFragmentShader |
+                                 vk::PipelineStageFlagBits::eComputeShader |
+                                 vk::PipelineStageFlagBits::eTaskShaderEXT);
+            waitValues.push_back(asyncComputeManager->getComputeWaitValue());
+
+            for (const auto& wait : pendingWaits)
+            {
+                waitSemaphores.push_back(wait.semaphore);
+                waitStages.push_back(wait.stageMask);
+                waitValues.push_back(wait.timelineValue);
+            }
 
             vk::TimelineSemaphoreSubmitInfo timelineInfo{};
             timelineInfo.waitSemaphoreValueCount = static_cast<uint32_t>(waitValues.size());
@@ -150,21 +170,35 @@ namespace render
             submitInfo.signalSemaphoreCount = 0;
             submitInfo.pSignalSemaphores = nullptr;
 
-            device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
+            device.submitGraphics(submitInfo, inFlightFences[currentFrame]);
         }
         else
         {
-            vk::SubmitInfo submitInfo(
-                0, nullptr, nullptr,
-                1, &commandBuffer,
-                0, nullptr
-            );
+            std::vector<vk::Semaphore> waitSemaphores;
+            std::vector<vk::PipelineStageFlags> waitStages;
+            waitSemaphores.reserve(pendingWaits.size());
+            waitStages.reserve(pendingWaits.size());
 
-            device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
+            for (const auto& wait : pendingWaits)
+            {
+                waitSemaphores.push_back(wait.semaphore);
+                waitStages.push_back(wait.stageMask);
+            }
+
+            vk::SubmitInfo submitInfo{};
+            submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
+            submitInfo.pWaitSemaphores = waitSemaphores.empty() ? nullptr : waitSemaphores.data();
+            submitInfo.pWaitDstStageMask = waitStages.empty() ? nullptr : waitStages.data();
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffer;
+            submitInfo.signalSemaphoreCount = 0;
+            submitInfo.pSignalSemaphores = nullptr;
+
+            device.submitGraphics(submitInfo, inFlightFences[currentFrame]);
         }
 
-        // Fence-based sync: inFlightFences[imageIndex] is waited on at the top of render()
-        // when this imageIndex comes around again. No need to stall the entire queue.
+        // Fence-based sync: inFlightFences[currentFrame] is waited on at the top of render()
+        // when this frame-in-flight slot comes around again. No need to stall the entire queue.
 
         auto* upscaleManager = device.getUpscaleManager();
         if (upscaleManager && upscaleManager->isActive() && !offscreenResources.displayColorImages.empty())

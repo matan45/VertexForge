@@ -152,8 +152,13 @@ namespace core {
 		}
 		globalFrameCounter++;
 
-		// Reclaim GPU memory blocks that are now completely empty
-		device.getMemoryManager().reclaimEmptyBlocks();
+		// Reclaim GPU memory blocks that are now completely empty.
+		// Throttled: scans every memory type under the manager mutex, and empty
+		// blocks only appear after large unloads — once a second is plenty.
+		if ((globalFrameCounter % 64) == 0)
+		{
+			device.getMemoryManager().reclaimEmptyBlocks();
+		}
 
 		// Advance to next frame
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;

@@ -82,6 +82,7 @@ namespace render::mesh
         cachedIrradianceMap = irradianceMap;
         cachedPrefilterMap = prefilterMap;
         cachedBrdfLUT = brdfLUT;
+        ++iblDescriptorVersion;
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;

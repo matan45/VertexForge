@@ -1,5 +1,5 @@
 workspace "VertexForge"
-   configurations { "Debug", "Release" }
+   configurations { "Debug", "Development", "Release" }
    platforms { "x64" }
    location "VFEngine"  -- Specify where to place generated files
    startproject "Editor"  -- Set the default startup project
@@ -25,6 +25,30 @@ workspace "VertexForge"
 local vulkanLibPath = os.getenv("VULKAN_SDK")
 if not vulkanLibPath then
    error("VULKAN_SDK environment variable is not set.")
+end
+
+-- Applies the standard per-config compile settings to the current project.
+-- Development = optimized like Release (NDEBUG, /O2) but keeps debug symbols
+-- and a VF_DEVELOPMENT define for editor-only niceties. Vulkan validation
+-- layers and Jolt asserts stay OFF (NDEBUG path), giving a fast day-to-day
+-- play-test build. Debug-only extras (JPH_ENABLE_ASSERTS, VF_ENABLE_VALIDATION)
+-- are passed via extraDebugDefines.
+function vfStandardConfigs(extraDebugDefines)
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+   if extraDebugDefines then
+      filter "configurations:Debug"
+         defines(extraDebugDefines)
+   end
+   filter "configurations:Development"
+      defines { "NDEBUG", "VF_DEVELOPMENT" }
+      optimize "On"
+      symbols "On"
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+   filter {}
 end
 
 -- Group for Engine Projects
@@ -81,45 +105,52 @@ project "Editor"
       linkoptions { "/ignore:4006" }
    filter {}
 
+   vfStandardConfigs()
+
+   -- OpenAL DLL: CMake-built per-config — Debug build uses the debug CRT DLL,
+   -- Development/Release use the release one
    filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      -- Copy OpenAL DLL to Editor output directory
       postbuildcommands {
-         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Editor/Debug/x64/",
-         -- Copy Streamline development DLLs (no App ID required)
-         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.common.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.pcl.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_g.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssg.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/Debug/x64/"
+         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
+      }
+   filter "configurations:Development or Release"
+      postbuildcommands {
+         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
       }
 
-   filter "configurations:Release"
-      kind "WindowedApp"
-      entrypoint "mainCRTStartup"
-      defines { "NDEBUG" }
-      optimize "On"
-      -- Copy OpenAL DLL to Editor output directory
+   -- Streamline development DLLs (no App ID required) for Debug + Development
+   filter "configurations:Debug or Development"
       postbuildcommands {
-         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Editor/Release/x64/",
-         -- Copy Streamline production DLLs (requires NVIDIA App ID for shipping)
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.common.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.pcl.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlss.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss_g.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlssg.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.directsr.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.reflex.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/NvLowLatencyVk.dll ../../bin/Editor/Release/x64/"
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.common.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.pcl.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_g.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssg.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
       }
+
+   -- Streamline production DLLs (requires NVIDIA App ID for shipping)
+   -- NOTE: Editor stays a ConsoleApp in Release too — console logs visible in
+   -- every config (user preference). The exported game is built by GameExport
+   -- from Runtime, so this does not affect shipped games.
+   filter "configurations:Release"
+      postbuildcommands {
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.common.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.pcl.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss_g.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlssg.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.directsr.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.reflex.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/NvLowLatencyVk.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
+      }
+   filter {}
 
 -- Project 2: Core
 project "Core"
@@ -162,15 +193,9 @@ project "Core"
    links { "Graphics", "Audio", "Physics", "Animation", "mType", "jolt", "recast" }
    defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM", "JPH_SHARED_LIBRARY" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
-      symbols "On"
+   vfStandardConfigs({ "JPH_ENABLE_ASSERTS" })
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-	  
-	  
+
 project "Import"
    kind "SharedLib"
    language "C++"
@@ -203,10 +228,17 @@ project "Import"
 
    links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp" }
 
-   -- Debug configuration
+   -- Copy DLLs to Editor output directory (Import is Editor-only)
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/Import/%{cfg.buildcfg}/x64/Import.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
+   }
+
+   vfStandardConfigs()
+
+   -- CMake-built libs: Debug links the /MDd debug variants; Development and
+   -- Release link the /MD release variants (mixing CRTs is a link error)
    filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
       libdirs {
          "dependencies/assimp/build/lib/Debug",
          "dependencies/freetype/build/Debug",
@@ -214,18 +246,11 @@ project "Import"
          "dependencies/libvorbis/build/lib/Debug"
       }
       links { "assimp-vc145-mtd.lib", "freetyped.lib", "ogg.lib", "vorbis.lib", "vorbisenc.lib" }
-
-      -- Copy DLLs to Editor output directory (Import is Editor-only)
       postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{COPY} ../../dependencies/assimp/build/bin/Debug/assimp-vc145-mtd.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../bin/Import/Debug/x64/Import.dll ../../bin/Editor/Debug/x64/"
+         "{COPY} ../../dependencies/assimp/build/bin/Debug/assimp-vc145-mtd.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
       }
 
-   -- Release configuration
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   filter "configurations:Development or Release"
       libdirs {
          "dependencies/assimp/build/lib/Release",
          "dependencies/freetype/build/Release",
@@ -233,13 +258,10 @@ project "Import"
          "dependencies/libvorbis/build/lib/Release"
       }
       links { "assimp-vc145-mt.lib", "freetype.lib", "ogg.lib", "vorbis.lib", "vorbisenc.lib" }
-
-      -- Copy DLLs to Editor output directory (Import is Editor-only)
       postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{COPY} ../../dependencies/assimp/build/bin/Release/assimp-vc145-mt.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../bin/Import/Release/x64/Import.dll ../../bin/Editor/Release/x64/"
+         "{COPY} ../../dependencies/assimp/build/bin/Release/assimp-vc145-mt.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
       }
+   filter {}
 
 
 -- Project 3: Graphics
@@ -294,21 +316,21 @@ project "Graphics"
 	  "imgui",
 	  "ispc_texcomp",
 	  "Memory",
-	  "sl.interposer.lib"
+	  "sl.interposer.lib",
+	  "shaderc_shared.lib"
    }
 
    -- Suppress LNK4006: __NULL_IMPORT_DESCRIPTOR collision between sl.interposer.lib and shaderc_shared.lib
    linkoptions { "/ignore:4006" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      links { "shaderc_shared.lib" }
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      links { "shaderc_shared.lib" }
+   -- VF_ENABLE_VALIDATION: Vulkan validation layers + debug messenger.
+   -- Enabled in Debug and Development (user preference: keep validation while
+   -- play-testing); Release stays validation-free. Remove the Development
+   -- filter below for a max-speed Development build.
+   vfStandardConfigs({ "VF_ENABLE_VALIDATION" })
+   filter "configurations:Development"
+      defines { "VF_ENABLE_VALIDATION" }
+   filter {}
 
 -- Project 4: Runtime (Standalone game runtime - NO Editor/Import dependencies)
 project "Runtime"
@@ -344,21 +366,20 @@ project "Runtime"
       linkoptions { "/ignore:4006" }
    filter {}
 
-   filter "configurations:Debug"
-      defines { "DEBUG", "DOCTEST_CONFIG_DISABLE" }
-      symbols "On"
-      -- Copy OpenAL DLL to Runtime output directory
-      postbuildcommands {
-         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Runtime/Debug/x64/"
-      }
+   defines { "DOCTEST_CONFIG_DISABLE" }
 
-   filter "configurations:Release"
-      defines { "NDEBUG", "DOCTEST_CONFIG_DISABLE" }
-      optimize "On"
-      -- Copy OpenAL DLL to Runtime output directory
+   vfStandardConfigs()
+
+   -- Copy OpenAL DLL to Runtime output directory (CMake-built per-config)
+   filter "configurations:Debug"
       postbuildcommands {
-         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Runtime/Release/x64/"
+         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
       }
+   filter "configurations:Development or Release"
+      postbuildcommands {
+         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+      }
+   filter {}
 
 -- Project 5: Utilities (Moved before Graphics)
 project "Utilities"
@@ -412,13 +433,7 @@ project "Utilities"
 
    buildoptions { "/bigobj" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- Project: Services (Event System, Service Interfaces, Service Implementations)
@@ -447,13 +462,7 @@ project "Services"
 
    links { "Utilities", "Destruction", "Terrain", "Serialization", "World", "Window", "Weather" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- Project: Plugin (Plugin system infrastructure)
@@ -484,13 +493,7 @@ project "Plugin"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 
@@ -519,13 +522,7 @@ project "Window"
    links {  "GLFW",
 			"Utilities"}  -- Link against Core and Graphics
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 -- Group for Extracted Subsystems
 group "Subsystems"
@@ -557,25 +554,14 @@ project "ECSRegistry"
 
    links { "spdLog" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{MKDIR} ../../bin/Runtime/Debug/x64",
-         "{COPY} ../../bin/ECSRegistry/Debug/x64/ECSRegistry.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../bin/ECSRegistry/Debug/x64/ECSRegistry.dll ../../bin/Runtime/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/ECSRegistry/%{cfg.buildcfg}/x64/ECSRegistry.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/ECSRegistry/%{cfg.buildcfg}/x64/ECSRegistry.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{MKDIR} ../../bin/Runtime/Release/x64",
-         "{COPY} ../../bin/ECSRegistry/Release/x64/ECSRegistry.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../bin/ECSRegistry/Release/x64/ECSRegistry.dll ../../bin/Runtime/Release/x64/"
-      }
+   vfStandardConfigs()
 
 
 -- Audio subsystem (extracted from Core, SharedLib/DLL)
@@ -605,29 +591,23 @@ project "Audio"
    links { "Utilities", "Services", "Animation", "Terrain", "ECSRegistry" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      libdirs { "dependencies/openal-soft/build/Debug" }
-      links { "OpenAL32.lib" }
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{MKDIR} ../../bin/Runtime/Debug/x64",
-         "{COPY} ../../bin/Audio/Debug/x64/Audio.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../bin/Audio/Debug/x64/Audio.dll ../../bin/Runtime/Debug/x64/"
-      }
+   links { "OpenAL32.lib" }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/Audio/%{cfg.buildcfg}/x64/Audio.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Audio/%{cfg.buildcfg}/x64/Audio.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
+
+   vfStandardConfigs()
+
+   -- OpenAL import lib: CMake-built per-config (Debug = /MDd, Release = /MD)
+   filter "configurations:Debug"
+      libdirs { "dependencies/openal-soft/build/Debug" }
+   filter "configurations:Development or Release"
       libdirs { "dependencies/openal-soft/build/Release" }
-      links { "OpenAL32.lib" }
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{MKDIR} ../../bin/Runtime/Release/x64",
-         "{COPY} ../../bin/Audio/Release/x64/Audio.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../bin/Audio/Release/x64/Audio.dll ../../bin/Runtime/Release/x64/"
-      }
+   filter {}
 
 
 -- Physics subsystem (extracted from Core)
@@ -652,13 +632,7 @@ project "Physics"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM", "JPH_SHARED_LIBRARY" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs({ "JPH_ENABLE_ASSERTS" })
 
 
 -- Memory subsystem (extracted from Utilities)
@@ -678,13 +652,7 @@ project "Memory"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- Weather subsystem (extracted from Utilities)
@@ -708,13 +676,7 @@ project "Weather"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- Destruction subsystem (extracted from Utilities)
@@ -736,13 +698,7 @@ project "Destruction"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- Terrain subsystem (extracted from Utilities, SharedLib/DLL)
@@ -772,25 +728,14 @@ project "Terrain"
 
    buildoptions { "/bigobj" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{MKDIR} ../../bin/Runtime/Debug/x64",
-         "{COPY} ../../bin/Terrain/Debug/x64/Terrain.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../bin/Terrain/Debug/x64/Terrain.dll ../../bin/Runtime/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/Terrain/%{cfg.buildcfg}/x64/Terrain.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Terrain/%{cfg.buildcfg}/x64/Terrain.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{MKDIR} ../../bin/Runtime/Release/x64",
-         "{COPY} ../../bin/Terrain/Release/x64/Terrain.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../bin/Terrain/Release/x64/Terrain.dll ../../bin/Runtime/Release/x64/"
-      }
+   vfStandardConfigs()
 
 
 -- ProceduralGen subsystem (extracted from Utilities, SharedLib/DLL)
@@ -811,21 +756,12 @@ project "ProceduralGen"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_PROCEDURAL_BUILD_DLL" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{COPY} ../../bin/ProceduralGen/Debug/x64/ProceduralGen.dll ../../bin/Editor/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/ProceduralGen/%{cfg.buildcfg}/x64/ProceduralGen.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{COPY} ../../bin/ProceduralGen/Release/x64/ProceduralGen.dll ../../bin/Editor/Release/x64/"
-      }
+   vfStandardConfigs()
 
 
 -- ImageProcessing subsystem (extracted from Utilities, SharedLib/DLL)
@@ -846,21 +782,12 @@ project "ImageProcessing"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMAGEPROCESSING_BUILD_DLL" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{COPY} ../../bin/ImageProcessing/Debug/x64/ImageProcessing.dll ../../bin/Editor/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/ImageProcessing/%{cfg.buildcfg}/x64/ImageProcessing.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{COPY} ../../bin/ImageProcessing/Release/x64/ImageProcessing.dll ../../bin/Editor/Release/x64/"
-      }
+   vfStandardConfigs()
 
 
 -- Serialization subsystem (extracted from Utilities, SharedLib/DLL)
@@ -896,25 +823,14 @@ project "Serialization"
 
    buildoptions { "/bigobj" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{MKDIR} ../../bin/Runtime/Debug/x64",
-         "{COPY} ../../bin/Serialization/Debug/x64/Serialization.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../bin/Serialization/Debug/x64/Serialization.dll ../../bin/Runtime/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/Serialization/%{cfg.buildcfg}/x64/Serialization.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Serialization/%{cfg.buildcfg}/x64/Serialization.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{MKDIR} ../../bin/Runtime/Release/x64",
-         "{COPY} ../../bin/Serialization/Release/x64/Serialization.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../bin/Serialization/Release/x64/Serialization.dll ../../bin/Runtime/Release/x64/"
-      }
+   vfStandardConfigs()
 
 
 -- DataTypes (header-only, extracted from Services for dependency clarity)
@@ -965,25 +881,14 @@ project "World"
 
    links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{MKDIR} ../../bin/Runtime/Debug/x64",
-         "{COPY} ../../bin/World/Debug/x64/World.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../bin/World/Debug/x64/World.dll ../../bin/Runtime/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/World/%{cfg.buildcfg}/x64/World.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/World/%{cfg.buildcfg}/x64/World.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{MKDIR} ../../bin/Runtime/Release/x64",
-         "{COPY} ../../bin/World/Release/x64/World.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../bin/World/Release/x64/World.dll ../../bin/Runtime/Release/x64/"
-      }
+   vfStandardConfigs()
 
 
 -- Animation subsystem (extracted from Graphics + Utilities, SharedLib/DLL)
@@ -1027,25 +932,14 @@ project "Animation"
    links { "Utilities", "Services", "Terrain", "ECSRegistry" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{MKDIR} ../../bin/Runtime/Debug/x64",
-         "{COPY} ../../bin/Animation/Debug/x64/Animation.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../bin/Animation/Debug/x64/Animation.dll ../../bin/Runtime/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/Animation/%{cfg.buildcfg}/x64/Animation.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Animation/%{cfg.buildcfg}/x64/Animation.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{MKDIR} ../../bin/Runtime/Release/x64",
-         "{COPY} ../../bin/Animation/Release/x64/Animation.dll ../../bin/Editor/Release/x64/",
-         "{COPY} ../../bin/Animation/Release/x64/Animation.dll ../../bin/Runtime/Release/x64/"
-      }
+   vfStandardConfigs()
 
 
 -- VFX subsystem (extracted from Graphics + Utilities)
@@ -1083,15 +977,9 @@ project "VFX"
       vulkanLibPath.."/Lib"
    }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      links { "shaderc_shared.lib" }
+   links { "shaderc_shared.lib" }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      links { "shaderc_shared.lib" }
+   vfStandardConfigs()
 
 
 -- GameExport subsystem (extracted from Utilities - shader pre-compilation and game export pipeline, SharedLib/DLL)
@@ -1127,21 +1015,12 @@ project "GameExport"
 
    links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Debug/x64",
-         "{COPY} ../../bin/GameExport/Debug/x64/GameExport.dll ../../bin/Editor/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/GameExport/%{cfg.buildcfg}/x64/GameExport.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../../bin/Editor/Release/x64",
-         "{COPY} ../../bin/GameExport/Release/x64/GameExport.dll ../../bin/Editor/Release/x64/"
-      }
+   vfStandardConfigs()
 
 
 -- Tests: doctest unit test runner (CPU-only tests, no rendering dependencies)
@@ -1204,34 +1083,27 @@ project "Tests"
    -- doctest specializes std::tuple, forbidden under C++20 [tuple.tuple.general]/1
    disablewarnings { "5285" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
-      symbols "On"
-      postbuildcommands {
-         "{COPY} ../../bin/ECSRegistry/Debug/x64/ECSRegistry.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} ../../bin/Terrain/Debug/x64/Terrain.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} ../../bin/Serialization/Debug/x64/Serialization.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} ../../bin/World/Debug/x64/World.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} ../../bin/Animation/Debug/x64/Animation.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} ../../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} ../../bin/GameExport/Debug/x64/GameExport.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Tests/Debug/x64/"
-      }
+   postbuildcommands {
+      "{COPY} ../../bin/ECSRegistry/%{cfg.buildcfg}/x64/ECSRegistry.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Terrain/%{cfg.buildcfg}/x64/Terrain.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Serialization/%{cfg.buildcfg}/x64/Serialization.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/World/%{cfg.buildcfg}/x64/World.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Animation/%{cfg.buildcfg}/x64/Animation.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/meshoptimizer/%{cfg.buildcfg}/x64/meshoptimizer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/GameExport/%{cfg.buildcfg}/x64/GameExport.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs({ "JPH_ENABLE_ASSERTS" })
+
+   -- Streamline interposer: development build for Debug/Development, production for Release
+   filter "configurations:Debug or Development"
       postbuildcommands {
-         "{COPY} ../../bin/ECSRegistry/Release/x64/ECSRegistry.dll ../../bin/Tests/Release/x64/",
-         "{COPY} ../../bin/Terrain/Release/x64/Terrain.dll ../../bin/Tests/Release/x64/",
-         "{COPY} ../../bin/Serialization/Release/x64/Serialization.dll ../../bin/Tests/Release/x64/",
-         "{COPY} ../../bin/World/Release/x64/World.dll ../../bin/Tests/Release/x64/",
-         "{COPY} ../../bin/Animation/Release/x64/Animation.dll ../../bin/Tests/Release/x64/",
-         "{COPY} ../../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../../bin/Tests/Release/x64/",
-         "{COPY} ../../bin/GameExport/Release/x64/GameExport.dll ../../bin/Tests/Release/x64/",
-         "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/Release/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Tests/Release/x64/"
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
+      }
+   filter "configurations:Release"
+      postbuildcommands {
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
       }
 
    filter {}  -- reset filters before next group
@@ -1255,13 +1127,7 @@ project "lz4"
 
    includedirs { "dependencies/lz4/lib" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 -- Project: GLFW
 project "GLFW"
@@ -1280,13 +1146,7 @@ project "GLFW"
 
    defines { "_GLFW_WIN32", "_CRT_SECURE_NO_WARNINGS" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 -- Project: spdLog (Moved under libs group)
 project "spdLog"
@@ -1306,13 +1166,7 @@ project "spdLog"
 
    defines { "SPDLOG_COMPILED_LIB" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- Project: imgui (Moved under libs group)
@@ -1363,13 +1217,7 @@ project "imgui"
       "vulkan-1.lib"
    }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 -- Project: JoltPhysics (Moved under libs group)
 project "jolt"
@@ -1394,25 +1242,14 @@ project "jolt"
       "JPH_BUILD_SHARED_LIBRARY"    -- Building the DLL: JPH_EXPORT = __declspec(dllexport)
    }
 
-   filter "configurations:Debug"
-      defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../bin/Editor/Debug/x64",
-         "{MKDIR} ../bin/Runtime/Debug/x64",
-         "{COPY} ../bin/jolt/Debug/x64/jolt.dll ../bin/Editor/Debug/x64/",
-         "{COPY} ../bin/jolt/Debug/x64/jolt.dll ../bin/Runtime/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../bin/jolt/%{cfg.buildcfg}/x64/jolt.dll ../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../bin/jolt/%{cfg.buildcfg}/x64/jolt.dll ../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../bin/Editor/Release/x64",
-         "{MKDIR} ../bin/Runtime/Release/x64",
-         "{COPY} ../bin/jolt/Release/x64/jolt.dll ../bin/Editor/Release/x64/",
-         "{COPY} ../bin/jolt/Release/x64/jolt.dll ../bin/Runtime/Release/x64/"
-      }
+   vfStandardConfigs({ "JPH_ENABLE_ASSERTS" })
 
 
 -- Project: mType (Scripting language interpreter)
@@ -1471,16 +1308,10 @@ project "mType"
          "dependencies/mtype/mType/plugin/WinPluginLoader.cpp"
       }
 
-   filter { "system:windows", "configurations:Release" }
+   filter { "system:windows", "configurations:Development or Release" }
       buildoptions { "/arch:AVX2" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- Project: meshoptimizer (Mesh simplification for LOD generation)
@@ -1518,25 +1349,14 @@ project "meshoptimizer"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllexport)" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{MKDIR} ../bin/Editor/Debug/x64",
-         "{MKDIR} ../bin/Runtime/Debug/x64",
-         "{COPY} ../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../bin/Editor/Debug/x64/",
-         "{COPY} ../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../bin/Runtime/Debug/x64/"
-      }
+   postbuildcommands {
+      "{MKDIR} ../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../bin/meshoptimizer/%{cfg.buildcfg}/x64/meshoptimizer.dll ../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../bin/meshoptimizer/%{cfg.buildcfg}/x64/meshoptimizer.dll ../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
 
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{MKDIR} ../bin/Editor/Release/x64",
-         "{MKDIR} ../bin/Runtime/Release/x64",
-         "{COPY} ../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../bin/Editor/Release/x64/",
-         "{COPY} ../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../bin/Runtime/Release/x64/"
-      }
+   vfStandardConfigs()
 
 
 -- Project: Recast Navigation (Navmesh generation + pathfinding)
@@ -1563,13 +1383,7 @@ project "recast"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- Project: enkiTS (Task Scheduler for game engines)
@@ -1593,13 +1407,7 @@ project "enkiTS"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- Project: ISPCTextureCompressor (BC7/BC6H GPU texture compression)
@@ -1620,13 +1428,7 @@ project "ispc_texcomp"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
+   vfStandardConfigs()
 
 
 -- ============================================================================

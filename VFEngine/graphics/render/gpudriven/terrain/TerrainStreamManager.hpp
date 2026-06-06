@@ -146,6 +146,12 @@ namespace render::gpudriven
         uint64_t currentFrame = 0;
         size_t currentMemoryUsage = 0;
 
+        // Early-out state: while the camera is static and the previous pass did
+        // no work, update() skips the per-frame scan/sort entirely
+        glm::vec3 lastStreamCameraPos{0.0f};
+        size_t lastVisibleTileCount = 0;
+        bool streamingSettled = false;
+
         static constexpr uint8_t FALLBACK_LOD = TERRAIN_LOD_LEVEL_COUNT - 1;
 
         static constexpr size_t LOD_MEMORY_ESTIMATE[TERRAIN_LOD_LEVEL_COUNT] = {
@@ -210,6 +216,8 @@ namespace render::gpudriven
         void updateDetailLODs();
 
         void updateStats();
+
+        bool hasDirtyTiles(const std::vector<terrain::TerrainTile*>& visibleTiles) const;
 
         struct EvictionCandidate
         {

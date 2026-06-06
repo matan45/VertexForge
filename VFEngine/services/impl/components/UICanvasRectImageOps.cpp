@@ -5,6 +5,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/ui/UIEvents.hpp"
+#include "../../events/project/ApplicationEvents.hpp"
 
 namespace services {
 
@@ -187,6 +188,43 @@ namespace services {
         return true;
     }
 
+    bool UIComponentService::setUIRectPixels(EntityHandle entity, float x, float y, float w, float h) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        entt::entity e = internal::fromHandle(entity);
+        scene::Entity sceneEntity(e);
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            return false;
+        }
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        float vw = static_cast<float>(dispatcher.query(::events::application::GetViewportWidthQuery{}));
+        float vh = static_cast<float>(dispatcher.query(::events::application::GetViewportHeightQuery{}));
+        if (vw <= 0.0f || vh <= 0.0f) {
+            return false;
+        }
+
+        // Express the rect purely through NORMALIZED anchors (sizeDelta and
+        // anchoredPosition zeroed). resolvePixelRect then lands on the same
+        // normalized rect whatever extent the UI pass renders against — in the
+        // editor the play panel (mouse space, what vw/vh report) and the UI
+        // render extent (swapchain) differ, and absolute canvas-unit math would
+        // shift the rect. Normalized anchors are extent- and canvas-scale-
+        // invariant, exactly like the picker's normalized ray math.
+        // Note: this overwrites the authored anchors/pivot — setRectPixels is
+        // for fully script-driven overlays (drag boxes), not authored layout.
+        auto& comp = sceneEntity.getComponent<components::UIRectComponent>();
+        comp.anchorMin = glm::vec2(x / vw, 1.0f - (y + h) / vh);
+        comp.anchorMax = glm::vec2((x + w) / vw, 1.0f - y / vh);
+        comp.pivot = glm::vec2(0.5f, 0.5f);
+        comp.sizeDelta = glm::vec2(0.0f, 0.0f);
+        comp.anchoredPosition = glm::vec2(0.0f, 0.0f);
+        return true;
+    }
+
     // ========== UI Image Operations ==========
 
     bool UIComponentService::addUIImageComponent(EntityHandle entity) {
@@ -335,6 +373,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::ui::SetUIRectDataCommand>(
             [this](const events::ui::SetUIRectDataCommand& cmd) {
                 return setUIRectData(cmd.entity, cmd.rectData);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::SetUIRectPixelsCommand>(
+            [this](const events::ui::SetUIRectPixelsCommand& cmd) {
+                return setUIRectPixels(cmd.entity, cmd.x, cmd.y, cmd.w, cmd.h);
             });
 
         dispatcher.registerQueryHandler<events::ui::HasUIRectComponentQuery>(

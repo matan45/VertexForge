@@ -30,6 +30,7 @@ namespace render::ibl
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorSet descriptorSet;
         vk::DescriptorPool descriptorPool;
+        ImageData skyboxImage;
 
         // Camera matrices (set via setCameraMatrices)
         glm::mat4 viewMatrix{1.0f};
@@ -51,6 +52,11 @@ namespace render::ibl
 
         void renderToTarget(const vk::CommandBuffer& commandBuffer,
                             const SkyboxTargetParams& target) const;
+        void renderToTarget(const vk::CommandBuffer& commandBuffer,
+                            const SkyboxTargetParams& target,
+                            vk::DescriptorSet targetDescriptorSet) const;
+        vk::DescriptorSet createExternalDescriptorSet(vk::Buffer externalCameraUBO,
+                                                      vk::DescriptorPool externalPool) const;
 
         bool isInitialized() const { return initialized; }
 
