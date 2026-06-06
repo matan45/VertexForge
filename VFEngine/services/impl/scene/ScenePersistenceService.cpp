@@ -7,6 +7,8 @@
 #include "components/Components.hpp"
 #include "serialization/SceneSerialization.hpp"
 #include "serialization/PrefabSerialization.hpp"
+#include "resource/AssetLifecycleManager.hpp"
+#include "resource/AssetLifecycleHelpers.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
@@ -538,8 +540,14 @@ namespace services
             auto handle = internal::toHandle(result->getHandle());
             auto& dispatcher = events::EventDispatcher::instance();
 
+            auto& lifecycle = resource::AssetLifecycleManager::instance();
             std::function<void(scene::Entity&)> triggerResourceLoading = [&](scene::Entity& entity)
             {
+                // Balance the per-entity releaseEntityAssets() that fires on delete —
+                // without this, deleting the instantiated prefab drops refcounts to zero
+                // and the GPU resources get released even if the prefab is re-added.
+                resource::acquireEntityAssets(entity, lifecycle);
+
                 if (entity.hasComponent<components::MeshComponent>())
                 {
                     const auto& meshComp = entity.getComponent<components::MeshComponent>();

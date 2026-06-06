@@ -4,6 +4,8 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "components/ComponentClone.hpp"
+#include "resource/AssetLifecycleManager.hpp"
+#include "resource/AssetLifecycleHelpers.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../data/ScriptTypes.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -194,6 +196,10 @@ namespace services
             // Picks up new components automatically via components::OptionalComponents.
             // ScriptComponent is excluded here and reattached below so script instances spawn.
             components::cloneOptionalComponents(orig, newEntity);
+
+            // Balance the per-entity releaseEntityAssets() that fires on delete —
+            // the clone holds its own refs to the same mesh/material/audio assets.
+            resource::acquireEntityAssets(newEntity, resource::AssetLifecycleManager::instance());
 
             // MeshComponent registration side-effect: notify so the duplicate registers with the
             // GPU-driven renderer (the component data itself was already copied above).

@@ -123,6 +123,11 @@ namespace render::gpudriven
         // Only tail mips are loaded; higher mips stream in on demand.
         uint32_t registerTexture(const std::string& path, vk::Format format);
 
+        // Fully release a streamed texture: unregister its bindless slot, destroy the
+        // image (deferred), close the stream handle and drop pending reads/uploads.
+        // Returns false if the path was not registered for streaming.
+        bool unregisterTexture(const std::string& path);
+
         // Per-frame update: process reads, upload, update priorities, submit new reads, evict
         void update(const glm::vec3& cameraPos, uint64_t frameIndex);
 
