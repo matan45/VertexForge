@@ -10,12 +10,17 @@ void FogOfWarSystem::initialize(plugin::PluginContext* context, std::shared_ptr<
     ctx = context;
     settings = std::move(sharedSettings);
 
+    loadSettings();
+
     if (!ctx->hasCapability(std::string(plugin::capability::graphics)))
         return;
 
     fogTexture = ctx->createTexture2D(FOG_GRID, FOG_GRID, plugin::TextureFormat::R8);
     if (fogTexture.isValid())
+    {
         visibilityGrid.resize(FOG_GRID * FOG_GRID);
+        exploredGrid.resize(FOG_GRID * FOG_GRID);
+    }
     else
         ctx->logError("RTSGameplay: fog-of-war texture creation failed");
 }
@@ -32,11 +37,46 @@ void FogOfWarSystem::update()
         ctx->logInfo(std::string("RTSGameplay: fog of war ") + (settings->enabled ? "ON" : "OFF"));
     }
 
+    if (settings->saveRequested)
+    {
+        settings->saveRequested = false;
+        saveSettings();
+    }
+
     updateVisibilityGrid();
+}
+
+void FogOfWarSystem::loadSettings()
+{
+    const nlohmann::json config = ctx->loadConfig();
+    if (!config.contains("fog")) return;
+
+    const auto& fog = config["fog"];
+    settings->enabled = fog.value("enabled", settings->enabled);
+    settings->terrainDimMin = fog.value("terrainDimMin", settings->terrainDimMin);
+    settings->exploredBrightness = fog.value("exploredBrightness", settings->exploredBrightness);
+    settings->entityDiscardBelow = fog.value("entityDiscardBelow", settings->entityDiscardBelow);
+    settings->paramsDirty = true;
+    ctx->logInfo("RTSGameplay: fog settings loaded from config");
+}
+
+void FogOfWarSystem::saveSettings()
+{
+    // Preserve any other sections future systems may add to the shared config.
+    nlohmann::json config = ctx->loadConfig();
+    config["fog"] = {
+        {"enabled", settings->enabled},
+        {"terrainDimMin", settings->terrainDimMin},
+        {"exploredBrightness", settings->exploredBrightness},
+        {"entityDiscardBelow", settings->entityDiscardBelow}
+    };
+    ctx->saveConfig(config);
 }
 
 void FogOfWarSystem::shutdown()
 {
+    saveSettings();
+
     if (fogBound)
     {
         ctx->unbindWorldMask();
@@ -101,8 +141,31 @@ void FogOfWarSystem::updateVisibilityGrid()
             ctx->setWorldMaskParams(makeFogParams(false));
             fogActive = false;
         }
+        hadVisionSources = false;
         settings->gridUpdateMs = elapsedMs(start);
         return;
+    }
+
+    // Sources reappearing after a sources-free stretch = a new match (play mode
+    // restarted) — forget the previous game's explored areas.
+    if (!hadVisionSources || settings->resetExploredRequested)
+    {
+        std::memset(exploredGrid.data(), 0, exploredGrid.size());
+        settings->resetExploredRequested = false;
+    }
+    hadVisionSources = true;
+
+    // Three-state compose (classic RTS fog): currently visible cells refresh the
+    // persistent explored memory and upload as 255; cells seen before but not now
+    // upload as the dimmer explored value; never-seen cells stay 0.
+    const auto exploredValue = static_cast<std::byte>(
+        std::clamp(settings->exploredBrightness, 0.0f, 1.0f) * 255.0f);
+    for (size_t i = 0; i < visibilityGrid.size(); ++i)
+    {
+        if (visibilityGrid[i] != std::byte{0})
+            exploredGrid[i] = std::byte{0xFF};
+        else if (exploredGrid[i] != std::byte{0})
+            visibilityGrid[i] = exploredValue;
     }
 
     ctx->updateTexture2D(fogTexture, visibilityGrid.data(), visibilityGrid.size());

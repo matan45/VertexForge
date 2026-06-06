@@ -34,10 +34,22 @@ public:
         ImGui::SeparatorText("Look");
         if (ImGui::SliderFloat("Terrain Dim", &settings->terrainDimMin, 0.0f, 1.0f, "%.2f"))
             settings->paramsDirty = true;
-        ImGui::SetItemTooltip("Albedo multiplier for unseen terrain (0 = black, 1 = no dimming)");
+        ImGui::SetItemTooltip("Albedo multiplier for unexplored terrain (0 = black, 1 = no dimming)");
+        ImGui::SliderFloat("Explored Brightness", &settings->exploredBrightness, 0.0f, 1.0f, "%.2f");
+        ImGui::SetItemTooltip("Mask value for explored-but-not-visible areas (between unexplored = 0\n"
+                              "and visible = 1). Keep below the hide threshold so enemies stay hidden\n"
+                              "in areas you have scouted and left.");
         if (ImGui::SliderFloat("Entity Hide Threshold", &settings->entityDiscardBelow, 0.0f, 1.0f, "%.2f"))
             settings->paramsDirty = true;
         ImGui::SetItemTooltip("Entities are hidden where the visibility mask is below this value");
+        if (ImGui::Button("Reset Explored"))
+            settings->resetExploredRequested = true;
+        ImGui::SetItemTooltip("Forget all explored areas (back to unexplored black)");
+        ImGui::SameLine();
+        if (ImGui::Button("Save Settings"))
+            settings->saveRequested = true;
+        ImGui::SetItemTooltip("Persist these settings to plugins/data/RTSGameplay/config.json\n"
+                              "(also saved automatically when the editor closes)");
 
         ImGui::SeparatorText("Stats");
         ImGui::Text("Vision sources: %d", settings->visionSources);

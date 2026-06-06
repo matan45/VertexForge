@@ -15,9 +15,16 @@
 struct FogSettings
 {
     bool enabled = true;               // runtime gate (F10 / UI checkbox)
-    float terrainDimMin = 0.35f;       // unseen terrain albedo multiplier
+    float terrainDimMin = 0.35f;       // unexplored terrain albedo multiplier
     float entityDiscardBelow = 0.5f;   // hide entities where mask < threshold
     bool paramsDirty = false;          // UI/F10 changed something -> re-push params
+
+    // Explored-but-not-visible mask value (classic RTS three-state fog):
+    // unexplored = 0 (darkest), explored = this, visible = 1. Keep it below
+    // entityDiscardBelow so enemies stay hidden in explored-but-unseen areas.
+    float exploredBrightness = 0.4f;
+    bool resetExploredRequested = false;   // UI button -> forget explored areas
+    bool saveRequested = false;            // UI button -> persist settings to plugin config
 
     // Stats (written by the system, read by the UI)
     int visionSources = 0;
@@ -39,8 +46,13 @@ public:
     void update();
 
     // Unbinds the mask and destroys the texture (also covered by the engine's
-    // plugin-unload auto-cleanup, but explicit is better).
+    // plugin-unload auto-cleanup, but explicit is better). Saves settings.
     void shutdown();
+
+    // Settings persistence via the plugin config file (plugins/data/RTSGameplay/
+    // config.json). Loaded on initialize; saved on shutdown and on request.
+    void loadSettings();
+    void saveSettings();
 
 private:
     // Two-state fog of war (visible / unseen) over the skirmish map bounds.
@@ -62,7 +74,9 @@ private:
     std::shared_ptr<FogSettings> settings;
 
     plugin::PluginTextureHandle fogTexture;
-    std::vector<std::byte> visibilityGrid;
+    std::vector<std::byte> visibilityGrid;   // recomputed each frame, then composed for upload
+    std::vector<std::byte> exploredGrid;     // persistent "has ever been seen" memory
     bool fogBound = false;        // mask bound to the renderer
     bool fogActive = false;       // enabled flag currently set in the params UBO
+    bool hadVisionSources = false; // explored memory resets when sources reappear (new match)
 };
