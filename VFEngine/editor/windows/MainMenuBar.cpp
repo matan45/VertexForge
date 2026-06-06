@@ -412,8 +412,11 @@ namespace windows
                 }
             }
 
+            // Debug force-off override for the plugin world mask (fog of war etc.).
+            // Unchecked by default — the mask is controlled by the owning plugin;
+            // checking this kills it engine-side without touching the plugin.
             bool worldMaskEnabled = dispatcher.query(events::render::GetWorldMaskDebugEnabledQuery{});
-            if (ImGui::MenuItem("Show World Mask", nullptr, worldMaskEnabled))
+            if (ImGui::MenuItem("Disable World Mask", nullptr, !worldMaskEnabled))
             {
                 events::render::SetWorldMaskDebugEnabledCommand cmd;
                 cmd.enabled = !worldMaskEnabled;
