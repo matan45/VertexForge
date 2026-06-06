@@ -235,6 +235,7 @@ namespace render::gpudriven
             .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
             .giProbeDataLayout = giLayout,
             .causticLayout = wboitCausticLayout,
+            .worldMaskLayout = currentWorldMaskLayout(),
             .colorAttachmentFormats = wboitColorFormats,
             .depthAttachmentFormat = wboitDepthFormat,
             .wboitMode = true
@@ -429,6 +430,7 @@ namespace render::gpudriven
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .giProbeDataLayout = giLayout,
                 .causticLayout = causticLayout,
+                .worldMaskLayout = currentWorldMaskLayout(),
                 .colorAttachmentFormats = cachedColorFormats,
                 .depthAttachmentFormat = cachedDepthFormat,
                 .motionVectorsEnabled = mvEnabled

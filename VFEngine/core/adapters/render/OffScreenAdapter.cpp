@@ -306,6 +306,16 @@ namespace core {
         return offScreen ? offScreen->getShowNavmeshDebug() : false;
     }
 
+    void OffScreenAdapter::setWorldMaskDebugEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setWorldMaskDebugEnabled(enabled);
+        }
+    }
+
+    bool OffScreenAdapter::getWorldMaskDebugEnabled() const {
+        return offScreen ? offScreen->getWorldMaskDebugEnabled() : true;
+    }
+
     void OffScreenAdapter::updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices,
                                                    const std::vector<uint32_t>& indices) {
         if (offScreen) {

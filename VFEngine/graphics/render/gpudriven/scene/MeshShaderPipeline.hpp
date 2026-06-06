@@ -30,6 +30,8 @@ namespace render::gpudriven
         vk::DescriptorSetLayout giProbeDataLayout;
         vk::DescriptorSetLayout causticLayout;
         vk::DescriptorSetLayout rtShadowMaskLayout;
+        // Plugin world-space mask (set 11, or set 14 when GI occupies 11)
+        vk::DescriptorSetLayout worldMaskLayout;
         // Dynamic rendering formats (Vulkan 1.3)
         std::vector<vk::Format> colorAttachmentFormats;
         vk::Format depthAttachmentFormat = vk::Format::eUndefined;
@@ -96,6 +98,7 @@ namespace render::gpudriven
         vk::DescriptorSet giProbeDataDescriptorSet;
         vk::DescriptorSet causticDescriptorSet;
         vk::DescriptorSet rtShadowMaskDescriptorSet;
+        vk::DescriptorSet worldMaskDescriptorSet;
 
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
@@ -110,6 +113,8 @@ namespace render::gpudriven
 
         bool isTransparentMode = false;
         bool rtShadowLayoutBound = false;
+        bool worldMaskLayoutBound = false;
+        uint32_t worldMaskSetIndex = 0;   // 11, or 14 when GI occupies set 11
         bool isWBOITMode = false;
         bool isWireframeMode = false;
     public:
@@ -142,6 +147,7 @@ namespace render::gpudriven
         void updateGIProbeDescriptor(vk::DescriptorSet giProbeDescSet);
         void updateCausticDescriptor(vk::DescriptorSet causticDescSet);
         void updateRTShadowMaskDescriptor(vk::DescriptorSet rtShadowMaskDescSet);
+        void updateWorldMaskDescriptor(vk::DescriptorSet worldMaskDescSet);
 
         vk::Pipeline getPipeline() const { return graphicsPipeline; }
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }
@@ -157,6 +163,9 @@ namespace render::gpudriven
         vk::DescriptorSet getCausticDescriptorSet() const { return causticDescriptorSet; }
         vk::DescriptorSet getRTShadowMaskDescriptorSet() const { return rtShadowMaskDescriptorSet; }
         bool hasRTShadowLayout() const { return rtShadowLayoutBound; }
+        vk::DescriptorSet getWorldMaskDescriptorSet() const { return worldMaskDescriptorSet; }
+        bool hasWorldMaskLayout() const { return worldMaskLayoutBound; }
+        uint32_t getWorldMaskSetIndex() const { return worldMaskSetIndex; }
 
         vk::DescriptorSetLayout getPerDrawDataLayout() const { return perDrawDataLayout; }
         vk::DescriptorSetLayout getMeshletDataLayout() const { return meshletDataLayout; }

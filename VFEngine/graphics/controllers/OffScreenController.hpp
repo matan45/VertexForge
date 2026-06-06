@@ -217,6 +217,9 @@ namespace controllers
         void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
         void clearNavmeshDebugMesh();
 
+        void setWorldMaskDebugEnabled(bool enabled);
+        bool getWorldMaskDebugEnabled() const;
+
         void updateImmediateDebugDrawList(render::mesh::ImmediateDebugDrawList drawList);
 
         void prepareFrameUICanvasOutlines();

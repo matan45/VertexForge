@@ -24,6 +24,7 @@
 #include "cloud/CloudPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "custom/CustomPipelineManager.hpp"
+#include "custom/PluginTextureManager.hpp"
 #include "upscaling/UpscaleManager.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -39,6 +40,10 @@ namespace render
 {
     void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
+        // Plugin texture CPU->GPU uploads — recorded before the frame graph so the
+        // copies land outside any render pass and complete before the scene samples them.
+        if (pluginTextureManager) pluginTextureManager->flushUploads(commandBuffer);
+
         frameGraph->reset();
         importFrameResources(imageIndex);
         buildFrameGraph(commandBuffer, imageIndex);
@@ -271,6 +276,9 @@ namespace render
             gpuDrivenRenderer->renderDepthPrepass(commandBuffer, iblDescriptorSet);
             gpuDrivenRenderer->generatePrepassHiZ(commandBuffer);
         }
+
+        // Plugin world mask: one-time pipeline recreate on first bind + descriptor upkeep
+        gpuDrivenRenderer->dispatchWorldMask();
 
         if (gpuDrivenRenderer->isRTShadowReady())
             gpuDrivenRenderer->dispatchRTShadow(commandBuffer, imageIndex);

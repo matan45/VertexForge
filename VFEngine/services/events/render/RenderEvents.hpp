@@ -341,6 +341,18 @@ namespace events::render {
         std::string_view getName() const override { return "GetShowNavmeshDebug"; }
     };
 
+    // Editor override for the plugin world-space mask (VK-1359) — flips the runtime
+    // enabled flag in the mask params UBO, no pipeline recreate.
+    struct SetWorldMaskDebugEnabledCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetWorldMaskDebugEnabled"; }
+    };
+
+    struct GetWorldMaskDebugEnabledQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetWorldMaskDebugEnabled"; }
+    };
+
     struct UpdateNavmeshDebugMeshCommand : ICommand<> {
         std::vector<glm::vec3> vertices;
         std::vector<uint32_t> indices;

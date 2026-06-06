@@ -333,6 +333,19 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
 layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
 #endif
 
+#ifdef WORLD_MASK_ENABLED
+// Plugin world-space mask (VK-1359): XZ-projected over worldMinMax bounds.
+// WORLD_MASK_SET is 11, or 14 when GI probes occupy set 11.
+layout(set = WORLD_MASK_SET, binding = 0) uniform sampler2D worldMaskTexture;
+layout(set = WORLD_MASK_SET, binding = 1) uniform WorldMaskUBO {
+    vec4 worldMinMax;          // minX, minZ, maxX, maxZ
+    float terrainDimMin;
+    float entityDiscardBelow;
+    uint flags;                // bit0 enabled, bit1 affectsTerrain, bit2 affectsEntities
+    float _padWM;
+} worldMask;
+#endif
+
 float sampleDirectionalShadowHybrid(int shadowIndex, int shadowMode,
                                      vec3 worldPos, vec3 N, float viewZ, vec3 cameraPos) {
 #ifdef RT_SHADOW_ENABLED
@@ -384,6 +397,20 @@ vec3 unpackORM(vec4 ormSample) {
 }
 
 void main() {
+#ifdef WORLD_MASK_ENABLED
+    // Plugin world mask: discard fragments where the XZ-projected mask is below the
+    // threshold (e.g. fog-of-war hidden entities). Outside the bounds = unaffected.
+    if ((worldMask.flags & 5u) == 5u) {   // enabled & affectsEntities
+        vec2 maskUV = (fragWorldPos.xz - worldMask.worldMinMax.xy)
+                    / (worldMask.worldMinMax.zw - worldMask.worldMinMax.xy);
+        if (all(greaterThanEqual(maskUV, vec2(0.0))) && all(lessThanEqual(maskUV, vec2(1.0)))) {
+            if (texture(worldMaskTexture, maskUV).r < worldMask.entityDiscardBelow) {
+                discard;
+            }
+        }
+    }
+#endif
+
     PerDrawData drawData = perDrawData[fragDrawIndex];
 
     vec3 N = normalize(fragNormal);

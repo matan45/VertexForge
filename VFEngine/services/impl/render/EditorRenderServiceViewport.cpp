@@ -141,6 +141,19 @@ namespace services
                 return showNavmeshDebug;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetWorldMaskDebugEnabledCommand>(
+            [this](const events::render::SetWorldMaskDebugEnabledCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->setWorldMaskDebugEnabled(cmd.enabled);
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetWorldMaskDebugEnabledQuery>(
+            [this](const events::render::GetWorldMaskDebugEnabledQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getWorldMaskDebugEnabled() : true;
+            });
+
         dispatcher.registerCommandHandler<events::render::UpdateNavmeshDebugMeshCommand>(
             [this](const events::render::UpdateNavmeshDebugMeshCommand& cmd)
             {

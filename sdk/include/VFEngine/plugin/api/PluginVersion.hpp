@@ -5,6 +5,6 @@ namespace plugin {
 
     // Increment this when the plugin API changes in an incompatible way.
     // Plugins built against a different version will be rejected at load time.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 7;
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 8;
 
 }

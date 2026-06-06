@@ -412,6 +412,14 @@ namespace windows
                 }
             }
 
+            bool worldMaskEnabled = dispatcher.query(events::render::GetWorldMaskDebugEnabledQuery{});
+            if (ImGui::MenuItem("Show World Mask", nullptr, worldMaskEnabled))
+            {
+                events::render::SetWorldMaskDebugEnabledCommand cmd;
+                cmd.enabled = !worldMaskEnabled;
+                dispatcher.execute(cmd);
+            }
+
             bool cullingVisible = cullingStatsWindow ? cullingStatsWindow->isVisible() : false;
             if (ImGui::MenuItem("Culling Stats", nullptr, cullingVisible))
             {

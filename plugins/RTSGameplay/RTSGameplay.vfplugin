@@ -1,9 +1,9 @@
 {
-    "apiVersion": 7,
+    "apiVersion": 8,
     "author": "VertexForge",
-    "capabilities": [],
+    "capabilities": ["graphics", "input"],
     "dependencies": [],
-    "description": "RTS gameplay tag components: Selectable, Selected, Team (VK-1302)",
+    "description": "RTS gameplay: Selectable/Selected/Team/Vision components (VK-1302) + fog of war world mask (VK-1314)",
     "enabled": true,
     "library": "RTSGameplay.dll",
     "loadOrder": 100,

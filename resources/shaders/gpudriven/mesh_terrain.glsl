@@ -218,6 +218,18 @@ layout(std430, set = 11, binding = 2) readonly buffer StampOverlayData {
     float stampHeights[];
 };
 
+#ifdef WORLD_MASK_ENABLED
+// Plugin world-space mask (VK-1359): XZ-projected over worldMinMax bounds.
+layout(set = 11, binding = 3) uniform sampler2D worldMaskTexture;
+layout(set = 11, binding = 4) uniform WorldMaskUBO {
+    vec4 worldMinMax;          // minX, minZ, maxX, maxZ
+    float terrainDimMin;
+    float entityDiscardBelow;
+    uint flags;                // bit0 enabled, bit1 affectsTerrain, bit2 affectsEntities
+    float _padWM;
+} worldMask;
+#endif
+
 layout(std430, set = 1, binding = 0) readonly buffer WeightMapBuffer {
     uint weightMapData[];
 };
@@ -423,6 +435,19 @@ void main() {
     // Weather surface effects (wetness first, then snow on top)
     applyWetness(camera.wetness, albedo, roughness, metallic, N);
     applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
+
+#ifdef WORLD_MASK_ENABLED
+    // Plugin world mask: dim albedo where the XZ-projected mask is low (e.g. fog of war).
+    // Fragments outside the mask bounds are unaffected (mask = 1.0).
+    if ((worldMask.flags & 3u) == 3u) {   // enabled & affectsTerrain
+        vec2 maskUV = (fragWorldPos.xz - worldMask.worldMinMax.xy)
+                    / (worldMask.worldMinMax.zw - worldMask.worldMinMax.xy);
+        if (all(greaterThanEqual(maskUV, vec2(0.0))) && all(lessThanEqual(maskUV, vec2(1.0)))) {
+            float maskValue = texture(worldMaskTexture, maskUV).r;
+            albedo *= mix(worldMask.terrainDimMin, 1.0, maskValue);
+        }
+    }
+#endif
 
     vec3 R = reflect(-V, N);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);

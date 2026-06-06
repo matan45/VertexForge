@@ -149,6 +149,7 @@ namespace handlers
         ikComponentService.reset();
         renderHookService.reset();
         customPipelineService.reset();
+        pluginTextureService.reset();
         debugDrawService.reset();
         audioSceneUpdater.reset();
         worldSectorService.reset();

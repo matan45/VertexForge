@@ -312,6 +312,11 @@ namespace render::gpudriven
         rtShadowMaskDescriptorSet = rtShadowMaskDescSet;
     }
 
+    void MeshShaderPipeline::updateWorldMaskDescriptor(vk::DescriptorSet worldMaskDescSet)
+    {
+        worldMaskDescriptorSet = worldMaskDescSet;
+    }
+
     void MeshShaderPipeline::createPerDrawDataDescriptor()
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -480,6 +485,11 @@ namespace render::gpudriven
         {
             meshShader->addMacroDefinition("RT_SHADOW_ENABLED");
         }
+        if (info.worldMaskLayout)
+        {
+            meshShader->addMacroDefinition("WORLD_MASK_ENABLED");
+            meshShader->addMacroDefinition("WORLD_MASK_SET", info.giProbeDataLayout ? "14" : "11");
+        }
         if (info.motionVectorsEnabled && !isWBOITMode)
         {
             meshShader->addMacroDefinition("MOTION_VECTORS_ENABLED");
@@ -524,32 +534,8 @@ namespace render::gpudriven
             info.shadowTextureLayout
         };
 
-        if (info.giProbeDataLayout)
+        auto ensureEmptyPlaceholder = [&]()
         {
-            setLayouts.push_back(info.giProbeDataLayout); // Set 11
-        }
-
-        if (info.causticLayout)
-        {
-            // If GI is not present, insert an empty placeholder at set 11
-            // so that caustics always occupy set 12
-            if (!info.giProbeDataLayout)
-            {
-                if (!emptyPlaceholderLayout)
-                {
-                    vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
-                    emptyLayoutInfo.bindingCount = 0;
-                    emptyLayoutInfo.pBindings = nullptr;
-                    emptyPlaceholderLayout = vkDevice.createDescriptorSetLayout(emptyLayoutInfo);
-                }
-                setLayouts.push_back(emptyPlaceholderLayout); // Set 11 placeholder
-            }
-            setLayouts.push_back(info.causticLayout); // Set 12
-        }
-
-        if (info.rtShadowMaskLayout)
-        {
-            // Pad with empty placeholders up to set 13
             if (!emptyPlaceholderLayout)
             {
                 vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
@@ -557,6 +543,34 @@ namespace render::gpudriven
                 emptyLayoutInfo.pBindings = nullptr;
                 emptyPlaceholderLayout = vkDevice.createDescriptorSetLayout(emptyLayoutInfo);
             }
+        };
+
+        // Set 11: GI probes when present; otherwise the plugin world mask may take it
+        // (WORLD_MASK_SET = 11). With GI present the world mask moves to set 14.
+        const bool worldMaskAtSet11 = info.worldMaskLayout && !info.giProbeDataLayout;
+
+        if (info.giProbeDataLayout)
+        {
+            setLayouts.push_back(info.giProbeDataLayout); // Set 11
+        }
+        else if (worldMaskAtSet11)
+        {
+            setLayouts.push_back(info.worldMaskLayout); // Set 11
+        }
+
+        if (info.causticLayout)
+        {
+            // Pad with empty placeholders so caustics always occupy set 12
+            ensureEmptyPlaceholder();
+            while (setLayouts.size() < 12)
+                setLayouts.push_back(emptyPlaceholderLayout);
+            setLayouts.push_back(info.causticLayout); // Set 12
+        }
+
+        if (info.rtShadowMaskLayout)
+        {
+            // Pad with empty placeholders up to set 13
+            ensureEmptyPlaceholder();
             while (setLayouts.size() < 13)
                 setLayouts.push_back(emptyPlaceholderLayout);
             setLayouts.push_back(info.rtShadowMaskLayout); // Set 13
@@ -566,6 +580,17 @@ namespace render::gpudriven
         {
             rtShadowLayoutBound = false;
         }
+
+        if (info.worldMaskLayout && !worldMaskAtSet11)
+        {
+            // GI occupies set 11 — world mask goes to set 14 (after RT shadow's 13)
+            ensureEmptyPlaceholder();
+            while (setLayouts.size() < 14)
+                setLayouts.push_back(emptyPlaceholderLayout);
+            setLayouts.push_back(info.worldMaskLayout); // Set 14
+        }
+        worldMaskLayoutBound = info.worldMaskLayout != nullptr;
+        worldMaskSetIndex = worldMaskLayoutBound ? (worldMaskAtSet11 ? 11u : 14u) : 0u;
 
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |

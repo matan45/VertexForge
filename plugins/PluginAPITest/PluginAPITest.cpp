@@ -7,6 +7,7 @@
 #include <vector>
 #include <map>
 #include <cstring>
+#include <cmath>
 
 enum class ElementType : int { Fire = 0, Water, Earth, Wind };
 
@@ -139,6 +140,20 @@ void main() {
         }
 
         ctx->logInfo("[CustomPipeline] Test triangle ready - press F8 to toggle");
+
+        // ================================================================
+        // VK-1359: Plugin texture + world-space mask test (F12 to toggle)
+        // ================================================================
+        maskTexture = ctx->createTexture2D(MASK_SIZE, MASK_SIZE, plugin::TextureFormat::R8);
+        if (maskTexture.isValid())
+        {
+            maskData.resize(MASK_SIZE * MASK_SIZE);
+            ctx->logInfo("[PluginTexture] World mask texture ready - press F12 to toggle");
+        }
+        else
+        {
+            ctx->logError("[PluginTexture] Texture creation failed");
+        }
     }
 
     void onUpdate(float deltaTime) override
@@ -217,6 +232,55 @@ void main() {
                 showTriangle = !showTriangle;
                 ctx->logInfo(std::string("[CustomPipeline] Triangle ") + (showTriangle ? "shown" : "hidden"));
             }
+
+            // F12: Toggle world-space mask test (VK-1359)
+            if (ctx->isKeyPressed(301) && maskTexture.isValid())
+            {
+                worldMaskActive = !worldMaskActive;
+                if (worldMaskActive && !worldMaskBound)
+                {
+                    plugin::WorldMaskParams params;
+                    params.affectsTerrain = true;
+                    params.terrainDimMin = 0.25f;
+                    params.affectsEntities = true;
+                    params.entityDiscardBelow = 0.5f;
+                    ctx->bindWorldMask(maskTexture, glm::vec3(-256.0f, 0.0f, -256.0f),
+                                       glm::vec3(256.0f, 0.0f, 256.0f), params);
+                    worldMaskBound = true;
+                }
+                else
+                {
+                    // Runtime flag flip only — must be hitch-free (no pipeline recreate)
+                    plugin::WorldMaskParams params;
+                    params.enabled = worldMaskActive;
+                    params.affectsTerrain = true;
+                    params.terrainDimMin = 0.25f;
+                    params.affectsEntities = true;
+                    params.entityDiscardBelow = 0.5f;
+                    ctx->setWorldMaskParams(params);
+                }
+                ctx->logInfo(std::string("[PluginTexture] World mask ") + (worldMaskActive ? "ON" : "OFF"));
+            }
+        }
+
+        // Animated mask: expanding/contracting visible circle, updated every frame
+        if (worldMaskActive && maskTexture.isValid())
+        {
+            maskTime += deltaTime;
+            const float center = MASK_SIZE * 0.5f;
+            const float radius = (0.5f + 0.45f * std::sin(maskTime * 0.6f)) * center;
+            const float radiusSq = radius * radius;
+            for (uint32_t z = 0; z < MASK_SIZE; ++z)
+            {
+                const float dz = static_cast<float>(z) - center;
+                for (uint32_t x = 0; x < MASK_SIZE; ++x)
+                {
+                    const float dx = static_cast<float>(x) - center;
+                    maskData[z * MASK_SIZE + x] = (dx * dx + dz * dz) < radiusSq
+                        ? std::byte{0xFF} : std::byte{0x00};
+                }
+            }
+            ctx->updateTexture2D(maskTexture, maskData.data(), maskData.size());
         }
 
         if (showTriangle && trianglePipeline.isValid() && triangleMesh.isValid())
@@ -235,6 +299,14 @@ private:
     plugin::CustomPipelineHandle trianglePipeline;
     plugin::CustomMeshHandle triangleMesh;
     bool showTriangle = false;
+
+    // VK-1359 world mask test
+    static constexpr uint32_t MASK_SIZE = 256;
+    plugin::PluginTextureHandle maskTexture;
+    std::vector<std::byte> maskData;
+    bool worldMaskActive = false;
+    bool worldMaskBound = false;
+    float maskTime = 0.0f;
 };
 
 VF_IMPLEMENT_PLUGIN(PluginAPITest)

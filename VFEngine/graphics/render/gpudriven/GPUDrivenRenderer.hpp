@@ -117,6 +117,11 @@ namespace render::vegetation
     class WindSystem;
 }
 
+namespace render::custom
+{
+    class PluginTextureManager;
+}
+
 namespace render::gpudriven
 {
     class GPUDrivenRenderer
@@ -359,6 +364,15 @@ namespace render::gpudriven
         std::vector<vk::Format> cachedWBOITColorFormats;
         vk::Format cachedWBOITDepthFormat = vk::Format::eUndefined;
 
+        // Plugin world-space mask (owned by RenderPassHandler's PluginTextureManager)
+        custom::PluginTextureManager* pluginTextureManager = nullptr;
+        uint64_t lastWorldMaskVersion = 0;
+
+        // Entity world-mask layout when a mask has been bound, else null — every
+        // MeshPipelineInitInfo construction passes this so recreates keep the mask.
+        vk::DescriptorSetLayout currentWorldMaskLayout() const;
+        void recreateScenePipelinesForWorldMask();
+
         TerrainState terrain;
         WaterState water;
         VegetationState vegetation;
@@ -487,6 +501,11 @@ namespace render::gpudriven
         void ensureAccelerationStructureManager();
         void dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex);
         bool isRTShadowReady() const;
+
+        // Plugin world-space mask: lazily recreates the scene + terrain pipelines with
+        // WORLD_MASK_ENABLED on the first bind, then keeps descriptors in sync.
+        void setPluginTextureManager(custom::PluginTextureManager* manager) { pluginTextureManager = manager; }
+        void dispatchWorldMask();
         raytracing::RTShadowPipeline* getRTShadowPipeline() const { return rtShadowPipeline.get(); }
         void applyRTShadowSettings(const types::RTShadowSettings& settings);
         types::RTShadowStats getRTShadowStats() const;

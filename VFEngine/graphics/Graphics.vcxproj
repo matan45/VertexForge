@@ -226,6 +226,7 @@
     <ClInclude Include="render\common\QuadBufferManager.hpp" />
     <ClInclude Include="render\common\SharedCameraUBO.hpp" />
     <ClInclude Include="render\custom\CustomPipelineManager.hpp" />
+    <ClInclude Include="render\custom\PluginTextureManager.hpp" />
     <ClInclude Include="render\decal\DecalPipeline.hpp" />
     <ClInclude Include="render\gi\GIDebugRenderer.hpp" />
     <ClInclude Include="render\gi\GITypes.hpp" />
@@ -477,6 +478,7 @@
     <ClCompile Include="render\cloud\CloudTemporal.cpp" />
     <ClCompile Include="render\common\SharedCameraUBO.cpp" />
     <ClCompile Include="render\custom\CustomPipelineManager.cpp" />
+    <ClCompile Include="render\custom\PluginTextureManager.cpp" />
     <ClCompile Include="render\decal\DecalPipeline.cpp" />
     <ClCompile Include="render\decal\DecalPipelineRender.cpp" />
     <ClCompile Include="render\gi\GIDebugRenderer.cpp" />
