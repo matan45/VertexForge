@@ -199,7 +199,7 @@ public class Entity {
 
     // Instantiate a .vfPrefab at the scene root, returning the root entity id
     // (or -1 on failure). Path may be project-relative (forward slashes),
-    // e.g. "assets/buildings2/barracks_prefab.vfPrefab".
+    // e.g. "assets/buildings/barracks_prefab.vfPrefab".
     public static function instantiate(string prefabPath): int {
         return _native_entity_instantiate(prefabPath);
     }
