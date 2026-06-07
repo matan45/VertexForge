@@ -6,7 +6,18 @@ namespace controllers::imguiHandler
 	void PluginWindowRegistry::add(const std::string& pluginName, const std::string& title,
 	                               const std::shared_ptr<ImguiWindow>& window)
 	{
-		entries.push_back({pluginName, title, window, true});
+		entries.push_back({pluginName, title, window, true, true});
+	}
+
+	void PluginWindowRegistry::setPluginActive(const std::string& pluginName, bool active)
+	{
+		for (auto& entry : entries)
+		{
+			if (entry.pluginName == pluginName)
+			{
+				entry.pluginActive = active;
+			}
+		}
 	}
 
 	void PluginWindowRegistry::remove(const std::shared_ptr<ImguiWindow>& window)
@@ -25,7 +36,7 @@ namespace controllers::imguiHandler
 		auto entriesCopy = entries;
 		for (const auto& entry : entriesCopy)
 		{
-			if (entry.visible && entry.window)
+			if (entry.pluginActive && entry.visible && entry.window)
 			{
 				entry.window->draw();
 			}

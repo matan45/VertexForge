@@ -1,6 +1,8 @@
 #include "PluginManagerWindow.hpp"
 #include "core/PluginManager.hpp"
 #include "api/PluginVersion.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/project/SceneEvents.hpp"
 #include <imgui.h>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -65,12 +67,44 @@ namespace windows
 
         ImGui::Spacing();
         ImGui::Separator();
-        ImGui::TextDisabled("Changes to enabled state take effect on next editor launch");
+
+        // VK-1365: persist per-scene overrides into the loaded scene's .vfSettings
+        const bool hasScene = !currentScenePath.empty();
+        if (!hasScene)
+            ImGui::BeginDisabled();
+        if (ImGui::Button("Save to Scene"))
+            saveToScene();
+        if (!hasScene)
+            ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            ImGui::SetTooltip(hasScene
+                ? "Write the Scene overrides into the loaded scene's .vfSettings"
+                : "No scene loaded — load or save a scene first");
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Clear All Overrides"))
+        {
+            for (auto& entry : entries)
+                entry.sceneOverride = SceneOverride::Inherit;
+            if (auto* pmMutable = plugin::PluginManager::getActiveMutable())
+                pmMutable->resetActiveStatesToGlobal();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Revert all plugins to Inherit (use Save to Scene to persist)");
+
+        ImGui::TextDisabled("Global toggle takes effect on next launch; Scene overrides apply live");
     }
 
     void PluginManagerWindow::refresh()
     {
         entries.clear();
+
+        // VK-1365: current scene path + its plugin overrides
+        auto& dispatcher = events::EventDispatcher::instance();
+        currentScenePath = dispatcher.query(events::scene::GetCurrentScenePathQuery{});
+        auto sceneOverrides = dispatcher.query(events::scene::GetScenePluginSettingsQuery{});
 
         auto* pm = plugin::PluginManager::getActive();
         if (!pm)
@@ -120,6 +154,10 @@ namespace windows
                 entry.status = "Not Loaded";
             }
 
+            auto overrideIt = sceneOverrides.find(entry.descriptor.name);
+            if (overrideIt != sceneOverrides.end())
+                entry.sceneOverride = overrideIt->second ? SceneOverride::On : SceneOverride::Off;
+
             entries.push_back(std::move(entry));
         }
 
@@ -136,9 +174,16 @@ namespace windows
     {
         ImGui::PushID(entry.descriptor.name.c_str());
 
+        // VK-1365: reflect the live per-scene state on initialized plugins
+        auto* pm = plugin::PluginManager::getActive();
+        const bool sceneInactive = entry.isInitialized && pm &&
+                                   !pm->isPluginActive(entry.descriptor.name);
+
         // Status color
         ImVec4 statusColor;
-        if (entry.isInitialized)
+        if (sceneInactive)
+            statusColor = ImVec4(0.9f, 0.6f, 0.2f, 1.0f); // orange
+        else if (entry.isInitialized)
             statusColor = ImVec4(0.3f, 0.8f, 0.3f, 1.0f); // green
         else if (!entry.descriptor.enabled)
             statusColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f); // gray
@@ -156,8 +201,8 @@ namespace windows
         ImGui::PopStyleColor(3);
 
         // Status badge on the right
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 120.0f);
-        ImGui::TextColored(statusColor, "[%s]", entry.status.c_str());
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 200.0f);
+        ImGui::TextColored(statusColor, "[%s]", sceneInactive ? "Inactive" : entry.status.c_str());
 
         // Enable/disable checkbox
         ImGui::SameLine();
@@ -175,6 +220,10 @@ namespace windows
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Enable/disable this plugin (takes effect on next launch)");
+
+        // VK-1365: per-scene override combo
+        ImGui::SameLine();
+        drawSceneOverrideCombo(entry);
 
         if (open)
         {
@@ -224,6 +273,64 @@ namespace windows
         }
 
         ImGui::PopID();
+    }
+
+    void PluginManagerWindow::drawSceneOverrideCombo(PluginEntry& entry)
+    {
+        static const char* overrideLabels[] = {"Inherit", "On", "Off"};
+        int current = static_cast<int>(entry.sceneOverride);
+
+        // Per-scene control only makes sense for plugins that are actually loaded;
+        // a globally-disabled plugin's DLL is never loaded, so a stored override
+        // is retained in the file but inert at runtime.
+        const bool canOverride = entry.isInitialized;
+        if (!canOverride)
+            ImGui::BeginDisabled();
+
+        ImGui::SetNextItemWidth(70.0f);
+        if (ImGui::Combo("##sceneOverride", &current, overrideLabels, 3))
+        {
+            entry.sceneOverride = static_cast<SceneOverride>(current);
+
+            // Apply live so the editor reflects the choice immediately
+            // (Inherit == global flag, which is enabled for any loaded plugin).
+            if (auto* pmMutable = plugin::PluginManager::getActiveMutable())
+            {
+                bool effective = entry.sceneOverride != SceneOverride::Off;
+                pmMutable->setPluginActive(entry.descriptor.name, effective);
+            }
+        }
+
+        if (!canOverride)
+            ImGui::EndDisabled();
+
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            ImGui::SetTooltip(canOverride
+                ? "Active in this scene: Inherit follows the global flag;\nOn/Off override it for this scene (Save to Scene to persist)"
+                : "Per-scene control needs the plugin loaded —\nenable it globally and relaunch the editor");
+        }
+    }
+
+    void PluginManagerWindow::saveToScene()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::scene::SetScenePluginSettingsCommand cmd;
+        for (const auto& entry : entries)
+        {
+            if (entry.sceneOverride != SceneOverride::Inherit)
+                cmd.settings[entry.descriptor.name] = (entry.sceneOverride == SceneOverride::On);
+        }
+        dispatcher.execute(cmd);
+
+        std::string path = dispatcher.query(events::scene::GetCurrentScenePathQuery{});
+        if (path.empty())
+            return;
+
+        events::scene::SaveSceneCommand saveCmd;
+        saveCmd.filePath = path;
+        dispatcher.execute(saveCmd);
     }
 
     void PluginManagerWindow::writeEnabledState(PluginEntry& entry, bool enabled)

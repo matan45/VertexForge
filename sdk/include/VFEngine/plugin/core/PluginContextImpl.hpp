@@ -1,6 +1,7 @@
 #pragma once
 #include "../api/PluginContext.hpp"
 #include "events/EventTypes.hpp"
+#include <atomic>
 #include <unordered_set>
 #include <vector>
 #include <memory>
@@ -34,6 +35,10 @@ namespace plugin {
         std::vector<plugin::CustomMeshHandle> managedCustomMeshes;
         std::vector<plugin::PluginTextureHandle> managedTextures;
         plugin::PluginTextureHandle boundWorldMaskTexture;
+        plugin::WorldMaskParams lastWorldMaskParams;
+        // VK-1365 per-scene soft-disable. Atomic: render-hook wrappers read it on the
+        // render thread while setActive flips it on the main thread.
+        std::atomic<bool> activeState{true};
         struct HeightFieldBodyKey { entt::entity entity; int32_t tileX; int32_t tileZ; };
         std::vector<HeightFieldBodyKey> managedHeightFieldBodies;
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
@@ -173,6 +178,14 @@ namespace plugin {
         static void setScriptHostVTable(const MTypePluginHost* table) { scriptHostVTable = table; }
 
         void cleanupAll();
+
+        // VK-1365 per-scene soft-disable: gates render-hook dispatch and custom-mesh
+        // enqueues, hides this plugin's editor windows (without touching the user's
+        // visibility toggle), and suppresses the bound world mask (params.enabled UBO
+        // toggle — no rebind). Resources stay alive; PluginManager owns the lifecycle
+        // (onDeactivate before suppression, onActivate after restoration).
+        void setActive(bool active);
+        bool isActive() const { return activeState.load(std::memory_order_relaxed); }
 
         std::vector<std::unique_ptr<pipeline::PipelineStage>> takeImportStages();
 

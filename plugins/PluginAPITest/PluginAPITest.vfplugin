@@ -1,5 +1,5 @@
 ﻿{
-    "apiVersion": 10,
+    "apiVersion": 11,
     "author": "VertexForge",
     "capabilities": ["editor", "audio", "physics", "terrain", "input", "navmesh", "vfx", "graphics"],
     "dependencies": [],

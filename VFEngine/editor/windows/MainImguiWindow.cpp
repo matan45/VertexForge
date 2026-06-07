@@ -95,6 +95,7 @@ namespace windows
                 weatherEditorWindow.notifySceneLoaded();
                 giConfigWindow.notifySceneLoaded();
                 lightStreamingDebugWindow.notifySceneLoaded();
+                pluginManagerWindow.notifySceneLoaded();
             });
 
         openImportDialogToken = dispatcher.subscribe<events::application::OpenImportDialogNotification>(
@@ -131,6 +132,7 @@ namespace windows
     void MainImguiWindow::onSceneCleared()
     {
         iblWindow.onSceneCleared();
+        pluginManagerWindow.notifySceneLoaded(); // VK-1365: overrides were reset
     }
 
     void MainImguiWindow::draw()

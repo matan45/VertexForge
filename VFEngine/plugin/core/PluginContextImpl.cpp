@@ -151,7 +151,13 @@ namespace plugin {
 
         events::renderhook::RegisterRenderPassHookCommand cmd;
         cmd.hookPoint = hookPoint;
-        cmd.callback = std::move(callback);
+        // VK-1365: wrap the plugin callback so hooks of a soft-disabled plugin are
+        // skipped at dispatch. The flag is atomic (hooks execute on the render thread);
+        // `this` outlives the hook — cleanupAll unregisters before the context dies.
+        cmd.callback = [this, cb = std::move(callback)](const plugin::RenderHookContext& ctx) {
+            if (!activeState.load(std::memory_order_relaxed)) return;
+            cb(ctx);
+        };
         auto handle = events::EventDispatcher::instance().execute(cmd);
 
         if (handle.isValid()) {
@@ -220,6 +226,7 @@ namespace plugin {
                                            const std::vector<std::byte>& pushConstants)
     {
         if (!pipeline.isValid() || !mesh.isValid()) return;
+        if (!isActive()) return; // VK-1365: no draws while soft-disabled (covers event-driven enqueues too)
 
         events::custompipeline::EnqueueCustomDrawCommand cmd;
         cmd.item.pipeline = pipeline;
@@ -319,6 +326,10 @@ namespace plugin {
         cmd.worldMin = worldMin;
         cmd.worldMax = worldMax;
         cmd.params = params;
+        // VK-1365: cache the plugin's intended params; while soft-disabled the mask
+        // stays bound but is forced inert (enabled=false => treated as 1.0).
+        lastWorldMaskParams = params;
+        if (!isActive()) cmd.params.enabled = false;
         events::EventDispatcher::instance().execute(cmd);
 
         boundWorldMaskTexture = handle;
@@ -340,7 +351,30 @@ namespace plugin {
 
         events::plugintexture::SetWorldMaskParamsCommand cmd;
         cmd.params = params;
+        // VK-1365: cache intent, keep the mask inert while soft-disabled.
+        lastWorldMaskParams = params;
+        if (!isActive()) cmd.params.enabled = false;
         events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::setActive(bool active)
+    {
+        activeState.store(active, std::memory_order_relaxed);
+
+        // Hide/show this plugin's registered editor windows. Composes with (never
+        // clobbers) the user's per-window visibility toggle in the Plugins menu.
+        // No-op in Runtime, where no windows are registered.
+        controllers::imguiHandler::PluginWindowRegistry::setPluginActive(pluginName, active);
+
+        // Suppress/restore the bound world mask via the existing params.enabled
+        // runtime gate (UBO write only — no rebind, hitch-free). Restoring replays
+        // the plugin's cached params verbatim.
+        if (boundWorldMaskTexture.isValid()) {
+            events::plugintexture::SetWorldMaskParamsCommand cmd;
+            cmd.params = lastWorldMaskParams;
+            if (!active) cmd.params.enabled = false;
+            events::EventDispatcher::instance().execute(cmd);
+        }
     }
 
     entt::registry& PluginContextImpl::getRegistry()
