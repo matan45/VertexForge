@@ -111,6 +111,7 @@ namespace core
         void setScriptLibraryPath(const std::string& path) override;
 
         void registerPluginNativeFunction(const std::string& name, std::any function) override;
+        void unregisterPluginNativeFunction(const std::string& name) override;
 
         // === Save/Load State ===
         std::string getInstanceState(uint64_t instanceId) override;

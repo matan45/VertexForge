@@ -24,6 +24,13 @@ time (same idea as Godot's GDExtension function table).
 - For editor ImGui windows: `links { "imgui" }` (in `lib/`), call
   `ImGui::SetCurrentContext(ctx->getImGuiContext())` in `onInitialize`, then
   `ctx->registerEditorWindow(window, "Title")`.
+- For mType script natives (`ctx->registerScriptFunction`, scripting
+  capability): build an `environment::registry::NativeDelegate`
+  (`deps/mType/environment/registry/NativeDelegate.hpp`), wrap it in
+  `std::any`. Primitive `value::Value` use (int/float/bool) is header-inline —
+  no extra lib. Do NOT return strings/objects/arrays from plugin natives
+  (those need mType's engine-side global pools). Functions auto-unregister on
+  plugin unload.
 
 Regenerate this SDK after engine API changes: `premake5 export-sdk` in the
 engine repo (re-run a Debug/Release build first so `lib/` is current).

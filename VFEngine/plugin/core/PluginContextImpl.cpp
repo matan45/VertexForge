@@ -122,6 +122,7 @@ namespace plugin {
         cmd.function = std::move(function);
         events::EventDispatcher::instance().execute(cmd);
 
+        registeredScriptFunctions.push_back(name);
         vfLogInfo("[Plugin:{}] Registered native script function: {}", pluginName, name);
     }
 
@@ -1073,6 +1074,18 @@ namespace plugin {
             }
         }
         registeredRenderHooks.clear();
+
+        // Remove script natives before the plugin DLL unloads — the registered
+        // NativeDelegate's function pointer lives in the plugin's code segment.
+        for (const auto& name : registeredScriptFunctions) {
+            events::scripting::UnregisterNativeScriptFunctionCommand cmd;
+            cmd.functionName = name;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        registeredScriptFunctions.clear();
 
         for (const auto& handle : managedCustomPipelines) {
             events::custompipeline::DestroyCustomPipelineCommand cmd;

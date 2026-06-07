@@ -29,6 +29,7 @@ namespace plugin {
         std::vector<std::shared_ptr<controllers::imguiHandler::ImguiWindow>> registeredWindows;
         std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
+        std::vector<std::string> registeredScriptFunctions;
         std::vector<plugin::CustomPipelineHandle> managedCustomPipelines;
         std::vector<plugin::CustomMeshHandle> managedCustomMeshes;
         std::vector<plugin::PluginTextureHandle> managedTextures;

@@ -1,7 +1,7 @@
 ﻿{
     "apiVersion": 9,
     "author": "VertexForge",
-    "capabilities": ["graphics", "input", "editor"],
+    "capabilities": ["graphics", "input", "editor", "scripting"],
     "dependencies": [],
     "description": "RTS gameplay: Selectable/Selected/Team/Vision components (VK-1302) + fog of war world mask (VK-1314)",
     "enabled": true,

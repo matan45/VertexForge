@@ -71,9 +71,12 @@ namespace services {
         virtual void setScriptLibraryPath(const std::string& path) = 0;
 
         // === Plugin Native Function Registration ===
-        // The function is type-erased as std::any wrapping a NativeFunction
-        // (std::function<value::Value(const std::vector<value::Value>&)>)
+        // The function is type-erased as std::any wrapping a services::NativeFunction
+        // (mType's environment::registry::NativeDelegate — {void* userData, fn ptr}).
         virtual void registerPluginNativeFunction(const std::string& name, std::any function) = 0;
+        // Remove a plugin-registered native (called on plugin unload so the
+        // interpreter never holds a delegate into a freed DLL).
+        virtual void unregisterPluginNativeFunction(const std::string& name) = 0;
 
         // === Save/Load State ===
         // Get JSON representation of a script instance's fields

@@ -37,6 +37,7 @@ function vfPluginProject(name)
          "../../sdk/deps/json",
          "../../sdk/deps/spdlog",
          "../../sdk/deps/imgui",
+         "../../sdk/deps/mType",
          vulkanSDK.."/Include"
       }
 

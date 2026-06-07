@@ -25,6 +25,8 @@
 #include "../../../plugin/core/PluginContextImpl.hpp"
 #include <runtime/EventLoop.hpp>
 #include <vm/runtime/VirtualMachine.hpp>
+#include <environment/Environment.hpp>
+#include <environment/registry/NativeRegistry.hpp>
 #include <json/JsonSerializer.hpp>
 #include <json/JsonDeserializer.hpp>
 #include <value/ObjectInstance.hpp>
@@ -502,6 +504,18 @@ namespace core
         catch (const std::bad_any_cast&)
         {
             vfLogError("[ScriptingAdapter] Failed to register '{}': invalid function type", name);
+        }
+    }
+
+    void ScriptingAdapter::unregisterPluginNativeFunction(const std::string& name)
+    {
+        if (!interpreter) return;  // interpreter already torn down — nothing to remove
+
+        auto env = interpreter->getEnvironment();
+        auto registry = env ? env->getNativeRegistry() : nullptr;
+        if (registry && registry->unregisterNativeFunction(name))
+        {
+            vfLogDebug("[ScriptingAdapter] Unregistered plugin native function: {}", name);
         }
     }
 

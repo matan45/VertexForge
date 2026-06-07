@@ -63,13 +63,22 @@ namespace events::scripting {
     };
 
     // Register a native function callable from mType scripts.
-    // The function must be std::any wrapping services::NativeFunction
-    // (std::function<value::Value(const std::vector<value::Value>&)>)
+    // The function must be std::any wrapping services::NativeFunction (mType's
+    // environment::registry::NativeDelegate — a {void* userData, function
+    // pointer} pair; see sdk/deps/mType/environment/registry/NativeDelegate.hpp).
     struct RegisterNativeScriptFunctionCommand : ICommand<> {
         std::string functionName;
         std::any function;
 
         std::string_view getName() const override { return "RegisterNativeScriptFunction"; }
+    };
+
+    // Remove a previously registered native function (plugin unload cleanup —
+    // the delegate's function pointer dies with the plugin DLL).
+    struct UnregisterNativeScriptFunctionCommand : ICommand<> {
+        std::string functionName;
+
+        std::string_view getName() const override { return "UnregisterNativeScriptFunction"; }
     };
 
     struct SetInstancePriorityCommand : ICommand<> {

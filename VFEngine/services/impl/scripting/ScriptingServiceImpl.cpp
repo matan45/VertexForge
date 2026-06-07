@@ -134,6 +134,15 @@ namespace services
                 }
             });
 
+        dispatcher.registerCommandHandler<events::scripting::UnregisterNativeScriptFunctionCommand>(
+            [this](const events::scripting::UnregisterNativeScriptFunctionCommand& cmd)
+            {
+                if (scriptingProvider)
+                {
+                    scriptingProvider->unregisterPluginNativeFunction(cmd.functionName);
+                }
+            });
+
         // === Instance Priority ===
         dispatcher.registerCommandHandler<events::scripting::SetInstancePriorityCommand>(
             [this](const events::scripting::SetInstancePriorityCommand& cmd)
