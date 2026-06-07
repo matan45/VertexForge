@@ -27,5 +27,6 @@ namespace core
                            const plugin::WorldMaskParams& params) override;
         void unbindWorldMask() override;
         void setWorldMaskParams(const plugin::WorldMaskParams& params) override;
+        float sampleWorldMask(float worldX, float worldZ) const override;
     };
 }

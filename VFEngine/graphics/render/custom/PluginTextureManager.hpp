@@ -115,6 +115,12 @@ namespace render::custom
         void setDebugMaskEnabled(bool enabled);
         bool getDebugMaskEnabled() const { return !debugForceDisabled; }
 
+        // CPU readback of the bound mask's red channel at a world (x,z) position,
+        // nearest-cell sampled from the retained pendingData. Returns 1.0 when no
+        // mask is bound, the mask is disabled, or the point is outside the bounds —
+        // the same "no effect" cases the shaders treat as mask = 1.0.
+        [[nodiscard]] float sampleWorldMask(float worldX, float worldZ) const;
+
         // Records staging->image copies for dirty textures. Must be called outside any
         // render pass, before the scene pass is recorded (same command buffer).
         void flushUploads(const vk::CommandBuffer& commandBuffer);

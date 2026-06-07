@@ -39,6 +39,7 @@
 #include "../api/WindowAPI.hpp"
 #include "../api/TerrainAPI.hpp"
 #include "../api/RuntimePickerAPI.hpp"
+#include "../api/WorldMaskAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -110,6 +111,7 @@ namespace core
         api::WindowAPI::registerAPI(interpreter);
         api::TerrainAPI::registerAPI(interpreter);
         api::RuntimePickerAPI::registerAPI(interpreter);
+        api::WorldMaskAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

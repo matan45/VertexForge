@@ -477,6 +477,7 @@ namespace render
                            const plugin::WorldMaskParams& params);
         void unbindWorldMask();
         void setWorldMaskParams(const plugin::WorldMaskParams& params);
+        float sampleWorldMask(float worldX, float worldZ) const;
         void setWorldMaskDebugEnabled(bool enabled);
         bool getWorldMaskDebugEnabled() const;
         custom::PluginTextureManager* getPluginTextureManager() const { return pluginTextureManager.get(); }

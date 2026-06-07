@@ -54,4 +54,11 @@ namespace core
         if (!handler) return;
         handler->setWorldMaskParams(params);
     }
+
+    float PluginTextureAdapter::sampleWorldMask(float worldX, float worldZ) const
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (!handler) return 1.0f;  // no renderer -> mask has no effect
+        return handler->sampleWorldMask(worldX, worldZ);
+    }
 }

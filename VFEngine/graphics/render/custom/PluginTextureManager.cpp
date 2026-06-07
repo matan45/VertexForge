@@ -1,4 +1,5 @@
 #include "PluginTextureManager.hpp"
+#include <algorithm>
 #include "../../core/Device.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
@@ -176,6 +177,38 @@ namespace render::custom
         maskUBOData.entityDiscardBelow = params.entityDiscardBelow;
         maskUBOData.flags = boundMaskId != 0 ? packMaskFlags(params, debugForceDisabled) : 0;
         writeMaskParamsUBO();
+    }
+
+    float PluginTextureManager::sampleWorldMask(float worldX, float worldZ) const
+    {
+        if (boundMaskId == 0) return 1.0f;
+        if (!(maskUBOData.flags & MASK_FLAG_ENABLED)) return 1.0f;
+
+        auto it = textures.find(boundMaskId);
+        if (it == textures.end()) return 1.0f;
+
+        const TextureEntry& entry = it->second;
+        if (entry.pendingData.empty()) return 1.0f;   // nothing uploaded yet
+
+        const float minX = maskUBOData.worldMinMax.x;
+        const float minZ = maskUBOData.worldMinMax.y;
+        const float maxX = maskUBOData.worldMinMax.z;
+        const float maxZ = maskUBOData.worldMinMax.w;
+        if (worldX < minX || worldX > maxX || worldZ < minZ || worldZ > maxZ) return 1.0f;
+
+        const float u = (worldX - minX) / (maxX - minX);
+        const float v = (worldZ - minZ) / (maxZ - minZ);
+        const int x = std::clamp(static_cast<int>(u * static_cast<float>(entry.width)),
+                                 0, static_cast<int>(entry.width) - 1);
+        const int z = std::clamp(static_cast<int>(v * static_cast<float>(entry.height)),
+                                 0, static_cast<int>(entry.height) - 1);
+
+        // Red channel = first byte of the texel for both R8 and RGBA8.
+        const size_t idx = (static_cast<size_t>(z) * entry.width + x) *
+                           plugin::textureFormatBytesPerPixel(entry.format);
+        if (idx >= entry.pendingData.size()) return 1.0f;
+
+        return static_cast<float>(std::to_integer<uint8_t>(entry.pendingData[idx])) / 255.0f;
     }
 
     void PluginTextureManager::setDebugMaskEnabled(bool enabled)
