@@ -27,6 +27,7 @@
 #include <vm/runtime/VirtualMachine.hpp>
 #include <environment/Environment.hpp>
 #include <environment/registry/NativeRegistry.hpp>
+#include <plugin/PluginHost.hpp>
 #include <json/JsonSerializer.hpp>
 #include <json/JsonDeserializer.hpp>
 #include <value/ObjectInstance.hpp>
@@ -70,6 +71,11 @@ namespace core
                 [interp](const std::vector<plugin::MetaComponentBridge>& bridges) {
                     api::PluginComponentAPI::registerAPI(interp, bridges);
                 });
+
+            // API v10: hand engine plugins mType's plugin host vtable so their
+            // registered natives can build/inspect script values through the
+            // standard C ABI (all execution stays engine-side in mType.lib).
+            plugin::PluginContextImpl::setScriptHostVTable(::plugin::getHostVTable());
 
             uiEventBridge = std::make_unique<ScriptUIEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
@@ -146,6 +152,7 @@ namespace core
         api::PluginComponentAPI::cleanup();
         apiRegistry.reset();
         interpreter.reset();
+        pluginNativeBindings.clear();  // after the interpreter (and its registry entries) is gone
         initialized = false;
 
     }
@@ -495,6 +502,32 @@ namespace core
             return;
         }
 
+        // Engine-plugin C-ABI form: wrap the {MTypeNativeFn, userData} pair in
+        // mType's plugin host trampoline (per-call arena, error rethrow), exactly
+        // like mType's own PluginLoader does for standalone script plugins.
+        if (auto* cAbi = std::any_cast<std::pair<MTypeNativeFn, void*>>(&function))
+        {
+            auto binding = std::make_unique<::plugin::PluginNativeBinding>();
+            binding->fn = cAbi->first;
+            binding->userData = cAbi->second;
+            binding->owner = nullptr;  // engine-managed, not an mType PluginHandle
+            binding->name = name;
+
+            ::services::NativeFunction delegate{};
+            delegate.userData = binding.get();
+            delegate.invoke = [](void* u, environment::NativeContext& nc,
+                                 std::span<const value::Value> args) -> value::Value
+            {
+                return ::plugin::pluginNativeTrampoline(u, nc, args);
+            };
+
+            interpreter->registerNativeFunction(name, std::move(delegate));
+            pluginNativeBindings[name] = std::move(binding);
+            vfLogDebug("[ScriptingAdapter] Registered plugin native function (C ABI): {}", name);
+            return;
+        }
+
+        // Engine-internal form: a ready-made NativeDelegate.
         try
         {
             auto nativeFunc = std::any_cast<::services::NativeFunction>(function);
@@ -509,14 +542,17 @@ namespace core
 
     void ScriptingAdapter::unregisterPluginNativeFunction(const std::string& name)
     {
-        if (!interpreter) return;  // interpreter already torn down — nothing to remove
-
-        auto env = interpreter->getEnvironment();
-        auto registry = env ? env->getNativeRegistry() : nullptr;
-        if (registry && registry->unregisterNativeFunction(name))
+        if (interpreter)
         {
-            vfLogDebug("[ScriptingAdapter] Unregistered plugin native function: {}", name);
+            auto env = interpreter->getEnvironment();
+            auto registry = env ? env->getNativeRegistry() : nullptr;
+            if (registry && registry->unregisterNativeFunction(name))
+            {
+                vfLogDebug("[ScriptingAdapter] Unregistered plugin native function: {}", name);
+            }
         }
+        // Drop the owned binding last — the registry entry pointing at it is gone.
+        pluginNativeBindings.erase(name);
     }
 
     std::string ScriptingAdapter::getInstanceState(uint64_t instanceId)

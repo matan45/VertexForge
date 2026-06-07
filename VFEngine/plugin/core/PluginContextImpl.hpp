@@ -41,6 +41,10 @@ namespace plugin {
         std::vector<services::VFXInstanceId> managedVFXInstances;
         static std::vector<MetaComponentBridge> allBridges;
         static ScriptBindingRegistrar scriptBindingRegistrar;
+        // API v10: mType's process-stable plugin host vtable, installed by Core
+        // at ScriptingAdapter::init (the Plugin module never links mType.lib —
+        // it only forwards the pointer to plugins via getScriptHost()).
+        static const MTypePluginHost* scriptHostVTable;
 
     public:
         explicit PluginContextImpl(const std::string& pluginName,
@@ -55,7 +59,8 @@ namespace plugin {
         void publishEvent(const std::string& eventName, const nlohmann::json& data) override;
         events::SubscriptionToken subscribeEvent(const std::string& eventName,
                                                   std::function<void(const nlohmann::json&)> handler) override;
-        void registerScriptFunction(const std::string& name, std::any function) override;
+        void registerScriptFunction(const std::string& name, MTypeNativeFn fn, void* userData) override;
+        const MTypePluginHost* getScriptHost() override;
         plugin::RenderHookHandle registerRenderPassHook(
             plugin::RenderPassHookPoint hookPoint,
             plugin::RenderHookCallback callback) override;
@@ -164,6 +169,8 @@ namespace plugin {
 
         static void setScriptBindingRegistrar(ScriptBindingRegistrar registrar) { scriptBindingRegistrar = std::move(registrar); }
         static ScriptBindingRegistrar getScriptBindingRegistrar() { return scriptBindingRegistrar; }
+
+        static void setScriptHostVTable(const MTypePluginHost* table) { scriptHostVTable = table; }
 
         void cleanupAll();
 

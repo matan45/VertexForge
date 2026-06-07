@@ -35,6 +35,7 @@ namespace plugin {
     // Static member definitions
     std::vector<MetaComponentBridge> PluginContextImpl::allBridges{};
     PluginContextImpl::ScriptBindingRegistrar PluginContextImpl::scriptBindingRegistrar{};
+    const MTypePluginHost* PluginContextImpl::scriptHostVTable = nullptr;
 
 
     PluginContextImpl::PluginContextImpl(const std::string& pluginName,
@@ -110,20 +111,33 @@ namespace plugin {
         return token;
     }
 
-    void PluginContextImpl::registerScriptFunction(const std::string& name, std::any function)
+    void PluginContextImpl::registerScriptFunction(const std::string& name, MTypeNativeFn fn, void* userData)
     {
         if (!hasCapability(std::string(capability::scripting))) {
             vfLogWarning("[Plugin:{}] Cannot register script function '{}' - scripting capability not available", pluginName, name);
             return;
         }
+        if (!fn) {
+            vfLogWarning("[Plugin:{}] Cannot register script function '{}' - null function", pluginName, name);
+            return;
+        }
 
         events::scripting::RegisterNativeScriptFunctionCommand cmd;
         cmd.functionName = name;
-        cmd.function = std::move(function);
+        cmd.function = std::any(std::pair<MTypeNativeFn, void*>(fn, userData));
         events::EventDispatcher::instance().execute(cmd);
 
         registeredScriptFunctions.push_back(name);
         vfLogInfo("[Plugin:{}] Registered native script function: {}", pluginName, name);
+    }
+
+    const MTypePluginHost* PluginContextImpl::getScriptHost()
+    {
+        if (!hasCapability(std::string(capability::scripting))) {
+            vfLogWarning("[Plugin:{}] getScriptHost unavailable - scripting capability not available", pluginName);
+            return nullptr;
+        }
+        return scriptHostVTable;
     }
 
     plugin::RenderHookHandle PluginContextImpl::registerRenderPassHook(

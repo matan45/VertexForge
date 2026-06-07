@@ -62,10 +62,10 @@ namespace events::scripting {
         std::string_view getName() const override { return "IsScriptsCompiled"; }
     };
 
-    // Register a native function callable from mType scripts.
-    // The function must be std::any wrapping services::NativeFunction (mType's
-    // environment::registry::NativeDelegate — a {void* userData, function
-    // pointer} pair; see sdk/deps/mType/environment/registry/NativeDelegate.hpp).
+    // Register a native function callable from mType scripts. The std::any wraps
+    // either std::pair<MTypeNativeFn, void*> (plugin C ABI — see mType's
+    // plugin/PluginHostApi.h; the handler wraps it in the host trampoline) or a
+    // raw services::NativeFunction (mType NativeDelegate, engine-internal use).
     struct RegisterNativeScriptFunctionCommand : ICommand<> {
         std::string functionName;
         std::any function;

@@ -56,30 +56,14 @@ function vfExportPluginSDK()
       n = n + copyTree("dependencies/imgui",               "*.h",      sdk .. "/deps/imgui")
       print("  third-party headers: " .. n)
 
-      -- mType interpreter headers — the minimal closure a plugin needs to build
-      -- a NativeDelegate for PluginContext::registerScriptFunction. Primitive
-      -- Value use (int/float/bool in & out) is fully header-inline, so plugins
-      -- need NO mType.lib link. Do NOT return/inspect strings, objects or
-      -- arrays from plugin natives — those route through out-of-line code and
-      -- mType's global pools, which must stay engine-side.
-      n = 0
-      local mtypeHeaders = {
-         "environment/registry/NativeDelegate.hpp",
-         "environment/NativeContext.hpp",
-         "value/ValueType.hpp",
-         "value/ValueBridge.hpp",
-         "value/StringPool.hpp",
-         "value/InternedString.hpp",
-         "value/IntrusivePtr.hpp",
-      }
-      for _, rel in ipairs(mtypeHeaders) do
-         local src = "dependencies/mType/mType/" .. rel
-         local dst = sdk .. "/deps/mType/" .. rel
-         os.mkdir(path.getdirectory(dst))
-         os.copyfile(src, dst)
-         n = n + 1
-      end
-      print("  mType headers: " .. n)
+      -- mType plugin C ABI — the only mType header a plugin needs for script
+      -- natives (PluginContext::registerScriptFunction + getScriptHost). Pure C,
+      -- toolchain-independent; all value manipulation runs engine-side through
+      -- the MTypePluginHost vtable.
+      os.mkdir(sdk .. "/deps/mType/plugin")
+      os.copyfile("dependencies/mType/mType/plugin/PluginHostApi.h",
+                  sdk .. "/deps/mType/plugin/PluginHostApi.h")
+      print("  mType headers: 1 (plugin/PluginHostApi.h)")
 
       -- imgui.lib (only needed by plugins that register editor ImGui windows)
       for _, cfg in ipairs({"Debug", "Development", "Release"}) do
@@ -213,13 +197,14 @@ time (same idea as Godot's GDExtension function table).
 - For editor ImGui windows: `links { "imgui" }` (in `lib/`), call
   `ImGui::SetCurrentContext(ctx->getImGuiContext())` in `onInitialize`, then
   `ctx->registerEditorWindow(window, "Title")`.
-- For mType script natives (`ctx->registerScriptFunction`, scripting
-  capability): build an `environment::registry::NativeDelegate`
-  (`deps/mType/environment/registry/NativeDelegate.hpp`), wrap it in
-  `std::any`. Primitive `value::Value` use (int/float/bool) is header-inline —
-  no extra lib. Do NOT return strings/objects/arrays from plugin natives
-  (those need mType's engine-side global pools). Functions auto-unregister on
-  plugin unload.
+- For mType script natives (scripting capability): register an `MTypeNativeFn`
+  via `ctx->registerScriptFunction(name, fn, userData)` and manipulate values
+  through the `MTypePluginHost` vtable from `ctx->getScriptHost()` — the
+  standard mType plugin C ABI (`deps/mType/plugin/PluginHostApi.h`): makeInt/
+  getFloat/getString, arrayLen/arrayGet/arraySet/makeArray, objGet/objSet/
+  makeObject, raiseError, reentrant callFunction/callMethod. MTypeValue*
+  lifetimes are per-call (copy scalars out to retain). Functions
+  auto-unregister on plugin unload.
 
 Regenerate this SDK after engine API changes: `premake5 export-sdk` in the
 engine repo (re-run a Debug/Release build first so `lib/` is current).
