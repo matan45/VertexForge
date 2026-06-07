@@ -133,11 +133,11 @@ namespace render::mesh
                                              pipelineLayout, 1, materialDescSet, nullptr);
             state.currentMaterialDescriptorSet = materialDescSet;
         }
-        else if (!materialDescSet && state.currentMaterialDescriptorSet != textureDescriptorSet)
+        else if (!materialDescSet && state.currentMaterialDescriptorSet != state.defaultMaterialDescriptorSet)
         {
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                             pipelineLayout, 1, textureDescriptorSet, nullptr);
-            state.currentMaterialDescriptorSet = textureDescriptorSet;
+                                             pipelineLayout, 1, state.defaultMaterialDescriptorSet, nullptr);
+            state.currentMaterialDescriptorSet = state.defaultMaterialDescriptorSet;
         }
     }
 
@@ -278,10 +278,11 @@ namespace render::mesh
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                          pipelineLayout, 0, descriptorSet, nullptr);
 
-        if (textureDescriptorsInitialized && textureDescriptorSet)
+        vk::DescriptorSet frameTextureDescriptorSet = getTextureDescriptorSet(imageIndex);
+        if (textureDescriptorsInitialized && frameTextureDescriptorSet)
         {
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                             pipelineLayout, 1, textureDescriptorSet, nullptr);
+                                             pipelineLayout, 1, frameTextureDescriptorSet, nullptr);
         }
 
         std::vector<SortedSubmesh> opaqueSubmeshes;
@@ -289,7 +290,8 @@ namespace render::mesh
         collectSortedSubmeshes(meshDrawList, frustum, materialCache, opaqueSubmeshes, maskedSubmeshes);
 
         RenderState state;
-        state.currentMaterialDescriptorSet = textureDescriptorSet;
+        state.currentMaterialDescriptorSet = frameTextureDescriptorSet;
+        state.defaultMaterialDescriptorSet = frameTextureDescriptorSet;
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         state.currentPipeline = graphicsPipeline;
@@ -333,10 +335,11 @@ namespace render::mesh
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                          pipelineLayout, 0, descriptorSet, nullptr);
 
-        if (textureDescriptorsInitialized && textureDescriptorSet)
+        vk::DescriptorSet frameTextureDescriptorSet = getTextureDescriptorSet(imageIndex);
+        if (textureDescriptorsInitialized && frameTextureDescriptorSet)
         {
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                             pipelineLayout, 1, textureDescriptorSet, nullptr);
+                                             pipelineLayout, 1, frameTextureDescriptorSet, nullptr);
         }
 
         std::vector<SortedSubmesh> opaqueSubmeshes;
@@ -344,7 +347,8 @@ namespace render::mesh
         collectSortedSubmeshes(meshDrawList, frustum, materialCache, opaqueSubmeshes, maskedSubmeshes);
 
         RenderState state;
-        state.currentMaterialDescriptorSet = textureDescriptorSet;
+        state.currentMaterialDescriptorSet = frameTextureDescriptorSet;
+        state.defaultMaterialDescriptorSet = frameTextureDescriptorSet;
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         state.currentPipeline = graphicsPipeline;
@@ -425,10 +429,12 @@ namespace render::mesh
     }
 
     void StaticMeshPipeline::updatePreviewTextureDescriptors(
+        uint32_t imageIndex,
         const std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES>& imageViews,
         const std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES>& samplers)
     {
-        if (!textureDescriptorSet) return;
+        vk::DescriptorSet frameTextureDescriptorSet = getTextureDescriptorSet(imageIndex);
+        if (!frameTextureDescriptorSet) return;
 
         std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
         for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
@@ -439,7 +445,7 @@ namespace render::mesh
         }
 
         vk::WriteDescriptorSet writeSet{};
-        writeSet.dstSet = textureDescriptorSet;
+        writeSet.dstSet = frameTextureDescriptorSet;
         writeSet.dstBinding = 0;
         writeSet.dstArrayElement = 0;
         writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
@@ -575,10 +581,11 @@ namespace render::mesh
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                          pipelineLayout, 0, descriptorSet, nullptr);
 
-        if (textureDescriptorsInitialized && textureDescriptorSet)
+        vk::DescriptorSet frameTextureDescriptorSet = getTextureDescriptorSet(imageIndex);
+        if (textureDescriptorsInitialized && frameTextureDescriptorSet)
         {
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                             pipelineLayout, 1, textureDescriptorSet, nullptr);
+                                             pipelineLayout, 1, frameTextureDescriptorSet, nullptr);
         }
 
         std::vector<SortedSubmesh> opaqueSubmeshes;
@@ -586,7 +593,8 @@ namespace render::mesh
         collectSortedSubmeshes(meshDrawList, frustum, materialCache, opaqueSubmeshes, maskedSubmeshes);
 
         RenderState state;
-        state.currentMaterialDescriptorSet = textureDescriptorSet;
+        state.currentMaterialDescriptorSet = frameTextureDescriptorSet;
+        state.defaultMaterialDescriptorSet = frameTextureDescriptorSet;
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         state.currentPipeline = graphicsPipeline;

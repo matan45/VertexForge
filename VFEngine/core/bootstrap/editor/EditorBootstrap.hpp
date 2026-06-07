@@ -26,6 +26,7 @@ namespace services
     class IRenderTextureProvider;
     class IRenderHookProvider;
     class ICustomPipelineProvider;
+    class IPluginTextureProvider;
     class IDebugDrawProvider;
     class IGrassRenderProvider;
     class IBillboardRenderProvider;
@@ -77,6 +78,7 @@ namespace core
     class RenderTextureAdapter;
     class RenderHookAdapter;
     class CustomPipelineAdapter;
+    class PluginTextureAdapter;
     class DebugDrawAdapter;
 
     namespace adapters
@@ -119,6 +121,7 @@ namespace core
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
         std::unique_ptr<RenderHookAdapter> renderHookAdapter;
         std::unique_ptr<CustomPipelineAdapter> customPipelineAdapter;
+        std::unique_ptr<PluginTextureAdapter> pluginTextureAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
         std::unique_ptr<adapters::GrassRenderAdapter> grassRenderAdapter;
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
@@ -186,6 +189,8 @@ namespace core
         services::IRenderHookProvider* getRenderHookProvider();
 
         services::ICustomPipelineProvider* getCustomPipelineProvider();
+
+        services::IPluginTextureProvider* getPluginTextureProvider();
 
         services::IDebugDrawProvider* getDebugDrawProvider();
 

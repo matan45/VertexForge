@@ -83,6 +83,7 @@
     <ClInclude Include="data\FileOperationsTypes.hpp" />
     <ClInclude Include="data\OceanData.hpp" />
     <ClInclude Include="data\PluginGraphicsTypes.hpp" />
+    <ClInclude Include="data\PluginTextureTypes.hpp" />
     <ClInclude Include="data\RenderHookContext.hpp" />
     <ClInclude Include="data\RenderHookTypes.hpp" />
     <ClInclude Include="data\SaveTypes.hpp" />

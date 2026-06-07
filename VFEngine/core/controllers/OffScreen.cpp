@@ -295,6 +295,16 @@ namespace controllers {
 		return offScreenController->getShowNavmeshDebug();
 	}
 
+	void OffScreen::setWorldMaskDebugEnabled(bool enabled)
+	{
+		offScreenController->setWorldMaskDebugEnabled(enabled);
+	}
+
+	bool OffScreen::getWorldMaskDebugEnabled() const
+	{
+		return offScreenController->getWorldMaskDebugEnabled();
+	}
+
 	void OffScreen::updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices,
 	                                        const std::vector<uint32_t>& indices)
 	{

@@ -16,6 +16,15 @@
 function vfExportPluginSDK()
       local sdk = "sdk"
 
+      -- Template .vfplugin must carry the engine's current API version or the
+      -- loader rejects it — read it from the single source of truth.
+      local apiVersion = "9"
+      local versionHeader = io.readfile("VFEngine/plugin/api/PluginVersion.hpp")
+      if versionHeader then
+         local v = versionHeader:match("VF_PLUGIN_API_VERSION%s*=%s*(%d+)")
+         if v then apiVersion = v end
+      end
+
       local function copyTree(srcBase, pattern, dstBase)
          local files = os.matchfiles(path.join(srcBase, pattern))
          for _, f in ipairs(files) do
@@ -138,7 +147,7 @@ project (PLUGIN_NAME)
 
       io.writefile(sdk .. "/template/MyPlugin.vfplugin", [[
 {
-    "apiVersion": 7,
+    "apiVersion": ]] .. apiVersion .. [[,
     "author": "you",
     "capabilities": ["graphics", "terrain", "input", "editor"],
     "dependencies": [],

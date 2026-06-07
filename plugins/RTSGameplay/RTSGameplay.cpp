@@ -1,37 +1,24 @@
 #include "api/IPlugin.hpp"
 #include "api/PluginExport.hpp"
 #include "api/PluginContext.hpp"
-#include <entt/entt.hpp>
+#include "RTSComponents.hpp"
+#include "FogOfWar.hpp"
+#include "FogOfWarWindow.hpp"
+#include <imgui.h>
+#include <memory>
+#include <string>
 
-// RTS gameplay tag components (VK-1302). Registered as plugin components so the
-// engine core stays game-agnostic — scripts access them via PluginComponent.mt
-// (has/getInt/add/remove/findAll) and designers via the Add Component popup.
-
-// Marks an entity as selectable by the RTS selection system.
-struct SelectableComponent
-{
-    bool canBeSelected = true;
-};
-
-// Runtime-only selection marker managed by the selection controller during play.
-// Never authored in scenes (scenes are saved in edit mode, where it is absent).
-struct SelectedComponent
-{
-    bool active = true;
-};
-
-// Faction ownership: 0 = Player, 1 = Enemy, 2 = Neutral.
-struct TeamComponent
-{
-    int teamId = 0;
-};
+// RTSGameplay plugin entry point: registers the RTS tag components (VK-1302)
+// and runs the fog-of-war system (VK-1314). See RTSComponents.hpp, FogOfWar.*
+// and FogOfWarWindow.hpp for the pieces.
 
 class RTSGameplay : public plugin::IPlugin
 {
 public:
     plugin::PluginInfo getInfo() const override
     {
-        return {"RTSGameplay", "VertexForge", "RTS gameplay tag components: Selectable, Selected, Team (VK-1302)", 1, 0, 0};
+        return {"RTSGameplay", "VertexForge",
+                "RTS gameplay: Selectable/Selected/Team/Vision components + fog of war (VK-1302/VK-1314)", 1, 1, 0};
     }
 
     bool onInitialize(plugin::PluginContext* context) override
@@ -47,17 +34,38 @@ public:
         ctx->registerNativeComponent<TeamComponent>("Team")
             .data<&TeamComponent::teamId>("teamId");
 
-        ctx->logInfo("RTSGameplay initialized - Selectable/Selected/Team components registered");
+        ctx->registerNativeComponent<VisionComponent>("Vision")
+            .data<&VisionComponent::sightRadius>("sightRadius");
+
+        fogSettings = std::make_shared<FogSettings>();
+        fogOfWar.initialize(ctx, fogSettings);
+
+        if (ctx->hasCapability(std::string(plugin::capability::editor)))
+        {
+            ImGui::SetCurrentContext(ctx->getImGuiContext());
+            ctx->registerEditorWindow(std::make_shared<FogOfWarWindow>(fogSettings), "Fog of War");
+        }
+
+        ctx->logInfo("RTSGameplay initialized - Selectable/Selected/Team/Vision components registered");
         return true;
+    }
+
+    void onUpdate(float deltaTime) override
+    {
+        (void)deltaTime;
+        fogOfWar.update();
     }
 
     void onShutdown() override
     {
+        fogOfWar.shutdown();
         ctx->logInfo("RTSGameplay shutdown");
     }
 
 private:
     plugin::PluginContext* ctx = nullptr;
+    std::shared_ptr<FogSettings> fogSettings;
+    FogOfWarSystem fogOfWar;
 };
 
 VF_IMPLEMENT_PLUGIN(RTSGameplay)

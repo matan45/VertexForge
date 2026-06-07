@@ -375,6 +375,17 @@ namespace services
         bool blocksRaycast = true;
     };
 
+    // Resolved on-screen pixel rect of a UIRect (viewport space, top-left origin,
+    // y down) — the same pixel space as SetUIRectPixelsCommand and the runtime UI
+    // hit tests, so scripts can map mouse coordinates into a UI element.
+    struct UIResolvedRectData
+    {
+        float x = 0.0f;
+        float y = 0.0f;
+        float w = 0.0f;
+        float h = 0.0f;
+    };
+
     // World-space corners of a UI element's quad as rendered in edit mode
     // (TL, TR, BR, BL) — used by the editor viewport selection outline.
     struct UIQuadCorners

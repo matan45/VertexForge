@@ -181,6 +181,67 @@ namespace render::gpudriven
         return textures[path].bindlessIndex;
     }
 
+    bool TextureStreamManager::unregisterTexture(const std::string& path)
+    {
+        auto it = textures.find(path);
+        if (it == textures.end())
+            return false;
+
+        // In-flight async reads capture the raw stream handle pointer; wait them
+        // out before the handle is destroyed below.
+        bool hasInFlightRead = std::any_of(inFlightReads.begin(), inFlightReads.end(),
+            [&path](const auto& key) { return key.first == path; });
+        if (hasInFlightRead)
+        {
+            for (auto& future : pendingReads)
+            {
+                if (future.valid()) future.wait();
+            }
+            processCompletedReads();
+        }
+
+        // Drop completed reads queued for upload
+        {
+            std::lock_guard lock(uploadQueueMutex);
+            std::erase_if(uploadQueue, [&path](const TextureMipReadResult& r) { return r.path == path; });
+        }
+
+        auto& tex = it->second;
+
+        bindlessTextures.unregisterTexture(path);
+
+        // The image may still be referenced by frames in flight — defer destruction
+        if (deletionQueue)
+        {
+            if (tex.currentSampler) deletionQueue->queueSampler(tex.currentSampler);
+            if (tex.image)
+            {
+                std::vector<vk::ImageView> views;
+                if (tex.view) views.push_back(tex.view);
+                deletionQueue->queueImage(tex.image, tex.allocation, device.getMemoryManager(), views);
+            }
+        }
+        else
+        {
+            vk::Device vkDevice = device.getLogicalDevice();
+            vkDevice.waitIdle();
+            if (tex.currentSampler) vkDevice.destroySampler(tex.currentSampler);
+            if (tex.view) vkDevice.destroyImageView(tex.view);
+            if (tex.image) vkDevice.destroyImage(tex.image);
+            if (tex.allocation) device.getMemoryManager().free(tex.allocation);
+        }
+
+        currentVRAMUsage = (tex.gpuMemoryUsage <= currentVRAMUsage)
+                               ? currentVRAMUsage - tex.gpuMemoryUsage
+                               : 0;
+
+        textures.erase(it);
+        streamHandles.erase(path);
+
+        vfLogDebug("TextureStreamManager: Unregistered texture '{}'", path);
+        return true;
+    }
+
     vk::Sampler TextureStreamManager::createMipClampedSampler(uint32_t minLod, uint32_t maxLod)
     {
         vk::SamplerCreateInfo samplerInfo{};

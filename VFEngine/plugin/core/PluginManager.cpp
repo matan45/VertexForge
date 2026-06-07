@@ -11,6 +11,16 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 namespace plugin {
 
     PluginManager::PluginManager(std::unordered_set<std::string> capabilities)
@@ -24,6 +34,47 @@ namespace plugin {
     {
         shutdownAll();
         activeInstance = nullptr;
+    }
+
+    std::filesystem::path PluginManager::resolvePluginsDirectory()
+    {
+        auto containsDescriptors = [](const std::filesystem::path& dir)
+        {
+            std::error_code ec;
+            if (!std::filesystem::is_directory(dir, ec)) return false;
+            for (auto it = std::filesystem::recursive_directory_iterator(dir, ec);
+                 !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec))
+            {
+                if (it->is_regular_file(ec) && it->path().extension() == ".vfplugin") return true;
+            }
+            return false;
+        };
+
+        // Anchor on the executable, not the CWD — IDE launchers (Rider/VS) set
+        // the working directory to the project folder, which broke CWD-relative
+        // lookup ("VFEngine/editor/plugins: no plugins found").
+        std::filesystem::path exeDir;
+#ifdef _WIN32
+        wchar_t exePath[MAX_PATH];
+        if (GetModuleFileNameW(nullptr, exePath, MAX_PATH) > 0)
+        {
+            exeDir = std::filesystem::path(exePath).parent_path();
+        }
+#endif
+        if (exeDir.empty()) exeDir = std::filesystem::current_path();
+
+        // Deployed layout first (plugins/ beside the executable), then walk up
+        // toward the dev-tree root (bin/Editor/<Config>/x64 -> repo root).
+        std::filesystem::path dir = exeDir;
+        for (int depth = 0; depth < 6 && !dir.empty(); ++depth)
+        {
+            auto candidate = dir / "plugins";
+            if (containsDescriptors(candidate)) return candidate;
+            auto parent = dir.parent_path();
+            if (parent == dir) break;
+            dir = parent;
+        }
+        return exeDir / "plugins";
     }
 
     void PluginManager::loadAll(const std::filesystem::path& pluginDirectory)

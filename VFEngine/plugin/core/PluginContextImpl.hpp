@@ -31,6 +31,8 @@ namespace plugin {
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
         std::vector<plugin::CustomPipelineHandle> managedCustomPipelines;
         std::vector<plugin::CustomMeshHandle> managedCustomMeshes;
+        std::vector<plugin::PluginTextureHandle> managedTextures;
+        plugin::PluginTextureHandle boundWorldMaskTexture;
         struct HeightFieldBodyKey { entt::entity entity; int32_t tileX; int32_t tileZ; };
         std::vector<HeightFieldBodyKey> managedHeightFieldBodies;
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
@@ -64,6 +66,15 @@ namespace plugin {
                             const std::vector<std::byte>& pushConstants) override;
         void destroyCustomPipeline(plugin::CustomPipelineHandle handle) override;
         void destroyCustomMesh(plugin::CustomMeshHandle handle) override;
+        plugin::PluginTextureHandle createTexture2D(uint32_t width, uint32_t height,
+                                                    plugin::TextureFormat format) override;
+        void updateTexture2D(plugin::PluginTextureHandle handle, const void* data, size_t size) override;
+        void destroyTexture2D(plugin::PluginTextureHandle handle) override;
+        void bindWorldMask(plugin::PluginTextureHandle handle,
+                           const glm::vec3& worldMin, const glm::vec3& worldMax,
+                           const plugin::WorldMaskParams& params) override;
+        void unbindWorldMask() override;
+        void setWorldMaskParams(const plugin::WorldMaskParams& params) override;
         entt::registry& getRegistry() override;
         bool hasCapability(const std::string& capability) const override;
         ImGuiContext* getImGuiContext() override;

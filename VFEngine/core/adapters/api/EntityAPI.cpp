@@ -8,11 +8,36 @@
 #include "../scripting/NativeAPIRegistry.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/project/SceneEvents.hpp"
+#include "../../../services/events/scene/ScenePersistenceEvents.hpp"
+#include "../../../services/events/project/ProjectEvents.hpp"
+#include <filesystem>
 
 namespace core::api
 {
     namespace
     {
+        // Resolve a script-provided prefab path relative to the project working
+        // directory (same convention as SceneAPI::resolveScenePath).
+        std::string resolvePrefabPath(const std::string& path)
+        {
+            std::filesystem::path p(path);
+            if (p.is_absolute())
+            {
+                return path;
+            }
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            auto projectPathOpt = dispatcher.query(events::project::GetProjectPathQuery{});
+            if (projectPathOpt.has_value())
+            {
+                std::filesystem::path projectFile(projectPathOpt.value());
+                std::filesystem::path projectDir = projectFile.parent_path();
+                return (projectDir / p).lexically_normal().string();
+            }
+
+            return path;
+        }
+
         value::Value getTransformVec3(events::EventDispatcher& dispatcher,
                                       std::span<const value::Value> args,
                                       glm::vec3(*accessor)(const services::TransformData&),
@@ -237,6 +262,36 @@ namespace core::api
                         if (parentId >= 0) cmd.parent = intToEntity(parentId);
                     }
                     return value::Value(entityToInt(dispatcher.execute(cmd)));
+                }});
+
+            // _native_entity_instantiate(prefabPath [, parentId]) -> int
+            // Instantiates a .vfPrefab (mesh/material/collider etc.) and returns the
+            // root entity id, or -1 on failure. Path may be project-relative.
+            interpreter->registerNativeFunction("_native_entity_instantiate",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.empty())
+                    {
+                        vfLogError("[Script] Entity.instantiate: missing prefab path argument");
+                        return value::Value(static_cast<int64_t>(-1));
+                    }
+                    std::string path = extractString(args[0], "Entity.instantiate");
+                    if (path.empty()) return value::Value(static_cast<int64_t>(-1));
+
+                    events::scene::LoadPrefabCommand cmd;
+                    cmd.filePath = resolvePrefabPath(path);
+                    if (args.size() >= 2)
+                    {
+                        int64_t parentId = extractInt64(args[1]);
+                        if (parentId >= 0) cmd.parent = intToEntity(parentId);
+                    }
+                    auto result = dispatcher.execute(cmd);
+                    if (!result.has_value())
+                    {
+                        vfLogError("[Script] Entity.instantiate: failed to load prefab '{}'", cmd.filePath);
+                        return value::Value(static_cast<int64_t>(-1));
+                    }
+                    return value::Value(entityToInt(*result));
                 }});
 
             interpreter->registerNativeFunction("_native_entity_destroy",

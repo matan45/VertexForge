@@ -273,6 +273,10 @@ namespace services {
         virtual void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices) = 0;
         virtual void clearNavmeshDebugMesh() = 0;
 
+        // Plugin world-space mask editor override (VK-1359) — runtime flag, no pipeline recreate
+        virtual void setWorldMaskDebugEnabled(bool enabled) = 0;
+        virtual bool getWorldMaskDebugEnabled() const = 0;
+
         virtual void prepareFrameUICanvasOutlines() = 0;
         virtual void prepareFrameUIImages() = 0;
 

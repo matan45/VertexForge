@@ -312,7 +312,11 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::releaseTextureAsset(const std::string& texturePath)
     {
-        if (bindlessTextures)
+        // Streamed textures own their bindless slot and GPU image — release them
+        // through the stream manager so re-registering after release works
+        // (a stale stream entry would return a freed bindless index).
+        bool wasStreamed = textureStreamManager && textureStreamManager->unregisterTexture(texturePath);
+        if (!wasStreamed && bindlessTextures)
         {
             bindlessTextures->unregisterTexture(texturePath);
         }

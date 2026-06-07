@@ -155,11 +155,11 @@ namespace render::mesh
 
         if (textureDescriptorPool)
         {
-            if (textureDescriptorSet)
-                device.getLogicalDevice().freeDescriptorSets(textureDescriptorPool, textureDescriptorSet);
+            if (!textureDescriptorSets.empty())
+                device.getLogicalDevice().freeDescriptorSets(textureDescriptorPool, textureDescriptorSets);
             device.getLogicalDevice().destroyDescriptorPool(textureDescriptorPool);
             textureDescriptorPool = nullptr;
-            textureDescriptorSet = nullptr;
+            textureDescriptorSets.clear();
         }
         if (textureDescriptorSetLayout)
         {
@@ -180,6 +180,15 @@ namespace render::mesh
             defaultIBLFactory.reset();
             usingDefaultTextures = false;
         }
+    }
+
+    vk::DescriptorSet StaticMeshPipeline::getTextureDescriptorSet(uint32_t imageIndex) const
+    {
+        if (textureDescriptorSets.empty())
+        {
+            return nullptr;
+        }
+        return textureDescriptorSets[imageIndex % textureDescriptorSets.size()];
     }
 
     void StaticMeshPipeline::cleanUp()

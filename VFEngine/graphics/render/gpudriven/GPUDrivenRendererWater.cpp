@@ -295,6 +295,7 @@ namespace render::gpudriven
                     .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                     .giProbeDataLayout = giLayout,
                     .causticLayout = causticLayout,
+                    .worldMaskLayout = currentWorldMaskLayout(),
                     .colorAttachmentFormats = cachedColorFormats,
                     .depthAttachmentFormat = cachedDepthFormat
                 };
@@ -535,6 +536,7 @@ namespace render::gpudriven
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .giProbeDataLayout = giLayout,
                 .causticLayout = nullptr,
+                .worldMaskLayout = currentWorldMaskLayout(),
                 .colorAttachmentFormats = cachedColorFormats,
                 .depthAttachmentFormat = cachedDepthFormat
             };

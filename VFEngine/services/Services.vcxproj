@@ -146,6 +146,7 @@
     <ClInclude Include="data\FileOperationsTypes.hpp" />
     <ClInclude Include="data\OceanData.hpp" />
     <ClInclude Include="data\PluginGraphicsTypes.hpp" />
+    <ClInclude Include="data\PluginTextureTypes.hpp" />
     <ClInclude Include="data\RenderHookContext.hpp" />
     <ClInclude Include="data\RenderHookTypes.hpp" />
     <ClInclude Include="data\SaveTypes.hpp" />
@@ -204,6 +205,7 @@
     <ClInclude Include="events\render\LightStreamingEvents.hpp" />
     <ClInclude Include="events\render\MaterialEvents.hpp" />
     <ClInclude Include="events\render\ObjectStreamingEvents.hpp" />
+    <ClInclude Include="events\render\PluginTextureEvents.hpp" />
     <ClInclude Include="events\render\PostProcessEvents.hpp" />
     <ClInclude Include="events\render\PreviewEvents.hpp" />
     <ClInclude Include="events\render\RenderEvents.hpp" />
@@ -315,6 +317,7 @@
     <ClInclude Include="impl\render\GIServiceImpl.hpp" />
     <ClInclude Include="impl\render\LightStreamingServiceImpl.hpp" />
     <ClInclude Include="impl\render\ObjectStreamingServiceImpl.hpp" />
+    <ClInclude Include="impl\render\PluginTextureServiceImpl.hpp" />
     <ClInclude Include="impl\render\PreviewServiceImpl.hpp" />
     <ClInclude Include="impl\render\RenderHookServiceImpl.hpp" />
     <ClInclude Include="impl\render\RenderTexturePlayModeHandler.hpp" />
@@ -385,6 +388,7 @@
     <ClInclude Include="interfaces\render\IGIService.hpp" />
     <ClInclude Include="interfaces\render\ILightStreamingService.hpp" />
     <ClInclude Include="interfaces\render\IObjectStreamingService.hpp" />
+    <ClInclude Include="interfaces\render\IPluginTextureService.hpp" />
     <ClInclude Include="interfaces\render\IPreviewService.hpp" />
     <ClInclude Include="interfaces\render\IRenderHookService.hpp" />
     <ClInclude Include="interfaces\render\IRenderService.hpp" />
@@ -429,6 +433,7 @@
     <ClInclude Include="providers\render\IMeshPreviewProvider.hpp" />
     <ClInclude Include="providers\render\IObjectStreamingProvider.hpp" />
     <ClInclude Include="providers\render\IOffScreenProvider.hpp" />
+    <ClInclude Include="providers\render\IPluginTextureProvider.hpp" />
     <ClInclude Include="providers\render\IPostProcessProvider.hpp" />
     <ClInclude Include="providers\render\IPreviewProvider.hpp" />
     <ClInclude Include="providers\render\IRenderHookProvider.hpp" />
@@ -519,6 +524,7 @@
     <ClCompile Include="impl\render\GIServiceImpl.cpp" />
     <ClCompile Include="impl\render\LightStreamingServiceImpl.cpp" />
     <ClCompile Include="impl\render\ObjectStreamingServiceImpl.cpp" />
+    <ClCompile Include="impl\render\PluginTextureServiceImpl.cpp" />
     <ClCompile Include="impl\render\PreviewServiceAnimVFX.cpp" />
     <ClCompile Include="impl\render\PreviewServiceImpl.cpp" />
     <ClCompile Include="impl\render\RenderHookServiceImpl.cpp" />

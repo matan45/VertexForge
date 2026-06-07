@@ -35,6 +35,14 @@ namespace plugin {
         explicit PluginManager(std::unordered_set<std::string> capabilities);
         ~PluginManager();
 
+        // Locates the plugins directory relative to the EXECUTABLE (not the CWD —
+        // IDE launchers set the working directory to the project folder). Tries
+        // <exeDir>/plugins (deployed layout), then walks up the ancestors to find
+        // the dev-tree root (bin/Editor/<Config>/x64 -> repo root). A candidate
+        // counts only if it actually contains a .vfplugin descriptor, so stray
+        // empty/data-only "plugins" folders can't hijack discovery.
+        static std::filesystem::path resolvePluginsDirectory();
+
         void loadAll(const std::filesystem::path& pluginDirectory);
         void initializeAll();
         void updateAll(float deltaTime);

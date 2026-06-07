@@ -149,6 +149,7 @@ namespace render::gpudriven
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .giProbeDataLayout = giLayout,
                 .causticLayout = causticLayout,
+                .worldMaskLayout = currentWorldMaskLayout(),
                 .colorAttachmentFormats = cachedColorFormats,
                 .depthAttachmentFormat = cachedDepthFormat
             };

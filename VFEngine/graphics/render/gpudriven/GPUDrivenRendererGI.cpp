@@ -1,5 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../occlusion/DepthPrepass.hpp"
+#include "../custom/PluginTextureManager.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/RenderManager.hpp"
@@ -180,6 +181,7 @@ namespace render::gpudriven
                         .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                         .giProbeDataLayout = storage->getSamplingLayout(),
                         .causticLayout = causticLayout,
+                        .worldMaskLayout = currentWorldMaskLayout(),
                         .colorAttachmentFormats = cachedColorFormats,
                         .depthAttachmentFormat = cachedDepthFormat
                     };
@@ -263,6 +265,7 @@ namespace render::gpudriven
                     .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                     .giProbeDataLayout = nullptr,
                     .causticLayout = causticLayout,
+                    .worldMaskLayout = currentWorldMaskLayout(),
                     .colorAttachmentFormats = cachedColorFormats,
                     .depthAttachmentFormat = cachedDepthFormat
                 };
@@ -480,6 +483,23 @@ namespace render::gpudriven
                lightBufferManager && lightBufferManager->getDirectionalLightCount() > 0;
     }
 
+    vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTShadowMaskLayout() const
+    {
+        if (!rtShadowPipeline || !rtShadowPipeline->isInitialized()) return nullptr;
+        // Same denoised-vs-raw selection as the mesh/terrain pipelines (see dispatchRTShadow).
+        return (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+            ? rtShadowDenoiser->getDenoisedMaskSamplerLayout()
+            : rtShadowPipeline->getShadowMaskSamplerLayout();
+    }
+
+    vk::DescriptorSet GPUDrivenRenderer::getActiveRTShadowMaskDescriptorSet() const
+    {
+        if (!rtShadowPipeline || !rtShadowPipeline->isInitialized()) return nullptr;
+        return (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+            ? rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
+            : rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
+    }
+
     void GPUDrivenRenderer::initAccelerationStructures()
     {
         if (accelStructManager || !device.isRayQuerySupported()) return;
@@ -539,6 +559,136 @@ namespace render::gpudriven
         }
     }
 
+    vk::DescriptorSetLayout GPUDrivenRenderer::currentWorldMaskLayout() const
+    {
+        return (pluginTextureManager && pluginTextureManager->hasMaskResources())
+                   ? pluginTextureManager->getEntityMaskLayout()
+                   : vk::DescriptorSetLayout{};
+    }
+
+    void GPUDrivenRenderer::dispatchWorldMask()
+    {
+        if (!initialized || !pluginTextureManager || !pluginTextureManager->hasMaskResources())
+            return;
+
+        if (!meshShaderPipeline || !shadowSystem || !bindlessTextures || !boneMatrixManager ||
+            !lightBufferManager || !clusterGridManager || !lightCullingPipeline)
+            return;
+
+        // One-time pipeline recreate with WORLD_MASK_ENABLED on the first bind.
+        if (pluginTextureManager->consumeNeedsPipelineRecreate())
+        {
+            recreateScenePipelinesForWorldMask();
+        }
+
+        // Keep descriptor pointers fresh — cheap stores; the sets are owned by the manager
+        // and survive any pipeline recreate (GI/water/motion-vector toggles).
+        vk::DescriptorSet maskSet = pluginTextureManager->getEntityMaskDescriptorSet();
+        meshShaderPipeline->updateWorldMaskDescriptor(maskSet);
+        if (transparentMeshShaderPipeline)
+            transparentMeshShaderPipeline->updateWorldMaskDescriptor(maskSet);
+        if (wboitMeshShaderPipeline)
+            wboitMeshShaderPipeline->updateWorldMaskDescriptor(maskSet);
+
+        // Terrain samples via its own set-11 bindings 3/4 — rewrite when the bound texture changes.
+        if (terrain.pipeline && pluginTextureManager->getMaskDescriptorVersion() != lastWorldMaskVersion)
+        {
+            lastWorldMaskVersion = pluginTextureManager->getMaskDescriptorVersion();
+            terrain.pipeline->updateWorldMaskResources(
+                pluginTextureManager->getMaskImageView(),
+                pluginTextureManager->getMaskSampler(),
+                pluginTextureManager->getMaskParamsBuffer(),
+                custom::PluginTextureManager::getMaskParamsSize());
+        }
+    }
+
+    void GPUDrivenRenderer::recreateScenePipelinesForWorldMask()
+    {
+        vk::DescriptorSetLayout giLayout = (giCascadeManager && giCascadeManager->getProbeStorage())
+            ? giCascadeManager->getProbeStorage()->getSamplingLayout() : vk::DescriptorSetLayout{};
+        vk::DescriptorSetLayout causticLayout = (water.causticsResources && water.causticsResources->isInitialized())
+            ? water.causticsResources->getDescriptorSetLayout() : vk::DescriptorSetLayout{};
+
+        // Preserve the RT shadow mask (set 13) if RT shadows are already active.
+        vk::DescriptorSetLayout rtMaskLayout{};
+        vk::DescriptorSet rtMaskDescSet{};
+        if (rtShadowPipeline && rtShadowPipeline->isInitialized())
+        {
+            const bool useDenoised = rtShadowDenoiser && rtShadowDenoiser->isInitialized();
+            rtMaskLayout = useDenoised ? rtShadowDenoiser->getDenoisedMaskSamplerLayout()
+                                       : rtShadowPipeline->getShadowMaskSamplerLayout();
+            rtMaskDescSet = useDenoised ? rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
+                                        : rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
+        }
+
+        MeshPipelineInitInfo pipelineInfo{
+            .iblLayout = cachedIBLLayout,
+            .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+            .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+            .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+            .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+            .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+            .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+            .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+            .giProbeDataLayout = giLayout,
+            .causticLayout = causticLayout,
+            .rtShadowMaskLayout = rtMaskLayout,
+            .worldMaskLayout = pluginTextureManager->getEntityMaskLayout(),
+            .colorAttachmentFormats = cachedColorFormats,
+            .depthAttachmentFormat = cachedDepthFormat
+        };
+
+        auto restoreDescriptors = [&](MeshShaderPipeline& pipeline)
+        {
+            if (rtMaskDescSet) pipeline.updateRTShadowMaskDescriptor(rtMaskDescSet);
+            if (giLayout && giCascadeManager)
+                pipeline.updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
+            if (causticLayout)
+                pipeline.updateCausticDescriptor(water.causticsResources->getDescriptorSet());
+            pipeline.updateWorldMaskDescriptor(pluginTextureManager->getEntityMaskDescriptorSet());
+        };
+
+        meshShaderPipeline->recreate(pipelineInfo);
+        restoreDescriptors(*meshShaderPipeline);
+
+        if (transparentMeshShaderPipeline)
+        {
+            pipelineInfo.transparentMode = true;
+            transparentMeshShaderPipeline->recreate(pipelineInfo);
+            restoreDescriptors(*transparentMeshShaderPipeline);
+            pipelineInfo.transparentMode = false;
+        }
+
+        if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
+        {
+            pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+            pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
+            pipelineInfo.wboitMode = true;
+            wboitMeshShaderPipeline->recreate(pipelineInfo);
+            restoreDescriptors(*wboitMeshShaderPipeline);
+        }
+
+        // Terrain: bindings 3/4 already live in terrainDataLayout — only the macro needs
+        // the pipeline rebuilt so the shader compiles the sampling branch.
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->setWorldMaskEnabled(true);
+            terrain.pipeline->recreate(
+                cachedIBLLayout,
+                bindlessTextures->getDescriptorSetLayout(),
+                terrain.pipeline->getCachedMeshletLayout(),
+                terrain.pipeline->getCachedVertexLayout(),
+                lightBufferManager->getDescriptorSetLayout(),
+                clusterGridManager->getDescriptorSetLayout(),
+                lightCullingPipeline->getDescriptorSetLayout(),
+                shadowSystem->getShadowDataLayout(),
+                shadowSystem->getShadowTextureLayout(),
+                cachedColorFormats, cachedDepthFormat);
+        }
+
+        vfLogInfo("GPUDrivenRenderer: world mask bound — scene + terrain pipelines recreated with WORLD_MASK_ENABLED");
+    }
+
     void GPUDrivenRenderer::dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex)
     {
         if (!isRTShadowReady()) return;
@@ -587,6 +737,7 @@ namespace render::gpudriven
                     .giProbeDataLayout = giLayout,
                     .causticLayout = causticLayout,
                     .rtShadowMaskLayout = rtMaskLayout,
+                    .worldMaskLayout = currentWorldMaskLayout(),
                     .colorAttachmentFormats = cachedColorFormats,
                     .depthAttachmentFormat = cachedDepthFormat
                 };

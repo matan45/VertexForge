@@ -11,6 +11,7 @@
 #include <glm/glm.hpp>
 #include "../../services/data/RenderHookTypes.hpp"
 #include "../../services/data/CustomPipelineTypes.hpp"
+#include "../../services/data/PluginTextureTypes.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/interfaces/audio/IAudioService.hpp"
 #include "../../services/interfaces/physics/IPhysicsService.hpp"
@@ -130,6 +131,43 @@ namespace plugin {
 
         virtual void destroyCustomPipeline(CustomPipelineHandle handle) = 0;
         virtual void destroyCustomMesh(CustomMeshHandle handle) = 0;
+
+        // === Plugin Textures ===
+        // Only available when hasCapability(capability::graphics) is true.
+        // Plugin-owned 2D GPU textures with per-frame CPU upload. The engine owns all
+        // Vulkan objects; plugins only see opaque handles. All handles are cleaned up
+        // automatically on plugin unload.
+
+        // Create a 2D texture (R8 or RGBA8), zero-initialized. Call at init time.
+        // Returns an invalid handle on failure (error is logged).
+        virtual PluginTextureHandle createTexture2D(uint32_t width, uint32_t height,
+                                                    TextureFormat format) = 0;
+
+        // Stream CPU data to the texture (safe to call every frame). data must contain
+        // exactly width * height * bytesPerPixel(format) tightly packed bytes; mismatched
+        // sizes are rejected with a logged error. The upload lands before the next frame
+        // is rendered.
+        virtual void updateTexture2D(PluginTextureHandle handle, const void* data, size_t size) = 0;
+
+        virtual void destroyTexture2D(PluginTextureHandle handle) = 0;
+
+        // === World-Space Mask ===
+        // Designate one texture as a world-space mask, XZ-projected over
+        // [worldMin.xz, worldMax.xz]. The mask's red channel modulates the scene per
+        // WorldMaskParams: terrain albedo dims (albedo *= mix(terrainDimMin, 1, mask))
+        // and entity fragments discard where mask < entityDiscardBelow. Fragments
+        // outside the bounds are unaffected. One mask may be bound at a time; binding
+        // again replaces it. The first bind compiles the mask sampling into the scene
+        // shaders (one-time pipeline recreate); unbinding and toggling params.enabled
+        // are free (no recreate).
+        virtual void bindWorldMask(PluginTextureHandle handle,
+                                   const glm::vec3& worldMin, const glm::vec3& worldMax,
+                                   const WorldMaskParams& params) = 0;
+
+        virtual void unbindWorldMask() = 0;
+
+        // Update the bound mask's behavior (enabled / dim / discard) — UBO write only.
+        virtual void setWorldMaskParams(const WorldMaskParams& params) = 0;
 
         // === Plugin Events ===
         // Dynamic event system for plugin-to-plugin and plugin-to-engine communication.

@@ -311,7 +311,7 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
@@ -328,13 +328,28 @@ namespace render::gpudriven
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
+        // Bindings 3/4: plugin world mask sampler + params UBO (fragment only).
+        // Written lazily on first bindWorldMask; statically unused until the
+        // WORLD_MASK_ENABLED macro is compiled in, so they may stay unwritten.
+        bindings[3].binding = 3;
+        bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        bindings[4].binding = 4;
+        bindings[4].descriptorType = vk::DescriptorType::eUniformBuffer;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
         terrainDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 3;
+        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+        poolSizes[0] = {vk::DescriptorType::eStorageBuffer, 3};
+        poolSizes[1] = {vk::DescriptorType::eCombinedImageSampler, 1};
+        poolSizes[2] = {vk::DescriptorType::eUniformBuffer, 1};
 
-        terrainDataPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
+        terrainDataPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, poolSizes.data(),
+                                                                             static_cast<uint32_t>(poolSizes.size()));
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = terrainDataPool;
@@ -353,6 +368,36 @@ namespace render::gpudriven
         writeStorageBufferDescriptor(vkDevice, terrainDataDescriptorSet, 2, stampDummyBuffer, sizeof(float));
     }
 
+    void TerrainMeshShaderPipeline::updateWorldMaskResources(vk::ImageView maskView, vk::Sampler maskSampler,
+                                                             vk::Buffer paramsBuffer, vk::DeviceSize paramsSize)
+    {
+        if (!terrainDataDescriptorSet || !maskView || !maskSampler || !paramsBuffer) return;
+
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.sampler = maskSampler;
+        imageInfo.imageView = maskView;
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::DescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = paramsBuffer;
+        bufferInfo.range = paramsSize;
+
+        std::array<vk::WriteDescriptorSet, 2> writes{};
+        writes[0].dstSet = terrainDataDescriptorSet;
+        writes[0].dstBinding = 3;
+        writes[0].descriptorCount = 1;
+        writes[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        writes[0].pImageInfo = &imageInfo;
+        writes[1].dstSet = terrainDataDescriptorSet;
+        writes[1].dstBinding = 4;
+        writes[1].descriptorCount = 1;
+        writes[1].descriptorType = vk::DescriptorType::eUniformBuffer;
+        writes[1].pBufferInfo = &bufferInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(static_cast<uint32_t>(writes.size()),
+                                                       writes.data(), 0, nullptr);
+    }
+
     bool TerrainMeshShaderPipeline::loadTerrainShaders()
     {
         terrainShader = std::make_unique<core::Shader>(device);
@@ -364,6 +409,10 @@ namespace render::gpudriven
         {
             terrainShader->addMacroDefinition("CAUSTICS_ENABLED");
             terrainShader->addMacroDefinition("CAUSTIC_SET", "12");
+        }
+        if (worldMaskEnabled)
+        {
+            terrainShader->addMacroDefinition("WORLD_MASK_ENABLED");
         }
         terrainShader->readShader("../../resources/shaders/gpudriven/task_terrain.glsl");
         terrainShader->readShader("../../resources/shaders/gpudriven/mesh_terrain.glsl");

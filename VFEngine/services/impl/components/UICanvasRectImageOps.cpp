@@ -6,6 +6,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/ui/UIEvents.hpp"
 #include "../../events/project/ApplicationEvents.hpp"
+#include "ui/UIRectMath.hpp"
 
 namespace services {
 
@@ -225,6 +226,41 @@ namespace services {
         return true;
     }
 
+    std::optional<UIResolvedRectData> UIComponentService::getUIResolvedRectPixels(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        entt::entity e = internal::fromHandle(entity);
+        scene::Entity sceneEntity(e);
+        if (!sceneEntity.hasComponent<components::UIRectComponent>()) {
+            return std::nullopt;
+        }
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        float vw = static_cast<float>(dispatcher.query(::events::application::GetViewportWidthQuery{}));
+        float vh = static_cast<float>(dispatcher.query(::events::application::GetViewportHeightQuery{}));
+        if (vw <= 0.0f || vh <= 0.0f) {
+            return std::nullopt;
+        }
+
+        // Same resolution path as the runtime UI hit tests (UIInteractionSystem):
+        // canvas scale + resolvePixelRect against the mouse-space viewport, so the
+        // result lines up with Input::getViewportMouseX/Y and setUIRectPixels.
+        const auto& rectComp = sceneEntity.getComponent<components::UIRectComponent>();
+        const auto* canvas = utilities::ui::findCanvasForEntity(registry, e);
+        float scale = utilities::ui::computeCanvasScale(canvas, vw, vh);
+        utilities::ui::PixelRect rect = utilities::ui::resolvePixelRect(rectComp, vw, vh, scale);
+
+        UIResolvedRectData data;
+        data.x = rect.x;
+        data.y = rect.y;
+        data.w = rect.w;
+        data.h = rect.h;
+        return data;
+    }
+
     // ========== UI Image Operations ==========
 
     bool UIComponentService::addUIImageComponent(EntityHandle entity) {
@@ -388,6 +424,11 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUIRectDataQuery>(
             [this](const events::ui::GetUIRectDataQuery& query) {
                 return getUIRectData(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::GetUIResolvedRectQuery>(
+            [this](const events::ui::GetUIResolvedRectQuery& query) {
+                return getUIResolvedRectPixels(query.entity);
             });
 
         // Image commands

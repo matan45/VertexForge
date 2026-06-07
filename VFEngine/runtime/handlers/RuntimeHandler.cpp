@@ -73,12 +73,7 @@ namespace handlers {
             std::string(plugin::capability::navmesh),
             std::string(plugin::capability::vfx)
         });
-        auto exePath = std::filesystem::current_path();
-        auto pluginsDir = exePath / "plugins";
-        if (!std::filesystem::exists(pluginsDir)) {
-            pluginsDir = exePath / "../../plugins";
-        }
-        pluginManager->loadAll(pluginsDir);
+        pluginManager->loadAll(plugin::PluginManager::resolvePluginsDirectory());
         pluginManager->initializeAll();
 
         // Build the frame task graph with dependency-based parallel execution

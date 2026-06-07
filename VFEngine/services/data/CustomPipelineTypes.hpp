@@ -45,10 +45,44 @@ namespace plugin {
     //   ...
     //   #type FRAGMENT
     //   ...
-    // The engine pushes a mat4 MVP at push-constant offset 0. User push-constant
+    // The engine pushes a mat4 at push-constant offset 0. User push-constant
     // data (pushConstantSize bytes, max MAX_CUSTOM_PUSH_CONSTANT_SIZE) follows at
-    // offset 64 and is visible to both stages. The shader declares:
+    // offset 64 and is visible to both stages.
+    //
+    // Unlit (receiveLighting == false, default): the built-in mat4 is the MVP
+    // (projection * view * model). The shader declares:
     //   layout(push_constant) uniform PC { mat4 mvp; <user fields> };
+    //
+    // Lit (receiveLighting == true): the built-in mat4 is the MODEL matrix and
+    // the engine binds its scene lighting descriptor sets to the pipeline:
+    //   set 0: CameraUBO (b0) + IBL irradiance/prefilter/brdfLUT (b1-b3)
+    //   set 6: directional/point/spot light SSBOs (b0-b2) + LightCounts UBO (b3)
+    //   set 7: cluster grid params UBO (b0)
+    //   set 8: cluster light grid (b0) + light index list (b1)
+    //   set 9: shadow data (b0) + VSM page table (b1)
+    //   set 10: VSM physical pool shadow/depth samplers (b0-b1)
+    //   set 13: RT shadow mask, screen-space sampler2D (b0) — only while RT
+    //           shadows are online (see below)
+    // Sets 1-5 and 11-12 are empty placeholders. Declarations can be copied
+    // verbatim from resources/shaders/gpudriven/mesh_terrain.glsl; the shared
+    // chunks under resources/shaders/common/ are #include-able from plugin GLSL.
+    // The shader computes clip position itself:
+    //   gl_Position = camera.projection * camera.view * pc.model * vec4(pos, 1);
+    //
+    // RT shadows: directional sun shadows are RT-only engine-wide (VSM has no
+    // directional fallback). When the RT shadow pipeline comes online, the
+    // engine recompiles lit pipelines with RT_SHADOW_ENABLED defined and binds
+    // the mask at set 13. Opt in from the shader:
+    //   #ifdef RT_SHADOW_ENABLED
+    //   layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
+    //   #endif
+    // and sample with the screen UV derived from the mask itself (it matches
+    // the offscreen resolution), gated by the runtime flag:
+    //   if (lightCounts.rtShadowActive != 0u)
+    //       shadow = texture(rtShadowMask, gl_FragCoord.xy / vec2(textureSize(rtShadowMask, 0))).r;
+    // Shaders without the #ifdef compile and run unchanged.
+    // Note: normals transformed with mat3(pc.model) are only correct for
+    // uniform scale. See plugins/HexTerrain for a full lit reference shader.
     struct CustomPipelineDesc {
         std::string glslSource;
         std::vector<CustomVertexAttribute> vertexLayout;
@@ -58,6 +92,7 @@ namespace plugin {
         CustomTopology topology = CustomTopology::TriangleList;
         CustomBlendMode blendMode = CustomBlendMode::Opaque;
         uint32_t pushConstantSize = 0;   // user bytes after the built-in mat4
+        bool receiveLighting = false;    // bind scene lighting sets; mat4 becomes MODEL
     };
 
     // Geometry uploaded once and stored device-local. indices may be empty for

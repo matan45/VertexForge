@@ -79,6 +79,13 @@ public class UI {
         return _native_ui_setRectPixels(entityId, x, y, w, h);
     }
 
+    // Resolved on-screen rect of a UIRect in viewport pixels (top-left origin,
+    // y down) — the same pixel space as setRectPixels and Input::getViewportMouseX/Y.
+    // Returns [valid, x, y, w, h]; valid <= 0.5 means no UIRect or no viewport.
+    public static function getRectPixels(int entityId): float[] {
+        return _native_ui_getRectPixels(entityId);
+    }
+
     // ============================================
     // Button Control
     // ============================================

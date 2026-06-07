@@ -68,7 +68,7 @@ namespace render::mesh
 
         vk::DescriptorSetLayout textureDescriptorSetLayout;
         vk::DescriptorPool textureDescriptorPool;
-        vk::DescriptorSet textureDescriptorSet;
+        std::vector<vk::DescriptorSet> textureDescriptorSets;
         bool textureDescriptorsInitialized = false;
 
         std::unique_ptr<MeshGPUCache> meshCache;
@@ -147,6 +147,7 @@ namespace render::mesh
         std::string getLastShaderCompilationError() const;
 
         void updatePreviewTextureDescriptors(
+            uint32_t imageIndex,
             const std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES>& imageViews,
             const std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES>& samplers);
 
@@ -210,6 +211,7 @@ namespace render::mesh
         void createTextureDescriptorSetLayout();
         void createTextureDescriptorPool();
         void initializeDefaultTextureDescriptors();
+        vk::DescriptorSet getTextureDescriptorSet(uint32_t imageIndex) const;
 
         struct SortedSubmesh
         {
@@ -223,6 +225,7 @@ namespace render::mesh
         {
             vk::Pipeline currentPipeline = nullptr;
             vk::DescriptorSet currentMaterialDescriptorSet = nullptr;
+            vk::DescriptorSet defaultMaterialDescriptorSet = nullptr;
         };
 
         void collectSortedSubmeshes(

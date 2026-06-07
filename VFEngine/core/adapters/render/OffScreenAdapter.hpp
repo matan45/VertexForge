@@ -104,6 +104,9 @@ namespace core
         void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices) override;
         void clearNavmeshDebugMesh() override;
 
+        void setWorldMaskDebugEnabled(bool enabled) override;
+        bool getWorldMaskDebugEnabled() const override;
+
         void prepareFrameUICanvasOutlines() override;
         void prepareFrameUIImages() override;
 

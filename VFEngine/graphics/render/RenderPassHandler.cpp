@@ -23,6 +23,7 @@
 #include "transparency/WBOITPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "custom/CustomPipelineManager.hpp"
+#include "custom/PluginTextureManager.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "cloud/CloudPipeline.hpp"
@@ -50,6 +51,7 @@ namespace render
         , terrainRaycastPipeline{std::make_unique<gpudriven::TerrainRaycastPipeline>(device)}
         , postProcessPipeline{std::make_unique<postprocess::PostProcessPipeline>(device, swapChain, offscreenResources)}
         , customPipelineManager{std::make_unique<custom::CustomPipelineManager>(device, swapChain)}
+        , pluginTextureManager{std::make_unique<custom::PluginTextureManager>(device)}
         , frameGraph{std::make_unique<graph::RenderGraph>(device)}
         , graphProfiler{std::make_unique<graph::RenderGraphProfiler>()}
     {
@@ -142,6 +144,8 @@ namespace render
         if (texCache.hasDefaultTexture())
             gpuDrivenRenderer->setDefaultTexture(texCache.getDefaultView(), texCache.getDefaultSampler());
 
+        gpuDrivenRenderer->setPluginTextureManager(pluginTextureManager.get());
+
         gpuDrivenRenderer->setEnabled(true);
         gpuDrivenRendererInitialized = true;
 
@@ -153,6 +157,29 @@ namespace render
 
         decalPipeline = std::make_unique<decal::DecalPipeline>(device, swapChain, offscreenResources);
         decalPipeline->init();
+
+        // Lighting layouts for lit plugin custom pipelines (receiveLighting) —
+        // builds any lit pipelines plugins created before the renderer was ready.
+        if (customPipelineManager)
+        {
+            auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+            auto* cgm = gpuDrivenRenderer->getClusterGridManager();
+            auto* lcp = gpuDrivenRenderer->getLightCullingPipeline();
+            auto* shadowSystem = gpuDrivenRenderer->getShadowSystem();
+            if (lbm && cgm && lcp && shadowSystem)
+            {
+                customPipelineManager->setLightingLayouts({
+                    meshPipeline->getIBLDescriptorSetLayout(),
+                    lbm->getDescriptorSetLayout(),
+                    cgm->getDescriptorSetLayout(),
+                    lcp->getDescriptorSetLayout(),
+                    shadowSystem->getShadowDataLayout(),
+                    shadowSystem->getShadowTextureLayout(),
+                    // RT shadow mask (set 13) — usually null here; the per-frame
+                    // syncCustomPipelineRTShadow picks it up when RT comes online.
+                    gpuDrivenRenderer->getActiveRTShadowMaskLayout()});
+            }
+        }
     }
 
     void RenderPassHandler::recreateOverlayPipelines()
@@ -188,6 +215,50 @@ namespace render
     void RenderPassHandler::destroyCustomMesh(plugin::CustomMeshHandle handle)
     {
         customPipelineManager->destroyMesh(handle);
+    }
+
+    plugin::PluginTextureHandle RenderPassHandler::createPluginTexture2D(uint32_t width, uint32_t height,
+                                                                         plugin::TextureFormat format)
+    {
+        return pluginTextureManager->createTexture2D(width, height, format);
+    }
+
+    void RenderPassHandler::updatePluginTexture2D(plugin::PluginTextureHandle handle,
+                                                  std::vector<std::byte>&& data)
+    {
+        pluginTextureManager->updateTexture2D(handle, std::move(data));
+    }
+
+    void RenderPassHandler::destroyPluginTexture2D(plugin::PluginTextureHandle handle)
+    {
+        pluginTextureManager->destroyTexture2D(handle);
+    }
+
+    void RenderPassHandler::bindWorldMask(plugin::PluginTextureHandle handle,
+                                          const glm::vec3& worldMin, const glm::vec3& worldMax,
+                                          const plugin::WorldMaskParams& params)
+    {
+        pluginTextureManager->bindWorldMask(handle, worldMin, worldMax, params);
+    }
+
+    void RenderPassHandler::unbindWorldMask()
+    {
+        pluginTextureManager->unbindWorldMask();
+    }
+
+    void RenderPassHandler::setWorldMaskParams(const plugin::WorldMaskParams& params)
+    {
+        pluginTextureManager->setWorldMaskParams(params);
+    }
+
+    void RenderPassHandler::setWorldMaskDebugEnabled(bool enabled)
+    {
+        pluginTextureManager->setDebugMaskEnabled(enabled);
+    }
+
+    bool RenderPassHandler::getWorldMaskDebugEnabled() const
+    {
+        return pluginTextureManager->getDebugMaskEnabled();
     }
 
     void RenderPassHandler::recreate()
@@ -260,6 +331,7 @@ namespace render
         if (decalPipeline) decalPipeline->cleanup();
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer) gpuDrivenRenderer->cleanup();
         if (customPipelineManager) customPipelineManager->cleanUp();
+        if (pluginTextureManager) pluginTextureManager->cleanUp();
         if (cameraOcclusionManager) cameraOcclusionManager->cleanup();
         cleanUpPipelines();
         if (volumetricFogComposite) volumetricFogComposite->cleanup();

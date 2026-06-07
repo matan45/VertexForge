@@ -8,6 +8,7 @@
 #include "../../services/data/RenderHookTypes.hpp"
 #include "../../services/data/RenderHookContext.hpp"
 #include "../../services/data/CustomPipelineTypes.hpp"
+#include "../../services/data/PluginTextureTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include "common/SharedCameraUBO.hpp"
 #include "graph/RenderGraphTypes.hpp"
@@ -58,6 +59,8 @@ namespace render::decal
 namespace render::custom
 {
     class CustomPipelineManager;
+    class PluginTextureManager;
+    struct CustomLightingSets;
 }
 
 namespace render::vfx
@@ -258,6 +261,9 @@ namespace render
 
         // Plugin-owned custom pipelines/meshes (handle-based, all Vulkan engine-side)
         std::unique_ptr<custom::CustomPipelineManager> customPipelineManager;
+
+        // Plugin-owned 2D textures + world-space mask binding (handle-based)
+        std::unique_ptr<custom::PluginTextureManager> pluginTextureManager;
 
         // Additional frustums for RTT cameras — merged with main when loading terrain tiles.
         // Mutable because they are consumed (cleared) inside the const updateGPUDrivenSceneData().
@@ -461,6 +467,20 @@ namespace render
         void destroyCustomPipeline(plugin::CustomPipelineHandle handle);
         void destroyCustomMesh(plugin::CustomMeshHandle handle);
 
+        // Plugin 2D textures + world-space mask (terrain dim / entity discard)
+        plugin::PluginTextureHandle createPluginTexture2D(uint32_t width, uint32_t height,
+                                                          plugin::TextureFormat format);
+        void updatePluginTexture2D(plugin::PluginTextureHandle handle, std::vector<std::byte>&& data);
+        void destroyPluginTexture2D(plugin::PluginTextureHandle handle);
+        void bindWorldMask(plugin::PluginTextureHandle handle,
+                           const glm::vec3& worldMin, const glm::vec3& worldMax,
+                           const plugin::WorldMaskParams& params);
+        void unbindWorldMask();
+        void setWorldMaskParams(const plugin::WorldMaskParams& params);
+        void setWorldMaskDebugEnabled(bool enabled);
+        bool getWorldMaskDebugEnabled() const;
+        custom::PluginTextureManager* getPluginTextureManager() const { return pluginTextureManager.get(); }
+
         void initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline);
         void resetVolumetricFogComposite();
         volumetric::VolumetricFogComposite* getVolumetricFogComposite() const { return volumetricFogComposite.get(); }
@@ -520,6 +540,12 @@ namespace render
         void recordInlineScenePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
                                                vk::DescriptorSet iblDescriptorSet, DebugRenderer* debugRendererPtr,
                                                bool hasCustomShaderMeshes, bool wboitActive) const;
+        // Per-frame lighting descriptor sets for lit plugin custom pipelines
+        // (returns empty sets until the gpu-driven renderer is initialized).
+        custom::CustomLightingSets buildCustomLightingSets(vk::DescriptorSet iblDescriptorSet) const;
+        // Once-per-frame poll: forwards the active RT shadow mask layout to the
+        // custom pipeline manager (rebuilds lit pipelines when it first arrives).
+        void syncCustomPipelineRTShadow();
         void drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void drawUIOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);

@@ -1,10 +1,12 @@
 #include "print/Log.hpp"
 #include "PluginContextImpl.hpp"
+#include "PluginManager.hpp"
 #include "PluginEventBus.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
 #include "events/render/CustomPipelineEvents.hpp"
+#include "events/render/PluginTextureEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/audio/AudioBusEvents.hpp"
@@ -26,6 +28,7 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <cstring>
 
 namespace plugin {
 
@@ -235,6 +238,96 @@ namespace plugin {
             [&](const plugin::CustomMeshHandle& h) { return h.id == handle.id; });
     }
 
+    plugin::PluginTextureHandle PluginContextImpl::createTexture2D(uint32_t width, uint32_t height,
+                                                                   plugin::TextureFormat format)
+    {
+        if (!hasCapability(std::string(capability::graphics))) {
+            vfLogWarning("[Plugin:{}] Cannot create texture - graphics capability not available", pluginName);
+            return {};
+        }
+
+        events::plugintexture::CreateTexture2DCommand cmd;
+        cmd.width = width;
+        cmd.height = height;
+        cmd.format = format;
+        auto handle = events::EventDispatcher::instance().execute(cmd);
+
+        if (handle.isValid()) {
+            managedTextures.push_back(handle);
+            vfLogInfo("[Plugin:{}] Created texture {} ({}x{})", pluginName, handle.id, width, height);
+        } else {
+            vfLogError("[Plugin:{}] Texture creation failed (see engine log)", pluginName);
+        }
+
+        return handle;
+    }
+
+    void PluginContextImpl::updateTexture2D(plugin::PluginTextureHandle handle, const void* data, size_t size)
+    {
+        if (!handle.isValid() || !data || size == 0) return;
+
+        events::plugintexture::UpdateTexture2DCommand cmd;
+        cmd.handle = handle;
+        cmd.data.resize(size);
+        std::memcpy(cmd.data.data(), data, size);
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::destroyTexture2D(plugin::PluginTextureHandle handle)
+    {
+        if (!handle.isValid()) return;
+
+        if (boundWorldMaskTexture.id == handle.id) {
+            unbindWorldMask();
+        }
+
+        events::plugintexture::DestroyTexture2DCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+
+        std::erase_if(managedTextures,
+            [&](const plugin::PluginTextureHandle& h) { return h.id == handle.id; });
+    }
+
+    void PluginContextImpl::bindWorldMask(plugin::PluginTextureHandle handle,
+                                          const glm::vec3& worldMin, const glm::vec3& worldMax,
+                                          const plugin::WorldMaskParams& params)
+    {
+        if (!hasCapability(std::string(capability::graphics))) {
+            vfLogWarning("[Plugin:{}] Cannot bind world mask - graphics capability not available", pluginName);
+            return;
+        }
+        if (!handle.isValid()) return;
+
+        events::plugintexture::BindWorldMaskCommand cmd;
+        cmd.handle = handle;
+        cmd.worldMin = worldMin;
+        cmd.worldMax = worldMax;
+        cmd.params = params;
+        events::EventDispatcher::instance().execute(cmd);
+
+        boundWorldMaskTexture = handle;
+    }
+
+    void PluginContextImpl::unbindWorldMask()
+    {
+        if (!boundWorldMaskTexture.isValid()) return;
+
+        events::plugintexture::UnbindWorldMaskCommand cmd;
+        events::EventDispatcher::instance().execute(cmd);
+
+        boundWorldMaskTexture = {};
+    }
+
+    void PluginContextImpl::setWorldMaskParams(const plugin::WorldMaskParams& params)
+    {
+        if (!hasCapability(std::string(capability::graphics))) return;
+
+        events::plugintexture::SetWorldMaskParamsCommand cmd;
+        cmd.params = params;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
     entt::registry& PluginContextImpl::getRegistry()
     {
         return scene::EntityRegistry::getRegistry();
@@ -265,7 +358,14 @@ namespace plugin {
             safeName = "_plugin_";
         }
 
-        auto path = std::filesystem::current_path() / "plugins" / "data" / safeName;
+        // Anchor on the resolved plugins directory, not the CWD — IDE launchers
+        // run with a different working directory and would scatter config files
+        // (and create stray "plugins" folders that used to hijack discovery).
+        const auto* manager = PluginManager::getActive();
+        auto base = manager && !manager->getPluginsDirectory().empty()
+            ? manager->getPluginsDirectory()
+            : PluginManager::resolvePluginsDirectory();
+        auto path = base / "data" / safeName;
         return path.string();
     }
 
@@ -993,6 +1093,22 @@ namespace plugin {
             }
         }
         managedCustomMeshes.clear();
+
+        // Unbind the world mask if this plugin owns it, then destroy its textures
+        if (boundWorldMaskTexture.isValid()) {
+            events::plugintexture::UnbindWorldMaskCommand cmd;
+            try { dispatcher.execute(cmd); } catch (...) {}
+            boundWorldMaskTexture = {};
+        }
+        for (const auto& handle : managedTextures) {
+            events::plugintexture::DestroyTexture2DCommand cmd;
+            cmd.handle = handle;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        managedTextures.clear();
 
         for (const auto& key : managedHeightFieldBodies) {
             events::physics::DestroyHeightFieldBodyCommand cmd;

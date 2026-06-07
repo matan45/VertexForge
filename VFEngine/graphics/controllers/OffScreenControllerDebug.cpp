@@ -79,6 +79,25 @@ namespace controllers
         return false;
     }
 
+    void OffScreenController::setWorldMaskDebugEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setWorldMaskDebugEnabled(enabled);
+        }
+    }
+
+    bool OffScreenController::getWorldMaskDebugEnabled() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            return renderHandler->getWorldMaskDebugEnabled();
+        }
+        return true;
+    }
+
     void OffScreenController::updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices,
                                                       const std::vector<uint32_t>& indices)
     {

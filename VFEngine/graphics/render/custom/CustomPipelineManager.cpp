@@ -4,14 +4,55 @@
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "resource/PathResolver.hpp"
 #include "print/Log.hpp"
 
 namespace render::custom
 {
     namespace
     {
-        // Built-in push-constant block: mat4 MVP at offset 0, user data follows.
+        // Built-in push-constant block at offset 0, user data follows. Unlit
+        // pipelines receive the MVP here; lit pipelines receive the MODEL matrix
+        // and reconstruct clip position from the camera UBO (set 0).
         constexpr uint32_t BUILTIN_PUSH_CONSTANT_SIZE = sizeof(glm::mat4);
+
+        // Lit pipelines mirror the engine scene-pass set numbering (sets 0-10).
+        constexpr uint32_t LIT_DESCRIPTOR_SET_COUNT = 11;
+
+        // With RT shadows online the layout extends to set 13 (RT shadow mask);
+        // sets 11-12 are empty placeholders like 1-5.
+        constexpr uint32_t LIT_DESCRIPTOR_SET_COUNT_WITH_RT = 14;
+
+        // Binds contiguous runs of non-null sets; null slots (placeholders 1-5,
+        // uninitialized shadow sets) are skipped. Mirrors the terrain pipeline's
+        // bindDescriptorSetsInBatches.
+        void bindSetsSkippingNulls(const vk::CommandBuffer& commandBuffer, vk::PipelineLayout layout,
+                                   const vk::DescriptorSet* sets, uint32_t count)
+        {
+            uint32_t batchStart = 0;
+            std::vector<vk::DescriptorSet> batch;
+
+            auto flush = [&]()
+            {
+                if (batch.empty()) return;
+                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout,
+                                                 batchStart, static_cast<uint32_t>(batch.size()),
+                                                 batch.data(), 0, nullptr);
+                batch.clear();
+            };
+
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                if (!sets[i])
+                {
+                    flush();
+                    continue;
+                }
+                if (batch.empty()) batchStart = i;
+                batch.push_back(sets[i]);
+            }
+            flush();
+        }
     }
 
     CustomPipelineManager::CustomPipelineManager(core::Device& device, core::SwapChain& swapChain)
@@ -68,11 +109,26 @@ namespace render::custom
         entry.desc = desc;
         entry.shader = std::make_shared<core::Shader>(device);
 
+        // Plugin shaders may #include the shared chunks under resources/shaders/
+        // (e.g. common/lighting_functions.glsl for lit pipelines).
+        entry.shader->setIncludeBasePath(resource::PathResolver::resolveEnginePath("../../resources/shaders"));
+
         if (!entry.shader->compileFromSource(desc.glslSource, "plugin_custom_pipeline"))
         {
             vfLogError("CustomPipelineManager: shader compilation failed: {}",
                        entry.shader->getLastCompilationError());
             return {};
+        }
+
+        if (desc.receiveLighting && !lightingLayouts.isComplete())
+        {
+            // Plugins can create pipelines before the gpu-driven renderer's
+            // lighting managers exist — keep the entry and build the pipeline
+            // when setLightingLayouts() arrives. Draws are skipped until then.
+            uint64_t id = nextId++;
+            vfLogInfo("CustomPipelineManager: deferring lit pipeline {} until lighting layouts are available", id);
+            pipelines.emplace(id, std::move(entry));
+            return plugin::CustomPipelineHandle{id};
         }
 
         if (!buildPipeline(entry))
@@ -83,6 +139,79 @@ namespace render::custom
         uint64_t id = nextId++;
         pipelines.emplace(id, std::move(entry));
         return plugin::CustomPipelineHandle{id};
+    }
+
+    void CustomPipelineManager::setLightingLayouts(const CustomLightingLayouts& layouts)
+    {
+        lightingLayouts = layouts;
+        if (!lightingLayouts.isComplete()) return;
+
+        for (auto& [id, entry] : pipelines)
+        {
+            if (entry.desc.receiveLighting && !entry.pipeline)
+            {
+                if (!buildPipeline(entry))
+                {
+                    vfLogError("CustomPipelineManager: deferred lit pipeline {} build failed", id);
+                }
+            }
+        }
+    }
+
+    void CustomPipelineManager::setRTShadowMaskLayout(vk::DescriptorSetLayout layout)
+    {
+        if (layout == lightingLayouts.rtShadowMask) return;
+        lightingLayouts.rtShadowMask = layout;
+
+        // Layout gone (RT shadows torn down): keep pipelines as-built — the
+        // runtime flag lightCounts.rtShadowActive gates the shader branch,
+        // mirroring the engine mesh/terrain pipelines which never rebuild down.
+        if (!layout) return;
+        if (!lightingLayouts.isComplete()) return;
+
+        bool anyLit = false;
+        for (const auto& [id, entry] : pipelines)
+        {
+            if (entry.desc.receiveLighting)
+            {
+                anyLit = true;
+                break;
+            }
+        }
+        if (!anyLit) return;
+
+        // Fires once per RT-enable (and once more on a raw -> denoised layout
+        // switch) — never on the per-frame unchanged path.
+        device.getLogicalDevice().waitIdle();
+        for (auto& [id, entry] : pipelines)
+        {
+            if (!entry.desc.receiveLighting) continue;
+            destroyPipelineObjects(entry);
+            if (!buildPipeline(entry))
+            {
+                vfLogError("CustomPipelineManager: lit pipeline {} rebuild with RT shadow mask failed", id);
+            }
+        }
+        vfLogInfo("CustomPipelineManager: lit pipelines rebuilt with RT shadow mask (set 13)");
+    }
+
+    bool CustomPipelineManager::recompileShaderWithRTMacro(PipelineEntry& entry)
+    {
+        // compileFromSource appends shader stages, so a recompile needs a fresh
+        // core::Shader rather than compiling on the existing one.
+        auto shader = std::make_shared<core::Shader>(device);
+        shader->setIncludeBasePath(resource::PathResolver::resolveEnginePath("../../resources/shaders"));
+        shader->addMacroDefinition("RT_SHADOW_ENABLED");
+        if (!shader->compileFromSource(entry.desc.glslSource, "plugin_custom_pipeline"))
+        {
+            vfLogError("CustomPipelineManager: RT_SHADOW_ENABLED recompile failed: {}",
+                       shader->getLastCompilationError());
+            return false;
+        }
+        if (entry.shader) entry.shader->cleanUp();
+        entry.shader = std::move(shader);
+        entry.shaderHasRTMacro = true;
+        return true;
     }
 
     bool CustomPipelineManager::buildPipeline(PipelineEntry& entry)
@@ -116,6 +245,49 @@ namespace render::custom
         config.shaderStages = entry.shader->getShaderStages();
         config.vertexBindings = {binding};
         config.vertexAttributes = attributes;
+
+        if (desc.receiveLighting)
+        {
+            if (!lightingLayouts.isComplete())
+            {
+                vfLogError("CustomPipelineManager: lit pipeline build requested before lighting layouts are set");
+                return false;
+            }
+            if (!emptyLayout)
+            {
+                emptyLayout = device.getLogicalDevice().createDescriptorSetLayout({});
+            }
+            // Engine scene-pass set numbering; sets 1-5 are empty placeholders.
+            config.descriptorSetLayouts = {
+                lightingLayouts.ibl,                                            // set 0: camera + IBL
+                emptyLayout, emptyLayout, emptyLayout, emptyLayout, emptyLayout, // sets 1-5
+                lightingLayouts.lights,                                         // set 6
+                lightingLayouts.clusterParams,                                  // set 7
+                lightingLayouts.clusterIndices,                                 // set 8
+                lightingLayouts.shadowData,                                     // set 9
+                lightingLayouts.shadowTextures                                  // set 10
+            };
+
+            if (lightingLayouts.rtShadowMask)
+            {
+                // RT shadows online: inject RT_SHADOW_ENABLED so plugin shaders
+                // can opt in via #ifdef, and extend the layout to set 13.
+                if (!entry.shaderHasRTMacro && !recompileShaderWithRTMacro(entry))
+                {
+                    return false;
+                }
+                config.shaderStages = entry.shader->getShaderStages();
+                config.descriptorSetLayouts.push_back(emptyLayout);                // set 11
+                config.descriptorSetLayouts.push_back(emptyLayout);                // set 12
+                config.descriptorSetLayouts.push_back(lightingLayouts.rtShadowMask); // set 13
+                entry.hasRTShadowSet = true;
+            }
+            else
+            {
+                entry.hasRTShadowSet = false;
+            }
+        }
+
         config.pushConstantSize = BUILTIN_PUSH_CONSTANT_SIZE + desc.pushConstantSize;
         config.pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         config.depthTestEnable = desc.depthTest;
@@ -217,7 +389,8 @@ namespace render::custom
     }
 
     void CustomPipelineManager::render(const vk::CommandBuffer& commandBuffer,
-                                       const glm::mat4& view, const glm::mat4& projection) const
+                                       const glm::mat4& view, const glm::mat4& projection,
+                                       const CustomLightingSets& lightingSets) const
     {
         if (pendingDraws.empty()) return;
 
@@ -232,15 +405,49 @@ namespace render::custom
             const PipelineEntry& pipelineEntry = pipelineIt->second;
             const MeshEntry& meshEntry = meshIt->second;
 
+            // Deferred lit pipeline whose layouts never arrived (or failed to build).
+            if (!pipelineEntry.pipeline) continue;
+
+            const bool lit = pipelineEntry.desc.receiveLighting;
+            // Lit shaders statically access the lighting sets — drawing while any
+            // is unbound is invalid, so skip until the frame provides all of them.
+            if (lit && !lightingSets.isComplete()) continue;
+
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineEntry.pipeline);
 
             vk::Buffer vertexBuffers[] = {meshEntry.vertexBuffer};
             vk::DeviceSize offsets[] = {0};
             commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-            const glm::mat4 mvp = projection * view * item.model;
-            commandBuffer.pushConstants(pipelineEntry.layout, pushStages,
-                                        0, BUILTIN_PUSH_CONSTANT_SIZE, &mvp);
+            if (lit)
+            {
+                const vk::DescriptorSet sets[LIT_DESCRIPTOR_SET_COUNT_WITH_RT] = {
+                    lightingSets.ibl,
+                    {}, {}, {}, {}, {},          // sets 1-5: empty placeholders
+                    lightingSets.lights,
+                    lightingSets.clusterParams,
+                    lightingSets.clusterIndices,
+                    lightingSets.shadowData,
+                    lightingSets.shadowTextures,
+                    {}, {},                      // sets 11-12: empty placeholders
+                    lightingSets.rtShadowMask    // set 13: only with RT shadows online
+                };
+                const uint32_t setCount = pipelineEntry.hasRTShadowSet
+                    ? LIT_DESCRIPTOR_SET_COUNT_WITH_RT
+                    : LIT_DESCRIPTOR_SET_COUNT;
+                bindSetsSkippingNulls(commandBuffer, pipelineEntry.layout, sets, setCount);
+
+                // Lit pipelines receive the model matrix; the shader reconstructs
+                // clip position from the camera UBO.
+                commandBuffer.pushConstants(pipelineEntry.layout, pushStages,
+                                            0, BUILTIN_PUSH_CONSTANT_SIZE, &item.model);
+            }
+            else
+            {
+                const glm::mat4 mvp = projection * view * item.model;
+                commandBuffer.pushConstants(pipelineEntry.layout, pushStages,
+                                            0, BUILTIN_PUSH_CONSTANT_SIZE, &mvp);
+            }
 
             const uint32_t userSize = pipelineEntry.desc.pushConstantSize;
             if (userSize > 0 && item.pushConstants.size() >= userSize)
@@ -271,6 +478,8 @@ namespace render::custom
         for (auto& [id, entry] : pipelines)
         {
             destroyPipelineObjects(entry);
+            // Lit pipelines stay deferred until lighting layouts are available.
+            if (entry.desc.receiveLighting && !lightingLayouts.isComplete()) continue;
             buildPipeline(entry);
         }
     }
@@ -363,5 +572,11 @@ namespace render::custom
             destroyMeshBuffers(entry);
         }
         meshes.clear();
+
+        if (emptyLayout)
+        {
+            device.getLogicalDevice().destroyDescriptorSetLayout(emptyLayout);
+            emptyLayout = nullptr;
+        }
     }
 }
