@@ -507,6 +507,12 @@ namespace render::gpudriven
         void setPluginTextureManager(custom::PluginTextureManager* manager) { pluginTextureManager = manager; }
         void dispatchWorldMask();
         raytracing::RTShadowPipeline* getRTShadowPipeline() const { return rtShadowPipeline.get(); }
+        // Active RT shadow mask (set 13) layout/descriptor for fragment-shader
+        // sampling — denoised variant when the denoiser is up, else the raw
+        // mask, else null while the RT shadow pipeline isn't online. Consumed
+        // by lit plugin custom pipelines (CustomPipelineManager).
+        vk::DescriptorSetLayout getActiveRTShadowMaskLayout() const;
+        vk::DescriptorSet getActiveRTShadowMaskDescriptorSet() const;
         void applyRTShadowSettings(const types::RTShadowSettings& settings);
         types::RTShadowStats getRTShadowStats() const;
 

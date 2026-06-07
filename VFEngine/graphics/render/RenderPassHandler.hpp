@@ -543,6 +543,9 @@ namespace render
         // Per-frame lighting descriptor sets for lit plugin custom pipelines
         // (returns empty sets until the gpu-driven renderer is initialized).
         custom::CustomLightingSets buildCustomLightingSets(vk::DescriptorSet iblDescriptorSet) const;
+        // Once-per-frame poll: forwards the active RT shadow mask layout to the
+        // custom pipeline manager (rebuilds lit pipelines when it first arrives).
+        void syncCustomPipelineRTShadow();
         void drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void drawUIOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);

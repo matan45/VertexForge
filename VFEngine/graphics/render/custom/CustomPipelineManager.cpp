@@ -19,6 +19,10 @@ namespace render::custom
         // Lit pipelines mirror the engine scene-pass set numbering (sets 0-10).
         constexpr uint32_t LIT_DESCRIPTOR_SET_COUNT = 11;
 
+        // With RT shadows online the layout extends to set 13 (RT shadow mask);
+        // sets 11-12 are empty placeholders like 1-5.
+        constexpr uint32_t LIT_DESCRIPTOR_SET_COUNT_WITH_RT = 14;
+
         // Binds contiguous runs of non-null sets; null slots (placeholders 1-5,
         // uninitialized shadow sets) are skipped. Mirrors the terrain pipeline's
         // bindDescriptorSetsInBatches.
@@ -154,6 +158,62 @@ namespace render::custom
         }
     }
 
+    void CustomPipelineManager::setRTShadowMaskLayout(vk::DescriptorSetLayout layout)
+    {
+        if (layout == lightingLayouts.rtShadowMask) return;
+        lightingLayouts.rtShadowMask = layout;
+
+        // Layout gone (RT shadows torn down): keep pipelines as-built — the
+        // runtime flag lightCounts.rtShadowActive gates the shader branch,
+        // mirroring the engine mesh/terrain pipelines which never rebuild down.
+        if (!layout) return;
+        if (!lightingLayouts.isComplete()) return;
+
+        bool anyLit = false;
+        for (const auto& [id, entry] : pipelines)
+        {
+            if (entry.desc.receiveLighting)
+            {
+                anyLit = true;
+                break;
+            }
+        }
+        if (!anyLit) return;
+
+        // Fires once per RT-enable (and once more on a raw -> denoised layout
+        // switch) — never on the per-frame unchanged path.
+        device.getLogicalDevice().waitIdle();
+        for (auto& [id, entry] : pipelines)
+        {
+            if (!entry.desc.receiveLighting) continue;
+            destroyPipelineObjects(entry);
+            if (!buildPipeline(entry))
+            {
+                vfLogError("CustomPipelineManager: lit pipeline {} rebuild with RT shadow mask failed", id);
+            }
+        }
+        vfLogInfo("CustomPipelineManager: lit pipelines rebuilt with RT shadow mask (set 13)");
+    }
+
+    bool CustomPipelineManager::recompileShaderWithRTMacro(PipelineEntry& entry)
+    {
+        // compileFromSource appends shader stages, so a recompile needs a fresh
+        // core::Shader rather than compiling on the existing one.
+        auto shader = std::make_shared<core::Shader>(device);
+        shader->setIncludeBasePath(resource::PathResolver::resolveEnginePath("../../resources/shaders"));
+        shader->addMacroDefinition("RT_SHADOW_ENABLED");
+        if (!shader->compileFromSource(entry.desc.glslSource, "plugin_custom_pipeline"))
+        {
+            vfLogError("CustomPipelineManager: RT_SHADOW_ENABLED recompile failed: {}",
+                       shader->getLastCompilationError());
+            return false;
+        }
+        if (entry.shader) entry.shader->cleanUp();
+        entry.shader = std::move(shader);
+        entry.shaderHasRTMacro = true;
+        return true;
+    }
+
     bool CustomPipelineManager::buildPipeline(PipelineEntry& entry)
     {
         const auto& desc = entry.desc;
@@ -207,6 +267,25 @@ namespace render::custom
                 lightingLayouts.shadowData,                                     // set 9
                 lightingLayouts.shadowTextures                                  // set 10
             };
+
+            if (lightingLayouts.rtShadowMask)
+            {
+                // RT shadows online: inject RT_SHADOW_ENABLED so plugin shaders
+                // can opt in via #ifdef, and extend the layout to set 13.
+                if (!entry.shaderHasRTMacro && !recompileShaderWithRTMacro(entry))
+                {
+                    return false;
+                }
+                config.shaderStages = entry.shader->getShaderStages();
+                config.descriptorSetLayouts.push_back(emptyLayout);                // set 11
+                config.descriptorSetLayouts.push_back(emptyLayout);                // set 12
+                config.descriptorSetLayouts.push_back(lightingLayouts.rtShadowMask); // set 13
+                entry.hasRTShadowSet = true;
+            }
+            else
+            {
+                entry.hasRTShadowSet = false;
+            }
         }
 
         config.pushConstantSize = BUILTIN_PUSH_CONSTANT_SIZE + desc.pushConstantSize;
@@ -342,16 +421,21 @@ namespace render::custom
 
             if (lit)
             {
-                const vk::DescriptorSet sets[LIT_DESCRIPTOR_SET_COUNT] = {
+                const vk::DescriptorSet sets[LIT_DESCRIPTOR_SET_COUNT_WITH_RT] = {
                     lightingSets.ibl,
                     {}, {}, {}, {}, {},          // sets 1-5: empty placeholders
                     lightingSets.lights,
                     lightingSets.clusterParams,
                     lightingSets.clusterIndices,
                     lightingSets.shadowData,
-                    lightingSets.shadowTextures
+                    lightingSets.shadowTextures,
+                    {}, {},                      // sets 11-12: empty placeholders
+                    lightingSets.rtShadowMask    // set 13: only with RT shadows online
                 };
-                bindSetsSkippingNulls(commandBuffer, pipelineEntry.layout, sets, LIT_DESCRIPTOR_SET_COUNT);
+                const uint32_t setCount = pipelineEntry.hasRTShadowSet
+                    ? LIT_DESCRIPTOR_SET_COUNT_WITH_RT
+                    : LIT_DESCRIPTOR_SET_COUNT;
+                bindSetsSkippingNulls(commandBuffer, pipelineEntry.layout, sets, setCount);
 
                 // Lit pipelines receive the model matrix; the shader reconstructs
                 // clip position from the camera UBO.

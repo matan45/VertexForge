@@ -20,7 +20,10 @@ namespace render::custom
     // Descriptor set layouts shared by lit custom pipelines (receiveLighting).
     // Non-owning — each layout is owned by its engine-side manager. Slots map to
     // shader set numbers: ibl=0, lights=6, clusterParams=7, clusterIndices=8,
-    // shadowData=9, shadowTextures=10 (sets 1-5 are empty placeholders).
+    // shadowData=9, shadowTextures=10, rtShadowMask=13 (sets 1-5 and 11-12 are
+    // empty placeholders). rtShadowMask is optional — null until the RT shadow
+    // pipeline comes online; lit pipelines are rebuilt with RT_SHADOW_ENABLED
+    // and set 13 when it arrives (see setRTShadowMaskLayout).
     struct CustomLightingLayouts
     {
         vk::DescriptorSetLayout ibl;
@@ -29,9 +32,11 @@ namespace render::custom
         vk::DescriptorSetLayout clusterIndices;
         vk::DescriptorSetLayout shadowData;
         vk::DescriptorSetLayout shadowTextures;
+        vk::DescriptorSetLayout rtShadowMask;
 
         [[nodiscard]] bool isComplete() const
         {
+            // rtShadowMask is intentionally excluded — RT shadows are optional.
             return ibl && lights && clusterParams && clusterIndices && shadowData && shadowTextures;
         }
     };
@@ -46,9 +51,11 @@ namespace render::custom
         vk::DescriptorSet clusterIndices;
         vk::DescriptorSet shadowData;
         vk::DescriptorSet shadowTextures;
+        vk::DescriptorSet rtShadowMask;
 
         [[nodiscard]] bool isComplete() const
         {
+            // rtShadowMask is intentionally excluded — RT shadows are optional.
             return ibl && lights && clusterParams && clusterIndices && shadowData && shadowTextures;
         }
     };
@@ -67,6 +74,10 @@ namespace render::custom
             std::shared_ptr<core::Shader> shader;
             vk::Pipeline pipeline;
             vk::PipelineLayout layout;
+            // Lit pipelines only: whether the layout includes set 13 (RT shadow
+            // mask) and whether the shader was compiled with RT_SHADOW_ENABLED.
+            bool hasRTShadowSet = false;
+            bool shaderHasRTMacro = false;
         };
 
         struct MeshEntry
@@ -113,6 +124,13 @@ namespace render::custom
         // was deferred because the layouts were not yet available.
         void setLightingLayouts(const CustomLightingLayouts& layouts);
 
+        // RT shadow mask layout (set 13) — polled once per frame by the render
+        // pass handler. On a layout change with a valid layout, lit pipelines
+        // are rebuilt with RT_SHADOW_ENABLED injected into their GLSL. Going
+        // back to null does NOT rebuild down (mirrors the engine pipelines);
+        // the runtime flag lightCounts.rtShadowActive gates the shader branch.
+        void setRTShadowMaskLayout(vk::DescriptorSetLayout layout);
+
         // Records pending draws. Must be called inside an active dynamic-rendering
         // pass targeting the scene color + depth attachments (viewport/scissor set).
         // lightingSets feed lit pipelines; lit draws are skipped while incomplete.
@@ -130,6 +148,7 @@ namespace render::custom
 
     private:
         bool buildPipeline(PipelineEntry& entry);
+        bool recompileShaderWithRTMacro(PipelineEntry& entry);
         void destroyPipelineObjects(PipelineEntry& entry);
         void destroyMeshBuffers(MeshEntry& entry);
 

@@ -483,6 +483,23 @@ namespace render::gpudriven
                lightBufferManager && lightBufferManager->getDirectionalLightCount() > 0;
     }
 
+    vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTShadowMaskLayout() const
+    {
+        if (!rtShadowPipeline || !rtShadowPipeline->isInitialized()) return nullptr;
+        // Same denoised-vs-raw selection as the mesh/terrain pipelines (see dispatchRTShadow).
+        return (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+            ? rtShadowDenoiser->getDenoisedMaskSamplerLayout()
+            : rtShadowPipeline->getShadowMaskSamplerLayout();
+    }
+
+    vk::DescriptorSet GPUDrivenRenderer::getActiveRTShadowMaskDescriptorSet() const
+    {
+        if (!rtShadowPipeline || !rtShadowPipeline->isInitialized()) return nullptr;
+        return (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+            ? rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
+            : rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
+    }
+
     void GPUDrivenRenderer::initAccelerationStructures()
     {
         if (accelStructManager || !device.isRayQuerySupported()) return;

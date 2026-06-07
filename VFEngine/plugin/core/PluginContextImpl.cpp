@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "PluginContextImpl.hpp"
+#include "PluginManager.hpp"
 #include "PluginEventBus.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
@@ -357,7 +358,14 @@ namespace plugin {
             safeName = "_plugin_";
         }
 
-        auto path = std::filesystem::current_path() / "plugins" / "data" / safeName;
+        // Anchor on the resolved plugins directory, not the CWD — IDE launchers
+        // run with a different working directory and would scatter config files
+        // (and create stray "plugins" folders that used to hijack discovery).
+        const auto* manager = PluginManager::getActive();
+        auto base = manager && !manager->getPluginsDirectory().empty()
+            ? manager->getPluginsDirectory()
+            : PluginManager::resolvePluginsDirectory();
+        auto path = base / "data" / safeName;
         return path.string();
     }
 

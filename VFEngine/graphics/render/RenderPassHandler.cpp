@@ -174,7 +174,10 @@ namespace render
                     cgm->getDescriptorSetLayout(),
                     lcp->getDescriptorSetLayout(),
                     shadowSystem->getShadowDataLayout(),
-                    shadowSystem->getShadowTextureLayout()});
+                    shadowSystem->getShadowTextureLayout(),
+                    // RT shadow mask (set 13) — usually null here; the per-frame
+                    // syncCustomPipelineRTShadow picks it up when RT comes online.
+                    gpuDrivenRenderer->getActiveRTShadowMaskLayout()});
             }
         }
     }

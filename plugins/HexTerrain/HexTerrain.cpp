@@ -434,11 +434,30 @@ layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer { uint page
 layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
 layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
 
+// RT shadow mask (set 13) — the engine injects RT_SHADOW_ENABLED and binds the
+// screen-space mask once RT shadows come online. Directional sun shadows are
+// RT-only engine-wide, so without this the hex grid receives unshadowed sun.
+#ifdef RT_SHADOW_ENABLED
+layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
+#endif
+
 #define SHADOW_BUFFER shadowDataArray
 #define PAGE_TABLE pageTableHex
 #include "common/shadow_sampling.glsl"
 
 layout(push_constant) uniform PC { mat4 model; float time; float opacity; float hovered; float selected; } pc;
+
+// Mirrors mesh_terrain.glsl's sampleTerrainDirectionalShadow, with the screen
+// UV derived from the mask itself (it matches the offscreen resolution).
+float sampleRTDirectionalShadow() {
+#ifdef RT_SHADOW_ENABLED
+    if (lightCounts.rtShadowActive != 0u) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(rtShadowMask, 0));
+        return texture(rtShadowMask, screenUV).r;
+    }
+#endif
+    return 1.0;
+}
 
 void main() {
     vec3 N = normalize(fragNormal);
@@ -496,10 +515,13 @@ void main() {
         }
     }
 
-    // Directional lights (sun) — VSM has no directional fallback engine-wide
-    // (RT-only); matches the scene mesh/terrain shaders.
+    // Directional lights (sun) — RT shadow mask when online, unshadowed
+    // otherwise (VSM has no directional fallback engine-wide); matches the
+    // scene mesh/terrain shaders.
+    float dirShadow = sampleRTDirectionalShadow();
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
-        directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, directionalLights[i]);
+        minShadow = min(minShadow, dirShadow);
+        directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, directionalLights[i]) * dirShadow;
     }
 
     float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;

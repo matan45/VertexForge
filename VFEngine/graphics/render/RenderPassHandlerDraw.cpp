@@ -48,6 +48,11 @@ namespace render
         // copies land outside any render pass and complete before the scene samples them.
         if (pluginTextureManager) pluginTextureManager->flushUploads(commandBuffer);
 
+        // Lit plugin custom pipelines: pick up the RT shadow mask layout once the
+        // RT shadow pipeline comes online — rebuilds them with RT_SHADOW_ENABLED
+        // + set 13. Cheap no-op while the layout is unchanged.
+        syncCustomPipelineRTShadow();
+
         frameGraph->reset();
         importFrameResources(imageIndex);
         buildFrameGraph(commandBuffer, imageIndex);
@@ -78,7 +83,17 @@ namespace render
             sets.shadowData = shadowSystem->getShadowDataDescSet();
             sets.shadowTextures = shadowSystem->getShadowTextureDescSet();
         }
+
+        // Set 13 — fetched per frame so raw <-> denoised switches and resizes
+        // are picked up automatically; null while RT shadows are offline.
+        sets.rtShadowMask = gpuDrivenRenderer->getActiveRTShadowMaskDescriptorSet();
         return sets;
+    }
+
+    void RenderPassHandler::syncCustomPipelineRTShadow()
+    {
+        if (!customPipelineManager || !gpuDrivenRendererInitialized || !gpuDrivenRenderer) return;
+        customPipelineManager->setRTShadowMaskLayout(gpuDrivenRenderer->getActiveRTShadowMaskLayout());
     }
 
     void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
