@@ -578,6 +578,34 @@ namespace core::api
                 return value::Value(dispatcher.execute(cmd));
             }});
 
+        // _native_ui_getRectPixels(entityId) — resolved on-screen rect of a UIRect in
+        // viewport pixels (top-left origin, y down), same pixel space as setRectPixels
+        // and Input::getViewportMouseX/Y. miss (no UIRect / no viewport) -> [0.0];
+        // hit -> [1.0, x, y, w, h].
+        interpreter->registerNativeFunction("_native_ui_getRectPixels",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto missArray = []() -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(0.0f));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return missArray();
+
+                events::ui::GetUIResolvedRectQuery query;
+                query.entity = intToEntity(extractInt64(args[0], "_native_ui_getRectPixels"));
+                auto rect = dispatcher.query(query);
+                if (!rect.has_value()) return missArray();
+
+                auto result = std::make_shared<value::NativeArray>(5, value::ValueType::FLOAT);
+                result->set(0, value::Value(1.0f));
+                result->set(1, value::Value(rect->x));
+                result->set(2, value::Value(rect->y));
+                result->set(3, value::Value(rect->w));
+                result->set(4, value::Value(rect->h));
+                return value::Value(result);
+            }});
+
         interpreter->registerNativeFunction("_native_ui_getImageColor",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();

@@ -98,6 +98,16 @@ namespace events::ui {
         std::string_view getName() const override { return "GetUIRectData"; }
     };
 
+    // Resolved on-screen pixel rect (viewport space, top-left origin, y down) of a
+    // UIRect, accounting for canvas anchoring + ScaleWithScreenSize — the read-side
+    // counterpart of SetUIRectPixelsCommand, resolved with the same math as the
+    // runtime UI hit tests. nullopt if the entity has no UIRect or no viewport.
+    struct GetUIResolvedRectQuery : IQuery<std::optional<services::UIResolvedRectData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetUIResolvedRect"; }
+    };
+
     // ============================================
     // UI Image Commands
     // ============================================
