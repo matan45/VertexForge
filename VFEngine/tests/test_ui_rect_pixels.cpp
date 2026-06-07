@@ -87,4 +87,34 @@ TEST_SUITE("UIRectPixels")
         CHECK(rect.w == doctest::Approx(100.0f));
         CHECK(rect.h == doctest::Approx(50.0f));
     }
+
+    // VK-1315: UI::getRectPixels reads an AUTHORED rect back in viewport pixels
+    // via the same resolvePixelRect path. Layout mirrors the RTS minimap view:
+    // bottom-left anchors (0,0), pivot (0,1), anchoredPosition (40,12),
+    // sizeDelta (210,197) under a ScaleWithScreenSize canvas (ref 1920x1080).
+    TEST_CASE("authored bottom-left rect resolves to viewport pixels (getRectPixels)")
+    {
+        components::UIRectComponent comp;
+        comp.anchorMin = glm::vec2(0.0f, 0.0f);
+        comp.anchorMax = glm::vec2(0.0f, 0.0f);
+        comp.pivot = glm::vec2(0.0f, 1.0f);
+        comp.anchoredPosition = glm::vec2(40.0f, 12.0f);
+        comp.sizeDelta = glm::vec2(210.0f, 197.0f);
+
+        // Native viewport == canvas reference: scale 1.
+        utilities::ui::PixelRect rect =
+            utilities::ui::resolvePixelRect(comp, 1920.0f, 1080.0f, 1.0f);
+        CHECK(rect.x == doctest::Approx(40.0f));
+        CHECK(rect.y == doctest::Approx(1080.0f - 12.0f - 197.0f));
+        CHECK(rect.w == doctest::Approx(210.0f));
+        CHECK(rect.h == doctest::Approx(197.0f));
+
+        // Half-size viewport: ScaleWithScreenSize gives scale 0.5, so offsets
+        // and size shrink with it while staying glued to the bottom-left.
+        rect = utilities::ui::resolvePixelRect(comp, 960.0f, 540.0f, 0.5f);
+        CHECK(rect.x == doctest::Approx(20.0f));
+        CHECK(rect.y == doctest::Approx(540.0f - 6.0f - 98.5f));
+        CHECK(rect.w == doctest::Approx(105.0f));
+        CHECK(rect.h == doctest::Approx(98.5f));
+    }
 }
