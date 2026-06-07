@@ -27,6 +27,8 @@ cache/
 
 # Build results
 [Dd]ebug/
+!VFEngine/editor/windows/debug/
+!VFEngine/editor/windows/debug/**
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
