@@ -45,6 +45,10 @@ namespace core {
 		void addMacroDefinition(const std::string& name);
 		void addMacroDefinition(const std::string& name, const std::string& value);
 
+		// Root for resolving #include directives when compiling from source
+		// (compileFromSource/compileFromSources). Defaults to "." if unset.
+		void setIncludeBasePath(const std::filesystem::path& basePath) { currentShaderBasePath = basePath; }
+
 		bool compileFromSource(std::string_view source, std::string_view shaderName = "generated");
 
 		bool compileFromSources(std::string_view vertexSource, std::string_view fragmentSource,

@@ -60,6 +60,7 @@ namespace render::custom
 {
     class CustomPipelineManager;
     class PluginTextureManager;
+    struct CustomLightingSets;
 }
 
 namespace render::vfx
@@ -539,6 +540,9 @@ namespace render
         void recordInlineScenePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
                                                vk::DescriptorSet iblDescriptorSet, DebugRenderer* debugRendererPtr,
                                                bool hasCustomShaderMeshes, bool wboitActive) const;
+        // Per-frame lighting descriptor sets for lit plugin custom pipelines
+        // (returns empty sets until the gpu-driven renderer is initialized).
+        custom::CustomLightingSets buildCustomLightingSets(vk::DescriptorSet iblDescriptorSet) const;
         void drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void drawUIOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);

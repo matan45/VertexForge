@@ -157,6 +157,26 @@ namespace render
 
         decalPipeline = std::make_unique<decal::DecalPipeline>(device, swapChain, offscreenResources);
         decalPipeline->init();
+
+        // Lighting layouts for lit plugin custom pipelines (receiveLighting) —
+        // builds any lit pipelines plugins created before the renderer was ready.
+        if (customPipelineManager)
+        {
+            auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+            auto* cgm = gpuDrivenRenderer->getClusterGridManager();
+            auto* lcp = gpuDrivenRenderer->getLightCullingPipeline();
+            auto* shadowSystem = gpuDrivenRenderer->getShadowSystem();
+            if (lbm && cgm && lcp && shadowSystem)
+            {
+                customPipelineManager->setLightingLayouts({
+                    meshPipeline->getIBLDescriptorSetLayout(),
+                    lbm->getDescriptorSetLayout(),
+                    cgm->getDescriptorSetLayout(),
+                    lcp->getDescriptorSetLayout(),
+                    shadowSystem->getShadowDataLayout(),
+                    shadowSystem->getShadowTextureLayout()});
+            }
+        }
     }
 
     void RenderPassHandler::recreateOverlayPipelines()

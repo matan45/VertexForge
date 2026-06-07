@@ -105,6 +105,7 @@ private:
     struct HexVertex
     {
         glm::vec3 position;
+        glm::vec3 normal;  // terrain surface normal — feeds the lit pipeline's PBR shading
         glm::vec4 color;
         float edge;       // 0 at hex center, 1 at the rim — used for border shading
         float hexIndex;   // flat per-hex id, compared against the picked hex in the shader
@@ -368,36 +369,146 @@ public:
 private:
     bool createPipeline()
     {
+        // Lit pipeline (receiveLighting): the engine binds its scene lighting
+        // sets (0 camera+IBL, 6 lights, 7/8 clusters, 9/10 VSM shadows) and the
+        // push-constant mat4 is the MODEL matrix — declarations below mirror
+        // resources/shaders/gpudriven/mesh_terrain.glsl.
         plugin::CustomPipelineDesc desc;
         desc.glslSource = R"(#type VERTEX
-#version 450
+#version 460 core
+#extension GL_GOOGLE_include_directive : require
+#include "common/camera_types.glsl"
 layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec4 inColor;
-layout(location = 2) in float inEdge;
-layout(location = 3) in float inHexIndex;
-layout(push_constant) uniform PC { mat4 mvp; float time; float opacity; float hovered; float selected; } pc;
-layout(location = 0) out vec4 fragColor;
-layout(location = 1) out float fragEdge;
-layout(location = 2) flat out float fragHexIndex;
+layout(location = 1) in vec3 inNormal;
+layout(location = 2) in vec4 inColor;
+layout(location = 3) in float inEdge;
+layout(location = 4) in float inHexIndex;
+layout(set = 0, binding = 0) uniform CameraUBO { CameraData camera; };
+layout(push_constant) uniform PC { mat4 model; float time; float opacity; float hovered; float selected; } pc;
+layout(location = 0) out vec3 fragWorldPos;
+layout(location = 1) out vec3 fragNormal;
+layout(location = 2) out vec4 fragColor;
+layout(location = 3) out float fragEdge;
+layout(location = 4) flat out float fragHexIndex;
 void main() {
-    gl_Position = pc.mvp * vec4(inPosition, 1.0);
+    vec4 worldPos = pc.model * vec4(inPosition, 1.0);
+    gl_Position = camera.projection * camera.view * worldPos;
+    fragWorldPos = worldPos.xyz;
+    fragNormal = mat3(pc.model) * inNormal;   // uniform scale only (identity here)
     fragColor = inColor;
     fragEdge = inEdge;
     fragHexIndex = inHexIndex;
 }
 
 #type FRAGMENT
-#version 450
-layout(push_constant) uniform PC { mat4 mvp; float time; float opacity; float hovered; float selected; } pc;
-layout(location = 0) in vec4 fragColor;
-layout(location = 1) in float fragEdge;
-layout(location = 2) flat in float fragHexIndex;
+#version 460 core
+#extension GL_GOOGLE_include_directive : require
+#include "common/camera_types.glsl"
+#include "common/lighting_functions.glsl"
+#include "common/shadow_sampling_types.glsl"
+#include "common/cluster_culling.glsl"
+
+layout(location = 0) in vec3 fragWorldPos;
+layout(location = 1) in vec3 fragNormal;
+layout(location = 2) in vec4 fragColor;
+layout(location = 3) in float fragEdge;
+layout(location = 4) flat in float fragHexIndex;
 layout(location = 0) out vec4 outColor;
+
+layout(set = 0, binding = 0) uniform CameraUBO { CameraData camera; };
+layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
+layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
+layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
+
+layout(std430, set = 6, binding = 0) readonly buffer DirectionalLightBuffer { DirectionalLight directionalLights[]; };
+layout(std430, set = 6, binding = 1) readonly buffer PointLightBuffer { PointLight pointLights[]; };
+layout(std430, set = 6, binding = 2) readonly buffer SpotLightBuffer { SpotLight spotLights[]; };
+layout(std140, set = 6, binding = 3) uniform LightCountsUBO { LightCounts lightCounts; };
+
+layout(std140, set = 7, binding = 0) uniform ClusterParamsUBO { ClusterGridParams clusterParams; };
+layout(std430, set = 8, binding = 0) readonly buffer ClusterLightGridBuffer { ClusterLightData clusterLightGrid[]; };
+layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer { uint lightIndexList[]; };
+
+layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer { ShadowData shadowDataArray[]; };
+layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer { uint pageTableHex[]; };
+layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
+layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
+
+#define SHADOW_BUFFER shadowDataArray
+#define PAGE_TABLE pageTableHex
+#include "common/shadow_sampling.glsl"
+
+layout(push_constant) uniform PC { mat4 model; float time; float opacity; float hovered; float selected; } pc;
+
 void main() {
-    // Darkened rim per hex; subtle pulse keeps the overlay readable in motion
+    vec3 N = normalize(fragNormal);
+    vec3 V = normalize(camera.cameraPos - fragWorldPos);
+
+    // Darkened rim per hex, baked into the albedo so it shades like a decal
     float border = smoothstep(0.82, 0.97, fragEdge);
+    vec3 albedo = fragColor.rgb * (1.0 - 0.45 * border);
+    const float metallic = 0.0;
+    const float roughness = 0.85;
+    const float ao = 1.0;
+
+    // IBL ambient — same split-sum path as mesh_terrain.glsl
+    vec3 R = reflect(-V, N);
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+    float NdotV = max(dot(N, V), 0.0);
+    vec3 irradiance = texture(irradianceMap, N).rgb;
+    vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+    vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
+
+    vec3 specularScale;
+    vec3 kD;
+    multiScatterCompensation(F0, brdf, metallic, specularScale, kD);
+    float so = specularOcclusion(NdotV, ao, roughness);
+    vec3 ambient = kD * irradiance * albedo * ao + prefilteredColor * specularScale * 0.5 * so;
+
+    // Clustered point/spot lights with VSM shadows
+    vec3 directLighting = vec3(0.0);
+    float minShadow = 1.0;
+
+    float linearZ = linearizeDepth(clusterParams, gl_FragCoord.z);
+    uint clusterIdx = getClusterIndex(clusterParams, gl_FragCoord.xy, linearZ);
+
+    if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
+        ClusterLightData clusterData = clusterLightGrid[clusterIdx];
+        uint clusterPointCount = getClusterPointLightCount(clusterData);
+        uint clusterSpotCount = getClusterSpotLightCount(clusterData);
+        uint lightOffset = clusterData.offset;
+
+        for (uint i = 0u; i < clusterPointCount; ++i) {
+            uint lightIdx = lightIndexList[lightOffset + i];
+            PointLight light = pointLights[lightIdx];
+            float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N, light.position, light.radius);
+            minShadow = min(minShadow, shadow);
+            directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
+        }
+
+        for (uint i = 0u; i < clusterSpotCount; ++i) {
+            uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
+            uint lightIdx = extractLightIndex(packedIdx);
+            SpotLight light = spotLights[lightIdx];
+            float shadow = sampleVSMShadow(light.shadowIndex, fragWorldPos, N);
+            minShadow = min(minShadow, shadow);
+            directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
+        }
+    }
+
+    // Directional lights (sun) — VSM has no directional fallback engine-wide
+    // (RT-only); matches the scene mesh/terrain shaders.
+    for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
+        directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, directionalLights[i]);
+    }
+
+    float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;
+    float ambientShadowFactor = mix(1.0, pow(minShadow, shadowContrast), lightCounts.shadowIntensity);
+    ambient *= ambientShadowFactor;
+
+    // Subtle pulse keeps the overlay readable in motion
     float pulse = 0.9 + 0.1 * sin(pc.time * 2.0);
-    vec3 tile = fragColor.rgb * (1.0 - 0.45 * border) * pulse;
+    vec3 tile = (ambient + directLighting) * pulse;
     float alpha = fragColor.a * pc.opacity;
 
     bool isHovered  = pc.hovered  >= 0.0 && abs(fragHexIndex - pc.hovered)  < 0.5;
@@ -415,6 +526,7 @@ void main() {
 )";
         desc.vertexLayout = {
             plugin::CustomVertexAttribute::Float3,  // position
+            plugin::CustomVertexAttribute::Float3,  // normal
             plugin::CustomVertexAttribute::Float4,  // color
             plugin::CustomVertexAttribute::Float,   // edge factor
             plugin::CustomVertexAttribute::Float    // hex index (flat)
@@ -423,6 +535,7 @@ void main() {
         desc.blendMode = plugin::CustomBlendMode::AlphaBlend;
         desc.depthWrite = false;   // overlay: test against scene depth, don't occlude it
         desc.pushConstantSize = 16;
+        desc.receiveLighting = true;   // IBL + clustered lights + VSM shadows
 
         pipeline = ctx->createCustomPipeline(desc);
         if (!pipeline.isValid())
@@ -441,6 +554,16 @@ void main() {
             if (result.valid) return result.height + HEIGHT_OFFSET;
         }
         return HEIGHT_OFFSET;
+    }
+
+    // Terrain surface normal via central differences of the same height
+    // function the grid is draped with — flat (0,1,0) when no terrain exists.
+    glm::vec3 sampleNormal(float worldX, float worldZ) const
+    {
+        const float e = settings->hexSize * 0.25f;
+        const float dx = sampleHeight(worldX + e, worldZ) - sampleHeight(worldX - e, worldZ);
+        const float dz = sampleHeight(worldX, worldZ + e) - sampleHeight(worldX, worldZ - e);
+        return glm::normalize(glm::vec3(-dx, 2.0f * e, -dz));
     }
 
     // Deterministic tile color from axial coordinates — stands in for real
@@ -489,14 +612,14 @@ void main() {
                 axialToIndex[axialKey(q, r)] = hexCounter++;
 
                 const uint32_t centerIndex = static_cast<uint32_t>(vertices.size());
-                vertices.push_back({{cx, sampleHeight(cx, cz), cz}, color, 0.0f, hexIndex});
+                vertices.push_back({{cx, sampleHeight(cx, cz), cz}, sampleNormal(cx, cz), color, 0.0f, hexIndex});
 
                 for (int corner = 0; corner < 6; ++corner)
                 {
                     const float angle = glm::radians(60.0f * corner - 30.0f);
                     const float x = cx + hexSize * std::cos(angle);
                     const float z = cz + hexSize * std::sin(angle);
-                    vertices.push_back({{x, sampleHeight(x, z), z}, color, 1.0f, hexIndex});
+                    vertices.push_back({{x, sampleHeight(x, z), z}, sampleNormal(x, z), color, 1.0f, hexIndex});
                 }
 
                 for (uint32_t corner = 0; corner < 6; ++corner)

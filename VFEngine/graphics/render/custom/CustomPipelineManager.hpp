@@ -17,6 +17,42 @@ namespace core
 
 namespace render::custom
 {
+    // Descriptor set layouts shared by lit custom pipelines (receiveLighting).
+    // Non-owning — each layout is owned by its engine-side manager. Slots map to
+    // shader set numbers: ibl=0, lights=6, clusterParams=7, clusterIndices=8,
+    // shadowData=9, shadowTextures=10 (sets 1-5 are empty placeholders).
+    struct CustomLightingLayouts
+    {
+        vk::DescriptorSetLayout ibl;
+        vk::DescriptorSetLayout lights;
+        vk::DescriptorSetLayout clusterParams;
+        vk::DescriptorSetLayout clusterIndices;
+        vk::DescriptorSetLayout shadowData;
+        vk::DescriptorSetLayout shadowTextures;
+
+        [[nodiscard]] bool isComplete() const
+        {
+            return ibl && lights && clusterParams && clusterIndices && shadowData && shadowTextures;
+        }
+    };
+
+    // Per-frame descriptor sets bound to lit custom pipelines; same slot -> set
+    // mapping as CustomLightingLayouts. Lit draws are skipped while any set is null.
+    struct CustomLightingSets
+    {
+        vk::DescriptorSet ibl;
+        vk::DescriptorSet lights;
+        vk::DescriptorSet clusterParams;
+        vk::DescriptorSet clusterIndices;
+        vk::DescriptorSet shadowData;
+        vk::DescriptorSet shadowTextures;
+
+        [[nodiscard]] bool isComplete() const
+        {
+            return ibl && lights && clusterParams && clusterIndices && shadowData && shadowTextures;
+        }
+    };
+
     // Engine-side owner of plugin-created graphics pipelines and meshes.
     // Plugins describe pipelines (GLSL source + fixed-function state) and geometry,
     // and receive opaque handles back; every Vulkan object lives here so no Vulkan
@@ -51,6 +87,12 @@ namespace render::custom
         std::vector<plugin::CustomDrawItem> pendingDraws;
         uint64_t nextId = 1;
 
+        // Lighting layouts for lit pipelines (set after the gpu-driven renderer
+        // initializes). Lit pipelines created earlier are built lazily when the
+        // layouts arrive. emptyLayout fills placeholder sets 1-5; owned here.
+        CustomLightingLayouts lightingLayouts;
+        vk::DescriptorSetLayout emptyLayout;
+
     public:
         explicit CustomPipelineManager(core::Device& device, core::SwapChain& swapChain);
         ~CustomPipelineManager();
@@ -66,10 +108,17 @@ namespace render::custom
 
         [[nodiscard]] bool hasDraws() const { return !pendingDraws.empty(); }
 
+        // Provides the engine lighting descriptor set layouts used by lit
+        // pipelines (receiveLighting). Builds any lit pipelines whose creation
+        // was deferred because the layouts were not yet available.
+        void setLightingLayouts(const CustomLightingLayouts& layouts);
+
         // Records pending draws. Must be called inside an active dynamic-rendering
         // pass targeting the scene color + depth attachments (viewport/scissor set).
+        // lightingSets feed lit pipelines; lit draws are skipped while incomplete.
         void render(const vk::CommandBuffer& commandBuffer,
-                    const glm::mat4& view, const glm::mat4& projection) const;
+                    const glm::mat4& view, const glm::mat4& projection,
+                    const CustomLightingSets& lightingSets) const;
 
         // Drops this frame's pending draws — called once per frame after recording.
         void endFrame();

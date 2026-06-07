@@ -25,6 +25,10 @@
 #include "transparency/WBOITPipeline.hpp"
 #include "custom/CustomPipelineManager.hpp"
 #include "custom/PluginTextureManager.hpp"
+#include "lighting/GPULightBufferManager.hpp"
+#include "lighting/ClusterGridManager.hpp"
+#include "lighting/LightCullingPipeline.hpp"
+#include "shadow/ShadowSystem.hpp"
 #include "upscaling/UpscaleManager.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -53,6 +57,28 @@ namespace render
         // Plugin custom draws are enqueued per frame — drop them whether or not
         // the scene pass consumed them (e.g. GPU-driven renderer disabled).
         if (customPipelineManager) customPipelineManager->endFrame();
+    }
+
+    custom::CustomLightingSets RenderPassHandler::buildCustomLightingSets(vk::DescriptorSet iblDescriptorSet) const
+    {
+        // Same per-frame sets the terrain pipeline consumes (see
+        // GPUDrivenRenderer::renderTerrainDraw); lit custom pipelines are
+        // skipped while any set is missing.
+        custom::CustomLightingSets sets{};
+        if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer) return sets;
+
+        sets.ibl = iblDescriptorSet;
+        if (auto* lbm = gpuDrivenRenderer->getLightBufferManager()) sets.lights = lbm->getDescriptorSet();
+        if (auto* cgm = gpuDrivenRenderer->getClusterGridManager()) sets.clusterParams = cgm->getDescriptorSet();
+        if (auto* lcp = gpuDrivenRenderer->getLightCullingPipeline()) sets.clusterIndices = lcp->getDescriptorSet();
+
+        auto* shadowSystem = gpuDrivenRenderer->getShadowSystem();
+        if (shadowSystem && shadowSystem->isInitialized())
+        {
+            sets.shadowData = shadowSystem->getShadowDataDescSet();
+            sets.shadowTextures = shadowSystem->getShadowTextureDescSet();
+        }
+        return sets;
     }
 
     void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
@@ -424,14 +450,17 @@ namespace render
             setupSecondary(overlayCmd);
             if (hasCustomShaderMeshes)
                 meshPipeline->renderMeshList(overlayCmd, imageIndex, customShaderMeshDrawList, currentFrustum);
-            if (customPipelineManager)
-                customPipelineManager->render(overlayCmd, currentView, currentProjection);
             gpuDrivenRenderer->renderGIDebug(overlayCmd, currentProjection * currentView);
             if (debugRendererPtr)
             {
                 debugRendererPtr->render(overlayCmd, combinedMeshDrawList, currentView, currentProjection,
                     [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
             }
+            // Plugin custom pipelines draw last in the scene pass, just before
+            // post-processing.
+            if (customPipelineManager)
+                customPipelineManager->render(overlayCmd, currentView, currentProjection,
+                                              buildCustomLightingSets(iblDescriptorSet));
             overlayCmd.end();
         }
 
@@ -478,9 +507,6 @@ namespace render
             if (hasCustomShaderMeshes)
                 meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
 
-            if (customPipelineManager)
-                customPipelineManager->render(commandBuffer, currentView, currentProjection);
-
             gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
 
             if (debugRendererPtr)
@@ -488,6 +514,12 @@ namespace render
                 debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
                     [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
             }
+
+            // Plugin custom pipelines draw last in the scene pass, just before
+            // post-processing.
+            if (customPipelineManager)
+                customPipelineManager->render(commandBuffer, currentView, currentProjection,
+                                              buildCustomLightingSets(iblDescriptorSet));
         }
 
         auto sceneRecordEnd = std::chrono::high_resolution_clock::now();
@@ -557,9 +589,6 @@ namespace render
         if (hasCustomShaderMeshes)
             meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
 
-        if (customPipelineManager)
-            customPipelineManager->render(commandBuffer, currentView, currentProjection);
-
         gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
 
         if (debugRendererPtr)
@@ -570,6 +599,12 @@ namespace render
                                          return meshPipeline->getMesh(meshId);
                                      });
         }
+
+        // Plugin custom pipelines draw last in the scene pass, just before
+        // post-processing.
+        if (customPipelineManager)
+            customPipelineManager->render(commandBuffer, currentView, currentProjection,
+                                          buildCustomLightingSets(iblDescriptorSet));
 
         meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
     }
