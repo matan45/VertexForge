@@ -163,12 +163,66 @@ namespace services {
                 info.restitution = cmd.restitution;
                 info.collisionLayer = cmd.collisionLayer;
                 physicsProvider->addTerrainTileCollider(cmd.entity, info);
+
+                // Debug wireframe so the body shows up in the physics collider
+                // debug draw — the scene terrain path attaches the same component
+                // via TerrainService::generateDebugWireframes. One component per
+                // entity: multiple height fields per entity keep the last wireframe.
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity ent = internal::fromHandle(cmd.entity);
+                if (registry.valid(ent))
+                {
+                    auto& debugComp = registry.emplace_or_replace<components::TerrainTileColliderDebugComponent>(ent);
+                    debugComp.tileX = cmd.tileX;
+                    debugComp.tileZ = cmd.tileZ;
+                    auto& data = debugComp.debugData;
+
+                    const uint32_t vc = cmd.sampleCount;
+                    data.vertices.resize(static_cast<size_t>(vc) * vc);
+                    for (uint32_t z = 0; z < vc; ++z)
+                    {
+                        for (uint32_t x = 0; x < vc; ++x)
+                        {
+                            data.vertices[static_cast<size_t>(z) * vc + x] = glm::vec3(
+                                cmd.worldOrigin.x + x * cmd.vertexSpacing,
+                                cmd.heightSamples[static_cast<size_t>(z) * vc + x],   // absolute Y
+                                cmd.worldOrigin.z + z * cmd.vertexSpacing);
+                        }
+                    }
+
+                    data.lineIndices.clear();
+                    data.lineIndices.reserve(static_cast<size_t>(vc) * (vc - 1) * 4);
+                    for (uint32_t z = 0; z < vc; ++z)
+                    {
+                        for (uint32_t x = 0; x < vc - 1; ++x)
+                        {
+                            data.lineIndices.push_back(z * vc + x);
+                            data.lineIndices.push_back(z * vc + x + 1);
+                        }
+                    }
+                    for (uint32_t x = 0; x < vc; ++x)
+                    {
+                        for (uint32_t z = 0; z < vc - 1; ++z)
+                        {
+                            data.lineIndices.push_back(z * vc + x);
+                            data.lineIndices.push_back((z + 1) * vc + x);
+                        }
+                    }
+                    data.version++;
+                }
                 return true;
             });
 
         dispatcher.registerCommandHandler<events::physics::DestroyHeightFieldBodyCommand>(
             [this](const events::physics::DestroyHeightFieldBodyCommand& cmd) {
                 physicsProvider->removeTerrainTileCollider(cmd.entity, cmd.tileX, cmd.tileZ);
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity ent = internal::fromHandle(cmd.entity);
+                if (registry.valid(ent) && registry.all_of<components::TerrainTileColliderDebugComponent>(ent))
+                {
+                    registry.remove<components::TerrainTileColliderDebugComponent>(ent);
+                }
             });
 
         // VK-1351: tear down the physics body when its entity is destroyed, so runtime-spawned
