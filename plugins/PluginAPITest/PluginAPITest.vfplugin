@@ -1,10 +1,19 @@
-﻿{
+{
     "apiVersion": 11,
     "author": "VertexForge",
-    "capabilities": ["editor", "audio", "physics", "terrain", "input", "navmesh", "vfx", "graphics"],
+    "capabilities": [
+        "editor",
+        "audio",
+        "physics",
+        "terrain",
+        "input",
+        "navmesh",
+        "vfx",
+        "graphics"
+    ],
     "dependencies": [],
     "description": "Tests plugin APIs: VK-1276 (Audio/Physics/Terrain/Input), VK-1277 (Enum/AssetRef/EntityRef/Quat), VK-1279 (Lifecycle Hooks), VK-1287 (NavMesh/VFX), custom render pipelines",
-    "enabled": true,
+    "enabled": false,
     "library": "PluginAPITest.dll",
     "loadOrder": 100,
     "name": "PluginAPITest",
