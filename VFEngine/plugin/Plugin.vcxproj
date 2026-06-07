@@ -142,6 +142,7 @@
     <ClInclude Include="core\PluginContextImpl.hpp" />
     <ClInclude Include="core\PluginEventBus.hpp" />
     <ClInclude Include="core\PluginManager.hpp" />
+    <ClInclude Include="core\PluginScaffolder.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="api\PluginDescriptor.cpp" />

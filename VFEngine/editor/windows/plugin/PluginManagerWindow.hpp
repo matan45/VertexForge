@@ -37,10 +37,23 @@ namespace windows
         std::vector<PluginEntry> entries;
         std::string currentScenePath;
 
+        // VK-1284: "New Plugin..." scaffolding modal state
+        static constexpr int capabilityCount = 10;
+        bool openNewPluginPopup = false;
+        bool newPluginSucceeded = false;
+        char newPluginName[128] = {};
+        char newPluginAuthor[128] = "VertexForge";
+        bool newPluginCaps[capabilityCount] = {};
+        bool newPluginComponent = true;
+        bool newPluginEditorWindow = false;
+        std::string newPluginResult; // error message, or created path after success
+
         void refresh();
         void drawPluginEntry(PluginEntry& entry);
         void drawSceneOverrideCombo(PluginEntry& entry);
         void writeEnabledState(PluginEntry& entry, bool enabled);
         void saveToScene();
+        void drawNewPluginPopup();
+        void resetNewPluginState();
     };
 }

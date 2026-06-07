@@ -1060,6 +1060,7 @@ project "Tests"
       "VFEngine/graphics",
       "VFEngine/core",
       "VFEngine/window/controllers",
+      "VFEngine/plugin",                   -- header-only PluginScaffolder (VK-1284), no link needed
       vulkanLibPath.."/Include"
    }
 
