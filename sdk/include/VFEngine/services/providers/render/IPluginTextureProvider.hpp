@@ -24,6 +24,10 @@ namespace services {
         virtual void unbindWorldMask() = 0;
 
         virtual void setWorldMaskParams(const plugin::WorldMaskParams& params) = 0;
+
+        // CPU sample of the bound world mask's red channel at a world (x,z) position.
+        // Returns 1.0 when no mask is bound / disabled / out of bounds (shader parity).
+        virtual float sampleWorldMask(float worldX, float worldZ) const = 0;
     };
 
 }
