@@ -19,24 +19,35 @@ VertexForge is a modular game engine framework built in C++ using modern technol
 
 ## Installation
 
+> **Platform:** Windows only.
+
 ### Prerequisites
-- Ensure you have installed the Vulkan SDK, GLFW, and CMake.
-- Set the `VULKAN_SDK` environment variable to the Vulkan SDK installation path.
-- Premake5: You will need Premake5 to generate project files for your build system (e.g., Visual Studio, Makefiles).
-- CMake (for dependencies like Assimp and OpenAL).
+- **Visual Studio 2026** with the C++ workload (the dependency builder uses the `Visual Studio 18 2026` generator and the `v145` toolset).
+- **Vulkan SDK** installed, with the `VULKAN_SDK` environment variable set to its installation path.
+- **CMake** on your `PATH` (used by `build_dependencies.bat` to build Assimp, OpenAL, FreeType, libogg, and libvorbis).
+- **Premake5** on your `PATH` (used by `premake.bat` to generate the Visual Studio solution).
 
 ### Steps
-1. Clone the repository:
+1. Clone the repository with submodules:
     ```bash
-    git clone https://github.com/your-repo/vertexforge.git
-    cd vertexforge
+    git clone --recurse-submodules https://github.com/matan45/VertexForge.git
     ```
-2. Build the project using your preferred IDE (e.g., Visual Studio) or the command line:
+2. Download the Streamline release zip from [NVIDIA-RTX/Streamline](https://github.com/NVIDIA-RTX/Streamline).
+3. Create a `streamline` folder under `dependencies/` and extract the release into it so it contains the `bin`, `include`, and `lib` folders:
+    ```
+    dependencies/streamline/bin
+    dependencies/streamline/include
+    dependencies/streamline/lib
+    ```
+4. Build the CMake-based dependencies:
     ```bash
-    premake5 vs2022
+    build_dependencies.bat
     ```
-3. Open the solution or makefile and build the projects in `Debug` or `Release` mode.
-4. Ensure all dependencies (Vulkan, GLFW, ImGui, etc.) are available and configured correctly in your build environment.
+5. Generate the Visual Studio solution:
+    ```bash
+    premake.bat
+    ```
+6. Open the generated solution (`VFEngine/VertexForge.sln`) in your IDE and build the projects in `Debug` or `Release` mode.
 
 ## Usage
 The primary entry points for development are the `Editor` and `Runtime` projects:
