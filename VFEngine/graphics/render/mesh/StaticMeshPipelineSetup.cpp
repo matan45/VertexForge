@@ -366,7 +366,7 @@ namespace render::mesh
 
         vk::PipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+        multisampling.rasterizationSamples = swapChain.getMSAASamples();
 
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_TRUE;

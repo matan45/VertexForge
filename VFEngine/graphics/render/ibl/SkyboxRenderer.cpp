@@ -174,7 +174,7 @@ namespace render::ibl
 
         vk::PipelineMultisampleStateCreateInfo multisampling;
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+        multisampling.rasterizationSamples = swapChain.getMSAASamples();
 
         vk::PipelineColorBlendAttachmentState colorBlendAttachment;
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
@@ -285,7 +285,10 @@ namespace render::ibl
         {
             updateUniformBuffer(viewMatrix, projectionMatrix);
 
-            vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+            // Pre-resolve pass: render into the multisampled scene color when MSAA is on.
+            vk::ImageView colorView = offscreenResources.msaaEnabled()
+                ? offscreenResources.colorImagesMSAA[imageIndex].colorImageView
+                : offscreenResources.colorImages[imageIndex].colorImageView;
 
             core::DynamicRenderingInfo renderingInfo{};
             renderingInfo.extent = swapChain.getSwapchainExtent();

@@ -1,6 +1,8 @@
 #include "GIDebugRenderer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/VulkanContext.hpp"
+#include "../../core/SwapChain.hpp"
 #include "print/Log.hpp"
 
 namespace render::gi
@@ -123,7 +125,7 @@ namespace render::gi
         rasterizer.cullMode = vk::CullModeFlagBits::eNone;
 
         vk::PipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+        multisampling.rasterizationSamples = core::VulkanContext::getSwapChain()->getMSAASamples();
 
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask =

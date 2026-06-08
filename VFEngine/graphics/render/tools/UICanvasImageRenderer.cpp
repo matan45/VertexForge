@@ -138,6 +138,7 @@ namespace render::mesh
             .blendEnable = true
         };
 
+        config.sampleCount = swapChain.getMSAASamples();
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         graphicsPipeline = result.pipeline;
         pipelineLayout = result.pipelineLayout;

@@ -2,6 +2,8 @@
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "../../core/VulkanContext.hpp"
+#include "../../core/SwapChain.hpp"
 #include "print/Log.hpp"
 #include <array>
 
@@ -355,6 +357,7 @@ namespace render::vegetation
         config.srcAlphaBlendFactor = vk::BlendFactor::eOne;
         config.dstAlphaBlendFactor = vk::BlendFactor::eZero;
         config.dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        config.sampleCount = core::VulkanContext::getSwapChain()->getMSAASamples();
 
         try
         {

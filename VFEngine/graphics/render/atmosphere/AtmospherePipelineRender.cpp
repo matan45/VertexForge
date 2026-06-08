@@ -151,7 +151,11 @@ namespace render::atmosphere
     {
         if (!initialized || !enabled) return;
 
-        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+        // Pre-resolve pass: render into the multisampled scene color when MSAA is on.
+        vk::ImageView colorView = offscreenResources.msaaEnabled()
+            ? offscreenResources.colorImagesMSAA[imageIndex].colorImageView
+            : offscreenResources.colorImages[imageIndex].colorImageView;
+        auto colorAttach = core::colorLoad(colorView);
 
         core::DynamicRenderingInfo info{};
         info.extent = currentExtent;
@@ -285,7 +289,7 @@ namespace render::atmosphere
             rasterizer.lineWidth = 1.0f;
             rasterizer.cullMode = vk::CullModeFlagBits::eNone;
             vk::PipelineMultisampleStateCreateInfo multisampling{};
-            multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+            multisampling.rasterizationSamples = swapChain.getMSAASamples();
             vk::PipelineDepthStencilStateCreateInfo depthStencil{};
             depthStencil.depthTestEnable = VK_FALSE;
             depthStencil.depthWriteEnable = VK_FALSE;
@@ -443,7 +447,7 @@ namespace render::atmosphere
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = vk::CullModeFlagBits::eNone;
         vk::PipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+        multisampling.rasterizationSamples = swapChain.getMSAASamples();
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_FALSE;
         depthStencil.depthWriteEnable = VK_FALSE;
