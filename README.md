@@ -95,8 +95,9 @@ To run in `Debug` or `Release` configurations:
 
 ## Configuration
 ### Build Configurations
-- **Debug**: Includes debug symbols and uses the `DEBUG` preprocessor definition.
-- **Release**: Optimized for performance and uses the `NDEBUG` preprocessor definition.
+- **Debug**: Unoptimized with debug symbols. Defines `DEBUG`.
+- **Development**: Optimized *and* keeps debug symbols — for profiling/debugging a fast build. Defines `NDEBUG` and `VF_DEVELOPMENT`.
+- **Release**: Optimized for performance, no debug symbols. Defines `NDEBUG`.
 
 ### Environment Variables
 Ensure the following environment variable is set:
