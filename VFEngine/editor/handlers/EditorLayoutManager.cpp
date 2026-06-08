@@ -1,40 +1,31 @@
 #include "EditorLayoutManager.hpp"
-#include <imgui_internal.h>
+#include "resource/PathResolver.hpp"
 #include <filesystem>
 #include <fstream>
 #include <cstdlib>
 
 namespace handlers
 {
-    void EditorLayoutManager::buildDefaultLayout(ImGuiID dockId)
+    // The engine's default editor layout ships as an ImGui ini under
+    // resources/editor/. It is applied on first launch and by the Preferences >
+    // Window Layout "Reset to Default Layout" button. Capturing it as a full ini
+    // (rather than building docks programmatically) lets the layout be hand-tuned
+    // and re-exported without touching code. The DockSpace ID inside the file
+    // corresponds to ImGui::GetID("MyDockSpace") within the "Vulkan Engine" main
+    // window (see MainImguiWindow.cpp), so it binds to the live runtime dockspace.
+    void EditorLayoutManager::buildDefaultLayout(ImGuiID /*dockId*/)
     {
-        ImGui::DockBuilderRemoveNode(dockId);
-        ImGui::DockBuilderAddNode(dockId, ImGuiDockNodeFlags_DockSpace);
+        const std::string path =
+            resource::PathResolver::resolveEnginePath("../../resources/editor/default_layout.ini");
 
-        ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::DockBuilderSetNodeSize(dockId, viewport->WorkSize);
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open()) return;
 
-        // Split left panel (20%) for SceneGraph
-        ImGuiID leftId, centerId;
-        ImGui::DockBuilderSplitNode(dockId, ImGuiDir_Left, 0.20f, &leftId, &centerId);
+        std::string content((std::istreambuf_iterator<char>(file)),
+                             std::istreambuf_iterator<char>());
+        if (content.empty()) return;
 
-        // Split right panel (25% of remaining) for Details/Inspector
-        ImGuiID rightId, middleId;
-        ImGui::DockBuilderSplitNode(centerId, ImGuiDir_Right, 0.25f, &rightId, &middleId);
-
-        // Split bottom panel (25% of middle) for Console + Content Browser
-        ImGuiID bottomId, viewportId;
-        ImGui::DockBuilderSplitNode(middleId, ImGuiDir_Down, 0.25f, &bottomId, &viewportId);
-
-        // Dock windows
-        ImGui::DockBuilderDockWindow("SceneGraph", leftId);
-        ImGui::DockBuilderDockWindow("Folder Structure", leftId);
-        ImGui::DockBuilderDockWindow("ViewPort", viewportId);
-        ImGui::DockBuilderDockWindow("Details", rightId);
-        ImGui::DockBuilderDockWindow("Console", bottomId);
-        ImGui::DockBuilderDockWindow("Content Folder", bottomId);
-
-        ImGui::DockBuilderFinish(dockId);
+        ImGui::LoadIniSettingsFromMemory(content.c_str(), content.size());
     }
 
     void EditorLayoutManager::saveLayout(const std::string& name)
