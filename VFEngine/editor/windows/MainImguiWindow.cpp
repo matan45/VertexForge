@@ -153,14 +153,13 @@ namespace windows
             ImGui::PopStyleVar(1);
 
             ImGuiID dockId = ImGui::GetID("MyDockSpace");
-            ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f),
-                             ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_None);
 
-            // The Preferences > Window Layout section's "Reset to Default Layout"
-            // button needs the live dockspace id.
-            editorPreferencesWindow.setDockSpaceId(dockId);
-
-            // Apply default layout on first launch
+            // Apply the default layout BEFORE DockSpace() runs. DockSpace()
+            // instantiates the dock node immediately, so this check must come
+            // first — otherwise DockBuilderGetNode() is never null and the
+            // default never loads. On a fresh start (no imgui.ini next to the
+            // exe) the node is absent, so we seed it from
+            // resources/editor/default_layout.ini.
             static bool layoutChecked = false;
             if (!layoutChecked)
             {
@@ -174,6 +173,13 @@ namespace windows
                 if (!startupLayout.empty() && startupLayout != "Default")
                     handlers::EditorLayoutManager::loadLayout(startupLayout);
             }
+
+            ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f),
+                             ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_None);
+
+            // The Preferences > Window Layout section's "Reset to Default Layout"
+            // button needs the live dockspace id.
+            editorPreferencesWindow.setDockSpaceId(dockId);
 
             menuBar.draw();
             iblWindow.draw();
