@@ -11,6 +11,18 @@
 #include "../core/Utilities.hpp"
 #include "print/Log.hpp"
 
+#include <filesystem>
+#include <string>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 namespace imguiPass {
 
 	ImguiRender::ImguiRender(core::Device& device, core::SwapChain& swapChain, core::CommandPool& commandPool,const window::Window* window) :
@@ -56,6 +68,25 @@ namespace imguiPass {
 		ImGuiIO& io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
+
+		// Lock the settings file to an absolute path next to the executable.
+		// ImGui's default "imgui.ini" is relative to the current working dir,
+		// which IDE launchers (Rider/VS) set to the project folder — so the
+		// window layout silently saved somewhere other than next to the exe and
+		// appeared not to persist. Anchor on the executable like PluginManager.
+		// The string must outlive the context: ImGui keeps the pointer, not a copy.
+		static std::string imguiIniPath;
+		{
+			std::filesystem::path exeDir;
+#ifdef _WIN32
+			wchar_t exePath[MAX_PATH];
+			if (GetModuleFileNameW(nullptr, exePath, MAX_PATH) > 0)
+				exeDir = std::filesystem::path(exePath).parent_path();
+#endif
+			if (exeDir.empty()) exeDir = std::filesystem::current_path();
+			imguiIniPath = (exeDir / "imgui.ini").string();
+			io.IniFilename = imguiIniPath.c_str();
+		}
 
 		// Load a custom font
 		io.Fonts->AddFontFromFileTTF("../../resources/editor/Roboto-Regular.ttf", 18.0f);
