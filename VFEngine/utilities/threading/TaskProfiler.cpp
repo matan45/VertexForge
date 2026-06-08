@@ -162,4 +162,20 @@ namespace threading {
 		return maxThreadId;
 	}
 
+	uint64_t taskDurationNs(const FrameProfileSnapshot& snapshot, const char* taskName)
+	{
+		for (const auto& e : snapshot.entries)
+			if (e.endTimeNs > e.startTimeNs && e.name == taskName)
+				return e.endTimeNs - e.startTimeNs;
+		return 0;
+	}
+
+	uint64_t viewportFrameDurationNs(const FrameProfileSnapshot& snapshot)
+	{
+		uint64_t editorNs = 0;
+		for (const char* name : kEditorOnlyTaskNames)
+			editorNs += taskDurationNs(snapshot, name);
+		return (snapshot.frameDurationNs > editorNs) ? (snapshot.frameDurationNs - editorNs) : 0;
+	}
+
 }

@@ -20,6 +20,16 @@ namespace threading {
 		uint64_t frameDurationNs = 0;
 	};
 
+	// Editor-only task names excluded from the viewport-equivalent frame total.
+	// Runtime's task graph contains none of these.
+	inline constexpr const char* kEditorOnlyTaskNames[] = { "ImGuiDraw" };
+
+	// Duration of a single named task in the snapshot (0 if absent / incomplete).
+	uint64_t taskDurationNs(const FrameProfileSnapshot& snapshot, const char* taskName);
+
+	// frameDurationNs minus the summed durations of all editor-only tasks.
+	uint64_t viewportFrameDurationNs(const FrameProfileSnapshot& snapshot);
+
 	class TaskProfiler {
 	public:
 		static constexpr size_t MAX_HISTORY = 120;

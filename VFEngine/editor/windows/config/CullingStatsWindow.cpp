@@ -494,6 +494,9 @@ namespace windows
         if (mainEnd > mainStart)
             mainThreadMs = static_cast<float>(mainEnd - mainStart) / 1e6f;
         ImGui::Text("  Main Thread:         %.2f ms", mainThreadMs);
-        ImGui::Text("  Frame Total:         %.2f ms", static_cast<float>(latestFrame.frameDurationNs) / 1e6f);
+        ImGui::Text("  Frame Total (viewport): %.2f ms",
+                    static_cast<float>(threading::viewportFrameDurationNs(latestFrame)) / 1e6f);
+        ImGui::TextDisabled("  Editor/ImGui overhead:  %.2f ms",
+                    static_cast<float>(threading::taskDurationNs(latestFrame, "ImGuiDraw")) / 1e6f);
     }
 }

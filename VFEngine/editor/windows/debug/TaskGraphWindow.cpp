@@ -80,9 +80,13 @@ namespace windows
 			}
 			else
 			{
-				float frameDurationMs = static_cast<float>(latestFrame.frameDurationNs) / 1e6f;
 				if (profilingEnabled)
-					ImGui::Text("Frame: %.3f ms | Tasks: %zu", frameDurationMs, latestFrame.entries.size());
+				{
+					float viewportMs = static_cast<float>(threading::viewportFrameDurationNs(latestFrame)) / 1e6f;
+					float imguiMs = static_cast<float>(threading::taskDurationNs(latestFrame, "ImGuiDraw")) / 1e6f;
+					ImGui::Text("Viewport: %.3f ms | ImGui: %.3f ms | Tasks: %zu",
+						viewportMs, imguiMs, latestFrame.entries.size());
+				}
 				else
 					ImGui::TextDisabled("Profiling disabled");
 			}

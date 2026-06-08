@@ -254,6 +254,7 @@
     <ClInclude Include="string\StringUtil.hpp" />
     <ClInclude Include="text\TextLayout.hpp" />
     <ClInclude Include="texture\OrmTexturePacker.hpp" />
+    <ClInclude Include="threading\EditorTaskStats.hpp" />
     <ClInclude Include="threading\JobSystem.hpp" />
     <ClInclude Include="threading\ParallelCollect.hpp" />
     <ClInclude Include="threading\ParallelView.hpp" />

@@ -4,6 +4,7 @@
 #include "events/scene/ScenePersistenceEvents.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
 #include "memory/GpuAllocationStats.hpp"
+#include "threading/EditorTaskStats.hpp"
 #include <imgui.h>
 #include <filesystem>
 
@@ -50,8 +51,22 @@ namespace windows
         if (ImGui::Begin("##StatusBar", nullptr, flags))
         {
             float deltaTime = ImGui::GetIO().DeltaTime;
-            float fps = (deltaTime > 0.0f) ? (1.0f / deltaTime) : 0.0f;
             float frameMs = deltaTime * 1000.0f;
+
+            // Viewport-only frame time: exclude the editor-only ImGuiDraw cost so
+            // the displayed FPS approximates the standalone Runtime (VK-1367).
+            float imguiDrawMs = threading::EditorTaskStats::imguiDrawDurationNs.load(std::memory_order_relaxed) / 1e6f;
+            float viewportFrameMs = frameMs - imguiDrawMs;
+            if (viewportFrameMs < 0.0f) viewportFrameMs = 0.0f;
+
+            float instantFps = (viewportFrameMs > 0.0f) ? (1000.0f / viewportFrameMs) : 0.0f;
+            if (instantFps > 0.0f)
+            {
+                smoothedViewportFps = (smoothedViewportFps <= 0.0f)
+                    ? instantFps
+                    : smoothedViewportFps + fpsEmaAlpha * (instantFps - smoothedViewportFps);
+            }
+            float fps = smoothedViewportFps;
 
             // Refresh heavier stats periodically
             refreshTimer += deltaTime;
@@ -96,7 +111,7 @@ namespace windows
             if (debugSettings.showGPUTime)
             {
                 separator();
-                ImGui::Text("Frame: %.1f ms", frameMs);
+                ImGui::Text("Frame: %.1f ms", viewportFrameMs);
             }
             if (debugSettings.showDrawCalls)
             {

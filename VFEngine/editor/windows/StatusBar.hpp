@@ -19,6 +19,9 @@ namespace windows
         uint64_t cachedVramMB = 0;
         std::string currentSceneName;
 
+        float smoothedViewportFps = 0.0f;          // 0 = uninitialized
+        static constexpr float fpsEmaAlpha = 0.1f; // ~90% response in ~22 frames @60fps
+
         config::DebugSettings debugSettings;
 
         events::SubscriptionToken sceneLoadedToken;

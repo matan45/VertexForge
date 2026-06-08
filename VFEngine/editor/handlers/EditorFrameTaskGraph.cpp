@@ -7,8 +7,11 @@
 #include "core/PluginManager.hpp"
 #include "../../../core/audio/AudioSceneUpdater.hpp"
 #include "time/Timer.hpp"
+#include "threading/EditorTaskStats.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/weather/WeatherEvents.hpp"
+
+#include <chrono>
 
 namespace handlers
 {
@@ -142,7 +145,16 @@ namespace handlers
 
         auto imguiDrawFn = bootstrap->getImguiDrawFn();
         frameTaskGraph->addTask("ImGuiDraw", [imguiDrawFn]() {
-            if (imguiDrawFn) imguiDrawFn();
+            if (!imguiDrawFn) {
+                threading::EditorTaskStats::imguiDrawDurationNs.store(0, std::memory_order_relaxed);
+                return;
+            }
+            const auto start = std::chrono::steady_clock::now();
+            imguiDrawFn();
+            const auto end = std::chrono::steady_clock::now();
+            threading::EditorTaskStats::imguiDrawDurationNs.store(
+                static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()),
+                std::memory_order_relaxed);
         });
 
         auto renderFn = bootstrap->getRenderFn();
