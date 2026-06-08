@@ -91,8 +91,7 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::DecalComponent>();
-        comp.shape = static_cast<components::DecalShape>(
-            std::clamp<uint8_t>(decalData.shape, static_cast<uint8_t>(0), static_cast<uint8_t>(2)));
+        comp.shape = components::toDecalShape(decalData.shape);
         comp.halfExtents = decalData.halfExtents;
         comp.albedoTextureRef = decalData.albedoTextureRef;
         comp.normalTextureRef = decalData.normalTextureRef;

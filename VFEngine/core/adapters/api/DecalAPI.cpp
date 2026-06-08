@@ -254,9 +254,8 @@ namespace core::api
                 if (!registry.valid(entity) || !registry.all_of<components::DecalComponent>(entity))
                     return value::Value(std::monostate{});
 
-                int64_t shape = std::clamp<int64_t>(extractInt64(args[1]), 0, 2);
                 registry.get<components::DecalComponent>(entity).shape =
-                    static_cast<components::DecalShape>(shape);
+                    components::toDecalShape(extractInt64(args[1]));
                 return value::Value(std::monostate{});
             }});
     }

@@ -98,15 +98,23 @@ void main()
         discard;
 
     int decalShape = int(decal.textureFlags.w + 0.5);
-    float shapeEdgeDist = min(1.0 - absLocal.x, 1.0 - absLocal.y);
 
-    if (decalShape == 1)
+    vec3 edgeDist = 1.0 - absLocal;
+    float edgeFalloff = decal.fadeParams.z;
+    float falloffWidth = max(edgeFalloff, 0.001);
+
+    // XY edge fade is shape-dependent. Rectangle (default) keeps the original
+    // independent per-axis falloff (smoothstep(x) * smoothstep(y)); circle and
+    // triangle fade from their own signed edge distance.
+    float shapeFade;
+    if (decalShape == 1)        // Circle
     {
-        shapeEdgeDist = 1.0 - length(localPos.xy);
-        if (shapeEdgeDist < 0.0)
+        float circleEdge = 1.0 - length(localPos.xy);
+        if (circleEdge < 0.0)
             discard;
+        shapeFade = smoothstep(0.0, falloffWidth, circleEdge);
     }
-    else if (decalShape == 2)
+    else if (decalShape == 2)   // Triangle
     {
         vec2 uvForShape = localPos.xy * 0.5 + 0.5;
         float bottomEdge = uvForShape.y;
@@ -115,7 +123,12 @@ void main()
         if (bottomEdge < 0.0 || diagonalEdge < 0.0)
             discard;
 
-        shapeEdgeDist = min(bottomEdge * 2.0, diagonalEdge);
+        shapeFade = smoothstep(0.0, falloffWidth, min(bottomEdge * 2.0, diagonalEdge));
+    }
+    else                        // Rectangle
+    {
+        shapeFade = smoothstep(0.0, falloffWidth, edgeDist.x)
+                  * smoothstep(0.0, falloffWidth, edgeDist.y);
     }
 
     // Decal UV from local XY
@@ -184,11 +197,8 @@ void main()
     float cosAngle = abs(dot(surfaceNormal, decalForward));
     float angleFade = smoothstep(angleFadeEnd, angleFadeStart, cosAngle);
 
-    // Edge falloff
-    float edgeFalloff = decal.fadeParams.z;
-    vec3 edgeDist = 1.0 - absLocal;
-    float edgeFade = smoothstep(0.0, max(edgeFalloff, 0.001), shapeEdgeDist)
-                   * smoothstep(0.0, max(edgeFalloff, 0.001), edgeDist.z);
+    // Edge falloff — combine the shape's XY fade with the depth-axis (Z) fade.
+    float edgeFade = shapeFade * smoothstep(0.0, falloffWidth, edgeDist.z);
 
     // Final alpha
     float alpha = decal.color.a * texAlpha * edgeFade * angleFade;

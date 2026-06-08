@@ -4,42 +4,10 @@
 
 namespace serialization
 {
-    namespace
-    {
-        std::string decalShapeToString(components::DecalShape shape)
-        {
-            switch (shape)
-            {
-            case components::DecalShape::Circle: return "Circle";
-            case components::DecalShape::Triangle: return "Triangle";
-            case components::DecalShape::Rectangle:
-            default: return "Rectangle";
-            }
-        }
-
-        components::DecalShape stringToDecalShape(const std::string& str)
-        {
-            if (str == "Circle" || str == "circle") return components::DecalShape::Circle;
-            if (str == "Triangle" || str == "triangle") return components::DecalShape::Triangle;
-            return components::DecalShape::Rectangle;
-        }
-
-        components::DecalShape intToDecalShape(int32_t shape)
-        {
-            switch (shape)
-            {
-            case 1: return components::DecalShape::Circle;
-            case 2: return components::DecalShape::Triangle;
-            case 0:
-            default: return components::DecalShape::Rectangle;
-            }
-        }
-    }
-
     json SceneSerialization::serializeDecal(const components::DecalComponent& decal)
     {
         json j;
-        j["shape"] = decalShapeToString(decal.shape);
+        j["shape"] = components::decalShapeName(decal.shape);
         j["halfExtents"] = json::array({decal.halfExtents.x, decal.halfExtents.y, decal.halfExtents.z});
 
         if (decal.albedoTextureRef.isValid())
@@ -70,9 +38,9 @@ namespace serialization
         if (auto it = j.find("shape"); it != j.end())
         {
             if (it->is_string())
-                decal.shape = stringToDecalShape(it->get<std::string>());
+                decal.shape = components::decalShapeFromName(it->get<std::string>());
             else if (it->is_number_integer())
-                decal.shape = intToDecalShape(it->get<int32_t>());
+                decal.shape = components::toDecalShape(it->get<int32_t>());
         }
 
         decal.albedoTextureRef = readAssetRef(j, "albedoTextureRef", "albedoTexture");

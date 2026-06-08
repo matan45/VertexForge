@@ -15,6 +15,7 @@
 #include "../../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
+#include "../../adapters/render/PluginTextureAdapter.hpp"
 
 namespace core
 {
@@ -45,6 +46,7 @@ namespace core
             navmeshAdapter->cleanUp();
         }
 
+        pluginTextureAdapter.reset();
         renderTextureAdapter.reset();
         debugDrawAdapter.reset();
         postProcessAdapter.reset();

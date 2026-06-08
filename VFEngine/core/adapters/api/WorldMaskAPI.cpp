@@ -23,7 +23,17 @@ namespace core::api
                 events::plugintexture::SampleWorldMaskQuery query;
                 query.worldX = extractFloat(args[0]);
                 query.worldZ = extractFloat(args[1]);
-                return value::Value(events::EventDispatcher::instance().query(query));
+                try
+                {
+                    return value::Value(events::EventDispatcher::instance().query(query));
+                }
+                catch (const std::exception&)
+                {
+                    // No plugin-texture handler registered (e.g. mask system unused) —
+                    // degrade to the shader's "unaffected" value rather than throwing
+                    // out of the script VM.
+                    return value::Value(1.0f);
+                }
             }});
 
         vfLogInfo("[WorldMaskAPI] Registered WorldMask native functions");

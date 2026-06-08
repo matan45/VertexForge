@@ -33,6 +33,8 @@ namespace render::custom
             return {};
         }
 
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         // TextureEntry holds a PerFrameBuffer (non-movable) — construct in place.
         const uint64_t id = nextId++;
         TextureEntry& entry = textures[id];
@@ -87,6 +89,8 @@ namespace render::custom
     void PluginTextureManager::updateTexture2D(plugin::PluginTextureHandle handle,
                                                std::vector<std::byte>&& data)
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         auto it = textures.find(handle.id);
         if (it == textures.end()) return;
 
@@ -106,6 +110,8 @@ namespace render::custom
 
     void PluginTextureManager::destroyTexture2D(plugin::PluginTextureHandle handle)
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         auto it = textures.find(handle.id);
         if (it == textures.end()) return;
 
@@ -124,6 +130,8 @@ namespace render::custom
                                              const glm::vec3& worldMin, const glm::vec3& worldMax,
                                              const plugin::WorldMaskParams& params)
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         auto it = textures.find(handle.id);
         if (it == textures.end())
         {
@@ -157,6 +165,8 @@ namespace render::custom
 
     void PluginTextureManager::unbindWorldMask()
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         if (boundMaskId == 0) return;
 
         boundMaskId = 0;
@@ -170,6 +180,8 @@ namespace render::custom
 
     void PluginTextureManager::setWorldMaskParams(const plugin::WorldMaskParams& params)
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         maskParams = params;
         if (!maskResourcesCreated) return;
 
@@ -181,6 +193,8 @@ namespace render::custom
 
     float PluginTextureManager::sampleWorldMask(float worldX, float worldZ) const
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         if (boundMaskId == 0) return 1.0f;
         if (!(maskUBOData.flags & MASK_FLAG_ENABLED)) return 1.0f;
 
@@ -213,6 +227,8 @@ namespace render::custom
 
     void PluginTextureManager::setDebugMaskEnabled(bool enabled)
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         debugForceDisabled = !enabled;
         if (!maskResourcesCreated) return;
 
@@ -222,6 +238,8 @@ namespace render::custom
 
     void PluginTextureManager::flushUploads(const vk::CommandBuffer& commandBuffer)
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         for (auto& [id, entry] : textures)
         {
             if (!entry.dirty) continue;
@@ -251,6 +269,8 @@ namespace render::custom
 
     bool PluginTextureManager::consumeNeedsPipelineRecreate()
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         if (!needsPipelineRecreate) return false;
         needsPipelineRecreate = false;
         return true;
@@ -258,12 +278,16 @@ namespace render::custom
 
     vk::ImageView PluginTextureManager::getMaskImageView() const
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         auto it = textures.find(boundMaskId);
         return it != textures.end() ? it->second.view : dummyView;
     }
 
     vk::Sampler PluginTextureManager::getMaskSampler() const
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         auto it = textures.find(boundMaskId);
         return it != textures.end() ? it->second.sampler : dummySampler;
     }
@@ -408,6 +432,8 @@ namespace render::custom
 
     void PluginTextureManager::cleanUp()
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+
         vk::Device vkDevice = device.getLogicalDevice();
 
         for (auto& [id, entry] : textures)

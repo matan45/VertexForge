@@ -21,6 +21,7 @@ namespace services
     class IDecalRenderProvider;
     class IBehaviorTreeProvider;
     class IRuntimePickerProvider;
+    class IPluginTextureProvider;
 }
 
 namespace window
@@ -69,6 +70,7 @@ namespace core
     }
     class BehaviorTreeAdapter;
     class RuntimePickerAdapter;
+    class PluginTextureAdapter;
 
     class RuntimeBootstrap
     {
@@ -94,6 +96,7 @@ namespace core
         std::unique_ptr<adapters::DecalRenderAdapter> decalRenderAdapter;
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
         std::unique_ptr<RuntimePickerAdapter> runtimePickerAdapter;
+        std::unique_ptr<PluginTextureAdapter> pluginTextureAdapter;
 
     public:
         explicit RuntimeBootstrap();
@@ -142,6 +145,8 @@ namespace core
         services::IBehaviorTreeProvider* getBehaviorTreeProvider();
 
         services::IRuntimePickerProvider* getRuntimePickerProvider();
+
+        services::IPluginTextureProvider* getPluginTextureProvider();
 
         // For late binding - allows RuntimeHandler to connect services
         TerrainRenderAdapter* getTerrainRenderAdapterInternal();

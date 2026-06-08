@@ -16,6 +16,7 @@
 #include "../../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 #include "../../adapters/input/RuntimePickerAdapter.hpp"
+#include "../../adapters/render/PluginTextureAdapter.hpp"
 
 namespace core
 {
@@ -107,5 +108,10 @@ namespace core
     services::IRuntimePickerProvider* RuntimeBootstrap::getRuntimePickerProvider()
     {
         return runtimePickerAdapter.get();
+    }
+
+    services::IPluginTextureProvider* RuntimeBootstrap::getPluginTextureProvider()
+    {
+        return pluginTextureAdapter.get();
     }
 }

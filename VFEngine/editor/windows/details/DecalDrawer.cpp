@@ -4,6 +4,7 @@
 #include "events/scene/ComponentMediaEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "components/DecalComponents.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -103,10 +104,9 @@ namespace windows::details
 
     bool DecalDrawer::drawShape(services::DecalData& data)
     {
-        static const char* shapeNames[] = {"Rectangle", "Circle", "Triangle"};
-        int currentShape = data.shape <= 2 ? static_cast<int>(data.shape) : 0;
+        int currentShape = static_cast<int>(components::toDecalShape(data.shape));
 
-        if (ImGui::Combo("Shape##Decal", &currentShape, shapeNames, IM_ARRAYSIZE(shapeNames)))
+        if (ImGui::Combo("Shape##Decal", &currentShape, components::kDecalShapeNames, components::kDecalShapeCount))
         {
             data.shape = static_cast<uint8_t>(currentShape);
             return true;

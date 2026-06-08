@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <cstddef>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 #include "../../core/VulkanMemoryManager.hpp"
@@ -68,6 +69,14 @@ namespace render::custom
         };
 
         core::Device& device;
+
+        // Guards `textures` and all world-mask state. sampleWorldMask() is invoked from
+        // script worker threads (WorldMask::sample) while updateTexture2D/bindWorldMask
+        // (plugin worker thread) and flushUploads (render thread) mutate the same map and
+        // pendingData buffers — without this lock a concurrent rehash/realloc is a
+        // torn-read/crash. Recursive because destroyTexture2D -> unbindWorldMask and
+        // updateEntityMaskDescriptor -> getMaskSampler/getMaskImageView re-enter.
+        mutable std::recursive_mutex stateMutex;
 
         std::unordered_map<uint64_t, TextureEntry> textures;
         uint64_t nextId = 1;
