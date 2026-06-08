@@ -9,17 +9,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 premake5 vs2022
 
 # Build from command line (after generating solution)
+msbuild VFEngine/VertexForge.sln /p:Configuration=Development /p:Platform=x64
 msbuild VFEngine/VertexForge.sln /p:Configuration=Debug /p:Platform=x64
 msbuild VFEngine/VertexForge.sln /p:Configuration=Release /p:Platform=x64
 
 # Build a single project (faster iteration)
-msbuild VFEngine/VertexForge.sln /t:Editor /p:Configuration=Debug /p:Platform=x64
+msbuild VFEngine/VertexForge.sln /t:Editor /p:Configuration=Development /p:Platform=x64
 msbuild VFEngine/VertexForge.sln /t:Tests  /p:Configuration=Debug /p:Platform=x64
 ```
 
+**Configurations** (`vfStandardConfigs` in `premake5.lua`):
+- **Debug** — `DEBUG`, symbols, no optimization. Adds `JPH_ENABLE_ASSERTS` (Jolt) and `VF_ENABLE_VALIDATION` (Vulkan validation layers).
+- **Development** — the day-to-day play-test build. Optimized (`/O2`, `NDEBUG`) **with** debug symbols, plus `VF_DEVELOPMENT` for editor-only niceties. Vulkan validation stays ON (user preference; see the `Development` filter on Graphics) but Jolt asserts are OFF.
+- **Release** — `NDEBUG`, optimized, no validation, no asserts.
+
+Note the Editor stays a `ConsoleApp` in all three configs (console logs always visible — user preference). Shipped games are built by GameExport from Runtime, not by switching the Editor config.
+
 **Prerequisites**: Vulkan SDK installed with `VULKAN_SDK` environment variable set.
 
-**Toolchain**: C++20, MSVC toolset `v145` (VS2026), latest Windows SDK. Global flags `/utf-8 /MP` (required by spdlog/fmt). Engine-wide defines: `VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1`, `GLM_FORCE_DEPTH_ZERO_TO_ONE` (Vulkan [0,1] depth range).
+**Toolchain**: C++20, MSVC toolset `v145` (VS2026), latest Windows SDK. Global flags `/utf-8 /MP /bigobj` (`/bigobj` because some TUs — e.g. `HierarchyService.cpp`, Tests — exceed the default COFF section limit instantiating templates over the full component inventory). Engine-wide defines: `VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1`, `GLM_FORCE_DEPTH_ZERO_TO_ONE` (Vulkan [0,1] depth range).
 
 **Output**: Executables in `bin/Editor/<Config>/x64/`, `bin/Runtime/<Config>/x64/`, `bin/Tests/<Config>/x64/`. Each SharedLib subsystem also lands in `bin/<Subsystem>/<Config>/x64/` and is copied into Editor/Runtime/Tests output dirs via `postbuildcommands`.
 
@@ -56,7 +64,7 @@ Plugin   ──> Services, Utilities (engine-side plugin SDK + loader)
 
 **Premake groups**: `Engine` (Editor, Runtime, Core, Graphics, Window, Import, Services, Plugin, Utilities), `Subsystems` (extracted modules — see table below), `libs` (vendored third-party), `Plugins` (sample/external plugin DLLs under `plugins/`).
 
-Module kinds: Editor/Runtime/Tests are `ConsoleApp`. Most modules are `StaticLib`. `SharedLib/DLL`: Import, ProceduralGen, ImageProcessing, Audio, Terrain, ProceduralGen, ImageProcessing, GameExport, ECSRegistry, jolt, meshoptimizer, and external plugins.
+Module kinds: Editor/Runtime/Tests are `ConsoleApp`. Most modules are `StaticLib`. `SharedLib/DLL`: Import, Audio, Animation, Terrain, World, Serialization, ProceduralGen, ImageProcessing, GameExport, ECSRegistry, jolt, meshoptimizer, and external plugins.
 
 ### Subsystem Extraction
 
@@ -66,11 +74,11 @@ Large modules are split into separately compiled subsystem projects using `remov
 |-----------|---------------|----------|------|
 | Audio | Core | `core/audio/**` | SharedLib (`VF_AUDIO_BUILD_DLL`) |
 | Physics | Core | `core/physics/**` | StaticLib |
-| Animation | Graphics + Utilities | `graphics/animation/**` + `utilities/animator/**` | StaticLib |
+| Animation | Graphics + Utilities | `graphics/animation/**` (except `AnimationComputePipeline`, kept in Graphics) + `utilities/animator/**` | SharedLib (`VF_ANIMATION_BUILD_DLL`) |
 | VFX | Graphics + Utilities | `graphics/render/vfx/**` + `utilities/vfx/**` | StaticLib |
-| Terrain | Utilities | `utilities/terrain/**` | SharedLib |
-| Serialization | Utilities | `utilities/serialization/**` + `utilities/world/World*Serialization.*` | StaticLib |
-| World | Utilities | `utilities/world/**` (excluding serialization files) | StaticLib |
+| Terrain | Utilities | `utilities/terrain/**` | SharedLib (`VF_TERRAIN_BUILD_DLL`) |
+| Serialization | Utilities | `utilities/serialization/**` + `utilities/world/{WorldDefinition,WorldSector,HLOD}Serialization.*` | SharedLib (`VF_SERIALIZATION_BUILD_DLL`) |
+| World | Utilities | `utilities/world/**` (excluding serialization files) | SharedLib (`VF_WORLD_BUILD_DLL`) |
 | Memory | Utilities | `utilities/memory/**` | StaticLib |
 | Weather | Utilities | `utilities/weather/**` | StaticLib |
 | Destruction | Utilities | `utilities/destruction/**` (uses v-hacd) | StaticLib |
@@ -321,8 +329,10 @@ meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 | mType + asmjit | Scripting language interpreter with JIT compilation |
 | enkiTS | Parallel task scheduling |
 | meshoptimizer | Mesh/meshlet optimization and LOD generation (SharedLib) |
-| ispc_texcomp | BC7/BC6H texture compression |
+| ispc_texcomp + bcdec | BC7/BC6H texture compression / decompression |
 | freetype | Font rasterization (requires CMake build) |
+| NVIDIA Streamline | DLSS / DLSS-G frame generation / Reflex (`VF_STREAMLINE_ENABLED`, Graphics module; dev DLLs copied for Debug/Development, production DLLs for Release) |
+| LZ4 | Compression for `.vfpak` game archives |
 | nlohmann/json | JSON serialization for scenes/assets/config |
 | spdlog | Logging |
 | GLM | Mathematics |
