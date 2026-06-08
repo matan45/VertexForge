@@ -239,6 +239,7 @@ namespace render::vegetation
 
         uint32_t taskGroups = (params.instanceCount + 31) / 32;
         cmd.drawMeshTasksEXT(taskGroups, 1, 1);
+        render::FrameDrawStats::count();
     }
 
     void GrassMeshShaderPipeline::createGrassDataDescriptor()

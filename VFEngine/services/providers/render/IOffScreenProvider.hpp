@@ -145,6 +145,10 @@ namespace services {
         TerrainDebugStats terrain;
         WaterDebugStats water;
         TextureStreamDebugStats textureStream;
+
+        // Total CPU-recorded draw commands across runtime/viewport passes last frame
+        // (VK-1368). Editor-only passes (ImGui, debug gizmos, previews, IBL bake) excluded.
+        uint32_t totalDrawCalls = 0;
     };
 
     struct PerLightShadowInfo

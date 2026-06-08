@@ -92,6 +92,7 @@ namespace render::atmosphere
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, skyRendererPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, skyRendererPipelineLayout, 0, skyRendererDS, nullptr);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
 
         core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
@@ -134,6 +135,7 @@ namespace render::atmosphere
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, compositePipelineLayout, 0, compositeDS, nullptr);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
 
         core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
@@ -166,6 +168,7 @@ namespace render::atmosphere
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, skyRendererPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, skyRendererPipelineLayout, 0, skyRendererDS, nullptr);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
     }
 
@@ -193,6 +196,7 @@ namespace render::atmosphere
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, compositePipelineLayout, 0, compositeDS, nullptr);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
     }
 

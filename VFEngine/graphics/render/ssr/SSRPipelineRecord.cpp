@@ -34,6 +34,7 @@ namespace render::ssr
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                 tracePipelineLayout, 1, traceSet1, nullptr);
             commandBuffer.draw(3, 1, 0, 0);
+            render::FrameDrawStats::count();
             core::endDynamicRendering(commandBuffer);
         }
 
@@ -78,6 +79,7 @@ namespace render::ssr
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                 temporalPipelineLayout, 1, temporalSet1PerHistory[readIdx], nullptr);
             commandBuffer.draw(3, 1, 0, 0);
+            render::FrameDrawStats::count();
             core::endDynamicRendering(commandBuffer);
 
             core::ImageUtilities::transitionImageLayout(commandBuffer,
@@ -119,6 +121,7 @@ namespace render::ssr
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(DenoisePushConstants), &denoisePush);
             commandBuffer.draw(3, 1, 0, 0);
+            render::FrameDrawStats::count();
             core::endDynamicRendering(commandBuffer);
         }
 
@@ -148,6 +151,7 @@ namespace render::ssr
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(DenoisePushConstants), &denoisePush);
             commandBuffer.draw(3, 1, 0, 0);
+            render::FrameDrawStats::count();
             core::endDynamicRendering(commandBuffer);
         }
 
@@ -186,6 +190,7 @@ namespace render::ssr
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(CompositePushConstants), &compositePush);
             commandBuffer.draw(3, 1, 0, 0);
+            render::FrameDrawStats::count();
             core::endDynamicRendering(commandBuffer);
         }
         // Scene color is now in ColorAttachmentOptimal

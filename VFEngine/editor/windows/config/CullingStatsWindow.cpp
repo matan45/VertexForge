@@ -18,6 +18,8 @@ namespace windows
             auto stats = events::EventDispatcher::instance().query(query);
 
             ImGui::Text("Active Camera: %u", stats.activeCameraId);
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
+                               "Total Draw Calls (runtime passes): %u", stats.totalDrawCalls);
             ImGui::Separator();
 
             if (ImGui::CollapsingHeader("Render Thread", ImGuiTreeNodeFlags_DefaultOpen))

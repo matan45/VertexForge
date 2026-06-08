@@ -106,7 +106,7 @@ namespace windows
                     {
                         auto stats = events::EventDispatcher::instance().query(
                             events::render::GetCullingStatsQuery{});
-                        cachedDrawCalls = stats.gpuDriven.visibleObjects;
+                        cachedDrawCalls = stats.totalDrawCalls;
                     }
                     catch (const std::exception&)
                     {

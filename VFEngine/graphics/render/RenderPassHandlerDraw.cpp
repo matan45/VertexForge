@@ -38,6 +38,7 @@
 #include "vfx/distortion/VFXDistortionComposite.hpp"
 #include "../core/DynamicRenderingHelpers.hpp"
 #include "threading/JobSystem.hpp"
+#include "stats/FrameDrawStats.hpp"
 #include <chrono>
 
 namespace render
@@ -46,6 +47,10 @@ namespace render
     {
         // Plugin texture CPU->GPU uploads — recorded before the frame graph so the
         // copies land outside any render pass and complete before the scene samples them.
+        // Publish the previous frame's draw-call total and reset the accumulator for
+        // this frame, before any pass records draws (VK-1368).
+        FrameDrawStats::beginFrame();
+
         if (pluginTextureManager) pluginTextureManager->flushUploads(commandBuffer);
 
         // Lit plugin custom pipelines: pick up the RT shadow mask layout once the

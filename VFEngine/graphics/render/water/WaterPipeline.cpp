@@ -729,6 +729,7 @@ namespace render::water
                            0, sizeof(WaterPushConstants), &pushConstants);
 
         cmd.drawIndexed(meshBuffer.getIndexCount(), meshBuffer.getTileCount(), 0, 0, 0);
+        render::FrameDrawStats::count();
     }
 
     void WaterPipeline::renderMultiLOD(vk::CommandBuffer cmd, const WaterRenderDescriptors& descriptors,
@@ -787,6 +788,7 @@ namespace render::water
                 static_cast<int32_t>(lodMesh.vertexOffset),
                 firstInstance
             );
+            render::FrameDrawStats::count();
 
             firstInstance += lodTileCounts[lod];
         }

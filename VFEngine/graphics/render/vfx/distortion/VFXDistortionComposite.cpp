@@ -106,6 +106,7 @@ namespace render::vfx
 
         // Fullscreen triangle: 3 vertices, no vertex buffer
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
 
         core::endDynamicRendering(cmd);
     }

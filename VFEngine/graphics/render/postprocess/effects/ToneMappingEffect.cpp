@@ -98,6 +98,7 @@ namespace render::postprocess
                                      0, sizeof(ToneMappingPushConstants), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
     }
 
     void ToneMappingEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)

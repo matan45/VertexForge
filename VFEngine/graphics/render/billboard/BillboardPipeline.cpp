@@ -476,6 +476,7 @@ namespace render::billboard
                                          0, sizeof(BillboardPushConstants), &pushConstants);
 
             commandBuffer.drawIndexed(6, atlasInstanceCount, 0, 0, 0);
+            render::FrameDrawStats::count();
         }
 
         for (const auto& batch : customBatches)
@@ -512,6 +513,7 @@ namespace render::billboard
                                          0, sizeof(BillboardPushConstants), &pushConstants);
 
             commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+            render::FrameDrawStats::count();
         }
 
         core::endDynamicRendering(commandBuffer);
@@ -572,6 +574,7 @@ namespace render::billboard
                                          0, sizeof(BillboardPushConstants), &pushConstants);
 
             commandBuffer.drawIndexed(6, atlasInstanceCount, 0, 0, 0);
+            render::FrameDrawStats::count();
         }
 
         for (const auto& batch : customBatches)
@@ -608,6 +611,7 @@ namespace render::billboard
                                          0, sizeof(BillboardPushConstants), &pushConstants);
 
             commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+            render::FrameDrawStats::count();
         }
 
         core::endDynamicRendering(commandBuffer);

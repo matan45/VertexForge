@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "Utilities.hpp"
+#include "stats/FrameDrawStats.hpp"
 
 namespace render::upscaling { class UpscaleManager; }
 

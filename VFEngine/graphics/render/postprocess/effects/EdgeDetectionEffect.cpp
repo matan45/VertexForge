@@ -157,6 +157,7 @@ namespace render::postprocess
                                      0, sizeof(EdgeDetectionPushConstants), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(commandBuffer);
 
         // Transition intermediate image to shader read for composite pass
@@ -183,6 +184,7 @@ namespace render::postprocess
                                           sets.data(), 0, nullptr);
 
         commandBuffer.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
     }
 
     void EdgeDetectionEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)
