@@ -8,6 +8,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "data/EntityConversion.hpp"
+#include <algorithm>
 
 namespace core::api
 {
@@ -223,6 +224,39 @@ namespace core::api
 
                 registry.get<components::DecalComponent>(entity).normalStrength =
                     extractFloat(args[1]);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_decal_getShape(entityId) -> int (0=Rectangle, 1=Circle, 2=Triangle)
+        interpreter->registerNativeFunction("_native_decal_getShape",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty()) return value::Value(static_cast<int64_t>(0));
+                int64_t id = extractInt64(args[0]);
+                if (id < 0) return value::Value(static_cast<int64_t>(0));
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = services::internal::fromHandle(services::EntityHandle{static_cast<uint64_t>(id)});
+                if (!registry.valid(entity) || !registry.all_of<components::DecalComponent>(entity))
+                    return value::Value(static_cast<int64_t>(0));
+
+                return value::Value(static_cast<int64_t>(registry.get<components::DecalComponent>(entity).shape));
+            }});
+
+        // _native_decal_setShape(entityId, shape) -> void
+        interpreter->registerNativeFunction("_native_decal_setShape",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 2) return value::Value(std::monostate{});
+                int64_t id = extractInt64(args[0]);
+                if (id < 0) return value::Value(std::monostate{});
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = services::internal::fromHandle(services::EntityHandle{static_cast<uint64_t>(id)});
+                if (!registry.valid(entity) || !registry.all_of<components::DecalComponent>(entity))
+                    return value::Value(std::monostate{});
+
+                int64_t shape = std::clamp<int64_t>(extractInt64(args[1]), 0, 2);
+                registry.get<components::DecalComponent>(entity).shape =
+                    static_cast<components::DecalShape>(shape);
                 return value::Value(std::monostate{});
             }});
     }

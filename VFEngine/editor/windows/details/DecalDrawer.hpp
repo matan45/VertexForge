@@ -12,6 +12,7 @@ namespace windows::details
 
     private:
         bool drawHeader(bool& outRemove);
+        bool drawShape(services::DecalData& data);
         bool drawHalfExtents(services::DecalData& data);
         bool drawTextures(services::DecalData& data);
         bool drawColor(services::DecalData& data);

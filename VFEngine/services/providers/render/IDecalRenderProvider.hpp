@@ -12,6 +12,7 @@ namespace services
         glm::mat4 worldMatrix{1.0f};
         glm::mat4 inverseWorldMatrix{1.0f};
         glm::vec3 halfExtents{0.5f, 0.5f, 0.1f};
+        uint32_t shape = 0; // 0=Rectangle, 1=Circle, 2=Triangle
         std::string albedoTexture;
         std::string normalTexture;
         std::string ormTexture;

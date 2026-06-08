@@ -44,7 +44,7 @@ struct DecalData {
     mat4 inverseDecalMatrix;
     vec4 color;
     vec4 fadeParams;    // x=angleFadeStart, y=angleFadeEnd, z=edgeFalloff, w=normalStrength
-    vec4 textureFlags;  // x=hasAlbedo, y=hasNormal, z=hasORM, w=unused
+    vec4 textureFlags;  // x=hasAlbedo, y=hasNormal, z=hasORM, w=shape
 };
 
 layout(std430, set = 0, binding = 2) readonly buffer DecalDataBuffer {
@@ -96,6 +96,27 @@ void main()
     vec3 absLocal = abs(localPos);
     if (absLocal.x > 1.0 || absLocal.y > 1.0 || absLocal.z > 1.0)
         discard;
+
+    int decalShape = int(decal.textureFlags.w + 0.5);
+    float shapeEdgeDist = min(1.0 - absLocal.x, 1.0 - absLocal.y);
+
+    if (decalShape == 1)
+    {
+        shapeEdgeDist = 1.0 - length(localPos.xy);
+        if (shapeEdgeDist < 0.0)
+            discard;
+    }
+    else if (decalShape == 2)
+    {
+        vec2 uvForShape = localPos.xy * 0.5 + 0.5;
+        float bottomEdge = uvForShape.y;
+        float diagonalEdge = 1.0 - uvForShape.y - abs(uvForShape.x - 0.5) * 2.0;
+
+        if (bottomEdge < 0.0 || diagonalEdge < 0.0)
+            discard;
+
+        shapeEdgeDist = min(bottomEdge * 2.0, diagonalEdge);
+    }
 
     // Decal UV from local XY
     vec2 decalUV = localPos.xy * 0.5 + 0.5;
@@ -166,8 +187,7 @@ void main()
     // Edge falloff
     float edgeFalloff = decal.fadeParams.z;
     vec3 edgeDist = 1.0 - absLocal;
-    float edgeFade = smoothstep(0.0, max(edgeFalloff, 0.001), edgeDist.x)
-                   * smoothstep(0.0, max(edgeFalloff, 0.001), edgeDist.y)
+    float edgeFade = smoothstep(0.0, max(edgeFalloff, 0.001), shapeEdgeDist)
                    * smoothstep(0.0, max(edgeFalloff, 0.001), edgeDist.z);
 
     // Final alpha

@@ -46,6 +46,8 @@ namespace windows::details
             ImGui::TextDisabled("Projects textures onto scene geometry");
             ImGui::Spacing();
 
+            changed |= drawShape(data);
+            ImGui::Spacing();
             changed |= drawHalfExtents(data);
             ImGui::Spacing();
             changed |= drawTextures(data);
@@ -97,6 +99,24 @@ namespace windows::details
         EntityDetailsPanel::popComponentHeaderStyle();
 
         return isOpen;
+    }
+
+    bool DecalDrawer::drawShape(services::DecalData& data)
+    {
+        static const char* shapeNames[] = {"Rectangle", "Circle", "Triangle"};
+        int currentShape = data.shape <= 2 ? static_cast<int>(data.shape) : 0;
+
+        if (ImGui::Combo("Shape##Decal", &currentShape, shapeNames, IM_ARRAYSIZE(shapeNames)))
+        {
+            data.shape = static_cast<uint8_t>(currentShape);
+            return true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Projection mask shape in decal-local XY space");
+        }
+
+        return false;
     }
 
     bool DecalDrawer::drawHalfExtents(services::DecalData& data)
