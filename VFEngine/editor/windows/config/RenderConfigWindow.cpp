@@ -83,17 +83,32 @@ namespace windows
             markDirty();
         }
         ImGui::EndDisabled();
+
+        // Tooltip on the combo itself — AllowWhenDisabled so it still shows while the
+        // control is greyed out by an active upscaler.
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            if (upscalerActive)
+                ImGui::SetTooltip(
+                    "MSAA is unavailable while the DLSS/DLAA upscaler is active.\n"
+                    "They are mutually exclusive anti-aliasing paths: the upscaler\n"
+                    "expects aliased input and does its own (DLAA) anti-aliasing, so\n"
+                    "stacking MSAA on top is redundant and degrades upscaling quality.\n"
+                    "Turn the upscaler off (Settings > Post Process > Upscaling) to use MSAA.");
+            else
+                ImGui::SetTooltip(
+                    "Multisample anti-aliasing for the scene geometry.\n"
+                    "Applied via a render-target rebuild when you click Apply.\n"
+                    "Clamped to what your GPU supports.");
+        }
+
         ImGui::SameLine();
-        ImGui::TextDisabled("(restart)");
+        ImGui::TextDisabled("(on Apply)");
 
         if (upscalerActive)
         {
             ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f),
                                "Anti-aliasing handled by the upscaler (DLAA).");
-        }
-        else if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Multisample anti-aliasing for the scene pass.\nTakes effect on restart.");
         }
 
         ImGui::Unindent(10.0f);
