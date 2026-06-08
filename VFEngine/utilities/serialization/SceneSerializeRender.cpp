@@ -396,6 +396,10 @@ namespace serialization
     {
         json j;
 
+        j["display"] = {
+            {"presentMode", static_cast<int>(settings.display.presentMode)},
+            {"msaa", static_cast<int>(settings.display.msaa)}
+        };
         j["shadows"] = serializeShadowSettings(settings.shadows);
         j["rtShadows"] = serializeRTShadowSettings(settings.rtShadows);
         j["culling"] = serializeCullingSettings(settings.culling);
@@ -414,6 +418,15 @@ namespace serialization
 
     void SceneSerialization::deserializeRenderSettings(const json& j, types::RenderSettings& settings)
     {
+        if (j.contains("display") && j["display"].is_object())
+        {
+            const auto& display = j["display"];
+            if (display.contains("presentMode") && display["presentMode"].is_number_integer())
+                settings.display.presentMode = static_cast<types::PresentMode>(display["presentMode"].get<int>());
+            if (display.contains("msaa") && display["msaa"].is_number_integer())
+                settings.display.msaa = static_cast<types::MsaaSamples>(display["msaa"].get<int>());
+        }
+
         deserializeShadowSettings(j, settings.shadows);
         deserializeRTShadowSettings(j, settings.rtShadows);
 

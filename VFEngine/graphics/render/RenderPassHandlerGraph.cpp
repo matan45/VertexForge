@@ -54,6 +54,32 @@ namespace render
             offscreenResources.depthImage.depthImageView,
             vk::ImageLayout::eUndefined,
             depthDesc);
+
+        // Scoped MSAA: import the multisampled scene targets the pre-resolve passes
+        // (ClearColor → Sky/IBL → Clouds → SceneMeshes) render into. The frame graph
+        // auto-inserts the write-after-write barriers between those passes; the
+        // SceneMeshes pass resolves them into the single-sample handles above, which
+        // every post-resolve pass keeps reading unchanged.
+        if (offscreenResources.msaaEnabled())
+        {
+            graph::ImageResourceDesc msaaColorDesc = colorDesc;
+            msaaColorDesc.usage = vk::ImageUsageFlagBits::eColorAttachment;
+            msaaColorDesc.debugName = "SceneColorMSAA";
+            sceneColorMSAAHandle = frameGraph->importImage(
+                offscreenResources.colorImagesMSAA[imageIndex].colorImage,
+                offscreenResources.colorImagesMSAA[imageIndex].colorImageView,
+                vk::ImageLayout::eUndefined,
+                msaaColorDesc);
+
+            graph::ImageResourceDesc msaaDepthDesc = depthDesc;
+            msaaDepthDesc.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+            msaaDepthDesc.debugName = "DepthMSAA";
+            depthMSAAHandle = frameGraph->importImage(
+                offscreenResources.depthImageMSAA.depthImage,
+                offscreenResources.depthImageMSAA.depthImageView,
+                vk::ImageLayout::eUndefined,
+                msaaDepthDesc);
+        }
     }
 
     void RenderPassHandler::buildFrameGraph(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
@@ -66,6 +92,14 @@ namespace render
         // full control over all layout transitions.
         // =====================================================================
 
+        // Scoped MSAA: the pre-resolve passes write the multisampled handles; when
+        // MSAA is off these aliases ARE the single-sample handles, so the pass
+        // declarations below are unconditional. The SceneMeshes pass resolves into
+        // sceneColorHandle/depthHandle, which all post-resolve passes keep using.
+        const bool msaa = offscreenResources.msaaEnabled();
+        graph::ResourceHandle& colorH = msaa ? sceneColorMSAAHandle : sceneColorHandle;
+        graph::ResourceHandle& depthH = msaa ? depthMSAAHandle : depthHandle;
+
         // --- Scene core passes ---
 
         // ClearColor
@@ -74,8 +108,8 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     clearColor->recordCommandBufferGraphManaged(cmd, idx);
                 });
-            sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
-            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
+            colorH = builder.write(colorH, graph::ResourceUsage::ColorAttachmentWrite);
+            depthH = builder.write(depthH, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
@@ -101,7 +135,7 @@ namespace render
                         atmospherePipeline->dispatchCompute(cmd);
                     atmospherePipeline->renderSkyGraphManaged(cmd, idx);
                 });
-            sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
+            colorH = builder.write(colorH, graph::ResourceUsage::ColorAttachmentWrite);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
@@ -111,7 +145,7 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     iblRenderer->recordCommandBufferGraphManaged(cmd, idx);
                 });
-            sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
+            colorH = builder.write(colorH, graph::ResourceUsage::ColorAttachmentWrite);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
@@ -142,21 +176,29 @@ namespace render
                         cloudPipeline->dispatchCompute(cmd);
                     cloudPipeline->renderCompositeGraphManaged(cmd, idx);
                 });
-            sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
-            builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
-            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            colorH = builder.write(colorH, graph::ResourceUsage::ColorAttachmentWrite);
+            builder.read(depthH, graph::ResourceUsage::DepthAttachmentRead);
+            depthH = builder.write(depthH, graph::ResourceUsage::DepthAttachmentRead);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
 
-        // SceneMeshes
+        // SceneMeshes — opaque geometry. Under MSAA this renders into the multisampled
+        // handles and resolves into the single-sample handles, which the post-resolve
+        // passes below consume.
         {
             auto builder = frameGraph->addPass("SceneMeshes",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     drawSceneMeshesGraphManaged(cmd, idx);
                 });
-            sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
-            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
+            colorH = builder.write(colorH, graph::ResourceUsage::ColorAttachmentWrite);
+            depthH = builder.write(depthH, graph::ResourceUsage::DepthAttachmentWrite);
+            if (msaa)
+            {
+                // Resolve targets — the dynamic-rendering resolve attachments write these.
+                sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
+                depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
+            }
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }

@@ -629,6 +629,10 @@ namespace render::gpudriven
         };
         config.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 
+        // Scoped MSAA: opaque + non-WBOIT transparent draws render into the multisampled
+        // scene targets; WBOIT renders into its own single-sample accumulation targets.
+        config.sampleCount = isWBOITMode ? vk::SampleCountFlagBits::e1 : swapChain.getMSAASamples();
+
         if (isWBOITMode)
         {
             // WBOIT dual-attachment blend states

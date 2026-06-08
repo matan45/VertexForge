@@ -169,6 +169,7 @@ namespace handlers {
 		std::unique_ptr<services::FrameTaskGraph> frameTaskGraph;
 
 		events::SubscriptionToken resizeSubscription;
+		events::SubscriptionToken displaySettingsSubscription;
 
 	public:
 		explicit EditorHandler();

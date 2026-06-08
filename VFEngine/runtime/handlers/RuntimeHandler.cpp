@@ -372,6 +372,11 @@ namespace handlers {
             [this](const events::application::WindowResizedNotification&) {
                 bootstrap->triggerResize();
             });
+
+        displaySettingsSubscription = dispatcher.subscribe<events::application::ApplyDisplaySettingsNotification>(
+            [this](const events::application::ApplyDisplaySettingsNotification& n) {
+                bootstrap->applyDisplaySettings(n.presentMode, n.msaa);
+            });
     }
 
     void RuntimeHandler::cleanupEventSubscriptions()
@@ -381,6 +386,11 @@ namespace handlers {
         if (resizeSubscription.isValid()) {
             dispatcher.unsubscribe(resizeSubscription);
             resizeSubscription = {};
+        }
+
+        if (displaySettingsSubscription.isValid()) {
+            dispatcher.unsubscribe(displaySettingsSubscription);
+            displaySettingsSubscription = {};
         }
     }
 

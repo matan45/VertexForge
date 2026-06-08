@@ -1,6 +1,7 @@
 #include "RenderConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
+#include "events/project/ApplicationEvents.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "events/save/ConfigEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
@@ -47,6 +48,55 @@ namespace windows
                 isDirty = true;
             }
         }
+        ImGui::Separator();
+    }
+
+    void RenderConfigWindow::drawDisplaySection()
+    {
+        if (!ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+
+        ImGui::Indent(10.0f);
+
+        // VSync / present mode
+        const char* presentModes[] = {"VSync (FIFO)", "Mailbox (low latency)", "Immediate (uncapped)"};
+        int presentIdx = static_cast<int>(settings.display.presentMode);
+        if (ImGui::Combo("Present Mode", &presentIdx, presentModes, 3))
+        {
+            settings.display.presentMode = static_cast<types::PresentMode>(presentIdx);
+            markDirty();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(on Apply)");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("VSync (FIFO) caps to refresh with no tearing.\nMailbox is low-latency with no tearing.\nImmediate is uncapped and may tear.\nApplied via a swapchain rebuild when you click Apply.");
+
+        // Anti-aliasing (MSAA). Redundant when the temporal upscaler (DLSS/DLAA) is active.
+        const bool upscalerActive = settings.postProcess.upscale.enabled;
+
+        ImGui::BeginDisabled(upscalerActive);
+        const char* aaModes[] = {"Off", "MSAA 2x", "MSAA 4x", "MSAA 8x"};
+        int aaIdx = static_cast<int>(settings.display.msaa);
+        if (ImGui::Combo("Anti-Aliasing", &aaIdx, aaModes, 4))
+        {
+            settings.display.msaa = static_cast<types::MsaaSamples>(aaIdx);
+            markDirty();
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::TextDisabled("(restart)");
+
+        if (upscalerActive)
+        {
+            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f),
+                               "Anti-aliasing handled by the upscaler (DLAA).");
+        }
+        else if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Multisample anti-aliasing for the scene pass.\nTakes effect on restart.");
+        }
+
+        ImGui::Unindent(10.0f);
         ImGui::Separator();
     }
 
@@ -121,6 +171,12 @@ namespace windows
         events::render::ApplyShadowSettingsCommand shadowCmd;
         shadowCmd.settings = settings;
         dispatcher.execute(shadowCmd);
+
+        // VSync / present mode: applied via a swapchain rebuild on the main thread.
+        events::application::ApplyDisplaySettingsNotification displayNotif;
+        displayNotif.presentMode = settings.display.presentMode;
+        displayNotif.msaa = settings.display.msaa;
+        dispatcher.publish(displayNotif);
 
         applyVFXLODSettings();
         applyAnimationLODSettings();
@@ -394,6 +450,7 @@ namespace windows
         }
 
         drawPresetSection();
+        drawDisplaySection();
         drawCullingSection();
         drawTerrainSection();
         drawShadowSection();

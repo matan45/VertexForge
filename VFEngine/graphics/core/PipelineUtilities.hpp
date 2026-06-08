@@ -15,6 +15,7 @@ namespace core
 		uint32_t pushConstantSize;
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		bool enableBlending = false;
+		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e1;
 	};
 
 	struct WireframePipelineResult
@@ -68,6 +69,8 @@ namespace core
 		                                         vk::ColorComponentFlagBits::eB |
 		                                         vk::ColorComponentFlagBits::eA;
 
+		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e1;
+
 		std::vector<vk::DynamicState> dynamicStates;
 	};
 
@@ -107,6 +110,8 @@ namespace core
 
 		// When non-empty, overrides the single blend attachment above with per-attachment states
 		std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+
+		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e1;
 
 		std::vector<vk::DynamicState> dynamicStates;
 	};

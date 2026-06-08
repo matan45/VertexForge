@@ -12,6 +12,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/project/ApplicationEvents.hpp"
 #include "../../events/scene/SceneManagementEvents.hpp"
 #include "../../events/scene/StreamingZoneEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
@@ -462,6 +463,12 @@ namespace services
             events::render::ApplyShadowSettingsCommand renderCmd;
             renderCmd.settings = sceneGraph->getRenderSettings();
             dispatcher.execute(renderCmd);
+
+            // Apply the scene's display settings (VSync present mode) to the swapchain.
+            events::application::ApplyDisplaySettingsNotification displayNotif;
+            displayNotif.presentMode = sceneGraph->getRenderSettings().display.presentMode;
+            displayNotif.msaa = sceneGraph->getRenderSettings().display.msaa;
+            dispatcher.publish(displayNotif);
 
             events::postprocess::ApplyPostProcessSettingsCommand postProcessCmd;
             postProcessCmd.settings = sceneGraph->getRenderSettings().postProcess;

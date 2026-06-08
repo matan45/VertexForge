@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
+#include "events/editor/EditorSettingsEvents.hpp"
 #include "memory/GpuAllocationStats.hpp"
 #include <imgui.h>
 #include <filesystem>
@@ -19,6 +20,12 @@ namespace windows
             [this](const events::scene::SceneClearedNotification&) {
                 currentSceneName.clear();
             });
+        settingsChangedToken = dispatcher.subscribe<events::editor::EditorSettingsChangedNotification>(
+            [this](const events::editor::EditorSettingsChangedNotification& n) {
+                debugSettings = n.settings.debug;
+            });
+
+        debugSettings = dispatcher.query(events::editor::GetEditorSettingsQuery{}).debug;
     }
 
     StatusBar::~StatusBar()
@@ -26,6 +33,7 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         if (sceneLoadedToken.isValid()) dispatcher.unsubscribe(sceneLoadedToken);
         if (sceneClearedToken.isValid()) dispatcher.unsubscribe(sceneClearedToken);
+        if (settingsChangedToken.isValid()) dispatcher.unsubscribe(settingsChangedToken);
     }
 
     void StatusBar::draw(const ImGuiViewport* viewport)
@@ -51,32 +59,51 @@ namespace windows
             {
                 refreshTimer = 0.0f;
 
-                try
+                if (debugSettings.showDrawCalls)
                 {
-                    auto stats = events::EventDispatcher::instance().query(
-                        events::render::GetCullingStatsQuery{});
-                    cachedDrawCalls = stats.gpuDriven.visibleObjects;
-                }
-                catch (const std::exception&)
-                {
-                    cachedDrawCalls = 0;
+                    try
+                    {
+                        auto stats = events::EventDispatcher::instance().query(
+                            events::render::GetCullingStatsQuery{});
+                        cachedDrawCalls = stats.gpuDriven.visibleObjects;
+                    }
+                    catch (const std::exception&)
+                    {
+                        cachedDrawCalls = 0;
+                    }
                 }
 
                 cachedVramMB = memory::GpuAllocationStats::deviceLocalUsedBytes.load() / (1024 * 1024);
             }
 
-            ImGui::Text("FPS: %.0f", fps);
-            ImGui::SameLine(0.0f, 16.0f);
-            ImGui::TextDisabled("|");
-            ImGui::SameLine(0.0f, 16.0f);
-            ImGui::Text("Frame: %.1f ms", frameMs);
-            ImGui::SameLine(0.0f, 16.0f);
-            ImGui::TextDisabled("|");
-            ImGui::SameLine(0.0f, 16.0f);
-            ImGui::Text("Draw Calls: %u", cachedDrawCalls);
-            ImGui::SameLine(0.0f, 16.0f);
-            ImGui::TextDisabled("|");
-            ImGui::SameLine(0.0f, 16.0f);
+            // Insert a separator before every item except the first visible one.
+            bool firstItem = true;
+            auto separator = [&firstItem]() {
+                if (!firstItem)
+                {
+                    ImGui::SameLine(0.0f, 16.0f);
+                    ImGui::TextDisabled("|");
+                    ImGui::SameLine(0.0f, 16.0f);
+                }
+                firstItem = false;
+            };
+
+            if (debugSettings.showFPS)
+            {
+                separator();
+                ImGui::Text("FPS: %.0f", fps);
+            }
+            if (debugSettings.showGPUTime)
+            {
+                separator();
+                ImGui::Text("Frame: %.1f ms", frameMs);
+            }
+            if (debugSettings.showDrawCalls)
+            {
+                separator();
+                ImGui::Text("Draw Calls: %u", cachedDrawCalls);
+            }
+            separator();
             ImGui::Text("VRAM: %llu MB", static_cast<unsigned long long>(cachedVramMB));
 
             // Scene name on the right

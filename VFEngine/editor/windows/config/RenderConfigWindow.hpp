@@ -12,6 +12,7 @@ namespace windows
         bool isDirty = false;
 
         void drawPresetSection();
+        void drawDisplaySection();
         void markDirty();
         void drawCullingSection();
         void drawShadowSection();

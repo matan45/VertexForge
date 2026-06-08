@@ -378,11 +378,14 @@ namespace render
         vk::Format colorFormat = swapChain.getSceneColorFormat();
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
+        const vk::SampleCountFlagBits sampleCount = offscreenResources.sampleCount;
+
         auto setupSecondary = [&](vk::CommandBuffer sec) {
             vk::CommandBufferInheritanceRenderingInfo inheritRendering{};
             inheritRendering.colorAttachmentCount = 1;
             inheritRendering.pColorAttachmentFormats = &colorFormat;
             inheritRendering.depthAttachmentFormat = depthFormat;
+            inheritRendering.rasterizationSamples = sampleCount;
 
             vk::CommandBufferInheritanceInfo inheritance{};
             inheritance.pNext = &inheritRendering;

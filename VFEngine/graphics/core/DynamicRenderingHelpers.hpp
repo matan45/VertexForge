@@ -9,7 +9,14 @@ namespace core
 {
     // --- Attachment info factories ---
 
-    inline vk::RenderingAttachmentInfo colorClear(vk::ImageView view, vk::ClearColorValue clearValue)
+    // --- MSAA resolve helpers ---
+    // When `resolveView` is non-null the multisampled attachment resolves into it at
+    // store time (color: average; depth: sample zero). Single source for the scoped
+    // MSAA path so the multisampled scene targets resolve into the existing
+    // single-sample targets that every downstream pass already reads.
+
+    inline vk::RenderingAttachmentInfo colorClear(vk::ImageView view, vk::ClearColorValue clearValue,
+                                                  vk::ImageView resolveView = nullptr)
     {
         vk::RenderingAttachmentInfo info{};
         info.imageView = view;
@@ -17,16 +24,28 @@ namespace core
         info.loadOp = vk::AttachmentLoadOp::eClear;
         info.storeOp = vk::AttachmentStoreOp::eStore;
         info.clearValue.color = clearValue;
+        if (resolveView)
+        {
+            info.resolveMode = vk::ResolveModeFlagBits::eAverage;
+            info.resolveImageView = resolveView;
+            info.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        }
         return info;
     }
 
-    inline vk::RenderingAttachmentInfo colorLoad(vk::ImageView view)
+    inline vk::RenderingAttachmentInfo colorLoad(vk::ImageView view, vk::ImageView resolveView = nullptr)
     {
         vk::RenderingAttachmentInfo info{};
         info.imageView = view;
         info.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
         info.loadOp = vk::AttachmentLoadOp::eLoad;
         info.storeOp = vk::AttachmentStoreOp::eStore;
+        if (resolveView)
+        {
+            info.resolveMode = vk::ResolveModeFlagBits::eAverage;
+            info.resolveImageView = resolveView;
+            info.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        }
         return info;
     }
 
@@ -41,7 +60,8 @@ namespace core
     }
 
     inline vk::RenderingAttachmentInfo depthClear(vk::ImageView view,
-                                                   float clearDepth = 1.0f, uint32_t clearStencil = 0)
+                                                   float clearDepth = 1.0f, uint32_t clearStencil = 0,
+                                                   vk::ImageView resolveView = nullptr)
     {
         vk::RenderingAttachmentInfo info{};
         info.imageView = view;
@@ -49,6 +69,13 @@ namespace core
         info.loadOp = vk::AttachmentLoadOp::eClear;
         info.storeOp = vk::AttachmentStoreOp::eStore;
         info.clearValue.depthStencil = vk::ClearDepthStencilValue{clearDepth, clearStencil};
+        if (resolveView)
+        {
+            // SampleZero is the universally-supported depth/stencil resolve mode.
+            info.resolveMode = vk::ResolveModeFlagBits::eSampleZero;
+            info.resolveImageView = resolveView;
+            info.resolveImageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        }
         return info;
     }
 

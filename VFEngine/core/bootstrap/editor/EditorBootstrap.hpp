@@ -54,6 +54,12 @@ namespace controllers
     class OffScreen;
 }
 
+namespace types
+{
+    enum class PresentMode : uint8_t;
+    enum class MsaaSamples : uint8_t;
+}
+
 namespace core
 {
     class OffScreenAdapter;
@@ -223,6 +229,7 @@ namespace core
         void setFrameCallback(std::function<void()> callback);
         void setPostUpdateCallback(std::function<void()> callback);
         void triggerResize();
+        void applyDisplaySettings(types::PresentMode presentMode, types::MsaaSamples msaa);
 
         // Set callback to run on the render thread before swapchain present
         void setPreRenderCallback(std::function<void()> callback);

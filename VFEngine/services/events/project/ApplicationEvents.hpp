@@ -1,5 +1,6 @@
 #pragma once
 #include "../EventTypes.hpp"
+#include "types/RenderSettings.hpp"
 #include <cstdint>
 
 namespace events::application {
@@ -63,6 +64,15 @@ namespace events::application {
         bool focused;
 
         std::string_view getName() const override { return "WindowFocused"; }
+    };
+
+    // Applied when the scene's display settings (VSync present mode) change or load.
+    // Handled by the editor/runtime bootstrap to reconfigure the swapchain + rebuild.
+    struct ApplyDisplaySettingsNotification : INotification {
+        types::PresentMode presentMode = types::PresentMode::Mailbox;
+        types::MsaaSamples msaa = types::MsaaSamples::Off;
+
+        std::string_view getName() const override { return "ApplyDisplaySettings"; }
     };
 
     // ============================================

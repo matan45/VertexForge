@@ -156,6 +156,10 @@ namespace windows
             ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f),
                              ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_None);
 
+            // The Preferences > Window Layout section's "Reset to Default Layout"
+            // button needs the live dockspace id.
+            editorPreferencesWindow.setDockSpaceId(dockId);
+
             // Apply default layout on first launch
             static bool layoutChecked = false;
             if (!layoutChecked)
@@ -163,6 +167,12 @@ namespace windows
                 layoutChecked = true;
                 if (ImGui::DockBuilderGetNode(dockId) == nullptr)
                     handlers::EditorLayoutManager::buildDefaultLayout(dockId);
+
+                // Honor the configured startup layout preset (if any).
+                auto prefs = events::EventDispatcher::instance().query(events::editor::GetEditorSettingsQuery{});
+                const std::string& startupLayout = prefs.windowLayout.startupLayout;
+                if (!startupLayout.empty() && startupLayout != "Default")
+                    handlers::EditorLayoutManager::loadLayout(startupLayout);
             }
 
             menuBar.draw();

@@ -39,6 +39,12 @@ namespace controllers
     class OffScreen;
 }
 
+namespace types
+{
+    enum class PresentMode : uint8_t;
+    enum class MsaaSamples : uint8_t;
+}
+
 namespace core
 {
     class OffScreenAdapter;
@@ -160,6 +166,7 @@ namespace core
 
         // Trigger window resize handling
         void triggerResize();
+        void applyDisplaySettings(types::PresentMode presentMode, types::MsaaSamples msaa);
 
         std::function<void()> getSceneGraphUpdateFn() const;
         std::function<void()> getRenderFn() const;

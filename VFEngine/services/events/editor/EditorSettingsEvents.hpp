@@ -30,6 +30,11 @@ namespace events::editor {
         std::string_view getName() const override { return "GetEditorSettings"; }
     };
 
+    // Absolute path to the editor preferences JSON file on disk.
+    struct GetEditorSettingsPathQuery : IQuery<std::string> {
+        std::string_view getName() const override { return "GetEditorSettingsPath"; }
+    };
+
     // ============================================
     // NOTIFICATIONS - State change broadcasts
     // ============================================

@@ -320,5 +320,8 @@ namespace windows
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
         }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Save writes these settings into the project configuration file (.vfproj).");
     }
 }

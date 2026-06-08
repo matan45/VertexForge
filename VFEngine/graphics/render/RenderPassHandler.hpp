@@ -274,6 +274,12 @@ namespace render
         std::unique_ptr<graph::RenderGraphProfiler> graphProfiler;
         graph::ResourceHandle sceneColorHandle;
         graph::ResourceHandle depthHandle;
+        // Scoped MSAA: multisampled scene targets. Pre-resolve passes (ClearColor,
+        // sky, clouds, opaque meshes) write these; the opaque pass resolves into
+        // sceneColorHandle/depthHandle. Equal to the single-sample handles when MSAA
+        // is off, so all write() calls stay valid unconditionally.
+        graph::ResourceHandle sceneColorMSAAHandle;
+        graph::ResourceHandle depthMSAAHandle;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,

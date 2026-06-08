@@ -1,6 +1,8 @@
 #include "CoreInterface.hpp"
 #include "../core/MainLoop.hpp"
 #include "AnimatorSystemController.hpp"
+#include "../../graphics/core/VulkanContext.hpp"
+#include "../../graphics/core/SwapChain.hpp"
 
 namespace controllers {
 
@@ -56,6 +58,32 @@ namespace controllers {
 
 	void CoreInterface::triggerResize()
 	{
+		mainLoop->triggerResize();
+	}
+
+	void CoreInterface::applyDisplaySettings(types::PresentMode presentMode, types::MsaaSamples /*msaa*/)
+	{
+		core::SwapChain* swapChain = core::VulkanContext::getSwapChain().get();
+		if (!swapChain)
+			return;
+
+		vk::PresentModeKHR mode = vk::PresentModeKHR::eFifo;
+		switch (presentMode)
+		{
+		case types::PresentMode::Fifo:      mode = vk::PresentModeKHR::eFifo; break;
+		case types::PresentMode::Mailbox:   mode = vk::PresentModeKHR::eMailbox; break;
+		case types::PresentMode::Immediate: mode = vk::PresentModeKHR::eImmediate; break;
+		}
+
+		// No-op if unchanged — avoids an unnecessary swapchain rebuild.
+		if (swapChain->getDesiredPresentMode() == mode)
+			return;
+
+		swapChain->setDesiredPresentMode(mode);
+
+		// MSAA is intentionally not applied yet (frame-graph integration pending).
+		// When that lands: swapChain->setMSAASamples(<clamped>) goes here.
+
 		mainLoop->triggerResize();
 	}
 

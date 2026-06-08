@@ -7,33 +7,6 @@ namespace config
     using json = nlohmann::json;
 
     // ============================================
-    // GeneralSettings
-    // ============================================
-
-    inline void to_json(json& j, const GeneralSettings& s)
-    {
-        j = json{
-            {"projectName", s.projectName},
-            {"defaultScene", s.defaultScene},
-            {"autoSaveEnabled", s.autoSaveEnabled},
-            {"autoSaveIntervalMinutes", s.autoSaveIntervalMinutes},
-            {"loadLastProject", s.loadLastProject},
-            {"showSplashScreen", s.showSplashScreen}
-        };
-    }
-
-    inline void from_json(const json& j, GeneralSettings& s)
-    {
-        GeneralSettings defaults;
-        s.projectName = j.value("projectName", defaults.projectName);
-        s.defaultScene = j.value("defaultScene", defaults.defaultScene);
-        s.autoSaveEnabled = j.value("autoSaveEnabled", defaults.autoSaveEnabled);
-        s.autoSaveIntervalMinutes = j.value("autoSaveIntervalMinutes", defaults.autoSaveIntervalMinutes);
-        s.loadLastProject = j.value("loadLastProject", defaults.loadLastProject);
-        s.showSplashScreen = j.value("showSplashScreen", defaults.showSplashScreen);
-    }
-
-    // ============================================
     // AppearanceSettings
     // ============================================
 
@@ -71,95 +44,6 @@ namespace config
     }
 
     // ============================================
-    // InputSettings
-    // ============================================
-
-    inline void to_json(json& j, const InputSettings& s)
-    {
-        j = json{
-            {"cameraSpeed", s.cameraSpeed},
-            {"cameraSensitivity", s.cameraSensitivity},
-            {"orbitMode", s.orbitMode},
-            {"invertYAxis", s.invertYAxis},
-            {"smoothCamera", s.smoothCamera},
-            {"focusOnSelection", s.focusOnSelection}
-        };
-    }
-
-    inline void from_json(const json& j, InputSettings& s)
-    {
-        InputSettings defaults;
-        s.cameraSpeed = j.value("cameraSpeed", defaults.cameraSpeed);
-        s.cameraSensitivity = j.value("cameraSensitivity", defaults.cameraSensitivity);
-        s.orbitMode = j.value("orbitMode", defaults.orbitMode);
-        s.invertYAxis = j.value("invertYAxis", defaults.invertYAxis);
-        s.smoothCamera = j.value("smoothCamera", defaults.smoothCamera);
-        s.focusOnSelection = j.value("focusOnSelection", defaults.focusOnSelection);
-    }
-
-    // ============================================
-    // RenderingSettings
-    // ============================================
-
-    inline void to_json(json& j, const RenderingSettings& s)
-    {
-        j = json{
-            {"vsync", s.vsync},
-            {"hdrMode", s.hdrMode},
-            {"msaaSamples", s.msaaSamples},
-            {"shadowQuality", s.shadowQuality},
-            {"shadowDistance", s.shadowDistance},
-            {"meshShaders", s.meshShaders},
-            {"bindlessTextures", s.bindlessTextures},
-            {"rayTracing", s.rayTracing}
-        };
-    }
-
-    inline void from_json(const json& j, RenderingSettings& s)
-    {
-        RenderingSettings defaults;
-        s.vsync = j.value("vsync", defaults.vsync);
-        s.hdrMode = j.value("hdrMode", defaults.hdrMode);
-        s.msaaSamples = j.value("msaaSamples", defaults.msaaSamples);
-        s.shadowQuality = j.value("shadowQuality", defaults.shadowQuality);
-        s.shadowDistance = j.value("shadowDistance", defaults.shadowDistance);
-        s.meshShaders = j.value("meshShaders", defaults.meshShaders);
-        s.bindlessTextures = j.value("bindlessTextures", defaults.bindlessTextures);
-        s.rayTracing = j.value("rayTracing", defaults.rayTracing);
-    }
-
-    // ============================================
-    // EditorSettings
-    // ============================================
-
-    inline void to_json(json& j, const EditorSettings& s)
-    {
-        j = json{
-            {"gridSize", s.gridSize},
-            {"gizmoSize", s.gizmoSize},
-            {"snapTranslate", s.snapTranslate},
-            {"snapRotate", s.snapRotate},
-            {"snapScale", s.snapScale},
-            {"showGrid", s.showGrid},
-            {"highlightSelection", s.highlightSelection},
-            {"enableGizmos", s.enableGizmos}
-        };
-    }
-
-    inline void from_json(const json& j, EditorSettings& s)
-    {
-        EditorSettings defaults;
-        s.gridSize = j.value("gridSize", defaults.gridSize);
-        s.gizmoSize = j.value("gizmoSize", defaults.gizmoSize);
-        s.snapTranslate = j.value("snapTranslate", defaults.snapTranslate);
-        s.snapRotate = j.value("snapRotate", defaults.snapRotate);
-        s.snapScale = j.value("snapScale", defaults.snapScale);
-        s.showGrid = j.value("showGrid", defaults.showGrid);
-        s.highlightSelection = j.value("highlightSelection", defaults.highlightSelection);
-        s.enableGizmos = j.value("enableGizmos", defaults.enableGizmos);
-    }
-
-    // ============================================
     // DebugSettings
     // ============================================
 
@@ -169,11 +53,7 @@ namespace config
             {"showFPS", s.showFPS},
             {"showGPUTime", s.showGPUTime},
             {"showDrawCalls", s.showDrawCalls},
-            {"logLevel", s.logLevel},
-            {"vulkanValidation", s.vulkanValidation},
-            {"gpuCrashDebugging", s.gpuCrashDebugging},
-            {"showShadowCascades", s.showShadowCascades},
-            {"showOverdraw", s.showOverdraw}
+            {"logLevel", s.logLevel}
         };
     }
 
@@ -184,10 +64,23 @@ namespace config
         s.showGPUTime = j.value("showGPUTime", defaults.showGPUTime);
         s.showDrawCalls = j.value("showDrawCalls", defaults.showDrawCalls);
         s.logLevel = j.value("logLevel", defaults.logLevel);
-        s.vulkanValidation = j.value("vulkanValidation", defaults.vulkanValidation);
-        s.gpuCrashDebugging = j.value("gpuCrashDebugging", defaults.gpuCrashDebugging);
-        s.showShadowCascades = j.value("showShadowCascades", defaults.showShadowCascades);
-        s.showOverdraw = j.value("showOverdraw", defaults.showOverdraw);
+    }
+
+    // ============================================
+    // WindowLayoutSettings
+    // ============================================
+
+    inline void to_json(json& j, const WindowLayoutSettings& s)
+    {
+        j = json{
+            {"startupLayout", s.startupLayout}
+        };
+    }
+
+    inline void from_json(const json& j, WindowLayoutSettings& s)
+    {
+        WindowLayoutSettings defaults;
+        s.startupLayout = j.value("startupLayout", defaults.startupLayout);
     }
 
     // ============================================
@@ -198,33 +91,21 @@ namespace config
     {
         j = json{
             {"schemaVersion", json{{"major", EditorSettingsSchemaVersion::major}, {"minor", EditorSettingsSchemaVersion::minor}}},
-            {"general", prefs.general},
             {"appearance", prefs.appearance},
-            {"input", prefs.input},
-            {"rendering", prefs.rendering},
-            {"editor", prefs.editor},
-            {"debug", prefs.debug}
+            {"debug", prefs.debug},
+            {"windowLayout", prefs.windowLayout}
         };
     }
 
     inline void from_json(const json& j, EditorPreferences& prefs)
     {
-        if (j.contains("general") && j["general"].is_object())
-            prefs.general = j["general"].get<GeneralSettings>();
-
         if (j.contains("appearance") && j["appearance"].is_object())
             prefs.appearance = j["appearance"].get<AppearanceSettings>();
 
-        if (j.contains("input") && j["input"].is_object())
-            prefs.input = j["input"].get<InputSettings>();
-
-        if (j.contains("rendering") && j["rendering"].is_object())
-            prefs.rendering = j["rendering"].get<RenderingSettings>();
-
-        if (j.contains("editor") && j["editor"].is_object())
-            prefs.editor = j["editor"].get<EditorSettings>();
-
         if (j.contains("debug") && j["debug"].is_object())
             prefs.debug = j["debug"].get<DebugSettings>();
+
+        if (j.contains("windowLayout") && j["windowLayout"].is_object())
+            prefs.windowLayout = j["windowLayout"].get<WindowLayoutSettings>();
     }
 }

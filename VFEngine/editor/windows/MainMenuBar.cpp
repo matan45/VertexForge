@@ -84,41 +84,12 @@ namespace windows
         {
             handleFileMenu();
             handleEditMenu();
-            handleWindowMenu();
             handleAddMenu();
             handleToolsMenu();
             handlePluginsMenu();
             handleScriptsMenu();
             handleDebug();
             ImGui::EndMainMenuBar();
-        }
-
-        // Save Layout modal - drawn outside menu bar context
-        if (openSaveLayoutPopup)
-        {
-            ImGui::OpenPopup("SaveLayoutPopup");
-            openSaveLayoutPopup = false;
-        }
-
-        if (ImGui::BeginPopupModal("SaveLayoutPopup", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-        {
-            ImGui::Text("Layout Name:");
-            ImGui::SetNextItemWidth(200.0f);
-            ImGui::InputText("##LayoutName", layoutName, sizeof(layoutName));
-            ImGui::Spacing();
-            if (ImGui::Button("Save", ImVec2(100, 0)) && layoutName[0] != '\0')
-            {
-                handlers::EditorLayoutManager::saveLayout(layoutName);
-                layoutName[0] = '\0';
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(100, 0)))
-            {
-                layoutName[0] = '\0';
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
         }
     }
 
@@ -208,42 +179,6 @@ namespace windows
         if (!ImGui::BeginMenu("Edit")) return;
         if (ImGui::MenuItem("Preferences") && editorPreferencesWindow) editorPreferencesWindow->show();
         if (ImGui::MenuItem("Settings") && editorSettingsWindow) editorSettingsWindow->show();
-        ImGui::EndMenu();
-    }
-
-    void MainMenuBar::handleWindowMenu()
-    {
-        if (!ImGui::BeginMenu("Window")) return;
-
-        if (ImGui::MenuItem("Reset Layout"))
-        {
-            ImGuiID dockId = ImGui::GetID("MyDockSpace");
-            handlers::EditorLayoutManager::resetLayout(dockId);
-        }
-
-        if (ImGui::MenuItem("Save Layout..."))
-        {
-            openSaveLayoutPopup = true;
-        }
-
-        if (ImGui::BeginMenu("Load Layout"))
-        {
-            auto layouts = handlers::EditorLayoutManager::getSavedLayouts();
-            if (layouts.empty())
-            {
-                ImGui::TextDisabled("No saved layouts");
-            }
-            else
-            {
-                for (const auto& name : layouts)
-                {
-                    if (ImGui::MenuItem(name.c_str()))
-                        handlers::EditorLayoutManager::loadLayout(name);
-                }
-            }
-            ImGui::EndMenu();
-        }
-
         ImGui::EndMenu();
     }
 

@@ -54,13 +54,20 @@ namespace render
 
     void ClearColor::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
+        // Under scoped MSAA, clear the multisampled scene targets the opaque pass
+        // resolves from (no resolve here — that happens at SceneMeshes).
+        const bool msaa = offscreenResources.msaaEnabled();
+        vk::ImageView colorView = msaa ? offscreenResources.colorImagesMSAA[imageIndex].colorImageView
+                                       : offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = msaa ? offscreenResources.depthImageMSAA.depthImageView
+                                       : offscreenResources.depthImage.depthImageView;
+
         auto colorAttach = core::colorClear(
-            offscreenResources.colorImages[imageIndex].colorImageView,
+            colorView,
             vk::ClearColorValue(std::array<float, 4>{
                 clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a}));
 
-        auto depthAttach = core::depthClear(
-            offscreenResources.depthImage.depthImageView, 1.0f, 0);
+        auto depthAttach = core::depthClear(depthView, 1.0f, 0);
 
         core::DynamicRenderingInfo info{};
         info.extent = swapChain.getSwapchainExtent();

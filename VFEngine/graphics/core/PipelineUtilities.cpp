@@ -90,7 +90,7 @@ namespace core
 
 		vk::PipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sampleShadingEnable = VK_FALSE;
-		multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+		multisampling.rasterizationSamples = config.sampleCount;
 
 		vk::PipelineDepthStencilStateCreateInfo depthStencil{};
 		depthStencil.depthTestEnable = VK_TRUE;
@@ -230,7 +230,7 @@ namespace core
 
 		vk::PipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sampleShadingEnable = VK_FALSE;
-		multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+		multisampling.rasterizationSamples = config.sampleCount;
 
 		vk::PipelineDepthStencilStateCreateInfo depthStencil{};
 		depthStencil.depthTestEnable = config.depthTestEnable ? VK_TRUE : VK_FALSE;
@@ -367,7 +367,7 @@ namespace core
 
 		vk::PipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sampleShadingEnable = VK_FALSE;
-		multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+		multisampling.rasterizationSamples = config.sampleCount;
 
 		vk::PipelineDepthStencilStateCreateInfo depthStencil{};
 		depthStencil.depthTestEnable = config.depthTestEnable ? VK_TRUE : VK_FALSE;

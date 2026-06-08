@@ -1,5 +1,6 @@
 #pragma once
 #include "events/EventDispatcher.hpp"
+#include "config/EditorPreferences.hpp"
 #include <cstdint>
 #include <string>
 
@@ -18,8 +19,11 @@ namespace windows
         uint64_t cachedVramMB = 0;
         std::string currentSceneName;
 
+        config::DebugSettings debugSettings;
+
         events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken sceneClearedToken;
+        events::SubscriptionToken settingsChangedToken;
 
     public:
         StatusBar();
