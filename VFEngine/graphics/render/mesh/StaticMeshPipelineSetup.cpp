@@ -366,7 +366,13 @@ namespace render::mesh
 
         vk::PipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = swapChain.getMSAASamples();
+        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+        // Dynamic MSAA sample count — set per pass via cmd.setRasterizationSamplesEXT().
+        vk::DynamicState meshDynStates[] = {vk::DynamicState::eRasterizationSamplesEXT};
+        vk::PipelineDynamicStateCreateInfo meshDynamicState{};
+        meshDynamicState.dynamicStateCount = 1;
+        meshDynamicState.pDynamicStates = meshDynStates;
 
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_TRUE;
@@ -405,6 +411,7 @@ namespace render::mesh
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &meshDynamicState;
         pipelineInfo.layout = pipelineLayout;
         pipelineInfo.subpass = 0;
 

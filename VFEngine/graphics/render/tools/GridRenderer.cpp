@@ -62,7 +62,7 @@ namespace render::mesh
             .enableBlending = true
         };
 
-        config.sampleCount = swapChain.getMSAASamples();
+        config.dynamicSampleCount = true;
         auto result = core::PipelineUtilities::createWireframePipeline(config);
         gridPipeline = result.pipeline;
         gridPipelineLayout = result.pipelineLayout;

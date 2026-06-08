@@ -144,7 +144,7 @@ namespace render::cloud
             rasterizer.lineWidth = 1.0f;
             rasterizer.cullMode = vk::CullModeFlagBits::eNone;
             vk::PipelineMultisampleStateCreateInfo multisampling{};
-            multisampling.rasterizationSamples = swapChain.getMSAASamples();
+            multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
             vk::PipelineDepthStencilStateCreateInfo depthStencil{};
             depthStencil.depthTestEnable = VK_FALSE;
             depthStencil.depthWriteEnable = VK_FALSE;
@@ -176,6 +176,11 @@ namespace render::cloud
             pipelineInfo.pMultisampleState = &multisampling;
             pipelineInfo.pDepthStencilState = &depthStencil;
             pipelineInfo.pColorBlendState = &blending;
+            vk::DynamicState cloudDynStates[] = {vk::DynamicState::eRasterizationSamplesEXT};
+            vk::PipelineDynamicStateCreateInfo cloudDynamicState{};
+            cloudDynamicState.dynamicStateCount = 1;
+            cloudDynamicState.pDynamicStates = cloudDynStates;
+            pipelineInfo.pDynamicState = &cloudDynamicState;
             pipelineInfo.layout = pipelineLayout;
 
             vk::Format colorFormat = swapChain.getSceneColorFormat();
@@ -291,7 +296,7 @@ namespace render::cloud
             rasterizer.lineWidth = 1.0f;
             rasterizer.cullMode = vk::CullModeFlagBits::eNone;
             vk::PipelineMultisampleStateCreateInfo multisampling{};
-            multisampling.rasterizationSamples = swapChain.getMSAASamples();
+            multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
             vk::PipelineDepthStencilStateCreateInfo depthStencil{};
             depthStencil.depthTestEnable = VK_FALSE;
             depthStencil.depthWriteEnable = VK_FALSE;
@@ -319,6 +324,11 @@ namespace render::cloud
             pipelineInfo.pMultisampleState = &multisampling;
             pipelineInfo.pDepthStencilState = &depthStencil;
             pipelineInfo.pColorBlendState = &blending;
+            vk::DynamicState cloudDynStates[] = {vk::DynamicState::eRasterizationSamplesEXT};
+            vk::PipelineDynamicStateCreateInfo cloudDynamicState{};
+            cloudDynamicState.dynamicStateCount = 1;
+            cloudDynamicState.pDynamicStates = cloudDynStates;
+            pipelineInfo.pDynamicState = &cloudDynamicState;
             pipelineInfo.layout = pipelineLayout;
 
             vk::Format colorFormat = swapChain.getSceneColorFormat();
@@ -395,6 +405,7 @@ namespace render::cloud
         info.colorAttachments = {colorAttach};
 
         core::beginDynamicRendering(cmd, info);
+        cmd.setRasterizationSamplesEXT(offscreenResources.sampleCount);
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSet, nullptr);
         cmd.pushConstants<CloudCompositePushConstants>(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, pushConstants);

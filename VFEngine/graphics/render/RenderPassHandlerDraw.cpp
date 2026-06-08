@@ -402,6 +402,8 @@ namespace render
             sec.setViewport(0, viewport);
             vk::Rect2D scissor{{0, 0}, extent};
             sec.setScissor(0, scissor);
+            // Dynamic MSAA: this opaque secondary renders into the (multisampled) scene targets.
+            sec.setRasterizationSamplesEXT(sampleCount);
         };
 
         bool hasTerrain = gpuDrivenRenderer->isTerrainRenderingEnabled();

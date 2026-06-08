@@ -351,6 +351,13 @@ namespace services {
                 auto* w = inputController->getWindow();
                 return w ? w->getHeight() : 0u;
             });
+
+        dispatcher.registerQueryHandler<events::application::GetMonitorRefreshRateQuery>(
+            [this](const events::application::GetMonitorRefreshRateQuery&) -> uint32_t {
+                if (!inputController) return 0u;
+                auto* w = inputController->getWindow();
+                return w ? w->getRefreshRate() : 0u;
+            });
     }
 
 }

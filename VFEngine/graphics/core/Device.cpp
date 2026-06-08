@@ -423,11 +423,17 @@ namespace core
         accelStructFeatures.descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
         accelStructFeatures.pNext = &rayQueryFeatures;
 
+        // Extended dynamic state 3: dynamic rasterization samples (VK_EXT_extended_dynamic_state3)
+        // so a single pipeline can render at MSAA Nx (main viewport) and 1x (RenderTexture/preview).
+        vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT extDynState3Features{};
+        extDynState3Features.extendedDynamicState3RasterizationSamples = VK_TRUE;
+        extDynState3Features.pNext = &accelStructFeatures;
+
         // Mesh shader features (VK_EXT_mesh_shader)
         vk::PhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
         meshShaderFeatures.taskShader = VK_TRUE;
         meshShaderFeatures.meshShader = VK_TRUE;
-        meshShaderFeatures.pNext = &accelStructFeatures;
+        meshShaderFeatures.pNext = &extDynState3Features;
 
         // Build active extension list — skip swapchain in headless mode
         std::vector<const char*> activeDeviceExtensions;

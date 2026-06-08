@@ -162,6 +162,7 @@ namespace render::atmosphere
         info.colorAttachments = {colorAttach};
 
         core::beginDynamicRendering(cmd, info);
+        cmd.setRasterizationSamplesEXT(offscreenResources.sampleCount);
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, skyRendererPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, skyRendererPipelineLayout, 0, skyRendererDS, nullptr);
         cmd.draw(3, 1, 0, 0);
@@ -289,7 +290,7 @@ namespace render::atmosphere
             rasterizer.lineWidth = 1.0f;
             rasterizer.cullMode = vk::CullModeFlagBits::eNone;
             vk::PipelineMultisampleStateCreateInfo multisampling{};
-            multisampling.rasterizationSamples = swapChain.getMSAASamples();
+            multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
             vk::PipelineDepthStencilStateCreateInfo depthStencil{};
             depthStencil.depthTestEnable = VK_FALSE;
             depthStencil.depthWriteEnable = VK_FALSE;
@@ -311,6 +312,11 @@ namespace render::atmosphere
             skyPipelineInfo.pMultisampleState = &multisampling;
             skyPipelineInfo.pDepthStencilState = &depthStencil;
             skyPipelineInfo.pColorBlendState = &skyBlending;
+            vk::DynamicState skyDynStates[] = {vk::DynamicState::eRasterizationSamplesEXT};
+            vk::PipelineDynamicStateCreateInfo skyDynamicState{};
+            skyDynamicState.dynamicStateCount = 1;
+            skyDynamicState.pDynamicStates = skyDynStates;
+            skyPipelineInfo.pDynamicState = &skyDynamicState;
             skyPipelineInfo.layout = skyRendererPipelineLayout;
 
             vk::Format skyColorFormat = swapChain.getSceneColorFormat();
@@ -447,7 +453,7 @@ namespace render::atmosphere
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = vk::CullModeFlagBits::eNone;
         vk::PipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.rasterizationSamples = swapChain.getMSAASamples();
+        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_FALSE;
         depthStencil.depthWriteEnable = VK_FALSE;
@@ -470,6 +476,11 @@ namespace render::atmosphere
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &blending;
+        vk::DynamicState skyInitDynStates[] = {vk::DynamicState::eRasterizationSamplesEXT};
+        vk::PipelineDynamicStateCreateInfo skyInitDynamicState{};
+        skyInitDynamicState.dynamicStateCount = 1;
+        skyInitDynamicState.pDynamicStates = skyInitDynStates;
+        pipelineInfo.pDynamicState = &skyInitDynamicState;
         pipelineInfo.layout = skyRendererPipelineLayout;
 
         vk::Format colorFormat = swapChain.getSceneColorFormat();

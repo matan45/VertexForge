@@ -33,6 +33,12 @@ namespace events::application {
         std::string_view getName() const override { return "GetViewportHeight"; }
     };
 
+    // Monitor refresh rate in Hz (0 if unknown). Used to derive the VSync (Fifo)
+    // present interval so the editor FPS can be capped to the presented rate.
+    struct GetMonitorRefreshRateQuery : IQuery<uint32_t> {
+        std::string_view getName() const override { return "GetMonitorRefreshRate"; }
+    };
+
     // ============================================
     // NOTIFICATIONS - Application state broadcasts
     // ============================================

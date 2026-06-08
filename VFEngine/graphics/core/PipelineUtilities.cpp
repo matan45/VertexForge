@@ -125,6 +125,13 @@ namespace core
 		colorBlending.attachmentCount = 1;
 		colorBlending.pAttachments = &colorBlendAttachment;
 
+		std::vector<vk::DynamicState> dynStates;
+		if (config.dynamicSampleCount)
+			dynStates.push_back(vk::DynamicState::eRasterizationSamplesEXT);
+		vk::PipelineDynamicStateCreateInfo dynamicStateInfo{};
+		dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynStates.size());
+		dynamicStateInfo.pDynamicStates = dynStates.empty() ? nullptr : dynStates.data();
+
 		vk::GraphicsPipelineCreateInfo pipelineInfo{};
 		pipelineInfo.stageCount = static_cast<uint32_t>(config.shaderStages.size());
 		pipelineInfo.pStages = config.shaderStages.data();
@@ -135,6 +142,7 @@ namespace core
 		pipelineInfo.pMultisampleState = &multisampling;
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
+		pipelineInfo.pDynamicState = dynStates.empty() ? nullptr : &dynamicStateInfo;
 		pipelineInfo.layout = uniqueLayout.get();
 
 		vk::PipelineRenderingCreateInfo pipelineRendering{};
@@ -264,11 +272,14 @@ namespace core
 		colorBlending.attachmentCount = 1;
 		colorBlending.pAttachments = &colorBlendAttachment;
 
+		std::vector<vk::DynamicState> dynStates = config.dynamicStates;
+		if (config.dynamicSampleCount)
+			dynStates.push_back(vk::DynamicState::eRasterizationSamplesEXT);
 		vk::PipelineDynamicStateCreateInfo dynamicStateInfo{};
-		if (!config.dynamicStates.empty())
+		if (!dynStates.empty())
 		{
-			dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(config.dynamicStates.size());
-			dynamicStateInfo.pDynamicStates = config.dynamicStates.data();
+			dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynStates.size());
+			dynamicStateInfo.pDynamicStates = dynStates.data();
 		}
 
 		vk::GraphicsPipelineCreateInfo pipelineInfo{};
@@ -281,7 +292,7 @@ namespace core
 		pipelineInfo.pMultisampleState = &multisampling;
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
-		pipelineInfo.pDynamicState = config.dynamicStates.empty() ? nullptr : &dynamicStateInfo;
+		pipelineInfo.pDynamicState = dynStates.empty() ? nullptr : &dynamicStateInfo;
 		pipelineInfo.layout = result.pipelineLayout;
 
 		vk::PipelineRenderingCreateInfo pipelineRendering{};
@@ -410,11 +421,14 @@ namespace core
 			colorBlending.pAttachments = &colorBlendAttachment;
 		}
 
+		std::vector<vk::DynamicState> dynStates = config.dynamicStates;
+		if (config.dynamicSampleCount)
+			dynStates.push_back(vk::DynamicState::eRasterizationSamplesEXT);
 		vk::PipelineDynamicStateCreateInfo dynamicStateInfo{};
-		if (!config.dynamicStates.empty())
+		if (!dynStates.empty())
 		{
-			dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(config.dynamicStates.size());
-			dynamicStateInfo.pDynamicStates = config.dynamicStates.data();
+			dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynStates.size());
+			dynamicStateInfo.pDynamicStates = dynStates.data();
 		}
 
 		// Create mesh shader pipeline
@@ -429,7 +443,7 @@ namespace core
 		pipelineInfo.pMultisampleState = &multisampling;
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
-		pipelineInfo.pDynamicState = config.dynamicStates.empty() ? nullptr : &dynamicStateInfo;
+		pipelineInfo.pDynamicState = dynStates.empty() ? nullptr : &dynamicStateInfo;
 		pipelineInfo.layout = result.pipelineLayout;
 
 		vk::PipelineRenderingCreateInfo pipelineRendering{};

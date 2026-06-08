@@ -357,7 +357,7 @@ namespace render::vegetation
         config.srcAlphaBlendFactor = vk::BlendFactor::eOne;
         config.dstAlphaBlendFactor = vk::BlendFactor::eZero;
         config.dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-        config.sampleCount = core::VulkanContext::getSwapChain()->getMSAASamples();
+        config.dynamicSampleCount = true;
 
         try
         {

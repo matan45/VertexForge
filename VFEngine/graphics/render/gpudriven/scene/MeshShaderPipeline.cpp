@@ -629,9 +629,10 @@ namespace render::gpudriven
         };
         config.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 
-        // Scoped MSAA: opaque + non-WBOIT transparent draws render into the multisampled
-        // scene targets; WBOIT renders into its own single-sample accumulation targets.
-        config.sampleCount = isWBOITMode ? vk::SampleCountFlagBits::e1 : swapChain.getMSAASamples();
+        // Dynamic MSAA: this pipeline is reused across the MSAA main viewport, the
+        // single-sample WBOIT pass, and RenderTexture/preview viewports — each pass
+        // sets its own sample count via cmd.setRasterizationSamplesEXT().
+        config.dynamicSampleCount = true;
 
         if (isWBOITMode)
         {

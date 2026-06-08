@@ -174,7 +174,7 @@ namespace render::ibl
 
         vk::PipelineMultisampleStateCreateInfo multisampling;
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = swapChain.getMSAASamples();
+        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
         vk::PipelineColorBlendAttachmentState colorBlendAttachment;
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
@@ -186,9 +186,10 @@ namespace render::ibl
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        std::array<vk::DynamicState, 2> dynamicStates = {
+        std::array<vk::DynamicState, 3> dynamicStates = {
             vk::DynamicState::eViewport,
-            vk::DynamicState::eScissor
+            vk::DynamicState::eScissor,
+            vk::DynamicState::eRasterizationSamplesEXT
         };
         vk::PipelineDynamicStateCreateInfo dynamicState{};
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
@@ -242,6 +243,7 @@ namespace render::ibl
             };
 
             core::beginDynamicRendering(commandBuffer, renderingInfo);
+            commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
 
             // Bind the graphics pipeline
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
@@ -297,6 +299,7 @@ namespace render::ibl
             };
 
             core::beginDynamicRendering(commandBuffer, renderingInfo);
+            commandBuffer.setRasterizationSamplesEXT(offscreenResources.sampleCount);
 
             // Bind the graphics pipeline
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
@@ -344,6 +347,8 @@ namespace render::ibl
         };
 
         core::beginDynamicRendering(commandBuffer, renderingInfo);
+        // RenderTexture targets are single-sample.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
@@ -379,6 +384,8 @@ namespace render::ibl
         };
 
         core::beginDynamicRendering(commandBuffer, renderingInfo);
+        // RenderTexture targets are single-sample.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 

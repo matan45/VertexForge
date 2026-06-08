@@ -159,7 +159,7 @@ namespace render::mesh
 
         vk::PipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = swapChain.getMSAASamples();
+        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_TRUE;
@@ -186,9 +186,10 @@ namespace render::mesh
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        std::array<vk::DynamicState, 2> dynamicStates = {
+        std::array<vk::DynamicState, 3> dynamicStates = {
             vk::DynamicState::eViewport,
-            vk::DynamicState::eScissor
+            vk::DynamicState::eScissor,
+            vk::DynamicState::eRasterizationSamplesEXT
         };
 
         vk::PipelineDynamicStateCreateInfo dynamicState{};

@@ -77,7 +77,7 @@ namespace render::mesh
                 .shaderStages = frustumShader->getShaderStages()
             };
 
-            config.sampleCount = swapChain.getMSAASamples();
+            config.dynamicSampleCount = true;
             auto result = core::PipelineUtilities::createWireframePipeline(config);
             frustumPipeline = result.pipeline;
             frustumPipelineLayout = result.pipelineLayout;
@@ -99,7 +99,7 @@ namespace render::mesh
                 .shaderStages = sphereShader->getShaderStages()
             };
 
-            config.sampleCount = swapChain.getMSAASamples();
+            config.dynamicSampleCount = true;
             auto result = core::PipelineUtilities::createWireframePipeline(config);
             spherePipeline = result.pipeline;
             spherePipelineLayout = result.pipelineLayout;
