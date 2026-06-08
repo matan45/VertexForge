@@ -13,7 +13,7 @@
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
 #include "impl/render/EditorRenderServiceImpl.hpp"
-#include "../../../core/audio/AudioSceneUpdater.hpp"
+#include "../../core/audio/AudioSceneUpdater.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
