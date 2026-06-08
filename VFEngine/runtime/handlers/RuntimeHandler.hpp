@@ -22,6 +22,7 @@
 #include "interfaces/world/IWorldSectorService.hpp"
 #include "interfaces/ai/IBehaviorTreeService.hpp"
 #include "interfaces/input/IRuntimePickerService.hpp"
+#include "interfaces/render/IPluginTextureService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace services {
@@ -77,12 +78,14 @@ namespace handlers {
         std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
         std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
         std::shared_ptr<services::IRuntimePickerService> runtimePickerService;
+        std::shared_ptr<services::IPluginTextureService> pluginTextureService;
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 
         std::unique_ptr<services::FrameTaskGraph> frameTaskGraph;
 
         events::SubscriptionToken resizeSubscription;
+        events::SubscriptionToken displaySettingsSubscription;
 
     public:
         explicit RuntimeHandler();

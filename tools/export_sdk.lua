@@ -56,6 +56,15 @@ function vfExportPluginSDK()
       n = n + copyTree("dependencies/imgui",               "*.h",      sdk .. "/deps/imgui")
       print("  third-party headers: " .. n)
 
+      -- mType plugin C ABI — the only mType header a plugin needs for script
+      -- natives (PluginContext::registerScriptFunction + getScriptHost). Pure C,
+      -- toolchain-independent; all value manipulation runs engine-side through
+      -- the MTypePluginHost vtable.
+      os.mkdir(sdk .. "/deps/mType/plugin")
+      os.copyfile("dependencies/mType/mType/plugin/PluginHostApi.h",
+                  sdk .. "/deps/mType/plugin/PluginHostApi.h")
+      print("  mType headers: 1 (plugin/PluginHostApi.h)")
+
       -- imgui.lib (only needed by plugins that register editor ImGui windows)
       for _, cfg in ipairs({"Debug", "Development", "Release"}) do
          local lib = "bin/imgui/" .. cfg .. "/x64/imgui.lib"
@@ -116,6 +125,7 @@ project (PLUGIN_NAME)
       sdkDir .. "/deps/json",
       sdkDir .. "/deps/spdlog",
       sdkDir .. "/deps/imgui",
+      sdkDir .. "/deps/mType",
       vulkanSDK .. "/Include"
    }
 
@@ -187,6 +197,14 @@ time (same idea as Godot's GDExtension function table).
 - For editor ImGui windows: `links { "imgui" }` (in `lib/`), call
   `ImGui::SetCurrentContext(ctx->getImGuiContext())` in `onInitialize`, then
   `ctx->registerEditorWindow(window, "Title")`.
+- For mType script natives (scripting capability): register an `MTypeNativeFn`
+  via `ctx->registerScriptFunction(name, fn, userData)` and manipulate values
+  through the `MTypePluginHost` vtable from `ctx->getScriptHost()` — the
+  standard mType plugin C ABI (`deps/mType/plugin/PluginHostApi.h`): makeInt/
+  getFloat/getString, arrayLen/arrayGet/arraySet/makeArray, objGet/objSet/
+  makeObject, raiseError, reentrant callFunction/callMethod. MTypeValue*
+  lifetimes are per-call (copy scalars out to retain). Functions
+  auto-unregister on plugin unload.
 
 Regenerate this SDK after engine API changes: `premake5 export-sdk` in the
 engine repo (re-run a Debug/Release build first so `lib/` is current).

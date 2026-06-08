@@ -205,7 +205,8 @@ namespace render::decal
             gpu.textureFlags = glm::vec4(
                 decal.albedoTexture.empty() ? 0.0f : 1.0f,
                 (!decal.normalTexture.empty() && decal.modifyNormals) ? 1.0f : 0.0f,
-                decal.ormTexture.empty() ? 0.0f : 1.0f, 0.0f);
+                decal.ormTexture.empty() ? 0.0f : 1.0f,
+                static_cast<float>(std::clamp<uint32_t>(decal.shape, 0u, 2u)));
         }
     }
 
@@ -338,6 +339,7 @@ namespace render::decal
                               0, sizeof(DecalPushConstants), &pc);
 
             cmd.drawIndexed(cubeIndexCount, 1, 0, 0, 0);
+            render::FrameDrawStats::count();
         }
 
         core::endDynamicRendering(cmd);
@@ -395,6 +397,7 @@ namespace render::decal
                               0, sizeof(DecalPushConstants), &pc);
 
             cmd.drawIndexed(cubeIndexCount, 1, 0, 0, 0);
+            render::FrameDrawStats::count();
         }
 
         core::endDynamicRendering(cmd);

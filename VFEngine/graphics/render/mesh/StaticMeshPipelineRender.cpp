@@ -244,10 +244,12 @@ namespace render::mesh
         {
             commandBuffer.bindIndexBuffer(lodBuffers.indexBuffer, 0, vk::IndexType::eUint32);
             commandBuffer.drawIndexed(lodBuffers.indexCount, 1, 0, 0, 0);
+            render::FrameDrawStats::count();
         }
         else
         {
             commandBuffer.draw(lodBuffers.vertexCount, 1, 0, 0);
+            render::FrameDrawStats::count();
         }
     }
 
@@ -543,6 +545,8 @@ namespace render::mesh
         info.depthAttachment = core::depthLoad(depthView);
 
         core::beginDynamicRendering(commandBuffer, info);
+        // Water continue pass runs post-resolve into the single-sample scene color.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
     }
 
     void StaticMeshPipeline::endRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
@@ -622,25 +626,40 @@ namespace render::mesh
 
     void StaticMeshPipeline::beginRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
-        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
+        const bool msaa = offscreenResources.msaaEnabled();
+
+        vk::ImageView colorView = msaa ? offscreenResources.colorImagesMSAA[imageIndex].colorImageView
+                                       : offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = msaa ? offscreenResources.depthImageMSAA.depthImageView
+                                       : offscreenResources.depthImage.depthImageView;
+        vk::ImageView resolveColor = msaa ? offscreenResources.colorImages[imageIndex].colorImageView : nullptr;
+        vk::ImageView resolveDepth = msaa ? offscreenResources.depthImage.depthImageView : nullptr;
 
         core::DynamicRenderingInfo info{};
         info.extent = swapChain.getSwapchainExtent();
-        info.colorAttachments = { core::colorLoad(colorView) };
-
-        info.depthAttachment = core::depthClear(depthView);
+        info.colorAttachments = { core::colorLoad(colorView, resolveColor) };
+        info.depthAttachment = core::depthClear(depthView, 1.0f, 0, resolveDepth);
 
         core::beginDynamicRendering(commandBuffer, info);
+        // Dynamic MSAA: opaque geometry renders at the scene target's sample count.
+        commandBuffer.setRasterizationSamplesEXT(offscreenResources.sampleCount);
     }
 
     void StaticMeshPipeline::beginRenderPassForSecondaryGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
-        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
+        const bool msaa = offscreenResources.msaaEnabled();
 
-        auto colorAttach = core::colorLoad(colorView);
-        auto depthAttach = core::depthClear(depthView);
+        // Under MSAA, render into the multisampled targets and resolve into the
+        // single-sample colorImages/depthImage at store time.
+        vk::ImageView colorView = msaa ? offscreenResources.colorImagesMSAA[imageIndex].colorImageView
+                                       : offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = msaa ? offscreenResources.depthImageMSAA.depthImageView
+                                       : offscreenResources.depthImage.depthImageView;
+        vk::ImageView resolveColor = msaa ? offscreenResources.colorImages[imageIndex].colorImageView : nullptr;
+        vk::ImageView resolveDepth = msaa ? offscreenResources.depthImage.depthImageView : nullptr;
+
+        auto colorAttach = core::colorLoad(colorView, resolveColor);
+        auto depthAttach = core::depthClear(depthView, 1.0f, 0, resolveDepth);
 
         std::vector<vk::RenderingAttachmentInfo> colorAttachments = { colorAttach };
 
@@ -697,6 +716,8 @@ namespace render::mesh
         info.depthAttachment = core::depthLoad(depthView);
 
         core::beginDynamicRendering(commandBuffer, info);
+        // Water continue pass runs post-resolve into the single-sample scene color.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
     }
 
     void StaticMeshPipeline::endRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t /*imageIndex*/) const

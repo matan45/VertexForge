@@ -6,6 +6,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/scene/ComponentMediaEvents.hpp"
+#include <algorithm>
 
 namespace services {
 
@@ -63,6 +64,7 @@ namespace services {
 
         const auto& comp = sceneEntity.getComponent<components::DecalComponent>();
         DecalData data;
+        data.shape = static_cast<uint8_t>(comp.shape);
         data.halfExtents = comp.halfExtents;
         data.albedoTextureRef = comp.albedoTextureRef;
         data.normalTextureRef = comp.normalTextureRef;
@@ -89,6 +91,7 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::DecalComponent>();
+        comp.shape = components::toDecalShape(decalData.shape);
         comp.halfExtents = decalData.halfExtents;
         comp.albedoTextureRef = decalData.albedoTextureRef;
         comp.normalTextureRef = decalData.normalTextureRef;

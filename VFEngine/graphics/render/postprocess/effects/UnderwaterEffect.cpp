@@ -126,6 +126,7 @@ namespace render::postprocess
                                      0, sizeof(UnderwaterPushConstants), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
     }
 
     void UnderwaterEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)

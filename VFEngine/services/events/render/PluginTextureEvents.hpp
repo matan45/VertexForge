@@ -46,4 +46,14 @@ namespace events::plugintexture {
         std::string_view getName() const override { return "SetWorldMaskParams"; }
     };
 
+    // CPU readback of the bound world mask at a world (x,z) position. Returns the
+    // red channel in [0,1]; 1.0 when no mask is bound, the mask is disabled, or
+    // the point is outside the mask bounds (matches the shader semantics).
+    struct SampleWorldMaskQuery : IQuery<float> {
+        float worldX = 0.0f;
+        float worldZ = 0.0f;
+
+        std::string_view getName() const override { return "SampleWorldMask"; }
+    };
+
 }

@@ -88,6 +88,7 @@ namespace render::postprocess
                                      0, sizeof(ChromaticAberrationPushConstants), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
     }
 
     void ChromaticAberrationEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)

@@ -462,6 +462,7 @@ namespace render::ui
                                                   0, descSet, nullptr);
 
                 commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+                render::FrameDrawStats::count();
             }
         }
 
@@ -563,6 +564,7 @@ namespace render::ui
                                                   0, descSet, nullptr);
 
                 commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+                render::FrameDrawStats::count();
             }
         }
 

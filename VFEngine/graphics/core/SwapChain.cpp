@@ -216,12 +216,14 @@ namespace core {
 	}
 
 	vk::PresentModeKHR SwapChain::choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)const {
+		// Honor the requested present mode when the driver advertises it.
 		for (const auto& presentMode : availablePresentModes) {
-			if (presentMode == vk::PresentModeKHR::eMailbox) {
+			if (presentMode == desiredPresentMode) {
 				return presentMode;
 			}
 		}
-		return vk::PresentModeKHR::eFifo;  // Fallback to guaranteed vsync
+		// FIFO is guaranteed by the Vulkan spec, so it is always a safe fallback.
+		return vk::PresentModeKHR::eFifo;
 	}
 
 

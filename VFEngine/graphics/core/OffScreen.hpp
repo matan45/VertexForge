@@ -58,10 +58,19 @@ namespace core {
 	};
 
 	struct OffscreenResources {
-		std::vector<core::ColorImage> colorImages;       // Scene color (render resolution)
+		std::vector<core::ColorImage> colorImages;       // Scene color (render resolution) — MSAA resolve target
 		std::vector<core::ColorImage> displayColorImages; // Display-res output (only when upscaling)
-		core::DepthImage depthImage;
+		core::DepthImage depthImage;                      // Scene depth — MSAA resolve target
 		core::StencilImage uiStencilImage;
+
+		// Scoped MSAA (opaque geometry only). When sampleCount > e1 the ClearColor,
+		// sky, and opaque scene passes render into these multisampled targets and
+		// resolve into colorImages/depthImage; every downstream pass keeps reading
+		// the single-sample resolve targets unchanged.
+		std::vector<core::ColorImage> colorImagesMSAA;   // per swapchain image
+		core::DepthImage depthImageMSAA;
+		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e1;
+		bool msaaEnabled() const { return sampleCount != vk::SampleCountFlagBits::e1; }
 
 		// Upscaling resources (created when upscaling is enabled)
 		MotionVectorImage motionVectors;

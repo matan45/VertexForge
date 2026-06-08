@@ -222,6 +222,12 @@ namespace handlers
             {
                 bootstrap->triggerResize();
             });
+
+        displaySettingsSubscription = dispatcher.subscribe<events::application::ApplyDisplaySettingsNotification>(
+            [this](const events::application::ApplyDisplaySettingsNotification& n)
+            {
+                bootstrap->applyDisplaySettings(n.presentMode, n.msaa);
+            });
     }
 
     void EditorHandler::cleanupEventSubscriptions()
@@ -232,6 +238,12 @@ namespace handlers
         {
             dispatcher.unsubscribe(resizeSubscription);
             resizeSubscription = {};
+        }
+
+        if (displaySettingsSubscription.isValid())
+        {
+            dispatcher.unsubscribe(displaySettingsSubscription);
+            displaySettingsSubscription = {};
         }
     }
 }

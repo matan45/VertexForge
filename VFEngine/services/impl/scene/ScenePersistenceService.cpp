@@ -12,6 +12,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/project/ApplicationEvents.hpp"
 #include "../../events/scene/SceneManagementEvents.hpp"
 #include "../../events/scene/StreamingZoneEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
@@ -110,6 +111,21 @@ namespace services
                 return setRenderSettings(cmd.settings);
             });
 
+        // VK-1365: per-scene plugin enable overrides
+        dispatcher.registerQueryHandler<events::scene::GetScenePluginSettingsQuery>(
+            [this](const events::scene::GetScenePluginSettingsQuery&)
+            {
+                return sceneGraph ? sceneGraph->getPluginSettings() : std::map<std::string, bool>{};
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetScenePluginSettingsCommand>(
+            [this](const events::scene::SetScenePluginSettingsCommand& cmd)
+            {
+                if (!sceneGraph) return false;
+                sceneGraph->setPluginSettings(cmd.settings);
+                return true;
+            });
+
         // Additive scene management
         dispatcher.registerCommandHandler<events::scene::LoadSceneAdditiveCommand>(
             [this](const events::scene::LoadSceneAdditiveCommand& cmd)
@@ -205,6 +221,7 @@ namespace services
         dispatcher.execute(audioCmd);
 
         sceneGraph->setRenderSettings(types::RenderSettings::createDefault());
+        sceneGraph->setPluginSettings({}); // VK-1365: new scene has no plugin overrides
 
         events::postprocess::ApplyPostProcessSettingsCommand postProcessCmd;
         postProcessCmd.settings = sceneGraph->getRenderSettings().postProcess;
@@ -446,6 +463,12 @@ namespace services
             events::render::ApplyShadowSettingsCommand renderCmd;
             renderCmd.settings = sceneGraph->getRenderSettings();
             dispatcher.execute(renderCmd);
+
+            // Apply the scene's display settings (VSync present mode) to the swapchain.
+            events::application::ApplyDisplaySettingsNotification displayNotif;
+            displayNotif.presentMode = sceneGraph->getRenderSettings().display.presentMode;
+            displayNotif.msaa = sceneGraph->getRenderSettings().display.msaa;
+            dispatcher.publish(displayNotif);
 
             events::postprocess::ApplyPostProcessSettingsCommand postProcessCmd;
             postProcessCmd.settings = sceneGraph->getRenderSettings().postProcess;

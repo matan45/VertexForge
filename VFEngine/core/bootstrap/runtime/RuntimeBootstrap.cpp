@@ -44,4 +44,12 @@ namespace core
             coreInterface->triggerResize();
         }
     }
+
+    void RuntimeBootstrap::applyDisplaySettings(types::PresentMode presentMode, types::MsaaSamples msaa)
+    {
+        if (coreInterface)
+        {
+            coreInterface->applyDisplaySettings(presentMode, msaa);
+        }
+    }
 }

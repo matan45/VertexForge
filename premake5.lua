@@ -81,6 +81,7 @@ project "Editor"
 	  "VFEngine/import/types",            -- For MeshSocketWriter, AnimationEventIO
 	  "VFEngine/services",                -- Services layer interfaces
 	  "VFEngine/plugin",                  -- Plugin system
+	  "dependencies/mType/mType",         -- mType plugin C ABI (PluginContext.hpp -> plugin/PluginHostApi.h)
 	  "VFEngine/utilities/procedural",    -- Procedural heightmap generation
 	  "VFEngine/utilities/imageprocessing" -- Image background removal
    }
@@ -350,7 +351,8 @@ project "Runtime"
       "VFEngine/utilities",
       "VFEngine/services",              -- Services interfaces only
       "VFEngine/core/bootstrap",        -- For RuntimeBootstrap
-      "VFEngine/plugin"                 -- Plugin system
+      "VFEngine/plugin",                -- Plugin system
+      "dependencies/mType/mType"        -- mType plugin C ABI (PluginContext.hpp -> plugin/PluginHostApi.h)
       -- NOTE: NO VFEngine/core/controllers, NO VFEngine/graphics/controllers
    }
 
@@ -483,6 +485,7 @@ project "Plugin"
       "dependencies/imgui",
       vulkanLibPath.."/Include",            -- For vk::CommandBuffer in RenderHookTypes
       "dependencies/json/single_include",  -- nlohmann/json (for plugin component registration)
+      "dependencies/mType/mType",          -- value::Value header-inline use only (no mType.lib link)
       "VFEngine/utilities",
       "VFEngine/services",
       "VFEngine/import/pipeline",          -- For PipelineStage base class
@@ -1057,6 +1060,7 @@ project "Tests"
       "VFEngine/graphics",
       "VFEngine/core",
       "VFEngine/window/controllers",
+      "VFEngine/plugin",                   -- header-only PluginScaffolder (VK-1284), no link needed
       vulkanLibPath.."/Include"
    }
 

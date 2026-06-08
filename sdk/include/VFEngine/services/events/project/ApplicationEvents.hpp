@@ -1,5 +1,6 @@
 #pragma once
 #include "../EventTypes.hpp"
+#include "types/RenderSettings.hpp"
 #include <cstdint>
 
 namespace events::application {
@@ -30,6 +31,12 @@ namespace events::application {
 
     struct GetViewportHeightQuery : IQuery<uint32_t> {
         std::string_view getName() const override { return "GetViewportHeight"; }
+    };
+
+    // Monitor refresh rate in Hz (0 if unknown). Used to derive the VSync (Fifo)
+    // present interval so the editor FPS can be capped to the presented rate.
+    struct GetMonitorRefreshRateQuery : IQuery<uint32_t> {
+        std::string_view getName() const override { return "GetMonitorRefreshRate"; }
     };
 
     // ============================================
@@ -63,6 +70,15 @@ namespace events::application {
         bool focused;
 
         std::string_view getName() const override { return "WindowFocused"; }
+    };
+
+    // Applied when the scene's display settings (VSync present mode) change or load.
+    // Handled by the editor/runtime bootstrap to reconfigure the swapchain + rebuild.
+    struct ApplyDisplaySettingsNotification : INotification {
+        types::PresentMode presentMode = types::PresentMode::Mailbox;
+        types::MsaaSamples msaa = types::MsaaSamples::Off;
+
+        std::string_view getName() const override { return "ApplyDisplaySettings"; }
     };
 
     // ============================================

@@ -1,6 +1,7 @@
 #pragma once
 #include "../api/PluginContext.hpp"
 #include "events/EventTypes.hpp"
+#include <atomic>
 #include <unordered_set>
 #include <vector>
 #include <memory>
@@ -29,10 +30,15 @@ namespace plugin {
         std::vector<std::shared_ptr<controllers::imguiHandler::ImguiWindow>> registeredWindows;
         std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
+        std::vector<std::string> registeredScriptFunctions;
         std::vector<plugin::CustomPipelineHandle> managedCustomPipelines;
         std::vector<plugin::CustomMeshHandle> managedCustomMeshes;
         std::vector<plugin::PluginTextureHandle> managedTextures;
         plugin::PluginTextureHandle boundWorldMaskTexture;
+        plugin::WorldMaskParams lastWorldMaskParams;
+        // VK-1365 per-scene soft-disable. Atomic: render-hook wrappers read it on the
+        // render thread while setActive flips it on the main thread.
+        std::atomic<bool> activeState{true};
         struct HeightFieldBodyKey { entt::entity entity; int32_t tileX; int32_t tileZ; };
         std::vector<HeightFieldBodyKey> managedHeightFieldBodies;
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
@@ -40,6 +46,10 @@ namespace plugin {
         std::vector<services::VFXInstanceId> managedVFXInstances;
         static std::vector<MetaComponentBridge> allBridges;
         static ScriptBindingRegistrar scriptBindingRegistrar;
+        // API v10: mType's process-stable plugin host vtable, installed by Core
+        // at ScriptingAdapter::init (the Plugin module never links mType.lib —
+        // it only forwards the pointer to plugins via getScriptHost()).
+        static const MTypePluginHost* scriptHostVTable;
 
     public:
         explicit PluginContextImpl(const std::string& pluginName,
@@ -54,7 +64,8 @@ namespace plugin {
         void publishEvent(const std::string& eventName, const nlohmann::json& data) override;
         events::SubscriptionToken subscribeEvent(const std::string& eventName,
                                                   std::function<void(const nlohmann::json&)> handler) override;
-        void registerScriptFunction(const std::string& name, std::any function) override;
+        void registerScriptFunction(const std::string& name, MTypeNativeFn fn, void* userData) override;
+        const MTypePluginHost* getScriptHost() override;
         plugin::RenderHookHandle registerRenderPassHook(
             plugin::RenderPassHookPoint hookPoint,
             plugin::RenderHookCallback callback) override;
@@ -164,7 +175,17 @@ namespace plugin {
         static void setScriptBindingRegistrar(ScriptBindingRegistrar registrar) { scriptBindingRegistrar = std::move(registrar); }
         static ScriptBindingRegistrar getScriptBindingRegistrar() { return scriptBindingRegistrar; }
 
+        static void setScriptHostVTable(const MTypePluginHost* table) { scriptHostVTable = table; }
+
         void cleanupAll();
+
+        // VK-1365 per-scene soft-disable: gates render-hook dispatch and custom-mesh
+        // enqueues, hides this plugin's editor windows (without touching the user's
+        // visibility toggle), and suppresses the bound world mask (params.enabled UBO
+        // toggle — no rebind). Resources stay alive; PluginManager owns the lifecycle
+        // (onDeactivate before suppression, onActivate after restoration).
+        void setActive(bool active);
+        bool isActive() const { return activeState.load(std::memory_order_relaxed); }
 
         std::vector<std::unique_ptr<pipeline::PipelineStage>> takeImportStages();
 

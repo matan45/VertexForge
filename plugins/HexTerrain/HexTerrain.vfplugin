@@ -1,10 +1,16 @@
-﻿{
-    "apiVersion": 9,
+{
+    "apiVersion": 11,
     "author": "VertexForge",
-    "capabilities": ["graphics", "terrain", "input", "editor", "physics"],
+    "capabilities": [
+        "graphics",
+        "terrain",
+        "input",
+        "editor",
+        "physics"
+    ],
     "dependencies": [],
     "description": "Civilization-style hexagonal tile overlay rendered with a custom shader via the plugin custom render pipeline API (F7 to toggle)",
-    "enabled": true,
+    "enabled": false,
     "library": "HexTerrain.dll",
     "loadOrder": 110,
     "name": "HexTerrain",

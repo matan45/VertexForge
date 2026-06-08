@@ -38,6 +38,7 @@
 #include "vfx/distortion/VFXDistortionComposite.hpp"
 #include "../core/DynamicRenderingHelpers.hpp"
 #include "threading/JobSystem.hpp"
+#include "stats/FrameDrawStats.hpp"
 #include <chrono>
 
 namespace render
@@ -46,6 +47,10 @@ namespace render
     {
         // Plugin texture CPU->GPU uploads — recorded before the frame graph so the
         // copies land outside any render pass and complete before the scene samples them.
+        // Publish the previous frame's draw-call total and reset the accumulator for
+        // this frame, before any pass records draws (VK-1368).
+        FrameDrawStats::beginFrame();
+
         if (pluginTextureManager) pluginTextureManager->flushUploads(commandBuffer);
 
         // Lit plugin custom pipelines: pick up the RT shadow mask layout once the
@@ -378,11 +383,14 @@ namespace render
         vk::Format colorFormat = swapChain.getSceneColorFormat();
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
+        const vk::SampleCountFlagBits sampleCount = offscreenResources.sampleCount;
+
         auto setupSecondary = [&](vk::CommandBuffer sec) {
             vk::CommandBufferInheritanceRenderingInfo inheritRendering{};
             inheritRendering.colorAttachmentCount = 1;
             inheritRendering.pColorAttachmentFormats = &colorFormat;
             inheritRendering.depthAttachmentFormat = depthFormat;
+            inheritRendering.rasterizationSamples = sampleCount;
 
             vk::CommandBufferInheritanceInfo inheritance{};
             inheritance.pNext = &inheritRendering;
@@ -399,6 +407,8 @@ namespace render
             sec.setViewport(0, viewport);
             vk::Rect2D scissor{{0, 0}, extent};
             sec.setScissor(0, scissor);
+            // Dynamic MSAA: this opaque secondary renders into the (multisampled) scene targets.
+            sec.setRasterizationSamplesEXT(sampleCount);
         };
 
         bool hasTerrain = gpuDrivenRenderer->isTerrainRenderingEnabled();

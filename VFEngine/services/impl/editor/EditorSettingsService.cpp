@@ -10,6 +10,18 @@ namespace services
 {
     using json = nlohmann::json;
 
+    namespace
+    {
+        void applyLogLevel(const std::string& level)
+        {
+            if (level == "Trace") util::minLogLevel = util::LogLevel::Trace;
+            else if (level == "Debug") util::minLogLevel = util::LogLevel::Debug;
+            else if (level == "Info") util::minLogLevel = util::LogLevel::Info;
+            else if (level == "Warning") util::minLogLevel = util::LogLevel::Warning;
+            else if (level == "Error") util::minLogLevel = util::LogLevel::Error;
+        }
+    }
+
     EditorSettingsService::EditorSettingsService()
     {
         currentSettings = config::EditorPreferences::createDefault();
@@ -23,6 +35,7 @@ namespace services
                 std::lock_guard<std::mutex> lock(settingsMutex);
                 ensureLoaded();
                 currentSettings = cmd.settings;
+                applyLogLevel(currentSettings.debug.logLevel);
                 save();
                 notifySettingsChanged();
                 return true;
@@ -54,6 +67,12 @@ namespace services
                 ensureLoaded();
                 return currentSettings;
             });
+
+        dispatcher.registerQueryHandler<::events::editor::GetEditorSettingsPathQuery>(
+            [this](const ::events::editor::GetEditorSettingsPathQuery&)
+            {
+                return getSettingsPath();
+            });
     }
 
     void EditorSettingsService::ensureLoaded()
@@ -80,6 +99,8 @@ namespace services
 
             if (!j.is_null())
                 currentSettings = j.get<config::EditorPreferences>();
+
+            applyLogLevel(currentSettings.debug.logLevel);
         }
         catch (const std::exception& e)
         {

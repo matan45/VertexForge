@@ -186,6 +186,7 @@
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
     <ClInclude Include="adapters\api\WeatherAPI.hpp" />
     <ClInclude Include="adapters\api\WindowAPI.hpp" />
+    <ClInclude Include="adapters\api\WorldMaskAPI.hpp" />
     <ClInclude Include="adapters\audio\AudioAdapter.hpp" />
     <ClInclude Include="adapters\input\RuntimePickerAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\NavmeshAdapter.hpp" />
@@ -296,6 +297,7 @@
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
     <ClCompile Include="adapters\api\WeatherAPI.cpp" />
     <ClCompile Include="adapters\api\WindowAPI.cpp" />
+    <ClCompile Include="adapters\api\WorldMaskAPI.cpp" />
     <ClCompile Include="adapters\audio\AudioAdapter.cpp" />
     <ClCompile Include="adapters\input\RuntimePickerAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapter.cpp" />

@@ -12,6 +12,11 @@ namespace services
     class ScriptInterpreter;
 }
 
+namespace plugin
+{
+    struct PluginNativeBinding;   // mType plugin C-ABI binding (plugin/PluginHost.hpp)
+}
+
 namespace core
 {
     class ScriptUIEventBridge;
@@ -53,6 +58,12 @@ namespace core
         std::unordered_map<uint64_t, std::unordered_set<std::string>> instanceToInterfaces;
         std::unordered_map<uint64_t, ::services::ScriptPlaybackState> instanceToPlaybackState;
         std::unordered_map<uint64_t, int> instanceToPriority;
+
+        // Engine-plugin script natives registered via the mType C ABI: the
+        // bindings own the {fn, userData} pair the host trampoline dereferences
+        // on every call, so they must outlive the registration (erased on
+        // unregisterPluginNativeFunction / cleanUp).
+        std::unordered_map<std::string, std::unique_ptr<::plugin::PluginNativeBinding>> pluginNativeBindings;
 
         mutable std::optional<::services::ScriptError> lastError;
 
@@ -111,6 +122,7 @@ namespace core
         void setScriptLibraryPath(const std::string& path) override;
 
         void registerPluginNativeFunction(const std::string& name, std::any function) override;
+        void unregisterPluginNativeFunction(const std::string& name) override;
 
         // === Save/Load State ===
         std::string getInstanceState(uint64_t instanceId) override;

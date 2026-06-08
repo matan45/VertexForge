@@ -62,14 +62,23 @@ namespace events::scripting {
         std::string_view getName() const override { return "IsScriptsCompiled"; }
     };
 
-    // Register a native function callable from mType scripts.
-    // The function must be std::any wrapping services::NativeFunction
-    // (std::function<value::Value(const std::vector<value::Value>&)>)
+    // Register a native function callable from mType scripts. The std::any wraps
+    // either std::pair<MTypeNativeFn, void*> (plugin C ABI — see mType's
+    // plugin/PluginHostApi.h; the handler wraps it in the host trampoline) or a
+    // raw services::NativeFunction (mType NativeDelegate, engine-internal use).
     struct RegisterNativeScriptFunctionCommand : ICommand<> {
         std::string functionName;
         std::any function;
 
         std::string_view getName() const override { return "RegisterNativeScriptFunction"; }
+    };
+
+    // Remove a previously registered native function (plugin unload cleanup —
+    // the delegate's function pointer dies with the plugin DLL).
+    struct UnregisterNativeScriptFunctionCommand : ICommand<> {
+        std::string functionName;
+
+        std::string_view getName() const override { return "UnregisterNativeScriptFunction"; }
     };
 
     struct SetInstancePriorityCommand : ICommand<> {

@@ -12,6 +12,7 @@ namespace windows
         bool isDirty = false;
 
         void drawPresetSection();
+        void drawDisplaySection();
         void markDirty();
         void drawCullingSection();
         void drawShadowSection();
@@ -30,6 +31,7 @@ namespace windows
         void applySettings();
         void applyVFXLODSettings();
         void applyAnimationLODSettings();
+        void publishDisplaySettings();
 
     public:
         void draw();

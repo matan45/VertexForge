@@ -54,6 +54,12 @@ public:
     void loadSettings();
     void saveSettings();
 
+    // Gameplay query (exposed to mType as _rts_fog_state): fog state at a world
+    // (x,z) position — 0 unexplored, 1 explored-but-not-visible, 2 visible.
+    // Inert fog (no texture / disabled / no vision sources) and off-map points
+    // report 2 so gameplay rules vanish exactly when the on-screen fog does.
+    int queryFogState(float worldX, float worldZ) const;
+
 private:
     // Two-state fog of war (visible / unseen) over the skirmish map bounds.
     // Bounds match the demo's RTSCameraController / BuildingPlacementController.

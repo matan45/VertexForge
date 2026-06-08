@@ -437,6 +437,7 @@ namespace render::transparency
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                compositePipelineLayout, 0, compositeDescriptorSet, {});
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
 
         core::endDynamicRendering(cmd);
 

@@ -25,6 +25,31 @@ namespace types
         Ultra // 4096px
     };
 
+    // Swapchain present mode. Fifo = VSync on (no tearing, capped to refresh).
+    // Mailbox = low-latency triple buffering (no tearing). Immediate = uncapped (may tear).
+    enum class PresentMode : uint8_t
+    {
+        Fifo = 0,
+        Mailbox,
+        Immediate
+    };
+
+    // Multisample anti-aliasing sample count for the forward scene pass.
+    enum class MsaaSamples : uint8_t
+    {
+        Off = 0, // 1x (no MSAA)
+        X2,
+        X4,
+        X8
+    };
+
+    // Display-level options applied at swapchain/render-target init (restart-scoped).
+    struct DisplaySettings
+    {
+        PresentMode presentMode = PresentMode::Mailbox;
+        MsaaSamples msaa = MsaaSamples::Off;
+    };
+
     enum class ShadowDebugMode : uint8_t
     {
         None = 0,
@@ -186,6 +211,7 @@ namespace types
     {
         RenderPreset activePreset = RenderPreset::High;
 
+        DisplaySettings display;
         ShadowSettings shadows;
         RTShadowSettings rtShadows;
         LightStreamingSettings lightStreaming;

@@ -7,9 +7,28 @@
 //   Decal::setHalfExtents(self, 2.0, 2.0, 0.5);  // 4x4 unit decal, 1 unit projection depth
 //   Decal::setEdgeFalloff(self, 0.2);             // Soft edges
 //   Decal::setSortPriority(self, 10);             // Render on top of priority < 10
+//   Decal::setShape(self, Decal::SHAPE_CIRCLE);   // Circular projection mask
 
 public class Decal {
+    public static int SHAPE_RECTANGLE = 0;
+    public static int SHAPE_CIRCLE = 1;
+    public static int SHAPE_TRIANGLE = 2;
+
     public constructor() {
+    }
+
+    // ============================================
+    // Shape (projection mask)
+    // ============================================
+
+    // Get projection mask shape: 0=Rectangle, 1=Circle, 2=Triangle
+    public static function getShape(int entityId): int {
+        return _native_decal_getShape(entityId);
+    }
+
+    // Set projection mask shape: use SHAPE_RECTANGLE, SHAPE_CIRCLE, or SHAPE_TRIANGLE
+    public static function setShape(int entityId, int shape): void {
+        _native_decal_setShape(entityId, shape);
     }
 
     // ============================================

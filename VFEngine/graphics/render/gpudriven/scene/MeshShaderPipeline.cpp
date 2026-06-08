@@ -629,6 +629,11 @@ namespace render::gpudriven
         };
         config.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 
+        // Dynamic MSAA: this pipeline is reused across the MSAA main viewport, the
+        // single-sample WBOIT pass, and RenderTexture/preview viewports — each pass
+        // sets its own sample count via cmd.setRasterizationSamplesEXT().
+        config.dynamicSampleCount = true;
+
         if (isWBOITMode)
         {
             // WBOIT dual-attachment blend states

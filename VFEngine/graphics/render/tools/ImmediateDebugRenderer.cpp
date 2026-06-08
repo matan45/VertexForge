@@ -82,6 +82,7 @@ namespace render::mesh
         config.depthWriteEnable = false;
         config.blendEnable = true;
 
+        config.dynamicSampleCount = true;
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         pipeline = result.pipeline;
         pipelineLayout = result.pipelineLayout;

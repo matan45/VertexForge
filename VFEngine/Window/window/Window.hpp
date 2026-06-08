@@ -50,6 +50,9 @@ namespace window {
 		uint32_t getWidth() const { return width; }
 		uint32_t getHeight() const { return height; }
 
+		// Refresh rate (Hz) of the monitor the window is on (0 if unavailable).
+		uint32_t getRefreshRate() const;
+
 		GLFWwindow* getWindowPtr() const { return window; }
 
 		void setTitle(const std::string& title);

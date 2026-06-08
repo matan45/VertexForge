@@ -3,6 +3,7 @@
 #include "../types/PhysicsTypes.hpp"
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
+#include <map>
 #include <optional>
 #include <string>
 
@@ -16,6 +17,10 @@ namespace scene {
 		types::AudioSettings audioSettings = types::AudioSettings::createDefault();
 		types::RenderSettings renderSettings = types::RenderSettings::createDefault();
 		std::optional<std::string> inputMappingPath;
+		// VK-1365: per-scene plugin enable overrides (plugin name -> enabled).
+		// Only explicit overrides are stored; unlisted plugins follow the global
+		// .vfplugin flag. Empty map == no overrides (key omitted from .vfSettings).
+		std::map<std::string, bool> pluginSettings;
 	public:
 		explicit SceneGraphSystem();
 		~SceneGraphSystem() = default;
@@ -70,6 +75,14 @@ namespace scene {
 
 		void setRenderSettings(const types::RenderSettings& settings) {
 			renderSettings = settings;
+		}
+
+		const std::map<std::string, bool>& getPluginSettings() const {
+			return pluginSettings;
+		}
+
+		void setPluginSettings(std::map<std::string, bool> settings) {
+			pluginSettings = std::move(settings);
 		}
 
 		const std::optional<std::string>& getInputMappingPath() const {

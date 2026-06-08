@@ -35,6 +35,7 @@ namespace plugin {
     // Static member definitions
     std::vector<MetaComponentBridge> PluginContextImpl::allBridges{};
     PluginContextImpl::ScriptBindingRegistrar PluginContextImpl::scriptBindingRegistrar{};
+    const MTypePluginHost* PluginContextImpl::scriptHostVTable = nullptr;
 
 
     PluginContextImpl::PluginContextImpl(const std::string& pluginName,
@@ -110,19 +111,33 @@ namespace plugin {
         return token;
     }
 
-    void PluginContextImpl::registerScriptFunction(const std::string& name, std::any function)
+    void PluginContextImpl::registerScriptFunction(const std::string& name, MTypeNativeFn fn, void* userData)
     {
         if (!hasCapability(std::string(capability::scripting))) {
             vfLogWarning("[Plugin:{}] Cannot register script function '{}' - scripting capability not available", pluginName, name);
             return;
         }
+        if (!fn) {
+            vfLogWarning("[Plugin:{}] Cannot register script function '{}' - null function", pluginName, name);
+            return;
+        }
 
         events::scripting::RegisterNativeScriptFunctionCommand cmd;
         cmd.functionName = name;
-        cmd.function = std::move(function);
+        cmd.function = std::any(std::pair<MTypeNativeFn, void*>(fn, userData));
         events::EventDispatcher::instance().execute(cmd);
 
+        registeredScriptFunctions.push_back(name);
         vfLogInfo("[Plugin:{}] Registered native script function: {}", pluginName, name);
+    }
+
+    const MTypePluginHost* PluginContextImpl::getScriptHost()
+    {
+        if (!hasCapability(std::string(capability::scripting))) {
+            vfLogWarning("[Plugin:{}] getScriptHost unavailable - scripting capability not available", pluginName);
+            return nullptr;
+        }
+        return scriptHostVTable;
     }
 
     plugin::RenderHookHandle PluginContextImpl::registerRenderPassHook(
@@ -136,7 +151,13 @@ namespace plugin {
 
         events::renderhook::RegisterRenderPassHookCommand cmd;
         cmd.hookPoint = hookPoint;
-        cmd.callback = std::move(callback);
+        // VK-1365: wrap the plugin callback so hooks of a soft-disabled plugin are
+        // skipped at dispatch. The flag is atomic (hooks execute on the render thread);
+        // `this` outlives the hook — cleanupAll unregisters before the context dies.
+        cmd.callback = [this, cb = std::move(callback)](const plugin::RenderHookContext& ctx) {
+            if (!activeState.load(std::memory_order_relaxed)) return;
+            cb(ctx);
+        };
         auto handle = events::EventDispatcher::instance().execute(cmd);
 
         if (handle.isValid()) {
@@ -205,6 +226,7 @@ namespace plugin {
                                            const std::vector<std::byte>& pushConstants)
     {
         if (!pipeline.isValid() || !mesh.isValid()) return;
+        if (!isActive()) return; // VK-1365: no draws while soft-disabled (covers event-driven enqueues too)
 
         events::custompipeline::EnqueueCustomDrawCommand cmd;
         cmd.item.pipeline = pipeline;
@@ -304,6 +326,10 @@ namespace plugin {
         cmd.worldMin = worldMin;
         cmd.worldMax = worldMax;
         cmd.params = params;
+        // VK-1365: cache the plugin's intended params; while soft-disabled the mask
+        // stays bound but is forced inert (enabled=false => treated as 1.0).
+        lastWorldMaskParams = params;
+        if (!isActive()) cmd.params.enabled = false;
         events::EventDispatcher::instance().execute(cmd);
 
         boundWorldMaskTexture = handle;
@@ -325,7 +351,30 @@ namespace plugin {
 
         events::plugintexture::SetWorldMaskParamsCommand cmd;
         cmd.params = params;
+        // VK-1365: cache intent, keep the mask inert while soft-disabled.
+        lastWorldMaskParams = params;
+        if (!isActive()) cmd.params.enabled = false;
         events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::setActive(bool active)
+    {
+        activeState.store(active, std::memory_order_relaxed);
+
+        // Hide/show this plugin's registered editor windows. Composes with (never
+        // clobbers) the user's per-window visibility toggle in the Plugins menu.
+        // No-op in Runtime, where no windows are registered.
+        controllers::imguiHandler::PluginWindowRegistry::setPluginActive(pluginName, active);
+
+        // Suppress/restore the bound world mask via the existing params.enabled
+        // runtime gate (UBO write only — no rebind, hitch-free). Restoring replays
+        // the plugin's cached params verbatim.
+        if (boundWorldMaskTexture.isValid()) {
+            events::plugintexture::SetWorldMaskParamsCommand cmd;
+            cmd.params = lastWorldMaskParams;
+            if (!active) cmd.params.enabled = false;
+            events::EventDispatcher::instance().execute(cmd);
+        }
     }
 
     entt::registry& PluginContextImpl::getRegistry()
@@ -1073,6 +1122,18 @@ namespace plugin {
             }
         }
         registeredRenderHooks.clear();
+
+        // Remove script natives before the plugin DLL unloads — the registered
+        // NativeDelegate's function pointer lives in the plugin's code segment.
+        for (const auto& name : registeredScriptFunctions) {
+            events::scripting::UnregisterNativeScriptFunctionCommand cmd;
+            cmd.functionName = name;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        registeredScriptFunctions.clear();
 
         for (const auto& handle : managedCustomPipelines) {
             events::custompipeline::DestroyCustomPipelineCommand cmd;

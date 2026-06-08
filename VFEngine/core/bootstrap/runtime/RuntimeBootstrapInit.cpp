@@ -20,6 +20,7 @@
 #include "../../adapters/render/DecalRenderAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 #include "../../adapters/input/RuntimePickerAdapter.hpp"
+#include "../../adapters/render/PluginTextureAdapter.hpp"
 
 namespace core
 {
@@ -54,6 +55,7 @@ namespace core
         decalRenderAdapter = std::make_unique<adapters::DecalRenderAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
         runtimePickerAdapter = std::make_unique<RuntimePickerAdapter>();
+        pluginTextureAdapter = std::make_unique<PluginTextureAdapter>(offScreen.get());
 
         offScreen->init();
 

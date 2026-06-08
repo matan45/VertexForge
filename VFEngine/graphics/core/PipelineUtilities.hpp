@@ -15,6 +15,11 @@ namespace core
 		uint32_t pushConstantSize;
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		bool enableBlending = false;
+		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e1;
+		// Adds VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT so the pipeline can render into
+		// either the MSAA main viewport or a single-sample RenderTexture/preview pass.
+		// The pass must call cmd.setRasterizationSamplesEXT(N) before drawing.
+		bool dynamicSampleCount = false;
 	};
 
 	struct WireframePipelineResult
@@ -68,6 +73,9 @@ namespace core
 		                                         vk::ColorComponentFlagBits::eB |
 		                                         vk::ColorComponentFlagBits::eA;
 
+		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e1;
+		bool dynamicSampleCount = false;
+
 		std::vector<vk::DynamicState> dynamicStates;
 	};
 
@@ -107,6 +115,9 @@ namespace core
 
 		// When non-empty, overrides the single blend attachment above with per-attachment states
 		std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+
+		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e1;
+		bool dynamicSampleCount = false;
 
 		std::vector<vk::DynamicState> dynamicStates;
 	};

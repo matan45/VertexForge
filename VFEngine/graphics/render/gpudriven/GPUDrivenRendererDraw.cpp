@@ -139,6 +139,7 @@ namespace render::gpudriven
                     sizeof(MeshShaderPushConstants),
                     &pushConstants);
 
+                render::FrameDrawStats::count();
                 cmd.drawMeshTasksIndirectCountEXT(
                     batchManager->getCombinedDrawCommandBuffer(),
                     cmdOffset,

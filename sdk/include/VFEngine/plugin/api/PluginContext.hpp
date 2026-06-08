@@ -20,6 +20,8 @@
 #include "../../utilities/navigation/NavmeshData.hpp"
 #include "../../services/data/VFXTypes.hpp"
 
+#include <plugin/PluginHostApi.h>   // mType plugin C ABI (MTypeNativeFn, MTypePluginHost)
+
 struct ImGuiContext;
 
 namespace events {
@@ -93,11 +95,22 @@ namespace plugin {
         // Only available when hasCapability(capability::import_) is true.
         virtual void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) = 0;
 
-        // === Script Native Function Registration ===
-        // Register a native function callable from mType scripts.
-        // The function signature must be: value::Value(const std::vector<value::Value>&)
-        // Wrap it in std::any before passing. Only available when hasCapability(capability::scripting) is true.
-        virtual void registerScriptFunction(const std::string& name, std::any function) = 0;
+        // === Script Native Functions (API v10 — mType plugin C ABI) ===
+        // Register a native function callable from mType scripts, using mType's
+        // standard plugin ABI (sdk/deps/mType/plugin/PluginHostApi.h). The
+        // function receives an MTypeContext* plus MTypeValue* args and talks to
+        // the interpreter exclusively through the MTypePluginHost vtable from
+        // getScriptHost() — makeInt/getFloat, arrayLen/arrayGet/arraySet/
+        // makeArray, objGet/objSet/makeObject, raiseError, even reentrant
+        // callFunction/callMethod. All value manipulation executes engine-side;
+        // MTypeValue* lifetimes are per-call (copy scalars out to retain).
+        // Only available when hasCapability(capability::scripting) is true.
+        // Auto-unregistered on plugin unload.
+        virtual void registerScriptFunction(const std::string& name, MTypeNativeFn fn, void* userData) = 0;
+
+        // The process-stable mType host vtable used inside registered natives.
+        // Null when the scripting capability is unavailable.
+        virtual const MTypePluginHost* getScriptHost() = 0;
 
         // === Graphics Render Hooks ===
         // Only available when hasCapability(capability::graphics) is true.

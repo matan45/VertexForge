@@ -4,10 +4,10 @@
 
 namespace serialization
 {
-
     json SceneSerialization::serializeDecal(const components::DecalComponent& decal)
     {
         json j;
+        j["shape"] = components::decalShapeName(decal.shape);
         j["halfExtents"] = json::array({decal.halfExtents.x, decal.halfExtents.y, decal.halfExtents.z});
 
         if (decal.albedoTextureRef.isValid())
@@ -33,6 +33,14 @@ namespace serialization
         if (auto it = j.find("halfExtents"); it != j.end() && it->is_array() && it->size() >= 3)
         {
             decal.halfExtents = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+        }
+
+        if (auto it = j.find("shape"); it != j.end())
+        {
+            if (it->is_string())
+                decal.shape = components::decalShapeFromName(it->get<std::string>());
+            else if (it->is_number_integer())
+                decal.shape = components::toDecalShape(it->get<int32_t>());
         }
 
         decal.albedoTextureRef = readAssetRef(j, "albedoTextureRef", "albedoTexture");

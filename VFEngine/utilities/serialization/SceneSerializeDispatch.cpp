@@ -239,6 +239,21 @@ namespace serialization
             settingsJson["inputMapping"] = *inputMappingPath;
         }
 
+        // VK-1365: per-scene plugin enable overrides. Only explicit overrides are
+        // written; scenes without overrides omit the key entirely. Object-of-objects
+        // shape ({"Name": {"enabled": bool}}) leaves room for per-scene plugin
+        // configuration values later (VK-1278).
+        const auto& pluginSettings = sceneGraph.getPluginSettings();
+        if (!pluginSettings.empty())
+        {
+            json pluginsJson = json::object();
+            for (const auto& [name, enabled] : pluginSettings)
+            {
+                pluginsJson[name] = json{{"enabled", enabled}};
+            }
+            settingsJson["pluginSettings"] = std::move(pluginsJson);
+        }
+
         return settingsJson;
     }
 
@@ -448,6 +463,21 @@ namespace serialization
         {
             sceneGraph.setInputMappingPath(std::nullopt);
         }
+
+        // VK-1365: per-scene plugin enable overrides. Absent key (old scenes) ==
+        // no overrides — every plugin follows its global .vfplugin flag.
+        std::map<std::string, bool> pluginSettings;
+        if (sceneJson.contains("pluginSettings") && sceneJson["pluginSettings"].is_object())
+        {
+            for (const auto& [name, entry] : sceneJson["pluginSettings"].items())
+            {
+                if (entry.is_object() && entry.contains("enabled") && entry["enabled"].is_boolean())
+                {
+                    pluginSettings[name] = entry["enabled"].get<bool>();
+                }
+            }
+        }
+        sceneGraph.setPluginSettings(std::move(pluginSettings));
 
         return true;
     }

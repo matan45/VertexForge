@@ -6,6 +6,7 @@
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "stats/FrameDrawStats.hpp"
 
 namespace controllers::offscreen
 {
@@ -14,6 +15,9 @@ namespace controllers::offscreen
                                                                 LightBVHManager* lightBvhManager) const
     {
         services::CullingDebugStats stats;
+
+        // Total recorded draw commands from the last completed frame (VK-1368).
+        stats.totalDrawCalls = render::FrameDrawStats::lastFrame.load(std::memory_order_relaxed);
 
         auto* cameraManager = renderHandler->getCameraOcclusionManager();
         if (!cameraManager)

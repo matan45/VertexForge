@@ -507,6 +507,7 @@ namespace render::gpudriven
             .depthWriteEnable = true
         };
         config.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+        config.dynamicSampleCount = true;
 
         try
         {

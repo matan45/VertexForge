@@ -2,6 +2,8 @@
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
+#include "../../../core/VulkanContext.hpp"
+#include "../../../core/SwapChain.hpp"
 #include "print/Log.hpp"
 #include <array>
 
@@ -212,6 +214,7 @@ namespace render::gpudriven
 
         uint32_t taskGroups = (instanceCount + 31) / 32;
         cmd.drawMeshTasksEXT(taskGroups, 1, 1);
+        render::FrameDrawStats::count();
     }
 
     void BillboardMeshShaderPipeline::createOwnedDescriptors()
@@ -315,6 +318,7 @@ namespace render::gpudriven
         config.srcAlphaBlendFactor = vk::BlendFactor::eOne;
         config.dstAlphaBlendFactor = vk::BlendFactor::eZero;
         config.dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        config.dynamicSampleCount = true;
 
         try
         {

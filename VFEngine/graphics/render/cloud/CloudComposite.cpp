@@ -176,6 +176,11 @@ namespace render::cloud
             pipelineInfo.pMultisampleState = &multisampling;
             pipelineInfo.pDepthStencilState = &depthStencil;
             pipelineInfo.pColorBlendState = &blending;
+            vk::DynamicState cloudDynStates[] = {vk::DynamicState::eRasterizationSamplesEXT};
+            vk::PipelineDynamicStateCreateInfo cloudDynamicState{};
+            cloudDynamicState.dynamicStateCount = 1;
+            cloudDynamicState.pDynamicStates = cloudDynStates;
+            pipelineInfo.pDynamicState = &cloudDynamicState;
             pipelineInfo.layout = pipelineLayout;
 
             vk::Format colorFormat = swapChain.getSceneColorFormat();
@@ -319,6 +324,11 @@ namespace render::cloud
             pipelineInfo.pMultisampleState = &multisampling;
             pipelineInfo.pDepthStencilState = &depthStencil;
             pipelineInfo.pColorBlendState = &blending;
+            vk::DynamicState cloudDynStates[] = {vk::DynamicState::eRasterizationSamplesEXT};
+            vk::PipelineDynamicStateCreateInfo cloudDynamicState{};
+            cloudDynamicState.dynamicStateCount = 1;
+            cloudDynamicState.pDynamicStates = cloudDynStates;
+            pipelineInfo.pDynamicState = &cloudDynamicState;
             pipelineInfo.layout = pipelineLayout;
 
             vk::Format colorFormat = swapChain.getSceneColorFormat();
@@ -362,6 +372,7 @@ namespace render::cloud
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSet, nullptr);
         cmd.pushConstants<CloudCompositePushConstants>(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
 
         // Transition scene color back to ShaderReadOnlyOptimal
@@ -384,17 +395,23 @@ namespace render::cloud
 
         vk::Extent2D extent = swapChain.getSwapchainExtent();
 
-        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+        // Pre-resolve pass: render into the multisampled scene color when MSAA is on.
+        vk::ImageView colorView = offscreenResources.msaaEnabled()
+            ? offscreenResources.colorImagesMSAA[imageIndex].colorImageView
+            : offscreenResources.colorImages[imageIndex].colorImageView;
+        auto colorAttach = core::colorLoad(colorView);
 
         core::DynamicRenderingInfo info{};
         info.extent = extent;
         info.colorAttachments = {colorAttach};
 
         core::beginDynamicRendering(cmd, info);
+        cmd.setRasterizationSamplesEXT(offscreenResources.sampleCount);
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSet, nullptr);
         cmd.pushConstants<CloudCompositePushConstants>(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
     }
 }

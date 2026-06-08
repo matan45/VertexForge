@@ -7,17 +7,16 @@
 #include <imgui.h>
 #include <cstring>
 #include <algorithm>
+#include <filesystem>
+#include <windows.h>
+#include <shellapi.h>
 
 namespace windows
 {
     static const char* categoryNames[] = {
-        "General",
         "Appearance",
-        "Input",
-        "Rendering",
-        "Editor",
         "Debug",
-        "Keybindings"
+        "Window Layout"
     };
 
     void EditorPreferencesWindow::show()
@@ -35,6 +34,8 @@ namespace windows
         savedSettings = settings;
         settingsLoaded = true;
         isDirty = false;
+
+        settingsPath = dispatcher.query(events::editor::GetEditorSettingsPathQuery{});
 
         events::save::GetConfigIntQuery tabQuery;
         tabQuery.key = "editorPreferences_lastCategory";
@@ -113,13 +114,9 @@ namespace windows
 
         switch (selectedCategory)
         {
-        case General:       drawGeneralSection(); break;
         case Appearance:    drawAppearanceSection(); break;
-        case Input:         drawInputSection(); break;
-        case Rendering:     drawRenderingSection(); break;
-        case Editor:        drawEditorSection(); break;
         case Debug:         drawDebugSection(); break;
-        case Keybindings:   drawKeybindingsSection(); break;
+        case WindowLayout:  drawWindowLayoutSection(); break;
         default: break;
         }
     }
@@ -128,6 +125,18 @@ namespace windows
     {
         ImGui::Separator();
         ImGui::Spacing();
+
+        if (!settingsPath.empty())
+        {
+            ImGui::TextDisabled("Saved to: %s", settingsPath.c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Open Folder"))
+            {
+                std::string folder = std::filesystem::path(settingsPath).parent_path().string();
+                ShellExecuteA(nullptr, "explore", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            }
+            ImGui::Spacing();
+        }
 
         if (ImGui::Button("Reset Defaults", ImVec2(110, 0)))
             resetToDefaults();

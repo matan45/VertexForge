@@ -251,6 +251,12 @@ namespace render
         pluginTextureManager->setWorldMaskParams(params);
     }
 
+    float RenderPassHandler::sampleWorldMask(float worldX, float worldZ) const
+    {
+        if (!pluginTextureManager) return 1.0f;
+        return pluginTextureManager->sampleWorldMask(worldX, worldZ);
+    }
+
     void RenderPassHandler::setWorldMaskDebugEnabled(bool enabled)
     {
         pluginTextureManager->setDebugMaskEnabled(enabled);

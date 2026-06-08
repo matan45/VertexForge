@@ -23,6 +23,7 @@
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
+#include "impl/render/PluginTextureServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
@@ -126,6 +127,7 @@ namespace handlers {
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
+        pluginTextureService.reset();
         renderTextureService.reset();
         debugDrawService.reset();
         renderService.reset();
@@ -304,6 +306,13 @@ namespace handlers {
             bootstrap->getRuntimePickerProvider()
         );
 
+        // Plugin world-mask / texture handlers (e.g. fog-of-war): plugins and scripts call
+        // these in runtime too, so the handlers must be registered here — not just in the
+        // editor — or WorldMask::sample and bindWorldMask throw at the dispatcher.
+        pluginTextureService = std::make_shared<services::PluginTextureServiceImpl>(
+            bootstrap->getPluginTextureProvider()
+        );
+
         if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
         {
             behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
@@ -358,6 +367,7 @@ namespace handlers {
         controllerService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
         runtimePickerService->registerEventHandlers();
+        pluginTextureService->registerEventHandlers();
         if (ikComponentService)
         {
             ikComponentService->registerEventHandlers();
@@ -372,6 +382,11 @@ namespace handlers {
             [this](const events::application::WindowResizedNotification&) {
                 bootstrap->triggerResize();
             });
+
+        displaySettingsSubscription = dispatcher.subscribe<events::application::ApplyDisplaySettingsNotification>(
+            [this](const events::application::ApplyDisplaySettingsNotification& n) {
+                bootstrap->applyDisplaySettings(n.presentMode, n.msaa);
+            });
     }
 
     void RuntimeHandler::cleanupEventSubscriptions()
@@ -381,6 +396,11 @@ namespace handlers {
         if (resizeSubscription.isValid()) {
             dispatcher.unsubscribe(resizeSubscription);
             resizeSubscription = {};
+        }
+
+        if (displaySettingsSubscription.isValid()) {
+            dispatcher.unsubscribe(displaySettingsSubscription);
+            displaySettingsSubscription = {};
         }
     }
 

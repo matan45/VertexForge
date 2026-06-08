@@ -43,6 +43,7 @@ project (PLUGIN_NAME)
       sdkDir .. "/deps/json",
       sdkDir .. "/deps/spdlog",
       sdkDir .. "/deps/imgui",
+      sdkDir .. "/deps/mType",
       vulkanSDK .. "/Include"
    }
 

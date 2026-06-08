@@ -180,6 +180,7 @@ namespace render::shadow
                     sizeof(vk::DrawMeshTasksIndirectCommandEXT);
                 vk::DeviceSize cntOffset = section * ctx.params.drawCountStructSize;
 
+                render::FrameDrawStats::count();
                 cmd.drawMeshTasksIndirectCountEXT(
                     ctx.params.drawCommandBuffer, cmdOffset,
                     ctx.params.drawCountBuffer, cntOffset,

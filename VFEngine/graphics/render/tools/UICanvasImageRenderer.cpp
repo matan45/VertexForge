@@ -138,6 +138,7 @@ namespace render::mesh
             .blendEnable = true
         };
 
+        config.dynamicSampleCount = true;
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         graphicsPipeline = result.pipeline;
         pipelineLayout = result.pipelineLayout;
@@ -297,6 +298,7 @@ namespace render::mesh
                 0, sizeof(UICanvasImagePushConstants), &pushConstants);
 
             commandBuffer.drawIndexed(6, 1, 0, 0, 0);
+            render::FrameDrawStats::count();
         }
     }
 }

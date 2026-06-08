@@ -242,6 +242,8 @@ namespace render::custom
         config.colorAttachmentFormats = {swapChain.getSceneColorFormat()};
         config.depthAttachmentFormat = swapChain.getSwapchainDepthStencilFormat();
         config.extent = swapChain.getSwapchainExtent();
+        // Plugin custom pipelines draw in the scene pass — sample count set per pass.
+        config.dynamicSampleCount = true;
         config.shaderStages = entry.shader->getShaderStages();
         config.vertexBindings = {binding};
         config.vertexAttributes = attributes;
@@ -460,10 +462,12 @@ namespace render::custom
             {
                 commandBuffer.bindIndexBuffer(meshEntry.indexBuffer, 0, vk::IndexType::eUint32);
                 commandBuffer.drawIndexed(meshEntry.indexCount, 1, 0, 0, 0);
+                render::FrameDrawStats::count();
             }
             else
             {
                 commandBuffer.draw(meshEntry.vertexCount, 1, 0, 0);
+                render::FrameDrawStats::count();
             }
         }
     }

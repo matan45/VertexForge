@@ -82,6 +82,7 @@ namespace render::mesh
         config.depthBiasSlopeFactor = -2.0f;
         config.blendEnable = true;
 
+        config.dynamicSampleCount = true;
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         wireframePipeline = result.pipeline;
         wireframePipelineLayout = result.pipelineLayout;

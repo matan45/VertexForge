@@ -22,7 +22,7 @@ namespace core
 		imageCreateInfo.tiling = imageInfo.tiling;
 		imageCreateInfo.initialLayout = vk::ImageLayout::eUndefined;
 		imageCreateInfo.usage = imageInfo.usage;
-		imageCreateInfo.samples = vk::SampleCountFlagBits::e1;
+		imageCreateInfo.samples = imageInfo.samples;
 		imageCreateInfo.sharingMode = vk::SharingMode::eExclusive;
 		imageCreateInfo.flags = imageInfo.imageFlags;
 

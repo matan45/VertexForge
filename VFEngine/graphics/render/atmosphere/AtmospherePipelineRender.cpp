@@ -92,6 +92,7 @@ namespace render::atmosphere
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, skyRendererPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, skyRendererPipelineLayout, 0, skyRendererDS, nullptr);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
 
         core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
@@ -134,6 +135,7 @@ namespace render::atmosphere
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, compositePipelineLayout, 0, compositeDS, nullptr);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
 
         core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
@@ -151,16 +153,22 @@ namespace render::atmosphere
     {
         if (!initialized || !enabled) return;
 
-        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+        // Pre-resolve pass: render into the multisampled scene color when MSAA is on.
+        vk::ImageView colorView = offscreenResources.msaaEnabled()
+            ? offscreenResources.colorImagesMSAA[imageIndex].colorImageView
+            : offscreenResources.colorImages[imageIndex].colorImageView;
+        auto colorAttach = core::colorLoad(colorView);
 
         core::DynamicRenderingInfo info{};
         info.extent = currentExtent;
         info.colorAttachments = {colorAttach};
 
         core::beginDynamicRendering(cmd, info);
+        cmd.setRasterizationSamplesEXT(offscreenResources.sampleCount);
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, skyRendererPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, skyRendererPipelineLayout, 0, skyRendererDS, nullptr);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
     }
 
@@ -188,6 +196,7 @@ namespace render::atmosphere
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, compositePipelineLayout, 0, compositeDS, nullptr);
         cmd.draw(3, 1, 0, 0);
+        render::FrameDrawStats::count();
         core::endDynamicRendering(cmd);
     }
 
@@ -307,6 +316,11 @@ namespace render::atmosphere
             skyPipelineInfo.pMultisampleState = &multisampling;
             skyPipelineInfo.pDepthStencilState = &depthStencil;
             skyPipelineInfo.pColorBlendState = &skyBlending;
+            vk::DynamicState skyDynStates[] = {vk::DynamicState::eRasterizationSamplesEXT};
+            vk::PipelineDynamicStateCreateInfo skyDynamicState{};
+            skyDynamicState.dynamicStateCount = 1;
+            skyDynamicState.pDynamicStates = skyDynStates;
+            skyPipelineInfo.pDynamicState = &skyDynamicState;
             skyPipelineInfo.layout = skyRendererPipelineLayout;
 
             vk::Format skyColorFormat = swapChain.getSceneColorFormat();
@@ -466,6 +480,11 @@ namespace render::atmosphere
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &blending;
+        vk::DynamicState skyInitDynStates[] = {vk::DynamicState::eRasterizationSamplesEXT};
+        vk::PipelineDynamicStateCreateInfo skyInitDynamicState{};
+        skyInitDynamicState.dynamicStateCount = 1;
+        skyInitDynamicState.pDynamicStates = skyInitDynStates;
+        pipelineInfo.pDynamicState = &skyInitDynamicState;
         pipelineInfo.layout = skyRendererPipelineLayout;
 
         vk::Format colorFormat = swapChain.getSceneColorFormat();

@@ -61,5 +61,12 @@ namespace services
                 provider->setWorldMaskParams(cmd.params);
             }
         );
+
+        dispatcher.registerQueryHandler<events::plugintexture::SampleWorldMaskQuery>(
+            [this](const events::plugintexture::SampleWorldMaskQuery& query)
+            {
+                return provider->sampleWorldMask(query.worldX, query.worldZ);
+            }
+        );
     }
 }

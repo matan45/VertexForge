@@ -18,6 +18,9 @@ namespace controllers::imguiHandler
 			std::string title;
 			std::shared_ptr<ImguiWindow> window;
 			bool visible = true;
+			// VK-1365: per-scene soft-disable gate. AND-ed with the user's visible
+			// toggle at draw time so neither flag clobbers the other.
+			bool pluginActive = true;
 		};
 
 	private:
@@ -31,6 +34,8 @@ namespace controllers::imguiHandler
 		                const std::shared_ptr<ImguiWindow>& window);
 		static void remove(const std::shared_ptr<ImguiWindow>& window);
 		static void removeByPlugin(const std::string& pluginName);
+		// VK-1365: hide/show all of a plugin's windows when it is soft-disabled.
+		static void setPluginActive(const std::string& pluginName, bool active);
 		static void draw();
 		static void cleanUp();
 

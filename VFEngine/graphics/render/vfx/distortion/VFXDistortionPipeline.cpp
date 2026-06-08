@@ -372,6 +372,7 @@ namespace render::vfx
 
             vk::DeviceSize offset = i * sizeof(VFXDrawIndirectCommand);
             cmd.drawIndexedIndirect(drawCommandBuffer, offset, 1, sizeof(VFXDrawIndirectCommand));
+            render::FrameDrawStats::count();
         }
     }
 }

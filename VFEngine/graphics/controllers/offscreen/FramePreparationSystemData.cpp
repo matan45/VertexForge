@@ -188,6 +188,7 @@ namespace controllers::offscreen
             renderData.worldMatrix = decalWorldMatrix;
             renderData.inverseWorldMatrix = glm::inverse(decalWorldMatrix);
             renderData.halfExtents = decal.halfExtents;
+            renderData.shape = static_cast<uint32_t>(decal.shape);
             renderData.albedoTexture = decal.albedoTextureRef.resolve();
             renderData.normalTexture = decal.normalTextureRef.resolve();
             renderData.ormTexture = decal.ormTextureRef.resolve();

@@ -186,9 +186,10 @@ namespace render::mesh
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        std::array<vk::DynamicState, 2> dynamicStates = {
+        std::array<vk::DynamicState, 3> dynamicStates = {
             vk::DynamicState::eViewport,
-            vk::DynamicState::eScissor
+            vk::DynamicState::eScissor,
+            vk::DynamicState::eRasterizationSamplesEXT
         };
 
         vk::PipelineDynamicStateCreateInfo dynamicState{};

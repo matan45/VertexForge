@@ -5,6 +5,7 @@
 #include "FogOfWar.hpp"
 #include "FogOfWarWindow.hpp"
 #include <imgui.h>
+#include <algorithm>
 #include <memory>
 #include <string>
 
@@ -40,6 +41,8 @@ public:
         fogSettings = std::make_shared<FogSettings>();
         fogOfWar.initialize(ctx, fogSettings);
 
+        registerScriptNatives();
+
         if (ctx->hasCapability(std::string(plugin::capability::editor)))
         {
             ImGui::SetCurrentContext(ctx->getImGuiContext());
@@ -63,7 +66,62 @@ public:
     }
 
 private:
+    // float-or-int numeric argument (mType passes float literals as FLOAT but
+    // an int expression is legal too).
+    static float numberArg(const MTypePluginHost* host, const MTypeValue* v)
+    {
+        return host->getTag(v) == MT_TAG_FLOAT ? static_cast<float>(host->getFloat(v))
+                                               : static_cast<float>(host->getInt(v));
+    }
+
+    // mType natives backed by plugin state, registered through mType's plugin
+    // C ABI (PluginHostApi.h): capture-less MTypeNativeFn + this as userData,
+    // values built/inspected via the engine-provided host vtable. The engine
+    // auto-unregisters these when the plugin unloads.
+    void registerScriptNatives()
+    {
+        if (!ctx->hasCapability(std::string(plugin::capability::scripting)))
+            return;
+        host = ctx->getScriptHost();
+        if (!host)
+            return;
+
+        // _rts_fog_state(x, z) -> int: 0 unexplored, 1 explored, 2 visible.
+        ctx->registerScriptFunction("_rts_fog_state",
+            [](void* userData, MTypeContext* c, const MTypeValue* const* args, int argc) -> MTypeValue*
+            {
+                auto* self = static_cast<RTSGameplay*>(userData);
+                const MTypePluginHost* h = self->host;
+                if (argc < 2) return h->makeInt(c, 2);
+                const float x = numberArg(h, args[0]);
+                const float z = numberArg(h, args[1]);
+                return h->makeInt(c, self->fogOfWar.queryFogState(x, z));
+            }, this);
+
+        // _rts_fog_states(float[] xs, float[] zs) -> int[]: batch form of the
+        // above (one native call per query set — e.g. a footprint or an AI
+        // scan). Demonstrates array args + array results through the host vtable.
+        ctx->registerScriptFunction("_rts_fog_states",
+            [](void* userData, MTypeContext* c, const MTypeValue* const* args, int argc) -> MTypeValue*
+            {
+                auto* self = static_cast<RTSGameplay*>(userData);
+                const MTypePluginHost* h = self->host;
+                if (argc < 2) return h->makeArray(c, MT_TAG_INT, 0);
+
+                const size_t count = std::min(h->arrayLen(args[0]), h->arrayLen(args[1]));
+                MTypeValue* result = h->makeArray(c, MT_TAG_INT, count);
+                for (size_t i = 0; i < count; ++i)
+                {
+                    const float x = numberArg(h, h->arrayGet(c, args[0], i));
+                    const float z = numberArg(h, h->arrayGet(c, args[1], i));
+                    h->arraySet(result, i, h->makeInt(c, self->fogOfWar.queryFogState(x, z)));
+                }
+                return result;
+            }, this);
+    }
+
     plugin::PluginContext* ctx = nullptr;
+    const MTypePluginHost* host = nullptr;
     std::shared_ptr<FogSettings> fogSettings;
     FogOfWarSystem fogOfWar;
 };

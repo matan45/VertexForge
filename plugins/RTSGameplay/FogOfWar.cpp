@@ -190,6 +190,29 @@ void FogOfWarSystem::updateVisibilityGrid()
     settings->gridUpdateMs = elapsedMs(start);
 }
 
+int FogOfWarSystem::queryFogState(float worldX, float worldZ) const
+{
+    // Inert fog never restricts gameplay — match what the player sees on screen
+    // (the mask params are pushed disabled in these cases, so terrain is lit).
+    if (!fogTexture.isValid() || !settings || !settings->enabled || settings->visionSources == 0)
+        return 2;
+    if (worldX < MAP_MIN || worldX > MAP_MAX || worldZ < MAP_MIN || worldZ > MAP_MAX)
+        return 2;  // outside the mask bounds the shaders treat the mask as 1.0
+
+    constexpr float cellSize = (MAP_MAX - MAP_MIN) / static_cast<float>(FOG_GRID);
+    constexpr float invCellSize = 1.0f / cellSize;
+    const int x = std::clamp(static_cast<int>((worldX - MAP_MIN) * invCellSize),
+                             0, static_cast<int>(FOG_GRID) - 1);
+    const int z = std::clamp(static_cast<int>((worldZ - MAP_MIN) * invCellSize),
+                             0, static_cast<int>(FOG_GRID) - 1);
+
+    // visibilityGrid holds the last composed three-state frame (0 / explored / 255).
+    const std::byte cell = visibilityGrid[static_cast<size_t>(z) * FOG_GRID + x];
+    if (cell == std::byte{0xFF}) return 2;
+    if (cell != std::byte{0}) return 1;
+    return 0;
+}
+
 void FogOfWarSystem::stampVisionCircle(float worldX, float worldZ, float radius, float invCellSize)
 {
     const float gridX = (worldX - MAP_MIN) * invCellSize;

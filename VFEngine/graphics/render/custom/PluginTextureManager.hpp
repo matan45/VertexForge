@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <cstddef>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 #include "../../core/VulkanMemoryManager.hpp"
@@ -69,6 +70,14 @@ namespace render::custom
 
         core::Device& device;
 
+        // Guards `textures` and all world-mask state. sampleWorldMask() is invoked from
+        // script worker threads (WorldMask::sample) while updateTexture2D/bindWorldMask
+        // (plugin worker thread) and flushUploads (render thread) mutate the same map and
+        // pendingData buffers — without this lock a concurrent rehash/realloc is a
+        // torn-read/crash. Recursive because destroyTexture2D -> unbindWorldMask and
+        // updateEntityMaskDescriptor -> getMaskSampler/getMaskImageView re-enter.
+        mutable std::recursive_mutex stateMutex;
+
         std::unordered_map<uint64_t, TextureEntry> textures;
         uint64_t nextId = 1;
 
@@ -114,6 +123,12 @@ namespace render::custom
         // Editor/debug override layered over the plugin's enabled flag — UBO write only.
         void setDebugMaskEnabled(bool enabled);
         bool getDebugMaskEnabled() const { return !debugForceDisabled; }
+
+        // CPU readback of the bound mask's red channel at a world (x,z) position,
+        // nearest-cell sampled from the retained pendingData. Returns 1.0 when no
+        // mask is bound, the mask is disabled, or the point is outside the bounds —
+        // the same "no effect" cases the shaders treat as mask = 1.0.
+        [[nodiscard]] float sampleWorldMask(float worldX, float worldZ) const;
 
         // Records staging->image copies for dirty textures. Must be called outside any
         // render pass, before the scene pass is recorded (same command buffer).

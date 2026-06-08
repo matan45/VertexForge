@@ -18,6 +18,8 @@ namespace windows
             auto stats = events::EventDispatcher::instance().query(query);
 
             ImGui::Text("Active Camera: %u", stats.activeCameraId);
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
+                               "Total Draw Calls (runtime passes): %u", stats.totalDrawCalls);
             ImGui::Separator();
 
             if (ImGui::CollapsingHeader("Render Thread", ImGuiTreeNodeFlags_DefaultOpen))
@@ -494,6 +496,9 @@ namespace windows
         if (mainEnd > mainStart)
             mainThreadMs = static_cast<float>(mainEnd - mainStart) / 1e6f;
         ImGui::Text("  Main Thread:         %.2f ms", mainThreadMs);
-        ImGui::Text("  Frame Total:         %.2f ms", static_cast<float>(latestFrame.frameDurationNs) / 1e6f);
+        ImGui::Text("  Frame Total (viewport): %.2f ms",
+                    static_cast<float>(threading::viewportFrameDurationNs(latestFrame)) / 1e6f);
+        ImGui::TextDisabled("  Editor/ImGui overhead:  %.2f ms",
+                    static_cast<float>(threading::taskDurationNs(latestFrame, "ImGuiDraw")) / 1e6f);
     }
 }

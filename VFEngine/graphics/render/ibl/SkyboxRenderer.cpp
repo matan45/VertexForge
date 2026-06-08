@@ -186,9 +186,10 @@ namespace render::ibl
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        std::array<vk::DynamicState, 2> dynamicStates = {
+        std::array<vk::DynamicState, 3> dynamicStates = {
             vk::DynamicState::eViewport,
-            vk::DynamicState::eScissor
+            vk::DynamicState::eScissor,
+            vk::DynamicState::eRasterizationSamplesEXT
         };
         vk::PipelineDynamicStateCreateInfo dynamicState{};
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
@@ -242,6 +243,7 @@ namespace render::ibl
             };
 
             core::beginDynamicRendering(commandBuffer, renderingInfo);
+            commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
 
             // Bind the graphics pipeline
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
@@ -269,6 +271,7 @@ namespace render::ibl
             vk::DeviceSize offsets[] = {0};
             commandBuffer.bindVertexBuffers(0, vertexBuffer, offsets);
             commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
+            render::FrameDrawStats::count();
 
             core::endDynamicRendering(commandBuffer);
 
@@ -285,7 +288,10 @@ namespace render::ibl
         {
             updateUniformBuffer(viewMatrix, projectionMatrix);
 
-            vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+            // Pre-resolve pass: render into the multisampled scene color when MSAA is on.
+            vk::ImageView colorView = offscreenResources.msaaEnabled()
+                ? offscreenResources.colorImagesMSAA[imageIndex].colorImageView
+                : offscreenResources.colorImages[imageIndex].colorImageView;
 
             core::DynamicRenderingInfo renderingInfo{};
             renderingInfo.extent = swapChain.getSwapchainExtent();
@@ -294,6 +300,7 @@ namespace render::ibl
             };
 
             core::beginDynamicRendering(commandBuffer, renderingInfo);
+            commandBuffer.setRasterizationSamplesEXT(offscreenResources.sampleCount);
 
             // Bind the graphics pipeline
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
@@ -321,6 +328,7 @@ namespace render::ibl
             vk::DeviceSize offsets[] = {0};
             commandBuffer.bindVertexBuffers(0, vertexBuffer, offsets);
             commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
+            render::FrameDrawStats::count();
 
             core::endDynamicRendering(commandBuffer);
         }
@@ -341,6 +349,8 @@ namespace render::ibl
         };
 
         core::beginDynamicRendering(commandBuffer, renderingInfo);
+        // RenderTexture targets are single-sample.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
@@ -376,6 +386,8 @@ namespace render::ibl
         };
 
         core::beginDynamicRendering(commandBuffer, renderingInfo);
+        // RenderTexture targets are single-sample.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 

@@ -68,6 +68,7 @@ namespace render::mesh
             .shaderStages = wireframeShader->getShaderStages()
         };
 
+        config.dynamicSampleCount = true;
         auto result = core::PipelineUtilities::createWireframePipeline(config);
         wireframePipeline = result.pipeline;
         wireframePipelineLayout = result.pipelineLayout;

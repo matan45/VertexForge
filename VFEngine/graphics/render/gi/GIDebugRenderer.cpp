@@ -1,6 +1,8 @@
 #include "GIDebugRenderer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/VulkanContext.hpp"
+#include "../../core/SwapChain.hpp"
 #include "print/Log.hpp"
 
 namespace render::gi
@@ -112,9 +114,9 @@ namespace render::gi
         viewportState.viewportCount = 1;
         viewportState.scissorCount = 1;
 
-        vk::DynamicState dynamicStates[] = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        vk::DynamicState dynamicStates[] = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eRasterizationSamplesEXT};
         vk::PipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.dynamicStateCount = 2;
+        dynamicState.dynamicStateCount = 3;
         dynamicState.pDynamicStates = dynamicStates;
 
         vk::PipelineRasterizationStateCreateInfo rasterizer{};

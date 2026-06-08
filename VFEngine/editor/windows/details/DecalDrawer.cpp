@@ -4,6 +4,7 @@
 #include "events/scene/ComponentMediaEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "components/DecalComponents.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -46,6 +47,8 @@ namespace windows::details
             ImGui::TextDisabled("Projects textures onto scene geometry");
             ImGui::Spacing();
 
+            changed |= drawShape(data);
+            ImGui::Spacing();
             changed |= drawHalfExtents(data);
             ImGui::Spacing();
             changed |= drawTextures(data);
@@ -97,6 +100,23 @@ namespace windows::details
         EntityDetailsPanel::popComponentHeaderStyle();
 
         return isOpen;
+    }
+
+    bool DecalDrawer::drawShape(services::DecalData& data)
+    {
+        int currentShape = static_cast<int>(components::toDecalShape(data.shape));
+
+        if (ImGui::Combo("Shape##Decal", &currentShape, components::kDecalShapeNames, components::kDecalShapeCount))
+        {
+            data.shape = static_cast<uint8_t>(currentShape);
+            return true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Projection mask shape in decal-local XY space");
+        }
+
+        return false;
     }
 
     bool DecalDrawer::drawHalfExtents(services::DecalData& data)

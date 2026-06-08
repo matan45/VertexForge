@@ -1,8 +1,7 @@
 #pragma once
 #include "SettingsEntry.hpp"
 #include "config/EditorPreferences.hpp"
-#include "data/EditorKeybindingTypes.hpp"
-#include "data/ActionMappingTypes.hpp"
+#include <imgui.h>
 #include <string>
 #include <vector>
 
@@ -13,13 +12,9 @@ namespace windows
     public:
         enum Category
         {
-            General = 0,
-            Appearance,
-            Input,
-            Rendering,
-            Editor,
+            Appearance = 0,
             Debug,
-            Keybindings,
+            WindowLayout,
             COUNT
         };
 
@@ -34,13 +29,14 @@ namespace windows
         std::vector<SettingsEntry> settingsRegistry;
         bool registryBuilt = false;
 
-        // Keybinding UI state
-        bool waitingForKey = false;
-        std::string captureAction;
-        bool showConflictModal = false;
-        services::InputBinding pendingBinding;
-        std::string pendingAction;
-        std::vector<services::KeybindingConflict> pendingConflicts;
+        // Dockspace id used by the Window Layout section's "Reset to default layout"
+        ImGuiID dockSpaceId = 0;
+
+        // Absolute path of the preferences JSON, cached for the footer display.
+        std::string settingsPath;
+
+        // Window Layout UI state
+        char saveLayoutNameBuffer[128] = {};
 
         void loadSettings();
         void saveSettings();
@@ -53,13 +49,9 @@ namespace windows
         void drawButtonBar();
         void drawSearchResults();
 
-        void drawGeneralSection();
         void drawAppearanceSection();
-        void drawInputSection();
-        void drawRenderingSection();
-        void drawEditorSection();
         void drawDebugSection();
-        void drawKeybindingsSection();
+        void drawWindowLayoutSection();
 
         void buildSettingsRegistry();
         bool matchesSearch(const SettingsEntry& entry, const std::string& queryLower) const;
@@ -67,5 +59,6 @@ namespace windows
     public:
         void draw();
         void show();
+        void setDockSpaceId(ImGuiID id) { dockSpaceId = id; }
     };
 }

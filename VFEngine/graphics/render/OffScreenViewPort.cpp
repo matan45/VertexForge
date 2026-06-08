@@ -256,6 +256,31 @@ namespace render
         }
         offscreenResources.colorImages.clear();
 
+        // Scoped MSAA targets
+        for (auto const& resources : offscreenResources.colorImagesMSAA)
+        {
+            device.getLogicalDevice().destroyImageView(resources.colorImageView);
+            device.getLogicalDevice().destroyImage(resources.colorImage);
+            device.getMemoryManager().free(resources.colorImageAllocation);
+        }
+        offscreenResources.colorImagesMSAA.clear();
+
+        if (offscreenResources.depthImageMSAA.depthImageView)
+        {
+            device.getLogicalDevice().destroyImageView(offscreenResources.depthImageMSAA.depthImageView);
+            offscreenResources.depthImageMSAA.depthImageView = nullptr;
+        }
+        if (offscreenResources.depthImageMSAA.depthImage)
+        {
+            device.getLogicalDevice().destroyImage(offscreenResources.depthImageMSAA.depthImage);
+            offscreenResources.depthImageMSAA.depthImage = nullptr;
+        }
+        if (offscreenResources.depthImageMSAA.depthImageAllocation)
+        {
+            device.getMemoryManager().free(offscreenResources.depthImageMSAA.depthImageAllocation);
+            offscreenResources.depthImageMSAA.depthImageAllocation = {};
+        }
+
         for (auto const& resources : offscreenResources.displayColorImages)
         {
             device.getLogicalDevice().destroyImageView(resources.colorImageView);
@@ -373,6 +398,12 @@ namespace render
         auto* upscaleManager = device.getUpscaleManager();
         bool upscaling = upscaleManager && upscaleManager->isActive();
 
+        // Scoped MSAA: the upscaler (DLSS/DLAA) and MSAA are mutually exclusive AA
+        // paths, so MSAA is disabled whenever the temporal upscaler is active.
+        offscreenResources.sampleCount = upscaling ? vk::SampleCountFlagBits::e1 : swapChain.getMSAASamples();
+        const vk::SampleCountFlagBits msaaSamples = offscreenResources.sampleCount;
+        const bool msaa = offscreenResources.msaaEnabled();
+
         core::ImageInfoRequest imageColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         imageColorInfo.width = renderWidth;
         imageColorInfo.height = renderHeight;
@@ -455,6 +486,65 @@ namespace render
             updateDescriptorSets(color.descriptorSet, color.colorImageView);
 
             offscreenResources.colorImages.push_back(std::move(color));
+        }
+
+        // Scoped MSAA: multisampled color (per swapchain image) + depth that the
+        // ClearColor/sky/opaque passes render into and resolve into the single-sample
+        // colorImages/depthImage above. No eSampled — MSAA targets are attachment-only.
+        if (msaa)
+        {
+            core::ImageInfoRequest msaaColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+            msaaColorInfo.width = renderWidth;
+            msaaColorInfo.height = renderHeight;
+            msaaColorInfo.format = colorFormat;
+            msaaColorInfo.tiling = vk::ImageTiling::eOptimal;
+            msaaColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment;
+            msaaColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            msaaColorInfo.samples = msaaSamples;
+
+            offscreenResources.colorImagesMSAA.reserve(swapChain.getImageCount());
+            for (size_t i = 0; i < swapChain.getImageCount(); i++)
+            {
+                core::ColorImage color;
+                core::ImageUtilities::createImage(msaaColorInfo, color.colorImage, color.colorImageAllocation, device.getMemoryManager());
+                core::ImageViewInfoRequest viewReq(device.getLogicalDevice(), color.colorImage);
+                viewReq.format = colorFormat;
+                core::ImageUtilities::createImageView(viewReq, color.colorImageView);
+
+                vk::UniqueCommandBuffer transitionCmd = core::Utilities::beginSingleTimeCommands(
+                    device.getLogicalDevice(), commandPool->getCommandPool());
+                core::ImageUtilities::transitionImageLayout(transitionCmd.get(), color.colorImage,
+                    vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+                    vk::ImageAspectFlagBits::eColor);
+                core::Utilities::endSingleTimeCommands(device, transitionCmd);
+
+                offscreenResources.colorImagesMSAA.push_back(std::move(color));
+            }
+
+            core::ImageInfoRequest msaaDepthInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+            msaaDepthInfo.width = renderWidth;
+            msaaDepthInfo.height = renderHeight;
+            msaaDepthInfo.format = depthFormat;
+            msaaDepthInfo.tiling = vk::ImageTiling::eOptimal;
+            msaaDepthInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+            msaaDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            msaaDepthInfo.samples = msaaSamples;
+
+            core::DepthImage msaaDepth;
+            core::ImageUtilities::createImage(msaaDepthInfo, msaaDepth.depthImage, msaaDepth.depthImageAllocation, device.getMemoryManager());
+            core::ImageViewInfoRequest msaaDepthView(device.getLogicalDevice(), msaaDepth.depthImage);
+            msaaDepthView.format = depthFormat;
+            msaaDepthView.aspectFlags = vk::ImageAspectFlagBits::eDepth;
+            core::ImageUtilities::createImageView(msaaDepthView, msaaDepth.depthImageView);
+
+            vk::UniqueCommandBuffer transitionDepth = core::Utilities::beginSingleTimeCommands(
+                device.getLogicalDevice(), commandPool->getCommandPool());
+            core::ImageUtilities::transitionImageLayout(transitionDepth.get(), msaaDepth.depthImage,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+            core::Utilities::endSingleTimeCommands(device, transitionDepth);
+
+            offscreenResources.depthImageMSAA = std::move(msaaDepth);
         }
 
         // When upscaling, create display-resolution color images for post-upscale output and UI

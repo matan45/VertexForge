@@ -291,6 +291,7 @@ namespace services
 
     struct DecalData
     {
+        uint8_t shape = 0; // 0=Rectangle, 1=Circle, 2=Triangle
         glm::vec3 halfExtents{0.5f, 0.5f, 0.1f};
         asset::AssetRef albedoTextureRef;
         asset::AssetRef normalTextureRef;

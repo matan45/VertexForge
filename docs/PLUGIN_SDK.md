@@ -6,6 +6,8 @@ VertexForge plugins are shared libraries (`.dll`) that extend engine functionali
 
 ## Quick Start
 
+> **Scaffolding (VK-1284):** the editor can generate all of the boilerplate below. Open **Settings > Plugins > New Plugin...**, pick a name, capabilities and optional examples (component registration, editor window), and it creates `plugins/<Name>/` with the three authored files (`premake5.lua`, `<Name>.cpp`, `<Name>.vfplugin`) — `apiVersion` is always the engine's current `VF_PLUGIN_API_VERSION`. Then run `premake5 vs2022` (the project is auto-discovered), build it, and restart the editor. Out-of-tree authors keep using `sdk/template/` (`premake5 export-sdk`).
+
 ### 1. Create Plugin Source
 
 ```cpp
@@ -439,3 +441,5 @@ Each plugin DLL has its own EnTT type ID space. This means:
 ## Plugin Manager
 
 Access via **Settings > Plugins** in the editor. Browse all discovered plugins, view details (version, author, capabilities, dependencies), and enable/disable plugins. Changes take effect on next editor launch.
+
+The **New Plugin...** button scaffolds a ready-to-build plugin project under `plugins/` (see Quick Start above). The new entry appears in the list as *Not Loaded* immediately; it shows *Loaded* after you regenerate the solution, build it, and restart the editor.

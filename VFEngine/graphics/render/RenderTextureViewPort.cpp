@@ -236,6 +236,9 @@ namespace render
         dynInfo.depthAttachment = depthAttach;
 
         core::beginDynamicRendering(commandBuffer, dynInfo);
+        // RenderTexture targets are always single-sample — the scene pipelines are
+        // sample-agnostic (dynamic), so pin their sample count to 1x here.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
 
         vk::Viewport viewport{0.0f, 0.0f,
                                static_cast<float>(width), static_cast<float>(height),

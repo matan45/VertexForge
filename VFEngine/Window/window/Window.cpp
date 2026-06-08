@@ -34,6 +34,16 @@ namespace window {
 		}
 	}
 
+	uint32_t Window::getRefreshRate() const
+	{
+		// In windowed mode glfwGetWindowMonitor returns null; fall back to primary.
+		GLFWmonitor* monitor = window ? glfwGetWindowMonitor(window) : nullptr;
+		if (!monitor) monitor = glfwGetPrimaryMonitor();
+		if (!monitor) return 0u;
+		const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+		return (mode && mode->refreshRate > 0) ? static_cast<uint32_t>(mode->refreshRate) : 0u;
+	}
+
 	void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	{
 		auto userWindow = static_cast<Window*>(glfwGetWindowUserPointer(window));

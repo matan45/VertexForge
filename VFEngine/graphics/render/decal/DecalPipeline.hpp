@@ -25,7 +25,7 @@ namespace render::decal
         glm::mat4 inverseDecalMatrix;
         glm::vec4 color;
         glm::vec4 fadeParams; // x=angleFadeStart, y=angleFadeEnd, z=edgeFalloff, w=normalStrength
-        glm::vec4 textureFlags; // x=hasAlbedo, y=hasNormal, z=hasORM, w=unused
+        glm::vec4 textureFlags; // x=hasAlbedo, y=hasNormal, z=hasORM, w=shape
     };
 
     struct DecalPushConstants

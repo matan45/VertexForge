@@ -76,7 +76,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\imgui;C:\VulkanSDK\1.4.341.1\Include;..\..\dependencies\json\single_include;..\utilities;..\services;..\import\pipeline;..\core\controllers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\imgui;C:\VulkanSDK\1.4.341.1\Include;..\..\dependencies\json\single_include;..\..\dependencies\mType\mType;..\utilities;..\services;..\import\pipeline;..\core\controllers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
@@ -93,7 +93,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;VF_DEVELOPMENT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\imgui;C:\VulkanSDK\1.4.341.1\Include;..\..\dependencies\json\single_include;..\utilities;..\services;..\import\pipeline;..\core\controllers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\imgui;C:\VulkanSDK\1.4.341.1\Include;..\..\dependencies\json\single_include;..\..\dependencies\mType\mType;..\utilities;..\services;..\import\pipeline;..\core\controllers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -116,7 +116,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\imgui;C:\VulkanSDK\1.4.341.1\Include;..\..\dependencies\json\single_include;..\utilities;..\services;..\import\pipeline;..\core\controllers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\imgui;C:\VulkanSDK\1.4.341.1\Include;..\..\dependencies\json\single_include;..\..\dependencies\mType\mType;..\utilities;..\services;..\import\pipeline;..\core\controllers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -142,6 +142,7 @@
     <ClInclude Include="core\PluginContextImpl.hpp" />
     <ClInclude Include="core\PluginEventBus.hpp" />
     <ClInclude Include="core\PluginManager.hpp" />
+    <ClInclude Include="core\PluginScaffolder.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="api\PluginDescriptor.cpp" />

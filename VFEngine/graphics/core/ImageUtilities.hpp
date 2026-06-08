@@ -21,6 +21,8 @@ namespace core
 		vk::ImageUsageFlags usage;
 		vk::MemoryPropertyFlags properties;
 		vk::ImageCreateFlags imageFlags;
+		// MSAA sample count. Default e1 (no MSAA). Set directly by name for MSAA targets.
+		vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1;
 
 		explicit ImageInfoRequest(
 			const vk::Device& logicalDevice,

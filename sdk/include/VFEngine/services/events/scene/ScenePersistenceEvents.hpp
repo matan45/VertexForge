@@ -1,6 +1,7 @@
 #pragma once
 #include "../EventTypes.hpp"
 #include "../../data/EntityHandle.hpp"
+#include <map>
 #include <optional>
 #include <string>
 
@@ -50,6 +51,19 @@ namespace events::scene {
 
     struct GetCurrentScenePathQuery : IQuery<std::string> {
         std::string_view getName() const override { return "GetCurrentScenePath"; }
+    };
+
+    // VK-1365: per-scene plugin enable overrides (plugin name -> enabled).
+    // Only explicit overrides are present; unlisted plugins inherit the global
+    // .vfplugin flag. Persisted in the scene's .vfSettings on SaveScene.
+    struct GetScenePluginSettingsQuery : IQuery<std::map<std::string, bool>> {
+        std::string_view getName() const override { return "GetScenePluginSettings"; }
+    };
+
+    struct SetScenePluginSettingsCommand : ICommand<bool> {
+        std::map<std::string, bool> settings;
+
+        std::string_view getName() const override { return "SetScenePluginSettings"; }
     };
 
     // ============================================

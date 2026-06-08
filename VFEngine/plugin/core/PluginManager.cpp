@@ -4,6 +4,8 @@
 #include "../api/PluginVersion.hpp"
 #include "serialization/SceneSerialization.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
 #include "Pipeline.hpp"
 #include <algorithm>
 #include <unordered_set>
@@ -695,12 +697,133 @@ namespace plugin {
         {
             registrar(PluginContextImpl::getAllBridges());
         }
+
+        // VK-1365: apply per-scene plugin overrides on every scene load/clear.
+        subscribeSceneEvents();
+    }
+
+    void PluginManager::subscribeSceneEvents()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification&)
+            {
+                auto overrides = events::EventDispatcher::instance()
+                                     .query(events::scene::GetScenePluginSettingsQuery{});
+                applySceneActiveStates(overrides);
+            });
+
+        sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&)
+            {
+                resetActiveStatesToGlobal();
+            });
+    }
+
+    void PluginManager::unsubscribeSceneEvents()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (sceneLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(sceneLoadedToken);
+            sceneLoadedToken = {};
+        }
+        if (sceneClearedToken.isValid())
+        {
+            dispatcher.unsubscribe(sceneClearedToken);
+            sceneClearedToken = {};
+        }
+    }
+
+    bool PluginManager::setPluginActive(const std::string& name, bool active)
+    {
+        for (auto& plugin : plugins)
+        {
+            // The descriptor name is the key used by the UI and scene overrides;
+            // legacy orphan DLLs have no descriptor, so fall back to info.name.
+            if (plugin.descriptor.name != name && plugin.info.name != name)
+                continue;
+
+            if (!plugin.initialized || !plugin.instance || !plugin.context)
+                return false;
+            if (plugin.active == active)
+                return false;
+
+            if (active)
+            {
+                // Restore engine channels first so the plugin can re-enqueue/bind
+                // into live channels from onActivate.
+                plugin.context->setActive(true);
+                plugin.active = true;
+                try {
+                    plugin.instance->onActivate();
+                }
+                catch (const std::exception& e) {
+                    vfLogError("Plugin '{}' threw exception during onActivate: {}", name, e.what());
+                }
+                vfLogInfo("Plugin '{}' activated", name);
+            }
+            else
+            {
+                // Let the plugin quiesce its own state (audio/VFX/physics) while
+                // its channels are still live, then suppress.
+                try {
+                    plugin.instance->onDeactivate();
+                }
+                catch (const std::exception& e) {
+                    vfLogError("Plugin '{}' threw exception during onDeactivate: {}", name, e.what());
+                }
+                plugin.context->setActive(false);
+                plugin.active = false;
+                vfLogInfo("Plugin '{}' deactivated", name);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    bool PluginManager::isPluginActive(const std::string& name) const
+    {
+        for (const auto& plugin : plugins)
+        {
+            if (plugin.descriptor.name == name || plugin.info.name == name)
+                return plugin.active;
+        }
+        return false;
+    }
+
+    void PluginManager::applySceneActiveStates(const std::map<std::string, bool>& overrides)
+    {
+        for (auto& plugin : plugins)
+        {
+            // Overrides are keyed by descriptor name (what the UI shows and the
+            // scene stores); legacy orphan DLLs fall back to info.name.
+            const std::string& key = !plugin.descriptor.name.empty()
+                                         ? plugin.descriptor.name
+                                         : plugin.info.name;
+            auto it = overrides.find(key);
+            // Loaded plugins are globally enabled by definition, so inherit == active.
+            bool effective = (it != overrides.end()) ? it->second : true;
+            setPluginActive(key, effective);
+        }
+    }
+
+    void PluginManager::resetActiveStatesToGlobal()
+    {
+        for (auto& plugin : plugins)
+        {
+            const std::string& key = !plugin.descriptor.name.empty()
+                                         ? plugin.descriptor.name
+                                         : plugin.info.name;
+            setPluginActive(key, true);
+        }
     }
 
     void PluginManager::updateAll(float deltaTime)
     {
         for (auto& plugin : plugins) {
-            if (!plugin.initialized || !plugin.instance) {
+            if (!plugin.initialized || !plugin.instance || !plugin.active) {
                 continue;
             }
 
@@ -715,6 +838,8 @@ namespace plugin {
 
     void PluginManager::shutdownAll()
     {
+        unsubscribeSceneEvents();
+
         for (auto it = plugins.rbegin(); it != plugins.rend(); ++it) {
             auto& plugin = *it;
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "types/RenderSettings.hpp"
 #include <memory>
 #include <functional>
 
@@ -44,6 +45,12 @@ namespace controllers {
 
 		// Trigger window resize handling
 		void triggerResize();
+
+		// Apply scene display settings (VSync present mode and MSAA sample count) to the
+		// swapchain and rebuild. The requested MSAA count is clamped against device limits
+		// before being applied; this triggers a resize so the offscreen targets and
+		// pipelines are recreated for the new sample count.
+		void applyDisplaySettings(types::PresentMode presentMode, types::MsaaSamples msaa);
 
 		// Set blit source provider for runtime (offscreen -> swapchain blit)
 		void setBlitSourceProvider(std::function<void*(uint32_t)> provider);

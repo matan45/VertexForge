@@ -44,8 +44,6 @@ namespace windows
         std::string currentSceneName;
         events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken sceneClearedToken;
-        bool openSaveLayoutPopup = false;
-        char layoutName[128] = {};
 
         IBLWindow* iblWindow = nullptr;
         EditorCameraWindow* editorCameraWindow = nullptr;
@@ -226,7 +224,6 @@ namespace windows
     private:
         void handleFileMenu();
         void handleEditMenu();
-        void handleWindowMenu();
         void handleSettingsMenu();
         void handleAddMenu();
         void handleScriptsMenu();

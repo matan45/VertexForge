@@ -19,6 +19,11 @@ namespace services
         dispatcher.registerCommandHandler<events::project::SaveProjectCommand>(
             [this](const events::project::SaveProjectCommand& cmd)
             {
+                if (cmd.filePath.empty())
+                {
+                    return saveProject();
+                }
+
                 return saveProject(cmd.filePath);
             });
 
@@ -102,6 +107,12 @@ namespace services
             return false;
         }
 
+        if (filePath.empty())
+        {
+            vfLogError("Project file path is empty");
+            return false;
+        }
+
         if (!serialization::ProjectSerialization::saveProject(*currentProject, filePath))
         {
             return false;
@@ -118,7 +129,7 @@ namespace services
 
     bool ProjectServiceImpl::saveProject()
     {
-        if (!currentProjectPath)
+        if (!currentProjectPath || currentProjectPath->empty())
         {
             vfLogError("No project path set, use saveProject(filePath) instead");
             return false;
