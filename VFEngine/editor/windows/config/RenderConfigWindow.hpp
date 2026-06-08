@@ -31,6 +31,7 @@ namespace windows
         void applySettings();
         void applyVFXLODSettings();
         void applyAnimationLODSettings();
+        void publishDisplaySettings();
 
     public:
         void draw();

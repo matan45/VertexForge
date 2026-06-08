@@ -166,6 +166,9 @@ namespace windows
         saveCmd.filePath = path;
         dispatcher.execute(saveCmd);
 
+        // Also apply display settings (VSync/MSAA) live when saving to scene.
+        publishDisplaySettings();
+
         isDirty = false;
     }
 
@@ -187,14 +190,19 @@ namespace windows
         shadowCmd.settings = settings;
         dispatcher.execute(shadowCmd);
 
-        // VSync / present mode: applied via a swapchain rebuild on the main thread.
-        events::application::ApplyDisplaySettingsNotification displayNotif;
-        displayNotif.presentMode = settings.display.presentMode;
-        displayNotif.msaa = settings.display.msaa;
-        dispatcher.publish(displayNotif);
+        publishDisplaySettings();
 
         applyVFXLODSettings();
         applyAnimationLODSettings();
+    }
+
+    void RenderConfigWindow::publishDisplaySettings()
+    {
+        // VSync / MSAA: applied via a swapchain + render-target rebuild on the main thread.
+        events::application::ApplyDisplaySettingsNotification displayNotif;
+        displayNotif.presentMode = settings.display.presentMode;
+        displayNotif.msaa = settings.display.msaa;
+        events::EventDispatcher::instance().publish(displayNotif);
     }
 
     void RenderConfigWindow::applyVFXLODSettings()
