@@ -32,6 +32,7 @@ namespace core
 
     class CoroutineManager;
     class ScriptCommunicationManager;
+    class ScriptDebugServer;
 
     class ScriptingAdapter : public ::services::IScriptingProvider
     {
@@ -50,6 +51,7 @@ namespace core
         std::unique_ptr<ScriptWeatherEventBridge> weatherEventBridge;
         std::unique_ptr<ScriptDestructionEventBridge> destructionEventBridge;
         std::unique_ptr<ScriptCommunicationManager> communicationManager;
+        std::unique_ptr<ScriptDebugServer> debugServer;
 
         std::unordered_map<uint64_t, std::string> instanceToClassName;
         std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity;
@@ -120,6 +122,11 @@ namespace core
         void clearError() override;
 
         void setScriptLibraryPath(const std::string& path) override;
+
+        // === Debugger (VK-1371) ===
+        void startDebugServer(int port) override;
+        void stopDebugServer() override;
+        bool isDebuggerActive() const override;
 
         void registerPluginNativeFunction(const std::string& name, std::any function) override;
         void unregisterPluginNativeFunction(const std::string& name) override;

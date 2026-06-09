@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/OffScreen.hpp"
+#include "../../core/RenderManager.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "resource/Types.hpp"
@@ -38,17 +39,16 @@ namespace render::ui
             return false;
         }
 
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &descriptorSetLayout;
-
-        vk::DescriptorSet newDescSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-        updateDescriptorSet(newDescSet, texture->getImageView(), texture->getSampler());
+        uint32_t bindlessIndex = uiBindless.registerTexture(texturePath, texture->getImageView(), texture->getSampler());
+        if (bindlessIndex == render::gpudriven::INVALID_TEXTURE_INDEX)
+        {
+            vfLogWarning("UI bindless table full, cannot register: {}", texturePath);
+            return false;
+        }
 
         TextureEntry entry;
         entry.texture = std::move(texture);
-        entry.descriptorSet = newDescSet;
+        entry.bindlessIndex = bindlessIndex;
         textureCache.emplace(texturePath, std::move(entry));
 
         return true;
@@ -60,26 +60,28 @@ namespace render::ui
         if (!initialized || !imageView || !externalSampler) return;
         if (imageIndex >= swapChain.getImageCount()) return;
 
+        // Each (key, imageIndex) gets its own stable bindless slot, since the view can differ
+        // per swapchain image. The per-image suffix keeps the slots distinct in the bindless
+        // table (which dedups by path). Re-pointing the current image's slot is safe: RenderManager
+        // waited imagesInFlight[imageIndex] before invoking the preRenderCallback that drives this,
+        // so no in-flight command buffer references the slot, and UpdateAfterBind permits the write.
         auto it = externalTextureCache.find(key);
         if (it != externalTextureCache.end())
         {
             auto& entry = it->second;
-            if (imageIndex >= entry.descriptorSets.size())
+            if (imageIndex >= entry.bindlessIndices.size())
                 return;
 
-            if (!entry.descriptorSets[imageIndex])
+            if (entry.bindlessIndices[imageIndex] == render::gpudriven::INVALID_TEXTURE_INDEX)
             {
-                vk::DescriptorSetAllocateInfo allocInfo{};
-                allocInfo.descriptorPool = descriptorPool;
-                allocInfo.descriptorSetCount = 1;
-                allocInfo.pSetLayouts = &descriptorSetLayout;
-
-                entry.descriptorSets[imageIndex] = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+                entry.bindlessIndices[imageIndex] =
+                    uiBindless.registerTexture(key + "#" + std::to_string(imageIndex), imageView, externalSampler);
+                entry.imageViews[imageIndex] = imageView;
+                entry.samplers[imageIndex] = externalSampler;
             }
-
-            if (entry.imageViews[imageIndex] != imageView || entry.samplers[imageIndex] != externalSampler)
+            else if (entry.imageViews[imageIndex] != imageView || entry.samplers[imageIndex] != externalSampler)
             {
-                updateDescriptorSet(entry.descriptorSets[imageIndex], imageView, externalSampler);
+                uiBindless.updateTexture(entry.bindlessIndices[imageIndex], imageView, externalSampler);
                 entry.imageViews[imageIndex] = imageView;
                 entry.samplers[imageIndex] = externalSampler;
             }
@@ -88,17 +90,12 @@ namespace render::ui
 
         if (externalTextureCache.size() >= MAX_EXTERNAL_TEXTURES) return;
 
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &descriptorSetLayout;
-
         ExternalTextureEntry entry;
-        entry.descriptorSets.resize(swapChain.getImageCount());
+        entry.bindlessIndices.assign(swapChain.getImageCount(), render::gpudriven::INVALID_TEXTURE_INDEX);
         entry.imageViews.resize(swapChain.getImageCount());
         entry.samplers.resize(swapChain.getImageCount());
-        entry.descriptorSets[imageIndex] = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-        updateDescriptorSet(entry.descriptorSets[imageIndex], imageView, externalSampler);
+        entry.bindlessIndices[imageIndex] =
+            uiBindless.registerTexture(key + "#" + std::to_string(imageIndex), imageView, externalSampler);
         entry.imageViews[imageIndex] = imageView;
         entry.samplers[imageIndex] = externalSampler;
         externalTextureCache[key] = std::move(entry);
@@ -109,10 +106,10 @@ namespace render::ui
         auto it = externalTextureCache.find(key);
         if (it != externalTextureCache.end())
         {
-            for (auto descSet : it->second.descriptorSets)
+            for (uint32_t i = 0; i < it->second.bindlessIndices.size(); ++i)
             {
-                if (descSet)
-                    device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+                if (it->second.bindlessIndices[i] != render::gpudriven::INVALID_TEXTURE_INDEX)
+                    uiBindless.unregisterTexture(key + "#" + std::to_string(i));
             }
             externalTextureCache.erase(it);
         }
@@ -122,10 +119,10 @@ namespace render::ui
     {
         for (auto& [key, entry] : externalTextureCache)
         {
-            for (auto descSet : entry.descriptorSets)
+            for (uint32_t i = 0; i < entry.bindlessIndices.size(); ++i)
             {
-                if (descSet)
-                    device.getLogicalDevice().freeDescriptorSets(descriptorPool, descSet);
+                if (entry.bindlessIndices[i] != render::gpudriven::INVALID_TEXTURE_INDEX)
+                    uiBindless.unregisterTexture(key + "#" + std::to_string(i));
             }
         }
         externalTextureCache.clear();
@@ -145,6 +142,11 @@ namespace render::ui
         std::vector<UIImageInstance> allInstances;
         allInstances.reserve(images.size());
 
+        // Resolve external/RTT slots against the swapchain image being recorded this frame.
+        // setUIImageDrawList runs in the preRenderCallback, after the imagesInFlight wait, so the
+        // acquired index is valid and the slot it points at is not referenced by an in-flight frame.
+        const uint32_t imageIndex = core::RenderManager::getImageIndex();
+
         UIScissorGroup* currentGroup = nullptr;
         glm::ivec4 currentScissor{-1};
 
@@ -154,9 +156,28 @@ namespace render::ui
 
             std::string resolvedPath = image.texturePath;
             bool isRTTSynthetic = resolvedPath.starts_with("__rtt_");
-            bool hasTexture = externalTextureCache.contains(resolvedPath)
-                           || (!isRTTSynthetic && loadTexture(resolvedPath));
-            if (!hasTexture) continue;
+
+            uint32_t textureIndex = 0;
+            auto extIt = externalTextureCache.find(resolvedPath);
+            if (extIt != externalTextureCache.end())
+            {
+                if (imageIndex >= extIt->second.bindlessIndices.size()) continue;
+                textureIndex = extIt->second.bindlessIndices[imageIndex];
+                if (textureIndex == render::gpudriven::INVALID_TEXTURE_INDEX) continue;
+            }
+            else if (!isRTTSynthetic)
+            {
+                // A file texture that fails to load/register (e.g. the bindless table is
+                // saturated) falls back to the white default at index 0, so the element
+                // keeps its place in the layout instead of silently vanishing.
+                textureIndex = loadTexture(resolvedPath)
+                    ? textureCache.at(resolvedPath).bindlessIndex
+                    : 0;
+            }
+            else
+            {
+                continue; // RTT target not ready this frame
+            }
 
             glm::ivec4 scissorKey{
                 static_cast<int32_t>(image.scissorRect.x), static_cast<int32_t>(image.scissorRect.y),
@@ -171,12 +192,12 @@ namespace render::ui
                 currentScissor = scissorKey;
             }
 
+            // Bindless: texture no longer splits batches. Batches break only on stencil state.
             bool canExtend = false;
             if (!currentGroup->batches.empty())
             {
                 auto& lastBatch = currentGroup->batches.back();
-                canExtend = (lastBatch.texturePath == resolvedPath
-                          && lastBatch.stencilOp == image.stencilOp
+                canExtend = (lastBatch.stencilOp == image.stencilOp
                           && lastBatch.stencilRef == image.stencilRef
                           && lastBatch.discardColor == image.discardColor
                           && lastBatch.alphaThreshold == image.alphaThreshold);
@@ -186,6 +207,7 @@ namespace render::ui
             inst.posAndSize = glm::vec4(image.position, image.size);
             inst.colorTint = image.colorTint;
             inst.uvRect = image.uvRect;
+            inst.textureIndex = textureIndex;
 
             if (canExtend)
             {
@@ -194,7 +216,6 @@ namespace render::ui
             else
             {
                 UITextureBatch batch;
-                batch.texturePath = resolvedPath;
                 batch.firstInstance = static_cast<uint32_t>(allInstances.size());
                 batch.instanceCount = 1;
                 batch.stencilOp = image.stencilOp;
@@ -241,6 +262,10 @@ namespace render::ui
         commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
         commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
 
+        // Bind the UI bindless texture table once for the whole pass; batches index into it.
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
+                                         uiBindless.getDescriptorSet(), nullptr);
+
         glm::vec2 viewportSize(static_cast<float>(swapChain.getDisplayExtent().width),
                                static_cast<float>(swapChain.getDisplayExtent().height));
 
@@ -263,22 +288,6 @@ namespace render::ui
 
             for (const auto& batch : group.batches)
             {
-                vk::DescriptorSet texDescSet;
-                auto it = textureCache.find(batch.texturePath);
-                if (it != textureCache.end())
-                    texDescSet = it->second.descriptorSet;
-                else
-                {
-                    auto extIt = externalTextureCache.find(batch.texturePath);
-                    if (extIt != externalTextureCache.end() &&
-                        imageIndex < extIt->second.descriptorSets.size() &&
-                        extIt->second.descriptorSets[imageIndex])
-                    {
-                        texDescSet = extIt->second.descriptorSets[imageIndex];
-                    }
-                    else continue;
-                }
-
                 vk::Pipeline targetPipeline;
                 switch (batch.stencilOp)
                 {
@@ -304,9 +313,8 @@ namespace render::ui
 
                 commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                                              0, sizeof(UIPushConstants), &pushConstants);
-                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, texDescSet, nullptr);
                 commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
-                render::FrameDrawStats::count();
+                render::FrameDrawStats::count(render::DrawCategory::UI);
             }
         }
 
@@ -343,6 +351,10 @@ namespace render::ui
         commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
         commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
 
+        // Bind the UI bindless texture table once for the whole pass; batches index into it.
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
+                                         uiBindless.getDescriptorSet(), nullptr);
+
         glm::vec2 viewportSize(static_cast<float>(swapChain.getDisplayExtent().width),
                                static_cast<float>(swapChain.getDisplayExtent().height));
 
@@ -365,22 +377,6 @@ namespace render::ui
 
             for (const auto& batch : group.batches)
             {
-                vk::DescriptorSet texDescSet;
-                auto it = textureCache.find(batch.texturePath);
-                if (it != textureCache.end())
-                    texDescSet = it->second.descriptorSet;
-                else
-                {
-                    auto extIt = externalTextureCache.find(batch.texturePath);
-                    if (extIt != externalTextureCache.end() &&
-                        imageIndex < extIt->second.descriptorSets.size() &&
-                        extIt->second.descriptorSets[imageIndex])
-                    {
-                        texDescSet = extIt->second.descriptorSets[imageIndex];
-                    }
-                    else continue;
-                }
-
                 vk::Pipeline targetPipeline;
                 switch (batch.stencilOp)
                 {
@@ -406,9 +402,8 @@ namespace render::ui
 
                 commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                                              0, sizeof(UIPushConstants), &pushConstants);
-                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, texDescSet, nullptr);
                 commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
-                render::FrameDrawStats::count();
+                render::FrameDrawStats::count(render::DrawCategory::UI);
             }
         }
 

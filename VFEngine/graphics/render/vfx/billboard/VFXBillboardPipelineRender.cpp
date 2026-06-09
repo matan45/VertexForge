@@ -136,7 +136,7 @@ namespace render::vfx
                                         0, sizeof(VFXFlipbookPushConstants), &flipbookPC);
 
             commandBuffer.drawIndexed(VFXConstants::QUAD_INDEX_COUNT, currentInstanceCount, 0, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::VFX);
         }
 
         core::endDynamicRendering(commandBuffer);

@@ -70,6 +70,14 @@ namespace services {
         // === Script Library Path ===
         virtual void setScriptLibraryPath(const std::string& path) = 0;
 
+        // === Debugger (VK-1371) ===
+        // Start/stop an embedded mType debug server that an external client (the
+        // VS Code extension) attaches to over TCP to debug engine-run scripts.
+        // isDebuggerActive() reports whether the server is currently listening.
+        virtual void startDebugServer(int port) = 0;
+        virtual void stopDebugServer() = 0;
+        virtual bool isDebuggerActive() const = 0;
+
         // === Plugin Native Function Registration ===
         // The function is type-erased as std::any wrapping a services::NativeFunction
         // (mType's environment::registry::NativeDelegate — {void* userData, fn ptr}).

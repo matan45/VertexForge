@@ -9,9 +9,11 @@ layout(location = 1) in vec2 inTexCoord;   // UV coordinates (0.0 to 1.0)
 layout(location = 2) in vec4 inPosAndSize;  // xy = pixel position, zw = pixel size
 layout(location = 3) in vec4 inColorTint;   // RGBA color tint
 layout(location = 4) in vec4 inUVRect;      // u0, v0, u1, v1
+layout(location = 5) in uint inTextureIndex; // bindless texture slot
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColorTint;
+layout(location = 2) flat out uint fragTextureIndex;
 
 layout(push_constant) uniform PushConstants {
     vec2 viewportSize;
@@ -32,17 +34,20 @@ void main() {
     gl_Position = vec4(ndc, 0.0, 1.0);
     fragTexCoord = mix(inUVRect.xy, inUVRect.zw, inTexCoord);
     fragColorTint = inColorTint;
+    fragTextureIndex = inTextureIndex;
 }
 
 #type FRAGMENT
 #version 460 core
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColorTint;
+layout(location = 2) flat in uint fragTextureIndex;
 
 layout(location = 0) out vec4 outColor;
 
-layout(binding = 0) uniform sampler2D uiTexture;
+layout(set = 0, binding = 0) uniform sampler2D bindlessTextures[];
 
 layout(push_constant) uniform PushConstants {
     vec2 viewportSize;
@@ -51,7 +56,7 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 void main() {
-    vec4 texColor = texture(uiTexture, fragTexCoord);
+    vec4 texColor = texture(bindlessTextures[nonuniformEXT(fragTextureIndex)], fragTexCoord);
     outColor = texColor * fragColorTint;
 
     // Stencil write mode: discard transparent mask pixels so stencil isn't written there

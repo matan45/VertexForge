@@ -88,4 +88,22 @@ namespace events::scripting {
         std::string_view getName() const override { return "SetInstancePriority"; }
     };
 
+    // === Debugger (VK-1371) ===
+    // Start the embedded mType debug server so the VS Code extension can attach
+    // and debug engine-run scripts. Default port matches the extension's attach
+    // default (MYT-379).
+    struct StartScriptDebuggerCommand : ICommand<> {
+        int port = 5005;
+
+        std::string_view getName() const override { return "StartScriptDebugger"; }
+    };
+
+    struct StopScriptDebuggerCommand : ICommand<> {
+        std::string_view getName() const override { return "StopScriptDebugger"; }
+    };
+
+    struct IsScriptDebuggerActiveQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsScriptDebuggerActive"; }
+    };
+
 }

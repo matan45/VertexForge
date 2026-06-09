@@ -1,5 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <array>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -8,6 +9,7 @@
 #include <functional>
 #include "types/CameraTypes.hpp"
 #include "types/RenderSettings.hpp"
+#include "stats/FrameDrawStats.hpp" // render::DrawCategory / FrameDrawStats::kCount
 
 namespace services {
 
@@ -149,6 +151,10 @@ namespace services {
         // Total CPU-recorded draw commands across runtime/viewport passes last frame
         // (VK-1368). Editor-only passes (ImGui, debug gizmos, previews, IBL bake) excluded.
         uint32_t totalDrawCalls = 0;
+
+        // Per-category breakdown of totalDrawCalls (VK-1370); index by render::DrawCategory.
+        // Sums exactly to totalDrawCalls. Same exclusions as above.
+        std::array<uint32_t, render::FrameDrawStats::kCount> drawCallsByCategory = {};
     };
 
     struct PerLightShadowInfo

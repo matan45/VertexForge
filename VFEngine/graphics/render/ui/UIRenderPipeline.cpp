@@ -13,7 +13,8 @@ namespace render::ui
 {
     UIRenderPipeline::UIRenderPipeline(core::Device& device, core::SwapChain& swapChain,
                                        core::OffscreenResources& offscreenResources)
-        : device{device}, swapChain{swapChain}, offscreenResources{offscreenResources}, bufferManager{device}
+        : device{device}, swapChain{swapChain}, offscreenResources{offscreenResources}, bufferManager{device},
+          uiBindless{device, UI_BINDLESS_CAPACITY}
     {
     }
 
@@ -22,10 +23,8 @@ namespace render::ui
     void UIRenderPipeline::init()
     {
         loadShader();
-        createDescriptorSetLayout();
-        createDescriptorPool();
+        uiBindless.init();
         bufferManager.init();
-        createDefaultDescriptorSet();
 
         {
             resource::TextureData whiteTexData;
@@ -35,16 +34,12 @@ namespace render::ui
             auto texture = std::make_unique<core::Texture>(device);
             texture->loadTextureFromData(whiteTexData, vk::Format::eR8G8B8A8Unorm, false);
 
-            vk::DescriptorSetAllocateInfo allocInfo{};
-            allocInfo.descriptorPool = descriptorPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &descriptorSetLayout;
-            vk::DescriptorSet descSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-            updateDescriptorSet(descSet, texture->getImageView(), texture->getSampler());
+            // White 1x1 becomes the bindless default at index 0 (textureIndex 0 fallback).
+            uiBindless.setDefaultTexture(texture->getImageView(), texture->getSampler());
 
             TextureEntry entry;
             entry.texture = std::move(texture);
-            entry.descriptorSet = descSet;
+            entry.bindlessIndex = 0;
             textureCache.emplace("__white_1x1__", std::move(entry));
         }
 
@@ -87,53 +82,10 @@ namespace render::ui
         scissorGroups.clear();
         totalInstanceCount = 0;
 
-        if (descriptorPool) { dev.destroyDescriptorPool(descriptorPool); descriptorPool = nullptr; }
-        if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
+        uiBindless.cleanup();
         bufferManager.cleanUp();
         if (uiShader) { uiShader->cleanUp(); uiShader.reset(); }
         initialized = false;
-    }
-
-    void UIRenderPipeline::createDescriptorSetLayout()
-    {
-        vk::DescriptorSetLayoutBinding binding{0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment};
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &binding;
-        descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
-    }
-
-    void UIRenderPipeline::createDescriptorPool()
-    {
-        uint32_t totalSets = 1 + MAX_UI_TEXTURES + (MAX_EXTERNAL_TEXTURES * swapChain.getImageCount());
-        vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler, totalSets};
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-        poolInfo.maxSets = totalSets;
-        descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
-    }
-
-    void UIRenderPipeline::createDefaultDescriptorSet()
-    {
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &descriptorSetLayout;
-        defaultDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-    }
-
-    void UIRenderPipeline::updateDescriptorSet(vk::DescriptorSet dstSet, vk::ImageView imageView, vk::Sampler sampler)
-    {
-        vk::DescriptorImageInfo imageInfo{sampler, imageView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        vk::WriteDescriptorSet imageWrite{};
-        imageWrite.dstSet = dstSet;
-        imageWrite.dstBinding = 0;
-        imageWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        imageWrite.descriptorCount = 1;
-        imageWrite.pImageInfo = &imageInfo;
-        device.getLogicalDevice().updateDescriptorSets(imageWrite, nullptr);
     }
 
     void UIRenderPipeline::createPipeline()
@@ -153,7 +105,7 @@ namespace render::ui
             .stencilAttachmentFormat = vk::Format::eS8Uint,
             .shaderStages = uiShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding}, .vertexAttributes = allAttribs,
-            .topology = vk::PrimitiveTopology::eTriangleList, .descriptorSetLayouts = {descriptorSetLayout},
+            .topology = vk::PrimitiveTopology::eTriangleList, .descriptorSetLayouts = {uiBindless.getDescriptorSetLayout()},
             .pushConstantSize = sizeof(UIPushConstants),
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eNone, .depthTestEnable = false, .depthWriteEnable = false,

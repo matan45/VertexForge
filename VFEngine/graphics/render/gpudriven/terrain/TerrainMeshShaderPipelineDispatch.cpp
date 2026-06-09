@@ -271,7 +271,7 @@ namespace render::gpudriven
                           0, sizeof(TerrainPushConstants), &pushConstants);
 
         cmd.drawMeshTasksEXT(currentTileCount, 1, 1);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::Terrain);
     }
 
     TerrainCullingStats TerrainMeshShaderPipeline::readStats()

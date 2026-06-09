@@ -462,12 +462,12 @@ namespace render::custom
             {
                 commandBuffer.bindIndexBuffer(meshEntry.indexBuffer, 0, vk::IndexType::eUint32);
                 commandBuffer.drawIndexed(meshEntry.indexCount, 1, 0, 0, 0);
-                render::FrameDrawStats::count();
+                render::FrameDrawStats::count(render::DrawCategory::Custom);
             }
             else
             {
                 commandBuffer.draw(meshEntry.vertexCount, 1, 0, 0);
-                render::FrameDrawStats::count();
+                render::FrameDrawStats::count(render::DrawCategory::Custom);
             }
         }
     }

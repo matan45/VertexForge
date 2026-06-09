@@ -124,6 +124,31 @@ namespace services
                 return isCompiled();
             });
 
+        // === Debugger (VK-1371) ===
+        dispatcher.registerCommandHandler<events::scripting::StartScriptDebuggerCommand>(
+            [this](const events::scripting::StartScriptDebuggerCommand& cmd)
+            {
+                if (scriptingProvider)
+                {
+                    scriptingProvider->startDebugServer(cmd.port);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::scripting::StopScriptDebuggerCommand>(
+            [this](const events::scripting::StopScriptDebuggerCommand&)
+            {
+                if (scriptingProvider)
+                {
+                    scriptingProvider->stopDebugServer();
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::scripting::IsScriptDebuggerActiveQuery>(
+            [this](const events::scripting::IsScriptDebuggerActiveQuery&)
+            {
+                return scriptingProvider && scriptingProvider->isDebuggerActive();
+            });
+
         // === Plugin Native Function Registration ===
         dispatcher.registerCommandHandler<events::scripting::RegisterNativeScriptFunctionCommand>(
             [this](const events::scripting::RegisterNativeScriptFunctionCommand& cmd)

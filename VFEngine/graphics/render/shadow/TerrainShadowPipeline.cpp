@@ -240,6 +240,6 @@ namespace render::shadow
 
         // One task workgroup per tile
         cmd.drawMeshTasksEXT(tileCount, 1, 1);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::Shadows);
     }
 }

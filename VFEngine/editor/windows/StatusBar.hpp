@@ -1,6 +1,8 @@
 #pragma once
 #include "events/EventDispatcher.hpp"
 #include "config/EditorPreferences.hpp"
+#include "stats/FrameDrawStats.hpp" // render::DrawCategory / FrameDrawStats::kCount
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -16,6 +18,7 @@ namespace windows
         static constexpr float refreshInterval = 0.25f;
 
         uint32_t cachedDrawCalls = 0;
+        std::array<uint32_t, render::FrameDrawStats::kCount> cachedDrawCallsByCategory = {};
         uint64_t cachedVramMB = 0;
         std::string currentSceneName;
 

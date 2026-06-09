@@ -143,7 +143,7 @@ namespace render::postprocess
                                           sets.data(), 0, nullptr);
 
         commandBuffer.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::PostProcess);
     }
 
     void ColorGradingEffect::preRecord(const vk::CommandBuffer& commandBuffer,

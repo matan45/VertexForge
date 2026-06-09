@@ -29,6 +29,7 @@ namespace render::gpudriven {
         uint32_t nextTextureIndex = 1; // Index 0 is reserved for default texture
         std::vector<uint32_t> freeIndices;
 
+        uint32_t requestedMaxTextures = MAX_BINDLESS_TEXTURES;
         uint32_t effectiveMaxTextures = MAX_BINDLESS_TEXTURES;
         bool initialized = false;
         bool defaultTextureSet = false;
@@ -36,7 +37,7 @@ namespace render::gpudriven {
         vk::Sampler defaultSampler;
 
     public:
-        explicit BindlessTextureManager(core::Device& device);
+        explicit BindlessTextureManager(core::Device& device, uint32_t maxTextures = MAX_BINDLESS_TEXTURES);
         ~BindlessTextureManager();
 
         BindlessTextureManager(const BindlessTextureManager&) = delete;
@@ -47,6 +48,11 @@ namespace render::gpudriven {
         void cleanup();
 
         uint32_t registerTexture(const std::string& path, vk::ImageView imageView, vk::Sampler sampler);
+
+        // Re-point an already-registered slot at a new view/sampler (e.g. per-frame RTT views).
+        // Requires UpdateAfterBind (set on this manager) and that the slot is not referenced by
+        // an in-flight submission at the time of the write.
+        void updateTexture(uint32_t index, vk::ImageView imageView, vk::Sampler sampler);
 
         void unregisterTexture(const std::string& path);
 

@@ -6,8 +6,8 @@
 
 namespace render::gpudriven {
 
-    BindlessTextureManager::BindlessTextureManager(core::Device& device)
-        : device(device)
+    BindlessTextureManager::BindlessTextureManager(core::Device& device, uint32_t maxTextures)
+        : device(device), requestedMaxTextures(maxTextures)
     {
     }
 
@@ -25,7 +25,7 @@ namespace render::gpudriven {
         // Validate against hardware limits
         auto limits = device.getPhysicalDevice().getProperties().limits;
         uint32_t maxSampledImages = limits.maxPerStageDescriptorSampledImages;
-        effectiveMaxTextures = MAX_BINDLESS_TEXTURES;
+        effectiveMaxTextures = requestedMaxTextures;
         if (effectiveMaxTextures > maxSampledImages)
         {
             vfLogWarning("BindlessTextureManager: MAX_BINDLESS_TEXTURES ({}) exceeds device limit ({}), clamping",
@@ -186,6 +186,16 @@ namespace render::gpudriven {
 
         vfLogDebug("BindlessTextureManager: Registered texture '{}' at index {}", path, index);
         return index;
+    }
+
+    void BindlessTextureManager::updateTexture(uint32_t index, vk::ImageView imageView, vk::Sampler sampler)
+    {
+        if (!initialized || index == INVALID_TEXTURE_INDEX) {
+            return;
+        }
+
+        std::lock_guard lock(textureMutex);
+        updateDescriptor(index, imageView, sampler);
     }
 
     void BindlessTextureManager::unregisterTexture(const std::string& path)

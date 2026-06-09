@@ -163,7 +163,7 @@ namespace render::postprocess
                                           blurSets.data(), 0, nullptr);
 
         commandBuffer.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::PostProcess);
         core::endDynamicRendering(commandBuffer);
 
         // Transition blur image to shader read for composite pass
@@ -190,7 +190,7 @@ namespace render::postprocess
                                           sets.data(), 0, nullptr);
 
         commandBuffer.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::PostProcess);
     }
 
     void DepthOfFieldEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)

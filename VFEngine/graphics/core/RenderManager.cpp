@@ -8,6 +8,7 @@
 #include "print/Log.hpp"
 #include "../window/Window.hpp"
 #include "../imguiPass/ImguiRender.hpp"
+#include "../render/upscaling/UpscaleManager.hpp"
 
 namespace core {
 
@@ -65,6 +66,11 @@ namespace core {
 	{
 		if (window->isWindowMinimized()) return;
 
+		// NVIDIA Reflex render-thread markers (re-fetch the published frame token).
+		// No-ops when Reflex is inactive.
+		auto* reflex = render::upscaling::UpscaleManager::getMutableInstance();
+		using FrameMarker = render::upscaling::UpscaleManager::FrameMarker;
+
 		vk::Result result = device.getLogicalDevice().waitForFences(
 			1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 		if (result != vk::Result::eSuccess) {
@@ -114,6 +120,8 @@ namespace core {
 
 		vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(acquiredImageIndex);
 
+		if (reflex) reflex->setMarkerRender(FrameMarker::RenderSubmitStart);
+
 		// Begin recording commands for the acquired image
 		commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
@@ -141,8 +149,12 @@ namespace core {
 
 		device.submitGraphics(submitInfo, inFlightFences[currentFrame]);
 
+		if (reflex) reflex->setMarkerRender(FrameMarker::RenderSubmitEnd);
+
 		// Present the rendered image (use per-image semaphore)
+		if (reflex) reflex->setMarkerRender(FrameMarker::PresentStart);
 		present(acquiredImageIndex);
+		if (reflex) reflex->setMarkerRender(FrameMarker::PresentEnd);
 
 		// Process deferred deletions for resources that are now safe to destroy
 		// Use monotonic frame counter (not wrapping currentFrame) so FRAMES_BEFORE_DELETE works correctly

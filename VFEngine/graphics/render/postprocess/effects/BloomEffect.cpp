@@ -228,7 +228,7 @@ namespace render::postprocess
                                          0, sizeof(BloomDownsamplePC), &pc);
 
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
 
             core::endDynamicRendering(commandBuffer);
 
@@ -277,7 +277,7 @@ namespace render::postprocess
                                          0, sizeof(BloomUpsamplePC), &pc);
 
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
 
             core::endDynamicRendering(commandBuffer);
 
@@ -312,7 +312,7 @@ namespace render::postprocess
                                      0, sizeof(BloomCompositePC), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
     }
 
     void BloomEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)

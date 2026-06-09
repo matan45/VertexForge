@@ -248,6 +248,9 @@ layout(push_constant) uniform PushConstants {
     uint viewMode;
     float screenWidth;
     float screenHeight;
+    uint hiZMipLevels;
+    // mat4 aligns to offset 32 (after the 5 leading scalars) — matches C++ MeshShaderPushConstants.
+    mat4 prevViewProjection;
 } pc;
 
 // Light structs provided by lighting_functions.glsl include

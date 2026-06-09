@@ -16,6 +16,7 @@
 #include "offscreen/SceneBVHManager.hpp"
 #include "offscreen/LightBVHManager.hpp"
 #include "types/RenderSettings.hpp"
+#include "print/Log.hpp"
 
 namespace controllers
 {
@@ -310,6 +311,23 @@ namespace controllers
                 postprocess::FrameGenSettings offSettings{};
                 upscaleManager->applyFrameGenSettings(offSettings, 0, 0, 0, 0, 0);
             }
+
+            // Reflex. DLSS Frame Generation REQUIRES Reflex, so force it On when Frame Gen
+            // ended up active even if the user left Reflex off. Otherwise honor the user's
+            // standalone Reflex setting. applyReflexSettings is a no-op when unsupported.
+            postprocess::ReflexSettings effectiveReflex = settings.reflex;
+            if (upscaleManager->isFrameGenActive() && !effectiveReflex.enabled)
+            {
+                effectiveReflex.enabled = true;
+                effectiveReflex.mode = postprocess::ReflexMode::On;
+            }
+            if (settings.frameGen.enabled && !upscaleManager->isFrameGenActive()
+                && !upscaleManager->isReflexSupported())
+            {
+                vfLogWarning("Frame Generation requested but Reflex is unavailable on this "
+                             "adapter; Frame Generation will not be enabled.");
+            }
+            upscaleManager->applyReflexSettings(effectiveReflex);
         }
 
         // SSR

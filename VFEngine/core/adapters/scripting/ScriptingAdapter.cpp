@@ -19,6 +19,7 @@
 #include "NativeAPIRegistry.hpp"
 #include "CoroutineManager.hpp"
 #include "ScriptCommunicationManager.hpp"
+#include "ScriptDebugServer.hpp"
 #include "../api/CoroutineAPI.hpp"
 #include "../api/ScriptCommunicationAPI.hpp"
 #include "../api/PluginComponentAPI.hpp"
@@ -56,6 +57,7 @@ namespace core
             interpreter = std::make_unique<::services::ScriptInterpreter>();
 
             coroutineManager = std::make_unique<CoroutineManager>();
+            debugServer = std::make_unique<ScriptDebugServer>();
 
             communicationManager = std::make_unique<ScriptCommunicationManager>(
                 interpreter.get(), instanceToClassName, instanceToEntity, instanceToObject);
@@ -132,6 +134,11 @@ namespace core
     void ScriptingAdapter::cleanUp()
     {
         if (!initialized) return;
+
+        // Stop the debug server first so no script thread is parked at a breakpoint
+        // while we tear the interpreter down.
+        if (debugServer) debugServer->stop();
+        debugServer.reset();
 
         if (weatherEventBridge) weatherEventBridge->unsubscribeAll();
         if (destructionEventBridge) destructionEventBridge->unsubscribeAll();
@@ -492,6 +499,28 @@ namespace core
     {
         scriptLibraryPath = path;
         vfLogInfo("[ScriptingAdapter] Script library path set to: {}", path);
+    }
+
+    void ScriptingAdapter::startDebugServer(int port)
+    {
+        if (!initialized || !debugServer || !interpreter)
+        {
+            return;
+        }
+        debugServer->start(interpreter.get(), port);
+    }
+
+    void ScriptingAdapter::stopDebugServer()
+    {
+        if (debugServer)
+        {
+            debugServer->stop();
+        }
+    }
+
+    bool ScriptingAdapter::isDebuggerActive() const
+    {
+        return debugServer && debugServer->isActive();
     }
 
     void ScriptingAdapter::registerPluginNativeFunction(const std::string& name, std::any function)

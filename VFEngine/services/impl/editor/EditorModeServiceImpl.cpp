@@ -1,6 +1,7 @@
 #include "EditorModeServiceImpl.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/scripting/ScriptingEvents.hpp"
 
 namespace services
 {
@@ -131,6 +132,21 @@ namespace services
         dispatcher.registerCommandHandler<events::editor::SetEditorModeCommand>(
             [this](const events::editor::SetEditorModeCommand& cmd)
             {
+                auto& d = events::EventDispatcher::instance();
+
+                // VK-1371: stop the debugger before tearing scripts down on Stop so
+                // no script is parked at a breakpoint during teardown; start it
+                // before entering Play when requested. Stop is idempotent.
+                if (cmd.mode == EditorMode::Edit)
+                {
+                    d.execute(events::scripting::StopScriptDebuggerCommand{});
+                }
+                else if (cmd.mode == EditorMode::Play && cmd.withDebugger &&
+                         currentMode == EditorMode::Edit)
+                {
+                    d.execute(events::scripting::StartScriptDebuggerCommand{});
+                }
+
                 setMode(cmd.mode);
             });
 

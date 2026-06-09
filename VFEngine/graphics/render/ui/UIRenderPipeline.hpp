@@ -3,6 +3,7 @@
 #include "UIRenderTypes.hpp"
 #include "UIRenderBufferManager.hpp"
 #include "../../core/Texture.hpp"
+#include "../gpudriven/scene/BindlessTextureManager.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -20,7 +21,6 @@ namespace render::ui
 {
     struct UITextureBatch
     {
-        std::string texturePath;
         uint32_t firstInstance = 0;
         uint32_t instanceCount = 0;
         UIStencilOp stencilOp = UIStencilOp::None;
@@ -52,27 +52,28 @@ namespace render::ui
         vk::Pipeline pipelineStencilTest;
         vk::Pipeline pipelineStencilDecNoColor;
         vk::PipelineLayout pipelineLayout;
-        vk::DescriptorSetLayout descriptorSetLayout;
-        vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet defaultDescriptorSet;
 
         UIRenderBufferManager bufferManager;
+
+        // UI-owned bindless texture table (independent of the mesh-material instance).
+        render::gpudriven::BindlessTextureManager uiBindless;
 
         struct TextureEntry
         {
             std::unique_ptr<core::Texture> texture;
-            vk::DescriptorSet descriptorSet;
+            uint32_t bindlessIndex = 0;
         };
         struct ExternalTextureEntry
         {
-            std::vector<vk::DescriptorSet> descriptorSets;
-            std::vector<vk::ImageView> imageViews;
-            std::vector<vk::Sampler> samplers;
+            std::vector<uint32_t> bindlessIndices;  // one slot per swapchain image
+            std::vector<vk::ImageView> imageViews;  // last-seen view per image (change detection)
+            std::vector<vk::Sampler> samplers;      // last-seen sampler per image
         };
         std::unordered_map<std::string, TextureEntry> textureCache;
         std::unordered_map<std::string, ExternalTextureEntry> externalTextureCache;
         static constexpr uint32_t MAX_UI_TEXTURES = 64;
         static constexpr uint32_t MAX_EXTERNAL_TEXTURES = 8;
+        static constexpr uint32_t UI_BINDLESS_CAPACITY = 2048;
 
         std::vector<UIScissorGroup> scissorGroups;
         uint32_t totalInstanceCount = 0;
@@ -101,12 +102,8 @@ namespace render::ui
 
     private:
         void loadShader();
-        void createDescriptorSetLayout();
-        void createDescriptorPool();
-        void createDefaultDescriptorSet();
         void createPipeline();
 
-        void updateDescriptorSet(vk::DescriptorSet dstSet, vk::ImageView imageView, vk::Sampler sampler);
         bool loadTexture(const std::string& texturePath);
     };
 }

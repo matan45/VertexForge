@@ -366,7 +366,7 @@ namespace render::mesh
             commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
             commandBuffer.bindIndexBuffer(lod.indexBuffer, 0, vk::IndexType::eUint32);
             commandBuffer.drawIndexed(lod.indexCount, 1, 0, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::Meshes);
         }
 
         core::endDynamicRendering(commandBuffer);

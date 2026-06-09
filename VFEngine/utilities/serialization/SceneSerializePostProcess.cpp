@@ -40,6 +40,31 @@ namespace serialization
             };
         }
 
+        json serializeUpscale(const postprocess::UpscaleSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"mode", static_cast<int>(s.mode)},
+                {"quality", static_cast<int>(s.quality)}
+            };
+        }
+
+        json serializeFrameGen(const postprocess::FrameGenSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"numFramesToGenerate", s.numFramesToGenerate}
+            };
+        }
+
+        json serializeReflex(const postprocess::ReflexSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"mode", static_cast<int>(s.mode)}
+            };
+        }
+
         json serializeBloom(const postprocess::BloomSettings& s)
         {
             return {
@@ -231,6 +256,44 @@ namespace serialization
                 s.toe = std::clamp(tm["toe"].get<float>(), 0.0f, 1.0f);
             if (tm.contains("shoulder") && tm["shoulder"].is_number())
                 s.shoulder = std::clamp(tm["shoulder"].get<float>(), 0.0f, 1.0f);
+        }
+
+        void deserializeUpscale(const json& j, postprocess::UpscaleSettings& s)
+        {
+            if (!j.contains("upscale") || !j["upscale"].is_object())
+                return;
+            const auto& u = j["upscale"];
+            if (u.contains("enabled") && u["enabled"].is_boolean())
+                s.enabled = u["enabled"].get<bool>();
+            if (u.contains("mode") && u["mode"].is_number_integer())
+                s.mode = static_cast<postprocess::UpscaleMode>(
+                    std::clamp(u["mode"].get<int>(), 0, 3));
+            if (u.contains("quality") && u["quality"].is_number_integer())
+                s.quality = static_cast<postprocess::UpscaleQuality>(
+                    std::clamp(u["quality"].get<int>(), 0, 4));
+        }
+
+        void deserializeFrameGen(const json& j, postprocess::FrameGenSettings& s)
+        {
+            if (!j.contains("frameGen") || !j["frameGen"].is_object())
+                return;
+            const auto& fg = j["frameGen"];
+            if (fg.contains("enabled") && fg["enabled"].is_boolean())
+                s.enabled = fg["enabled"].get<bool>();
+            if (fg.contains("numFramesToGenerate") && fg["numFramesToGenerate"].is_number_unsigned())
+                s.numFramesToGenerate = std::clamp(fg["numFramesToGenerate"].get<uint32_t>(), 1u, 3u);
+        }
+
+        void deserializeReflex(const json& j, postprocess::ReflexSettings& s)
+        {
+            if (!j.contains("reflex") || !j["reflex"].is_object())
+                return;
+            const auto& r = j["reflex"];
+            if (r.contains("enabled") && r["enabled"].is_boolean())
+                s.enabled = r["enabled"].get<bool>();
+            if (r.contains("mode") && r["mode"].is_number_integer())
+                s.mode = static_cast<postprocess::ReflexMode>(
+                    std::clamp(r["mode"].get<int>(), 0, 2));
         }
 
         void deserializeBloom(const json& j, postprocess::BloomSettings& s)
@@ -521,6 +584,9 @@ namespace serialization
         json j;
         j["enabled"] = settings.enabled;
         j["toneMapping"] = serializeToneMapping(settings.toneMapping);
+        j["upscale"] = serializeUpscale(settings.upscale);
+        j["frameGen"] = serializeFrameGen(settings.frameGen);
+        j["reflex"] = serializeReflex(settings.reflex);
         j["bloom"] = serializeBloom(settings.bloom);
         j["vignette"] = serializeVignette(settings.vignette);
         j["chromaticAberration"] = serializeChromaticAberration(settings.chromaticAberration);
@@ -540,6 +606,9 @@ namespace serialization
         if (j.contains("enabled") && j["enabled"].is_boolean())
             settings.enabled = j["enabled"].get<bool>();
         deserializeToneMapping(j, settings.toneMapping);
+        deserializeUpscale(j, settings.upscale);
+        deserializeFrameGen(j, settings.frameGen);
+        deserializeReflex(j, settings.reflex);
         deserializeBloom(j, settings.bloom);
         deserializeVignette(j, settings.vignette);
         deserializeChromaticAberration(j, settings.chromaticAberration);

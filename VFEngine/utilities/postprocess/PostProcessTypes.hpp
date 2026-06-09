@@ -277,6 +277,21 @@ namespace postprocess
         uint32_t numFramesToGenerate = 1; // 1 = 2x FPS, 2 = 3x, 3 = 4x (Blackwell only)
     };
 
+    // NVIDIA Reflex low-latency mode (NVIDIA-only, via Streamline). Maps to
+    // sl::ReflexMode in UpscaleManager (Off / eLowLatency / eLowLatencyWithBoost).
+    enum class ReflexMode : uint8_t
+    {
+        Off = 0,
+        On,       // Low Latency
+        OnBoost   // Low Latency + Boost (prioritize latency over consistency)
+    };
+
+    struct ReflexSettings
+    {
+        bool enabled = false;
+        ReflexMode mode = ReflexMode::On;
+    };
+
     struct PostProcessSettings
     {
         bool enabled = false;
@@ -284,6 +299,7 @@ namespace postprocess
         ToneMappingSettings toneMapping;
         UpscaleSettings upscale;
         FrameGenSettings frameGen;
+        ReflexSettings reflex;
         BloomSettings bloom;
         VignetteSettings vignette;
         ChromaticAberrationSettings chromaticAberration;

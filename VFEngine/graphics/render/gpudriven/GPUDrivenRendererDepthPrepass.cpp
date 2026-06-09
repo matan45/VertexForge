@@ -124,7 +124,7 @@ namespace render::gpudriven
 
                     depthPrepassPipeline->pushSceneConstants(cmd, scenePC);
 
-                    render::FrameDrawStats::count();
+                    render::FrameDrawStats::count(render::DrawCategory::Meshes);
                     cmd.drawMeshTasksIndirectCountEXT(
                         batchManager->getCombinedDrawCommandBuffer(),
                         cmdOffset,
@@ -168,7 +168,7 @@ namespace render::gpudriven
 
                 depthPrepassPipeline->pushTerrainConstants(cmd, terrainPC);
                 cmd.drawMeshTasksEXT(terrainPC.tileCount, 1, 1);
-                render::FrameDrawStats::count();
+                render::FrameDrawStats::count(render::DrawCategory::Meshes);
             }
         }
 
