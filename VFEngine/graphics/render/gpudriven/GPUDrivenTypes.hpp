@@ -8,6 +8,7 @@
 #include "MeshletBufferTypes.hpp"
 #include "../../../services/data/CullingCategories.hpp"
 #include "../common/CameraTypes.hpp"
+#include "../../core/BindlessConstants.hpp"
 
 namespace render::gpudriven
 {
@@ -24,12 +25,12 @@ namespace render::gpudriven
     constexpr uint32_t MAX_DRAW_COMMANDS = 700000;
     constexpr uint32_t DEFAULT_BATCH_COUNT = 4;
     constexpr uint32_t MAX_BATCH_COUNT = 8;
-    constexpr uint32_t MAX_BINDLESS_TEXTURES = 16384;
+    using core::MAX_BINDLESS_TEXTURES;
     constexpr uint32_t MAX_SHADER_GROUPS = 16;
     constexpr uint32_t LOD_LEVEL_COUNT = 4;
     constexpr uint32_t TERRAIN_LOD_LEVEL_COUNT = 6;
     constexpr uint32_t CULL_WORKGROUP_SIZE = 64;
-    constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
+    using core::INVALID_TEXTURE_INDEX;
 
     // enableLODSelection values — must match camera_types.glsl constants
     constexpr uint32_t LOD_SELECTION_DISABLED       = 0;

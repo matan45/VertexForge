@@ -47,6 +47,7 @@ namespace render::ui
         glm::vec4 posAndSize;  // xy = pixel position, zw = pixel size
         glm::vec4 colorTint;   // RGBA color tint
         glm::vec4 uvRect{0.0f, 0.0f, 1.0f, 1.0f}; // u0, v0, u1, v1
+        uint32_t textureIndex = 0; // bindless texture slot (0 = white fallback)
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -57,9 +58,9 @@ namespace render::ui
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 3> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 4> attributes{};
 
             attributes[0].binding = 1;
             attributes[0].location = 2;
@@ -75,6 +76,11 @@ namespace render::ui
             attributes[2].location = 4;
             attributes[2].format = vk::Format::eR32G32B32A32Sfloat;
             attributes[2].offset = offsetof(UIImageInstance, uvRect);
+
+            attributes[3].binding = 1;
+            attributes[3].location = 5;
+            attributes[3].format = vk::Format::eR32Uint;
+            attributes[3].offset = offsetof(UIImageInstance, textureIndex);
 
             return attributes;
         }
