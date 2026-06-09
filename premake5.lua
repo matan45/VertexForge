@@ -140,16 +140,16 @@ project "Editor"
    -- from Runtime, so this does not affect shipped games.
    filter "configurations:Release"
       postbuildcommands {
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.common.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.pcl.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss_g.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlssg.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.directsr.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.reflex.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/NvLowLatencyVk.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.common.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.pcl.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_g.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssg.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
       }
    filter {}
 
