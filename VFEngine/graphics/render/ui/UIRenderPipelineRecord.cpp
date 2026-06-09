@@ -165,13 +165,18 @@ namespace render::ui
                 textureIndex = extIt->second.bindlessIndices[imageIndex];
                 if (textureIndex == render::gpudriven::INVALID_TEXTURE_INDEX) continue;
             }
-            else if (!isRTTSynthetic && loadTexture(resolvedPath))
+            else if (!isRTTSynthetic)
             {
-                textureIndex = textureCache.at(resolvedPath).bindlessIndex;
+                // A file texture that fails to load/register (e.g. the bindless table is
+                // saturated) falls back to the white default at index 0, so the element
+                // keeps its place in the layout instead of silently vanishing.
+                textureIndex = loadTexture(resolvedPath)
+                    ? textureCache.at(resolvedPath).bindlessIndex
+                    : 0;
             }
             else
             {
-                continue;
+                continue; // RTT target not ready this frame
             }
 
             glm::ivec4 scissorKey{

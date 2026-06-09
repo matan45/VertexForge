@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 #include <atomic>
+#include <mutex>
 #include <cstdint>
 
 namespace core
@@ -189,6 +190,12 @@ namespace render::upscaling
         uint32_t reflexTokenIndex[kReflexTokenRing] = {};
         std::atomic<uint32_t> reflexFrameIndex{0};
         std::atomic<uint32_t> lastKickedFrameIndex{0};
+        // acquireFrameToken() reads/writes the ring slots from both the main thread
+        // (beginReflexFrame/reflexSleep/setMarkerMain) and the render thread
+        // (setMarkerRender), which can target the same slot in a frame. The two ring
+        // fields (pointer + index) must be read/written as a unit, so guard them with
+        // a small mutex — this is off the per-draw hot path (a handful of calls/frame).
+        std::mutex reflexTokenMutex;
 
         // Resolve the FrameToken (void*) for a given monotonic frame index, fetching
         // and caching it in the ring if absent. Returns nullptr when Streamline is down.

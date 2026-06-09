@@ -571,6 +571,8 @@ namespace render::upscaling
         if (!streamlineAvailable) return nullptr;
 
         const uint32_t slot = index % kReflexTokenRing;
+        // Serialize ring access: main and render threads can hit the same slot.
+        std::lock_guard<std::mutex> lock(reflexTokenMutex);
         if (reflexTokenRing[slot] != nullptr && reflexTokenIndex[slot] == index)
             return reflexTokenRing[slot];
 

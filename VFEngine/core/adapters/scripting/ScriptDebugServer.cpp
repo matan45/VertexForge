@@ -176,21 +176,24 @@ namespace core
     {
         for (;;)
         {
-            std::size_t nl = recvBuffer.find('\n');
-            if (nl != std::string::npos)
-            {
-                outLine = recvBuffer.substr(0, nl);
-                if (!outLine.empty() && outLine.back() == '\r')
-                {
-                    outLine.pop_back();
-                }
-                recvBuffer.erase(0, nl + 1);
-                return true;
-            }
-
+            // recvBuffer is shared with start()/onAccept (which clear it under
+            // clientMutex), so every read/mutate of it is taken under the lock too.
+            // The lock is released around the blocking recv() below so stop() can
+            // still grab clientMutex to close the socket and unblock us.
             std::shared_ptr<net::ISocket> sock;
             {
                 std::lock_guard<std::mutex> lock(clientMutex);
+                std::size_t nl = recvBuffer.find('\n');
+                if (nl != std::string::npos)
+                {
+                    outLine = recvBuffer.substr(0, nl);
+                    if (!outLine.empty() && outLine.back() == '\r')
+                    {
+                        outLine.pop_back();
+                    }
+                    recvBuffer.erase(0, nl + 1);
+                    return true;
+                }
                 sock = clientSocket;
             }
             if (!sock)
@@ -215,7 +218,10 @@ namespace core
             {
                 return false; // socket closed
             }
-            recvBuffer += chunk;
+            {
+                std::lock_guard<std::mutex> lock(clientMutex);
+                recvBuffer += chunk;
+            }
         }
     }
 }

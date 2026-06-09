@@ -210,7 +210,13 @@ namespace render
         // records begin dynamic rendering with colorLoad (expects COLOR_ATTACHMENT_OPTIMAL), so transition
         // it here. Without upscaling the UI targets the render-res colorImages, which the graph already
         // transitions via the UIOverlays pass's ColorAttachmentWrite declaration — leave that path alone.
-        const bool hasDisplay = !offscreenResources.displayColorImages.empty();
+        const bool hasUIImages = uiPipelineInitialized && !currentUIImageDrawList.empty();
+        const bool hasUIText = uiTextPipelineInitialized && !currentUITextDrawList.empty();
+        // Only round-trip the display target's layout when we actually record UI into it.
+        // With nothing to draw the transition pair is a no-op that would still assert the
+        // image is currently in SHADER_READ_ONLY_OPTIMAL — skip it to avoid a spurious
+        // barrier and a layout-mismatch if the post-upscale path left it elsewhere.
+        const bool hasDisplay = !offscreenResources.displayColorImages.empty() && (hasUIImages || hasUIText);
 
         if (hasDisplay)
             core::ImageUtilities::transitionImageLayout(commandBuffer,
@@ -218,10 +224,10 @@ namespace render
                 vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
                 vk::ImageAspectFlagBits::eColor);
 
-        if (uiPipelineInitialized && !currentUIImageDrawList.empty())
+        if (hasUIImages)
             uiPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
 
-        if (uiTextPipelineInitialized && !currentUITextDrawList.empty())
+        if (hasUIText)
             uiTextPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
 
         // Restore to SHADER_READ_ONLY_OPTIMAL so render() can sample displayColorImages for presentation.
