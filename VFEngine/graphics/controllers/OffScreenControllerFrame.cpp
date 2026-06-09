@@ -269,8 +269,13 @@ namespace controllers
         ctx.lightBvhManager = lightBvhManager.get();
         ctx.cameraController = cameraController.get();
         ctx.playModeActive = playModeActive;
-        ctx.viewportWidth = swapChain.getSwapchainExtent().width;
-        ctx.viewportHeight = swapChain.getSwapchainExtent().height;
+        // Screen-space UI lays out and composites at DISPLAY resolution (getDisplayExtent), not the
+        // render resolution (getSwapchainExtent, which is downscaled when upscaling/DLSS is active).
+        // The UI pipelines normalize positions against getDisplayExtent(), so the layout space must
+        // match — otherwise the HUD shrinks toward the origin when upscaling is on. The two extents
+        // are equal when upscaling is off, so this is a no-op in that case.
+        ctx.viewportWidth = swapChain.getDisplayExtent().width;
+        ctx.viewportHeight = swapChain.getDisplayExtent().height;
 
         if (ctx.playModeActive)
         {
