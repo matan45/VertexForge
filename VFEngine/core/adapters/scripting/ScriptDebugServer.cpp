@@ -55,7 +55,10 @@ namespace core
                 }
                 if (sock)
                 {
-                    sock->send(line + "\n");
+                    // Never let a socket error escape: this runs on the debug
+                    // worker thread, and an uncaught throw would terminate it.
+                    try { sock->send(line + "\n"); }
+                    catch (...) { /* client gone; the read side detects EOF */ }
                 }
             });
 
@@ -184,7 +187,19 @@ namespace core
                 return false;
             }
 
-            std::string chunk = sock->recv(4096);
+            // recv() throws on socket error (e.g. when stop() closes the socket
+            // from the main thread to unblock us). This runs on the worker
+            // thread, so an escaping exception would terminate the process —
+            // treat any failure as EOF and end the loop cleanly.
+            std::string chunk;
+            try
+            {
+                chunk = sock->recv(4096);
+            }
+            catch (...)
+            {
+                return false;
+            }
             if (chunk.empty())
             {
                 return false; // socket closed
