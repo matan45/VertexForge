@@ -2,6 +2,7 @@
 
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
+#include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 
@@ -47,6 +48,10 @@ namespace render::gpudriven
         float screenWidth;
         float screenHeight;
         uint32_t hiZMipLevels;
+        // Previous-frame view-projection for motion-vector output (MOTION_VECTORS_ENABLED,
+        // e.g. when DLSS upscaling is on). alignas(16) places it at offset 32 to match the
+        // shader's std430 push-constant layout (mat4 aligns after the 5 leading scalars).
+        alignas(16) glm::mat4 prevViewProjection{1.0f};
     };
 
     // viewMode bit packing: bits 0-7 = viewMode, bit 8 = frustum culling, bit 9 = backface culling, bit 11 = occlusion culling

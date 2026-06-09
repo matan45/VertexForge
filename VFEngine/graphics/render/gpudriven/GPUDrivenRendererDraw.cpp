@@ -130,6 +130,8 @@ namespace render::gpudriven
                 pushConstants.screenWidth = dispatchWidth;
                 pushConstants.screenHeight = dispatchHeight;
                 pushConstants.hiZMipLevels = prepassHiZMipLevels;
+                // Previous-frame VP for motion-vector output (used when MOTION_VECTORS_ENABLED, e.g. DLSS).
+                pushConstants.prevViewProjection = cameraBuffer->getData().prevViewProjection;
 
                 cmd.pushConstants(
                     layout,
@@ -213,6 +215,8 @@ namespace render::gpudriven
             if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
             pushConstants.screenWidth = dispatchWidth;
             pushConstants.screenHeight = dispatchHeight;
+            // Previous-frame VP for motion-vector output (used when MOTION_VECTORS_ENABLED, e.g. DLSS).
+            pushConstants.prevViewProjection = cameraBuffer->getData().prevViewProjection;
 
             cmd.pushConstants(
                 layout,
@@ -294,6 +298,8 @@ namespace render::gpudriven
             if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
             pushConstants.screenWidth = dispatchWidth;
             pushConstants.screenHeight = dispatchHeight;
+            // Previous-frame VP for motion-vector output (used when MOTION_VECTORS_ENABLED, e.g. DLSS).
+            pushConstants.prevViewProjection = cameraBuffer->getData().prevViewProjection;
 
             cmd.pushConstants(
                 layout,
@@ -375,6 +381,8 @@ namespace render::gpudriven
             if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
             pushConstants.screenWidth = dispatchWidth;
             pushConstants.screenHeight = dispatchHeight;
+            // Previous-frame VP for motion-vector output (used when MOTION_VECTORS_ENABLED, e.g. DLSS).
+            pushConstants.prevViewProjection = cameraBuffer->getData().prevViewProjection;
 
             cmd.pushConstants(
                 layout,
