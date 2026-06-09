@@ -288,6 +288,53 @@ namespace windows
                 }
             }
 
+            // Reflex / Low Latency — NVIDIA-only, independent of upscaling. Always shown so the
+            // user can reduce latency without DLSS. Required (and forced on) by Frame Generation.
+            {
+                ImGui::Spacing();
+                ImGui::SeparatorText("Reflex / Low Latency");
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto status = dispatcher.query(events::postprocess::GetUpscaleStatusQuery{});
+
+                bool canEnableReflex = status.reflexSupported;
+                if (!canEnableReflex) ImGui::BeginDisabled();
+                if (ImGui::Checkbox("Enable Reflex", &settings.reflex.enabled))
+                    isDirty = true;
+                if (!canEnableReflex)
+                {
+                    ImGui::EndDisabled();
+                    ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+                        "Reflex not supported (requires an NVIDIA GPU with Streamline).");
+                }
+
+                if (settings.reflex.enabled && canEnableReflex)
+                {
+                    const char* reflexModeNames[] = {"On (Low Latency)", "On + Boost"};
+                    // settings.reflex.mode is On(1) or OnBoost(2); map to 0/1 for the combo.
+                    int currentReflexMode = (settings.reflex.mode == postprocess::ReflexMode::OnBoost) ? 1 : 0;
+                    if (ImGui::Combo("Reflex Mode", &currentReflexMode, reflexModeNames, IM_ARRAYSIZE(reflexModeNames)))
+                    {
+                        settings.reflex.mode = (currentReflexMode == 1)
+                            ? postprocess::ReflexMode::OnBoost
+                            : postprocess::ReflexMode::On;
+                        isDirty = true;
+                    }
+                }
+
+                const char* activeReflex = "Off";
+                if (status.reflexActive)
+                    activeReflex = (status.reflexMode == postprocess::ReflexMode::OnBoost) ? "On + Boost" : "On";
+                ImGui::Text("Reflex: %s", activeReflex);
+
+                if (status.latencyValid)
+                {
+                    ImGui::Text("GPU frame: %.2f ms", status.gpuFrameTimeUs / 1000.0f);
+                    if (status.totalLatencyUs > 0)
+                        ImGui::Text("Total latency: %.2f ms", status.totalLatencyUs / 1000.0f);
+                }
+            }
+
             ImGui::Unindent(10.0f);
         }
     }

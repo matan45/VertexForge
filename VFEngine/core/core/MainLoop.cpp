@@ -8,6 +8,7 @@
 #include "resource/ResourceManager.hpp"
 #include "scene/LevelHandler.hpp"
 #include "threading/JobSystem.hpp"
+#include "../../graphics/render/upscaling/UpscaleManager.hpp"
 
 #include <thread>
 #include <imgui.h>
@@ -54,6 +55,15 @@ namespace core {
 		while (!mainWindow->shouldClose()) {
 			mainWindow->pollEvents();
 
+			// NVIDIA Reflex: mint this frame's token, mark input/latency ping, then sleep
+			// as early as possible to reduce render/input latency. No-ops when Reflex inactive.
+			auto* reflex = render::upscaling::UpscaleManager::getMutableInstance();
+			if (reflex) {
+				reflex->beginReflexFrame();
+				reflex->setMarkerMain(render::upscaling::UpscaleManager::FrameMarker::InputPing);
+				reflex->reflexSleep();
+			}
+
 			engineTime::Timer::update();
 
 			// Wait for render thread to finish previous frame before starting new frame.
@@ -62,9 +72,17 @@ namespace core {
 
 			// The frame callback orchestrates the entire frame pipeline
 			// (service updates, scene graph, post-update, imgui, render)
+			if (reflex)
+				reflex->setMarkerMain(render::upscaling::UpscaleManager::FrameMarker::SimulationStart);
 			if (frameCallback) {
+				// Publish the frame index before frameCallback kicks the render thread,
+				// so the render thread re-fetches the matching Reflex token.
+				if (reflex)
+					reflex->publishRenderFrameIndex();
 				frameCallback();
 			}
+			if (reflex)
+				reflex->setMarkerMain(render::upscaling::UpscaleManager::FrameMarker::SimulationEnd);
 		}
 	}
 

@@ -52,6 +52,17 @@ namespace core
             status.displayHeight = res.getDisplayHeight();
             status.dlssGSupported = mgr->isDLSSGSupported();
             status.frameGenActive = mgr->isFrameGenActive();
+
+            status.reflexSupported = mgr->isReflexSupported();
+            status.reflexActive = mgr->isReflexActive();
+            status.reflexMode = mgr->getActiveReflexMode();
+
+            // getUpscaleStatus runs on the ImGui/main thread, so the non-thread-safe
+            // slReflexGetState inside getLatency() is safe here.
+            auto latency = mgr->getLatency();
+            status.latencyValid = latency.valid;
+            status.gpuFrameTimeUs = latency.gpuFrameTimeUs;
+            status.totalLatencyUs = latency.totalLatencyUs;
         }
         return status;
     }

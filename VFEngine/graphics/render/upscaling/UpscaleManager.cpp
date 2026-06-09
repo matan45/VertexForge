@@ -65,7 +65,9 @@ namespace render::upscaling
             sl::kFeatureDLSS,
              sl::kFeatureDLSS_G,
             sl::kFeatureDirectSR,
-            sl::kFeatureReflex
+            sl::kFeatureReflex,
+            // PCL provides slPCLSetMarker; without it every latency marker fails to resolve.
+            sl::kFeaturePCL
         };
 
         sl::Preferences prefs{};
@@ -176,8 +178,8 @@ namespace render::upscaling
                 slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
             }
-            if (reflexEnabled)
-                disableReflex();
+            if (reflexActive)
+                applyReflexSettings({});
             slShutdown();
             streamlineAvailable = false;
             streamlineInitialized = false;
@@ -223,6 +225,11 @@ namespace render::upscaling
         directSRSupported = (directSRResult == sl::Result::eOk);
         vfLogInfo("Streamline DirectSR support query: {} ({})",
                   slResultToString(directSRResult), static_cast<int>(directSRResult));
+
+        sl::Result reflexResult = slIsFeatureSupported(sl::kFeatureReflex, adapterInfo);
+        reflexSupported = (reflexResult == sl::Result::eOk);
+        vfLogInfo("Streamline Reflex support query: {} ({})",
+                  slResultToString(reflexResult), static_cast<int>(reflexResult));
 
         // Check if DLSS feature actually loaded
         if (dlssSupported)
@@ -345,13 +352,12 @@ namespace render::upscaling
 
         sl::ViewportHandle viewport{0};
 
-        // Get frame token — use a monotonically increasing counter, not taaFrameIndex
-        // which wraps around and causes "Setting constants multiple times" errors.
-        static uint32_t slFrameCounter = 0;
-        uint32_t currentFrame = slFrameCounter++;
-        sl::FrameToken* frameToken = nullptr;
-        sl::Result tokenResult = slGetNewFrameToken(frameToken, &currentFrame);
-        if (tokenResult != sl::Result::eOk || !frameToken) return false;
+        // Reuse the shared per-frame Reflex token (minted on the main thread, re-fetched
+        // here by the published index) so DLSS constants/tags align with the Reflex frame
+        // and we don't double-mint tokens that trigger "Setting constants multiple times".
+        sl::FrameToken* frameToken =
+            static_cast<sl::FrameToken*>(acquireFrameToken(lastKickedFrameIndex.load(std::memory_order_acquire)));
+        if (!frameToken) return false;
 
         // Set constants — all SL matrices are row-major, GLM is column-major
         sl::Constants constants{};
@@ -517,35 +523,180 @@ namespace render::upscaling
         // which is handled via sl::Constants::reset in evaluate()
     }
 
-    void UpscaleManager::enableReflex()
+    void UpscaleManager::applyReflexSettings(const ::postprocess::ReflexSettings& settings)
     {
 #ifdef VF_STREAMLINE_ENABLED
-        if (!streamlineAvailable || !deviceSet) return;
+        if (!streamlineAvailable || !deviceSet || !reflexSupported)
+        {
+            reflexActive = false;
+            activeReflexMode = ::postprocess::ReflexMode::Off;
+            return;
+        }
 
         sl::ReflexOptions options{};
-        options.mode = sl::ReflexMode::eLowLatency;
+        if (!settings.enabled)
+        {
+            options.mode = sl::ReflexMode::eOff;
+        }
+        else
+        {
+            options.mode = (settings.mode == ::postprocess::ReflexMode::OnBoost)
+                ? sl::ReflexMode::eLowLatencyWithBoost
+                : sl::ReflexMode::eLowLatency;
+        }
         options.frameLimitUs = 0;
         options.useMarkersToOptimize = false;
 
         sl::Result result = slReflexSetOptions(options);
-        reflexEnabled = (result == sl::Result::eOk);
-        vfLogInfo("Streamline Reflex: {} ({})",
-                  reflexEnabled ? "enabled" : "failed",
+        if (result == sl::Result::eOk)
+        {
+            reflexActive = settings.enabled;
+            activeReflexMode = settings.enabled ? settings.mode : ::postprocess::ReflexMode::Off;
+        }
+        else
+        {
+            reflexActive = false;
+            activeReflexMode = ::postprocess::ReflexMode::Off;
+        }
+        vfLogInfo("Streamline Reflex: mode={} ({})",
+                  !settings.enabled ? "Off"
+                      : (settings.mode == ::postprocess::ReflexMode::OnBoost ? "On+Boost" : "On"),
                   slResultToString(result));
 #endif
     }
 
-    void UpscaleManager::disableReflex()
+    void* UpscaleManager::acquireFrameToken(uint32_t index)
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!streamlineAvailable) return nullptr;
+
+        const uint32_t slot = index % kReflexTokenRing;
+        if (reflexTokenRing[slot] != nullptr && reflexTokenIndex[slot] == index)
+            return reflexTokenRing[slot];
+
+        sl::FrameToken* token = nullptr;
+        uint32_t frameIndex = index;
+        sl::Result result = slGetNewFrameToken(token, &frameIndex);
+        if (result != sl::Result::eOk || !token)
+            return nullptr;
+
+        reflexTokenRing[slot] = token;
+        reflexTokenIndex[slot] = index;
+        return token;
+#else
+        (void)index;
+        return nullptr;
+#endif
+    }
+
+    void UpscaleManager::beginReflexFrame()
     {
 #ifdef VF_STREAMLINE_ENABLED
         if (!streamlineAvailable) return;
-
-        sl::ReflexOptions options{};
-        options.mode = sl::ReflexMode::eOff;
-        slReflexSetOptions(options);
-        reflexEnabled = false;
-        vfLogInfo("Streamline Reflex: disabled");
+        // One token per main-loop iteration. fetch_add gives a monotonic index.
+        uint32_t index = reflexFrameIndex.fetch_add(1, std::memory_order_acq_rel);
+        acquireFrameToken(index);
 #endif
+    }
+
+    void UpscaleManager::publishRenderFrameIndex()
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!streamlineAvailable) return;
+        // The index minted by the most recent beginReflexFrame() is reflexFrameIndex-1.
+        lastKickedFrameIndex.store(reflexFrameIndex.load(std::memory_order_acquire) - 1,
+                                   std::memory_order_release);
+#endif
+    }
+
+    void UpscaleManager::reflexSleep()
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!reflexActive) return;
+        uint32_t index = reflexFrameIndex.load(std::memory_order_acquire) - 1;
+        auto* token = static_cast<sl::FrameToken*>(acquireFrameToken(index));
+        if (token)
+            slReflexSleep(*token);
+#endif
+    }
+
+#ifdef VF_STREAMLINE_ENABLED
+    static sl::PCLMarker toPCLMarker(UpscaleManager::FrameMarker marker)
+    {
+        switch (marker)
+        {
+        case UpscaleManager::FrameMarker::InputPing:         return sl::PCLMarker::ePCLatencyPing;
+        case UpscaleManager::FrameMarker::SimulationStart:   return sl::PCLMarker::eSimulationStart;
+        case UpscaleManager::FrameMarker::SimulationEnd:     return sl::PCLMarker::eSimulationEnd;
+        case UpscaleManager::FrameMarker::RenderSubmitStart: return sl::PCLMarker::eRenderSubmitStart;
+        case UpscaleManager::FrameMarker::RenderSubmitEnd:   return sl::PCLMarker::eRenderSubmitEnd;
+        case UpscaleManager::FrameMarker::PresentStart:      return sl::PCLMarker::ePresentStart;
+        case UpscaleManager::FrameMarker::PresentEnd:        return sl::PCLMarker::ePresentEnd;
+        }
+        return sl::PCLMarker::ePCLatencyPing;
+    }
+#endif
+
+    void UpscaleManager::setMarkerMain(FrameMarker marker)
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!reflexActive) return;
+        uint32_t index = reflexFrameIndex.load(std::memory_order_acquire) - 1;
+        auto* token = static_cast<sl::FrameToken*>(acquireFrameToken(index));
+        if (token)
+            slPCLSetMarker(toPCLMarker(marker), *token);
+#else
+        (void)marker;
+#endif
+    }
+
+    void UpscaleManager::setMarkerRender(FrameMarker marker)
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!reflexActive) return;
+        uint32_t index = lastKickedFrameIndex.load(std::memory_order_acquire);
+        auto* token = static_cast<sl::FrameToken*>(acquireFrameToken(index));
+        if (token)
+            slPCLSetMarker(toPCLMarker(marker), *token);
+#else
+        (void)marker;
+#endif
+    }
+
+    UpscaleManager::ReflexLatency UpscaleManager::getLatency() const
+    {
+        ReflexLatency latency{};
+#ifdef VF_STREAMLINE_ENABLED
+        if (!streamlineAvailable || !reflexActive) return latency;
+
+        sl::ReflexState state{};
+        if (slReflexGetState(state) != sl::Result::eOk || !state.latencyReportAvailable)
+            return latency;
+
+        // Pick the most recently completed frame (highest frameID) in the report ring.
+        const sl::ReflexReport* report = nullptr;
+        uint64_t newestFrameId = 0;
+        for (int i = 0; i < sl::kReflexFrameReportCount; ++i)
+        {
+            if (state.frameReport[i].frameID >= newestFrameId)
+            {
+                newestFrameId = state.frameReport[i].frameID;
+                report = &state.frameReport[i];
+            }
+        }
+        if (!report)
+            return latency;
+
+        latency.gpuFrameTimeUs = report->gpuFrameTimeUs;
+        if (report->presentEndTime != 0 && report->inputSampleTime != 0 &&
+            report->presentEndTime > report->inputSampleTime)
+        {
+            latency.totalLatencyUs =
+                static_cast<uint32_t>(report->presentEndTime - report->inputSampleTime);
+        }
+        latency.valid = (latency.gpuFrameTimeUs != 0 || latency.totalLatencyUs != 0);
+#endif
+        return latency;
     }
 
     void UpscaleManager::applyFrameGenSettings(const ::postprocess::FrameGenSettings& settings,
@@ -562,9 +713,8 @@ namespace render::upscaling
             return;
         }
 
-        if (settings.enabled && !reflexEnabled)
-            enableReflex();
-
+        // Reflex is configured by the caller (OffScreenController) after this call,
+        // which forces Reflex On when Frame Gen ends up active. We only configure DLSS-G here.
         sl::DLSSGOptions options{};
         options.mode = settings.enabled ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
         options.numFramesToGenerate = std::clamp(settings.numFramesToGenerate, 1u, 3u);
@@ -583,14 +733,9 @@ namespace render::upscaling
                       frameGenActive ? "active" : "failed",
                       slResultToString(result),
                       settings.numFramesToGenerate + 1);
-            // Disable Reflex if Frame Gen activation failed
-            if (!frameGenActive && reflexEnabled)
-                disableReflex();
         }
         else
         {
-            if (reflexEnabled && !isActive())
-                disableReflex();
             vfLogInfo("DLSS Frame Generation: disabled");
         }
 #else

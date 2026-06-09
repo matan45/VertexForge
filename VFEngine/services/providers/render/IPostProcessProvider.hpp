@@ -16,6 +16,12 @@ namespace services
         uint32_t displayHeight = 0;
         bool dlssGSupported = false;
         bool frameGenActive = false;
+        bool reflexSupported = false;
+        bool reflexActive = false;
+        postprocess::ReflexMode reflexMode = postprocess::ReflexMode::Off;
+        bool latencyValid = false;
+        uint32_t gpuFrameTimeUs = 0;
+        uint32_t totalLatencyUs = 0;
     };
 
     class IPostProcessProvider

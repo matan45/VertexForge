@@ -381,6 +381,23 @@ project "Runtime"
       postbuildcommands {
          "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
       }
+
+   -- Streamline runtime DLLs so DLSS / Frame Generation / Reflex work in standalone
+   -- Runtime.exe (not only the Editor). Missing DLLs are handled gracefully (slInit
+   -- fails -> streamlineAvailable=false -> upscaling/Reflex no-op).
+   filter "configurations:Debug or Development or Release"
+      postbuildcommands {
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.common.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.pcl.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_g.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssg.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+      }
    filter {}
 
 -- Project 5: Utilities (Moved before Graphics)
