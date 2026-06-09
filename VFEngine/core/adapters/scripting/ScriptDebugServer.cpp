@@ -43,10 +43,11 @@ namespace core
         // VK-1378: the breakpoint hook lives on the interpreter execution paths;
         // JIT-compiled code bypasses it. Debugging and the JIT are mutually
         // exclusive, so force the script VM into interpreter mode while the
-        // debug server is attached. (The engine ships with JIT off by default,
-        // but make it explicit so breakpoints always pause.)
+        // debug server is attached. Remember the prior JIT state so stop() can
+        // restore it — Play mode runs with JIT on, only the debug session is off.
         if (auto vm = interpreter->getVM())
         {
+            jitWasEnabled = vm->isJitEnabled();
             vm->setJitEnabled(false);
         }
 
@@ -165,6 +166,12 @@ namespace core
         if (interpreter)
         {
             interpreter->disableDebugging();
+            // Restore the JIT to whatever it was before we attached, so leaving the
+            // debugger doesn't leave Play mode stuck in interpreter mode.
+            if (auto vm = interpreter->getVM())
+            {
+                vm->setJitEnabled(jitWasEnabled);
+            }
         }
         debugger::DebugContext::shutdown();
         interpreter = nullptr;

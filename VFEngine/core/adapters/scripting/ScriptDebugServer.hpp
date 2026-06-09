@@ -63,5 +63,10 @@ namespace core
         std::atomic<bool> active{false};
         std::atomic<bool> clientConnected{false};
         int listenPort = 0;
+
+        // The debug hook only fires on the interpreter path, so start() forces the VM
+        // into interpreter mode. We remember the JIT state we found so stop() can put
+        // it back (Play mode runs with JIT on; only the debug session turns it off).
+        bool jitWasEnabled = false;
     };
 }
