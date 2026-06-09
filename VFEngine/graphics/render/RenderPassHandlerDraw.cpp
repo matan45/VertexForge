@@ -205,11 +205,31 @@ namespace render
 
     void RenderPassHandler::drawUIOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
+        // When upscaling is active the UI composites into displayColorImages (display res), which the
+        // frame graph does not track — executePostUpscale leaves it in SHADER_READ_ONLY_OPTIMAL. The UI
+        // records begin dynamic rendering with colorLoad (expects COLOR_ATTACHMENT_OPTIMAL), so transition
+        // it here. Without upscaling the UI targets the render-res colorImages, which the graph already
+        // transitions via the UIOverlays pass's ColorAttachmentWrite declaration — leave that path alone.
+        const bool hasDisplay = !offscreenResources.displayColorImages.empty();
+
+        if (hasDisplay)
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources.displayColorImages[imageIndex].colorImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
         if (uiPipelineInitialized && !currentUIImageDrawList.empty())
             uiPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
 
         if (uiTextPipelineInitialized && !currentUITextDrawList.empty())
             uiTextPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
+
+        // Restore to SHADER_READ_ONLY_OPTIMAL so render() can sample displayColorImages for presentation.
+        if (hasDisplay)
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources.displayColorImages[imageIndex].colorImage,
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
     }
 
     void RenderPassHandler::drawSceneMeshesGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
