@@ -244,12 +244,12 @@ namespace render::mesh
         {
             commandBuffer.bindIndexBuffer(lodBuffers.indexBuffer, 0, vk::IndexType::eUint32);
             commandBuffer.drawIndexed(lodBuffers.indexCount, 1, 0, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::Meshes);
         }
         else
         {
             commandBuffer.draw(lodBuffers.vertexCount, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::Meshes);
         }
     }
 

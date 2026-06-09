@@ -152,7 +152,7 @@ namespace render::volumetric
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                           pipelineLayout, 0, descriptorSet, nullptr);
         commandBuffer.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::PostProcess);
 
         core::endDynamicRendering(commandBuffer);
 
@@ -190,7 +190,7 @@ namespace render::volumetric
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                           pipelineLayout, 0, descriptorSet, nullptr);
         commandBuffer.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::PostProcess);
 
         core::endDynamicRendering(commandBuffer);
     }

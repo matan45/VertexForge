@@ -298,7 +298,7 @@ namespace render::mesh
                 0, sizeof(UICanvasImagePushConstants), &pushConstants);
 
             commandBuffer.drawIndexed(6, 1, 0, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::UI);
         }
     }
 }

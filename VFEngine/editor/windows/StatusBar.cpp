@@ -107,10 +107,12 @@ namespace windows
                         auto stats = events::EventDispatcher::instance().query(
                             events::render::GetCullingStatsQuery{});
                         cachedDrawCalls = stats.totalDrawCalls;
+                        cachedDrawCallsByCategory = stats.drawCallsByCategory;
                     }
                     catch (const std::exception&)
                     {
                         cachedDrawCalls = 0;
+                        cachedDrawCallsByCategory = {};
                     }
                 }
 
@@ -149,6 +151,23 @@ namespace windows
             {
                 separator();
                 ImGui::Text("Draw Calls: %u", cachedDrawCalls);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("Draw calls by category");
+                    ImGui::Separator();
+                    bool any = false;
+                    for (size_t i = 0; i < render::FrameDrawStats::kCount; ++i)
+                    {
+                        if (cachedDrawCallsByCategory[i] == 0) continue;
+                        any = true;
+                        ImGui::Text("%-16s %u",
+                            render::drawCategoryName(static_cast<render::DrawCategory>(i)),
+                            cachedDrawCallsByCategory[i]);
+                    }
+                    if (!any) ImGui::TextDisabled("(none)");
+                    ImGui::EndTooltip();
+                }
             }
             separator();
             ImGui::Text("VRAM: %llu MB", static_cast<unsigned long long>(cachedVramMB));

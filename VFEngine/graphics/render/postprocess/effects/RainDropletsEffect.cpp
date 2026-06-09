@@ -101,7 +101,7 @@ namespace render::postprocess
                                      0, sizeof(RainDropletsPushConstants), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::PostProcess);
     }
 
     void RainDropletsEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)

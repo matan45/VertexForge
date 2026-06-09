@@ -339,7 +339,7 @@ namespace render::decal
                               0, sizeof(DecalPushConstants), &pc);
 
             cmd.drawIndexed(cubeIndexCount, 1, 0, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::Decals);
         }
 
         core::endDynamicRendering(cmd);
@@ -397,7 +397,7 @@ namespace render::decal
                               0, sizeof(DecalPushConstants), &pc);
 
             cmd.drawIndexed(cubeIndexCount, 1, 0, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::Decals);
         }
 
         core::endDynamicRendering(cmd);

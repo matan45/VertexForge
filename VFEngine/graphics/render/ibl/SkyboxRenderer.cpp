@@ -271,7 +271,7 @@ namespace render::ibl
             vk::DeviceSize offsets[] = {0};
             commandBuffer.bindVertexBuffers(0, vertexBuffer, offsets);
             commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::Sky);
 
             core::endDynamicRendering(commandBuffer);
 
@@ -328,7 +328,7 @@ namespace render::ibl
             vk::DeviceSize offsets[] = {0};
             commandBuffer.bindVertexBuffers(0, vertexBuffer, offsets);
             commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::Sky);
 
             core::endDynamicRendering(commandBuffer);
         }

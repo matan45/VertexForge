@@ -162,7 +162,7 @@ namespace render::postprocess
                                               sets.data(), 0, nullptr);
 
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
 
             // Transition SSAO raw to shader read for blur pass
@@ -196,7 +196,7 @@ namespace render::postprocess
                                          0, sizeof(BlurPushConstants), &blurPC);
 
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
 
             // Transition blurred SSAO to shader read for composite pass
@@ -230,7 +230,7 @@ namespace render::postprocess
                                      0, sizeof(CompositePushConstants), &compositePC);
 
         commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
     }
 
     void SSAOEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)

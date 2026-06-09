@@ -1,7 +1,9 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "threading/TaskProfiler.hpp"
+#include "stats/FrameDrawStats.hpp" // render::DrawCategory / FrameDrawStats::kCount
 
+#include <array>
 #include <vector>
 #include <string>
 
@@ -23,6 +25,10 @@ namespace windows
 		std::vector<std::vector<uint32_t>> adjacency;
 		uint32_t maxThreadId = 0;
 
+		// Per-frame draw-call breakdown (VK-1370), refreshed alongside the task stats.
+		uint32_t drawCallTotal = 0;
+		std::array<uint32_t, render::FrameDrawStats::kCount> drawCallsByCategory = {};
+
 	public:
 		TaskGraphWindow() = default;
 		~TaskGraphWindow() override = default;
@@ -35,5 +41,6 @@ namespace windows
 		void drawTimeline();
 		void drawStatistics();
 		void drawDAG();
+		void drawDrawCalls();
 	};
 }

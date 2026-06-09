@@ -42,7 +42,7 @@ namespace render::gi
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                 tracePipelineLayout, 1, traceSet1, nullptr);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
         }
 
@@ -89,7 +89,7 @@ namespace render::gi
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                 temporalPipelineLayout, 1, temporalSet1PerHistory[readIdx], nullptr);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
 
             // Transition write history to ShaderReadOnlyOptimal
@@ -132,7 +132,7 @@ namespace render::gi
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(DenoisePushConstants), &denoisePush);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
         }
 
@@ -168,7 +168,7 @@ namespace render::gi
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(DenoisePushConstants), &denoisePush);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
         }
 
@@ -207,7 +207,7 @@ namespace render::gi
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(CompositePushConstants), &compositePush);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
 
             // Transition scene color back to ShaderReadOnlyOptimal
@@ -261,7 +261,7 @@ namespace render::gi
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                 tracePipelineLayout, 1, traceSet1, nullptr);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
         }
 
@@ -307,7 +307,7 @@ namespace render::gi
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                 temporalPipelineLayout, 1, temporalSet1PerHistory[readIdx], nullptr);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
 
             core::ImageUtilities::transitionImageLayout(commandBuffer,
@@ -348,7 +348,7 @@ namespace render::gi
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(DenoisePushConstants), &denoisePush);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
         }
 
@@ -383,7 +383,7 @@ namespace render::gi
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(DenoisePushConstants), &denoisePush);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
         }
 
@@ -420,7 +420,7 @@ namespace render::gi
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(CompositePushConstants), &compositePush);
             commandBuffer.draw(3, 1, 0, 0);
-            render::FrameDrawStats::count();
+            render::FrameDrawStats::count(render::DrawCategory::PostProcess);
             core::endDynamicRendering(commandBuffer);
         }
 

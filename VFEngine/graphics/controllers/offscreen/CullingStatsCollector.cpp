@@ -16,8 +16,12 @@ namespace controllers::offscreen
     {
         services::CullingDebugStats stats;
 
-        // Total recorded draw commands from the last completed frame (VK-1368).
-        stats.totalDrawCalls = render::FrameDrawStats::lastFrame.load(std::memory_order_relaxed);
+        // Total recorded draw commands from the last completed frame (VK-1368), plus the
+        // per-category breakdown (VK-1370). totalDrawCalls is the sum of the array.
+        stats.totalDrawCalls = render::FrameDrawStats::total();
+        for (size_t i = 0; i < render::FrameDrawStats::kCount; ++i)
+            stats.drawCallsByCategory[i] =
+                render::FrameDrawStats::lastFrame[i].load(std::memory_order_relaxed);
 
         auto* cameraManager = renderHandler->getCameraOcclusionManager();
         if (!cameraManager)

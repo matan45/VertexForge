@@ -372,7 +372,7 @@ namespace render::cloud
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSet, nullptr);
         cmd.pushConstants<CloudCompositePushConstants>(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
         cmd.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::Sky);
         core::endDynamicRendering(cmd);
 
         // Transition scene color back to ShaderReadOnlyOptimal
@@ -411,7 +411,7 @@ namespace render::cloud
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSet, nullptr);
         cmd.pushConstants<CloudCompositePushConstants>(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
         cmd.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::Sky);
         core::endDynamicRendering(cmd);
     }
 }

@@ -306,7 +306,7 @@ namespace render::ui
                                              0, sizeof(UIPushConstants), &pushConstants);
                 commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, texDescSet, nullptr);
                 commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
-                render::FrameDrawStats::count();
+                render::FrameDrawStats::count(render::DrawCategory::UI);
             }
         }
 
@@ -408,7 +408,7 @@ namespace render::ui
                                              0, sizeof(UIPushConstants), &pushConstants);
                 commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, texDescSet, nullptr);
                 commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
-                render::FrameDrawStats::count();
+                render::FrameDrawStats::count(render::DrawCategory::UI);
             }
         }
 

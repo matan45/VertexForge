@@ -92,7 +92,7 @@ namespace render::postprocess
                                      0, sizeof(VignettePushConstants), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::PostProcess);
     }
 
     void VignetteEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)

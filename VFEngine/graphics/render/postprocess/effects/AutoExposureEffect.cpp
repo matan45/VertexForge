@@ -266,7 +266,7 @@ namespace render::postprocess
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, passthroughPipelineLayout,
                                           0, inputDescriptorSet, nullptr);
         commandBuffer.draw(3, 1, 0, 0);
-        render::FrameDrawStats::count();
+        render::FrameDrawStats::count(render::DrawCategory::PostProcess);
     }
 
     void AutoExposureEffect::updateParameters(const ::postprocess::PostProcessSettings& settings)

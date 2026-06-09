@@ -1,11 +1,14 @@
 #include "TaskGraphWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/threading/TaskGraphEvents.hpp"
+#include "events/render/RenderEvents.hpp"
 #include "imgui.h"
 #include "print/Log.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <utility>
 
 namespace windows
 {
@@ -110,6 +113,11 @@ namespace windows
 					drawDAG();
 					ImGui::EndTabItem();
 				}
+				if (ImGui::BeginTabItem("Draw Calls"))
+				{
+					drawDrawCalls();
+					ImGui::EndTabItem();
+				}
 				ImGui::EndTabBar();
 			}
 		}
@@ -127,6 +135,11 @@ namespace windows
 			auto structure = dispatcher.query(events::threading::GetTaskGraphStructureQuery{});
 			taskNames = structure.taskNames;
 			adjacency = structure.adjacency;
+
+			// Draw-call breakdown (VK-1370) — independent of task-graph profiling.
+			auto cullingStats = dispatcher.query(events::render::GetCullingStatsQuery{});
+			drawCallTotal = cullingStats.totalDrawCalls;
+			drawCallsByCategory = cullingStats.drawCallsByCategory;
 
 			if (profilingEnabled)
 			{
@@ -435,5 +448,64 @@ namespace windows
 		}
 
 		ImGui::Dummy(canvasSize);
+	}
+
+	void TaskGraphWindow::drawDrawCalls()
+	{
+		ImGui::Text("Draw Calls: %u", drawCallTotal);
+		ImGui::TextDisabled("CPU-recorded draws last frame (excludes editor ImGui / gizmos / previews)");
+		ImGui::Separator();
+
+		if (drawCallTotal == 0)
+		{
+			ImGui::TextDisabled("No draw calls recorded");
+			return;
+		}
+
+		// Category indices sorted by count, descending.
+		std::array<size_t, render::FrameDrawStats::kCount> order{};
+		for (size_t i = 0; i < render::FrameDrawStats::kCount; ++i) order[i] = i;
+		std::sort(order.begin(), order.end(),
+			[this](size_t a, size_t b) { return drawCallsByCategory[a] > drawCallsByCategory[b]; });
+
+		const float barMaxWidth = 220.0f;
+		const float barHeight = ImGui::GetTextLineHeight();
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		if (ImGui::BeginTable("DrawCallBreakdown", 3,
+			ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+		{
+			ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+			ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+			ImGui::TableSetupColumn("Share", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			for (size_t idx : order)
+			{
+				uint32_t count = drawCallsByCategory[idx];
+				if (count == 0) continue;
+
+				ImGui::TableNextRow();
+
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", render::drawCategoryName(static_cast<render::DrawCategory>(idx)));
+
+				ImGui::TableNextColumn();
+				ImGui::Text("%u", count);
+
+				ImGui::TableNextColumn();
+				float frac = static_cast<float>(count) / static_cast<float>(drawCallTotal);
+				ImVec2 p0 = ImGui::GetCursorScreenPos();
+				float w = barMaxWidth * frac;
+				ImU32 color = getTaskColor(static_cast<uint32_t>(idx));
+				drawList->AddRectFilled(p0, ImVec2(p0.x + std::max(w, 2.0f), p0.y + barHeight), color, 2.0f);
+				char overlay[32];
+				snprintf(overlay, sizeof(overlay), "%.0f%%", frac * 100.0f);
+				drawList->AddText(ImVec2(p0.x + 4.0f, p0.y), IM_COL32(255, 255, 255, 255), overlay);
+				ImGui::Dummy(ImVec2(barMaxWidth, barHeight));
+			}
+
+			ImGui::EndTable();
+		}
 	}
 }
