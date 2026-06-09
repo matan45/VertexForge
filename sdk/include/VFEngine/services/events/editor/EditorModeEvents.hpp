@@ -10,6 +10,9 @@ namespace events::editor {
 
     struct SetEditorModeCommand : ICommand<> {
         services::EditorMode mode;
+        // VK-1371: when entering Play, also start the embedded mType debug server
+        // so VS Code can attach and debug the running scripts.
+        bool withDebugger = false;
 
         std::string_view getName() const override { return "SetEditorMode"; }
     };

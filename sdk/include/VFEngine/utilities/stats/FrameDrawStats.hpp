@@ -30,7 +30,8 @@ namespace render {
         VFX,          // particle systems (billboard/ribbon/mesh/scene/distortion)
         Decals,       // deferred decals
         PostProcess,  // SSR, SSGI, bloom, tonemap, DoF, SSAO, volumetric fog, WBOIT composite, ...
-        UI,           // UI rects, UI text, world text
+        UI,           // UI image/rect quads (UIRenderPipeline)
+        UIText,       // UI text + world text (UITextPipeline, TextPipeline)
         Custom,       // custom / plugin pipelines
         Count
     };
@@ -46,7 +47,8 @@ namespace render {
             case DrawCategory::VFX:         return "VFX";
             case DrawCategory::Decals:      return "Decals";
             case DrawCategory::PostProcess: return "Post-process";
-            case DrawCategory::UI:          return "UI";
+            case DrawCategory::UI:          return "UI (images)";
+            case DrawCategory::UIText:      return "UI text";
             case DrawCategory::Custom:      return "Custom / plugin";
             default:                        return "?";
         }
