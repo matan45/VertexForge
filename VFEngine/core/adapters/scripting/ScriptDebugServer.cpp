@@ -1,5 +1,6 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
+#include <vm/runtime/VirtualMachine.hpp>
 #include <debugger/DebugContext.hpp>
 #include <debugger/DebugProtocol.hpp>
 #include <net/WinSocket.hpp>
@@ -38,6 +39,16 @@ namespace core
         debugger::DebugContext::initialize();
         debugger::DebugContext::getInstance().continueExecution();
         interpreter->enableDebugging();
+
+        // VK-1378: the breakpoint hook lives on the interpreter execution paths;
+        // JIT-compiled code bypasses it. Debugging and the JIT are mutually
+        // exclusive, so force the script VM into interpreter mode while the
+        // debug server is attached. (The engine ships with JIT off by default,
+        // but make it explicit so breakpoints always pause.)
+        if (auto vm = interpreter->getVM())
+        {
+            vm->setJitEnabled(false);
+        }
 
         server = std::make_unique<debugger::DebugServer>();
         server->setEnvironment(interpreter->getEnvironment());
