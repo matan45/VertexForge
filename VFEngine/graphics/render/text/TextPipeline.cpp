@@ -344,7 +344,7 @@ namespace render::text
                                               0, descSet, nullptr);
 
             commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
-            render::FrameDrawStats::count(render::DrawCategory::UI);
+            render::FrameDrawStats::count(render::DrawCategory::UIText);
         }
 
         core::endDynamicRendering(commandBuffer);
@@ -408,7 +408,7 @@ namespace render::text
                                               0, descSet, nullptr);
 
             commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
-            render::FrameDrawStats::count(render::DrawCategory::UI);
+            render::FrameDrawStats::count(render::DrawCategory::UIText);
         }
 
         core::endDynamicRendering(commandBuffer);
