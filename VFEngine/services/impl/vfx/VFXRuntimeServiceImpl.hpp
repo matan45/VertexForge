@@ -18,6 +18,7 @@ namespace services
 
         VFXInstanceId createInstance(const VFXRuntimeParams& params);
         void destroyInstance(VFXInstanceId id);
+        void applyInstanceOverrides(VFXInstanceId id, const VFXEmitterOverrides& overrides);
         void setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform);
         void playInstance(VFXInstanceId id);
         void stopInstance(VFXInstanceId id);

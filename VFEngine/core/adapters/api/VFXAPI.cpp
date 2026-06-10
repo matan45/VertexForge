@@ -466,6 +466,93 @@ namespace core::api
                 return value::Value(std::monostate{});
             }});
 
+        // _native_vfx_setOverride(instanceId, name, value) -> bool
+        // Scalar runtime overrides by name. Supported names:
+        //   spawnRate, lifetime, startSize, startSpeed, stretchMultiplier,
+        //   windStrength, gravityStrength, softParticleDistance,
+        //   lightingInfluence, collisionLifetimeLoss, coneSpread,
+        //   renderMode (int), collisionEnabled (0/1)
+        interpreter->registerNativeFunction("_native_vfx_setOverride",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 3)
+                {
+                    return value::Value(false);
+                }
+                int64_t instanceId = extractInt64(args[0]);
+                if (instanceId <= 0)
+                {
+                    return value::Value(false);
+                }
+
+                std::string name = extractString(args[1], "VFX.setOverride");
+                float val = extractFloat(args[2]);
+
+                services::events::vfxruntime::ApplyVFXInstanceOverridesCommand cmd;
+                cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
+
+                if (name == "spawnRate")                 cmd.overrides.spawnRate = val;
+                else if (name == "lifetime")             cmd.overrides.lifetime = val;
+                else if (name == "startSize")            cmd.overrides.startSize = val;
+                else if (name == "startSpeed")           cmd.overrides.startSpeed = val;
+                else if (name == "stretchMultiplier")    cmd.overrides.stretchMultiplier = val;
+                else if (name == "windStrength")         cmd.overrides.windStrength = val;
+                else if (name == "gravityStrength")      cmd.overrides.gravityStrength = val;
+                else if (name == "softParticleDistance") cmd.overrides.softParticleDistance = val;
+                else if (name == "lightingInfluence")    cmd.overrides.lightingInfluence = val;
+                else if (name == "collisionLifetimeLoss") cmd.overrides.collisionLifetimeLoss = val;
+                else if (name == "coneSpread")           cmd.overrides.coneSpread = val;
+                else if (name == "renderMode")           cmd.overrides.renderMode = static_cast<int>(val);
+                else if (name == "collisionEnabled")     cmd.overrides.collisionEnabled = (val != 0.0f);
+                else
+                {
+                    return value::Value(false);
+                }
+
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(true);
+            }});
+
+        // _native_vfx_setOverrideVec(instanceId, name, x, y, z [, w]) -> bool
+        // Vector runtime overrides by name. Supported names:
+        //   emitDirection, windDirection, gravityDirection, shapeDimensions (vec3)
+        //   startColor (vec4, w defaults to 1)
+        interpreter->registerNativeFunction("_native_vfx_setOverrideVec",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 5)
+                {
+                    return value::Value(false);
+                }
+                int64_t instanceId = extractInt64(args[0]);
+                if (instanceId <= 0)
+                {
+                    return value::Value(false);
+                }
+
+                std::string name = extractString(args[1], "VFX.setOverrideVec");
+                glm::vec3 vec{
+                    extractFloat(args[2]),
+                    extractFloat(args[3]),
+                    extractFloat(args[4])
+                };
+                float w = (args.size() >= 6) ? extractFloat(args[5]) : 1.0f;
+
+                services::events::vfxruntime::ApplyVFXInstanceOverridesCommand cmd;
+                cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
+
+                if (name == "emitDirection")          cmd.overrides.emitDirection = vec;
+                else if (name == "windDirection")     cmd.overrides.windDirection = vec;
+                else if (name == "gravityDirection")  cmd.overrides.gravityDirection = vec;
+                else if (name == "shapeDimensions")   cmd.overrides.shapeDimensions = vec;
+                else if (name == "startColor")        cmd.overrides.startColor = glm::vec4(vec, w);
+                else
+                {
+                    return value::Value(false);
+                }
+
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(true);
+            }});
+
         // _native_vfx_instanceIsPlaying(instanceId) -> bool
         interpreter->registerNativeFunction("_native_vfx_instanceIsPlaying",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{

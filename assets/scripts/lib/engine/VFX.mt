@@ -128,4 +128,28 @@ public class VFX {
     public static function instanceIsPlaying(int instanceId): bool {
         return _native_vfx_instanceIsPlaying(instanceId);
     }
+
+    // ============================================
+    // Runtime Overrides (per instance)
+    // ============================================
+
+    // Override a scalar emitter parameter on a live instance. Returns false
+    // for unknown names. Names: spawnRate, lifetime, startSize, startSpeed,
+    // stretchMultiplier, windStrength, gravityStrength, softParticleDistance,
+    // lightingInfluence, collisionLifetimeLoss, coneSpread, renderMode,
+    // collisionEnabled (0/1)
+    public static function setOverride(int instanceId, string name, float value): bool {
+        return _native_vfx_setOverride(instanceId, name, value);
+    }
+
+    // Override a vec3 emitter parameter on a live instance.
+    // Names: emitDirection, windDirection, gravityDirection, shapeDimensions
+    public static function setOverrideVec3(int instanceId, string name, float x, float y, float z): bool {
+        return _native_vfx_setOverrideVec(instanceId, name, x, y, z);
+    }
+
+    // Override the start color (RGBA) on a live instance - e.g. team tinting
+    public static function setOverrideColor(int instanceId, float r, float g, float b, float a): bool {
+        return _native_vfx_setOverrideVec(instanceId, "startColor", r, g, b, a);
+    }
 }
