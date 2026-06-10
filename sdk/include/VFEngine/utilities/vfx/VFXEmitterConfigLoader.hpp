@@ -5,6 +5,7 @@
 #include "VFXModifierConfigLoader.hpp"
 #include "VFXForceConfigLoader.hpp"
 #include "VFXShapeConfigLoader.hpp"
+#include "VFXBurstTypes.hpp"
 #include <algorithm>
 #include <optional>
 #include <string_view>
@@ -106,10 +107,13 @@ namespace vfx
         config.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         config.looping = getBool(*emitterNode, "looping", EmitterDefaults::LOOPING);
         config.texturePath = getString(*emitterNode, "texture", "");
+        config.inheritVelocityRatio = std::clamp(
+            getFloat(*emitterNode, "inheritVelocityRatio", EmitterDefaults::INHERIT_VELOCITY_RATIO), 0.0f, 1.0f);
 
         config.modifiers = VFXModifierConfigLoader::fromGraph(data.graph);
         config.forces = VFXForceConfigLoader::fromGraph(data.graph);
         config.shape = VFXShapeConfigLoader::fromGraph(data.graph);
+        config.bursts = loadBurstsFromNode(*emitterNode);
 
         config.flipbookRows = std::clamp(getInt(*emitterNode, "flipbookRows", EmitterDefaults::FLIPBOOK_ROWS), 1, 16);
         config.flipbookColumns = std::clamp(getInt(*emitterNode, "flipbookColumns", EmitterDefaults::FLIPBOOK_COLUMNS), 1, 16);
@@ -160,6 +164,13 @@ namespace vfx
             getInt(*emitterNode, "normalMode", EmitterDefaults::NORMAL_MODE), 0, 2);
         config.ambientAmount = std::clamp(
             getFloat(*emitterNode, "ambientAmount", EmitterDefaults::AMBIENT_AMOUNT), 0.0f, 1.0f);
+
+        // Proxy light emission
+        config.lightEmissionEnabled = getBool(*emitterNode, "lightEmissionEnabled", EmitterDefaults::LIGHT_EMISSION_ENABLED);
+        config.lightEmissionIntensity = std::max(0.0f,
+            getFloat(*emitterNode, "lightEmissionIntensity", EmitterDefaults::LIGHT_EMISSION_INTENSITY));
+        config.lightEmissionRadius = std::max(0.1f,
+            getFloat(*emitterNode, "lightEmissionRadius", EmitterDefaults::LIGHT_EMISSION_RADIUS));
 
         // Collision
         config.collisionEnabled = getBool(*emitterNode, "collisionEnabled", EmitterDefaults::COLLISION_ENABLED);

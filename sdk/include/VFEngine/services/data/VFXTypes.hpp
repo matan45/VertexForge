@@ -25,6 +25,9 @@ namespace services
         uint32_t entityId = 0;
         VFXEmitterPriority priority = VFXEmitterPriority::Normal;
         bool cameraRelative = false;
+        // Destroy the instance automatically once a non-looping effect has
+        // finished emitting and its last particles have expired (fire-and-forget)
+        bool autoDestroy = false;
     };
 
     struct VFXEmitterOverrides

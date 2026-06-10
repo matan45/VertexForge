@@ -139,6 +139,7 @@ namespace vfx
         inline constexpr float START_SIZE = 1.0f;
         inline constexpr float START_SPEED = 1.0f;
         inline constexpr bool LOOPING = true;
+        inline constexpr float INHERIT_VELOCITY_RATIO = 0.0f;
 
         inline constexpr int FLIPBOOK_ROWS = 1;
         inline constexpr int FLIPBOOK_COLUMNS = 1;
@@ -164,6 +165,11 @@ namespace vfx
         inline constexpr float LIGHTING_INFLUENCE = 0.0f;
         inline constexpr int NORMAL_MODE = 0;              // 0 = sphere, 1 = view-aligned, 2 = mesh
         inline constexpr float AMBIENT_AMOUNT = 0.3f;
+
+        // Proxy light emission
+        inline constexpr bool LIGHT_EMISSION_ENABLED = false;
+        inline constexpr float LIGHT_EMISSION_INTENSITY = 5.0f;
+        inline constexpr float LIGHT_EMISSION_RADIUS = 10.0f;
 
         // Collision
         inline constexpr bool COLLISION_ENABLED = false;

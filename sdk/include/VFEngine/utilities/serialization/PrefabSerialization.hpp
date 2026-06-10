@@ -31,6 +31,7 @@ namespace serialization
 		static json serializeEntityTreeComponents(const scene::Entity& entity);
 		static void serializeRenderComponents(const scene::Entity& entity, json& out);
 		static void serializePhysicsAndEffectComponents(const scene::Entity& entity, json& out);
+		static void serializeUIComponents(const scene::Entity& entity, json& out);
 
 		static scene::Entity deserializeEntityTree(
 			const json& entityJson,
@@ -43,6 +44,7 @@ namespace serialization
 		static void deserializeSceneComponents(const json& componentsJson, scene::Entity& entity);
 		static void deserializeMediaComponents(const json& componentsJson, scene::Entity& entity);
 		static void deserializeLightComponents(const json& componentsJson, scene::Entity& entity);
+		static void deserializeUIComponents(const json& componentsJson, scene::Entity& entity);
 
 		static std::optional<json> parsePrefabJson(std::string_view filename);
 	};
