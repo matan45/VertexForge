@@ -2,6 +2,7 @@
 #include "vfx/VFXShapeTypes.hpp"
 #include "imgui.h"
 #include <algorithm>
+#include <map>
 
 namespace ed = ax::NodeEditor;
 
@@ -224,6 +225,109 @@ namespace editor::graph
             }
         }
         ed::EndDelete();
+    }
+
+    void VFXGraphEditor::handleClipboardShortcuts()
+    {
+        if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+            return;
+
+        const ImGuiIO& io = ImGui::GetIO();
+        if (!io.KeyCtrl || io.WantTextInput)
+            return;
+
+        if (ImGui::IsKeyPressed(ImGuiKey_C, false))
+            copySelection();
+        else if (ImGui::IsKeyPressed(ImGuiKey_V, false))
+            pasteClipboard();
+        else if (ImGui::IsKeyPressed(ImGuiKey_D, false))
+            duplicateSelection();
+    }
+
+    void VFXGraphEditor::copySelection()
+    {
+        if (!currentGraph)
+            return;
+
+        int selectedCount = ed::GetSelectedObjectCount();
+        if (selectedCount <= 0)
+            return;
+
+        std::vector<ed::NodeId> selectedNodes(static_cast<size_t>(selectedCount));
+        int nodeCount = ed::GetSelectedNodes(selectedNodes.data(), selectedCount);
+
+        std::vector<vfx::VFXNode> copied;
+        for (int i = 0; i < nodeCount; ++i)
+        {
+            uint32_t id = fromEditorNodeId(selectedNodes[static_cast<size_t>(i)]);
+            const vfx::VFXNode* node = currentGraph->findNode(id);
+            if (!node)
+                continue;
+
+            // Single-emitter format: Emitter and OutSystem are unique per graph
+            if (node->type == vfx::VFXNodeType::Emitter ||
+                node->type == vfx::VFXNodeType::OutSystem)
+                continue;
+
+            copied.push_back(*node);
+        }
+
+        if (copied.empty())
+            return;
+
+        clipboardNodes = std::move(copied);
+
+        // Keep only links fully inside the copied set
+        clipboardLinks.clear();
+        auto isCopied = [this](uint32_t nodeId) {
+            for (const auto& node : clipboardNodes)
+                if (node.id == nodeId) return true;
+            return false;
+        };
+        for (const auto& link : currentGraph->links)
+        {
+            if (isCopied(link.sourceNodeId) && isCopied(link.targetNodeId))
+                clipboardLinks.push_back(link);
+        }
+
+        pasteCount = 0;
+    }
+
+    void VFXGraphEditor::pasteClipboard()
+    {
+        if (!currentGraph || clipboardNodes.empty())
+            return;
+
+        ++pasteCount;
+        const float offset = 40.0f * static_cast<float>(pasteCount);
+
+        std::map<uint32_t, uint32_t> idRemap;
+        for (const auto& source : clipboardNodes)
+        {
+            vfx::VFXNode node = source;
+            node.id = currentGraph->nextNodeId++;
+            node.position += glm::vec2(offset, offset);
+            idRemap[source.id] = node.id;
+            currentGraph->nodes.push_back(std::move(node));
+        }
+
+        for (const auto& source : clipboardLinks)
+        {
+            vfx::VFXNodeLink link = source;
+            link.id = currentGraph->nextLinkId++;
+            link.sourceNodeId = idRemap[source.sourceNodeId];
+            link.targetNodeId = idRemap[source.targetNodeId];
+            currentGraph->links.push_back(std::move(link));
+        }
+
+        needsPositionInit = true;
+        if (onGraphChanged) onGraphChanged();
+    }
+
+    void VFXGraphEditor::duplicateSelection()
+    {
+        copySelection();
+        pasteClipboard();
     }
 
     void VFXGraphEditor::initializeModifierProperties(vfx::VFXNode& node)
@@ -457,6 +561,12 @@ namespace editor::graph
 
         if (ImGui::BeginPopup("VFXContextMenu"))
         {
+            if (ImGui::MenuItem("Paste", "Ctrl+V", false, !clipboardNodes.empty()))
+            {
+                pasteClipboard();
+            }
+            ImGui::Separator();
+
             ImGui::TextDisabled("Add Node");
             ImGui::Separator();
 
