@@ -2,6 +2,7 @@
 #include "graph/RenderGraph.hpp"
 #include "graph/RenderGraphProfiler.hpp"
 #include "upscaling/MotionVectorPass.hpp"
+#include "upscaling/ReactiveMaskPass.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "ClearColor.hpp"
