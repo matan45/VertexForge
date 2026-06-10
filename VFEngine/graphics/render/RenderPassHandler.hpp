@@ -72,6 +72,7 @@ namespace render::vfx
 namespace render::upscaling
 {
     class MotionVectorPass;
+    class ReactiveMaskPass;
     class UpscaleManager;
 }
 
@@ -176,6 +177,10 @@ namespace render
         bool wboitEnabled = true;
 
         std::unique_ptr<upscaling::MotionVectorPass> motionVectorPass;
+        std::unique_ptr<upscaling::ReactiveMaskPass> reactiveMaskPass;
+        // Set when the opaque-only scene color was copied this frame (consumed
+        // by executeUpscalePass to generate the reactive mask)
+        mutable bool preTransparencyCaptured = false;
         bool upscaleFirstFrame = true;
 
         std::unique_ptr<decal::DecalPipeline> decalPipeline;
@@ -563,6 +568,11 @@ namespace render
 
         void initDistortionPass();
         void executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+
+        // Copies the opaque-only scene color (pre-VFX/WBOIT) into
+        // offscreenResources.preTransparencyColor for reactive mask generation.
+        // No-op unless upscaling is active and its resources exist.
+        void capturePreTransparencyColor(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         // Render graph
         void importFrameResources(uint32_t imageIndex);

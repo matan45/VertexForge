@@ -689,6 +689,46 @@ namespace render
             core::ImageUtilities::createImageView(sampledView, offscreenResources.motionVectors.sampledView);
         }
 
+        // Reactive/transparency mask (R8_UNORM) at render resolution + the
+        // opaque-only scene color copy it is generated from
+        {
+            core::ImageInfoRequest maskInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
+                renderWidth, renderHeight, 1, 1,
+                vk::Format::eR8Unorm,
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+            core::ImageUtilities::createImage(maskInfo,
+                offscreenResources.reactiveMask.image,
+                offscreenResources.reactiveMask.allocation,
+                device.getMemoryManager());
+
+            core::ImageViewInfoRequest maskView(device.getLogicalDevice(),
+                offscreenResources.reactiveMask.image,
+                vk::Format::eR8Unorm, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(maskView, offscreenResources.reactiveMask.imageView);
+
+            core::ImageInfoRequest preTransInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
+                renderWidth, renderHeight, 1, 1,
+                colorFormat,
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+            core::ImageUtilities::createImage(preTransInfo,
+                offscreenResources.preTransparencyColor.image,
+                offscreenResources.preTransparencyColor.allocation,
+                device.getMemoryManager());
+
+            core::ImageViewInfoRequest preTransView(device.getLogicalDevice(),
+                offscreenResources.preTransparencyColor.image,
+                colorFormat, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(preTransView, offscreenResources.preTransparencyColor.imageView);
+        }
+
         // Upscale output image at display resolution
         // Use R16G16B16A16_SFLOAT because SRGB formats don't support storage writes
         {
@@ -764,6 +804,23 @@ namespace render
         if (offscreenResources.motionVectors.allocation)
             device.getMemoryManager().free(offscreenResources.motionVectors.allocation);
         offscreenResources.motionVectors = {};
+
+        // Reactive mask + opaque color copy
+        if (offscreenResources.reactiveMask.imageView)
+            vkDevice.destroyImageView(offscreenResources.reactiveMask.imageView);
+        if (offscreenResources.reactiveMask.image)
+            vkDevice.destroyImage(offscreenResources.reactiveMask.image);
+        if (offscreenResources.reactiveMask.allocation)
+            device.getMemoryManager().free(offscreenResources.reactiveMask.allocation);
+        offscreenResources.reactiveMask = {};
+
+        if (offscreenResources.preTransparencyColor.imageView)
+            vkDevice.destroyImageView(offscreenResources.preTransparencyColor.imageView);
+        if (offscreenResources.preTransparencyColor.image)
+            vkDevice.destroyImage(offscreenResources.preTransparencyColor.image);
+        if (offscreenResources.preTransparencyColor.allocation)
+            device.getMemoryManager().free(offscreenResources.preTransparencyColor.allocation);
+        offscreenResources.preTransparencyColor = {};
 
         // Upscale output
         if (offscreenResources.upscaleOutput.descriptorSet && ImGui::GetCurrentContext())

@@ -192,6 +192,75 @@ namespace render
             distortionResources->getCompositeDescriptorSet());
     }
 
+    void RenderPassHandler::capturePreTransparencyColor(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        auto* upscaleManager = device.getUpscaleManager();
+        if (!upscaleManager || !upscaleManager->isActive()
+            || !offscreenResources.upscaleResourcesCreated
+            || !offscreenResources.preTransparencyColor.image)
+            return;
+
+        auto renderRes = upscaleManager->getResolutionManager().getRenderResolution();
+        vk::Image srcColorImage = offscreenResources.colorImages[imageIndex].colorImage;
+        vk::Image dstImage = offscreenResources.preTransparencyColor.image;
+
+        // Destination is fully overwritten - discard previous contents
+        vk::ImageMemoryBarrier toTransferDst{};
+        toTransferDst.oldLayout = vk::ImageLayout::eUndefined;
+        toTransferDst.newLayout = vk::ImageLayout::eTransferDstOptimal;
+        toTransferDst.image = dstImage;
+        toTransferDst.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        toTransferDst.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+        toTransferDst.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+        commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+                                      vk::PipelineStageFlagBits::eTransfer,
+                                      {}, {}, {}, toTransferDst);
+
+        vk::ImageMemoryBarrier srcToTransfer{};
+        srcToTransfer.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        srcToTransfer.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+        srcToTransfer.image = srcColorImage;
+        srcToTransfer.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        srcToTransfer.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+        srcToTransfer.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+        commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                      vk::PipelineStageFlagBits::eTransfer,
+                                      {}, {}, {}, srcToTransfer);
+
+        vk::ImageCopy copyRegion{};
+        copyRegion.srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+        copyRegion.dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+        copyRegion.extent = vk::Extent3D{renderRes.width, renderRes.height, 1};
+        commandBuffer.copyImage(srcColorImage, vk::ImageLayout::eTransferSrcOptimal,
+                                dstImage, vk::ImageLayout::eTransferDstOptimal,
+                                copyRegion);
+
+        vk::ImageMemoryBarrier dstToRead{};
+        dstToRead.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+        dstToRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        dstToRead.image = dstImage;
+        dstToRead.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        dstToRead.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        dstToRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                      vk::PipelineStageFlagBits::eComputeShader,
+                                      {}, {}, {}, dstToRead);
+
+        // Restore the scene color to the layout the render graph expects
+        vk::ImageMemoryBarrier srcBack{};
+        srcBack.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+        srcBack.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        srcBack.image = srcColorImage;
+        srcBack.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        srcBack.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+        srcBack.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eShaderRead;
+        commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                      vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eFragmentShader,
+                                      {}, {}, {}, srcBack);
+
+        preTransparencyCaptured = true;
+    }
+
     // ======================== Graph-managed dispatch variants ========================
 
     void RenderPassHandler::drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
@@ -313,6 +382,7 @@ namespace render
                                               debugRendererPtr, currentView, currentProjection);
             if (hasVFX)
             {
+                capturePreTransparencyColor(commandBuffer, imageIndex);
                 meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
                 vfxRuntimeProvider->recordDrawCommands(commandBuffer);
                 meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
@@ -324,6 +394,7 @@ namespace render
             meshPipeline->beginRenderPassGraphManaged(commandBuffer, imageIndex);
             meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
 
+            capturePreTransparencyColor(commandBuffer, imageIndex);
             meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
             vfxRuntimeProvider->recordDrawCommands(commandBuffer);
             meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
@@ -379,6 +450,11 @@ namespace render
             decalPipeline->setCameraData(currentView, currentProjection, currentNearPlane, currentFarPlane);
             decalPipeline->renderGraphManaged(commandBuffer, imageIndex);
         }
+
+        // Opaque rendering (incl. decals) is complete - snapshot it for the
+        // upscaler reactive mask before transparency (WBOIT/VFX) draws
+        if ((wboitActive && gpuDrivenRenderer->hasTransparentObjects()) || hasVFX)
+            capturePreTransparencyColor(commandBuffer, imageIndex);
 
         if (wboitActive && gpuDrivenRenderer->hasTransparentObjects())
         {

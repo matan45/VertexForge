@@ -23,6 +23,7 @@
 #include "cloud/CloudPipeline.hpp"
 #include "upscaling/UpscaleManager.hpp"
 #include "upscaling/MotionVectorPass.hpp"
+#include "upscaling/ReactiveMaskPass.hpp"
 #include "../core/ImageUtilities.hpp"
 #include "time/Timer.hpp"
 #include "shadow/ShadowSystem.hpp"
@@ -408,6 +409,31 @@ namespace render
 
         vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
 
+        // Generate the reactive/transparency mask from the opaque-only color
+        // snapshot taken before the VFX/WBOIT passes (scene color is in
+        // ShaderReadOnlyOptimal here, sampled directly)
+        bool reactiveMaskReady = false;
+        if (preTransparencyCaptured && offscreenResources.reactiveMask.image)
+        {
+            if (!reactiveMaskPass)
+            {
+                reactiveMaskPass = std::make_unique<upscaling::ReactiveMaskPass>(device);
+                reactiveMaskPass->init();
+            }
+            if (reactiveMaskPass->isInitialized())
+            {
+                reactiveMaskPass->dispatch(commandBuffer,
+                    offscreenResources.preTransparencyColor.imageView,
+                    offscreenResources.colorImages[imageIndex].colorImageView,
+                    offscreenResources.reactiveMask.imageView,
+                    offscreenResources.reactiveMask.image,
+                    renderRes.width, renderRes.height,
+                    taaFrameIndex);
+                reactiveMaskReady = true;
+            }
+        }
+        preTransparencyCaptured = false;
+
         render::upscaling::UpscaleInputs inputs{};
         inputs.colorInput = colorImage;
         inputs.colorView = offscreenResources.colorImages[imageIndex].colorImageView;
@@ -415,6 +441,11 @@ namespace render
         inputs.depthView = offscreenResources.depthImage.depthImageView;
         inputs.motionVectors = offscreenResources.motionVectors.image;
         inputs.motionView = offscreenResources.motionVectors.sampledView;
+        if (reactiveMaskReady)
+        {
+            inputs.reactiveMask = offscreenResources.reactiveMask.image;
+            inputs.reactiveView = offscreenResources.reactiveMask.imageView;
+        }
         inputs.exposureImage = offscreenResources.exposureImage.image;
         inputs.exposureView = offscreenResources.exposureImage.imageView;
         inputs.output = offscreenResources.upscaleOutput.image;
