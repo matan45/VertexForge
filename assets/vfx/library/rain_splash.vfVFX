@@ -1,0 +1,63 @@
+{
+    "version": "1.0",
+    "uuid": "910000000000000006",
+    "name": "Rain Splash",
+    "graph": {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "Emitter",
+                "name": "Emitter",
+                "position": [100.0, 200.0],
+                "properties": {
+                    "spawnRate": { "type": "Float", "value": 0.0 },
+                    "lifetime": { "type": "Float", "value": 0.35 },
+                    "startSize": { "type": "Float", "value": 0.15 },
+                    "startSpeed": { "type": "Float", "value": 2.5 },
+                    "startVelocity": { "type": "Vec3", "value": [0.0, 1.0, 0.0] },
+                    "startColor": { "type": "Color", "value": [0.7, 0.8, 0.95, 0.7] },
+                    "looping": { "type": "Bool", "value": false },
+                    "texture": { "type": "String", "value": "" },
+                    "burstCount": { "type": "Int", "value": 1 },
+                    "burst0Time": { "type": "Float", "value": 0.0 },
+                    "burst0Count": { "type": "Int", "value": 14 },
+                    "burst0Cycles": { "type": "Int", "value": 1 },
+                    "burst0Interval": { "type": "Float", "value": 0.5 },
+                    "burst0Probability": { "type": "Float", "value": 1.0 },
+                    "coneSpread": { "type": "Float", "value": 1.0 }
+                }
+            },
+            {
+                "id": 3,
+                "type": "SizeOverLifetime",
+                "name": "Size Over Lifetime",
+                "position": [330.0, 100.0],
+                "properties": {
+                    "curve": { "type": "Curve", "value": { "keys": [[0.0, 1.0, 0.0, 0.0], [1.0, 0.3, 0.0, 0.0]] } }
+                }
+            },
+            {
+                "id": 4,
+                "type": "ForceGravity",
+                "name": "Gravity",
+                "position": [530.0, 100.0],
+                "properties": {
+                    "direction": { "type": "Vec3", "value": [0.0, -1.0, 0.0] },
+                    "strength": { "type": "Float", "value": 9.81 }
+                }
+            },
+            {
+                "id": 2,
+                "type": "OutSystem",
+                "name": "Output",
+                "position": [730.0, 200.0],
+                "properties": {}
+            }
+        ],
+        "links": [
+            { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 2, "sourceNode": 3, "targetNode": 4, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 3, "sourceNode": 4, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" }
+        ]
+    }
+}

@@ -1,0 +1,90 @@
+{
+    "version": "1.0",
+    "uuid": "910000000000000011",
+    "name": "Ground Fog",
+    "graph": {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "Emitter",
+                "name": "Emitter",
+                "position": [100.0, 200.0],
+                "properties": {
+                    "spawnRate": { "type": "Float", "value": 8.0 },
+                    "lifetime": { "type": "Float", "value": 6.0 },
+                    "startSize": { "type": "Float", "value": 3.0 },
+                    "startSpeed": { "type": "Float", "value": 0.3 },
+                    "startVelocity": { "type": "Vec3", "value": [1.0, 0.05, 0.0] },
+                    "startColor": { "type": "Color", "value": [0.75, 0.78, 0.82, 0.35] },
+                    "looping": { "type": "Bool", "value": true },
+                    "texture": { "type": "String", "value": "" },
+                    "softParticleDistance": { "type": "Float", "value": 2.0 },
+                    "lightingInfluence": { "type": "Float", "value": 1.0 },
+                    "normalMode": { "type": "Int", "value": 1 },
+                    "ambientAmount": { "type": "Float", "value": 0.55 }
+                }
+            },
+            {
+                "id": 3,
+                "type": "SizeOverLifetime",
+                "name": "Size Over Lifetime",
+                "position": [330.0, 100.0],
+                "properties": {
+                    "curve": { "type": "Curve", "value": { "keys": [[0.0, 1.0, 0.0, 0.0], [1.0, 1.8, 0.0, 0.0]] } }
+                }
+            },
+            {
+                "id": 4,
+                "type": "ColorOverLifetime",
+                "name": "Color Over Lifetime",
+                "position": [530.0, 100.0],
+                "properties": {
+                    "gradient": { "type": "Gradient", "value": { "stops": [
+                        [0.0, 0.75, 0.78, 0.82, 0.0],
+                        [0.2, 0.75, 0.78, 0.82, 0.35],
+                        [0.8, 0.75, 0.78, 0.82, 0.3],
+                        [1.0, 0.75, 0.78, 0.82, 0.0]
+                    ] } }
+                }
+            },
+            {
+                "id": 5,
+                "type": "ForceWind",
+                "name": "Wind",
+                "position": [730.0, 100.0],
+                "properties": {
+                    "direction": { "type": "Vec3", "value": [1.0, 0.0, 0.2] },
+                    "strength": { "type": "Float", "value": 0.25 },
+                    "noiseStrength": { "type": "Float", "value": 0.15 },
+                    "noiseFrequency": { "type": "Float", "value": 0.3 }
+                }
+            },
+            {
+                "id": 10,
+                "type": "Shape",
+                "name": "Box",
+                "position": [100.0, 420.0],
+                "properties": {
+                    "shapeType": { "type": "String", "value": "Box" },
+                    "emitFrom": { "type": "String", "value": "Volume" },
+                    "randomDirection": { "type": "Bool", "value": false },
+                    "halfExtents": { "type": "Vec3", "value": [6.0, 0.3, 6.0] }
+                }
+            },
+            {
+                "id": 2,
+                "type": "OutSystem",
+                "name": "Output",
+                "position": [930.0, 200.0],
+                "properties": {}
+            }
+        ],
+        "links": [
+            { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 2, "sourceNode": 3, "targetNode": 4, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 3, "sourceNode": 4, "targetNode": 5, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 4, "sourceNode": 5, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 5, "sourceNode": 10, "targetNode": 1, "sourcePin": "Output", "targetPin": "Shape" }
+        ]
+    }
+}

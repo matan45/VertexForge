@@ -1,0 +1,92 @@
+{
+    "version": "1.0",
+    "uuid": "910000000000000005",
+    "name": "Dust Impact",
+    "graph": {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "Emitter",
+                "name": "Emitter",
+                "position": [100.0, 200.0],
+                "properties": {
+                    "spawnRate": { "type": "Float", "value": 0.0 },
+                    "lifetime": { "type": "Float", "value": 1.2 },
+                    "startSize": { "type": "Float", "value": 0.8 },
+                    "startSpeed": { "type": "Float", "value": 4.0 },
+                    "startVelocity": { "type": "Vec3", "value": [0.0, 1.0, 0.0] },
+                    "startColor": { "type": "Color", "value": [0.55, 0.48, 0.4, 0.8] },
+                    "looping": { "type": "Bool", "value": false },
+                    "texture": { "type": "String", "value": "" },
+                    "burstCount": { "type": "Int", "value": 1 },
+                    "burst0Time": { "type": "Float", "value": 0.0 },
+                    "burst0Count": { "type": "Int", "value": 40 },
+                    "burst0Cycles": { "type": "Int", "value": 1 },
+                    "burst0Interval": { "type": "Float", "value": 0.5 },
+                    "burst0Probability": { "type": "Float", "value": 1.0 },
+                    "softParticleDistance": { "type": "Float", "value": 0.8 },
+                    "lightingInfluence": { "type": "Float", "value": 1.0 },
+                    "ambientAmount": { "type": "Float", "value": 0.45 }
+                }
+            },
+            {
+                "id": 3,
+                "type": "SizeOverLifetime",
+                "name": "Size Over Lifetime",
+                "position": [330.0, 100.0],
+                "properties": {
+                    "curve": { "type": "Curve", "value": { "keys": [[0.0, 0.8, 0.0, 0.0], [1.0, 2.2, 0.0, 0.0]] } }
+                }
+            },
+            {
+                "id": 4,
+                "type": "ColorOverLifetime",
+                "name": "Color Over Lifetime",
+                "position": [530.0, 100.0],
+                "properties": {
+                    "gradient": { "type": "Gradient", "value": { "stops": [
+                        [0.0, 0.55, 0.48, 0.4, 0.8],
+                        [0.5, 0.5, 0.44, 0.37, 0.45],
+                        [1.0, 0.45, 0.4, 0.34, 0.0]
+                    ] } }
+                }
+            },
+            {
+                "id": 5,
+                "type": "ForceGravity",
+                "name": "Gravity",
+                "position": [730.0, 100.0],
+                "properties": {
+                    "direction": { "type": "Vec3", "value": [0.0, -1.0, 0.0] },
+                    "strength": { "type": "Float", "value": 2.5 }
+                }
+            },
+            {
+                "id": 10,
+                "type": "Shape",
+                "name": "Sphere",
+                "position": [100.0, 420.0],
+                "properties": {
+                    "shapeType": { "type": "String", "value": "Sphere" },
+                    "emitFrom": { "type": "String", "value": "Surface" },
+                    "randomDirection": { "type": "Bool", "value": true },
+                    "radius": { "type": "Float", "value": 0.4 }
+                }
+            },
+            {
+                "id": 2,
+                "type": "OutSystem",
+                "name": "Output",
+                "position": [930.0, 200.0],
+                "properties": {}
+            }
+        ],
+        "links": [
+            { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 2, "sourceNode": 3, "targetNode": 4, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 3, "sourceNode": 4, "targetNode": 5, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 4, "sourceNode": 5, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 5, "sourceNode": 10, "targetNode": 1, "sourcePin": "Output", "targetPin": "Shape" }
+        ]
+    }
+}
