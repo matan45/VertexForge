@@ -64,6 +64,8 @@ namespace controllers
             gpuMeshPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuRibbonPipeline = std::make_unique<render::vfx::VFXRibbonGPUPipeline>(device, swapChain);
+            if (hasLightingLayouts)
+                gpuRibbonPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
             gpuRibbonPipeline->init(colorFormat, depthFormat);
             if (!gpuRibbonPipeline->isInitialized())
             {
@@ -483,6 +485,8 @@ namespace controllers
             gpuRenderPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
         if (gpuMeshPipeline)
             gpuMeshPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
+        if (gpuRibbonPipeline)
+            gpuRibbonPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
     }
 
     void VFXSceneRenderer::updateLightingDescriptorSets(
@@ -494,5 +498,7 @@ namespace controllers
             gpuRenderPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
         if (gpuMeshPipeline)
             gpuMeshPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
+        if (gpuRibbonPipeline)
+            gpuRibbonPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
     }
 }

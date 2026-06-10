@@ -326,6 +326,16 @@ namespace render::vfx
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
+        // Bind lighting descriptor sets (sets 1-3) if available
+        if (lightingAvailable && cachedLightBufferSet && cachedClusterGridSet && cachedClusterLightGridSet)
+        {
+            std::array<vk::DescriptorSet, 3> lightingSets = {
+                cachedLightBufferSet, cachedClusterGridSet, cachedClusterLightGridSet
+            };
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                   1, lightingSets, {});
+        }
+
         vk::Buffer vertexBuffers[] = {quadVertexBuffer};
         vk::DeviceSize offsets[] = {0};
         cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
