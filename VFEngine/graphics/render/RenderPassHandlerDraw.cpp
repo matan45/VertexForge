@@ -343,6 +343,25 @@ namespace render
             }
         }
 
+        // VFX proxy lights: instances with light emission illuminate the scene
+        // as transient point lights (set before dispatchCompute runs
+        // updateFromScene; an empty list clears last frame's lights)
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            if (auto* lbm = gpuDrivenRenderer->getLightBufferManager())
+            {
+                std::vector<lighting::GPULightBufferManager::TransientPointLight> transientLights;
+                if (hasVFX)
+                {
+                    auto proxyLights = vfxRuntimeProvider->getActiveProxyLights();
+                    transientLights.reserve(proxyLights.size());
+                    for (const auto& proxy : proxyLights)
+                        transientLights.push_back({proxy.position, proxy.color, proxy.intensity, proxy.radius});
+                }
+                lbm->setTransientPointLights(std::move(transientLights));
+            }
+        }
+
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()
             && terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
 

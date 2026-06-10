@@ -35,6 +35,7 @@ namespace render::lighting
         // copy data to staging arrays), so parallelism adds more overhead than benefit.
         collectDirectionalLights(filterPtr, pendingDirShadow);
         collectPointLights(filterPtr, pendingPointShadow);
+        appendTransientPointLights();
         collectSpotLights(filterPtr, pendingSpotShadow);
 
         processPendingShadowRegistrations();
@@ -189,6 +190,27 @@ namespace render::lighting
         else if (!hitLimit && warnedPointLimit)
         {
             warnedPointLimit = false;
+        }
+    }
+
+    void GPULightBufferManager::appendTransientPointLights()
+    {
+        for (const auto& light : transientPointLights)
+        {
+            if (pointCount >= LightConstants::MAX_POINT_LIGHTS)
+                break;
+
+            GPUPointLight& gpuLight = cpuPointLights[pointCount];
+            gpuLight.position = light.position;
+            gpuLight.radius = light.radius;
+            gpuLight.color = light.color;
+            gpuLight.intensity = light.intensity;
+            gpuLight.shadowIndex = -1;
+            gpuLight.padding[0] = 0;
+            gpuLight.padding[1] = 0;
+            gpuLight.padding[2] = 0;
+
+            ++pointCount;
         }
     }
 

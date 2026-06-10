@@ -165,6 +165,13 @@ namespace vfx
         config.ambientAmount = std::clamp(
             getFloat(*emitterNode, "ambientAmount", EmitterDefaults::AMBIENT_AMOUNT), 0.0f, 1.0f);
 
+        // Proxy light emission
+        config.lightEmissionEnabled = getBool(*emitterNode, "lightEmissionEnabled", EmitterDefaults::LIGHT_EMISSION_ENABLED);
+        config.lightEmissionIntensity = std::max(0.0f,
+            getFloat(*emitterNode, "lightEmissionIntensity", EmitterDefaults::LIGHT_EMISSION_INTENSITY));
+        config.lightEmissionRadius = std::max(0.1f,
+            getFloat(*emitterNode, "lightEmissionRadius", EmitterDefaults::LIGHT_EMISSION_RADIUS));
+
         // Collision
         config.collisionEnabled = getBool(*emitterNode, "collisionEnabled", EmitterDefaults::COLLISION_ENABLED);
         config.collisionBounce = std::clamp(

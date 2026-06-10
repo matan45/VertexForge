@@ -245,6 +245,15 @@ namespace controllers
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
         void setMaxDrawDistance(float distance) { maxVFXDistSq = distance * distance; }
 
+        struct VFXProxyLight
+        {
+            glm::vec3 position{0.0f};
+            glm::vec3 color{1.0f};
+            float intensity = 1.0f;
+            float radius = 10.0f;
+        };
+        std::vector<VFXProxyLight> getActiveProxyLights() const;
+
         struct VFXBudgetStats
         {
             uint32_t activeEmitters = 0;

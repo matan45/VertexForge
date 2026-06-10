@@ -115,6 +115,21 @@ namespace render::lighting
         void updateFromScene();
         void updateFromScene(const std::unordered_set<uint32_t>& visibleLightIds);
         void uploadToGPU(vk::CommandBuffer cmd);
+
+        // Transient point lights appended after scene lights every updateFromScene
+        // (e.g. VFX proxy lights from explosions/fires). Replaced wholesale each
+        // frame; no entity, no shadow casting.
+        struct TransientPointLight
+        {
+            glm::vec3 position{0.0f};
+            glm::vec3 color{1.0f};
+            float intensity = 1.0f;
+            float radius = 10.0f;
+        };
+        void setTransientPointLights(std::vector<TransientPointLight> lights)
+        {
+            transientPointLights = std::move(lights);
+        }
         void advanceStagingFrame() { currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT; }
 
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
@@ -150,6 +165,7 @@ namespace render::lighting
                                        std::vector<PendingShadowReg>& pendingShadow);
         void collectPointLights(const std::unordered_set<uint32_t>* visibleLightIds,
                                 std::vector<PendingShadowReg>& pendingShadow);
+        void appendTransientPointLights();
         void collectSpotLights(const std::unordered_set<uint32_t>* visibleLightIds,
                                std::vector<PendingShadowReg>& pendingShadow);
         void processPendingShadowRegistrations();
@@ -161,5 +177,7 @@ namespace render::lighting
     private:
         void updateCountsBuffer();
         bool detectChanges();
+
+        std::vector<TransientPointLight> transientPointLights;
     };
 }

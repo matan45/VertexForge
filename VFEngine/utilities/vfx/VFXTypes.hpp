@@ -166,6 +166,11 @@ namespace vfx
         inline constexpr int NORMAL_MODE = 0;              // 0 = sphere, 1 = view-aligned, 2 = mesh
         inline constexpr float AMBIENT_AMOUNT = 0.3f;
 
+        // Proxy light emission
+        inline constexpr bool LIGHT_EMISSION_ENABLED = false;
+        inline constexpr float LIGHT_EMISSION_INTENSITY = 5.0f;
+        inline constexpr float LIGHT_EMISSION_RADIUS = 10.0f;
+
         // Collision
         inline constexpr bool COLLISION_ENABLED = false;
         inline constexpr float COLLISION_BOUNCE = 0.5f;

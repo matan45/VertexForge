@@ -254,6 +254,11 @@ namespace render::vfx
         int normalMode = 0;
         float ambientAmount = 0.3f;
 
+        // Proxy light emission (instance illuminates the scene as a point light)
+        bool lightEmissionEnabled = false;
+        float lightEmissionIntensity = 5.0f;
+        float lightEmissionRadius = 10.0f;
+
         bool collisionEnabled = false;
         float collisionBounce = 0.5f;
         float collisionFriction = 0.1f;

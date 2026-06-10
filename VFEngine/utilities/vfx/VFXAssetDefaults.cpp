@@ -167,6 +167,18 @@ namespace vfx
                 "ambientAmount", VFXPropertyType::Float,
                 EmitterDefaults::AMBIENT_AMOUNT, 0.0f, 1.0f
             };
+            node.properties["lightEmissionEnabled"] = VFXProperty{
+                "lightEmissionEnabled", VFXPropertyType::Bool,
+                EmitterDefaults::LIGHT_EMISSION_ENABLED, 0.0f, 1.0f
+            };
+            node.properties["lightEmissionIntensity"] = VFXProperty{
+                "lightEmissionIntensity", VFXPropertyType::Float,
+                EmitterDefaults::LIGHT_EMISSION_INTENSITY, 0.0f, 100.0f
+            };
+            node.properties["lightEmissionRadius"] = VFXProperty{
+                "lightEmissionRadius", VFXPropertyType::Float,
+                EmitterDefaults::LIGHT_EMISSION_RADIUS, 0.1f, 100.0f
+            };
             node.properties["collisionEnabled"] = VFXProperty{
                 "collisionEnabled", VFXPropertyType::Bool,
                 EmitterDefaults::COLLISION_ENABLED, 0.0f, 1.0f
