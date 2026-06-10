@@ -294,7 +294,7 @@ namespace controllers
                 }
             }
 
-            // Apply Frame Generation settings (requires DLSS SR specifically, not DirectSR)
+            // Apply Frame Generation settings (requires DLSS SR)
             bool dlssSRActive = upscaleManager->isActive() &&
                                 upscaleManager->getActiveMode() == postprocess::UpscaleMode::DLSS;
             if (settings.frameGen.enabled && dlssSRActive)

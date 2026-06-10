@@ -40,7 +40,6 @@ namespace core
         services::UpscaleStatus status{};
         status.streamlineAvailable = render::upscaling::UpscaleManager::isStreamlineAvailable();
         status.dlssSupported = render::upscaling::UpscaleManager::isDLSSAvailable();
-        status.directSRSupported = render::upscaling::UpscaleManager::isDirectSRAvailable();
         auto* mgr = render::upscaling::UpscaleManager::getInstance();
         if (mgr)
         {

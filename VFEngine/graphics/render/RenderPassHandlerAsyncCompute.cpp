@@ -698,7 +698,7 @@ namespace render
 
                 // Read depth from the same flight slot (written by frame N-2, guaranteed complete
                 // by the in-flight fence). Using current-frame VP matrices with stale depth
-                // produces approximate motion vectors — camera motion dominates and DLSS/FSR2
+                // produces approximate motion vectors — camera motion dominates and DLSS
                 // have built-in robustness to handle slight inaccuracy.
                 auto& prevDepth = offscreenResources.prevFrameDepth[frameIndex];
 

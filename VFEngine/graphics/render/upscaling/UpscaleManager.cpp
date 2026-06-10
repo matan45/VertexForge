@@ -63,8 +63,7 @@ namespace render::upscaling
 
         sl::Feature featuresToLoad[] = {
             sl::kFeatureDLSS,
-             sl::kFeatureDLSS_G,
-            sl::kFeatureDirectSR,
+            sl::kFeatureDLSS_G,
             sl::kFeatureReflex,
             // PCL provides slPCLSetMarker; without it every latency marker fails to resolve.
             sl::kFeaturePCL
@@ -157,9 +156,8 @@ namespace render::upscaling
         instance = this;
         queryFeatureSupport();
 
-        vfLogInfo("Streamline Vulkan device set. DLSS={}, DirectSR={}",
-                  dlssSupported ? "supported" : "not supported",
-                  directSRSupported ? "supported" : "not supported");
+        vfLogInfo("Streamline Vulkan device set. DLSS={}",
+                  dlssSupported ? "supported" : "not supported");
         return true;
 #else
         return false;
@@ -176,7 +174,6 @@ namespace render::upscaling
             {
                 slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
-                slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
             }
             if (reflexActive)
                 applyReflexSettings({});
@@ -197,7 +194,6 @@ namespace render::upscaling
         {
             slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
             slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
-            slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
             frameGenActive = false;
             vfLogInfo("Streamline: freed feature resources for resolution change");
         }
@@ -220,11 +216,6 @@ namespace render::upscaling
         dlssGSupported = (dlssGResult == sl::Result::eOk);
         vfLogInfo("Streamline DLSS-G (Frame Gen) support query: {} ({})",
                   slResultToString(dlssGResult), static_cast<int>(dlssGResult));
-
-        sl::Result directSRResult = slIsFeatureSupported(sl::kFeatureDirectSR, adapterInfo);
-        directSRSupported = (directSRResult == sl::Result::eOk);
-        vfLogInfo("Streamline DirectSR support query: {} ({})",
-                  slResultToString(directSRResult), static_cast<int>(directSRResult));
 
         sl::Result reflexResult = slIsFeatureSupported(sl::kFeatureReflex, adapterInfo);
         reflexSupported = (reflexResult == sl::Result::eOk);
@@ -274,19 +265,10 @@ namespace render::upscaling
         if (requested == ::postprocess::UpscaleMode::Off)
             return ::postprocess::UpscaleMode::Off;
 
-        if (requested == ::postprocess::UpscaleMode::DLSS)
+        // DLSS and Auto both resolve to DLSS when supported
+        if (requested == ::postprocess::UpscaleMode::DLSS ||
+            requested == ::postprocess::UpscaleMode::Auto)
             return dlssSupported ? ::postprocess::UpscaleMode::DLSS : ::postprocess::UpscaleMode::Off;
-
-        if (requested == ::postprocess::UpscaleMode::FSR2)
-            return directSRSupported ? ::postprocess::UpscaleMode::FSR2 : ::postprocess::UpscaleMode::Off;
-
-        // Auto: prefer DLSS, fall back to DirectSR
-        if (requested == ::postprocess::UpscaleMode::Auto)
-        {
-            if (dlssSupported) return ::postprocess::UpscaleMode::DLSS;
-            if (directSRSupported) return ::postprocess::UpscaleMode::FSR2;
-            return ::postprocess::UpscaleMode::Off;
-        }
 
         return ::postprocess::UpscaleMode::Off;
     }
@@ -346,9 +328,7 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return false;
 
-        sl::Feature feature = (activeMode == ::postprocess::UpscaleMode::DLSS)
-            ? sl::kFeatureDLSS
-            : sl::kFeatureDirectSR;
+        sl::Feature feature = sl::kFeatureDLSS;
 
         sl::ViewportHandle viewport{0};
 
