@@ -70,6 +70,7 @@ namespace controllers
         uint32_t entityId = 0;
         services::VFXEmitterPriority priority = services::VFXEmitterPriority::Normal;
         bool cameraRelative = false;
+        bool autoDestroy = false;
     };
 
     struct VFXRuntimeInstance
@@ -98,6 +99,7 @@ namespace controllers
         float lodSpawnMultiplier = 1.0f;
         float lodBias = 0.0f;
         bool burstClampWarned = false;
+        bool autoDestroy = false;
     };
 
     class VFXSceneRenderer

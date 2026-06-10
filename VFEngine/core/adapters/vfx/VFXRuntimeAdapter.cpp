@@ -81,6 +81,7 @@ namespace core
         controllerParams.entityId = params.entityId;
         controllerParams.priority = params.priority;
         controllerParams.cameraRelative = params.cameraRelative;
+        controllerParams.autoDestroy = params.autoDestroy;
 
         return renderer->createInstance(controllerParams);
     }

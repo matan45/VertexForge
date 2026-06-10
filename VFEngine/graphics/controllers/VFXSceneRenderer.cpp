@@ -129,6 +129,7 @@ namespace controllers
         instance.entityId = params.entityId;
         instance.priority = params.priority;
         instance.cameraRelative = params.cameraRelative;
+        instance.autoDestroy = params.autoDestroy;
 
         if (!params.vfxAssetPath.empty())
         {
@@ -606,6 +607,22 @@ namespace controllers
         else
         {
             updateCPU(deltaTime);
+        }
+
+        // Fire-and-forget instances: destroy once emission is done and the
+        // longest-lived particles have expired (same margin as sub-emitters)
+        std::vector<VFXInstanceId> finishedAutoDestroy;
+        for (const auto& [id, instance] : instances)
+        {
+            if (instance.autoDestroy && !instance.loop && instance.active &&
+                instance.emissionTime >= instance.config.lifetime * 2.0f)
+            {
+                finishedAutoDestroy.push_back(id);
+            }
+        }
+        for (VFXInstanceId id : finishedAutoDestroy)
+        {
+            destroyInstance(id);
         }
 
         frameNumber++;

@@ -10,6 +10,14 @@
 //
 //   // Load a different VFX asset
 //   VFX::setPath(self, "effects/explosion.vfVFX");
+//
+//   // Fire-and-forget effect at a world position (no entity needed):
+//   VFX::spawnAt("effects/explosion.vfVFX", hit.x, hit.y, hit.z);
+//
+//   // Looping instance controlled manually:
+//   int fireId = VFX::spawnAtLooping("effects/fire.vfVFX", x, y, z);
+//   VFX::setInstancePosition(fireId, x2, y2, z2);
+//   VFX::destroyInstance(fireId);
 
 public class VFX {
     public constructor() {
@@ -82,5 +90,42 @@ public class VFX {
     // When enabled, VFX starts automatically when entity becomes active
     public static function setAutoPlay(int entityId, bool autoPlay): void {
         _native_vfx_setAutoPlay(entityId, autoPlay);
+    }
+
+    // ============================================
+    // Instance Spawning (fire-and-forget, no entity)
+    // ============================================
+
+    // Spawn a one-shot effect at a world position and play it immediately.
+    // The instance destroys itself once finished. Returns the instance id
+    // (0 on failure); keep it only if you want to move/stop it early.
+    public static function spawnAt(string path, float x, float y, float z): int {
+        return _native_vfx_spawnAt(path, x, y, z, false);
+    }
+
+    // Spawn a looping effect at a world position and play it immediately.
+    // Caller owns the instance and must call destroyInstance when done.
+    public static function spawnAtLooping(string path, float x, float y, float z): int {
+        return _native_vfx_spawnAt(path, x, y, z, true);
+    }
+
+    // Destroy a spawned instance
+    public static function destroyInstance(int instanceId): void {
+        _native_vfx_destroyInstance(instanceId);
+    }
+
+    // Stop emission on a spawned instance (existing particles finish naturally)
+    public static function stopInstance(int instanceId): void {
+        _native_vfx_stopInstance(instanceId);
+    }
+
+    // Move a spawned instance to a new world position
+    public static function setInstancePosition(int instanceId, float x, float y, float z): void {
+        _native_vfx_setInstancePosition(instanceId, x, y, z);
+    }
+
+    // Check whether a spawned instance is still playing
+    public static function instanceIsPlaying(int instanceId): bool {
+        return _native_vfx_instanceIsPlaying(instanceId);
     }
 }

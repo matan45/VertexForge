@@ -10,6 +10,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "data/EntityConversion.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace core::api
 {
@@ -345,6 +346,142 @@ namespace core::api
                 vfxComp.autoPlay = autoPlay;
 
                 return value::Value(std::monostate{});
+            }});
+
+        // ============================================================
+        // Instance-based natives: fire-and-forget effects at a world
+        // position, no entity/VFXComponent required
+        // ============================================================
+
+        // _native_vfx_spawnAt(path, x, y, z [, loop]) -> int instanceId (0 on failure)
+        // Non-looping spawns auto-destroy once finished; looping spawns must be
+        // destroyed via _native_vfx_destroyInstance
+        interpreter->registerNativeFunction("_native_vfx_spawnAt",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 4)
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+
+                std::string path = extractString(args[0], "VFX.spawnAt");
+                if (path.empty())
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+
+                glm::vec3 position{
+                    extractFloat(args[1]),
+                    extractFloat(args[2]),
+                    extractFloat(args[3])
+                };
+
+                bool loop = false;
+                if (args.size() >= 5 && value::isBool(args[4]))
+                {
+                    loop = value::asBool(args[4]);
+                }
+
+                services::events::vfxruntime::CreateVFXInstanceCommand createCmd;
+                createCmd.params.vfxAssetPath = path;
+                createCmd.params.worldTransform = glm::translate(glm::mat4(1.0f), position);
+                createCmd.params.loop = loop;
+                createCmd.params.autoDestroy = !loop;
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                services::VFXInstanceId instanceId = dispatcher.execute(createCmd);
+                if (instanceId != 0)
+                {
+                    services::events::vfxruntime::PlayVFXInstanceCommand playCmd;
+                    playCmd.instanceId = instanceId;
+                    dispatcher.execute(playCmd);
+                }
+
+                return value::Value(static_cast<int64_t>(instanceId));
+            }});
+
+        // _native_vfx_destroyInstance(instanceId) -> void
+        interpreter->registerNativeFunction("_native_vfx_destroyInstance",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t instanceId = extractInt64(args[0]);
+                if (instanceId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                services::events::vfxruntime::DestroyVFXInstanceCommand cmd;
+                cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
+                events::EventDispatcher::instance().execute(cmd);
+
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_stopInstance(instanceId) -> void
+        interpreter->registerNativeFunction("_native_vfx_stopInstance",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t instanceId = extractInt64(args[0]);
+                if (instanceId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                services::events::vfxruntime::StopVFXInstanceCommand cmd;
+                cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
+                events::EventDispatcher::instance().execute(cmd);
+
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_setInstancePosition(instanceId, x, y, z) -> void
+        interpreter->registerNativeFunction("_native_vfx_setInstancePosition",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 4)
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t instanceId = extractInt64(args[0]);
+                if (instanceId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                glm::vec3 position{
+                    extractFloat(args[1]),
+                    extractFloat(args[2]),
+                    extractFloat(args[3])
+                };
+
+                services::events::vfxruntime::SetVFXInstanceTransformCommand cmd;
+                cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
+                cmd.worldTransform = glm::translate(glm::mat4(1.0f), position);
+                events::EventDispatcher::instance().execute(cmd);
+
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_instanceIsPlaying(instanceId) -> bool
+        interpreter->registerNativeFunction("_native_vfx_instanceIsPlaying",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(false);
+                }
+                int64_t instanceId = extractInt64(args[0]);
+                if (instanceId <= 0)
+                {
+                    return value::Value(false);
+                }
+
+                services::events::vfxruntime::IsVFXInstancePlayingQuery query;
+                query.instanceId = static_cast<services::VFXInstanceId>(instanceId);
+                return value::Value(events::EventDispatcher::instance().query(query));
             }});
     }
 }
