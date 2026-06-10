@@ -31,6 +31,10 @@ namespace vfx
                 "looping", VFXPropertyType::Bool,
                 EmitterDefaults::LOOPING, 0.0f, 1.0f
             };
+            node.properties["inheritVelocityRatio"] = VFXProperty{
+                "inheritVelocityRatio", VFXPropertyType::Float,
+                EmitterDefaults::INHERIT_VELOCITY_RATIO, 0.0f, 1.0f
+            };
             node.properties["texture"] = VFXProperty{
                 "texture", VFXPropertyType::String,
                 std::string(""), 0.0f, 0.0f

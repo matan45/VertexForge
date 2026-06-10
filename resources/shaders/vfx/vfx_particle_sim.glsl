@@ -110,6 +110,8 @@ struct GPUEmitterConfig
 struct GPUEmitterState
 {
     mat4 worldTransform;
+    mat4 prevWorldTransform;
+    vec4 emitterVelocityAndInherit; // xyz = emitter world velocity, w = inherit ratio
     uint particleOffset;
     uint maxParticles;
     uint activeCount;
@@ -1006,8 +1008,16 @@ void main()
 
             vec3 localPos = generateSpawnPosition(seed, config);
 
+            // Sub-frame interpolation: distribute this frame's spawns along the
+            // emitter's path from last frame to avoid beads-on-a-string clumping.
+            float spawnFrac = (spawnThisFrame > 1u)
+                ? float(spawnSlot) / float(spawnThisFrame - 1u)
+                : 1.0;
+            vec3 spawnOrigin = mix(vec3(states[pc.emitterIndex].prevWorldTransform[3]),
+                                   vec3(worldTransform[3]), spawnFrac);
+
             mat3 rotation = mat3(worldTransform);
-            p.position = vec3(worldTransform[3]) + rotation * localPos;
+            p.position = spawnOrigin + rotation * localPos;
 
             p.lifetime = 0.0;
             p.maxLifetime = config.lifetime;
@@ -1024,6 +1034,9 @@ void main()
             p.velocity = dir * config.startSpeed;
 
             p.velocity = rotation * p.velocity;
+
+            vec4 emitterVel = states[pc.emitterIndex].emitterVelocityAndInherit;
+            p.velocity += emitterVel.xyz * emitterVel.w;
 
             if (config.renderMode == RENDER_MODE_RIBBON && config.maxTrailPoints > 0u) {
                 uint head = atomicAdd(ribbonHeads[pc.emitterIndex], 1u);

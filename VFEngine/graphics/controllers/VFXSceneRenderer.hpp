@@ -77,6 +77,8 @@ namespace controllers
         VFXInstanceId id = 0;
         std::unique_ptr<render::vfx::VFXParticleSystem> particleSystem;
         glm::mat4 worldTransform{1.0f};
+        glm::mat4 prevWorldTransform{1.0f};
+        glm::vec3 emitterVelocity{0.0f};
         render::vfx::VFXEmitterConfig config;
         bool loop = true;
         bool active = true;

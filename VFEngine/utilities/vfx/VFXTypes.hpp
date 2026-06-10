@@ -139,6 +139,7 @@ namespace vfx
         inline constexpr float START_SIZE = 1.0f;
         inline constexpr float START_SPEED = 1.0f;
         inline constexpr bool LOOPING = true;
+        inline constexpr float INHERIT_VELOCITY_RATIO = 0.0f;
 
         inline constexpr int FLIPBOOK_ROWS = 1;
         inline constexpr int FLIPBOOK_COLUMNS = 1;

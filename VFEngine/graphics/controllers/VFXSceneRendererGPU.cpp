@@ -188,6 +188,14 @@ namespace controllers
             {
                 effectiveDt = std::min(deltaTime, 1.0f / 30.0f);
                 instance.firstFrame = false;
+                instance.prevWorldTransform = instance.worldTransform;
+            }
+
+            if (effectiveDt > 0.0f)
+            {
+                glm::vec3 currentPos = glm::vec3(instance.worldTransform[3]);
+                glm::vec3 prevPos = glm::vec3(instance.prevWorldTransform[3]);
+                instance.emitterVelocity = (currentPos - prevPos) / effectiveDt;
             }
 
             instance.emissionTime += effectiveDt;
@@ -251,6 +259,8 @@ namespace controllers
             auto gpuState = toGPUState(instance);
             gpuState.spawnThisFrame = spawnThisFrame;
             gpuBufferManager->updateEmitterState(instance.gpuEmitterIndex, gpuState);
+
+            instance.prevWorldTransform = instance.worldTransform;
         }
     }
 
@@ -441,6 +451,9 @@ namespace controllers
     {
         render::vfx::GPUEmitterState gpuState{};
         gpuState.worldTransform = instance.worldTransform;
+        gpuState.prevWorldTransform = instance.prevWorldTransform;
+        gpuState.emitterVelocityAndInherit = glm::vec4(
+            instance.emitterVelocity, instance.config.inheritVelocityRatio);
         gpuState.particleOffset = instance.gpuParticleOffset;
         gpuState.maxParticles = instance.gpuParticleCount;
         gpuState.activeCount = 0;

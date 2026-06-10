@@ -216,6 +216,8 @@ namespace render::vfx
         float coneSpread = 0.5f;  // radians, cone half-angle for emission direction
         std::string texturePath;
         bool looping = true;
+        // Fraction of the emitter's own world velocity passed to new particles (0..1)
+        float inheritVelocityRatio = 0.0f;
 
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;

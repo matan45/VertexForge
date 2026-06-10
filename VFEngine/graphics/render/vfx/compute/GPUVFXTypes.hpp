@@ -194,6 +194,9 @@ namespace render::vfx
     struct alignas(16) GPUEmitterState
     {
         glm::mat4 worldTransform;
+        glm::mat4 prevWorldTransform;
+        // xyz = emitter world velocity (units/s), w = inherit velocity ratio
+        glm::vec4 emitterVelocityAndInherit{0.0f};
         uint32_t particleOffset;
         uint32_t maxParticles;
         uint32_t activeCount;
@@ -203,16 +206,18 @@ namespace render::vfx
         uint32_t spawnCounter;
         uint32_t padding = 0;
     };
-    static_assert(sizeof(GPUEmitterState) == 96, "GPUEmitterState must be 96 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterState) == 176, "GPUEmitterState must be 176 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterState, worldTransform) == 0, "GPUEmitterState::worldTransform offset mismatch");
-    static_assert(offsetof(GPUEmitterState, particleOffset) == 64, "GPUEmitterState::particleOffset offset mismatch");
-    static_assert(offsetof(GPUEmitterState, maxParticles) == 68, "GPUEmitterState::maxParticles offset mismatch");
-    static_assert(offsetof(GPUEmitterState, activeCount) == 72, "GPUEmitterState::activeCount offset mismatch");
-    static_assert(offsetof(GPUEmitterState, spawnThisFrame) == 76, "GPUEmitterState::spawnThisFrame offset mismatch");
-    static_assert(offsetof(GPUEmitterState, spawnAccumulator) == 80, "GPUEmitterState::spawnAccumulator offset mismatch");
-    static_assert(offsetof(GPUEmitterState, flags) == 84, "GPUEmitterState::flags offset mismatch");
-    static_assert(offsetof(GPUEmitterState, spawnCounter) == 88, "GPUEmitterState::spawnCounter offset mismatch");
-    static_assert(offsetof(GPUEmitterState, padding) == 92, "GPUEmitterState::padding offset mismatch");
+    static_assert(offsetof(GPUEmitterState, prevWorldTransform) == 64, "GPUEmitterState::prevWorldTransform offset mismatch");
+    static_assert(offsetof(GPUEmitterState, emitterVelocityAndInherit) == 128, "GPUEmitterState::emitterVelocityAndInherit offset mismatch");
+    static_assert(offsetof(GPUEmitterState, particleOffset) == 144, "GPUEmitterState::particleOffset offset mismatch");
+    static_assert(offsetof(GPUEmitterState, maxParticles) == 148, "GPUEmitterState::maxParticles offset mismatch");
+    static_assert(offsetof(GPUEmitterState, activeCount) == 152, "GPUEmitterState::activeCount offset mismatch");
+    static_assert(offsetof(GPUEmitterState, spawnThisFrame) == 156, "GPUEmitterState::spawnThisFrame offset mismatch");
+    static_assert(offsetof(GPUEmitterState, spawnAccumulator) == 160, "GPUEmitterState::spawnAccumulator offset mismatch");
+    static_assert(offsetof(GPUEmitterState, flags) == 164, "GPUEmitterState::flags offset mismatch");
+    static_assert(offsetof(GPUEmitterState, spawnCounter) == 168, "GPUEmitterState::spawnCounter offset mismatch");
+    static_assert(offsetof(GPUEmitterState, padding) == 172, "GPUEmitterState::padding offset mismatch");
 
     struct VFXDrawIndirectCommand
     {

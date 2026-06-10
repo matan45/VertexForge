@@ -107,6 +107,8 @@ namespace vfx
         config.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         config.looping = getBool(*emitterNode, "looping", EmitterDefaults::LOOPING);
         config.texturePath = getString(*emitterNode, "texture", "");
+        config.inheritVelocityRatio = std::clamp(
+            getFloat(*emitterNode, "inheritVelocityRatio", EmitterDefaults::INHERIT_VELOCITY_RATIO), 0.0f, 1.0f);
 
         config.modifiers = VFXModifierConfigLoader::fromGraph(data.graph);
         config.forces = VFXForceConfigLoader::fromGraph(data.graph);
