@@ -170,6 +170,7 @@ namespace windows
         params.modifiers = vfx::VFXModifierConfigLoader::fromGraph(vfxData->graph);
         params.forces = vfx::VFXForceConfigLoader::fromGraph(vfxData->graph);
         params.shape = vfx::VFXShapeConfigLoader::fromGraph(vfxData->graph);
+        params.bursts = vfx::loadBurstsFromNode(*emitterNode);
 
         params.flipbookRows = std::clamp(getInt(*emitterNode, "flipbookRows", vfx::EmitterDefaults::FLIPBOOK_ROWS), 1, 16);
         params.flipbookColumns = std::clamp(getInt(*emitterNode, "flipbookColumns", vfx::EmitterDefaults::FLIPBOOK_COLUMNS), 1, 16);

@@ -9,6 +9,7 @@
 #include "../../common/CameraTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
 #include "vfx/VFXEventTypes.hpp"
+#include "vfx/VFXBurstTypes.hpp"
 
 namespace render::vfx
 {
@@ -219,6 +220,7 @@ namespace render::vfx
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;
         ::vfx::ShapeConfig shape;
+        std::vector<::vfx::VFXBurst> bursts;
 
         int flipbookRows = 1;
         int flipbookColumns = 1;

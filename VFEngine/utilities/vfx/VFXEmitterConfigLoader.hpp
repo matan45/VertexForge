@@ -5,6 +5,7 @@
 #include "VFXModifierConfigLoader.hpp"
 #include "VFXForceConfigLoader.hpp"
 #include "VFXShapeConfigLoader.hpp"
+#include "VFXBurstTypes.hpp"
 #include <algorithm>
 #include <optional>
 #include <string_view>
@@ -110,6 +111,7 @@ namespace vfx
         config.modifiers = VFXModifierConfigLoader::fromGraph(data.graph);
         config.forces = VFXForceConfigLoader::fromGraph(data.graph);
         config.shape = VFXShapeConfigLoader::fromGraph(data.graph);
+        config.bursts = loadBurstsFromNode(*emitterNode);
 
         config.flipbookRows = std::clamp(getInt(*emitterNode, "flipbookRows", EmitterDefaults::FLIPBOOK_ROWS), 1, 16);
         config.flipbookColumns = std::clamp(getInt(*emitterNode, "flipbookColumns", EmitterDefaults::FLIPBOOK_COLUMNS), 1, 16);

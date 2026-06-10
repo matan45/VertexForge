@@ -5,6 +5,8 @@
 #include <vfx/VFXForceTypes.hpp>
 #include <vfx/VFXShapeTypes.hpp>
 #include <vfx/VFXEventTypes.hpp>
+#include <vfx/VFXBurstTypes.hpp>
+#include <vector>
 #include <glm/glm.hpp>
 #include <string>
 
@@ -24,6 +26,7 @@ namespace services
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;
         ::vfx::ShapeConfig shape;
+        std::vector<::vfx::VFXBurst> bursts;
 
         int flipbookRows = 1;
         int flipbookColumns = 1;

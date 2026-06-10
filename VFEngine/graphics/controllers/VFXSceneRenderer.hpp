@@ -95,6 +95,7 @@ namespace controllers
         uint8_t currentLOD = 0;
         float lodSpawnMultiplier = 1.0f;
         float lodBias = 0.0f;
+        bool burstClampWarned = false;
     };
 
     class VFXSceneRenderer

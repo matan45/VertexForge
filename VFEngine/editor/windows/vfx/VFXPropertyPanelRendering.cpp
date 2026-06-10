@@ -1,6 +1,7 @@
 #include "VFXPropertyPanel.hpp"
 #include "imgui.h"
 #include <nfd/FileDialog.hpp>
+#include <vfx/VFXBurstTypes.hpp>
 #include <cstring>
 #include <filesystem>
 
@@ -417,6 +418,81 @@ namespace editor::vfxeditor
                     }
                 }
             }
+        }
+    }
+
+    void VFXPropertyPanel::drawBurstProperties(vfx::VFXNode& node, float inputWidth)
+    {
+        ImGui::Text("Bursts");
+        ImGui::Separator();
+
+        std::vector<vfx::VFXBurst> bursts = vfx::loadBurstsFromNode(node);
+        bool changed = false;
+        int removeIndex = -1;
+
+        for (int i = 0; i < static_cast<int>(bursts.size()); ++i)
+        {
+            auto& burst = bursts[static_cast<size_t>(i)];
+            ImGui::PushID(i);
+
+            ImGui::Text("Burst %d", i);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X##removeBurst"))
+                removeIndex = i;
+
+            ImGui::Text("Time");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth);
+            changed |= ImGui::DragFloat("##burstTime", &burst.time, 0.05f, 0.0f, 60.0f, "%.2f");
+
+            ImGui::Text("Count");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth);
+            changed |= ImGui::DragInt("##burstCount", &burst.count, 1, 0, 10000);
+
+            ImGui::Text("Cycles");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth);
+            changed |= ImGui::DragInt("##burstCycles", &burst.cycles, 1, 0, 100);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Number of repeats (0 = repeat forever)");
+
+            if (burst.cycles != 1)
+            {
+                ImGui::Text("Interval");
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                changed |= ImGui::DragFloat("##burstInterval", &burst.interval, 0.05f, 0.01f, 60.0f, "%.2f");
+            }
+
+            ImGui::Text("Probability");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth);
+            changed |= ImGui::SliderFloat("##burstProbability", &burst.probability, 0.0f, 1.0f, "%.2f");
+
+            ImGui::Spacing();
+            ImGui::PopID();
+        }
+
+        if (removeIndex >= 0)
+        {
+            bursts.erase(bursts.begin() + removeIndex);
+            changed = true;
+        }
+
+        if (bursts.size() < static_cast<size_t>(vfx::BurstDefaults::MAX_BURSTS))
+        {
+            if (ImGui::Button("+ Add Burst"))
+            {
+                bursts.push_back(vfx::VFXBurst{});
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            vfx::storeBurstsToNode(node, bursts);
+            notifyChanged();
         }
     }
 

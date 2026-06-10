@@ -298,6 +298,7 @@ namespace editor::vfxeditor
                     if (propName.rfind("flipbook", 0) == 0) continue;
                     if (propName.rfind("event", 0) == 0) continue;
                     if (propName.rfind("collision", 0) == 0) continue;
+                    if (propName.rfind("burst", 0) == 0) continue;
 
                     std::string widgetId = "##adv" + propName + std::to_string(node->id);
 
@@ -360,6 +361,8 @@ namespace editor::vfxeditor
             drawRibbonProperties(*node, 80.0f);
             ImGui::Spacing();
             drawUVScrollProperties(*node, 80.0f);
+            ImGui::Spacing();
+            drawBurstProperties(*node, 80.0f);
             ImGui::Spacing();
             drawEventsProperties(*node, 80.0f);
             ImGui::Spacing();

@@ -82,6 +82,7 @@ namespace editor::vfxeditor
         void drawMeshPathSelector(vfx::VFXNode& node, float inputWidth);
         void drawRibbonProperties(vfx::VFXNode& node, float inputWidth);
         void drawUVScrollProperties(vfx::VFXNode& node, float inputWidth);
+        void drawBurstProperties(vfx::VFXNode& node, float inputWidth);
         void drawEventsProperties(vfx::VFXNode& node, float inputWidth);
         void drawCollisionProperties(vfx::VFXNode& node, float inputWidth);
         void notifyChanged();

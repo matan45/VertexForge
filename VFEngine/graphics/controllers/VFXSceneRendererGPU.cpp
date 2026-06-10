@@ -171,6 +171,7 @@ namespace controllers
         static std::random_device rd;
         static std::mt19937 gen(rd());
         std::uniform_int_distribution<uint32_t> dist;
+        std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
 
         for (auto& [id, instance] : instances)
         {
@@ -200,6 +201,25 @@ namespace controllers
                 instance.spawnAccumulator += lodAdjustedRate * effectiveDt;
                 spawnThisFrame = static_cast<uint32_t>(instance.spawnAccumulator);
                 instance.spawnAccumulator -= static_cast<float>(spawnThisFrame);
+
+                if (!instance.config.bursts.empty())
+                {
+                    float prevEmissionTime = instance.emissionTime - effectiveDt;
+                    uint32_t burstSpawns = ::vfx::evaluateBurstSpawns(
+                        instance.config.bursts, prevEmissionTime, instance.emissionTime,
+                        [&dist01]() { return dist01(gen); });
+                    burstSpawns = static_cast<uint32_t>(
+                        static_cast<float>(burstSpawns) * instance.lodSpawnMultiplier);
+
+                    if (burstSpawns > instance.gpuParticleCount && !instance.burstClampWarned)
+                    {
+                        vfLogWarning("VFX instance {}: burst of {} particles exceeds emitter pool size {} - clamped",
+                                     id, burstSpawns, instance.gpuParticleCount);
+                        instance.burstClampWarned = true;
+                    }
+
+                    spawnThisFrame += burstSpawns;
+                }
             }
 
             auto gpuConfig = toGPUConfig(instance.config, effectiveDt, instance.gpuParticleCount, dist(gen));

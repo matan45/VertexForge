@@ -203,6 +203,7 @@ namespace controllers
             config.modifiers = params.modifiers;
             config.forces = params.forces;
             config.shape = params.shape;
+            config.bursts = params.bursts;
             config.flipbookRows = params.flipbookRows;
             config.flipbookColumns = params.flipbookColumns;
             config.flipbookFrameRate = params.flipbookFrameRate;
