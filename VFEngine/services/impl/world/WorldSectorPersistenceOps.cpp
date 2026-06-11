@@ -301,6 +301,7 @@ namespace services
 
         hlodProxyManager.unloadAll(*sceneGraph);
         hlodStreamer.clear();
+        hlodRegenQueue.clear();
 
         worldDefinition = {};
         streamer.setEnabled(false);

@@ -22,6 +22,7 @@
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/AssetLifecycleHelpers.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
 #include <filesystem>
 
 namespace
@@ -632,38 +633,7 @@ namespace services
         dispatcher.registerCommandHandler<::events::world::hlod::GenerateHLODCommand>(
             [this](const ::events::world::hlod::GenerateHLODCommand& cmd) -> bool
             {
-                if (!worldMode) return false;
-                const auto* sector = sectorManager.getSector(cmd.coord);
-                if (!sector || sector->filePath.empty()) return false;
-
-                auto& tiers = worldDefinition.hlodConfig.tiers;
-                world::HLODTierConfig tierConfig;
-                for (const auto& t : tiers)
-                {
-                    if (t.tier == cmd.tier) { tierConfig = t; break; }
-                }
-
-                // Generate output path alongside sector file
-                std::string hlodPath = sector->filePath;
-                auto dotPos = hlodPath.rfind('.');
-                if (dotPos != std::string::npos)
-                    hlodPath = hlodPath.substr(0, dotPos);
-                hlodPath += "_hlod" + std::to_string(cmd.tier) + ".vfHLOD";
-
-                world::HLODGenerator generator;
-                std::string workingDir = currentWorldPath.empty() ? "." :
-                    currentWorldPath.substr(0, currentWorldPath.find_last_of("/\\"));
-
-                bool result = generator.generateForSector(
-                    cmd.coord, sector->filePath, workingDir,
-                    tierConfig, hlodPath);
-
-                if (result)
-                {
-                    sectorManager.getSector(cmd.coord)->hlodFilePath = hlodPath;
-                }
-
-                return result;
+                return generateSectorHLOD(cmd.coord, cmd.tier);
             });
 
         dispatcher.registerCommandHandler<::events::world::hlod::SetHLODConfigCommand>(
@@ -994,6 +964,65 @@ namespace services
             });
     }
 
+    bool WorldSectorServiceImpl::generateSectorHLOD(const world::SectorCoord& coord, uint8_t tier)
+    {
+        if (!worldMode) return false;
+        const auto* sector = sectorManager.getSector(coord);
+        if (!sector || sector->filePath.empty()) return false;
+
+        auto& tiers = worldDefinition.hlodConfig.tiers;
+        world::HLODTierConfig tierConfig;
+        for (const auto& t : tiers)
+        {
+            if (t.tier == tier) { tierConfig = t; break; }
+        }
+
+        // Generate output path alongside sector file
+        std::string hlodPath = sector->filePath;
+        auto dotPos = hlodPath.rfind('.');
+        if (dotPos != std::string::npos)
+            hlodPath = hlodPath.substr(0, dotPos);
+        hlodPath += "_hlod" + std::to_string(tier) + ".vfHLOD";
+
+        world::HLODGenerator generator;
+        std::string workingDir = currentWorldPath.empty() ? "." :
+            currentWorldPath.substr(0, currentWorldPath.find_last_of("/\\"));
+
+        bool result = generator.generateForSector(
+            coord, sector->filePath, workingDir,
+            tierConfig, hlodPath);
+
+        if (result)
+        {
+            sectorManager.getSector(coord)->hlodFilePath = hlodPath;
+        }
+
+        return result;
+    }
+
+    void WorldSectorServiceImpl::processHLODRegenQueue()
+    {
+        // One re-bake per frame, edit mode only (generation runs on the main
+        // thread — HLODGenerator's thread-safety is unproven), and only while
+        // sector streaming is idle so re-bakes never compete with loads
+        if (hlodRegenQueue.empty() || isPlayMode || !worldDefinition.hlodConfig.enabled)
+            return;
+        if (!pendingAsyncLoads.empty())
+            return;
+
+        auto coord = hlodRegenQueue.front();
+        hlodRegenQueue.pop_front();
+
+        auto* sector = sectorManager.getSector(coord);
+        if (!sector || sector->filePath.empty() || !sector->hlodFilePath.empty())
+            return; // gone, never saved, or already re-baked manually
+
+        if (generateSectorHLOD(coord, 0))
+            vfLogInfo("HLOD re-baked for sector [{},{}]", coord.x, coord.z);
+        else
+            vfLogWarning("HLOD re-bake failed for sector [{},{}]", coord.x, coord.z);
+    }
+
     void WorldSectorServiceImpl::invalidateHLODForSector(const world::SectorCoord& coord)
     {
         auto* sector = sectorManager.getSector(coord);
@@ -1019,6 +1048,13 @@ namespace services
         ::events::world::hlod::HLODInvalidatedNotification notif;
         notif.coord = coord;
         ::events::EventDispatcher::instance().publish(notif);
+
+        // Queue an automatic re-bake (drained when streaming is idle, edit mode)
+        if (worldDefinition.hlodConfig.enabled &&
+            std::find(hlodRegenQueue.begin(), hlodRegenQueue.end(), coord) == hlodRegenQueue.end())
+        {
+            hlodRegenQueue.push_back(coord);
+        }
 
         vfLogInfo("HLOD invalidated for sector [{},{}]", coord.x, coord.z);
     }

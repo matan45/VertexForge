@@ -12,6 +12,7 @@
 #include "world/HLODProxyManager.hpp"
 #include "streaming/AsyncLoadQueue.hpp"
 #include <chrono>
+#include <deque>
 #include <future>
 #include <memory>
 #include <optional>
@@ -146,6 +147,12 @@ namespace services
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
         void invalidateHLODForSector(const world::SectorCoord& coord);
+        bool generateSectorHLOD(const world::SectorCoord& coord, uint8_t tier);
+        void processHLODRegenQueue();
+
+        // Sectors whose HLOD was invalidated, awaiting automatic re-bake
+        // (drained one per frame in edit mode while streaming is idle)
+        std::deque<world::SectorCoord> hlodRegenQueue;
         void pollAsyncSectorLoads();
         void finalizeSectorLoad(const world::SectorCoord& coord,
                                 std::vector<nlohmann::json>& entityData,

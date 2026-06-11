@@ -139,6 +139,8 @@ namespace services
 
         drawDebugSectors();
 
+        processHLODRegenQueue();
+
         entityLoader.update(*sceneGraph, worldDefinition.streamingConfig.maxEntitiesPerFrame);
 
         // Transition sectors from Loading to Loaded once all their entities are processed
