@@ -2,6 +2,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/navmesh/NavmeshEvents.hpp"
 #include "../../services/events/render/RenderEvents.hpp"
+#include "../../services/events/world/WorldSectorEvents.hpp"
 #include "types/NavmeshTypes.hpp"
 #include <imgui.h>
 
@@ -344,8 +345,55 @@ namespace windows
 
             ImGui::EndDisabled();
 
+            drawWorldBake();
+
             ImGui::Unindent();
         }
+    }
+
+    void NavmeshWindow::drawWorldBake()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (!dispatcher.query(events::world::IsWorldModeQuery{}))
+            return;
+
+        ImGui::Spacing();
+        ImGui::Text("Open World");
+        ImGui::Separator();
+
+        auto progress = dispatcher.query(events::navmesh::GetWorldNavmeshBakeProgressQuery{});
+        if (progress.state == events::navmesh::WorldNavmeshBakeState::Baking)
+        {
+            float fraction = progress.sectorsTotal > 0
+                ? static_cast<float>(progress.sectorsDone) / static_cast<float>(progress.sectorsTotal)
+                : 0.0f;
+            ImGui::ProgressBar(fraction, ImVec2(-1, 0));
+            ImGui::Text("Sector (%d, %d) — %d / %d sectors, %d tiles baked",
+                        progress.currentSectorX, progress.currentSectorZ,
+                        progress.sectorsDone, progress.sectorsTotal, progress.tilesBaked);
+
+            if (ImGui::Button("Cancel World Bake", ImVec2(-1, 0)))
+            {
+                dispatcher.execute(events::navmesh::CancelWorldNavmeshBakeCommand{});
+            }
+            return;
+        }
+
+        if (ImGui::Button("Bake World Navmesh...", ImVec2(-1, 30)))
+        {
+            std::string outputDir = fileDialog.selectFolderDialog();
+            if (!outputDir.empty())
+            {
+                events::navmesh::BakeWorldNavmeshCommand cmd;
+                cmd.outputDirectory = outputDir;
+                cmd.settings = settings;
+                dispatcher.execute(cmd);
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Bakes the whole world sector by sector (streams each sector in,\n"
+                              "bakes its navmesh tiles to the chosen folder, releases it).\n"
+                              "Pick a folder inside the project so the tiles ship with the game.");
     }
 
     void NavmeshWindow::drawTileStatus()
@@ -452,6 +500,15 @@ namespace windows
                 events::navmesh::SetNavmeshStreamingEnabledCommand cmd;
                 cmd.enabled = enabled;
                 dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Off: the whole navmesh stays resident (default).\n"
+                                  "On: tiles load/unload around cameras, invokers and sectors.\n"
+                                  "Saved into the navmesh asset (index.vfNavIndex).");
+
+            if (enabled && ImGui::Button("Load All Tiles", ImVec2(-1, 0)))
+            {
+                dispatcher.execute(events::navmesh::LoadAllNavmeshTilesCommand{});
             }
 
             ImGui::PushItemWidth(-1);

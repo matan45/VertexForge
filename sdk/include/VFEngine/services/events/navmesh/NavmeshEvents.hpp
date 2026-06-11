@@ -210,6 +210,57 @@ namespace events::navmesh
         std::string_view getName() const override { return "IsNavmeshStreamingEnabled"; }
     };
 
+    // Loads every cached tile not currently resident (terrain "Load All Tiles" parity)
+    struct LoadAllNavmeshTilesCommand : ICommand<bool>
+    {
+        std::string_view getName() const override { return "LoadAllNavmeshTiles"; }
+    };
+
+    // === Whole-World Bake (sector-by-sector, editor only) ===
+
+    enum class WorldNavmeshBakeState : uint8_t
+    {
+        Idle = 0,
+        Baking,
+        Cancelled,
+        Failed,
+        Complete
+    };
+
+    struct WorldNavmeshBakeProgress
+    {
+        WorldNavmeshBakeState state = WorldNavmeshBakeState::Idle;
+        int sectorsDone = 0;
+        int sectorsTotal = 0;
+        int tilesBaked = 0;
+        int currentSectorX = 0;
+        int currentSectorZ = 0;
+    };
+
+    struct BakeWorldNavmeshCommand : ICommand<bool>
+    {
+        std::string outputDirectory;
+        types::NavmeshBakeSettings settings;
+        std::string_view getName() const override { return "BakeWorldNavmesh"; }
+    };
+
+    struct CancelWorldNavmeshBakeCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "CancelWorldNavmeshBake"; }
+    };
+
+    struct GetWorldNavmeshBakeProgressQuery : IQuery<WorldNavmeshBakeProgress>
+    {
+        std::string_view getName() const override { return "GetWorldNavmeshBakeProgress"; }
+    };
+
+    struct WorldNavmeshBakeCompleteNotification : INotification
+    {
+        bool success = false;
+        std::string message;
+        std::string_view getName() const override { return "WorldNavmeshBakeComplete"; }
+    };
+
     enum class NavmeshTileStatus : uint8_t
     {
         NotBaked = 0,
@@ -258,5 +309,13 @@ namespace events::navmesh
         uint8_t oldLod = 0;
         uint8_t newLod = 0;
         std::string_view getName() const override { return "NavmeshTileLodChanged"; }
+    };
+
+    // Monotonic counter bumped on every tile load/unload/update. Scripts cache it
+    // alongside findPath results and re-path when it changes — full waypoint lists
+    // go silently stale when streaming swaps tiles underneath them.
+    struct GetNavmeshTileVersionQuery : IQuery<uint64_t>
+    {
+        std::string_view getName() const override { return "GetNavmeshTileVersion"; }
     };
 }

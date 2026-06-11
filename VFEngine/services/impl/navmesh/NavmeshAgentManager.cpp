@@ -295,6 +295,19 @@ namespace services
             entityStuckTimer.erase(id);
             velocityTransitionFrames.erase(id);
         }
+
+        // Agents standing on still-loaded tiles whose TARGET tile just unloaded
+        // would chase an unreachable goal — re-issue the target so Detour
+        // re-plans to the nearest reachable point
+        for (const auto& [entityId, agentIdx] : entityToAgentIndex)
+        {
+            auto targetIt = entityToTarget.find(entityId);
+            if (targetIt == entityToTarget.end())
+                continue;
+
+            if (unloadedSet.count(worldToTileCoord(targetIt->second)))
+                navmeshProvider->setCrowdAgentTarget(agentIdx, targetIt->second);
+        }
     }
 
     void NavmeshAgentManager::resumeAgentsOnLoadedTiles(

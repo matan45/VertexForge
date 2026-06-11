@@ -145,6 +145,33 @@ namespace gameExport
 			}
 		}
 
+		// A navmesh index with no sibling tiles ships a navmesh that can never load
+		std::error_code navEc;
+		for (auto it = fs::recursive_directory_iterator(config.workingDirectory, navEc);
+		     it != fs::recursive_directory_iterator(); it.increment(navEc))
+		{
+			if (navEc) break;
+			if (!it->is_regular_file() || it->path().filename() != "index.vfNavIndex")
+				continue;
+
+			bool hasTiles = false;
+			std::error_code tileEc;
+			for (const auto& sibling : fs::directory_iterator(it->path().parent_path(), tileEc))
+			{
+				if (sibling.is_regular_file() && sibling.path().extension() == ".vfNavTile")
+				{
+					hasTiles = true;
+					break;
+				}
+			}
+
+			if (!hasTiles)
+			{
+				result.warnings.push_back("Navmesh index has no baked tiles: " + it->path().string()
+				                          + " — re-save the navmesh before exporting.");
+			}
+		}
+
 		return true;
 	}
 

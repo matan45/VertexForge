@@ -45,6 +45,24 @@ namespace services
         bool saveNavmeshTiled(const std::string& directory);
         bool loadNavmeshTiled(const std::string& directory, types::NavmeshBakeSettings& outSettings);
 
+        // Loads every cached tile not currently resident (streaming off / "Load All Tiles")
+        int loadAllTilesFromCache();
+
+        // === Whole-world bake support (driven by NavmeshWorldBaker) ===
+
+        // Points the tile cache at a fresh output directory without loading anything
+        void prepareTileCache(const std::string& directory);
+
+        // Collects geometry for one tile on the calling thread and submits the bake
+        // async (saved to cache on completion). Returns false when the tile has no
+        // geometry (skipped — nothing to bake).
+        bool submitWorldBakeTile(const navigation::NavmeshTileCoord& coord);
+
+        int getPendingBakeCount() const { return static_cast<int>(pendingTileBakes.size()); }
+
+        // Writes index.vfNavIndex from everything currently in the tile cache
+        bool finalizeWorldBakeIndex();
+
         void markTileDirty(int tileX, int tileZ);
         void processDirtyTiles();
         void processOnDemandGeneration();
@@ -103,6 +121,9 @@ namespace services
         };
         std::vector<PendingTileBake> pendingTileBakes;
         static constexpr int MAX_TILE_BAKES_PER_FRAME = 2;
+
+        int initialLoadBurst = 0;
+        static constexpr int INITIAL_STREAM_LOAD_BURST = 64;
 
         ::events::SubscriptionToken brushAppliedToken;
         ::events::SubscriptionToken holeBrushAppliedToken;

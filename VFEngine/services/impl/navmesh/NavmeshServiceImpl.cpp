@@ -48,6 +48,73 @@ namespace services
             {
                 return collectAreaModifiersForTile(bounds);
             });
+
+        NavmeshWorldBaker::WorldOps worldOps;
+        worldOps.getAllSectorCoords = []()
+        {
+            return ::events::EventDispatcher::instance().query(::events::world::GetAllSectorCoordsQuery{});
+        };
+        worldOps.loadSector = [](const ::world::SectorCoord& coord)
+        {
+            ::events::world::LoadSectorCommand cmd;
+            cmd.coord = coord;
+            return ::events::EventDispatcher::instance().execute(cmd);
+        };
+        worldOps.unloadSector = [](const ::world::SectorCoord& coord)
+        {
+            ::events::world::UnloadSectorCommand cmd;
+            cmd.coord = coord;
+            return ::events::EventDispatcher::instance().execute(cmd);
+        };
+        worldOps.sectorExists = [](const ::world::SectorCoord& coord)
+        {
+            ::events::world::DoesSectorExistQuery query;
+            query.coord = coord;
+            return ::events::EventDispatcher::instance().query(query);
+        };
+        worldOps.getReadiness = [](const ::world::SectorCoord& coord)
+        {
+            ::events::world::GetSectorReadinessQuery query;
+            query.coord = coord;
+            return ::events::EventDispatcher::instance().query(query);
+        };
+        worldOps.getSectorWorldSize = []()
+        {
+            return ::events::EventDispatcher::instance()
+                .query(::events::world::GetSectorConfigQuery{}).sectorWorldSize;
+        };
+        worldOps.registerKeepAliveSource = [](const glm::vec3& position)
+        {
+            ::events::world::RegisterStreamingSourceCommand cmd;
+            cmd.position = position;
+            cmd.radiusMultiplier = 1.0f;
+            cmd.priority = 255;
+            return ::events::EventDispatcher::instance().execute(cmd);
+        };
+        worldOps.updateKeepAliveSource = [](uint32_t sourceId, const glm::vec3& position)
+        {
+            ::events::world::UpdateStreamingSourcePositionCommand cmd;
+            cmd.sourceId = sourceId;
+            cmd.position = position;
+            ::events::EventDispatcher::instance().execute(cmd);
+        };
+        worldOps.unregisterKeepAliveSource = [](uint32_t sourceId)
+        {
+            ::events::world::UnregisterStreamingSourceCommand cmd;
+            cmd.sourceId = sourceId;
+            ::events::EventDispatcher::instance().execute(cmd);
+        };
+        worldBaker = std::make_unique<NavmeshWorldBaker>(tileManager, std::move(worldOps));
+        worldBaker->setCompletionCallback([this](bool success, const std::string& message)
+        {
+            if (success && tileManager.getTileCache())
+                attachNavmeshAssetToSceneRoot(tileManager.getTileCache()->getDirectory() + "/index.vfNavIndex");
+
+            ::events::navmesh::WorldNavmeshBakeCompleteNotification notif;
+            notif.success = success;
+            notif.message = message;
+            ::events::EventDispatcher::instance().publish(notif);
+        });
     }
 
     NavmeshServiceImpl::~NavmeshServiceImpl()
@@ -216,6 +283,50 @@ namespace services
             [this](const events::navmesh::SetNavmeshStreamingEnabledCommand& cmd)
             {
                 tileManager.getStreamer().setEnabled(cmd.enabled);
+                // Streaming off = whole navmesh resident again (terrain parity)
+                if (!cmd.enabled)
+                    tileManager.loadAllTilesFromCache();
+            });
+
+        dispatcher.registerCommandHandler<events::navmesh::LoadAllNavmeshTilesCommand>(
+            [this](const events::navmesh::LoadAllNavmeshTilesCommand&)
+            {
+                return tileManager.loadAllTilesFromCache() >= 0;
+            });
+
+        dispatcher.registerCommandHandler<events::navmesh::BakeWorldNavmeshCommand>(
+            [this](const events::navmesh::BakeWorldNavmeshCommand& cmd) -> bool
+            {
+                if (playModeActive)
+                {
+                    vfLogWarning("NavmeshService: world bake is edit-mode only");
+                    return false;
+                }
+                if (!::events::EventDispatcher::instance().query(::events::world::IsWorldModeQuery{}))
+                {
+                    vfLogWarning("NavmeshService: world bake requires world mode");
+                    return false;
+                }
+                if (bakeFuture.valid() || worldBaker->isRunning())
+                    return false;
+
+                // Fresh tiled navmesh with the requested settings — tileManager
+                // holds a reference to lastBakeSettings
+                clearNavmesh();
+                lastBakeSettings = cmd.settings;
+                return worldBaker->start(cmd.outputDirectory);
+            });
+
+        dispatcher.registerCommandHandler<events::navmesh::CancelWorldNavmeshBakeCommand>(
+            [this](const events::navmesh::CancelWorldNavmeshBakeCommand&)
+            {
+                worldBaker->cancel();
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetWorldNavmeshBakeProgressQuery>(
+            [this](const events::navmesh::GetWorldNavmeshBakeProgressQuery&)
+            {
+                return worldBaker->getProgress();
             });
 
         dispatcher.registerQueryHandler<events::navmesh::GetNavmeshStreamingConfigQuery>(
@@ -259,23 +370,33 @@ namespace services
                 tileManager.setLastCameraPos(notif.position);
             });
 
-        // Tile graph updates for hierarchical pathfinding
+        // Tile graph updates for hierarchical pathfinding (+ version bump for
+        // script-side stale-path detection)
         dispatcher.subscribe<events::navmesh::NavmeshTileLoadedNotification>(
             [this](const events::navmesh::NavmeshTileLoadedNotification& notif)
             {
+                ++tileVersion;
                 navmeshProvider->onTileAdded(notif.tileX, notif.tileZ);
             });
 
         dispatcher.subscribe<events::navmesh::NavmeshTileUnloadedNotification>(
             [this](const events::navmesh::NavmeshTileUnloadedNotification& notif)
             {
+                ++tileVersion;
                 navmeshProvider->onTileRemoved(notif.tileX, notif.tileZ);
             });
 
         dispatcher.subscribe<events::navmesh::NavmeshTileUpdatedNotification>(
             [this](const events::navmesh::NavmeshTileUpdatedNotification& notif)
             {
+                ++tileVersion;
                 navmeshProvider->onTileAdded(notif.tileX, notif.tileZ);
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetNavmeshTileVersionQuery>(
+            [this](const events::navmesh::GetNavmeshTileVersionQuery&)
+            {
+                return tileVersion;
             });
 
         // Brush event subscriptions for incremental rebake
@@ -490,10 +611,19 @@ namespace services
         agentManager.stopAgent(entity);
     }
 
-    void NavmeshServiceImpl::updateAgents(float deltaTime)
+    void NavmeshServiceImpl::update(float deltaTime, bool simulateAgents)
     {
+        playModeActive = simulateAgents;
+
         pollBakeCompletion();
         tileManager.pollTileBakeCompletions();
+
+        // World bake is an edit-mode job — entering play mode aborts it
+        if (simulateAgents)
+            worldBaker->cancel();
+        else
+            worldBaker->update();
+
         gatherInvokerSources();
         auto streamResult = tileManager.updateStreaming();
         if (!streamResult.unloaded.empty())
@@ -502,7 +632,8 @@ namespace services
             agentManager.resumeAgentsOnLoadedTiles(streamResult.loaded);
         tileManager.processDirtyTiles();
         tileManager.processOnDemandGeneration();
-        agentManager.updatePositions(deltaTime);
+        if (simulateAgents)
+            agentManager.updatePositions(deltaTime);
         drawOffMeshLinkDebug();
         trackOffMeshLinkTransforms();
         trackObstacleTransforms();

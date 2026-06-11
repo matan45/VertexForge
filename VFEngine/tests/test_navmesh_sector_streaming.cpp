@@ -1,9 +1,11 @@
 #include <doctest.h>
 #include <impl/navmesh/NavmeshTileManager.hpp>
 #include <providers/navmesh/INavmeshProvider.hpp>
+#include <navigation/NavmeshTileCache.hpp>
 #include <types/NavmeshTypes.hpp>
 
 #include <algorithm>
+#include <filesystem>
 #include <vector>
 
 // ============================================================
@@ -232,5 +234,92 @@ TEST_SUITE("NavmeshSectorStreaming")
         f.manager.releaseTilesForSector(sector, sectorMin(0.0f, 0.0f), sectorMax(64.0f, 64.0f));
 
         CHECK(f.provider.removedTiles.size() == 4);
+    }
+
+    TEST_CASE("loadNavmeshTiled honors the persisted streaming toggle")
+    {
+        namespace fs = std::filesystem;
+        fs::path dir = fs::temp_directory_path() / "vf_test_nav_deferred_load";
+
+        // Five cached tiles in a row at z=0 (tile world size 32)
+        auto buildCache = [&dir](uint8_t streamingEnabled)
+        {
+            fs::remove_all(dir);
+            navigation::NavmeshTileCache writer(dir.string());
+            navigation::NavmeshTileIndex index;
+            index.streaming.enabled = streamingEnabled;
+            for (int x = 0; x < 5; ++x)
+            {
+                navigation::NavmeshTileData tile;
+                tile.x = x;
+                tile.y = 0;
+                tile.data = {1, 2, 3, 4};
+                tile.dataSize = 4;
+                writer.saveTile(navigation::NavmeshTileCoord{x, 0}, tile);
+                index.tileCoords.push_back({x, 0});
+            }
+            writer.saveIndex(index);
+        };
+
+        SUBCASE("streaming ON: no eager adds, first update bursts past the per-frame cap")
+        {
+            buildCache(1);
+            Fixture f;
+            types::NavmeshBakeSettings outSettings;
+            REQUIRE(f.manager.loadNavmeshTiled(dir.string(), outSettings));
+
+            // Deferred: nothing resident yet
+            CHECK(f.provider.addedTiles.empty());
+            CHECK(f.manager.getStreamer().isEnabled());
+
+            // First streaming update pulls everything nearby in one burst —
+            // more than the default maxLoadsPerFrame of 2
+            f.manager.setLastCameraPos({80.0f, 0.0f, 16.0f});
+            auto result = f.manager.updateStreaming();
+            CHECK(result.loaded.size() == 5);
+            CHECK(f.provider.addedTiles.size() == 5);
+
+            // Subsequent updates are back to the normal per-frame budget
+            // (everything is already loaded here — just verify no churn)
+            auto second = f.manager.updateStreaming();
+            CHECK(second.loaded.empty());
+        }
+
+        SUBCASE("streaming OFF: eager full load, streamer stays disabled")
+        {
+            buildCache(0);
+            Fixture f;
+            types::NavmeshBakeSettings outSettings;
+            REQUIRE(f.manager.loadNavmeshTiled(dir.string(), outSettings));
+
+            CHECK(f.provider.addedTiles.size() == 5);
+            CHECK_FALSE(f.manager.getStreamer().isEnabled());
+
+            // With the streamer disabled updateStreaming is a no-op — the full
+            // mesh stays resident no matter where the camera is
+            f.manager.setLastCameraPos({100000.0f, 0.0f, 100000.0f});
+            auto result = f.manager.updateStreaming();
+            CHECK(result.unloaded.empty());
+        }
+
+        SUBCASE("loadAllTilesFromCache restores residency (streaming toggled off)")
+        {
+            buildCache(1);
+            Fixture f;
+            types::NavmeshBakeSettings outSettings;
+            REQUIRE(f.manager.loadNavmeshTiled(dir.string(), outSettings));
+            CHECK(f.provider.addedTiles.empty());
+
+            f.manager.getStreamer().setEnabled(false);
+            CHECK(f.manager.loadAllTilesFromCache() == 5);
+            CHECK(f.provider.addedTiles.size() == 5);
+            CHECK(f.manager.getStreamer().isTileLoaded({4, 0}));
+
+            // Idempotent: nothing left to load
+            CHECK(f.manager.loadAllTilesFromCache() == 0);
+        }
+
+        std::error_code ec;
+        fs::remove_all(dir, ec);
     }
 }

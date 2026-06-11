@@ -1,13 +1,48 @@
 #include "NavmeshTileCache.hpp"
 #include "../print/Log.hpp"
+#include "../resource/VirtualFileSystem.hpp"
 #include <fstream>
 #include <filesystem>
+#include <cstring>
 
 namespace navigation
 {
+    namespace
+    {
+        // Sequential reader over a byte buffer (pak entries arrive as whole buffers)
+        struct BufferReader
+        {
+            const std::vector<uint8_t>& buf;
+            size_t pos = 0;
+
+            bool read(void* dst, size_t size)
+            {
+                if (pos + size > buf.size())
+                    return false;
+                std::memcpy(dst, buf.data() + pos, size);
+                pos += size;
+                return true;
+            }
+        };
+    }
+
     NavmeshTileCache::NavmeshTileCache(const std::string& directory)
         : directory(directory)
     {
+        readFileFn = [](const std::string& path)
+        {
+            return resource::VirtualFileSystem::instance().readFile(path);
+        };
+        fileExistsFn = [](const std::string& path)
+        {
+            return resource::VirtualFileSystem::instance().exists(path);
+        };
+    }
+
+    void NavmeshTileCache::setFileAccess(FileReadFn read, FileExistsFn exists)
+    {
+        readFileFn = std::move(read);
+        fileExistsFn = std::move(exists);
     }
 
     std::string NavmeshTileCache::getTilePath(const NavmeshTileCoord& coord) const
@@ -31,6 +66,9 @@ namespace navigation
 
     bool NavmeshTileCache::saveTile(const NavmeshTileCoord& coord, const NavmeshTileData& data)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false; // pak is read-only — on-demand tiles stay in-memory in shipped builds
+
         std::filesystem::create_directories(directory);
 
         std::string path = getTilePath(coord);
@@ -55,6 +93,9 @@ namespace navigation
 
     bool NavmeshTileCache::saveTile(const NavmeshTileLodKey& key, const NavmeshTileData& data)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         std::filesystem::create_directories(directory);
 
         std::string path = getTilePath(key);
@@ -84,45 +125,47 @@ namespace navigation
 
     bool NavmeshTileCache::loadTile(const NavmeshTileCoord& coord, NavmeshTileData& outData)
     {
-        std::string path = getTilePath(coord);
-        std::ifstream file(path, std::ios::binary);
-        if (!file.is_open())
-        {
+        auto bytes = readFileFn(getTilePath(coord));
+        if (bytes.empty())
             return false;
-        }
 
-        file.read(reinterpret_cast<char*>(&outData.x), sizeof(outData.x));
-        file.read(reinterpret_cast<char*>(&outData.y), sizeof(outData.y));
-        file.read(reinterpret_cast<char*>(&outData.dataSize), sizeof(outData.dataSize));
+        BufferReader reader{bytes};
+        if (!reader.read(&outData.x, sizeof(outData.x)) ||
+            !reader.read(&outData.y, sizeof(outData.y)) ||
+            !reader.read(&outData.dataSize, sizeof(outData.dataSize)))
+            return false;
+
         if (outData.dataSize > 0)
         {
             outData.data.resize(outData.dataSize);
-            file.read(reinterpret_cast<char*>(outData.data.data()), outData.dataSize);
+            if (!reader.read(outData.data.data(), outData.dataSize))
+                return false;
         }
 
-        return file.good();
+        return true;
     }
 
     bool NavmeshTileCache::loadTile(const NavmeshTileLodKey& key, NavmeshTileData& outData)
     {
-        std::string path = getTilePath(key);
-        std::ifstream file(path, std::ios::binary);
-        if (!file.is_open())
-        {
+        auto bytes = readFileFn(getTilePath(key));
+        if (bytes.empty())
             return false;
-        }
 
-        file.read(reinterpret_cast<char*>(&outData.x), sizeof(outData.x));
-        file.read(reinterpret_cast<char*>(&outData.y), sizeof(outData.y));
-        file.read(reinterpret_cast<char*>(&outData.lod), sizeof(outData.lod));
-        file.read(reinterpret_cast<char*>(&outData.dataSize), sizeof(outData.dataSize));
+        BufferReader reader{bytes};
+        if (!reader.read(&outData.x, sizeof(outData.x)) ||
+            !reader.read(&outData.y, sizeof(outData.y)) ||
+            !reader.read(&outData.lod, sizeof(outData.lod)) ||
+            !reader.read(&outData.dataSize, sizeof(outData.dataSize)))
+            return false;
+
         if (outData.dataSize > 0)
         {
             outData.data.resize(outData.dataSize);
-            file.read(reinterpret_cast<char*>(outData.data.data()), outData.dataSize);
+            if (!reader.read(outData.data.data(), outData.dataSize))
+                return false;
         }
 
-        return file.good();
+        return true;
     }
 
     bool NavmeshTileCache::hasTile(const NavmeshTileCoord& coord) const
@@ -130,7 +173,7 @@ namespace navigation
         if (knownTiles.count(coord))
             return true;
 
-        return std::filesystem::exists(getTilePath(coord));
+        return fileExistsFn(getTilePath(coord));
     }
 
     bool NavmeshTileCache::hasTile(const NavmeshTileLodKey& key) const
@@ -138,11 +181,14 @@ namespace navigation
         if (knownTileLods.count(key))
             return true;
 
-        return std::filesystem::exists(getTilePath(key));
+        return fileExistsFn(getTilePath(key));
     }
 
     bool NavmeshTileCache::removeTile(const NavmeshTileCoord& coord)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         knownTiles.erase(coord);
         std::string path = getTilePath(coord);
         std::error_code ec;
@@ -151,6 +197,9 @@ namespace navigation
 
     bool NavmeshTileCache::saveIndex(const NavmeshTileIndex& index)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         std::filesystem::create_directories(directory);
 
         std::string path = getIndexPath();
@@ -167,6 +216,14 @@ namespace navigation
         file.write(reinterpret_cast<const char*>(&index.boundsMin), sizeof(index.boundsMin));
         file.write(reinterpret_cast<const char*>(&index.boundsMax), sizeof(index.boundsMax));
 
+        // Version 6: streaming block, written field-by-field (no struct padding)
+        file.write(reinterpret_cast<const char*>(&index.streaming.enabled), sizeof(index.streaming.enabled));
+        file.write(reinterpret_cast<const char*>(&index.streaming.loadRadius), sizeof(index.streaming.loadRadius));
+        file.write(reinterpret_cast<const char*>(&index.streaming.unloadRadius), sizeof(index.streaming.unloadRadius));
+        file.write(reinterpret_cast<const char*>(&index.streaming.maxLoadsPerFrame), sizeof(index.streaming.maxLoadsPerFrame));
+        file.write(reinterpret_cast<const char*>(&index.streaming.maxUnloadsPerFrame), sizeof(index.streaming.maxUnloadsPerFrame));
+        file.write(reinterpret_cast<const char*>(index.streaming.lodDistances), sizeof(index.streaming.lodDistances));
+
         uint32_t count = static_cast<uint32_t>(index.tileCoords.size());
         file.write(reinterpret_cast<const char*>(&count), sizeof(count));
         for (const auto& coord : index.tileCoords)
@@ -180,38 +237,55 @@ namespace navigation
 
     bool NavmeshTileCache::loadIndex(NavmeshTileIndex& outIndex)
     {
-        std::string path = getIndexPath();
-        std::ifstream file(path, std::ios::binary);
-        if (!file.is_open())
-        {
+        auto bytes = readFileFn(getIndexPath());
+        if (bytes.empty())
             return false;
-        }
 
-        file.read(reinterpret_cast<char*>(&outIndex.magic), sizeof(outIndex.magic));
-        if (outIndex.magic != NAVMESH_FILE_MAGIC)
+        BufferReader reader{bytes};
+
+        if (!reader.read(&outIndex.magic, sizeof(outIndex.magic)) || outIndex.magic != NAVMESH_FILE_MAGIC)
         {
             vfLogError("NavmeshTileCache: Invalid index file magic");
             return false;
         }
 
-        file.read(reinterpret_cast<char*>(&outIndex.version), sizeof(outIndex.version));
-        if (outIndex.version != NAVMESH_TILE_FILE_VERSION)
+        if (!reader.read(&outIndex.version, sizeof(outIndex.version)) ||
+            outIndex.version < NAVMESH_TILE_MIN_SUPPORTED_VERSION || outIndex.version > NAVMESH_TILE_FILE_VERSION)
         {
             vfLogError("NavmeshTileCache: Unsupported index version {}", outIndex.version);
             return false;
         }
 
-        file.read(reinterpret_cast<char*>(&outIndex.settings), sizeof(outIndex.settings));
-        file.read(reinterpret_cast<char*>(&outIndex.boundsMin), sizeof(outIndex.boundsMin));
-        file.read(reinterpret_cast<char*>(&outIndex.boundsMax), sizeof(outIndex.boundsMax));
+        if (!reader.read(&outIndex.settings, sizeof(outIndex.settings)) ||
+            !reader.read(&outIndex.boundsMin, sizeof(outIndex.boundsMin)) ||
+            !reader.read(&outIndex.boundsMax, sizeof(outIndex.boundsMax)))
+            return false;
+
+        if (outIndex.version >= 6)
+        {
+            if (!reader.read(&outIndex.streaming.enabled, sizeof(outIndex.streaming.enabled)) ||
+                !reader.read(&outIndex.streaming.loadRadius, sizeof(outIndex.streaming.loadRadius)) ||
+                !reader.read(&outIndex.streaming.unloadRadius, sizeof(outIndex.streaming.unloadRadius)) ||
+                !reader.read(&outIndex.streaming.maxLoadsPerFrame, sizeof(outIndex.streaming.maxLoadsPerFrame)) ||
+                !reader.read(&outIndex.streaming.maxUnloadsPerFrame, sizeof(outIndex.streaming.maxUnloadsPerFrame)) ||
+                !reader.read(outIndex.streaming.lodDistances, sizeof(outIndex.streaming.lodDistances)))
+                return false;
+        }
+        else
+        {
+            // Version 5: no streaming block — defaults (streaming OFF)
+            outIndex.streaming = NavmeshIndexStreamingSettings{};
+        }
 
         uint32_t count = 0;
-        file.read(reinterpret_cast<char*>(&count), sizeof(count));
+        if (!reader.read(&count, sizeof(count)))
+            return false;
         outIndex.tileCoords.resize(count);
         for (uint32_t i = 0; i < count; ++i)
         {
-            file.read(reinterpret_cast<char*>(&outIndex.tileCoords[i].x), sizeof(int32_t));
-            file.read(reinterpret_cast<char*>(&outIndex.tileCoords[i].z), sizeof(int32_t));
+            if (!reader.read(&outIndex.tileCoords[i].x, sizeof(int32_t)) ||
+                !reader.read(&outIndex.tileCoords[i].z, sizeof(int32_t)))
+                return false;
         }
 
         knownTiles.clear();
@@ -220,7 +294,7 @@ namespace navigation
             knownTiles.insert(coord);
         }
 
-        return file.good();
+        return true;
     }
 
     void NavmeshTileCache::forEachTile(const std::function<void(const NavmeshTileCoord&)>& callback) const

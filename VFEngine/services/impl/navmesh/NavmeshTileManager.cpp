@@ -1,4 +1,5 @@
 #include "NavmeshTileManager.hpp"
+#include "resource/VirtualFileSystem.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
@@ -8,6 +9,35 @@
 
 namespace services
 {
+    namespace
+    {
+        ::events::navmesh::NavmeshStreamingConfig toStreamingConfig(const navigation::NavmeshIndexStreamingSettings& s)
+        {
+            ::events::navmesh::NavmeshStreamingConfig cfg;
+            cfg.loadRadius = s.loadRadius;
+            cfg.unloadRadius = s.unloadRadius;
+            cfg.maxLoadsPerFrame = s.maxLoadsPerFrame;
+            cfg.maxUnloadsPerFrame = s.maxUnloadsPerFrame;
+            for (int i = 0; i < 3; ++i)
+                cfg.lodDistances[i] = s.lodDistances[i];
+            return cfg;
+        }
+
+        navigation::NavmeshIndexStreamingSettings toIndexStreamingSettings(
+            const ::events::navmesh::NavmeshStreamingConfig& cfg, bool enabled)
+        {
+            navigation::NavmeshIndexStreamingSettings s;
+            s.enabled = enabled ? 1 : 0;
+            s.loadRadius = cfg.loadRadius;
+            s.unloadRadius = cfg.unloadRadius;
+            s.maxLoadsPerFrame = cfg.maxLoadsPerFrame;
+            s.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
+            for (int i = 0; i < 3; ++i)
+                s.lodDistances[i] = cfg.lodDistances[i];
+            return s;
+        }
+    }
+
     NavmeshTileManager::NavmeshTileManager(INavmeshProvider* provider,
                                            const types::NavmeshBakeSettings& settings,
                                            CollectGeometryFunc collectTileGeometryFunc)
@@ -157,6 +187,7 @@ namespace services
 
         navigation::NavmeshTileIndex index;
         index.settings = bakeSettings;
+        index.streaming = toIndexStreamingSettings(streamer.getConfig(), streamer.isEnabled());
 
         for (const auto& tile : tiles)
         {
@@ -230,6 +261,10 @@ namespace services
     {
         tileCache = std::make_unique<navigation::NavmeshTileCache>(directory);
 
+        // Shipped builds read tiles from the pak; nothing can be written back
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            saveOnDemandToCache = false;
+
         navigation::NavmeshTileIndex index;
         if (!tileCache->loadIndex(index))
         {
@@ -244,45 +279,156 @@ namespace services
             vfLogError("NavmeshService: Failed to init tiled navmesh");
             return false;
         }
-
-        int loadedCount = 0;
-        for (const auto& coord : index.tileCoords)
-        {
-            navigation::NavmeshTileData tileData;
-            if (tileCache->loadTile(coord, tileData))
-            {
-                if (navmeshProvider->addNavmeshTile(tileData))
-                {
-                    loadedCount++;
-                }
-            }
-        }
+        tiledNavmeshInitialized = true;
 
         streamer.setTileCache(tileCache.get());
         streamer.setProvider(navmeshProvider);
         streamer.setSettings(index.settings);
         streamer.setLodConfig(index.settings.lodConfig);
-        streamer.setEnabled(true);
+        streamer.setConfig(toStreamingConfig(index.streaming));
+        streamer.setMaxResidentTiles(navmeshProvider->getMaxResidentTiles());
 
-        for (const auto& coord : index.tileCoords)
+        const bool streamingOn = index.streaming.enabled != 0;
+        streamer.setEnabled(streamingOn);
+
+        if (streamingOn)
         {
-            streamer.markTileLoaded(coord);
+            // Deferred load: tiles stream in around camera/invokers/sectors.
+            // The first updateStreaming() pulls a larger burst so the spawn
+            // area isn't empty for the opening frames.
+            initialLoadBurst = INITIAL_STREAM_LOAD_BURST;
+            vfLogInfo("NavmeshService: Tiled navmesh ready, streaming {} tiles on demand from {}",
+                      index.tileCoords.size(), directory);
         }
-
-        vfLogInfo("NavmeshService: Loaded {} / {} tiles from {}", loadedCount, index.tileCoords.size(), directory);
+        else
+        {
+            int loadedCount = 0;
+            for (const auto& coord : index.tileCoords)
+            {
+                navigation::NavmeshTileData tileData;
+                if (tileCache->loadTile(coord, tileData))
+                {
+                    if (navmeshProvider->addNavmeshTile(tileData))
+                    {
+                        loadedCount++;
+                        streamer.markTileLoaded(coord);
+                    }
+                }
+            }
+            vfLogInfo("NavmeshService: Loaded {} / {} tiles from {}", loadedCount, index.tileCoords.size(), directory);
+        }
 
         auto& dispatcher = ::events::EventDispatcher::instance();
         events::navmesh::NavmeshBakeCompleteNotification notification;
         notification.success = true;
-        notification.message = "Tiled navmesh loaded";
+        notification.message = streamingOn ? "Tiled navmesh loaded (streaming)" : "Tiled navmesh loaded";
         dispatcher.publish(notification);
 
         return true;
     }
 
+    int NavmeshTileManager::loadAllTilesFromCache()
+    {
+        if (!tileCache)
+            return 0;
+
+        int loadedCount = 0;
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        tileCache->forEachTile([&](const navigation::NavmeshTileCoord& coord)
+        {
+            if (streamer.isTileLoaded(coord))
+                return;
+
+            navigation::NavmeshTileData tileData;
+            if (tileCache->loadTile(coord, tileData) && navmeshProvider->addNavmeshTile(tileData))
+            {
+                streamer.markTileLoaded(coord);
+                loadedCount++;
+
+                events::navmesh::NavmeshTileLoadedNotification notif;
+                notif.tileX = coord.x;
+                notif.tileZ = coord.z;
+                dispatcher.publish(notif);
+            }
+        });
+
+        if (loadedCount > 0)
+            vfLogInfo("NavmeshService: Loaded {} remaining tiles from cache", loadedCount);
+        return loadedCount;
+    }
+
     void NavmeshTileManager::setInvokerSources(std::vector<StreamingSource> sources)
     {
         invokerSources = std::move(sources);
+    }
+
+    void NavmeshTileManager::prepareTileCache(const std::string& directory)
+    {
+        tileCache = std::make_unique<navigation::NavmeshTileCache>(directory);
+        streamer.setTileCache(tileCache.get());
+    }
+
+    bool NavmeshTileManager::submitWorldBakeTile(const navigation::NavmeshTileCoord& coord)
+    {
+        if (!collectTileGeometry)
+            return false;
+
+        auto bounds = navigation::computeTileBounds(coord, bakeSettings, -1000.0f, 1000.0f);
+
+        navigation::NavmeshInputGeometry geometry;
+        collectTileGeometry(bounds, bakeSettings, geometry);
+        if (geometry.isEmpty())
+            return false;
+
+        navigation::NavmeshOffMeshConnections offMeshLinks;
+        if (collectOffMeshLinks)
+            offMeshLinks = collectOffMeshLinks(bounds, bakeSettings);
+
+        std::vector<navigation::NavmeshAreaModifier> areaModifiers;
+        if (collectAreaModifiers)
+            areaModifiers = collectAreaModifiers(bounds);
+
+        auto future = threading::JobSystem::instance().submit(
+            [this, coord, geom = std::move(geometry), settings = bakeSettings, links = std::move(offMeshLinks), mods = std::move(areaModifiers)]()
+            {
+                return navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings, links, mods);
+            }, threading::JobPriority::LOW);
+
+        pendingTileBakes.push_back({coord, true, std::move(future)});
+        return true;
+    }
+
+    bool NavmeshTileManager::finalizeWorldBakeIndex()
+    {
+        if (!tileCache)
+            return false;
+
+        navigation::NavmeshTileIndex index;
+        index.settings = bakeSettings;
+        index.streaming = toIndexStreamingSettings(streamer.getConfig(), streamer.isEnabled());
+
+        tileCache->forEachTile([&](const navigation::NavmeshTileCoord& coord)
+        {
+            index.tileCoords.push_back(coord);
+        });
+
+        if (!index.tileCoords.empty())
+        {
+            float tileWorldSize = bakeSettings.tileSize * bakeSettings.cellSize;
+            float minX = 1e9f, minZ = 1e9f, maxX = -1e9f, maxZ = -1e9f;
+            for (const auto& coord : index.tileCoords)
+            {
+                minX = std::min(minX, coord.x * tileWorldSize);
+                minZ = std::min(minZ, coord.z * tileWorldSize);
+                maxX = std::max(maxX, (coord.x + 1) * tileWorldSize);
+                maxZ = std::max(maxZ, (coord.z + 1) * tileWorldSize);
+            }
+            index.boundsMin = glm::vec3(minX, -1000.0f, minZ);
+            index.boundsMax = glm::vec3(maxX, 1000.0f, maxZ);
+        }
+
+        return tileCache->saveIndex(index);
     }
 
     void NavmeshTileManager::ensureTiledNavmeshInitialized()
@@ -301,6 +447,7 @@ namespace services
             streamer.setProvider(navmeshProvider);
             streamer.setSettings(bakeSettings);
             streamer.setLodConfig(bakeSettings.lodConfig);
+            streamer.setMaxResidentTiles(navmeshProvider->getMaxResidentTiles());
             streamer.setEnabled(true);
         }
     }
@@ -315,6 +462,19 @@ namespace services
         // Process sector-driven tile requests with priority before normal streaming
         processSectorTileRequests();
 
+        // One-shot burst after a deferred (streaming) load: raise the per-frame
+        // load cap once so the area around the first sources fills immediately
+        ::events::navmesh::NavmeshStreamingConfig savedConfig;
+        const bool burst = initialLoadBurst > 0;
+        if (burst)
+        {
+            savedConfig = streamer.getConfig();
+            auto boosted = savedConfig;
+            boosted.maxLoadsPerFrame = initialLoadBurst;
+            streamer.setConfig(boosted);
+            initialLoadBurst = 0;
+        }
+
         if (!invokerSources.empty())
         {
             std::vector<navigation::NavmeshTileCoord> needGeneration;
@@ -327,6 +487,9 @@ namespace services
         {
             streamer.update(lastCameraPos, result.loaded, result.unloaded);
         }
+
+        if (burst)
+            streamer.setConfig(savedConfig);
 
         auto& dispatcher = ::events::EventDispatcher::instance();
 
@@ -489,6 +652,7 @@ namespace services
         pendingSectorTileRequests.clear();
         sectorRefCounts.clear();
         invokerSources.clear();
+        initialLoadBurst = 0;
         tiledNavmeshInitialized = false;
         streamer.clear();
         tileCache.reset();

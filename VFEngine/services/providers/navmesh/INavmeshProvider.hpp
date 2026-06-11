@@ -33,6 +33,10 @@ namespace services
         virtual bool addNavmeshTile(const navigation::NavmeshTileData& tileData) = 0;
         virtual bool removeNavmeshTile(int tx, int tz) = 0;
 
+        // Resident-tile budget of the current tiled navmesh (dtNavMeshParams.maxTiles).
+        // 0 = no tiled navmesh initialized / unlimited.
+        virtual int getMaxResidentTiles() const { return 0; }
+
         virtual std::vector<navigation::NavmeshTileData> serializeNavmesh() const = 0;
         virtual bool deserializeNavmesh(const navigation::NavmeshFileHeader& header,
                                          const std::vector<navigation::NavmeshTileData>& tiles) = 0;

@@ -234,6 +234,10 @@ namespace services
             if (loaded >= config.maxLoadsPerFrame)
                 break;
 
+            if (maxResidentTiles > 0 &&
+                static_cast<int>(loadedTileLods.size()) >= maxResidentTiles)
+                break;
+
             // Select LOD based on distance + boundary constraint
             uint8_t targetLod = 0;
             if (lodConfig.lodCount > 1)

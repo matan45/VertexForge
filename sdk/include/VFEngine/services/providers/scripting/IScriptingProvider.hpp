@@ -59,6 +59,10 @@ namespace services {
         virtual std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
                                                   const std::vector<std::any>& args = {}) = 0;
 
+        // Whether the instance's class (or a base class) defines methodName — lets callers
+        // skip optional callbacks without triggering a method-not-found error
+        virtual bool hasMethod(uint64_t instanceId, const std::string& methodName) const = 0;
+
         virtual void playVFX(uint64_t instanceId) = 0;
 
         virtual void setInstancePriority(uint64_t instanceId, int priority) = 0;

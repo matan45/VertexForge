@@ -502,6 +502,17 @@ namespace services
                 return result;
             });
 
+        dispatcher.registerQueryHandler<::events::world::GetAllSectorCoordsQuery>(
+            [this](const ::events::world::GetAllSectorCoordsQuery&)
+            {
+                std::vector<world::SectorCoord> result;
+                sectorManager.forEachSector([&](const world::WorldSector& sector)
+                {
+                    result.push_back(sector.coord);
+                });
+                return result;
+            });
+
         dispatcher.registerCommandHandler<::events::world::SetSectorDataLayerCommand>(
             [this](const ::events::world::SetSectorDataLayerCommand& cmd) -> bool
             {

@@ -208,6 +208,12 @@ namespace events::world
         std::string_view getName() const override { return "GetLoadedSectorCoords"; }
     };
 
+    // Every sector in the world definition regardless of state (world bake passes)
+    struct GetAllSectorCoordsQuery : IQuery<std::vector<::world::SectorCoord>>
+    {
+        std::string_view getName() const override { return "GetAllSectorCoords"; }
+    };
+
     // Per-sector content readiness: which parts of a Loading sector are still in
     // flight. A sector is fully ready when state == Loaded and both flags are false.
     struct SectorReadiness

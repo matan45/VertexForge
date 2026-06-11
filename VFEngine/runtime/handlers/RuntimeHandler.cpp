@@ -468,6 +468,13 @@ namespace handlers {
             }
         });
 
+        frameTaskGraph->addTask("Navmesh", [this]() {
+            if (navmeshService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                navmeshService->update(dt, true);
+            }
+        });
+
         frameTaskGraph->addTask("AudioListener", [this]() {
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
@@ -516,6 +523,7 @@ namespace handlers {
         frameTaskGraph->addDependency("Scripts", "PhysicsSync");
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
+        frameTaskGraph->addDependency("Navmesh", "BehaviorTrees");
         frameTaskGraph->addDependency("AudioListener", "Scripts");
 
         // === Full frame pipeline tasks ===
@@ -597,6 +605,7 @@ namespace handlers {
 
         // Transforms depend on all service updates completing
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
+        frameTaskGraph->addDependency("Transforms", "Navmesh");
         frameTaskGraph->addDependency("Transforms", "AudioListener");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
