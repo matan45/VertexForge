@@ -20,9 +20,11 @@ namespace world
         // JSON format (debug fallback)
         static bool saveSectorJson(WorldSector& sector, const std::string& filePath);
 
-        // Auto-detecting load (binary or JSON based on magic bytes)
+        // Auto-detecting load (binary or JSON based on magic bytes).
+        // outDataLayers (optional) receives v3 section payloads; v2 files leave it empty.
         static bool loadSector(const std::string& filePath,
-                               std::vector<json>& outEntityData);
+                               std::vector<json>& outEntityData,
+                               SectorDataLayers* outDataLayers = nullptr);
 
         // Header-only read for metadata caching (binary files only)
         static bool readSectorMetadata(const std::string& filePath,
@@ -32,7 +34,9 @@ namespace world
 
     private:
         static bool saveSectorBinary(WorldSector& sector, const std::string& filePath);
-        static bool loadSectorBinary(std::ifstream& file, std::vector<json>& outEntityData);
+        static bool loadSectorBinary(std::ifstream& file, uint32_t version,
+                                     std::vector<json>& outEntityData,
+                                     SectorDataLayers* outDataLayers);
         static bool loadSectorJson(const std::string& filePath,
                                    std::vector<json>& outEntityData);
         static json buildSectorJson(WorldSector& sector);

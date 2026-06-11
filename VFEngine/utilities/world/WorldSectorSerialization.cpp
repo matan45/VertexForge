@@ -114,6 +114,17 @@ namespace world
 
             auto msgpackData = json::to_msgpack(sectorJson);
 
+            // v3 sections (TLV after the entity blob)
+            std::vector<uint8_t> dataLayerBlob;
+            if (!sector.dataLayers.empty())
+            {
+                json layersJson;
+                for (const auto& [name, bytes] : sector.dataLayers)
+                    layersJson[name] = json::binary(bytes);
+                dataLayerBlob = json::to_msgpack(layersJson);
+            }
+            uint32_t sectionCount = dataLayerBlob.empty() ? 0u : 1u;
+
             std::ofstream file(filePath, std::ios::binary);
             if (!file.is_open())
             {
@@ -121,7 +132,15 @@ namespace world
                 return false;
             }
 
+            // v3 layout: header | u64 entityBlobSize | entity msgpack |
+            //            u32 sectionCount | per section: u32 id, u64 size, bytes
+            uint64_t totalSize = SECTOR_HEADER_SIZE + sizeof(uint64_t) + msgpackData.size()
+                               + sizeof(uint32_t);
+            if (sectionCount > 0)
+                totalSize += sizeof(uint32_t) + sizeof(uint64_t) + dataLayerBlob.size();
+
             SectorFileHeader header;
+            header.version = SECTOR_FORMAT_VERSION;
             header.entityCount = static_cast<uint32_t>(sector.entityUUIDs.size());
             header.aabbMinX = aabb.min.x;
             header.aabbMinY = aabb.min.y;
@@ -129,10 +148,18 @@ namespace world
             header.aabbMaxX = aabb.max.x;
             header.aabbMaxY = aabb.max.y;
             header.aabbMaxZ = aabb.max.z;
-            header.totalFileSize = SECTOR_HEADER_SIZE + msgpackData.size();
+            header.totalFileSize = totalSize;
 
             writeHeader(file, header);
+            resource::endian::writeLE<uint64_t>(file, msgpackData.size());
             file.write(reinterpret_cast<const char*>(msgpackData.data()), msgpackData.size());
+            resource::endian::writeLE<uint32_t>(file, sectionCount);
+            if (sectionCount > 0)
+            {
+                resource::endian::writeLE<uint32_t>(file, SECTOR_SECTION_DATA_LAYERS);
+                resource::endian::writeLE<uint64_t>(file, dataLayerBlob.size());
+                file.write(reinterpret_cast<const char*>(dataLayerBlob.data()), dataLayerBlob.size());
+            }
             file.close();
 
             sector.dirty = false;
@@ -194,16 +221,32 @@ namespace world
 
     // ── Binary load (file already opened and header already read) ────────
 
-    bool WorldSectorSerialization::loadSectorBinary(std::ifstream& file,
-                                                     std::vector<json>& outEntityData)
+    bool WorldSectorSerialization::loadSectorBinary(std::ifstream& file, uint32_t version,
+                                                     std::vector<json>& outEntityData,
+                                                     SectorDataLayers* outDataLayers)
     {
         try
         {
             // Header already consumed by caller; file position is at payload start.
-            // Read remaining bytes as MessagePack.
-            std::vector<uint8_t> msgpackData(
-                (std::istreambuf_iterator<char>(file)),
-                std::istreambuf_iterator<char>());
+            std::vector<uint8_t> msgpackData;
+            if (version >= 3)
+            {
+                uint64_t entityBlobSize = resource::endian::readLE<uint64_t>(file);
+                msgpackData.resize(entityBlobSize);
+                file.read(reinterpret_cast<char*>(msgpackData.data()),
+                          static_cast<std::streamsize>(entityBlobSize));
+                if (file.gcount() != static_cast<std::streamsize>(entityBlobSize))
+                {
+                    vfLogError("Truncated v3 sector file: entity blob short read");
+                    return false;
+                }
+            }
+            else
+            {
+                // v2: the rest of the file is the entity MessagePack blob
+                msgpackData.assign((std::istreambuf_iterator<char>(file)),
+                                   std::istreambuf_iterator<char>());
+            }
 
             json sectorJson = json::from_msgpack(msgpackData);
 
@@ -217,6 +260,35 @@ namespace world
             for (const auto& entityJson : sectorJson["entities"])
             {
                 outEntityData.push_back(entityJson);
+            }
+
+            // v3 section table
+            if (version >= 3)
+            {
+                uint32_t sectionCount = resource::endian::readLE<uint32_t>(file);
+                for (uint32_t i = 0; i < sectionCount && file.good(); ++i)
+                {
+                    uint32_t sectionId = resource::endian::readLE<uint32_t>(file);
+                    uint64_t sectionSize = resource::endian::readLE<uint64_t>(file);
+
+                    if (sectionId == SECTOR_SECTION_DATA_LAYERS && outDataLayers)
+                    {
+                        std::vector<uint8_t> blob(sectionSize);
+                        file.read(reinterpret_cast<char*>(blob.data()),
+                                  static_cast<std::streamsize>(sectionSize));
+                        json layersJson = json::from_msgpack(blob);
+                        for (const auto& [name, value] : layersJson.items())
+                        {
+                            if (value.is_binary())
+                                (*outDataLayers)[name] = value.get_binary();
+                        }
+                    }
+                    else
+                    {
+                        // Unknown (or unwanted) section: skip forward
+                        file.seekg(static_cast<std::streamoff>(sectionSize), std::ios::cur);
+                    }
+                }
             }
 
             return true;
@@ -271,8 +343,12 @@ namespace world
     // ── Auto-detecting load (single file open) ──────────────────────────
 
     bool WorldSectorSerialization::loadSector(const std::string& filePath,
-                                               std::vector<json>& outEntityData)
+                                               std::vector<json>& outEntityData,
+                                               SectorDataLayers* outDataLayers)
     {
+        if (outDataLayers)
+            outDataLayers->clear();
+
         // Open once in binary mode and read magic bytes to detect format
         std::ifstream file(filePath, std::ios::binary);
         if (!file.is_open())
@@ -285,7 +361,8 @@ namespace world
         if (readHeader(file, header))
         {
             // Binary format — file is already positioned past the header
-            if (header.version != SECTOR_FORMAT_VERSION)
+            if (header.version < SECTOR_MIN_SUPPORTED_VERSION ||
+                header.version > SECTOR_FORMAT_VERSION)
             {
                 vfLogError("Unsupported sector format version {} in: {}", header.version, filePath);
                 return false;
@@ -304,7 +381,7 @@ namespace world
                 return false;
             }
 
-            return loadSectorBinary(file, outEntityData);
+            return loadSectorBinary(file, header.version, outEntityData, outDataLayers);
         }
 
         // Not binary — close and re-open as JSON text

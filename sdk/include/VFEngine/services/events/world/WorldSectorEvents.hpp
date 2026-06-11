@@ -3,6 +3,7 @@
 #include "../EventTypes.hpp"
 #include "world/WorldTypes.hpp"
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <string>
 #include <optional>
 #include <vector>
@@ -112,6 +113,45 @@ namespace events::world
         uint32_t sourceId = 0;
 
         std::string_view getName() const override { return "IsStreamingSourceValid"; }
+    };
+
+    // ============================================
+    // Per-sector data layers (named binary payloads persisted in vfsector v3:
+    // gameplay grids, fog-of-war, plugin data)
+    // ============================================
+
+    struct SetSectorDataLayerCommand : ICommand<bool>
+    {
+        ::world::SectorCoord coord;
+        std::string layerName;
+        std::vector<uint8_t> data;
+
+        std::string_view getName() const override { return "SetSectorDataLayer"; }
+    };
+
+    struct RemoveSectorDataLayerCommand : ICommand<bool>
+    {
+        ::world::SectorCoord coord;
+        std::string layerName;
+
+        std::string_view getName() const override { return "RemoveSectorDataLayer"; }
+    };
+
+    struct GetSectorDataLayerQuery : IQuery<std::optional<std::vector<uint8_t>>>
+    {
+        ::world::SectorCoord coord;
+        std::string layerName;
+
+        std::string_view getName() const override { return "GetSectorDataLayer"; }
+    };
+
+    // Published once per layer when a streamed-in sector carries data layers
+    struct SectorDataLayerLoadedNotification : INotification
+    {
+        ::world::SectorCoord coord;
+        std::string layerName;
+
+        std::string_view getName() const override { return "SectorDataLayerLoaded"; }
     };
 
     // ============================================
