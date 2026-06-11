@@ -7,6 +7,7 @@
 #include <vector>
 #include <utility>
 #include <memory>
+#include <algorithm>
 
 // ============================================================
 // VK-1091: AI / Behavior Tree unit tests
@@ -251,6 +252,13 @@ behaviortree::BTNode makeBTNode(uint32_t id, behaviortree::BTNodeType type) {
     return node;
 }
 
+// Manually-built graphs set node IDs directly, so bring nextNodeId up to the same
+// invariant the JSON loader and editor maintain (nextNodeId > every node ID).
+void finalizeGraphIds(behaviortree::BTGraph& graph) {
+    for (const auto& node : graph.nodes)
+        graph.nextNodeId = std::max(graph.nextNodeId, node.id + 1);
+}
+
 void linkBTNodes(behaviortree::BTGraph& graph, uint32_t source, uint32_t target, uint32_t sortOrder) {
     behaviortree::BTLink link;
     link.id = graph.nextLinkId++;
@@ -455,6 +463,7 @@ behaviortree::BehaviorTreeData makeChildTree() {
     linkBTNodes(data.graph, 2, 3, 0);
     data.graph.blackboardKeys.push_back({"childKey", behaviortree::BlackboardValueType::Float, 5.0f});
     data.graph.blackboardKeys.push_back({"shared", behaviortree::BlackboardValueType::Int, 7});
+    finalizeGraphIds(data.graph);
     return data;
 }
 
@@ -471,6 +480,7 @@ behaviortree::BehaviorTreeData makeParentTree() {
     linkBTNodes(data.graph, 2, 3, 0);
     linkBTNodes(data.graph, 2, 4, 1);
     data.graph.blackboardKeys.push_back({"shared", behaviortree::BlackboardValueType::Int, 1});
+    finalizeGraphIds(data.graph);
     return data;
 }
 

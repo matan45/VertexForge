@@ -482,6 +482,12 @@ namespace behaviortree
             return false;
         }
 
+        // Splicing remaps child IDs via nextNodeId++; ensure it exceeds every existing
+        // node ID so remapped IDs can't collide with the parent's, regardless of how the
+        // caller built this graph (mirrors the loader invariant maintained at parseNodes).
+        for (const auto& node : data.graph.nodes)
+            data.graph.nextNodeId = std::max(data.graph.nextNodeId, node.id + 1);
+
         std::vector<uint32_t> subTreeNodeIds;
         for (const auto& node : data.graph.nodes)
         {
