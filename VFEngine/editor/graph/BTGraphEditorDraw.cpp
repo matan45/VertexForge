@@ -185,6 +185,27 @@ namespace editor::graph
                 ImGui::Text("Set: %s", std::get<std::string>(keyIt->second).c_str());
             break;
         }
+        case BTNodeType::BlackboardCondition:
+        {
+            auto keyIt = node.properties.find("key");
+            if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
+                ImGui::Text("If: %s", std::get<std::string>(keyIt->second).c_str());
+            auto modeIt = node.properties.find("abortMode");
+            if (modeIt != node.properties.end() && std::holds_alternative<std::string>(modeIt->second))
+            {
+                const auto& mode = std::get<std::string>(modeIt->second);
+                if (mode != "None")
+                    ImGui::Text("Abort: %s", mode.c_str());
+            }
+            break;
+        }
+        case BTNodeType::EnvironmentQuery:
+        {
+            auto qIt = node.properties.find("queryName");
+            if (qIt != node.properties.end() && std::holds_alternative<std::string>(qIt->second))
+                ImGui::Text("Query: %s", std::get<std::string>(qIt->second).c_str());
+            break;
+        }
         case BTNodeType::LineOfSight:
         {
             auto keyIt = node.properties.find("targetKey");

@@ -51,6 +51,14 @@ namespace behaviortree
                                                  float maxDistance,
                                                  float eyeOffset,
                                                  Blackboard& blackboard) = 0;
+
+        // Called when a Running task node is aborted (observer abort / self abort)
+        // so the executor can cancel in-flight side effects (nav requests, EQS queries, scripts)
+        virtual void onAbort(services::EntityHandle entity, const BTNode& node)
+        {
+            (void)entity;
+            (void)node;
+        }
     };
 
     class BehaviorTreeRuntime
@@ -79,5 +87,7 @@ namespace behaviortree
 
         BTNodeRuntime& getNodeState(uint32_t nodeId);
         void resetSubtreeState(uint32_t nodeId);
+        void abortSubtree(uint32_t nodeId, IBTTaskExecutor* executor);
+        bool evaluateCondition(const BTNode& node) const;
     };
 }

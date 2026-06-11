@@ -50,6 +50,8 @@ namespace editor::windows
         case BTNodeType::SetBlackboardValue: drawSetBlackboardProperties(*node, graph); break;
         case BTNodeType::CheckBlackboardValue: drawCheckBlackboardProperties(*node, graph); break;
         case BTNodeType::LineOfSight: drawLineOfSightProperties(*node, graph); break;
+        case BTNodeType::BlackboardCondition: drawBlackboardConditionProperties(*node, graph); break;
+        case BTNodeType::EnvironmentQuery: drawEnvironmentQueryProperties(*node, graph); break;
         default: break;
         }
     }
@@ -381,6 +383,149 @@ namespace editor::windows
             node.properties["compareValue"] = compareVal;
             notifyChanged();
         }
+    }
+
+    void BTPropertyPanel::drawBlackboardConditionProperties(BTNode& node, const BTGraph* graph)
+    {
+        // Key
+        std::string key;
+        auto keyIt = node.properties.find("key");
+        if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
+            key = std::get<std::string>(keyIt->second);
+
+        if (graph && !graph->blackboardKeys.empty())
+        {
+            if (ImGui::BeginCombo("Key", key.c_str()))
+            {
+                for (const auto& keyDef : graph->blackboardKeys)
+                {
+                    bool selected = (keyDef.name == key);
+                    if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                    {
+                        node.properties["key"] = keyDef.name;
+                        notifyChanged();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
+        else
+        {
+            char keyBuf[64];
+            strncpy(keyBuf, key.c_str(), sizeof(keyBuf) - 1);
+            keyBuf[sizeof(keyBuf) - 1] = '\0';
+            if (ImGui::InputText("Key", keyBuf, sizeof(keyBuf)))
+            {
+                node.properties["key"] = std::string(keyBuf);
+                notifyChanged();
+            }
+        }
+
+        // Compare operator
+        std::string opStr = "==";
+        auto opIt = node.properties.find("compareOp");
+        if (opIt != node.properties.end() && std::holds_alternative<std::string>(opIt->second))
+            opStr = std::get<std::string>(opIt->second);
+
+        static const std::array<const char*, 6> ops = {"==", "!=", ">", "<", ">=", "<="};
+        int currentOp = 0;
+        for (int i = 0; i < 6; ++i)
+        {
+            if (opStr == ops[i]) { currentOp = i; break; }
+        }
+        if (ImGui::Combo("Operator", &currentOp, ops.data(), static_cast<int>(ops.size())))
+        {
+            node.properties["compareOp"] = std::string(ops[currentOp]);
+            notifyChanged();
+        }
+
+        // Compare value
+        float compareVal = 0.0f;
+        auto cvIt = node.properties.find("compareValue");
+        if (cvIt != node.properties.end() && std::holds_alternative<float>(cvIt->second))
+            compareVal = std::get<float>(cvIt->second);
+
+        if (ImGui::DragFloat("Compare Value", &compareVal, 0.1f))
+        {
+            node.properties["compareValue"] = compareVal;
+            notifyChanged();
+        }
+
+        // Abort mode
+        std::string modeStr = "None";
+        auto modeIt = node.properties.find("abortMode");
+        if (modeIt != node.properties.end() && std::holds_alternative<std::string>(modeIt->second))
+            modeStr = std::get<std::string>(modeIt->second);
+
+        static const std::array<const char*, 4> modes = {"None", "Self", "LowerPriority", "Both"};
+        int currentMode = 0;
+        for (int i = 0; i < 4; ++i)
+        {
+            if (modeStr == modes[i]) { currentMode = i; break; }
+        }
+        if (ImGui::Combo("Abort Mode", &currentMode, modes.data(), static_cast<int>(modes.size())))
+        {
+            node.properties["abortMode"] = std::string(modes[currentMode]);
+            notifyChanged();
+        }
+        ImGui::TextDisabled("Self: abort own subtree when condition turns false");
+        ImGui::TextDisabled("LowerPriority: preempt running lower Selector branch");
+    }
+
+    void BTPropertyPanel::drawEnvironmentQueryProperties(BTNode& node, const BTGraph* graph)
+    {
+        // Query name
+        std::string queryName;
+        auto qIt = node.properties.find("queryName");
+        if (qIt != node.properties.end() && std::holds_alternative<std::string>(qIt->second))
+            queryName = std::get<std::string>(qIt->second);
+
+        char queryBuf[128];
+        strncpy(queryBuf, queryName.c_str(), sizeof(queryBuf) - 1);
+        queryBuf[sizeof(queryBuf) - 1] = '\0';
+        if (ImGui::InputText("Query Name", queryBuf, sizeof(queryBuf)))
+        {
+            node.properties["queryName"] = std::string(queryBuf);
+            notifyChanged();
+        }
+
+        // Result key (Vec3 blackboard keys)
+        std::string resultKey = "eqsResult";
+        auto rIt = node.properties.find("resultKey");
+        if (rIt != node.properties.end() && std::holds_alternative<std::string>(rIt->second))
+            resultKey = std::get<std::string>(rIt->second);
+
+        if (graph && !graph->blackboardKeys.empty())
+        {
+            if (ImGui::BeginCombo("Result Key", resultKey.c_str()))
+            {
+                for (const auto& keyDef : graph->blackboardKeys)
+                {
+                    if (keyDef.type == BlackboardValueType::Vec3)
+                    {
+                        bool selected = (keyDef.name == resultKey);
+                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                        {
+                            node.properties["resultKey"] = keyDef.name;
+                            notifyChanged();
+                        }
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
+        else
+        {
+            char keyBuf[64];
+            strncpy(keyBuf, resultKey.c_str(), sizeof(keyBuf) - 1);
+            keyBuf[sizeof(keyBuf) - 1] = '\0';
+            if (ImGui::InputText("Result Key", keyBuf, sizeof(keyBuf)))
+            {
+                node.properties["resultKey"] = std::string(keyBuf);
+                notifyChanged();
+            }
+        }
+        ImGui::TextDisabled("Best query position is written to the result key");
     }
 
     void BTPropertyPanel::drawLineOfSightProperties(BTNode& node, const BTGraph* graph)

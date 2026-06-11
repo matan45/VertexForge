@@ -24,6 +24,7 @@ namespace behaviortree
         RepeatUntilFail,
         Cooldown,
         TimeLimit,
+        BlackboardCondition,
 
         Wait,
         Log,
@@ -67,6 +68,17 @@ namespace behaviortree
         Less,
         GreaterEqual,
         LessEqual
+    };
+
+    // Observer-abort behavior for BlackboardCondition decorators:
+    // - Self: while the guarded subtree runs, re-evaluate each tick and abort it when the condition turns false
+    // - LowerPriority: when this condition (as a Selector child) becomes true, abort the running lower-priority sibling branch
+    enum class AbortMode : uint8_t
+    {
+        None,
+        Self,
+        LowerPriority,
+        Both
     };
 
     enum class LogLevel : uint8_t
@@ -145,6 +157,9 @@ namespace behaviortree
 
     const char* compareOpToString(CompareOp op);
     CompareOp stringToCompareOp(const std::string& str);
+
+    const char* abortModeToString(AbortMode mode);
+    AbortMode stringToAbortMode(const std::string& str);
 
     const char* logLevelToString(LogLevel level);
     LogLevel stringToLogLevel(const std::string& str);

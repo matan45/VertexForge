@@ -117,6 +117,8 @@ namespace core
         std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
                                           const std::vector<std::any>& args = {}) override;
 
+        bool hasMethod(uint64_t instanceId, const std::string& methodName) const override;
+
         void playVFX(uint64_t instanceId) override;
         void setInstancePriority(uint64_t instanceId, int priority) override;
 

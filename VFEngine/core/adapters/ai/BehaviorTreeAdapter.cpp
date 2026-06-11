@@ -367,6 +367,56 @@ namespace core
         }
     }
 
+    void BehaviorTreeAdapter::onAbort(services::EntityHandle entity, const BTNode& node)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        switch (node.type)
+        {
+        case BTNodeType::MoveTo:
+        {
+            events::navmesh::StopAgentCommand stopCmd;
+            stopCmd.entity = entity;
+            dispatcher.execute(stopCmd);
+            break;
+        }
+        case BTNodeType::EnvironmentQuery:
+        {
+            std::string queryName;
+            auto qIt = node.properties.find("queryName");
+            if (qIt != node.properties.end() && std::holds_alternative<std::string>(qIt->second))
+                queryName = std::get<std::string>(qIt->second);
+            if (queryName.empty()) break;
+
+            std::string eqsKey = std::to_string(entity.id) + ":" + queryName;
+            auto it = pendingEQSQueries.find(eqsKey);
+            if (it != pendingEQSQueries.end())
+            {
+                events::ai::CancelEQSQueryCommand cancelCmd;
+                cancelCmd.handle = it->second;
+                dispatcher.execute(cancelCmd);
+                pendingEQSQueries.erase(it);
+            }
+            break;
+        }
+        case BTNodeType::ScriptTask:
+        {
+            if (!scriptingProvider || node.scriptPath.empty()) break;
+
+            auto sit = scriptInstances.find({entity.id, node.scriptPath});
+            if (sit != scriptInstances.end() &&
+                scriptingProvider->isScriptLoaded(sit->second) &&
+                scriptingProvider->hasMethod(sit->second, "onAbort"))
+            {
+                scriptingProvider->callMethodWithReturn(sit->second, "onAbort");
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
     BTNodeStatus BehaviorTreeAdapter::executeLineOfSight(services::EntityHandle entity,
                                                           const std::string& targetKey,
                                                           float maxDistance,

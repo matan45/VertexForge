@@ -72,6 +72,8 @@ namespace core
                                                        float eyeOffset,
                                                        behaviortree::Blackboard& blackboard) override;
 
+        void onAbort(services::EntityHandle entity, const behaviortree::BTNode& node) override;
+
     private:
         struct RuntimeInstance
         {
