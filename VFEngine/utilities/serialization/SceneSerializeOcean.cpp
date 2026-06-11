@@ -48,6 +48,8 @@ namespace serialization
             bandJson["foamThreshold"] = band.foamThreshold;
             bandJson["displacementScale"] = band.displacementScale;
             bandJson["enabled"] = band.enabled;
+            bandJson["foamPersistence"] = band.foamPersistence;
+            bandJson["foamDecay"] = band.foamDecay;
             bandsArray.push_back(bandJson);
         }
         j["oceanBands"] = bandsArray;
@@ -127,6 +129,8 @@ namespace serialization
                 ocean.oceanBands[i].foamThreshold = b.value("foamThreshold", -0.1f);
                 ocean.oceanBands[i].displacementScale = b.value("displacementScale", 4.0f);
                 ocean.oceanBands[i].enabled = b.value("enabled", true);
+                ocean.oceanBands[i].foamPersistence = b.value("foamPersistence", ocean.oceanBands[i].foamPersistence);
+                ocean.oceanBands[i].foamDecay = b.value("foamDecay", ocean.oceanBands[i].foamDecay);
             }
         }
         else

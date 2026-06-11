@@ -221,7 +221,8 @@ namespace render::water
         }
     }
 
-    void OceanFFTPipelines::dispatchMerge(vk::CommandBuffer cmd, const OceanFFTConfig& config, const OceanFFTResources& resources)
+    void OceanFFTPipelines::dispatchMerge(vk::CommandBuffer cmd, const OceanFFTConfig& config, const OceanFFTResources& resources,
+                                          float deltaTime, uint32_t foamParity)
     {
         uint32_t N = config.resolution;
 
@@ -231,9 +232,12 @@ namespace render::water
         pc.patchSize = config.patchSize;
         pc.foamThreshold = config.foamThreshold;
         pc.displacementScale = config.displacementScale;
+        pc.deltaTime = deltaTime;
+        pc.foamPersistence = config.foamPersistence;
+        pc.foamDecay = config.foamDecay;
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, mergePipeline);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, mergePipelineLayout, 0, resources.getMergeDescSet(), nullptr);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, mergePipelineLayout, 0, resources.getMergeDescSet(foamParity), nullptr);
         cmd.pushConstants(mergePipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(pc), &pc);
 
         uint32_t groups = (N + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;

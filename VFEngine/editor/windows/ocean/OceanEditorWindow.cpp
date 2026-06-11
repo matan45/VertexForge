@@ -396,6 +396,18 @@ namespace windows
 
                         snprintf(id, sizeof(id), "##DisplacementScale%d", i);
                         oceanConfigDirty |= labeledDragFloat("Wave Height Scale", id, &band.displacementScale, 0.1f, 0.1f, 50.0f, "%.1f");
+
+                        ImGui::Spacing();
+
+                        snprintf(id, sizeof(id), "##FoamPersistence%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Foam Persistence", id, &band.foamPersistence, 0.01f, 0.0f, 0.99f, "%.2f");
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("How much advected previous-frame foam survives (0 = instantaneous foam only)");
+
+                        snprintf(id, sizeof(id), "##FoamDecay%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Foam Decay (1/s)", id, &band.foamDecay, 0.01f, 0.01f, 5.0f, "%.2f");
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("Exponential fade rate of persistent foam trails");
                     }
 
                     ImGui::EndTabItem();

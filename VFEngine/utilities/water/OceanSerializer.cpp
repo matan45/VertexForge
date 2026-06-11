@@ -61,6 +61,8 @@ namespace ocean
             b["foamThreshold"] = data.bands[i].foamThreshold;
             b["displacementScale"] = data.bands[i].displacementScale;
             b["enabled"] = data.bands[i].enabled;
+            b["foamPersistence"] = data.bands[i].foamPersistence;
+            b["foamDecay"] = data.bands[i].foamDecay;
             bandsArr.push_back(b);
         }
         fft["bands"] = bandsArr;
@@ -164,6 +166,8 @@ namespace ocean
                     outData.bands[i].foamThreshold = b.value("foamThreshold", -0.1f);
                     outData.bands[i].displacementScale = b.value("displacementScale", 4.0f);
                     outData.bands[i].enabled = b.value("enabled", true);
+                    outData.bands[i].foamPersistence = b.value("foamPersistence", outData.bands[i].foamPersistence);
+                    outData.bands[i].foamDecay = b.value("foamDecay", outData.bands[i].foamDecay);
                 }
             }
             else

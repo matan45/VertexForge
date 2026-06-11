@@ -137,6 +137,8 @@ namespace render
                     configs[i].gravity = gravity;
                     configs[i].foamThreshold = band.foamThreshold;
                     configs[i].displacementScale = band.displacementScale;
+                    configs[i].foamPersistence = band.foamPersistence;
+                    configs[i].foamDecay = band.foamDecay;
                     enabled[i] = band.enabled;
                 }
                 return {configs, enabled};

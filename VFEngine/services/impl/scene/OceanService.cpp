@@ -310,6 +310,8 @@ namespace services
                             comp.oceanBands[i].foamThreshold = cmd.config.bands[i].foamThreshold;
                             comp.oceanBands[i].displacementScale = cmd.config.bands[i].displacementScale;
                             comp.oceanBands[i].enabled = cmd.config.bands[i].enabled;
+                            comp.oceanBands[i].foamPersistence = cmd.config.bands[i].foamPersistence;
+                            comp.oceanBands[i].foamDecay = cmd.config.bands[i].foamDecay;
                         }
                         comp.oceanGravity = cmd.config.gravity;
                     }
@@ -357,6 +359,8 @@ namespace services
             comp.oceanBands[i].foamThreshold = config.oceanConfig.bands[i].foamThreshold;
             comp.oceanBands[i].displacementScale = config.oceanConfig.bands[i].displacementScale;
             comp.oceanBands[i].enabled = config.oceanConfig.bands[i].enabled;
+            comp.oceanBands[i].foamPersistence = config.oceanConfig.bands[i].foamPersistence;
+            comp.oceanBands[i].foamDecay = config.oceanConfig.bands[i].foamDecay;
         }
         comp.oceanGravity = config.oceanConfig.gravity;
 
@@ -452,6 +456,8 @@ namespace services
             data.oceanConfig.bands[i].foamThreshold = comp.oceanBands[i].foamThreshold;
             data.oceanConfig.bands[i].displacementScale = comp.oceanBands[i].displacementScale;
             data.oceanConfig.bands[i].enabled = comp.oceanBands[i].enabled;
+            data.oceanConfig.bands[i].foamPersistence = comp.oceanBands[i].foamPersistence;
+            data.oceanConfig.bands[i].foamDecay = comp.oceanBands[i].foamDecay;
         }
         data.oceanConfig.gravity = comp.oceanGravity;
         data.oceanConfig.enabled = comp.isActive;
@@ -596,6 +602,8 @@ namespace services
             fileData.bands[i].foamThreshold = comp.oceanBands[i].foamThreshold;
             fileData.bands[i].displacementScale = comp.oceanBands[i].displacementScale;
             fileData.bands[i].enabled = comp.oceanBands[i].enabled;
+            fileData.bands[i].foamPersistence = comp.oceanBands[i].foamPersistence;
+            fileData.bands[i].foamDecay = comp.oceanBands[i].foamDecay;
         }
         fileData.gravity = comp.oceanGravity;
 
@@ -637,6 +645,8 @@ namespace services
             config.oceanConfig.bands[i].foamThreshold = fileData.bands[i].foamThreshold;
             config.oceanConfig.bands[i].displacementScale = fileData.bands[i].displacementScale;
             config.oceanConfig.bands[i].enabled = fileData.bands[i].enabled;
+            config.oceanConfig.bands[i].foamPersistence = fileData.bands[i].foamPersistence;
+            config.oceanConfig.bands[i].foamDecay = fileData.bands[i].foamDecay;
         }
         config.oceanConfig.gravity = fileData.gravity;
         config.oceanConfig.enabled = true;
@@ -1043,6 +1053,8 @@ namespace services
                 oceanConfig.bands[i].foamThreshold = comp.oceanBands[i].foamThreshold;
                 oceanConfig.bands[i].displacementScale = comp.oceanBands[i].displacementScale;
                 oceanConfig.bands[i].enabled = comp.oceanBands[i].enabled;
+                oceanConfig.bands[i].foamPersistence = comp.oceanBands[i].foamPersistence;
+                oceanConfig.bands[i].foamDecay = comp.oceanBands[i].foamDecay;
             }
             oceanConfig.gravity = comp.oceanGravity;
             oceanConfig.enabled = comp.isActive;

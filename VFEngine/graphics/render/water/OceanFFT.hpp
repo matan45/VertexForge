@@ -58,5 +58,9 @@ namespace render::water
         bool initialized = false;
         bool spectrumDirty = true;
         bool firstDispatch = true;
+
+        // Persistent foam ping-pong: merge reads foam[historyIndex], writes foam[1 - historyIndex]
+        uint32_t foamHistoryIndex = 0;
+        float lastDispatchTime = -1.0f;
     };
 }
