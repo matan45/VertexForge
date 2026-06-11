@@ -1,6 +1,7 @@
 #include "BehaviorTreeEditorWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
+#include "events/ai/BehaviorTreeEvents.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <array>
@@ -65,6 +66,11 @@ namespace editor::windows
             events::resource::AssetSavedNotification assetNotif;
             assetNotif.filePath = treePath;
             events::EventDispatcher::instance().publish(assetNotif);
+
+            // Hot reload: rebind any live runtimes using this asset (no-op outside play)
+            events::ai::ReloadBehaviorTreeAssetCommand reloadCmd;
+            reloadCmd.treePath = treePath;
+            events::EventDispatcher::instance().execute(reloadCmd);
         }
     }
 

@@ -40,6 +40,12 @@ namespace services
                 setEnabled(cmd.entity, cmd.enabled);
             });
 
+        dispatcher.registerCommandHandler<events::ai::ReloadBehaviorTreeAssetCommand>(
+            [this](const auto& cmd)
+            {
+                provider->reloadAsset(cmd.treePath);
+            });
+
         dispatcher.registerCommandHandler<events::ai::SetBlackboardValueCommand>(
             [this](const auto& cmd)
             {

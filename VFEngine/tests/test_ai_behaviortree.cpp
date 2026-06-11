@@ -1,10 +1,11 @@
-#include <doctest.h>
+﻿#include <doctest.h>
 #include <behaviortree/BehaviorTreeTypes.hpp>
 #include <behaviortree/BehaviorTreeRuntime.hpp>
 #include <behaviortree/Blackboard.hpp>
 #include <string>
 #include <vector>
 #include <utility>
+#include <memory>
 
 // ============================================================
 // VK-1091: AI / Behavior Tree unit tests
@@ -308,7 +309,7 @@ behaviortree::BehaviorTreeData makeSelectorTree(const std::string& abortMode) {
 
 TEST_CASE("BlackboardCondition: gates child on entry") {
     behaviortree::BehaviorTreeRuntime runtime;
-    runtime.init(makeGuardedWaitTree("None", false), services::EntityHandle{});
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeGuardedWaitTree("None", false)), services::EntityHandle{});
     AbortRecorder executor;
 
     // Condition false: child must not run
@@ -322,7 +323,7 @@ TEST_CASE("BlackboardCondition: gates child on entry") {
 
 TEST_CASE("BlackboardCondition: None mode keeps running after condition turns false") {
     behaviortree::BehaviorTreeRuntime runtime;
-    runtime.init(makeGuardedWaitTree("None", true), services::EntityHandle{});
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeGuardedWaitTree("None", true)), services::EntityHandle{});
     AbortRecorder executor;
 
     CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
@@ -335,7 +336,7 @@ TEST_CASE("BlackboardCondition: None mode keeps running after condition turns fa
 
 TEST_CASE("BlackboardCondition: Self abort cancels running subtree") {
     behaviortree::BehaviorTreeRuntime runtime;
-    runtime.init(makeGuardedWaitTree("Self", true), services::EntityHandle{});
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeGuardedWaitTree("Self", true)), services::EntityHandle{});
     AbortRecorder executor;
 
     CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
@@ -354,7 +355,7 @@ TEST_CASE("BlackboardCondition: Self abort cancels running subtree") {
 
 TEST_CASE("Selector observer abort: LowerPriority preempts running branch") {
     behaviortree::BehaviorTreeRuntime runtime;
-    runtime.init(makeSelectorTree("LowerPriority"), services::EntityHandle{});
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeSelectorTree("LowerPriority")), services::EntityHandle{});
     AbortRecorder executor;
 
     // Guard fails -> selector falls through to the low-priority wait
@@ -374,7 +375,7 @@ TEST_CASE("Selector observer abort: LowerPriority preempts running branch") {
 
 TEST_CASE("Selector observer abort: None mode never preempts") {
     behaviortree::BehaviorTreeRuntime runtime;
-    runtime.init(makeSelectorTree("None"), services::EntityHandle{});
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeSelectorTree("None")), services::EntityHandle{});
     AbortRecorder executor;
 
     CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
@@ -386,7 +387,7 @@ TEST_CASE("Selector observer abort: None mode never preempts") {
 
 TEST_CASE("Selector observer abort: Both preempts and self-aborts") {
     behaviortree::BehaviorTreeRuntime runtime;
-    runtime.init(makeSelectorTree("Both"), services::EntityHandle{});
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeSelectorTree("Both")), services::EntityHandle{});
     AbortRecorder executor;
 
     // Fall through to low-priority branch
@@ -403,6 +404,31 @@ TEST_CASE("Selector observer abort: Both preempts and self-aborts") {
     CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
     REQUIRE(executor.aborts.size() == 2);
     CHECK(executor.aborts[1].first == 4);
+}
+
+// ---- Shared tree data ----
+
+TEST_CASE("Shared tree data: runtimes share one asset but keep independent state") {
+    auto shared = std::make_shared<const behaviortree::BehaviorTreeData>(makeGuardedWaitTree("None", true));
+    AbortRecorder executor;
+
+    behaviortree::BehaviorTreeRuntime runtimeA;
+    behaviortree::BehaviorTreeRuntime runtimeB;
+    runtimeA.init(shared, services::EntityHandle{});
+    runtimeB.init(shared, services::EntityHandle{});
+
+    // Same immutable data instance backs both runtimes
+    CHECK(&runtimeA.getTreeData() == &runtimeB.getTreeData());
+
+    // Per-agent blackboards stay independent
+    runtimeB.getBlackboard().set("ok", false);
+    CHECK(runtimeA.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
+    CHECK(runtimeB.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Failure);
+
+    // Re-init with the same shared data resets state without touching the other runtime
+    runtimeA.init(shared, services::EntityHandle{});
+    CHECK(runtimeA.getBlackboard().getBool("ok") == true);
+    CHECK(runtimeB.getBlackboard().getBool("ok") == false);
 }
 
 } // TEST_SUITE

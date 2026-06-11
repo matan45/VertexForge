@@ -1,36 +1,43 @@
-#include "BehaviorTreeRuntime.hpp"
+﻿#include "BehaviorTreeRuntime.hpp"
 #include <cmath>
 
 namespace behaviortree
 {
-    void BehaviorTreeRuntime::init(BehaviorTreeData data, services::EntityHandle entity)
+    void BehaviorTreeRuntime::init(std::shared_ptr<const BehaviorTreeData> data, services::EntityHandle entity)
     {
         treeData = std::move(data);
         ownerEntity = entity;
-        blackboard.initializeFromGraph(treeData.graph);
+        blackboard.clear();
+        if (treeData)
+        {
+            blackboard.initializeFromGraph(treeData->graph);
+        }
         nodeStates.clear();
     }
 
     BTNodeStatus BehaviorTreeRuntime::tick(float deltaTime, IBTTaskExecutor* executor)
     {
-        if (treeData.graph.rootNodeId == 0)
+        if (!treeData || treeData->graph.rootNodeId == 0)
         {
             return BTNodeStatus::Failure;
         }
 
-        return tickNode(treeData.graph.rootNodeId, deltaTime, executor);
+        return tickNode(treeData->graph.rootNodeId, deltaTime, executor);
     }
 
     void BehaviorTreeRuntime::reset()
     {
         nodeStates.clear();
-        blackboard.initializeFromGraph(treeData.graph);
+        if (treeData)
+        {
+            blackboard.initializeFromGraph(treeData->graph);
+        }
     }
 
     void BehaviorTreeRuntime::resetSubtreeState(uint32_t nodeId)
     {
         nodeStates.erase(nodeId);
-        auto children = treeData.graph.getChildren(nodeId);
+        auto children = treeData->graph.getChildren(nodeId);
         for (const auto* child : children)
         {
             resetSubtreeState(child->id);
@@ -42,14 +49,14 @@ namespace behaviortree
         auto it = nodeStates.find(nodeId);
         if (it != nodeStates.end() && it->second.lastStatus == BTNodeStatus::Running && executor)
         {
-            const BTNode* node = treeData.graph.findNodeById(nodeId);
+            const BTNode* node = treeData->graph.findNodeById(nodeId);
             if (node && isTaskNode(node->type))
             {
                 executor->onAbort(ownerEntity, *node);
             }
         }
         nodeStates.erase(nodeId);
-        auto children = treeData.graph.getChildren(nodeId);
+        auto children = treeData->graph.getChildren(nodeId);
         for (const auto* child : children)
         {
             abortSubtree(child->id, executor);
@@ -120,7 +127,7 @@ namespace behaviortree
 
     BTNodeStatus BehaviorTreeRuntime::tickNode(uint32_t nodeId, float dt, IBTTaskExecutor* executor)
     {
-        const BTNode* node = treeData.graph.findNodeById(nodeId);
+        const BTNode* node = treeData->graph.findNodeById(nodeId);
         if (!node)
         {
             return BTNodeStatus::Failure;
@@ -130,7 +137,7 @@ namespace behaviortree
 
         if (isRootNode(node->type))
         {
-            auto children = treeData.graph.getChildren(nodeId);
+            auto children = treeData->graph.getChildren(nodeId);
             if (children.empty())
             {
                 status = BTNodeStatus::Failure;
@@ -162,7 +169,7 @@ namespace behaviortree
 
     BTNodeStatus BehaviorTreeRuntime::tickComposite(const BTNode& node, float dt, IBTTaskExecutor* executor)
     {
-        auto children = treeData.graph.getChildren(node.id);
+        auto children = treeData->graph.getChildren(node.id);
         if (children.empty())
         {
             return BTNodeStatus::Failure;
@@ -281,7 +288,7 @@ namespace behaviortree
 
     BTNodeStatus BehaviorTreeRuntime::tickDecorator(const BTNode& node, float dt, IBTTaskExecutor* executor)
     {
-        auto children = treeData.graph.getChildren(node.id);
+        auto children = treeData->graph.getChildren(node.id);
         auto& state = getNodeState(node.id);
 
         switch (node.type)

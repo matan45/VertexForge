@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <memory>
 #include <optional>
+#include <mutex>
+#include <vector>
 
 namespace services
 {
@@ -32,6 +34,7 @@ namespace core
 
         void updateAll(float deltaTime) override;
         void stopAll() override;
+        void reloadAsset(const std::string& treePath) override;
 
         void setBlackboardValue(services::EntityHandle entity, const std::string& key,
                                 const behaviortree::BlackboardValue& value) override;
@@ -108,5 +111,17 @@ namespace core
         std::unordered_map<uint64_t, RuntimeInstance> runtimes; // keyed by EntityHandle::id
         std::unordered_map<ScriptInstanceKey, uint64_t, ScriptInstanceKeyHash> scriptInstances;
         std::unordered_map<std::string, eqs::EQSQueryHandle> pendingEQSQueries; // key: "{entityId}:{queryName}"
+
+        // One immutable tree per asset path, shared by every runtime attached to it
+        std::unordered_map<std::string, std::shared_ptr<const behaviortree::BehaviorTreeData>> assetCache;
+
+        // Hot-reload requests queued from the editor thread, applied between ticks in updateAll
+        std::vector<std::string> pendingReloads;
+        std::mutex reloadMutex;
+
+        std::shared_ptr<const behaviortree::BehaviorTreeData> getOrLoadTree(const std::string& treePath);
+        void applyPendingReloads();
+        void cleanupScriptInstances(uint64_t entityId, const behaviortree::BehaviorTreeData& treeData);
+        void cancelPendingEQSQueriesForEntity(uint64_t entityId);
     };
 }

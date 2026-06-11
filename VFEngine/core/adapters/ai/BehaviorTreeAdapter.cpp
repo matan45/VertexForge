@@ -21,6 +21,21 @@ namespace core
 
     BehaviorTreeAdapter::~BehaviorTreeAdapter() = default;
 
+    std::shared_ptr<const BehaviorTreeData> BehaviorTreeAdapter::getOrLoadTree(const std::string& treePath)
+    {
+        auto cacheIt = assetCache.find(treePath);
+        if (cacheIt != assetCache.end())
+            return cacheIt->second;
+
+        auto dataOpt = BehaviorTreeAsset::load(treePath);
+        if (!dataOpt.has_value())
+            return nullptr;
+
+        auto shared = std::make_shared<const BehaviorTreeData>(std::move(dataOpt.value()));
+        assetCache[treePath] = shared;
+        return shared;
+    }
+
     bool BehaviorTreeAdapter::attachTree(services::EntityHandle entity, const std::string& treePath)
     {
         if (!entity.isValid() || treePath.empty())
@@ -28,8 +43,8 @@ namespace core
 
         detachTree(entity);
 
-        auto dataOpt = BehaviorTreeAsset::load(treePath);
-        if (!dataOpt.has_value())
+        auto treeData = getOrLoadTree(treePath);
+        if (!treeData)
         {
             vfLogError("Failed to load behavior tree: {}", treePath);
             return false;
@@ -37,7 +52,7 @@ namespace core
 
         RuntimeInstance instance;
         instance.runtime = std::make_unique<BehaviorTreeRuntime>();
-        instance.runtime->init(std::move(dataOpt.value()), entity);
+        instance.runtime->init(treeData, entity);
         instance.treePath = treePath;
         instance.enabled = true;
 
@@ -46,32 +61,31 @@ namespace core
         return true;
     }
 
-    void BehaviorTreeAdapter::detachTree(services::EntityHandle entity)
+    void BehaviorTreeAdapter::cleanupScriptInstances(uint64_t entityId, const BehaviorTreeData& treeData)
     {
-        auto it = runtimes.find(entity.id);
-        if (it == runtimes.end()) return;
+        if (!scriptingProvider) return;
 
-        if (it->second.runtime && scriptingProvider)
+        for (const auto& node : treeData.graph.nodes)
         {
-            for (const auto& node : it->second.runtime->getTreeData().graph.nodes)
-            {
-                if (node.type != BTNodeType::ScriptTask || node.scriptPath.empty())
-                    continue;
+            if (node.type != BTNodeType::ScriptTask || node.scriptPath.empty())
+                continue;
 
-                auto sit = scriptInstances.find({entity.id, node.scriptPath});
-                if (sit != scriptInstances.end())
+            auto sit = scriptInstances.find({entityId, node.scriptPath});
+            if (sit != scriptInstances.end())
+            {
+                if (scriptingProvider->isScriptLoaded(sit->second))
                 {
-                    if (scriptingProvider->isScriptLoaded(sit->second))
-                    {
-                        scriptingProvider->callOnDestroy(sit->second);
-                        scriptingProvider->unloadScript(sit->second);
-                    }
-                    scriptInstances.erase(sit);
+                    scriptingProvider->callOnDestroy(sit->second);
+                    scriptingProvider->unloadScript(sit->second);
                 }
+                scriptInstances.erase(sit);
             }
         }
-        // Cancel any pending EQS queries for this entity
-        std::string prefix = std::to_string(entity.id) + ":";
+    }
+
+    void BehaviorTreeAdapter::cancelPendingEQSQueriesForEntity(uint64_t entityId)
+    {
+        std::string prefix = std::to_string(entityId) + ":";
         for (auto eqsIt = pendingEQSQueries.begin(); eqsIt != pendingEQSQueries.end(); )
         {
             if (eqsIt->first.compare(0, prefix.size(), prefix) == 0)
@@ -84,6 +98,18 @@ namespace core
             else
                 ++eqsIt;
         }
+    }
+
+    void BehaviorTreeAdapter::detachTree(services::EntityHandle entity)
+    {
+        auto it = runtimes.find(entity.id);
+        if (it == runtimes.end()) return;
+
+        if (it->second.runtime && it->second.runtime->hasTreeData())
+        {
+            cleanupScriptInstances(entity.id, it->second.runtime->getTreeData());
+        }
+        cancelPendingEQSQueriesForEntity(entity.id);
 
         runtimes.erase(it);
     }
@@ -128,8 +154,88 @@ namespace core
         }
     }
 
+    void BehaviorTreeAdapter::reloadAsset(const std::string& treePath)
+    {
+        if (treePath.empty()) return;
+
+        std::lock_guard<std::mutex> lock(reloadMutex);
+        for (const auto& pending : pendingReloads)
+        {
+            if (pending == treePath) return;
+        }
+        pendingReloads.push_back(treePath);
+    }
+
+    void BehaviorTreeAdapter::applyPendingReloads()
+    {
+        std::vector<std::string> reloads;
+        {
+            std::lock_guard<std::mutex> lock(reloadMutex);
+            reloads.swap(pendingReloads);
+        }
+
+        for (const auto& treePath : reloads)
+        {
+            auto dataOpt = BehaviorTreeAsset::load(treePath);
+            if (!dataOpt.has_value())
+            {
+                vfLogError("BT hot reload: failed to load '{}', keeping old tree", treePath);
+                continue;
+            }
+
+            auto newData = std::make_shared<const BehaviorTreeData>(std::move(dataOpt.value()));
+            assetCache[treePath] = newData;
+
+            int rebound = 0;
+            for (auto& [entityId, instance] : runtimes)
+            {
+                if (instance.treePath != treePath || !instance.runtime) continue;
+
+                // Old node ids/scripts are invalid against the new graph
+                if (instance.runtime->hasTreeData())
+                {
+                    cleanupScriptInstances(entityId, instance.runtime->getTreeData());
+                }
+                cancelPendingEQSQueriesForEntity(entityId);
+
+                auto savedBlackboard = instance.runtime->getBlackboard().getAll();
+                services::EntityHandle owner = instance.runtime->getOwnerEntity();
+
+                instance.runtime->init(newData, owner);
+                instance.lastTickStatus.reset();
+
+                // Restore surviving values: keep script scratch keys, and declared keys
+                // whose stored type still matches the new schema default
+                auto& blackboard = instance.runtime->getBlackboard();
+                for (const auto& [key, value] : savedBlackboard)
+                {
+                    bool declared = false;
+                    bool typeMatches = true;
+                    for (const auto& keyDef : newData->graph.blackboardKeys)
+                    {
+                        if (keyDef.name == key)
+                        {
+                            declared = true;
+                            typeMatches = keyDef.defaultValue.index() == value.index();
+                            break;
+                        }
+                    }
+                    if (!declared || typeMatches)
+                    {
+                        blackboard.set(key, value);
+                    }
+                }
+                ++rebound;
+            }
+
+            vfLogInfo("BT hot reload: '{}' rebound to {} runtime(s)", treePath, rebound);
+        }
+    }
+
     void BehaviorTreeAdapter::updateAll(float deltaTime)
     {
+        applyPendingReloads();
+
         std::vector<uint64_t> entityIds;
         entityIds.reserve(runtimes.size());
         for (const auto& [entityId, _] : runtimes)
@@ -154,6 +260,8 @@ namespace core
             if (instance.runtime)
                 instance.runtime->reset();
         }
+        // Play session over: drop cached assets so the next session reloads from disk
+        assetCache.clear();
     }
 
     void BehaviorTreeAdapter::setBlackboardValue(services::EntityHandle entity, const std::string& key,

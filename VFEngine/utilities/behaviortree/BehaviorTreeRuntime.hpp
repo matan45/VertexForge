@@ -64,19 +64,22 @@ namespace behaviortree
     class BehaviorTreeRuntime
     {
     private:
-        BehaviorTreeData treeData;
+        // Immutable tree data, shared between all runtimes attached to the same asset path.
+        // All mutable per-agent state lives in nodeStates/blackboard.
+        std::shared_ptr<const BehaviorTreeData> treeData;
         services::EntityHandle ownerEntity;
         Blackboard blackboard;
         std::unordered_map<uint32_t, BTNodeRuntime> nodeStates;
     public:
-        void init(BehaviorTreeData data, services::EntityHandle entity);
+        void init(std::shared_ptr<const BehaviorTreeData> data, services::EntityHandle entity);
         BTNodeStatus tick(float deltaTime, IBTTaskExecutor* executor);
         void reset();
 
         Blackboard& getBlackboard() { return blackboard; }
         const Blackboard& getBlackboard() const { return blackboard; }
 
-        const BehaviorTreeData& getTreeData() const { return treeData; }
+        const BehaviorTreeData& getTreeData() const { return *treeData; }
+        bool hasTreeData() const { return treeData != nullptr; }
         services::EntityHandle getOwnerEntity() const { return ownerEntity; }
 
     private:

@@ -27,6 +27,12 @@ namespace events::ai {
         std::string_view getName() const override { return "SetBehaviorTreeEnabled"; }
     };
 
+    struct ReloadBehaviorTreeAssetCommand : ICommand<> {
+        std::string treePath;
+
+        std::string_view getName() const override { return "ReloadBehaviorTreeAsset"; }
+    };
+
     struct SetBlackboardValueCommand : ICommand<> {
         services::EntityHandle entity;
         std::string key;
