@@ -307,7 +307,8 @@ namespace services
         pendingAsyncLoads.launch(coord,
             std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
                 AsyncSectorLoadResult result;
-                result.success = world::WorldSectorSerialization::loadSector(filePath, result.entityData);
+                result.success = world::WorldSectorSerialization::loadSector(
+                    filePath, result.entityData, &result.dataLayers);
                 return result;
             }));
     }
@@ -328,16 +329,30 @@ namespace services
                 return;
             }
 
-            finalizeSectorLoad(coord, result.entityData);
+            finalizeSectorLoad(coord, result.entityData, result.dataLayers);
         });
     }
 
     void WorldSectorServiceImpl::finalizeSectorLoad(const world::SectorCoord& coord,
-                                                     std::vector<nlohmann::json>& entityData)
+                                                     std::vector<nlohmann::json>& entityData,
+                                                     world::SectorDataLayers& dataLayers)
     {
         auto* sector = sectorManager.getSector(coord);
         if (!sector)
             return;
+
+        // Merge file layers under any in-memory ones: layers written at runtime
+        // (e.g. fog-of-war) survive unload on the sector struct and are newer
+        // than what the file holds
+        for (auto& [layerName, bytes] : dataLayers)
+            sector->dataLayers.try_emplace(layerName, std::move(bytes));
+        for (const auto& [layerName, bytes] : sector->dataLayers)
+        {
+            ::events::world::SectorDataLayerLoadedNotification notif;
+            notif.coord = coord;
+            notif.layerName = layerName;
+            ::events::EventDispatcher::instance().publish(notif);
+        }
 
         sector->entityUUIDs.clear();
         std::vector<std::pair<std::string, nlohmann::json>> entityNamesAndJson;

@@ -100,6 +100,7 @@ namespace services
         struct AsyncSectorLoadResult
         {
             std::vector<nlohmann::json> entityData;
+            world::SectorDataLayers dataLayers;
             bool success = false;
         };
 
@@ -146,7 +147,9 @@ namespace services
         void handleSectorUnload(const world::SectorCoord& coord);
         void invalidateHLODForSector(const world::SectorCoord& coord);
         void pollAsyncSectorLoads();
-        void finalizeSectorLoad(const world::SectorCoord& coord, std::vector<nlohmann::json>& entityData);
+        void finalizeSectorLoad(const world::SectorCoord& coord,
+                                std::vector<nlohmann::json>& entityData,
+                                world::SectorDataLayers& dataLayers);
         void onTransformChanged(uint64_t uuid, const glm::vec3& newPosition);
         void onTerrainAvailable(float worldTileSize);
         glm::vec3 getPrimaryCameraPosition() const;

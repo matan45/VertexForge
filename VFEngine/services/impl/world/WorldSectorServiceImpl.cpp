@@ -501,6 +501,47 @@ namespace services
                 return result;
             });
 
+        dispatcher.registerCommandHandler<::events::world::SetSectorDataLayerCommand>(
+            [this](const ::events::world::SetSectorDataLayerCommand& cmd) -> bool
+            {
+                if (!worldMode || cmd.layerName.empty()) return false;
+                auto* sector = sectorManager.getSector(cmd.coord);
+                if (!sector) return false;
+
+                sector->dataLayers[cmd.layerName] = cmd.data;
+                // Edit-mode only dirty (play-mode dirty pins the sector against unload);
+                // play-mode layer writes live in memory until an editor-mode save
+                if (!isPlayMode)
+                    sector->dirty = true;
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<::events::world::RemoveSectorDataLayerCommand>(
+            [this](const ::events::world::RemoveSectorDataLayerCommand& cmd) -> bool
+            {
+                if (!worldMode) return false;
+                auto* sector = sectorManager.getSector(cmd.coord);
+                if (!sector) return false;
+
+                if (sector->dataLayers.erase(cmd.layerName) == 0)
+                    return false;
+                if (!isPlayMode)
+                    sector->dirty = true;
+                return true;
+            });
+
+        dispatcher.registerQueryHandler<::events::world::GetSectorDataLayerQuery>(
+            [this](const ::events::world::GetSectorDataLayerQuery& q)
+                -> std::optional<std::vector<uint8_t>>
+            {
+                const auto* sector = sectorManager.getSector(q.coord);
+                if (!sector) return std::nullopt;
+
+                auto it = sector->dataLayers.find(q.layerName);
+                if (it == sector->dataLayers.end()) return std::nullopt;
+                return it->second;
+            });
+
         dispatcher.registerQueryHandler<::events::world::GetSectorReadinessQuery>(
             [this](const ::events::world::GetSectorReadinessQuery& q)
                 -> ::events::world::SectorReadiness

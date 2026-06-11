@@ -223,6 +223,73 @@ TEST_SUITE("SectorPersistence")
         }
     }
 
+    TEST_CASE("v3 sections round-trip data layers alongside entities")
+    {
+        resetTestRoot();
+        TestEntities scope{{920070, {1.0f, 0.0f, 1.0f}}};
+
+        auto sector = makeSector({920070});
+        sector.dataLayers["fogOfWar"] = {0x01, 0x02, 0x03, 0xFF};
+        sector.dataLayers["resourceGrid"] = std::vector<uint8_t>(256, 0xAB);
+
+        std::string path = (testRoot() / "layers.vfsector").string();
+        REQUIRE(world::WorldSectorSerialization::saveSector(sector, path));
+
+        std::vector<nlohmann::json> entityData;
+        world::SectorDataLayers layers;
+        REQUIRE(world::WorldSectorSerialization::loadSector(path, entityData, &layers));
+
+        CHECK(entityData.size() == 1);
+        REQUIRE(layers.size() == 2);
+        CHECK(layers.at("fogOfWar") == std::vector<uint8_t>{0x01, 0x02, 0x03, 0xFF});
+        CHECK(layers.at("resourceGrid") == std::vector<uint8_t>(256, 0xAB));
+
+        // Callers that don't ask for layers still load entities
+        std::vector<nlohmann::json> entitiesOnly;
+        REQUIRE(world::WorldSectorSerialization::loadSector(path, entitiesOnly));
+        CHECK(entitiesOnly.size() == 1);
+    }
+
+    TEST_CASE("v2 sector files still load (backward compatibility)")
+    {
+        resetTestRoot();
+
+        // Hand-craft a v2 file: 44-byte header + raw MessagePack payload
+        nlohmann::json sectorJson;
+        sectorJson["version"] = "1.0";
+        sectorJson["coord"] = {{"x", 0}, {"z", 0}};
+        sectorJson["entities"] = nlohmann::json::array(
+            {{{"uuid", 920080}, {"name", "Legacy"}}});
+        auto blob = nlohmann::json::to_msgpack(sectorJson);
+
+        std::string path = (testRoot() / "legacy_v2.vfsector").string();
+        {
+            std::ofstream file(path, std::ios::binary);
+            REQUIRE(file.is_open());
+            file.write("VFSC", 4);
+            auto writeU32 = [&](uint32_t v) { file.write(reinterpret_cast<const char*>(&v), 4); };
+            auto writeF32 = [&](float v) { file.write(reinterpret_cast<const char*>(&v), 4); };
+            writeU32(2); // version
+            writeU32(1); // entity count
+            for (int i = 0; i < 6; ++i) writeF32(0.0f); // AABB
+            uint64_t totalSize = 44 + blob.size();
+            file.write(reinterpret_cast<const char*>(&totalSize), 8);
+            file.write(reinterpret_cast<const char*>(blob.data()),
+                       static_cast<std::streamsize>(blob.size()));
+        }
+
+        std::vector<nlohmann::json> entityData;
+        world::SectorDataLayers layers;
+        REQUIRE(world::WorldSectorSerialization::loadSector(path, entityData, &layers));
+        REQUIRE(entityData.size() == 1);
+        CHECK(entityData[0]["uuid"].get<uint64_t>() == 920080);
+        CHECK(layers.empty()); // v2 has no sections
+
+        world::SectorMetadata metadata;
+        REQUIRE(world::WorldSectorSerialization::readSectorMetadata(path, metadata));
+        CHECK(metadata.entityCount == 1);
+    }
+
     TEST_CASE(".vfworld round-trips the full streaming config")
     {
         resetTestRoot();
