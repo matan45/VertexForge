@@ -64,13 +64,6 @@ namespace import
         // config. Empty = default "<fileName>.<outputExtension>".
         virtual std::string deriveOutputFile(const pipeline::ImportContext&) const { return {}; }
 
-        // Asset type for the .vfmeta sidecar when it depends on the import
-        // config. COUNT = use the format's assetType.
-        virtual resource::AssetType deriveAssetType(const pipeline::ImportContext&) const
-        {
-            return resource::AssetType::COUNT;
-        }
-
         // Per-file options shown in the import dialog for this importer's
         // extensions; chosen values arrive in context.file.config.customOptions.
         virtual std::vector<ImportOptionDesc> options() const { return {}; }

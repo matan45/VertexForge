@@ -1,5 +1,5 @@
 {
-    "apiVersion": 11,
+    "apiVersion": 12,
     "author": "you",
     "capabilities": ["graphics", "terrain", "input", "editor"],
     "dependencies": [],

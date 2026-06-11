@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
+#include <map>
 #include <string>
+#include <variant>
 
 // Application version - static constants
 struct Version
@@ -121,6 +123,10 @@ namespace importConfig
         AudioLoadType loadType = AudioLoadType::Auto;
     };
 
+    // Value type for importer-declared options (see import::ImportOptionDesc).
+    // Enum options store the selected index as int32_t.
+    using ImportOptionValue = std::variant<bool, int32_t, float, std::string>;
+
     struct ImportConfig
     {
         bool isImageFlipVertically = false;
@@ -128,6 +134,9 @@ namespace importConfig
         TextureCompressionMode compressionMode = TextureCompressionMode::BC;
         TextureCompressionQuality compressionQuality = TextureCompressionQuality::Balanced;
         AudioImportConfig audioConfig;
+        // Options declared by registered importers (plugin or engine), keyed by
+        // ImportOptionDesc::key. Read inside AssetImporter::process().
+        std::map<std::string, ImportOptionValue> customOptions;
     };
 
     struct ImportFiles
