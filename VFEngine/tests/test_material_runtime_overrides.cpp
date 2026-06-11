@@ -52,35 +52,33 @@ TEST_SUITE("MaterialRuntimeOverrides") {
 
 // ---- scene serialization ----
 
-TEST_CASE("MaterialComponent serialization round-trips typed overrides") {
-    components::MaterialComponent comp;
-    comp.parameterOverrides["Boost"] = 0.4f;
-    comp.parameterOverrides["Wind"] = glm::vec2(1.0f, -2.0f);
-    comp.parameterOverrides["Offset"] = glm::vec3(0.1f, 0.2f, 0.3f);
-    comp.parameterOverrides["Tint"] = glm::vec4(0.9f, 0.8f, 0.7f, 0.6f);
+TEST_CASE("parameter override serialization round-trips typed values") {
+    std::map<std::string, material::ParameterValue> overrides;
+    overrides["Boost"] = 0.4f;
+    overrides["Wind"] = glm::vec2(1.0f, -2.0f);
+    overrides["Offset"] = glm::vec3(0.1f, 0.2f, 0.3f);
+    overrides["Tint"] = glm::vec4(0.9f, 0.8f, 0.7f, 0.6f);
 
-    nlohmann::json j = serialization::SceneSerialization::serializeMaterial(comp);
+    nlohmann::json j = serialization::SceneSerialization::serializeParameterOverrides(overrides);
 
-    components::MaterialComponent loaded;
-    serialization::SceneSerialization::deserializeMaterial(j, loaded);
+    std::map<std::string, material::ParameterValue> loaded;
+    serialization::SceneSerialization::deserializeParameterOverrides(j, loaded);
 
-    REQUIRE(loaded.parameterOverrides.size() == 4);
-    CHECK(std::get<float>(loaded.parameterOverrides.at("Boost")) == doctest::Approx(0.4f));
-    CHECK(std::get<glm::vec2>(loaded.parameterOverrides.at("Wind")).y == doctest::Approx(-2.0f));
-    CHECK(std::get<glm::vec3>(loaded.parameterOverrides.at("Offset")).z == doctest::Approx(0.3f));
-    CHECK(std::get<glm::vec4>(loaded.parameterOverrides.at("Tint")).w == doctest::Approx(0.6f));
+    REQUIRE(loaded.size() == 4);
+    CHECK(std::get<float>(loaded.at("Boost")) == doctest::Approx(0.4f));
+    CHECK(std::get<glm::vec2>(loaded.at("Wind")).y == doctest::Approx(-2.0f));
+    CHECK(std::get<glm::vec3>(loaded.at("Offset")).z == doctest::Approx(0.3f));
+    CHECK(std::get<glm::vec4>(loaded.at("Tint")).w == doctest::Approx(0.6f));
 }
 
-TEST_CASE("MaterialComponent deserialization accepts legacy bare-float overrides") {
-    nlohmann::json j;
-    j["subMeshMaterials"] = nlohmann::json::object();
-    j["parameterOverrides"] = {{"OldParam", 0.55f}};
+TEST_CASE("parameter override deserialization accepts legacy bare floats") {
+    nlohmann::json j = {{"OldParam", 0.55f}};
 
-    components::MaterialComponent loaded;
-    serialization::SceneSerialization::deserializeMaterial(j, loaded);
+    std::map<std::string, material::ParameterValue> loaded;
+    serialization::SceneSerialization::deserializeParameterOverrides(j, loaded);
 
-    REQUIRE(loaded.parameterOverrides.size() == 1);
-    CHECK(std::get<float>(loaded.parameterOverrides.at("OldParam")) == doctest::Approx(0.55f));
+    REQUIRE(loaded.size() == 1);
+    CHECK(std::get<float>(loaded.at("OldParam")) == doctest::Approx(0.55f));
 }
 
 // ---- component service ----

@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include "../scene/Entity.hpp"
 #include "../asset/AssetRef.hpp"
+#include "../material/MaterialTypes.hpp"
 #include "../types/PhysicsTypes.hpp"
 #include "../types/PhysicsAnimationTypes.hpp"
 #include "../types/NavmeshTypes.hpp"
@@ -72,6 +73,13 @@ namespace serialization
         static json serializeEntity(scene::Entity& entity);
         static void deserializeEntity(const json& entityJson, scene::Entity& entity,
                                       DeserializeEntityContext& ctx);
+
+        // Typed runtime material parameter overrides ({type, value} entries; the
+        // deserializer also accepts the legacy bare-float form). Public for tests.
+        static json serializeParameterOverrides(
+            const std::map<std::string, ::material::ParameterValue>& overrides);
+        static void deserializeParameterOverrides(
+            const json& j, std::map<std::string, ::material::ParameterValue>& overrides);
 
     private:
         static json serializeRootEntity(scene::Entity& root);

@@ -146,8 +146,16 @@ namespace serialization
         }
         j["subMeshMaterials"] = subMeshMaterialsJson;
 
+        j["parameterOverrides"] = serializeParameterOverrides(material.parameterOverrides);
+
+        return j;
+    }
+
+    json SceneSerialization::serializeParameterOverrides(
+        const std::map<std::string, ::material::ParameterValue>& overrides)
+    {
         json paramOverridesJson = json::object();
-        for (const auto& [paramName, value] : material.parameterOverrides)
+        for (const auto& [paramName, value] : overrides)
         {
             json entry;
             std::visit([&entry](const auto& v)
@@ -176,9 +184,7 @@ namespace serialization
             }, value);
             paramOverridesJson[paramName] = entry;
         }
-        j["parameterOverrides"] = paramOverridesJson;
-
-        return j;
+        return paramOverridesJson;
     }
 
     void SceneSerialization::deserializeMaterial(const json& j, components::MaterialComponent& material)
@@ -214,38 +220,45 @@ namespace serialization
 
         if (auto it = j.find("parameterOverrides"); it != j.end() && it->is_object())
         {
-            material.parameterOverrides.clear();
-            for (auto& [key, value] : it->items())
+            deserializeParameterOverrides(*it, material.parameterOverrides);
+        }
+    }
+
+    void SceneSerialization::deserializeParameterOverrides(
+        const json& j, std::map<std::string, ::material::ParameterValue>& overrides)
+    {
+        if (!j.is_object()) return;
+
+        overrides.clear();
+        for (auto& [key, value] : j.items())
+        {
+            if (value.is_number())
             {
-                if (value.is_number())
+                // Legacy form: bare float
+                overrides[key] = value.get<float>();
+            }
+            else if (value.is_object() && value.contains("value"))
+            {
+                const auto& inner = value["value"];
+                std::string type = value.value("type", "scalar");
+                if (type == "scalar" && inner.is_number())
                 {
-                    // Legacy form: bare float
-                    material.parameterOverrides[key] = value.get<float>();
+                    overrides[key] = inner.get<float>();
                 }
-                else if (value.is_object() && value.contains("value"))
+                else if (type == "vec2" && inner.is_array() && inner.size() >= 2)
                 {
-                    const auto& inner = value["value"];
-                    std::string type = value.value("type", "scalar");
-                    if (type == "scalar" && inner.is_number())
-                    {
-                        material.parameterOverrides[key] = inner.get<float>();
-                    }
-                    else if (type == "vec2" && inner.is_array() && inner.size() >= 2)
-                    {
-                        material.parameterOverrides[key] =
-                            glm::vec2(inner[0].get<float>(), inner[1].get<float>());
-                    }
-                    else if (type == "vec3" && inner.is_array() && inner.size() >= 3)
-                    {
-                        material.parameterOverrides[key] =
-                            glm::vec3(inner[0].get<float>(), inner[1].get<float>(), inner[2].get<float>());
-                    }
-                    else if (type == "vec4" && inner.is_array() && inner.size() >= 4)
-                    {
-                        material.parameterOverrides[key] = glm::vec4(
-                            inner[0].get<float>(), inner[1].get<float>(),
-                            inner[2].get<float>(), inner[3].get<float>());
-                    }
+                    overrides[key] = glm::vec2(inner[0].get<float>(), inner[1].get<float>());
+                }
+                else if (type == "vec3" && inner.is_array() && inner.size() >= 3)
+                {
+                    overrides[key] =
+                        glm::vec3(inner[0].get<float>(), inner[1].get<float>(), inner[2].get<float>());
+                }
+                else if (type == "vec4" && inner.is_array() && inner.size() >= 4)
+                {
+                    overrides[key] = glm::vec4(
+                        inner[0].get<float>(), inner[1].get<float>(),
+                        inner[2].get<float>(), inner[3].get<float>());
                 }
             }
         }
