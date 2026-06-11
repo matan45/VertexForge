@@ -15,6 +15,22 @@ namespace import
         uint64_t fileSize = 0;
     };
 
+    // Declarative per-file import option: the import dialog renders these
+    // generically (checkbox / slider / combo) and stores the chosen values in
+    // ImportConfig::customOptions under `key`, so importers get config UI
+    // without any editor code.
+    struct ImportOptionDesc
+    {
+        std::string key;
+        std::string label;
+        std::string tooltip;
+        enum class Type { Bool, Int, Float, Enum } type = Type::Bool;
+        importConfig::ImportOptionValue defaultValue = false;
+        float minValue = 0.0f;                // Int/Float slider range
+        float maxValue = 0.0f;
+        std::vector<std::string> enumNames;   // Enum entries (value stored as int32_t index)
+    };
+
     struct FormatInfo
     {
         std::string fileType;                 // canonical id ("PNG") stored in ImportContext::fileType
@@ -47,6 +63,10 @@ namespace import
         // Output file name (with extension) when it depends on the import
         // config. Empty = default "<fileName>.<outputExtension>".
         virtual std::string deriveOutputFile(const pipeline::ImportContext&) const { return {}; }
+
+        // Per-file options shown in the import dialog for this importer's
+        // extensions; chosen values arrive in context.file.config.customOptions.
+        virtual std::vector<ImportOptionDesc> options() const { return {}; }
     };
 
     // Adapts the per-file ImportProgressCallback to the single-float callbacks

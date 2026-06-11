@@ -222,6 +222,68 @@ TEST_SUITE("ImporterRegistry")
         CHECK_FALSE(registry.formatInfo("FAKEPNG").has_value());
     }
 
+    TEST_CASE("importer-declared options surface per extension")
+    {
+        class OptionedImporter : public import::AssetImporter
+        {
+        public:
+            std::vector<import::FormatInfo> formats() const override
+            {
+                return {{"OPTFMT", "Opt Files", {"optfmt"}, "vfImage", resource::AssetType::Texture, 1}};
+            }
+
+            bool matches(const std::string&, const import::DetectionInput&) const override
+            {
+                return false;
+            }
+
+            void process(pipeline::ImportContext&) override {}
+
+            std::vector<import::ImportOptionDesc> options() const override
+            {
+                import::ImportOptionDesc flip;
+                flip.key = "flipVertically";
+                flip.label = "Flip Vertically";
+                flip.type = import::ImportOptionDesc::Type::Bool;
+                flip.defaultValue = true;
+
+                import::ImportOptionDesc scale;
+                scale.key = "scale";
+                scale.label = "Scale";
+                scale.type = import::ImportOptionDesc::Type::Float;
+                scale.defaultValue = 1.0f;
+                scale.minValue = 0.1f;
+                scale.maxValue = 10.0f;
+
+                return {flip, scale};
+            }
+        };
+
+        import::builtin::ensureRegistered();
+        auto& registry = import::ImporterRegistry::instance();
+        registry.registerImporter(std::make_unique<OptionedImporter>(), "test_options");
+
+        auto options = registry.optionsForExtension("optfmt");
+        REQUIRE(options.size() == 2);
+        CHECK(options[0].key == "flipVertically");
+        CHECK(std::get<bool>(options[0].defaultValue) == true);
+        CHECK(options[1].key == "scale");
+        CHECK(std::get<float>(options[1].defaultValue) == doctest::Approx(1.0f));
+
+        // Builtin formats declare no options today.
+        CHECK(registry.optionsForExtension("png").empty());
+
+        // Values round-trip through ImportConfig::customOptions.
+        importConfig::ImportConfig config;
+        config.customOptions["flipVertically"] = false;
+        config.customOptions["scale"] = 2.5f;
+        CHECK(std::get<bool>(config.customOptions.at("flipVertically")) == false);
+        CHECK(std::get<float>(config.customOptions.at("scale")) == doctest::Approx(2.5f));
+
+        registry.unregisterByOwner("test_options");
+        CHECK(registry.optionsForExtension("optfmt").empty());
+    }
+
     TEST_CASE("parallel detection is stable")
     {
         import::builtin::ensureRegistered();

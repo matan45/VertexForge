@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <thread>
 #include "../pipeline/stages/FileValidationStage.hpp"
 #include "../pipeline/stages/HeaderReadingStage.hpp"
 #include "../pipeline/stages/FileTypeDetectionStage.hpp"
@@ -146,6 +147,14 @@ namespace controllers
             initialize();
         }
 
+        // Tracks the whole synchronous run so waitForIdle() can drain
+        // in-flight imports before importers are unregistered.
+        struct ActiveImportScope
+        {
+            ActiveImportScope() { activeImports.fetch_add(1); }
+            ~ActiveImportScope() { activeImports.fetch_sub(1); }
+        } activeScope;
+
         vfLogInfo("Starting import of {} files", paths.size());
 
         auto futures = importPipeline->processFiles(paths, location, progressCallback);
@@ -171,6 +180,11 @@ namespace controllers
 
     void Import::shutdown()
     {
+        // Plugin-owned importers must go before plugin DLLs unload — drain any
+        // running import first so no worker is inside a plugin vtable.
+        waitForIdle();
+        import::ImporterRegistry::instance().unregisterAllExceptOwner("engine");
+
         importPipeline.reset();
         threading::JobSystem::instance().shutdown();
     }
@@ -217,6 +231,38 @@ namespace controllers
     {
         import::builtin::ensureRegistered();
         return fileTypeToAssetType(fileType);
+    }
+
+    std::vector<import::ImportOptionDesc> Import::optionsForExtension(const std::string& extension)
+    {
+        import::builtin::ensureRegistered();
+        return import::ImporterRegistry::instance().optionsForExtension(extension);
+    }
+
+    void Import::registerImporter(std::unique_ptr<import::AssetImporter> importer,
+                                  std::string_view ownerTag)
+    {
+        import::builtin::ensureRegistered();
+        import::ImporterRegistry::instance().registerImporter(std::move(importer), ownerTag);
+    }
+
+    void Import::unregisterImportersByOwner(std::string_view ownerTag)
+    {
+        waitForIdle();
+        import::ImporterRegistry::instance().unregisterByOwner(ownerTag);
+    }
+
+    void Import::waitForIdle()
+    {
+        if (activeImports.load() == 0)
+            return;
+
+        requestCancel();
+        while (activeImports.load() != 0)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        resetCancellation();
     }
 
     void Import::setupPipeline()

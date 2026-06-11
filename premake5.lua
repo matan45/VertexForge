@@ -505,6 +505,7 @@ project "Plugin"
       "dependencies/mType/mType",          -- value::Value header-inline use only (no mType.lib link)
       "VFEngine/utilities",
       "VFEngine/services",
+      "VFEngine/import",                   -- For registry/AssetImporter.hpp
       "VFEngine/import/pipeline",          -- For PipelineStage base class
       "VFEngine/core/controllers"          -- For ImguiWindow base class
    }

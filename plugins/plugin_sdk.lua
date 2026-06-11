@@ -32,6 +32,7 @@ function vfPluginProject(name)
          "../../sdk/include/VFEngine/utilities",
          "../../sdk/include/VFEngine/services",
          "../../sdk/include/VFEngine/core/controllers",
+         "../../sdk/include/VFEngine/import",
          "../../sdk/deps/glm",
          "../../sdk/deps/entt",
          "../../sdk/deps/json",

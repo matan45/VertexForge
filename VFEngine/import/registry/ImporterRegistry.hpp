@@ -25,7 +25,14 @@ namespace import
 
         void registerImporter(std::unique_ptr<AssetImporter> importer, std::string_view ownerTag = "engine");
         void unregisterByOwner(std::string_view ownerTag);
+        // Drops every registration not owned by `ownerTag` (plugin cleanup at
+        // shutdown: plugin DLLs unload, engine builtins stay).
+        void unregisterAllExceptOwner(std::string_view ownerTag);
         bool hasOwner(std::string_view ownerTag) const;
+
+        // Option descriptors of every importer claiming this extension
+        // (lowercase, no dot), deduplicated by key in detection-priority order.
+        std::vector<ImportOptionDesc> optionsForExtension(const std::string& extension) const;
 
         // Returns the matched fileType, or "Unknown".
         std::string detect(const DetectionInput& input) const;
