@@ -1078,6 +1078,7 @@ project "Tests"
       "VFEngine/core",
       "VFEngine/window/controllers",
       "VFEngine/plugin",                   -- header-only PluginScaffolder (VK-1284), no link needed
+      "VFEngine/import",                   -- ImporterRegistry tests
       vulkanLibPath.."/Include"
    }
 
@@ -1087,7 +1088,7 @@ project "Tests"
 
    links {
       "Utilities", "Memory", "Destruction", "Terrain", "World", "Serialization",
-      "Animation", "ECSRegistry", "Services",
+      "Animation", "ECSRegistry", "Services", "Import",
       "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW", "GameExport",
       "spdLog", "meshoptimizer", "enkiTS", "lz4", "recast",
       "vulkan-1.lib", "shaderc_shared.lib"
@@ -1112,6 +1113,7 @@ project "Tests"
       "{COPY} ../../bin/Animation/%{cfg.buildcfg}/x64/Animation.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/meshoptimizer/%{cfg.buildcfg}/x64/meshoptimizer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/GameExport/%{cfg.buildcfg}/x64/GameExport.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Import/%{cfg.buildcfg}/x64/Import.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
    }
 
@@ -1125,6 +1127,16 @@ project "Tests"
    filter "configurations:Release"
       postbuildcommands {
          "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
+      }
+
+   -- Import.dll runtime dependency: assimp CMake build (Debug uses /MDd variant)
+   filter "configurations:Debug"
+      postbuildcommands {
+         "{COPY} ../../dependencies/assimp/build/bin/Debug/assimp-vc145-mtd.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
+      }
+   filter "configurations:Development or Release"
+      postbuildcommands {
+         "{COPY} ../../dependencies/assimp/build/bin/Release/assimp-vc145-mt.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
       }
 
    filter {}  -- reset filters before next group

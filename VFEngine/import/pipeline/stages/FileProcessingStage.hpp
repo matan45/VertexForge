@@ -1,32 +1,14 @@
 #pragma once
 #include "../Pipeline.hpp"
-#include "../../types/Audio.hpp"
-#include "../../types/Texture.hpp"
-#include "../../types/Mesh.hpp"
-#include "../../types/Font.hpp"
-#include "../../types/Animation.hpp"
+
 namespace pipeline::stages
 {
+    // Thin stage: dispatches to the AssetImporter registered for the detected
+    // file type. Importers run concurrently on JobSystem workers.
     class FileProcessingStage : public PipelineStage
     {
     public:
         std::optional<ImportContext> process(ImportContext context) override;
         std::string getName() const override { return "FileProcessing"; }
-
-    private:
-        types::Audio audioProcessor;
-        types::Texture textureProcessor;
-        types::Mesh meshProcessor;
-        types::Font fontProcessor;
-        types::Animation animationProcessor;
-
-        template<typename CallbackType>
-        CallbackType wrapProgress(ImportContext& context) const;
-
-        void processTexture(ImportContext& context);
-        void processHDR(ImportContext& context);
-        void processAudio(ImportContext& context);
-        void processMesh(ImportContext& context);
-        void processFont(ImportContext& context);
     };
 }

@@ -6,6 +6,7 @@
 #include <atomic>
 #include "config/Config.hpp"
 #include "../pipeline/Pipeline.hpp"
+#include "../registry/AssetImporter.hpp"
 #include "../ImportExport.hpp"
 
 namespace controllers
@@ -56,6 +57,10 @@ namespace controllers
 
         // Add a custom pipeline stage (appended after built-in stages).
         static void addCustomStage(std::unique_ptr<pipeline::PipelineStage> stage);
+
+        // Registry queries (built-in importers are registered on first use).
+        static std::vector<import::FormatInfo> supportedFormats();
+        static resource::AssetType assetTypeFor(const std::string& fileType);
 
         // Cancellation support
         static void requestCancel();

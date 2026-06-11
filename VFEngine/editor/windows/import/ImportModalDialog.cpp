@@ -8,24 +8,6 @@
 #include <imgui.h>
 #include <thread>
 
-namespace
-{
-    resource::AssetType importFileTypeToAssetType(const std::string& fileType)
-    {
-        if (fileType == "PNG" || fileType == "JPEG" || fileType == "BMP" || fileType == "TGA")
-            return resource::AssetType::Texture;
-        if (fileType == "HDR" || fileType == "EXR")
-            return resource::AssetType::HDR;
-        if (fileType == "MP3" || fileType == "WAV" || fileType == "OGG")
-            return resource::AssetType::Audio;
-        if (fileType == "OBJ" || fileType == "FBX" || fileType == "DAE" || fileType == "GLTF" || fileType == "GLB")
-            return resource::AssetType::Mesh;
-        if (fileType == "TTF" || fileType == "OTF")
-            return resource::AssetType::Font;
-        return resource::AssetType::COUNT;
-    }
-}
-
 namespace windows
 {
     void ImportModalDialog::openImportDialog()
@@ -367,7 +349,7 @@ namespace windows
                         services::ImportResult res;
                         res.sourcePath = fileResult.sourcePath;
                         res.outputPath = fileResult.outputPath;
-                        res.assetType = importFileTypeToAssetType(fileResult.fileType);
+                        res.assetType = controllers::Import::assetTypeFor(fileResult.fileType);
                         res.success = fileResult.success;
                         res.errorMessage = fileResult.errorMessage;
                         completeNotif.results.push_back(res);

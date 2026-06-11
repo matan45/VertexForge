@@ -1,7 +1,8 @@
 #include "FileUtils.hpp"
 #include "string/StringUtil.hpp"
+#include "../../registry/ImporterRegistry.hpp"
+#include "../../registry/builtin/BuiltinImporters.hpp"
 #include <filesystem>
-#include <initializer_list>
 
 namespace fs = std::filesystem;
 
@@ -9,13 +10,24 @@ namespace files
 {
     namespace
     {
-        bool hasExtension(std::string_view filePath, std::initializer_list<const char*> extensions)
+        bool hasExtensionForAssetType(std::string_view filePath, resource::AssetType assetType)
         {
+            import::builtin::ensureRegistered();
+
             std::string ext = FileUtils::getFileExtension(filePath);
-            for (const char* e : extensions)
+            if (!ext.empty() && ext.front() == '.')
+                ext.erase(0, 1);
+
+            for (const auto& info : import::ImporterRegistry::instance().allFormats())
             {
-                if (ext == e)
-                    return true;
+                if (info.assetType != assetType)
+                    continue;
+
+                for (const auto& e : info.extensions)
+                {
+                    if (ext == e)
+                        return true;
+                }
             }
             return false;
         }
@@ -41,21 +53,21 @@ namespace files
 
     bool FileUtils::isHDRFile(std::string_view filePath)
     {
-        return hasExtension(filePath, {".hdr", ".exr"});
+        return hasExtensionForAssetType(filePath, resource::AssetType::HDR);
     }
 
     bool FileUtils::isTextureFile(std::string_view filePath)
     {
-        return hasExtension(filePath, {".png", ".jpg", ".jpeg", ".bmp", ".tga"});
+        return hasExtensionForAssetType(filePath, resource::AssetType::Texture);
     }
 
     bool FileUtils::isMeshFile(std::string_view filePath)
     {
-        return hasExtension(filePath, {".obj", ".fbx", ".dae", ".gltf", ".glb"});
+        return hasExtensionForAssetType(filePath, resource::AssetType::Mesh);
     }
 
     bool FileUtils::isAudioFile(std::string_view filePath)
     {
-        return hasExtension(filePath, {".mp3", ".wav", ".ogg"});
+        return hasExtensionForAssetType(filePath, resource::AssetType::Audio);
     }
 }

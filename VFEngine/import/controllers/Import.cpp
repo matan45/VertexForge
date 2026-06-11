@@ -13,6 +13,8 @@
 #include "../pipeline/stages/HeaderReadingStage.hpp"
 #include "../pipeline/stages/FileTypeDetectionStage.hpp"
 #include "../pipeline/stages/FileProcessingStage.hpp"
+#include "../registry/ImporterRegistry.hpp"
+#include "../registry/builtin/BuiltinImporters.hpp"
 
 namespace controllers
 {
@@ -20,38 +22,25 @@ namespace controllers
     {
         std::string deriveOutputPath(const pipeline::ImportContext& ctx)
         {
-            std::string ext;
-            std::string ft = ctx.fileType;
+            auto& registry = import::ImporterRegistry::instance();
 
-            if (ft == "PNG" || ft == "JPEG" || ft == "BMP" || ft == "TGA")
-                ext = FileExtension::textrue;
-            else if (ft == "HDR" || ft == "EXR")
-                ext = FileExtension::hdr;
-            else if (ft == "MP3" || ft == "WAV" || ft == "OGG")
-                ext = FileExtension::audio;
-            else if (ft == "OBJ" || ft == "FBX" || ft == "DAE" || ft == "GLTF" || ft == "GLB")
-                ext = FileExtension::mesh;
-            else if (ft == "TTF" || ft == "OTF")
-                ext = FileExtension::font;
+            if (auto* importer = registry.importerFor(ctx.fileType))
+            {
+                std::string fileName = importer->deriveOutputFile(ctx);
+                if (!fileName.empty())
+                    return (std::filesystem::path(ctx.location) / fileName).string();
+            }
 
-            if (ext.empty()) return {};
+            auto info = registry.formatInfo(ctx.fileType);
+            if (!info || info->outputExtension.empty()) return {};
 
-            return (std::filesystem::path(ctx.location) / (ctx.fileName + "." + ext)).string();
+            return (std::filesystem::path(ctx.location) / (ctx.fileName + "." + info->outputExtension)).string();
         }
 
         resource::AssetType fileTypeToAssetType(const std::string& ft)
         {
-            if (ft == "PNG" || ft == "JPEG" || ft == "BMP" || ft == "TGA")
-                return resource::AssetType::Texture;
-            if (ft == "HDR" || ft == "EXR")
-                return resource::AssetType::HDR;
-            if (ft == "MP3" || ft == "WAV" || ft == "OGG")
-                return resource::AssetType::Audio;
-            if (ft == "OBJ" || ft == "FBX" || ft == "DAE" || ft == "GLTF" || ft == "GLB")
-                return resource::AssetType::Mesh;
-            if (ft == "TTF" || ft == "OTF")
-                return resource::AssetType::Font;
-            return resource::AssetType::COUNT;
+            auto info = import::ImporterRegistry::instance().formatInfo(ft);
+            return info ? info->assetType : resource::AssetType::COUNT;
         }
 
         void createVfMeta(const std::string& outputPath, const std::string& sourcePath,
@@ -176,6 +165,7 @@ namespace controllers
         // Import DLL has its own copy of Utilities (static lib), so its
         // JobSystem singleton needs separate initialization.
         threading::JobSystem::instance().init();
+        import::builtin::ensureRegistered();
         setupPipeline();
     }
 
@@ -215,6 +205,18 @@ namespace controllers
     std::atomic<bool>* Import::getCancelFlag()
     {
         return &cancelRequested;
+    }
+
+    std::vector<import::FormatInfo> Import::supportedFormats()
+    {
+        import::builtin::ensureRegistered();
+        return import::ImporterRegistry::instance().allFormats();
+    }
+
+    resource::AssetType Import::assetTypeFor(const std::string& fileType)
+    {
+        import::builtin::ensureRegistered();
+        return fileTypeToAssetType(fileType);
     }
 
     void Import::setupPipeline()
