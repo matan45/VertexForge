@@ -33,6 +33,11 @@ public class Ocean {
         return _native_ocean_isCameraUnderwater();
     }
 
+    // Check if a physics entity is currently (partially) submerged in the ocean
+    public static function isEntityInWater(int entityId): bool {
+        return _native_ocean_isEntityInWater(entityId);
+    }
+
     // ============================================
     // Component Queries
     // ============================================

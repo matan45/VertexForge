@@ -143,6 +143,13 @@ namespace services
         physicsProvider->syncPhysicsStep();
         physicsProvider->updatePhysicsAnimations(deltaTime);
         syncTransformsFromPhysics();
+
+        // Publish water enter/exit recorded during kickUpdate — must run on the main
+        // thread because script listeners react to these notifications.
+        if (oceanService)
+        {
+            oceanService->flushWaterEvents();
+        }
     }
 
     void PhysicsPlayModeHandler::syncTransformsFromPhysics()

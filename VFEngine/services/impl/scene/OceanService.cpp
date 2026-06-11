@@ -12,6 +12,7 @@
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "../../../utilities/water/WaterTileGrid.hpp"
+#include "../../../utilities/water/BuoyancySampling.hpp"
 
 namespace services
 {
@@ -73,6 +74,7 @@ namespace services
         dispatcher.unregisterQueryHandler<events::ocean::IsOceanFFTEnabledQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanHeightAtQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsPositionInOceanQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::IsEntityInWaterQuery>();
     }
 
     void OceanService::registerEventHandlers()
@@ -230,6 +232,12 @@ namespace services
             [this](const events::ocean::IsPositionInOceanQuery& query)
             {
                 return isPositionInOcean(query.position);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::IsEntityInWaterQuery>(
+            [this](const events::ocean::IsEntityInWaterQuery& query)
+            {
+                return isEntityInWater(query.entity);
             });
     }
 
@@ -650,61 +658,136 @@ namespace services
                 continue;
 
             glm::vec3 pos = physicsProvider->getPosition(handle);
+            glm::quat rot = physicsProvider->getRotation(handle);
 
-            float halfHeight = 0.5f;
+            components::ColliderShape shape = components::ColliderShape::Box;
+            glm::vec3 colliderSize{0.5f};
+            float colliderHeight = 0.0f;
+            glm::vec3 colliderOffset{0.0f};
             if (registry.all_of<components::ColliderComponent>(rbEntity))
             {
                 const auto& collider = registry.get<components::ColliderComponent>(rbEntity);
-                switch (collider.shape)
-                {
-                case components::ColliderShape::Box:
-                    halfHeight = collider.size.y;
-                    break;
-                case components::ColliderShape::Sphere:
-                    halfHeight = collider.size.x;
-                    break;
-                case components::ColliderShape::Capsule:
-                    halfHeight = collider.size.x + collider.height * 0.5f;
-                    break;
-                default:
-                    halfHeight = 0.5f;
-                    break;
-                }
+                shape = collider.shape;
+                colliderSize = collider.size;
+                colliderHeight = collider.height;
+                colliderOffset = collider.offset;
             }
 
-            float waterHeight = getOceanHeightAt(glm::vec2(pos.x, pos.z));
-            float objectBottom = pos.y - halfHeight;
-            float objectHeight = halfHeight * 2.0f;
+            float halfHeight = water::colliderHalfHeight(shape, colliderSize, colliderHeight);
 
-            float submergedDepth = glm::clamp(waterHeight - objectBottom, 0.0f, objectHeight);
-            float submersionRatio = submergedDepth / objectHeight;
+            // Hull sample points: explicit BuoyancyComponent points, or auto from the collider
+            water::BuoyancySamplePoints samples;
+            float buoyancyScale = 1.0f;
+            float angularDrag = 0.0f;
+            const auto* buoyancy = registry.try_get<components::BuoyancyComponent>(rbEntity);
+            if (buoyancy)
+            {
+                buoyancyScale = buoyancy->buoyancyScale;
+                angularDrag = buoyancy->angularDrag;
+            }
+            if (buoyancy && buoyancy->sampleMode == components::BuoyancyComponent::SampleMode::Custom &&
+                buoyancy->customPointCount > 0)
+            {
+                samples.count = glm::min(buoyancy->customPointCount, water::MAX_BUOYANCY_POINTS);
+                for (uint32_t i = 0; i < samples.count; ++i)
+                    samples.points[i] = buoyancy->customPoints[i];
+            }
+            else
+            {
+                samples = water::generateSamplePoints(shape, colliderSize, colliderHeight, colliderOffset);
+            }
 
-            // Track enter/exit for submersion notifications
+            // Per-point submersion; the average drives drag and enter/exit tracking
+            float totalSubmersion = 0.0f;
+            float pointSubmersion[water::MAX_BUOYANCY_POINTS];
+            glm::vec3 pointWorld[water::MAX_BUOYANCY_POINTS];
+            for (uint32_t i = 0; i < samples.count; ++i)
+            {
+                pointWorld[i] = pos + rot * samples.points[i];
+                float waterHeight = getOceanHeightAt(glm::vec2(pointWorld[i].x, pointWorld[i].z));
+                pointSubmersion[i] = water::computeSubmersion(pointWorld[i].y, waterHeight, halfHeight);
+                totalSubmersion += pointSubmersion[i];
+            }
+            float submersionRatio = samples.count > 0 ? totalSubmersion / static_cast<float>(samples.count) : 0.0f;
+
+            // Track enter/exit for submersion notifications (published later on the main thread)
             bool wasInWater = entitiesInWater.contains(handle);
             bool isInWater = submersionRatio > 0.0f;
 
             if (isInWater && !wasInWater)
+            {
                 entitiesInWater.insert(handle);
+                pendingWaterTransitions.push_back({handle, pos,
+                                                   physicsProvider->getLinearVelocity(handle).y,
+                                                   submersionRatio, true});
+            }
             else if (!isInWater && wasInWater)
+            {
                 entitiesInWater.erase(handle);
+                pendingWaterTransitions.push_back({handle, pos, 0.0f, 0.0f, false});
+            }
 
             if (submersionRatio <= 0.0f)
                 continue;
 
             float mass = rb.mass;
 
-            float buoyancyForce = mass * gravityMag * submersionRatio * comp.buoyancyStrength;
-            physicsProvider->applyForce(handle, glm::vec3(0.0f, buoyancyForce, 0.0f));
+            // Per-point share keeps the net force identical to the old single-point version
+            // when fully submerged, while differential submersion adds a righting torque.
+            float forcePerPoint = mass * gravityMag * comp.buoyancyStrength * buoyancyScale /
+                                  static_cast<float>(samples.count);
+            for (uint32_t i = 0; i < samples.count; ++i)
+            {
+                if (pointSubmersion[i] <= 0.0f)
+                    continue;
+                physicsProvider->applyForceAtPosition(
+                    handle, glm::vec3(0.0f, forcePerPoint * pointSubmersion[i], 0.0f), pointWorld[i]);
+            }
 
             glm::vec3 velocity = physicsProvider->getLinearVelocity(handle);
             glm::vec3 dragForce = -velocity * comp.drag * submersionRatio * mass;
             physicsProvider->applyForce(handle, dragForce);
+
+            if (angularDrag > 0.0f)
+            {
+                glm::vec3 angularVelocity = physicsProvider->getAngularVelocity(handle);
+                physicsProvider->applyTorque(handle, -angularVelocity * angularDrag * submersionRatio * mass);
+            }
         }
+    }
+
+    void OceanService::flushWaterEvents()
+    {
+        if (pendingWaterTransitions.empty())
+            return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        for (const auto& transition : pendingWaterTransitions)
+        {
+            if (transition.entered)
+            {
+                events::ocean::ObjectEnteredWaterNotification notification;
+                notification.entity = transition.entity;
+                notification.position = transition.position;
+                notification.verticalSpeed = transition.verticalSpeed;
+                notification.submersion = transition.submersion;
+                dispatcher.publish(notification);
+            }
+            else
+            {
+                events::ocean::ObjectExitedWaterNotification notification;
+                notification.entity = transition.entity;
+                notification.position = transition.position;
+                dispatcher.publish(notification);
+            }
+        }
+        pendingWaterTransitions.clear();
     }
 
     void OceanService::clearBuoyancyTracking()
     {
         entitiesInWater.clear();
+        pendingWaterTransitions.clear();
     }
 
     void OceanService::rebuildOceanFromComponents()

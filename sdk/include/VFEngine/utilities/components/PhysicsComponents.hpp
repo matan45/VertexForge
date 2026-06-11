@@ -27,6 +27,24 @@ namespace components
         float restitution = 0.0f;
     };
 
+    // Optional companion to RigidBodyComponent: tunes how the ocean buoyancy loop samples
+    // the hull. Entities without it get Auto sampling derived from their collider.
+    struct BuoyancyComponent
+    {
+        enum class SampleMode : uint8_t
+        {
+            Auto = 0,   // derive sample points from the collider shape
+            Custom = 1  // use customPoints (local space)
+        };
+
+        SampleMode sampleMode = SampleMode::Auto;
+        glm::vec3 customPoints[8]{};
+        uint32_t customPointCount = 0;
+
+        float buoyancyScale = 1.0f;
+        float angularDrag = 0.5f;
+    };
+
     struct RigidBodyComponent
     {
         RigidBodyType type = RigidBodyType::Dynamic;

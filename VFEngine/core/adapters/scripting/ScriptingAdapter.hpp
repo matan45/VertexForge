@@ -29,6 +29,7 @@ namespace core
     class ScriptSceneEventBridge;
     class ScriptWeatherEventBridge;
     class ScriptDestructionEventBridge;
+    class ScriptOceanEventBridge;
 
     class CoroutineManager;
     class ScriptCommunicationManager;
@@ -50,6 +51,7 @@ namespace core
         std::unique_ptr<ScriptSceneEventBridge> sceneEventBridge;
         std::unique_ptr<ScriptWeatherEventBridge> weatherEventBridge;
         std::unique_ptr<ScriptDestructionEventBridge> destructionEventBridge;
+        std::unique_ptr<ScriptOceanEventBridge> oceanEventBridge;
         std::unique_ptr<ScriptCommunicationManager> communicationManager;
         std::unique_ptr<ScriptDebugServer> debugServer;
 

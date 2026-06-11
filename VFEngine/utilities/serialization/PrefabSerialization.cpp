@@ -74,6 +74,12 @@ namespace serialization
                 entity.getComponent<components::RigidBodyComponent>());
         }
 
+        if (entity.hasComponent<components::BuoyancyComponent>())
+        {
+            out["buoyancy"] = SceneSerialization::serializeBuoyancy(
+                entity.getComponent<components::BuoyancyComponent>());
+        }
+
         if (entity.hasComponent<components::DestructibleComponent>())
         {
             out["destructible"] = SceneSerialization::serializeDestructible(
@@ -350,6 +356,12 @@ namespace serialization
         {
             auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
             SceneSerialization::deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
+        }
+
+        if (componentsJson.contains("buoyancy"))
+        {
+            auto& buoyancyComp = entity.addOrReplaceComponent<components::BuoyancyComponent>();
+            SceneSerialization::deserializeBuoyancy(componentsJson["buoyancy"], buoyancyComp);
         }
 
         if (componentsJson.contains("destructible"))

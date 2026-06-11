@@ -12,6 +12,7 @@
 #include "../details/ScriptDrawer.hpp"
 #include "../details/ColliderDrawer.hpp"
 #include "../details/RigidBodyDrawer.hpp"
+#include "../details/BuoyancyDrawer.hpp"
 #include "../details/DestructibleDrawer.hpp"
 #include "../details/PhysicsAnimationDrawer.hpp"
 #include "../details/VFXDrawer.hpp"
@@ -77,6 +78,7 @@ namespace windows
         details::ScriptDrawer scriptDrawer;
         details::ColliderDrawer colliderDrawer;
         details::RigidBodyDrawer rigidBodyDrawer;
+        details::BuoyancyDrawer buoyancyDrawer;
         details::DestructibleDrawer destructibleDrawer;
         details::PhysicsAnimationDrawer physicsAnimationDrawer;
         details::VFXDrawer vfxDrawer;

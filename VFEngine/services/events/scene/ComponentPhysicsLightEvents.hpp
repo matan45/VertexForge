@@ -150,6 +150,41 @@ namespace events::scene {
     };
 
     // ============================================
+    // Buoyancy Component Events
+    // ============================================
+
+    struct AddBuoyancyComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddBuoyancyComponent"; }
+    };
+
+    struct RemoveBuoyancyComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveBuoyancyComponent"; }
+    };
+
+    struct SetBuoyancyDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::BuoyancyComponentData buoyancyData;
+
+        std::string_view getName() const override { return "SetBuoyancyData"; }
+    };
+
+    struct HasBuoyancyComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasBuoyancyComponent"; }
+    };
+
+    struct GetBuoyancyDataQuery : IQuery<std::optional<services::BuoyancyComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetBuoyancyData"; }
+    };
+
+    // ============================================
     // Physics Animation Component Events
     // ============================================
 

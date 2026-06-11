@@ -286,6 +286,18 @@ namespace windows::details
                 ImGui::SetTooltip("Physics body for dynamics simulation");
         }
 
+        if (!c.hasBuoyancy && matchesFilter("Buoyancy", filter))
+        {
+            if (ImGui::Selectable("  Buoyancy"))
+            {
+                events::scene::AddBuoyancyComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Tunes ocean buoyancy hull sampling (boats: custom hull points + angular drag)");
+        }
+
         if (!c.hasDestructible && matchesFilter("Destructible", filter))
         {
             if (ImGui::Selectable("  Destructible"))

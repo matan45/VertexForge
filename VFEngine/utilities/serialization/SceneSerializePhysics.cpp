@@ -466,6 +466,59 @@ namespace serialization
         }
     }
 
+    json SceneSerialization::serializeBuoyancy(const components::BuoyancyComponent& buoyancy)
+    {
+        json j;
+        j["sampleMode"] = buoyancy.sampleMode == components::BuoyancyComponent::SampleMode::Custom
+                              ? "custom"
+                              : "auto";
+        j["buoyancyScale"] = buoyancy.buoyancyScale;
+        j["angularDrag"] = buoyancy.angularDrag;
+        if (buoyancy.customPointCount > 0)
+        {
+            json points = json::array();
+            for (uint32_t i = 0; i < buoyancy.customPointCount && i < 8; ++i)
+            {
+                points.push_back({buoyancy.customPoints[i].x,
+                                  buoyancy.customPoints[i].y,
+                                  buoyancy.customPoints[i].z});
+            }
+            j["customPoints"] = std::move(points);
+        }
+        return j;
+    }
+
+    void SceneSerialization::deserializeBuoyancy(const json& j, components::BuoyancyComponent& buoyancy)
+    {
+        if (auto it = j.find("sampleMode"); it != j.end() && it->is_string())
+        {
+            buoyancy.sampleMode = it->get<std::string>() == "custom"
+                                      ? components::BuoyancyComponent::SampleMode::Custom
+                                      : components::BuoyancyComponent::SampleMode::Auto;
+        }
+        if (auto it = j.find("buoyancyScale"); it != j.end() && it->is_number())
+        {
+            buoyancy.buoyancyScale = it->get<float>();
+        }
+        if (auto it = j.find("angularDrag"); it != j.end() && it->is_number())
+        {
+            buoyancy.angularDrag = it->get<float>();
+        }
+        if (auto it = j.find("customPoints"); it != j.end() && it->is_array())
+        {
+            buoyancy.customPointCount = 0;
+            for (const auto& point : *it)
+            {
+                if (buoyancy.customPointCount >= 8)
+                    break;
+                if (!point.is_array() || point.size() < 3)
+                    continue;
+                buoyancy.customPoints[buoyancy.customPointCount++] =
+                    glm::vec3(point[0].get<float>(), point[1].get<float>(), point[2].get<float>());
+            }
+        }
+    }
+
     json SceneSerialization::serializeDestructible(const components::DestructibleComponent& d)
     {
         json j;

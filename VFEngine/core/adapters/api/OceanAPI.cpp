@@ -52,17 +52,32 @@ namespace core::api
                     auto view = registry.view<components::OceanComponent>();
                     for (auto entity : view)
                     {
-                        const auto& ocean = view.get<components::OceanComponent>(entity);
-                        // Check if the camera position (from CameraComponent) is below water
+                        // Check if the camera position (from CameraComponent) is below the
+                        // displaced wave surface, not just the flat base height
                         auto camView = registry.view<components::CameraComponent, components::TransformComponent>();
                         for (auto camEntity : camView)
                         {
                             const auto& transform = camView.get<components::TransformComponent>(camEntity);
-                            if (transform.position.y < ocean.waterHeight)
+                            events::ocean::GetOceanHeightAtQuery query;
+                            query.worldXZ = glm::vec2(transform.position.x, transform.position.z);
+                            if (transform.position.y < dispatcher.query(query))
                                 return value::Value(true);
                         }
                     }
                     return value::Value(false);
+                }});
+
+            // ocean.isEntityInWater(entityId) -> bool
+            interpreter->registerNativeFunction("_native_ocean_isEntityInWater",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.empty()) return value::Value(false);
+                    int64_t id = extractInt64(args[0]);
+                    if (id < 0) return value::Value(false);
+
+                    events::ocean::IsEntityInWaterQuery query;
+                    query.entity = services::EntityHandle{static_cast<uint64_t>(id)};
+                    return value::Value(dispatcher.query(query));
                 }});
 
             // ocean.hasOcean(entityId) -> bool

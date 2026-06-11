@@ -43,6 +43,19 @@ namespace services
 
         std::unordered_set<EntityHandle, EntityHandle::Hash> entitiesInWater;
 
+        // Enter/exit transitions recorded during updateBuoyancy (physics worker task) and
+        // published from flushWaterEvents on the main thread — script callbacks must not
+        // run on the worker.
+        struct WaterTransition
+        {
+            EntityHandle entity;
+            glm::vec3 position{0.0f};
+            float verticalSpeed = 0.0f;
+            float submersion = 0.0f;
+            bool entered = false;
+        };
+        std::vector<WaterTransition> pendingWaterTransitions;
+
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
 
@@ -93,7 +106,9 @@ namespace services
         EntityHandle loadOcean(const std::string& path);
 
         void updateBuoyancy();
+        void flushWaterEvents();
         void clearBuoyancyTracking();
+        bool isEntityInWater(EntityHandle entity) const { return entitiesInWater.contains(entity); }
 
         void rebuildOceanFromComponents();
 
