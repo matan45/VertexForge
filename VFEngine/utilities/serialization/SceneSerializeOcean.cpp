@@ -53,6 +53,11 @@ namespace serialization
         j["oceanBands"] = bandsArray;
         j["oceanGravity"] = ocean.oceanGravity;
 
+        // Weather-driven sea state
+        j["weatherDriven"] = ocean.weatherDriven;
+        j["weatherResponse"] = ocean.weatherResponse;
+        j["currentBeaufort"] = ocean.currentBeaufort;
+
         // Runtime
         j["waterHeight"] = ocean.waterHeight;
         j["isActive"] = ocean.isActive;
@@ -146,6 +151,14 @@ namespace serialization
         }
         if (auto it = j.find("oceanGravity"); it != j.end() && it->is_number())
             ocean.oceanGravity = it->get<float>();
+
+        // Weather-driven sea state (absent in older scenes -> defaults)
+        if (auto it = j.find("weatherDriven"); it != j.end() && it->is_boolean())
+            ocean.weatherDriven = it->get<bool>();
+        if (auto it = j.find("weatherResponse"); it != j.end() && it->is_number())
+            ocean.weatherResponse = it->get<float>();
+        if (auto it = j.find("currentBeaufort"); it != j.end() && it->is_number())
+            ocean.currentBeaufort = it->get<float>();
 
         // Runtime
         if (auto it = j.find("waterHeight"); it != j.end() && it->is_number())

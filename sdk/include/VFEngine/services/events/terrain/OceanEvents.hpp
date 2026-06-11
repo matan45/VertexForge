@@ -44,6 +44,33 @@ namespace events::ocean
         std::string_view getName() const override { return "SetOceanFFTConfig"; }
     };
 
+    // === Sea State Commands ===
+
+    struct UpdateOceanCommand : ICommand<void> {
+        float deltaTime = 0.0f;
+
+        std::string_view getName() const override { return "UpdateOcean"; }
+    };
+
+    struct SetOceanSeaStateCommand : ICommand<void> {
+        float beaufort = 3.0f;
+        float transitionSeconds = 0.0f;
+
+        std::string_view getName() const override { return "SetOceanSeaState"; }
+    };
+
+    struct SetOceanWeatherDrivenCommand : ICommand<void> {
+        services::EntityHandle oceanEntity;
+        bool enabled = false;
+        float response = 1.0f;
+
+        std::string_view getName() const override { return "SetOceanWeatherDriven"; }
+    };
+
+    struct GetOceanSeaStateQuery : IQuery<float> {
+        std::string_view getName() const override { return "GetOceanSeaState"; }
+    };
+
     // === Queries ===
 
     struct GetOceanEntityQuery : IQuery<services::EntityHandle> {

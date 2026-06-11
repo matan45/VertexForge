@@ -10,6 +10,7 @@
 #include "../../events/terrain/OceanEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
+#include "../../events/weather/WeatherEvents.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "../../../utilities/water/WaterTileGrid.hpp"
 #include "../../../utilities/water/BuoyancySampling.hpp"
@@ -66,6 +67,9 @@ namespace services
         dispatcher.unregisterCommandHandler<events::ocean::SaveOceanCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::LoadOceanCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::RebuildOceanFromComponentsCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::UpdateOceanCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::SetOceanSeaStateCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::SetOceanWeatherDrivenCommand>();
 
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanEntityQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanDataQuery>();
@@ -75,6 +79,7 @@ namespace services
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanHeightAtQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsPositionInOceanQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsEntityInWaterQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetOceanSeaStateQuery>();
     }
 
     void OceanService::registerEventHandlers()
@@ -200,6 +205,37 @@ namespace services
             {
                 rebuildOceanFromComponents();
             });
+
+        dispatcher.registerCommandHandler<events::ocean::UpdateOceanCommand>(
+            [this](const events::ocean::UpdateOceanCommand& cmd)
+            {
+                update(cmd.deltaTime);
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::SetOceanSeaStateCommand>(
+            [this](const events::ocean::SetOceanSeaStateCommand& cmd)
+            {
+                setSeaState(cmd.beaufort, cmd.transitionSeconds);
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::SetOceanWeatherDrivenCommand>(
+            [this](const events::ocean::SetOceanWeatherDrivenCommand& cmd)
+            {
+                if (!cmd.oceanEntity.isValid())
+                    return;
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity ent = internal::fromHandle(cmd.oceanEntity);
+                if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+                    return;
+
+                auto& comp = registry.get<components::OceanComponent>(ent);
+                comp.weatherDriven = cmd.enabled;
+                comp.weatherResponse = cmd.response;
+                // Force a reapply on the next update tick
+                lastAppliedBeaufort = -1.0f;
+                lastAppliedWindDirection = -10000.0f;
+            });
     }
 
     void OceanService::registerOceanQueryHandlers(::events::EventDispatcher& dispatcher)
@@ -238,6 +274,12 @@ namespace services
             [this](const events::ocean::IsEntityInWaterQuery& query)
             {
                 return isEntityInWater(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetOceanSeaStateQuery>(
+            [this](const events::ocean::GetOceanSeaStateQuery&)
+            {
+                return getSeaState();
             });
     }
 
@@ -396,6 +438,9 @@ namespace services
         data.shoreWetRange = comp.shoreWetRange;
         data.shoreWetDarkening = comp.shoreWetDarkening;
         data.shoreWetRoughness = comp.shoreWetRoughness;
+        data.weatherDriven = comp.weatherDriven;
+        data.weatherResponse = comp.weatherResponse;
+        data.currentBeaufort = comp.currentBeaufort;
         for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
         {
             data.oceanConfig.bands[i].resolution = comp.oceanBands[i].resolution;
@@ -536,6 +581,10 @@ namespace services
         fileData.drag = comp.drag;
         fileData.buoyancyStrength = comp.buoyancyStrength;
 
+        fileData.weatherDriven = comp.weatherDriven;
+        fileData.weatherResponse = comp.weatherResponse;
+        fileData.currentBeaufort = comp.currentBeaufort;
+
         for (uint32_t i = 0; i < ocean::OceanFileData::MAX_BANDS; ++i)
         {
             fileData.bands[i].resolution = comp.oceanBands[i].resolution;
@@ -618,6 +667,9 @@ namespace services
             comp.density = fileData.density;
             comp.drag = fileData.drag;
             comp.buoyancyStrength = fileData.buoyancyStrength;
+            comp.weatherDriven = fileData.weatherDriven;
+            comp.weatherResponse = fileData.weatherResponse;
+            comp.currentBeaufort = fileData.currentBeaufort;
         }
 
         events::ocean::OceanLoadedNotification notification;
@@ -790,10 +842,187 @@ namespace services
         pendingWaterTransitions.clear();
     }
 
+    void OceanService::update(float deltaTime)
+    {
+        if (!oceanEntity.isValid())
+            return;
+
+        if (seaStateTransitionActive)
+            updateManualSeaStateTransition(deltaTime);
+        else
+            updateWeatherDrivenSeaState();
+    }
+
+    void OceanService::setSeaState(float beaufort, float transitionSeconds)
+    {
+        if (!oceanEntity.isValid())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return;
+
+        auto& comp = registry.get<components::OceanComponent>(ent);
+        float bf = glm::clamp(beaufort, 0.0f, 12.0f);
+        // Keep the currently authored swell direction; weather-driven mode overrides it anyway
+        float direction = comp.oceanBands[0].windDirection;
+        water::SeaState target = water::seaStateFromBeaufort(bf, direction);
+
+        if (transitionSeconds <= 0.0f)
+        {
+            seaStateTransitionActive = false;
+            comp.currentBeaufort = bf;
+            lastAppliedBeaufort = bf;
+            applySeaState(target);
+            return;
+        }
+
+        seaStateTransitionStart = seaStateFromComponentBands();
+        seaStateTransitionTarget = target;
+        seaStateStartBeaufort = comp.currentBeaufort;
+        seaStateTargetBeaufort = bf;
+        seaStateTransitionElapsed = 0.0f;
+        seaStateTransitionDuration = transitionSeconds;
+        seaStateTransitionActive = true;
+    }
+
+    float OceanService::getSeaState() const
+    {
+        if (!oceanEntity.isValid())
+            return 0.0f;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return 0.0f;
+
+        return registry.get<components::OceanComponent>(ent).currentBeaufort;
+    }
+
+    void OceanService::applySeaState(const water::SeaState& state)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return;
+
+        auto& comp = registry.get<components::OceanComponent>(ent);
+        for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS && i < water::SEA_STATE_BANDS; ++i)
+        {
+            // Only spectrum/push-constant parameters — never resolution or patchSize
+            // (those tear down and rebuild the FFT GPU resources)
+            comp.oceanBands[i].windSpeed = state.bands[i].windSpeed;
+            comp.oceanBands[i].windDirection = state.bands[i].windDirection;
+            comp.oceanBands[i].amplitude = state.bands[i].amplitude;
+            comp.oceanBands[i].choppiness = state.bands[i].choppiness;
+            comp.oceanBands[i].displacementScale = state.bands[i].displacementScale;
+            comp.oceanBands[i].foamThreshold = state.bands[i].foamThreshold;
+
+            oceanConfig.bands[i].windSpeed = state.bands[i].windSpeed;
+            oceanConfig.bands[i].windDirection = state.bands[i].windDirection;
+            oceanConfig.bands[i].amplitude = state.bands[i].amplitude;
+            oceanConfig.bands[i].choppiness = state.bands[i].choppiness;
+            oceanConfig.bands[i].displacementScale = state.bands[i].displacementScale;
+            oceanConfig.bands[i].foamThreshold = state.bands[i].foamThreshold;
+        }
+        oceanConfigVersion++;
+    }
+
+    water::SeaState OceanService::seaStateFromComponentBands() const
+    {
+        water::SeaState state;
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return state;
+
+        const auto& comp = registry.get<components::OceanComponent>(ent);
+        for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS && i < water::SEA_STATE_BANDS; ++i)
+        {
+            state.bands[i].windSpeed = comp.oceanBands[i].windSpeed;
+            state.bands[i].windDirection = comp.oceanBands[i].windDirection;
+            state.bands[i].amplitude = comp.oceanBands[i].amplitude;
+            state.bands[i].choppiness = comp.oceanBands[i].choppiness;
+            state.bands[i].displacementScale = comp.oceanBands[i].displacementScale;
+            state.bands[i].foamThreshold = comp.oceanBands[i].foamThreshold;
+        }
+        return state;
+    }
+
+    void OceanService::updateWeatherDrivenSeaState()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return;
+
+        auto& comp = registry.get<components::OceanComponent>(ent);
+        if (!comp.weatherDriven)
+            return;
+
+        weather::WeatherState ws;
+        try
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            if (!dispatcher.query(events::weather::IsWeatherEnabledQuery{}))
+                return;
+            ws = dispatcher.query(events::weather::GetWeatherStateQuery{});
+        }
+        catch (...)
+        {
+            // No weather service registered (e.g. a runtime build without weather) — keep
+            // the authored sea state instead of failing every frame.
+            return;
+        }
+
+        // Quantize so a slow weather transition doesn't bump the config version (and
+        // re-dispatch the FFT spectrum) every single frame
+        float bf = water::quantizeBeaufort(water::beaufortFromWeather(ws, comp.weatherResponse));
+        float direction = water::quantizeDirectionDeg(ws.windDirectionDeg);
+        if (bf == lastAppliedBeaufort && direction == lastAppliedWindDirection)
+            return;
+
+        lastAppliedBeaufort = bf;
+        lastAppliedWindDirection = direction;
+        comp.currentBeaufort = bf;
+        applySeaState(water::seaStateFromBeaufort(bf, direction));
+    }
+
+    void OceanService::updateManualSeaStateTransition(float deltaTime)
+    {
+        seaStateTransitionElapsed += deltaTime;
+        float t = seaStateTransitionDuration > 0.0f
+                      ? glm::clamp(seaStateTransitionElapsed / seaStateTransitionDuration, 0.0f, 1.0f)
+                      : 1.0f;
+
+        applySeaState(water::lerpSeaState(seaStateTransitionStart, seaStateTransitionTarget, t));
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (registry.valid(ent) && registry.all_of<components::OceanComponent>(ent))
+        {
+            registry.get<components::OceanComponent>(ent).currentBeaufort =
+                glm::mix(seaStateStartBeaufort, seaStateTargetBeaufort, t);
+        }
+
+        if (t >= 1.0f)
+        {
+            seaStateTransitionActive = false;
+            // Let weather-driven mode (if on) take back over from the new state
+            lastAppliedBeaufort = -1.0f;
+            lastAppliedWindDirection = -10000.0f;
+        }
+    }
+
     void OceanService::rebuildOceanFromComponents()
     {
         oceanEntity = {};
         entitiesInWater.clear();
+        pendingWaterTransitions.clear();
+        seaStateTransitionActive = false;
+        lastAppliedBeaufort = -1.0f;
+        lastAppliedWindDirection = -10000.0f;
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto oceanView = registry.view<components::OceanComponent>();

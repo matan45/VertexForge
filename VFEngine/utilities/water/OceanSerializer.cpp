@@ -39,6 +39,12 @@ namespace ocean
         phys["drag"] = data.drag;
         phys["buoyancyStrength"] = data.buoyancyStrength;
 
+        // Weather-driven sea state
+        auto& sea = j["seaState"];
+        sea["weatherDriven"] = data.weatherDriven;
+        sea["weatherResponse"] = data.weatherResponse;
+        sea["currentBeaufort"] = data.currentBeaufort;
+
         // Ocean FFT bands
         auto& fft = j["oceanFFT"];
         fft["gravity"] = data.gravity;
@@ -126,6 +132,15 @@ namespace ocean
             outData.density = phys.value("density", 1000.0f);
             outData.drag = phys.value("drag", 0.5f);
             outData.buoyancyStrength = phys.value("buoyancyStrength", 2.0f);
+        }
+
+        // Weather-driven sea state (absent in v1 files -> defaults)
+        if (j.contains("seaState"))
+        {
+            const auto& sea = j["seaState"];
+            outData.weatherDriven = sea.value("weatherDriven", false);
+            outData.weatherResponse = sea.value("weatherResponse", 1.0f);
+            outData.currentBeaufort = sea.value("currentBeaufort", 3.0f);
         }
 
         // Ocean FFT bands

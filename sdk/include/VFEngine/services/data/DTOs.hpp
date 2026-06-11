@@ -254,6 +254,15 @@ namespace services
         bool freezeRotationZ = false;
     };
 
+    struct BuoyancyComponentData
+    {
+        bool customSampleMode = false;
+        glm::vec3 customPoints[8]{};
+        uint32_t customPointCount = 0;
+        float buoyancyScale = 1.0f;
+        float angularDrag = 0.5f;
+    };
+
     struct PhysicsAnimationComponentData
     {
         asset::AssetRef physicsAnimationRef;

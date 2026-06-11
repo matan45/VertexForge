@@ -10,6 +10,7 @@
 #include "threading/EditorTaskStats.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/weather/WeatherEvents.hpp"
+#include "events/terrain/OceanEvents.hpp"
 
 #include <chrono>
 
@@ -103,6 +104,13 @@ namespace handlers
             events::EventDispatcher::instance().execute(cmd);
         });
 
+        frameTaskGraph->addTask("Ocean", [this]() {
+            float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            events::ocean::UpdateOceanCommand cmd;
+            cmd.deltaTime = dt;
+            events::EventDispatcher::instance().execute(cmd);
+        });
+
         frameTaskGraph->addTask("WorldSector", [this]() {
             if (worldSectorService) worldSectorService->update();
         });
@@ -122,6 +130,7 @@ namespace handlers
         });
 
         frameTaskGraph->addDependency("Weather", "Scene");
+        frameTaskGraph->addDependency("Ocean", "Weather");
         frameTaskGraph->addDependency("PhysicsKick", "Scene");
         frameTaskGraph->addDependency("PhysicsKick", "Input");
         frameTaskGraph->addDependency("PhysicsKick", "WindowState");

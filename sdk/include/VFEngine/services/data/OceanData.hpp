@@ -92,6 +92,11 @@ namespace services
         float shoreWetDarkening = 0.3f;
         float shoreWetRoughness = 0.15f;
 
+        // Weather-driven sea state
+        bool weatherDriven = false;
+        float weatherResponse = 1.0f;
+        float currentBeaufort = 3.0f;
+
         OceanFFTConfigData oceanConfig;
     };
 }

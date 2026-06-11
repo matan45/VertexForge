@@ -46,6 +46,11 @@ namespace ocean
         float drag = 0.5f;
         float buoyancyStrength = 2.0f;
 
+        // Weather-driven sea state
+        bool weatherDriven = false;
+        float weatherResponse = 1.0f;
+        float currentBeaufort = 3.0f;
+
         // Multi-band FFT
         static constexpr uint32_t MAX_BANDS = 3;
         OceanBandFileData bands[MAX_BANDS] = {

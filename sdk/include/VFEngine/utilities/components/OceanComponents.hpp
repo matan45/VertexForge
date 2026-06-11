@@ -54,6 +54,13 @@ namespace components
         };
         float oceanGravity = 9.81f;
 
+        // Weather-driven sea state: when enabled the ocean service maps the live
+        // WeatherState (wind/gusts) onto band wind/amplitude/choppiness each frame.
+        // Manual band authoring above stays untouched while this is off.
+        bool weatherDriven = false;
+        float weatherResponse = 1.0f;
+        float currentBeaufort = 3.0f;
+
         // Runtime
         float waterHeight = 0.0f;
         bool isActive = true;

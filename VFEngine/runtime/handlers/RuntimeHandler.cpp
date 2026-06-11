@@ -11,6 +11,7 @@
 #include "impl/project/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
 #include "impl/scene/OceanService.hpp"
+#include "impl/weather/WeatherServiceImpl.hpp"
 #include "impl/physics/PhysicsServiceImpl.hpp"
 #include "impl/physics/PhysicsAnimationServiceImpl.hpp"
 #include "impl/navmesh/NavmeshServiceImpl.hpp"
@@ -34,6 +35,8 @@
 #include "events/editor/EditorModeEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "events/project/SceneEvents.hpp"
+#include "events/weather/WeatherEvents.hpp"
+#include "events/terrain/OceanEvents.hpp"
 #include "resource/PathResolver.hpp"
 #include "resource/VirtualFileSystem.hpp"
 #include <filesystem>
@@ -121,6 +124,7 @@ namespace handlers {
         physicsAnimationService.reset();
         physicsService.reset();
         navmeshService.reset();
+        weatherService.reset();
         oceanService.reset();
         terrainService.reset();
         projectService.reset();
@@ -254,6 +258,12 @@ namespace handlers {
             oceanAdapter->setOceanService(oceanServiceImpl.get());
         }
 
+        // Weather runs in shipped games too: scripts drive it (Weather natives) and the
+        // ocean's weather-driven sea state queries it. Without this, both silently no-op
+        // outside the editor.
+        weatherService = std::make_shared<services::WeatherServiceImpl>(
+            bootstrap->getVFXRuntimeProvider());
+
         if (auto* physicsProvider = bootstrap->getPhysicsProvider())
         {
             physicsService = std::make_shared<services::PhysicsServiceImpl>(physicsProvider);
@@ -348,6 +358,7 @@ namespace handlers {
         static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();
         terrainService->registerEventHandlers();
         oceanService->registerEventHandlers();
+        weatherService->registerEventHandlers();
         if (physicsService)
         {
             physicsService->registerEventHandlers();
@@ -463,6 +474,20 @@ namespace handlers {
             }
         });
 
+        frameTaskGraph->addTask("Weather", [this]() {
+            float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            events::weather::UpdateWeatherCommand cmd;
+            cmd.deltaTime = dt;
+            events::EventDispatcher::instance().execute(cmd);
+        });
+
+        frameTaskGraph->addTask("Ocean", [this]() {
+            float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            events::ocean::UpdateOceanCommand cmd;
+            cmd.deltaTime = dt;
+            events::EventDispatcher::instance().execute(cmd);
+        });
+
         frameTaskGraph->addTask("WorldSector", [this]() {
             if (worldSectorService) worldSectorService->update();
         });
@@ -482,6 +507,8 @@ namespace handlers {
         });
 
         // Dependencies
+        frameTaskGraph->addDependency("Weather", "Scene");
+        frameTaskGraph->addDependency("Ocean", "Weather");
         frameTaskGraph->addDependency("PhysicsKick", "Scene");
         frameTaskGraph->addDependency("PhysicsKick", "Input");
         frameTaskGraph->addDependency("PhysicsKick", "WindowState");

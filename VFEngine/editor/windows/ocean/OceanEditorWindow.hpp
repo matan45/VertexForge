@@ -28,6 +28,12 @@ namespace windows
         services::OceanPhysicsSettings physicsSettings;
         bool physicsSettingsDirty = false;
 
+        // Weather-driven sea state
+        bool weatherDriven = false;
+        float weatherResponse = 1.0f;
+        int seaStatePresetIndex = 1;
+        float seaStateTransitionSeconds = 10.0f;
+
         nfd::FileDialog fileDialog;
 
     public:
