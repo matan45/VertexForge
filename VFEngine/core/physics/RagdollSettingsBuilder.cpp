@@ -108,7 +108,17 @@ namespace core::physics
             if (physicsParentIdx >= 0)
             {
                 const types::JointConstraintLimits* limits = config.findJointLimits(bone.name);
-                part.mToParent = createJointConstraint(limits, joltBoneWorld, boneWorldMatrices[physicsParentIdx]);
+
+                // Spring frequency/damping are fixed at build time; torque limits are
+                // rescaled per frame by the powered-ragdoll drive loop
+                const types::BoneMotorSettings* motor = config.findBoneMotor(bone.name);
+                float frequency = motor ? motor->frequency : config.defaultMotorFrequency;
+                float damping = motor ? motor->damping : config.defaultMotorDamping;
+                float maxTorque = motor ? motor->maxTorque : config.defaultMotorMaxTorque;
+                JPH::MotorSettings motorSettings(frequency, damping, 0.0f, maxTorque);
+
+                part.mToParent = createJointConstraint(limits, joltBoneWorld, boneWorldMatrices[physicsParentIdx],
+                                                       motorSettings);
             }
         }
 
@@ -153,9 +163,13 @@ namespace core::physics
     JPH::Ref<JPH::SwingTwistConstraintSettings> RagdollSettingsBuilder::createJointConstraint(
         const types::JointConstraintLimits* limits,
         const JPH::Mat44& childWorldTransform,
-        const JPH::Mat44& parentWorldTransform)
+        const JPH::Mat44& parentWorldTransform,
+        const JPH::MotorSettings& motorSettings)
     {
         JPH::Ref<JPH::SwingTwistConstraintSettings> constraint = new JPH::SwingTwistConstraintSettings();
+
+        constraint->mSwingMotorSettings = motorSettings;
+        constraint->mTwistMotorSettings = motorSettings;
 
         constraint->mSpace = JPH::EConstraintSpace::WorldSpace;
 

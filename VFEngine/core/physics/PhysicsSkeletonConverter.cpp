@@ -113,6 +113,43 @@ namespace core::physics
         return pose;
     }
 
+    JPH::SkeletonPose PhysicsSkeletonConverter::buildTargetPoseFromAnimatorMatrices(
+        const JPH::Skeleton* physicsSkeleton,
+        const std::vector<glm::mat4>& animatorSkinningMatrices,
+        const std::vector<int>& physicsToAnimBoneIndex,
+        const resource::SkeletonData& skeletonData,
+        const glm::vec3& entityPosition)
+    {
+        JPH::SkeletonPose pose;
+        pose.SetSkeleton(physicsSkeleton);
+        pose.SetRootOffset(toJoltR(entityPosition));
+
+        glm::mat4 globalTransform = glm::inverse(skeletonData.globalInverseTransform);
+
+        auto& jointMatrices = pose.GetJointMatrices();
+        jointMatrices.resize(physicsSkeleton->GetJointCount());
+
+        for (int i = 0; i < physicsSkeleton->GetJointCount(); ++i)
+        {
+            int animIdx = physicsToAnimBoneIndex[i];
+            if (animIdx >= 0 && animIdx < static_cast<int>(animatorSkinningMatrices.size()) &&
+                animIdx < static_cast<int>(skeletonData.bindPoses.size()))
+            {
+                glm::mat4 boneModel =
+                    globalTransform * animatorSkinningMatrices[animIdx] * skeletonData.bindPoses[animIdx];
+                jointMatrices[i] = toJoltMat44(boneModel);
+            }
+            else
+            {
+                jointMatrices[i] = JPH::Mat44::sIdentity();
+            }
+        }
+
+        pose.CalculateJointStates();
+
+        return pose;
+    }
+
     std::vector<glm::mat4> PhysicsSkeletonConverter::ragdollPoseToSkinningMatrices(
         const JPH::SkeletonPose& ragdollPose,
         const SkeletonConversionResult& conversion,
