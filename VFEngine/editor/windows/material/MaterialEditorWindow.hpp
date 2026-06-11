@@ -57,5 +57,6 @@ namespace windows
         void drawGraphPanel();
 
         void onGraphChanged();
+        void onParameterValueChanged();
     };
 }

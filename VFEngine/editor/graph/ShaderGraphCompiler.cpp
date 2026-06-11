@@ -1,6 +1,7 @@
 #include "print/Log.hpp"
 #include "ShaderGraphCompiler.hpp"
 #include "nodes/ShaderNode.hpp"
+#include "material/MaterialParameterSet.hpp"
 #include <queue>
 #include <set>
 #include <filesystem>
@@ -210,9 +211,9 @@ namespace editor::graph {
 
     std::string ShaderGraphCompiler::generateFragmentShader(const material::ShaderGraph& graph) {
         std::string code;
-        
+
         bool useParallax = isDisplacementConnected(graph);
-        
+
         if (useParallax) {
             // Find the end of the #version line (after #type FRAGMENT line)
             size_t versionPos = s_fragmentHeader.find("#version");
@@ -234,13 +235,27 @@ namespace editor::graph {
             code += s_fragmentHeader;
         }
 
+        // Exposed parameters become a std140 uniform block (set 2) instead of baked
+        // literals, so value edits and overrides don't require a shader recompile.
+        material::MaterialParameterSet paramSet = material::collectParameters(graph);
+        if (paramSet.hasValueParameters()) {
+            std::string paramBlock = material::emitGlslUniformBlock(
+                paramSet, material::PARAMETER_DESCRIPTOR_SET, material::PARAMETER_DESCRIPTOR_BINDING);
+            size_t mainPos = code.rfind("void main()");
+            if (mainPos != std::string::npos) {
+                code.insert(mainPos, paramBlock + "\n");
+            } else {
+                vfLogWarning("Fragment header has no 'void main()' anchor; parameter block not injected");
+            }
+        }
+
         std::vector<uint32_t> sortedNodes = topologicalSort(graph);
         std::map<uint32_t, std::map<std::string, std::string>> nodeOutputVars;
 
         code += "    // Generated shader graph code\n";
 
         for (uint32_t nodeId : sortedNodes) {
-            code += generateNodeCode(graph, nodeId, nodeOutputVars);
+            code += generateNodeCode(graph, nodeId, nodeOutputVars, paramSet);
         }
 
         // Append cached fragment footer (PBR lighting calculation and main() closing)
@@ -354,21 +369,28 @@ namespace editor::graph {
 
     std::string ShaderGraphCompiler::generateNodeCode(const material::ShaderGraph& graph,
                                                       uint32_t nodeId,
-                                                      std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars) {
+                                                      std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars,
+                                                      const material::MaterialParameterSet& paramSet) {
         const material::ShaderNode* nodeData = graph.findNode(nodeId);
         if (!nodeData) return "";
 
         // Create a mutable copy of node data for TextureSample nodes
         // so we can set the correct texture index based on PBR connection
         material::ShaderNode modifiedNodeData = *nodeData;
-        
+
         if (nodeData->type == material::NodeType::TextureSample) {
             int pbrIndex = determinePBRTextureIndex(graph, nodeId);
             if (pbrIndex >= 0) {
                 modifiedNodeData.properties["textureIndex"] = static_cast<float>(pbrIndex);
             }
         }
-        
+
+        // Exposed value parameters read from the uniform block instead of baking literals
+        auto glslNameIt = paramSet.nodeToGlslName.find(nodeId);
+        if (glslNameIt != paramSet.nodeToGlslName.end()) {
+            modifiedNodeData.properties["glslUniformName"] = glslNameIt->second;
+        }
+
         auto node = ShaderNodeFactory::createNodeFromData(modifiedNodeData);
         if (!node) return "";
         

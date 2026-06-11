@@ -30,6 +30,7 @@ namespace windows
         windowTitle = "Material Editor: " + path.filename().string();
 
         propertyPanel->setOnPropertyChanged([this]() { onGraphChanged(); });
+        propertyPanel->setOnParameterValueChanged([this]() { onParameterValueChanged(); });
         previewPanel->setOnBlendModeChanged([this]() { isDirty = true; });
     }
 
@@ -138,6 +139,19 @@ namespace windows
     {
         isDirty = true;
         materialData->needsRecompile = true;
+    }
+
+    void MaterialEditorWindow::onParameterValueChanged()
+    {
+        // Exposed parameter values live in the set-2 uniform block — the preview picks
+        // them up through the shared MaterialData without recompiling the shader.
+        isDirty = true;
+        if (materialData)
+        {
+            bool customShaderActive = !materialData->cachedFragmentShader.empty() &&
+                                      !materialData->needsRecompile;
+            previewPanel->updateFromGraph(materialData, materialPath, customShaderActive);
+        }
     }
 
     void MaterialEditorWindow::draw()

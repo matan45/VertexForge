@@ -1,5 +1,6 @@
 #pragma once
 #include "material/MaterialTypes.hpp"
+#include "material/MaterialParameterSet.hpp"
 #include <terrain/TerrainMaterialTypes.hpp>
 #include <string>
 #include <string_view>
@@ -72,7 +73,8 @@ namespace editor::graph {
         
         static std::string generateNodeCode(const material::ShaderGraph& graph,
                                            uint32_t nodeId,
-                                           std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars);
+                                           std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars,
+                                           const material::MaterialParameterSet& paramSet);
 
         // Get the variable name for a node's input (follows links or uses default)
         static std::string getInputVarName(const material::ShaderGraph& graph,

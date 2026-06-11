@@ -9,7 +9,7 @@
 
 namespace material
 {
-    constexpr const char* MATERIAL_FORMAT_VERSION = "1.0";
+    constexpr const char* MATERIAL_FORMAT_VERSION = "1.1";
 
     constexpr int MAX_MATERIAL_TEXTURES = 16;
 
@@ -285,6 +285,9 @@ namespace material
 
     using NodeProperty = std::variant<float, glm::vec2, glm::vec3, glm::vec4, std::string>;
 
+    // Exposed-parameter convention (format 1.1): constant and texture-sample nodes carrying
+    // properties "isParameter" (float != 0) + "parameterName" (string) become named material
+    // parameters. See MaterialParameterSet.hpp for collection/layout helpers.
     struct ShaderNode
     {
         uint32_t id = 0;

@@ -3,6 +3,7 @@
 #include "MaterialCacheManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialShaderCache.hpp"
+#include "../material/MaterialParameterBufferCache.hpp"
 #include "../ibl/DefaultIBLTextureFactory.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
@@ -23,10 +24,12 @@ namespace render::mesh
         textureCache->init(device.getStagingCommandPool());
 
         materialShaderCache = std::make_unique<MaterialShaderCache>(device);
+        parameterBufferCache = std::make_unique<MaterialParameterBufferCache>(device);
 
         materialCacheManager = std::make_unique<MaterialCacheManager>();
         materialCacheManager->setShaderCache(materialShaderCache.get());
         materialCacheManager->setTextureCache(textureCache.get());
+        materialCacheManager->setParameterBufferCache(parameterBufferCache.get());
     }
 
     StaticMeshPipeline::~StaticMeshPipeline()
@@ -55,6 +58,8 @@ namespace render::mesh
         loadShaders();
         createDescriptorSetLayout();
         createTextureDescriptorSetLayout();
+        parameterBufferCache->initLayout();
+        parameterBufferCache->setImageCount(static_cast<uint32_t>(swapChain.getImageCount()));
         createDescriptorPool();
         createTextureDescriptorPool();
         createCameraUBO();
@@ -72,6 +77,8 @@ namespace render::mesh
         loadShaders();
         createDescriptorSetLayout();
         createTextureDescriptorSetLayout();
+        parameterBufferCache->initLayout();
+        parameterBufferCache->setImageCount(static_cast<uint32_t>(swapChain.getImageCount()));
         createDescriptorPool();
         createTextureDescriptorPool();
         createCameraUBO();
@@ -167,6 +174,11 @@ namespace render::mesh
             textureDescriptorSetLayout = nullptr;
         }
         textureDescriptorsInitialized = false;
+
+        if (parameterBufferCache)
+        {
+            parameterBufferCache->cleanUp();
+        }
 
         graphicsPipeline = nullptr;
         pipelineLayout = nullptr;

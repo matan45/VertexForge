@@ -408,7 +408,8 @@ namespace material
             const LogWarningFn& logWarning)
         {
             std::string fileVersion = j.value("version", MATERIAL_FORMAT_VERSION);
-            if (fileVersion != MATERIAL_FORMAT_VERSION)
+            // 1.0 files are forward-compatible with 1.1 (parameter exposure is additive node properties)
+            if (fileVersion != MATERIAL_FORMAT_VERSION && fileVersion != "1.0")
             {
                 vfLogError("Incompatible material file version: {}, expected {}. Re-import required. path: {}",
                            fileVersion, MATERIAL_FORMAT_VERSION, std::string(path));

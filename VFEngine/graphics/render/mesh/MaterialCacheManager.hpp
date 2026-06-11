@@ -10,6 +10,7 @@ namespace render::mesh
 {
     class MaterialShaderCache;
     class MaterialTextureCache;
+    class MaterialParameterBufferCache;
 
     class MaterialCacheManager
     {
@@ -21,13 +22,15 @@ namespace render::mesh
         // Optional references to related caches for coordinated invalidation
         MaterialShaderCache* shaderCache = nullptr;
         MaterialTextureCache* textureCache = nullptr;
+        MaterialParameterBufferCache* parameterBufferCache = nullptr;
 
     public:
         explicit MaterialCacheManager() = default;
         ~MaterialCacheManager() = default;
-        
+
         void setShaderCache(MaterialShaderCache* cache) { shaderCache = cache; }
         void setTextureCache(MaterialTextureCache* cache) { textureCache = cache; }
+        void setParameterBufferCache(MaterialParameterBufferCache* cache) { parameterBufferCache = cache; }
         
         std::shared_ptr<material::MaterialData> getMaterial(const std::string& materialPath) const;
 
