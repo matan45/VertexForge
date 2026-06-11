@@ -348,12 +348,13 @@ namespace render::mesh
 
     ExtractedPBRValues MaterialPBRExtractor::extractPBRFromInstance(
         const material::MaterialInstanceData& instance,
-        const material::MaterialData& parentMaterial)
+        const material::MaterialData& parentMaterial,
+        const ParameterOverrides* runtimeOverrides)
     {
         // Named parameter overrides apply during the parent graph walk; the fixed PBR
         // scalar overrides below still win on top (they target PBROutput inputs directly).
         material::MaterialParameterSet parentSet = material::collectParameters(parentMaterial.graph);
-        ParameterOverrides resolved = material::resolveOverrides(parentSet, &instance);
+        ParameterOverrides resolved = material::resolveOverrides(parentSet, &instance, runtimeOverrides);
 
         ExtractedPBRValues pbr = extractPBRFromMaterial(parentMaterial,
                                                         resolved.empty() ? nullptr : &resolved);
@@ -430,7 +431,9 @@ namespace render::mesh
         return pbr;
     }
 
-    ExtractedPBRValues MaterialPBRExtractor::extractPBRFromPath(const std::string& materialOrInstancePath)
+    ExtractedPBRValues MaterialPBRExtractor::extractPBRFromPath(
+        const std::string& materialOrInstancePath,
+        const ParameterOverrides* runtimeOverrides)
     {
         ExtractedPBRValues pbr;
 
@@ -457,7 +460,7 @@ namespace render::mesh
             }
 
             // Extract with overrides
-            pbr = extractPBRFromInstance(*instanceData, *parentMaterial);
+            pbr = extractPBRFromInstance(*instanceData, *parentMaterial, runtimeOverrides);
             pbr.materialPath = materialOrInstancePath;
         }
         else
@@ -469,7 +472,16 @@ namespace render::mesh
                 return pbr;
             }
 
-            pbr = extractPBRFromMaterial(*matData);
+            if (runtimeOverrides && !runtimeOverrides->empty())
+            {
+                material::MaterialParameterSet paramSet = material::collectParameters(matData->graph);
+                ParameterOverrides resolved = material::resolveOverrides(paramSet, nullptr, runtimeOverrides);
+                pbr = extractPBRFromMaterial(*matData, resolved.empty() ? nullptr : &resolved);
+            }
+            else
+            {
+                pbr = extractPBRFromMaterial(*matData);
+            }
             pbr.materialPath = materialOrInstancePath;
         }
 

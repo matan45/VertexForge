@@ -6,6 +6,7 @@
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <asset/AssetRef.hpp>
 #include <resource/AssetTypes.hpp>
+#include <material/MaterialTypes.hpp>
 #include <components/DestructionComponents.hpp>
 #include <glm/glm.hpp>
 #include <string>
@@ -72,7 +73,7 @@ namespace services
     {
         asset::AssetRef defaultMaterialRef; // .vfMat asset for unmapped submeshes
         std::map<std::string, asset::AssetRef> subMeshMaterials; // submesh NAME -> .vfMat asset
-        std::map<std::string, float> parameterOverrides; // Runtime parameter tweaks
+        std::map<std::string, material::ParameterValue> parameterOverrides; // Runtime named-parameter tweaks
     };
 
     struct SubMeshInfo

@@ -52,13 +52,18 @@ namespace render::mesh
             const ParameterOverrides* paramOverrides = nullptr);
 
         // Extract PBR from material instance (applies named parameter overrides during
-        // the graph walk, then fixed PBR scalar + texture slot overrides on top)
+        // the graph walk, then fixed PBR scalar + texture slot overrides on top).
+        // runtimeOverrides win over the instance's own parameter overrides.
         static ExtractedPBRValues extractPBRFromInstance(
             const material::MaterialInstanceData& instance,
-            const material::MaterialData& parentMaterial);
+            const material::MaterialData& parentMaterial,
+            const ParameterOverrides* runtimeOverrides = nullptr);
 
-        // Unified extraction - handles both .vfMat and .vfMatInstance paths
-        static ExtractedPBRValues extractPBRFromPath(const std::string& materialOrInstancePath);
+        // Unified extraction - handles both .vfMat and .vfMatInstance paths.
+        // runtimeOverrides: per-entity named-parameter values (MaterialComponent).
+        static ExtractedPBRValues extractPBRFromPath(
+            const std::string& materialOrInstancePath,
+            const ParameterOverrides* runtimeOverrides = nullptr);
 
         static ExtractedPBRValues getPBRForSubmesh(
             const MeshRenderData& meshData,
