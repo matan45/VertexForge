@@ -24,6 +24,7 @@ namespace world
         {
             SectorCoord coord;
             float distSq;
+            float sortKey; // distSq scaled by source priority for load ordering
         };
 
         SectorStreamingConfig config;

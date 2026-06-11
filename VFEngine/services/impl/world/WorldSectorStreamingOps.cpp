@@ -428,7 +428,18 @@ namespace services
         world::SectorCoord newCoord = sectorManager.worldPositionToSectorCoord(newPosition);
 
         if (oldCoord == newCoord)
+        {
+            // Edit-mode moves within a sector must still mark it for save — otherwise
+            // Save World skips the clean sector and silently drops the edit.
+            // Play-mode motion must NOT dirty: dirty sectors are never auto-unloaded
+            // by the streamer, so a wandering entity would pin its sector forever.
+            if (!isPlayMode)
+            {
+                if (auto* sector = sectorManager.getSector(oldCoord))
+                    sector->dirty = true;
+            }
             return;
+        }
 
         sectorManager.removeEntityFromSector(uuid, oldCoord);
         sectorManager.assignEntityToSector(uuid, newPosition);

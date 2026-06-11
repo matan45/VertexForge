@@ -32,6 +32,10 @@ namespace world
 
         void clear();
 
+        // Drop a single proxy from tracking (e.g. its HLOD file was invalidated);
+        // the streamer will re-emit a load once a valid file exists again
+        void forgetProxy(const HLODCellCoord& cell) { loadedProxies.erase(cell); }
+
         const std::unordered_set<HLODCellCoord, HLODCellCoordHash>& getLoadedProxies() const
         {
             return loadedProxies;

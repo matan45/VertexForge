@@ -71,11 +71,23 @@ namespace events::world
         std::string_view getName() const override { return "UpdateWorldStreaming"; }
     };
 
+    // Marks the sector owning the given entity as needing save. Editor code should
+    // execute this after mutating components on a sector-managed entity (transform
+    // moves are tracked automatically via TransformChangedNotification).
+    struct MarkEntitySectorDirtyCommand : ICommand<>
+    {
+        uint64_t entityUUID = 0;
+
+        std::string_view getName() const override { return "MarkEntitySectorDirty"; }
+    };
+
     struct RegisterStreamingSourceCommand : ICommand<uint32_t>
     {
         glm::vec3 position{0.0f};
         float radiusMultiplier = 1.0f;
         uint8_t priority = 0;
+        // Optional owning entity: the source auto-unregisters when this entity is deleted
+        uint64_t ownerEntityUUID = 0;
 
         std::string_view getName() const override { return "RegisterStreamingSource"; }
     };

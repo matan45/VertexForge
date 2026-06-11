@@ -59,8 +59,20 @@ namespace world
         // Reuse member set to avoid per-frame allocation
         visitedCoords.clear();
 
+        // Scan higher-priority sources first: a sector covered by several sources is
+        // claimed (via visitedCoords) by the most important one, so its load candidates
+        // carry that source's priority-scaled sort key.
+        std::vector<const StreamingSource*> orderedSources;
+        orderedSources.reserve(sources.size());
         for (const auto& source : sources)
+            orderedSources.push_back(&source);
+        std::stable_sort(orderedSources.begin(), orderedSources.end(),
+                         [](const StreamingSource* a, const StreamingSource* b)
+                         { return a->priority > b->priority; });
+
+        for (const auto* sourcePtr : orderedSources)
         {
+            const auto& source = *sourcePtr;
             float loadWorldRadius = config.loadRadius * sectorSize * source.radiusMultiplier;
             float loadRadiusSq = loadWorldRadius * loadWorldRadius;
 
@@ -91,7 +103,10 @@ namespace world
 
                     if (sector->state == SectorState::Unloaded && !sector->filePath.empty())
                     {
-                        loadCandidates.push_back({coord, distSq});
+                        // Higher-priority sources win the per-frame load budget:
+                        // their candidates sort as if proportionally closer
+                        float sortKey = distSq / (1.0f + static_cast<float>(source.priority));
+                        loadCandidates.push_back({coord, distSq, sortKey});
                     }
                 }
             }
@@ -129,15 +144,15 @@ namespace world
 
                 if (outsideAllSources)
                 {
-                    unloadCandidates.push_back({*it, maxDistSq});
+                    unloadCandidates.push_back({*it, maxDistSq, maxDistSq});
                 }
             }
             ++it;
         }
 
-        // Sort: load nearest first, unload farthest first
+        // Sort: load nearest (priority-scaled) first, unload farthest first
         std::sort(loadCandidates.begin(), loadCandidates.end(),
-                  [](const Candidate& a, const Candidate& b) { return a.distSq < b.distSq; });
+                  [](const Candidate& a, const Candidate& b) { return a.sortKey < b.sortKey; });
 
         std::sort(unloadCandidates.begin(), unloadCandidates.end(),
                   [](const Candidate& a, const Candidate& b) { return a.distSq > b.distSq; });

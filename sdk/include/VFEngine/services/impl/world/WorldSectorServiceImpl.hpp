@@ -74,11 +74,14 @@ namespace services
 
         // Multiple streaming sources (camera + gameplay-registered sources)
         std::unordered_map<uint32_t, world::StreamingSource> streamingSources;
+        // sourceId -> owning entity UUID, for auto-unregister on entity deletion
+        std::unordered_map<uint32_t, uint64_t> streamingSourceOwners;
         uint32_t nextStreamingSourceId = 1;
 
         ::events::SubscriptionToken transformChangedToken;
         ::events::SubscriptionToken editorModeChangedToken;
         ::events::SubscriptionToken cameraPositionToken;
+        ::events::SubscriptionToken entityDeletedToken;
 
         ::events::SubscriptionToken sceneLoadedToken;
         ::events::SubscriptionToken sceneClearedToken;
@@ -146,6 +149,7 @@ namespace services
 
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
+        void invalidateHLODForSector(const world::SectorCoord& coord);
         void pollAsyncSectorLoads();
         void finalizeSectorLoad(const world::SectorCoord& coord, std::vector<nlohmann::json>& entityData);
         void onTransformChanged(uint64_t uuid, const glm::vec3& newPosition);

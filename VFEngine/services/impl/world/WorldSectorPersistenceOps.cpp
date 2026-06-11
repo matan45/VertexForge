@@ -140,6 +140,7 @@ namespace services
         std::filesystem::path sectorsDir = worldDir / "sectors";
         std::filesystem::create_directories(sectorsDir);
 
+        std::vector<world::SectorCoord> staleHLODs;
         sectorManager.forEachSector([&](world::WorldSector& sector)
         {
             if (sector.dirty || sector.filePath.empty())
@@ -149,13 +150,21 @@ namespace services
                     std::to_string(sector.coord.z) + ".vfsector";
                 std::string sectorPath = (sectorsDir / sectorFileName).string();
 
+                bool contentChanged = sector.dirty;
                 if (world::WorldSectorSerialization::saveSector(sector, sectorPath))
                 {
                     sector.filePath = sectorPath;
                     worldDefinition.sectorFilePaths[sector.coord] = sectorPath;
+
+                    // The baked HLOD no longer matches the saved content
+                    if (contentChanged && !sector.hlodFilePath.empty())
+                        staleHLODs.push_back(sector.coord);
                 }
             }
         });
+
+        for (const auto& coord : staleHLODs)
+            invalidateHLODForSector(coord);
 
         currentWorldPath = path;
         bool result = world::WorldDefinitionSerialization::save(worldDefinition, path);
@@ -224,6 +233,15 @@ namespace services
 
             // Pre-cache metadata from binary header (44 bytes, fast)
             world::WorldSectorSerialization::readSectorMetadata(sectorPath, sector.metadata);
+
+            // Restore the HLOD bake if one exists on disk (the path isn't stored in
+            // the world definition; GenerateHLODCommand uses this naming convention)
+            std::string hlodPath = sectorPath;
+            if (auto dotPos = hlodPath.rfind('.'); dotPos != std::string::npos)
+                hlodPath = hlodPath.substr(0, dotPos);
+            hlodPath += "_hlod0.vfHLOD";
+            if (std::filesystem::exists(hlodPath))
+                sector.hlodFilePath = hlodPath;
         }
 
         ::events::world::WorldLoadedNotification notif;
@@ -276,6 +294,7 @@ namespace services
         vfxSnapshots.clear();
         audioSnapshots.clear();
         streamingSources.clear();
+        streamingSourceOwners.clear();
         nextStreamingSourceId = 1;
         sectorManager.clear();
 

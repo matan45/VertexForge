@@ -188,6 +188,26 @@ TEST_SUITE("HLODStreamer")
         CHECK_FALSE(hasAction(actions, {7, 0, 0}, true)); // already loaded, no re-emit
     }
 
+    TEST_CASE("forgetProxy re-emits the load on the next update (invalidation path)")
+    {
+        world::WorldSectorManager manager(makeSectorConfig());
+        world::HLODStreamer streamer;
+        streamer.setConfig(makeStreamConfig(), singleTierConfig(1, 10.0f));
+
+        std::vector<world::StreamingSource> sources{sourceAt(50.0f, 50.0f)};
+        std::vector<world::HLODStreamingAction> actions;
+        streamer.update(sources, manager, makeSectorConfig(), actions);
+        REQUIRE(streamer.getLoadedProxies().contains(world::HLODCellCoord(7, 0, 0)));
+
+        // HLOD bake invalidated: tracking dropped, so a fresh bake gets re-requested
+        streamer.forgetProxy(world::HLODCellCoord(7, 0, 0));
+        CHECK_FALSE(streamer.getLoadedProxies().contains(world::HLODCellCoord(7, 0, 0)));
+
+        actions.clear();
+        streamer.update(sources, manager, makeSectorConfig(), actions);
+        CHECK(hasAction(actions, {7, 0, 0}, true));
+    }
+
     TEST_CASE("clear drops all loaded proxies")
     {
         world::WorldSectorManager manager(makeSectorConfig());

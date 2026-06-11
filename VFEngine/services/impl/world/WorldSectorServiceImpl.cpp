@@ -513,6 +513,18 @@ namespace services
                 return debugDrawSectors;
             });
 
+        dispatcher.registerCommandHandler<::events::world::MarkEntitySectorDirtyCommand>(
+            [this](const ::events::world::MarkEntitySectorDirtyCommand& cmd)
+            {
+                // Edit-mode only: play-mode dirty sectors are pinned (never auto-unloaded)
+                if (!worldMode || isPlayMode) return;
+                if (!sectorManager.hasEntitySector(cmd.entityUUID)) return;
+
+                auto coord = sectorManager.getEntitySector(cmd.entityUUID);
+                if (auto* sector = sectorManager.getSector(coord))
+                    sector->dirty = true;
+            });
+
         dispatcher.registerCommandHandler<::events::world::RegisterStreamingSourceCommand>(
             [this](const ::events::world::RegisterStreamingSourceCommand& cmd) -> uint32_t
             {
@@ -523,6 +535,8 @@ namespace services
                 source.priority = cmd.priority;
                 source.id = id;
                 streamingSources[id] = source;
+                if (cmd.ownerEntityUUID != 0)
+                    streamingSourceOwners[id] = cmd.ownerEntityUUID;
                 return id;
             });
 
@@ -530,6 +544,7 @@ namespace services
             [this](const ::events::world::UnregisterStreamingSourceCommand& cmd)
             {
                 streamingSources.erase(cmd.sourceId);
+                streamingSourceOwners.erase(cmd.sourceId);
             });
 
         dispatcher.registerCommandHandler<::events::world::UpdateStreamingSourcePositionCommand>(
@@ -638,12 +653,7 @@ namespace services
         dispatcher.registerCommandHandler<::events::world::hlod::InvalidateHLODCommand>(
             [this](const ::events::world::hlod::InvalidateHLODCommand& cmd)
             {
-                auto* sector = sectorManager.getSector(cmd.coord);
-                if (sector)
-                {
-                    sector->hlodFilePath.clear();
-                    vfLogInfo("HLOD invalidated for sector [{},{}]", cmd.coord.x, cmd.coord.z);
-                }
+                invalidateHLODForSector(cmd.coord);
             });
 
         dispatcher.registerQueryHandler<::events::vfx::snapshot::GetVFXSnapshotQuery>(
@@ -724,6 +734,7 @@ namespace services
                     vfxSnapshots.clear();
                     audioSnapshots.clear();
                     streamingSources.clear();
+                    streamingSourceOwners.clear();
                     nextStreamingSourceId = 1;
 
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
@@ -781,6 +792,33 @@ namespace services
                 if (sectorManager.hasEntitySector(uuid))
                 {
                     onTransformChanged(uuid, notif.newTransform.position);
+                }
+            });
+
+        // Auto-unregister streaming sources whose owning entity is deleted
+        entityDeletedToken = dispatcher.subscribe<::events::scene::EntityDeletedNotification>(
+            [this](const ::events::scene::EntityDeletedNotification& notif)
+            {
+                if (!worldMode || streamingSourceOwners.empty()) return;
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(notif.entity);
+                if (!registry.valid(entity)) return;
+
+                auto* uuidComp = registry.try_get<components::UUIDComponent>(entity);
+                if (!uuidComp) return;
+                uint64_t uuid = uuidComp->id.getValue();
+
+                auto it = streamingSourceOwners.begin();
+                while (it != streamingSourceOwners.end())
+                {
+                    if (it->second == uuid)
+                    {
+                        streamingSources.erase(it->first);
+                        it = streamingSourceOwners.erase(it);
+                    }
+                    else
+                        ++it;
                 }
             });
 
@@ -881,6 +919,35 @@ namespace services
                     onTerrainAvailable(tileSize);
                 }
             });
+    }
+
+    void WorldSectorServiceImpl::invalidateHLODForSector(const world::SectorCoord& coord)
+    {
+        auto* sector = sectorManager.getSector(coord);
+        if (!sector || sector->hlodFilePath.empty())
+            return;
+
+        // Delete the stale bake so loadWorld's disk probe doesn't resurrect it
+        std::error_code ec;
+        std::filesystem::remove(sector->hlodFilePath, ec);
+        sector->hlodFilePath.clear();
+
+        // Drop any loaded proxy covering this sector, per tier (real or future
+        // geometry replaces it; the streamer re-emits a load once a new bake exists)
+        auto floorDiv = [](int32_t v, int32_t s) { return (v >= 0) ? v / s : (v - s + 1) / s; };
+        for (const auto& tier : worldDefinition.hlodConfig.tiers)
+        {
+            int32_t cs = static_cast<int32_t>(tier.cellSize);
+            world::HLODCellCoord cell(floorDiv(coord.x, cs), floorDiv(coord.z, cs), tier.tier);
+            hlodProxyManager.unloadProxy(cell, *sceneGraph);
+            hlodStreamer.forgetProxy(cell);
+        }
+
+        ::events::world::hlod::HLODInvalidatedNotification notif;
+        notif.coord = coord;
+        ::events::EventDispatcher::instance().publish(notif);
+
+        vfLogInfo("HLOD invalidated for sector [{},{}]", coord.x, coord.z);
     }
 
     void WorldSectorServiceImpl::onTerrainAvailable(float worldTileSize)

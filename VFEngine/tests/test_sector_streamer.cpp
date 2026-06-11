@@ -386,6 +386,77 @@ TEST_SUITE("SectorStreamer")
         CHECK_FALSE(hasAction(actions, {10, 10}, false));
     }
 
+    TEST_CASE("high-priority source wins the per-frame load budget")
+    {
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 3);
+        for (int x = 8; x <= 12; ++x)
+        {
+            for (int z = 8; z <= 12; ++z)
+            {
+                auto& sector = manager.getOrCreateSector({x, z});
+                sector.state = world::SectorState::Unloaded;
+                sector.filePath = "sector.vfsector";
+            }
+        }
+
+        // Source A's best candidates: axis neighbors of (0,0), distance 100.
+        // Source B sits on a loaded plateau; its best candidates are the
+        // diagonals of (10,10) at distance ~141 — farther than A's.
+        manager.getSector({0, 0})->state = world::SectorState::Loaded;
+        manager.getSector({10, 10})->state = world::SectorState::Loaded;
+        manager.getSector({9, 10})->state = world::SectorState::Loaded;
+        manager.getSector({11, 10})->state = world::SectorState::Loaded;
+        manager.getSector({10, 9})->state = world::SectorState::Loaded;
+        manager.getSector({10, 11})->state = world::SectorState::Loaded;
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.unloadRadius = 3.0f;
+        config.maxLoadsPerFrame = 1;
+        config.maxUnloadsPerFrame = 0;
+
+        auto isDiagonalOfB = [](const world::SectorCoord& c)
+        {
+            return std::abs(c.x - 10) == 1 && std::abs(c.z - 10) == 1;
+        };
+        auto isNeighborOfA = [](const world::SectorCoord& c)
+        {
+            return std::abs(c.x) + std::abs(c.z) == 1;
+        };
+
+        SUBCASE("equal priority: plain nearest-first, source A's candidate wins")
+        {
+            world::SectorStreamer streamer(config);
+            streamer.setEnabled(true);
+            std::vector<world::StreamingSource> sources{
+                sourceAtSectorCenter(0, 0),
+                sourceAtSectorCenter(10, 10)};
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+            REQUIRE(actions.size() == 1);
+            CHECK(actions[0].isLoad);
+            CHECK(isNeighborOfA(actions[0].coord));
+        }
+
+        SUBCASE("priority 3 source claims the budget despite larger distance")
+        {
+            world::SectorStreamer streamer(config);
+            streamer.setEnabled(true);
+            std::vector<world::StreamingSource> sources{
+                sourceAtSectorCenter(0, 0),
+                sourceAtSectorCenter(10, 10)};
+            sources[1].priority = 3; // 20000 / (1+3) = 5000 < A's 10000
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+            REQUIRE(actions.size() == 1);
+            CHECK(actions[0].isLoad);
+            CHECK(isDiagonalOfB(actions[0].coord));
+        }
+    }
+
     TEST_CASE("setConfig enforces unloadRadius > loadRadius")
     {
         world::SectorStreamer streamer;
