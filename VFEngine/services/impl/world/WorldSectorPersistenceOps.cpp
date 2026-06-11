@@ -281,12 +281,7 @@ namespace services
         }
 
         // Drain all pending async sector loads before clearing
-        for (auto& [coord, pending] : pendingAsyncLoads)
-        {
-            if (pending.future.valid())
-                pending.future.get();
-        }
-        pendingAsyncLoads.clear();
+        pendingAsyncLoads.drain();
 
         entityLoader.clear();
         physicsSnapshots.clear();

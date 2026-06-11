@@ -10,6 +10,7 @@
 #include "world/PendingReferenceResolver.hpp"
 #include "world/HLODStreamer.hpp"
 #include "world/HLODProxyManager.hpp"
+#include "streaming/AsyncLoadQueue.hpp"
 #include <chrono>
 #include <future>
 #include <memory>
@@ -102,14 +103,8 @@ namespace services
             bool success = false;
         };
 
-        struct PendingAsyncSectorLoad
-        {
-            world::SectorCoord coord;
-            std::future<AsyncSectorLoadResult> future;
-            bool cancelled = false;
-        };
-
-        std::unordered_map<world::SectorCoord, PendingAsyncSectorLoad, world::SectorCoordHash> pendingAsyncLoads;
+        streaming::AsyncLoadQueue<world::SectorCoord, AsyncSectorLoadResult,
+                                  world::SectorCoordHash> pendingAsyncLoads;
 
         // Physics state snapshots for velocity/sleep preservation across sector streaming
         struct PhysicsSnapshot

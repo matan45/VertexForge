@@ -168,6 +168,23 @@ namespace events::world
         std::string_view getName() const override { return "GetLoadedSectorCoords"; }
     };
 
+    // Per-sector content readiness: which parts of a Loading sector are still in
+    // flight. A sector is fully ready when state == Loaded and both flags are false.
+    struct SectorReadiness
+    {
+        ::world::SectorState state = ::world::SectorState::Unloaded;
+        bool fileLoadPending = false;    // .vfsector async read in flight
+        bool entitySpawnsPending = false; // deserialized entities awaiting frame-budgeted spawn
+        uint32_t entityCount = 0;
+    };
+
+    struct GetSectorReadinessQuery : IQuery<SectorReadiness>
+    {
+        ::world::SectorCoord coord;
+
+        std::string_view getName() const override { return "GetSectorReadiness"; }
+    };
+
     struct SetSectorDebugDrawCommand : ICommand<>
     {
         bool enabled = false;

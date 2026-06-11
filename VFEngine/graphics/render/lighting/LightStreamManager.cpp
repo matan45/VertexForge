@@ -1,6 +1,7 @@
 #include "LightStreamManager.hpp"
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "streaming/StreamingPriority.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <glm/glm.hpp>
@@ -270,10 +271,10 @@ namespace render::lighting
                         }
                     }
                     // Static lights get wider hysteresis (harder to deactivate)
-                    float margin = entry.isStatic
+                    streaming::PriorityHysteresis hysteresis{entry.isStatic
                         ? config.hysteresisMargin * config.staticHysteresisMultiplier
-                        : config.hysteresisMargin;
-                    if (entry.priority >= cutoffPriority - margin)
+                        : config.hysteresisMargin};
+                    if (hysteresis.shouldKeepActive(entry.priority, cutoffPriority))
                     {
                         shouldDeactivate = false;
                     }
@@ -363,17 +364,13 @@ namespace render::lighting
 
     float LightStreamManager::computePriority(const LightStreamEntry& entry) const
     {
-        float distanceFactor = 1.0f / (1.0f + entry.distance * 0.01f);
-        float intensityFactor = entry.intensity;
-        float radiusFactor = entry.radius;
-        float shadowFactor = entry.castsShadow ? 1.0f : 0.0f;
-        float staticFactor = entry.isStatic ? config.staticBonus : 0.0f;
-
-        return distanceFactor * config.distanceWeight +
-               intensityFactor * config.intensityWeight +
-               radiusFactor * config.radiusWeight +
-               shadowFactor * config.shadowWeight +
-               staticFactor;
+        return streaming::WeightedPriority()
+            .addInverseDistance(entry.distance, config.distanceWeight, 0.01f)
+            .add(entry.intensity, config.intensityWeight)
+            .add(entry.radius, config.radiusWeight)
+            .add(entry.castsShadow ? 1.0f : 0.0f, config.shadowWeight)
+            .addIf(entry.isStatic, config.staticBonus)
+            .value();
     }
 
     float LightStreamManager::getShadowPriority(uint32_t entityId) const

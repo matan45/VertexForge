@@ -35,6 +35,13 @@ namespace events::terrain
         std::string_view getName() const override { return "GetActiveTerrainTileSize"; }
     };
 
+    // Number of sector-driven terrain tile load/unload actions still queued
+    // (world mode); 0 means terrain has caught up with sector streaming
+    struct GetPendingSectorTileActionCountQuery : IQuery<uint32_t>
+    {
+        std::string_view getName() const override { return "GetPendingSectorTileActionCount"; }
+    };
+
     struct HasTerrainComponentQuery : IQuery<bool>
     {
         services::EntityHandle entity;

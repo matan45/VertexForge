@@ -111,6 +111,12 @@ namespace services
                 return terrainGrids.begin()->second->getTileConfig().worldTileSize;
             });
 
+        dispatcher.registerQueryHandler<events::terrain::GetPendingSectorTileActionCountQuery>(
+            [this](const events::terrain::GetPendingSectorTileActionCountQuery&) -> uint32_t
+            {
+                return static_cast<uint32_t>(pendingSectorTileActions.size());
+            });
+
         dispatcher.registerQueryHandler<events::terrain::HasTerrainComponentQuery>(
             [this](const events::terrain::HasTerrainComponentQuery& query)
             {

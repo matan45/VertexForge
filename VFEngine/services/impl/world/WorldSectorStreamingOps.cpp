@@ -304,51 +304,32 @@ namespace services
 
         std::string filePath = sector->filePath;
 
-        auto future = std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
-            AsyncSectorLoadResult result;
-            result.success = world::WorldSectorSerialization::loadSector(filePath, result.entityData);
-            return result;
-        });
-
-        PendingAsyncSectorLoad pending;
-        pending.coord = coord;
-        pending.future = std::move(future);
-        pending.cancelled = false;
-        pendingAsyncLoads.emplace(coord, std::move(pending));
+        pendingAsyncLoads.launch(coord,
+            std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
+                AsyncSectorLoadResult result;
+                result.success = world::WorldSectorSerialization::loadSector(filePath, result.entityData);
+                return result;
+            }));
     }
 
     void WorldSectorServiceImpl::pollAsyncSectorLoads()
     {
-        auto it = pendingAsyncLoads.begin();
-        while (it != pendingAsyncLoads.end())
+        pendingAsyncLoads.poll([this](const world::SectorCoord& coord,
+                                      AsyncSectorLoadResult result)
         {
-            if (it->second.future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
-            {
-                ++it;
-                continue;
-            }
-
-            auto result = it->second.future.get();
-            auto coord = it->second.coord;
-            bool wasCancelled = it->second.cancelled;
-            it = pendingAsyncLoads.erase(it);
-
-            if (wasCancelled)
-                continue;
-
             auto* sector = sectorManager.getSector(coord);
             if (!sector)
-                continue;
+                return;
 
             if (!result.success)
             {
                 sector->state = world::SectorState::Unloaded;
                 vfLogError("Async sector load failed for ({},{})", coord.x, coord.z);
-                continue;
+                return;
             }
 
             finalizeSectorLoad(coord, result.entityData);
-        }
+        });
     }
 
     void WorldSectorServiceImpl::finalizeSectorLoad(const world::SectorCoord& coord,
@@ -383,14 +364,9 @@ namespace services
         if (!sector)
             return;
 
-        // Cancel any in-flight async file I/O for this sector.
-        // The background thread still runs to completion (std::async has no cooperative
-        // cancellation), but pollAsyncSectorLoads() will discard the result.
-        auto asyncIt = pendingAsyncLoads.find(coord);
-        if (asyncIt != pendingAsyncLoads.end())
-        {
-            asyncIt->second.cancelled = true;
-        }
+        // Cancel any in-flight async file I/O for this sector — the result is
+        // discarded on the next poll (std::async has no cooperative cancellation)
+        pendingAsyncLoads.cancel(coord);
 
         sector->state = world::SectorState::Unloading;
 

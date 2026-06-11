@@ -501,6 +501,22 @@ namespace services
                 return result;
             });
 
+        dispatcher.registerQueryHandler<::events::world::GetSectorReadinessQuery>(
+            [this](const ::events::world::GetSectorReadinessQuery& q)
+                -> ::events::world::SectorReadiness
+            {
+                ::events::world::SectorReadiness readiness;
+                const auto* sector = sectorManager.getSector(q.coord);
+                if (!sector)
+                    return readiness;
+
+                readiness.state = sector->state;
+                readiness.fileLoadPending = pendingAsyncLoads.contains(q.coord);
+                readiness.entitySpawnsPending = entityLoader.hasPendingLoadsForSector(q.coord);
+                readiness.entityCount = static_cast<uint32_t>(sector->entityUUIDs.size());
+                return readiness;
+            });
+
         dispatcher.registerCommandHandler<::events::world::SetSectorDebugDrawCommand>(
             [this](const ::events::world::SetSectorDebugDrawCommand& cmd)
             {

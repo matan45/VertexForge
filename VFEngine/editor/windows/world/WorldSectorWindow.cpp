@@ -128,6 +128,11 @@ namespace windows
     {
         ImGui::Text("Sectors: %d total | %d loaded | %d unloaded | %d loading",
                      totalSectors, loadedSectors, unloadedSectors, loadingSectors);
+
+        uint32_t terrainPending = events::EventDispatcher::instance().query(
+            events::terrain::GetPendingSectorTileActionCountQuery{});
+        if (terrainPending > 0)
+            ImGui::Text("Terrain tile actions pending: %u", terrainPending);
     }
 
     void WorldSectorWindow::drawSectorGrid()
@@ -227,10 +232,25 @@ namespace windows
                     else if (info.state == world::SectorState::Loading) stateStr = "Loading";
                     else if (info.state == world::SectorState::Unloading) stateStr = "Unloading";
 
+                    events::world::GetSectorReadinessQuery readinessQuery;
+                    readinessQuery.coord = info.coord;
+                    auto readiness = dispatcher.query(readinessQuery);
+
+                    char pendingStr[64] = "ready";
+                    if (readiness.fileLoadPending || readiness.entitySpawnsPending)
+                    {
+                        snprintf(pendingStr, sizeof(pendingStr), "%s%s%s",
+                                 readiness.fileLoadPending ? "file I/O" : "",
+                                 (readiness.fileLoadPending && readiness.entitySpawnsPending) ? " + " : "",
+                                 readiness.entitySpawnsPending ? "entity spawns" : "");
+                    }
+
                     ImGui::SetTooltip("Sector (%d, %d) - %s\n"
+                                      "Entities: %u | Pending: %s\n"
                                       "Terrain tiles: (%d,%d) to (%d,%d)\n"
                                       "Click to %s",
                                       x, z, stateStr,
+                                      readiness.entityCount, pendingStr,
                                       x * tps, z * tps,
                                       (x + 1) * tps - 1, (z + 1) * tps - 1,
                                       info.state == world::SectorState::Loaded ? "unload" : "load");
