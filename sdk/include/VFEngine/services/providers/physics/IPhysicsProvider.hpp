@@ -184,6 +184,15 @@ namespace services
                                               const glm::vec3& impulse) = 0;
         virtual void updatePhysicsAnimations(float deltaTime) = 0;
 
+        // Powered ragdoll
+        virtual void setPhysicsAnimationMode(EntityHandle entity, types::PhysicsAnimationMode mode) = 0;
+        virtual void setBoneMotorStrength(EntityHandle entity, const std::string& boneName,
+                                           float strength) = 0;
+        virtual void setGlobalMotorStrength(EntityHandle entity, float strength) = 0;
+        virtual void applyHitReaction(EntityHandle entity, const std::string& boneName,
+                                       const glm::vec3& impulse, float recoverTime) = 0;
+        virtual bool isRagdollSettled(EntityHandle entity) const = 0;
+
         // Character controller (CharacterVirtual)
         struct CharacterControllerInfo
         {

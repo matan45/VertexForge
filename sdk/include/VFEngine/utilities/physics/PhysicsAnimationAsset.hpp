@@ -7,7 +7,7 @@
 
 namespace physics
 {
-    inline constexpr const char* PHYSICS_ANIM_FORMAT_VERSION = "1.0";
+    inline constexpr const char* PHYSICS_ANIM_FORMAT_VERSION = "1.1";
 
     class PhysicsAnimationAsset
     {
@@ -15,10 +15,10 @@ namespace physics
         static std::optional<types::PhysicsAnimationConfig> load(std::string_view path);
         static bool save(std::string_view path, const types::PhysicsAnimationConfig& config);
 
-    private:
         static nlohmann::json serializeConfig(const types::PhysicsAnimationConfig& config);
         static types::PhysicsAnimationConfig deserializeConfig(const nlohmann::json& j);
 
+    private:
         static std::string colliderShapeToString(types::ColliderShape shape);
         static types::ColliderShape stringToColliderShape(const std::string& str);
         static std::string modeToString(types::PhysicsAnimationMode mode);
