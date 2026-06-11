@@ -495,6 +495,9 @@ namespace render::mesh
         info.depthAttachment = core::depthClear(depthView);
 
         core::beginDynamicRendering(commandBuffer, info);
+        // Non-graph preview/classic targets are single-sample; the mesh pipeline
+        // has dynamic rasterization samples enabled, so set it before drawing.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
     }
 
     void StaticMeshPipeline::beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
