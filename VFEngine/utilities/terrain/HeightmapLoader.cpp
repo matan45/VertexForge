@@ -138,9 +138,34 @@ namespace terrain
         // Convert to grayscale using luminance formula
         // Uncompressed vfImage is BGRA, BC7-decoded is RGBA
         bool isBGRA = (compressionFormat == 0);
+
+        // 16-bit heightmaps imported from RAW16/PNG16 pack the height as
+        // RGB = high byte, A = low byte. A plain image has a constant 255
+        // alpha plane, so a varying alpha selects the 16-bit decode.
+        bool use16Bit = false;
+        if (isBGRA)
+        {
+            for (size_t i = 0; i < pixelCount; ++i)
+            {
+                if (pixelData[i * 4 + 3] != 255)
+                {
+                    use16Bit = true;
+                    break;
+                }
+            }
+        }
+
         for (size_t i = 0; i < pixelCount; ++i)
         {
             size_t idx = i * 4;
+            if (use16Bit)
+            {
+                uint32_t high = pixelData[idx + 2]; // R (BGRA)
+                uint32_t low = pixelData[idx + 3];  // A
+                result->heights[i] = static_cast<float>(high * 256 + low) / 65535.0f;
+                continue;
+            }
+
             float r, g, b;
             if (isBGRA)
             {

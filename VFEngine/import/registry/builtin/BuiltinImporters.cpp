@@ -5,6 +5,7 @@
 #include "AudioImporter.hpp"
 #include "MeshImporter.hpp"
 #include "FontImporter.hpp"
+#include "HeightmapImporter.hpp"
 #include <mutex>
 
 namespace import::builtin
@@ -22,6 +23,7 @@ namespace import::builtin
             registry.registerImporter(std::make_unique<AudioImporter>());
             registry.registerImporter(std::make_unique<MeshImporter>());
             registry.registerImporter(std::make_unique<FontImporter>());
+            registry.registerImporter(std::make_unique<HeightmapImporter>());
         });
     }
 }
