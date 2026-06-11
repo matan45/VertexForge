@@ -149,6 +149,10 @@ namespace editor::graph {
             case material::NodeType::Vec3ToVec4:     return "Vec3 To Vec4";
             case material::NodeType::Vec4ToVec2:     return "Vec4 To Vec2";
             case material::NodeType::Vec4ToVec3:     return "Vec4 To Vec3";
+            case material::NodeType::WorldPosition:  return "World Position";
+            case material::NodeType::Panner:         return "Panner";
+            case material::NodeType::UVTransform:    return "UV Transform";
+            case material::NodeType::Remap:          return "Remap";
             default:                                 return "Unknown";
         }
     }
