@@ -2,9 +2,11 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 #include "events/ai/BehaviorTreeEvents.hpp"
+#include "events/editor/EditorModeEvents.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <array>
+#include <algorithm>
 
 using namespace behaviortree;
 
@@ -19,6 +21,10 @@ namespace editor::windows
 
     BehaviorTreeEditorWindow::~BehaviorTreeEditorWindow()
     {
+        if (debugActive)
+        {
+            stopDebugging();
+        }
         graphEditor.cleanUp();
     }
 
@@ -99,6 +105,7 @@ namespace editor::windows
         }
 
         drawToolbar();
+        updateDebugState();
 
         float rightPanelWidth = 300.0f;
         ImVec2 contentRegion = ImGui::GetContentRegionAvail();
@@ -155,6 +162,8 @@ namespace editor::windows
                 ImGui::EndMenu();
             }
 
+            drawDebugMenu();
+
             ImGui::EndMenuBar();
         }
 
@@ -162,6 +171,110 @@ namespace editor::windows
         {
             saveTree();
         }
+    }
+
+    namespace
+    {
+        std::string normalizePath(std::string path)
+        {
+            std::replace(path.begin(), path.end(), '\\', '/');
+            return path;
+        }
+    }
+
+    void BehaviorTreeEditorWindow::drawDebugMenu()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
+
+        if (ImGui::BeginMenu("Debug"))
+        {
+            if (!isPlayMode)
+            {
+                ImGui::TextDisabled("Enter play mode to debug");
+            }
+            else
+            {
+                if (ImGui::MenuItem("Off", nullptr, !debugActive))
+                {
+                    stopDebugging();
+                }
+
+                auto targets = dispatcher.query(events::ai::GetAttachedBehaviorTreesQuery{});
+                std::string thisPath = normalizePath(treePath);
+                bool anyMatch = false;
+
+                for (const auto& target : targets)
+                {
+                    if (normalizePath(target.treePath) != thisPath) continue;
+                    anyMatch = true;
+
+                    std::string label = (target.name.empty() ? "Entity" : target.name) +
+                                        " (" + std::to_string(target.entity.id) + ")";
+                    bool selected = debugActive && debugTarget.id == target.entity.id;
+                    if (ImGui::MenuItem(label.c_str(), nullptr, selected))
+                    {
+                        startDebugging(target.entity);
+                    }
+                }
+
+                if (!anyMatch)
+                {
+                    ImGui::TextDisabled("No entities running this tree");
+                }
+            }
+            ImGui::EndMenu();
+        }
+
+        if (debugActive)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "DEBUGGING");
+        }
+    }
+
+    void BehaviorTreeEditorWindow::updateDebugState()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (debugActive && !dispatcher.query(events::editor::IsPlayModeQuery{}))
+        {
+            stopDebugging();
+        }
+
+        if (debugActive)
+        {
+            events::ai::GetTreeRuntimeSnapshotQuery snapshotQuery;
+            snapshotQuery.entity = debugTarget;
+            debugSnapshot = dispatcher.query(snapshotQuery);
+            graphEditor.setLiveStatus(debugSnapshot.valid ? &debugSnapshot.nodeStatuses : nullptr);
+        }
+        else
+        {
+            graphEditor.setLiveStatus(nullptr);
+        }
+    }
+
+    void BehaviorTreeEditorWindow::startDebugging(services::EntityHandle entity)
+    {
+        debugActive = true;
+        debugTarget = entity;
+        debugSnapshot = {};
+
+        events::ai::SetTreeDebugTargetCommand cmd;
+        cmd.entity = entity;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void BehaviorTreeEditorWindow::stopDebugging()
+    {
+        debugActive = false;
+        debugTarget = services::EntityHandle::invalid();
+        debugSnapshot = {};
+        graphEditor.setLiveStatus(nullptr);
+
+        events::ai::SetTreeDebugTargetCommand cmd;
+        cmd.entity = services::EntityHandle::invalid();
+        events::EventDispatcher::instance().execute(cmd);
     }
 
     void BehaviorTreeEditorWindow::drawGraphPanel()
@@ -179,9 +292,91 @@ namespace editor::windows
         propertyPanel.draw(selectedNode, &treeData->graph);
     }
 
+    void BehaviorTreeEditorWindow::drawLiveBlackboardPanel()
+    {
+        ImGui::TextDisabled("Live values - tick %llu",
+                            static_cast<unsigned long long>(debugSnapshot.tickIndex));
+        ImGui::Separator();
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        for (auto& [key, value] : debugSnapshot.blackboard)
+        {
+            ImGui::PushID(key.c_str());
+
+            bool changed = false;
+            behaviortree::BlackboardValue newValue = value;
+
+            if (std::holds_alternative<float>(value))
+            {
+                float v = std::get<float>(value);
+                ImGui::SetNextItemWidth(130.0f);
+                if (ImGui::DragFloat(key.c_str(), &v, 0.1f)) { newValue = v; changed = true; }
+            }
+            else if (std::holds_alternative<int32_t>(value))
+            {
+                int v = std::get<int32_t>(value);
+                ImGui::SetNextItemWidth(130.0f);
+                if (ImGui::DragInt(key.c_str(), &v)) { newValue = static_cast<int32_t>(v); changed = true; }
+            }
+            else if (std::holds_alternative<bool>(value))
+            {
+                bool v = std::get<bool>(value);
+                if (ImGui::Checkbox(key.c_str(), &v)) { newValue = v; changed = true; }
+            }
+            else if (std::holds_alternative<std::string>(value))
+            {
+                char buf[128];
+                strncpy(buf, std::get<std::string>(value).c_str(), sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
+                ImGui::SetNextItemWidth(130.0f);
+                if (ImGui::InputText(key.c_str(), buf, sizeof(buf),
+                                     ImGuiInputTextFlags_EnterReturnsTrue))
+                {
+                    newValue = std::string(buf);
+                    changed = true;
+                }
+            }
+            else if (std::holds_alternative<glm::vec3>(value))
+            {
+                glm::vec3 v = std::get<glm::vec3>(value);
+                ImGui::SetNextItemWidth(180.0f);
+                if (ImGui::DragFloat3(key.c_str(), &v.x, 0.1f)) { newValue = v; changed = true; }
+            }
+            else if (std::holds_alternative<services::EntityHandle>(value))
+            {
+                auto handle = std::get<services::EntityHandle>(value);
+                ImGui::Text("%s: entity %llu", key.c_str(),
+                            static_cast<unsigned long long>(handle.id));
+            }
+
+            if (changed)
+            {
+                events::ai::SetBlackboardValueCommand cmd;
+                cmd.entity = debugTarget;
+                cmd.key = key;
+                cmd.value = newValue;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::PopID();
+        }
+
+        if (debugSnapshot.blackboard.empty())
+        {
+            ImGui::TextDisabled("(blackboard is empty)");
+        }
+    }
+
     void BehaviorTreeEditorWindow::drawBlackboardPanel()
     {
         if (!treeData) return;
+
+        if (debugActive && debugSnapshot.valid)
+        {
+            drawLiveBlackboardPanel();
+            return;
+        }
 
         auto& keys = treeData->graph.blackboardKeys;
 

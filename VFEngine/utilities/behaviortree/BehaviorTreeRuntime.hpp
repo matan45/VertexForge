@@ -81,6 +81,7 @@ namespace behaviortree
         const BehaviorTreeData& getTreeData() const { return *treeData; }
         bool hasTreeData() const { return treeData != nullptr; }
         services::EntityHandle getOwnerEntity() const { return ownerEntity; }
+        const std::unordered_map<uint32_t, BTNodeRuntime>& getNodeStates() const { return nodeStates; }
 
     private:
         BTNodeStatus tickNode(uint32_t nodeId, float dt, IBTTaskExecutor* executor);

@@ -23,6 +23,11 @@ namespace editor::windows
         editor::graph::BTGraphEditor graphEditor;
         BTPropertyPanel propertyPanel;
 
+        // Live debugging of a running tree instance (play mode only)
+        bool debugActive = false;
+        services::EntityHandle debugTarget;
+        behaviortree::BTRuntimeSnapshot debugSnapshot;
+
     public:
         explicit BehaviorTreeEditorWindow(const std::string& path);
         ~BehaviorTreeEditorWindow() override;
@@ -37,9 +42,14 @@ namespace editor::windows
         void loadTree();
         void saveTree();
         void drawToolbar();
+        void drawDebugMenu();
         void drawGraphPanel();
         void drawPropertyPanel();
         void drawBlackboardPanel();
+        void drawLiveBlackboardPanel();
         void onGraphChanged();
+        void updateDebugState();
+        void startDebugging(services::EntityHandle entity);
+        void stopDebugging();
     };
 }

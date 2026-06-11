@@ -8,6 +8,7 @@
 #include <optional>
 #include <mutex>
 #include <vector>
+#include <atomic>
 
 namespace services
 {
@@ -41,6 +42,9 @@ namespace core
         behaviortree::BlackboardValue getBlackboardValue(services::EntityHandle entity,
                                                           const std::string& key) override;
         bool hasBlackboardKey(services::EntityHandle entity, const std::string& key) const override;
+
+        void setDebugTarget(services::EntityHandle entity) override;
+        behaviortree::BTRuntimeSnapshot getRuntimeSnapshot(services::EntityHandle entity) const override;
 
         // === IBTTaskExecutor ===
         behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle entity,
@@ -119,8 +123,16 @@ namespace core
         std::vector<std::string> pendingReloads;
         std::mutex reloadMutex;
 
+        // Debugger: snapshot of one entity's runtime, written after its tick (worker task)
+        // and read by the editor (main thread) — always copied under snapshotMutex
+        std::atomic<uint64_t> debugTargetEntityId{0};
+        mutable std::mutex snapshotMutex;
+        behaviortree::BTRuntimeSnapshot debugSnapshot;
+        uint64_t tickCounter = 0;
+
         std::shared_ptr<const behaviortree::BehaviorTreeData> getOrLoadTree(const std::string& treePath);
         void applyPendingReloads();
+        void captureDebugSnapshot(const behaviortree::BehaviorTreeRuntime& runtime);
         void cleanupScriptInstances(uint64_t entityId, const behaviortree::BehaviorTreeData& treeData);
         void cancelPendingEQSQueriesForEntity(uint64_t entityId);
     };

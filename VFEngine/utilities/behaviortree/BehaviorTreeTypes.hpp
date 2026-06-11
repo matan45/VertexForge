@@ -143,6 +143,16 @@ namespace behaviortree
         BTGraph graph;
     };
 
+    // Point-in-time view of a live runtime for the editor debugger.
+    // Copied under a lock because trees tick on a worker task while ImGui reads on the main thread.
+    struct BTRuntimeSnapshot
+    {
+        bool valid = false;
+        uint64_t tickIndex = 0;
+        std::unordered_map<uint32_t, BTNodeStatus> nodeStatuses;
+        std::vector<std::pair<std::string, BlackboardValue>> blackboard;
+    };
+
     bool isCompositeNode(BTNodeType type);
     bool isDecoratorNode(BTNodeType type);
     bool isTaskNode(BTNodeType type);

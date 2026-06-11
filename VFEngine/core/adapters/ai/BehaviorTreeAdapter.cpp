@@ -8,6 +8,7 @@
 #include "../../../services/events/scene/EntityTransformEvents.hpp"
 #include "../../../services/events/physics/PhysicsEvents.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
 
 namespace core
 {
@@ -232,14 +233,39 @@ namespace core
         }
     }
 
+    void BehaviorTreeAdapter::captureDebugSnapshot(const BehaviorTreeRuntime& runtime)
+    {
+        BTRuntimeSnapshot snapshot;
+        snapshot.valid = true;
+        snapshot.tickIndex = tickCounter;
+
+        const auto& nodeStates = runtime.getNodeStates();
+        snapshot.nodeStatuses.reserve(nodeStates.size());
+        for (const auto& [nodeId, state] : nodeStates)
+            snapshot.nodeStatuses[nodeId] = state.lastStatus;
+
+        const auto& blackboardValues = runtime.getBlackboard().getAll();
+        snapshot.blackboard.reserve(blackboardValues.size());
+        for (const auto& [key, value] : blackboardValues)
+            snapshot.blackboard.emplace_back(key, value);
+        std::sort(snapshot.blackboard.begin(), snapshot.blackboard.end(),
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
+
+        std::lock_guard<std::mutex> lock(snapshotMutex);
+        debugSnapshot = std::move(snapshot);
+    }
+
     void BehaviorTreeAdapter::updateAll(float deltaTime)
     {
         applyPendingReloads();
+        ++tickCounter;
 
         std::vector<uint64_t> entityIds;
         entityIds.reserve(runtimes.size());
         for (const auto& [entityId, _] : runtimes)
             entityIds.push_back(entityId);
+
+        uint64_t debugId = debugTargetEntityId.load(std::memory_order_relaxed);
 
         for (uint64_t entityId : entityIds)
         {
@@ -250,7 +276,27 @@ namespace core
             if (!instance.enabled || !instance.runtime) continue;
 
             instance.lastTickStatus = instance.runtime->tick(deltaTime, this);
+
+            if (entityId == debugId)
+                captureDebugSnapshot(*instance.runtime);
         }
+    }
+
+    void BehaviorTreeAdapter::setDebugTarget(services::EntityHandle entity)
+    {
+        debugTargetEntityId.store(entity.isValid() ? entity.id : 0);
+
+        std::lock_guard<std::mutex> lock(snapshotMutex);
+        debugSnapshot = {};
+    }
+
+    BTRuntimeSnapshot BehaviorTreeAdapter::getRuntimeSnapshot(services::EntityHandle entity) const
+    {
+        if (!entity.isValid() || entity.id != debugTargetEntityId.load(std::memory_order_relaxed))
+            return {};
+
+        std::lock_guard<std::mutex> lock(snapshotMutex);
+        return debugSnapshot;
     }
 
     void BehaviorTreeAdapter::stopAll()
@@ -262,6 +308,8 @@ namespace core
         }
         // Play session over: drop cached assets so the next session reloads from disk
         assetCache.clear();
+
+        setDebugTarget(services::EntityHandle::invalid());
     }
 
     void BehaviorTreeAdapter::setBlackboardValue(services::EntityHandle entity, const std::string& key,
