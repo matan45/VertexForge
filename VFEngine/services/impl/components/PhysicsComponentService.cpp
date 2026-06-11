@@ -300,10 +300,7 @@ namespace services
         const auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
         PhysicsAnimationComponentData data;
         data.physicsAnimationRef = comp.physicsAnimationRef;
-        data.defaultMode = comp.config.defaultMode;
-        data.collisionLayer = comp.config.collisionLayer;
-        data.boneBodyMappings = comp.config.boneBodyMappings;
-        data.jointLimits = comp.config.jointLimits;
+        data.config = comp.config;
         return data;
     }
 
@@ -323,10 +320,7 @@ namespace services
 
         auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
         comp.physicsAnimationRef = data.physicsAnimationRef;
-        comp.config.defaultMode = data.defaultMode;
-        comp.config.collisionLayer = data.collisionLayer;
-        comp.config.boneBodyMappings = data.boneBodyMappings;
-        comp.config.jointLimits = data.jointLimits;
+        comp.config = data.config;
         return true;
     }
 

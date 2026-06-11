@@ -256,10 +256,7 @@ namespace services
     struct PhysicsAnimationComponentData
     {
         asset::AssetRef physicsAnimationRef;
-        types::PhysicsAnimationMode defaultMode = types::PhysicsAnimationMode::Animated;
-        uint8_t collisionLayer = 1;
-        std::vector<types::BoneBodyMapping> boneBodyMappings;
-        std::vector<types::JointConstraintLimits> jointLimits;
+        types::PhysicsAnimationConfig config;
     };
 
     struct VFXData

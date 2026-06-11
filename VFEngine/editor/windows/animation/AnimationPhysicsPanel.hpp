@@ -21,12 +21,17 @@ namespace windows::animation
     private:
         void drawFileBar(types::PhysicsAnimationConfig& config, std::string& configPath);
         bool drawGlobalConfig(types::PhysicsAnimationConfig& config, bool& showColliderOverlay);
+        bool drawMotorConfig(types::PhysicsAnimationConfig& config);
+        bool drawHitReactionConfig(types::PhysicsAnimationConfig& config);
         bool drawSelectedBoneMapping(types::PhysicsAnimationConfig& config,
                                      int selectedChannel,
                                      const std::vector<services::EvaluatedBoneInfo>& evaluatedBones);
         bool drawSelectedBoneJointLimits(types::PhysicsAnimationConfig& config,
                                          int selectedChannel,
                                          const std::vector<services::EvaluatedBoneInfo>& evaluatedBones);
+        bool drawSelectedBoneMotor(types::PhysicsAnimationConfig& config,
+                                   int selectedChannel,
+                                   const std::vector<services::EvaluatedBoneInfo>& evaluatedBones);
         bool drawMappingFields(types::BoneBodyMapping& mapping);
         bool drawJointLimitFields(types::JointConstraintLimits& limits);
         bool drawLayerCombo(const char* id, uint8_t& layerValue);
