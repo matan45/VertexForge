@@ -1,0 +1,14 @@
+{
+    "apiVersion": 12,
+    "author": "VertexForge",
+    "capabilities": [
+        "import"
+    ],
+    "dependencies": [],
+    "description": "Imports Photoshop .psd files as .vfImage textures (sample asset importer)",
+    "enabled": true,
+    "library": "PSDImport.dll",
+    "loadOrder": 100,
+    "name": "PSDImport",
+    "version": "1.0.0"
+}
