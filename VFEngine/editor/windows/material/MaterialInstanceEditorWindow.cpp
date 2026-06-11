@@ -70,6 +70,7 @@ namespace windows
             if (parentMaterial)
             {
                 parentPBR = material::MaterialGraphHelper::extractPBRFromGraph(*parentMaterial);
+                parentParamSet = material::collectParameters(parentMaterial->graph);
             }
         }
     }
@@ -184,6 +185,8 @@ namespace windows
         ImGui::Separator();
         drawScalarOverrides();
         ImGui::Separator();
+        drawParameterOverrides();
+        ImGui::Separator();
         drawTextureOverrides();
         ImGui::EndChild();
 
@@ -264,6 +267,203 @@ namespace windows
         changed |= sliderOverride("##EmissionOverride", emissionOverrideEnabled, "Emission", tempEmission, 0.0f, 10.0f);
 
         if (changed) { isDirty = true; updatePreviewMaterial(); }
+    }
+
+    void MaterialInstanceEditorWindow::drawParameterOverrides()
+    {
+        ImGui::Text("Parameter Overrides");
+        ImGui::Spacing();
+
+        if (!instanceData || !parentMaterial) return;
+
+        if (parentParamSet.empty())
+        {
+            ImGui::TextDisabled("Parent exposes no parameters");
+            return;
+        }
+
+        bool changed = false;
+
+        for (const auto& desc : parentParamSet.values)
+        {
+            ImGui::PushID(desc.name.c_str());
+
+            bool overridden = instanceData->parameterOverrides.contains(desc.name);
+            if (ImGui::Checkbox("##ParamOverride", &overridden))
+            {
+                if (overridden)
+                {
+                    instanceData->parameterOverrides[desc.name] = desc.defaultValue;
+                }
+                else
+                {
+                    instanceData->parameterOverrides.erase(desc.name);
+                }
+                changed = true;
+            }
+            ImGui::SameLine();
+
+            material::ParameterValue value = overridden
+                ? instanceData->parameterOverrides[desc.name]
+                : desc.defaultValue;
+
+            ImGui::BeginDisabled(!overridden);
+            bool valueChanged = false;
+            switch (desc.type)
+            {
+            case material::ParameterType::Scalar:
+                if (float* v = std::get_if<float>(&value))
+                {
+                    valueChanged = ImGui::SliderFloat(desc.name.c_str(), v, desc.min, desc.max);
+                }
+                break;
+            case material::ParameterType::Vec2:
+                if (glm::vec2* v = std::get_if<glm::vec2>(&value))
+                {
+                    valueChanged = ImGui::DragFloat2(desc.name.c_str(), &v->x, 0.01f);
+                }
+                break;
+            case material::ParameterType::Vec3:
+                if (glm::vec3* v = std::get_if<glm::vec3>(&value))
+                {
+                    valueChanged = ImGui::DragFloat3(desc.name.c_str(), &v->x, 0.01f);
+                }
+                break;
+            case material::ParameterType::Vec4:
+            case material::ParameterType::Color:
+                if (glm::vec4* v = std::get_if<glm::vec4>(&value))
+                {
+                    valueChanged = ImGui::ColorEdit4(desc.name.c_str(), &v->x);
+                }
+                break;
+            }
+            ImGui::EndDisabled();
+
+            if (valueChanged && overridden)
+            {
+                instanceData->parameterOverrides[desc.name] = value;
+                changed = true;
+            }
+
+            if (material::isParameterWorldVisible(parentMaterial->graph, desc.sourceNodeId))
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "[world]");
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Visible in the scene view at runtime\n"
+                                      "(folds into extracted PBR values)");
+                }
+            }
+            else
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled("[preview]");
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Visible in the material preview shader only");
+                }
+            }
+
+            ImGui::PopID();
+        }
+
+        for (const auto& texDesc : parentParamSet.textures)
+        {
+            ImGui::PushID(texDesc.name.c_str());
+
+            bool overridden = instanceData->textureParameterOverrides.contains(texDesc.name);
+            if (ImGui::Checkbox("##TexParamOverride", &overridden))
+            {
+                if (!overridden)
+                {
+                    instanceData->textureParameterOverrides.erase(texDesc.name);
+                    changed = true;
+                }
+                else if (!texDesc.defaultTexturePath.empty())
+                {
+                    instanceData->textureParameterOverrides[texDesc.name] =
+                        asset::AssetRef::fromPath(texDesc.defaultTexturePath);
+                    changed = true;
+                }
+            }
+            ImGui::SameLine();
+
+            std::string currentPath = texDesc.defaultTexturePath;
+            auto refIt = instanceData->textureParameterOverrides.find(texDesc.name);
+            if (refIt != instanceData->textureParameterOverrides.end() && refIt->second.isValid())
+            {
+                currentPath = refIt->second.resolve();
+            }
+            fs::path texPath(currentPath);
+            std::string displayName = currentPath.empty() ? "(none)" : texPath.filename().string();
+
+            ImGui::Text("%s:", texDesc.name.c_str());
+            ImGui::SameLine();
+            if (overridden)
+            {
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "%s", displayName.c_str());
+            }
+            else
+            {
+                ImGui::TextDisabled("%s", displayName.c_str());
+            }
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton("..."))
+            {
+                nfd::FileDialog fileDialog;
+                std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                    {L"Textures", L"*.vfImage"}
+                };
+                std::string selectedPath = fileDialog.openFileDialog(filters);
+                if (!selectedPath.empty())
+                {
+                    instanceData->textureParameterOverrides[texDesc.name] =
+                        asset::AssetRef::fromPath(selectedPath);
+                    changed = true;
+                }
+            }
+
+            ImGui::PopID();
+        }
+
+        // Overrides whose name no longer matches a parent parameter (kept on disk so
+        // re-exposing the parameter recovers them)
+        bool staleHeaderShown = false;
+        for (auto it = instanceData->parameterOverrides.begin();
+             it != instanceData->parameterOverrides.end();)
+        {
+            if (parentParamSet.find(it->first))
+            {
+                ++it;
+                continue;
+            }
+            if (!staleHeaderShown)
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled("Stale overrides (parameter no longer exposed):");
+                staleHeaderShown = true;
+            }
+            ImGui::PushID(it->first.c_str());
+            ImGui::BulletText("%s", it->first.c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+            {
+                it = instanceData->parameterOverrides.erase(it);
+                changed = true;
+                ImGui::PopID();
+                continue;
+            }
+            ImGui::PopID();
+            ++it;
+        }
+
+        if (changed)
+        {
+            isDirty = true;
+            updatePreviewMaterial();
+        }
     }
 
     bool MaterialInstanceEditorWindow::drawTextureOverrideSlot(
@@ -467,18 +667,34 @@ namespace windows
         services::MaterialPreviewParams params;
         params.useCustomShader = false;
 
-        params.albedo = albedoOverrideEnabled ? tempAlbedo : parentPBR.albedo;
-        params.metallic = metallicOverrideEnabled ? tempMetallic : parentPBR.metallic;
-        params.roughness = roughnessOverrideEnabled ? tempRoughness : parentPBR.roughness;
-        params.ao = aoOverrideEnabled ? tempAo : parentPBR.ao;
-        params.emission = emissionOverrideEnabled ? tempEmission : parentPBR.emission;
-
-        auto getTexture = [this](material::TextureSlot slot, const std::string& parentPath) -> std::string
+        // Named parameter overrides apply during the parent graph walk; the fixed PBR
+        // override checkboxes below still win on top
+        material::ExtractedParentPBR basePBR = parentPBR;
+        if (parentMaterial && !instanceData->parameterOverrides.empty())
         {
-            if (instanceData->isTextureOverridden(slot))
+            auto resolved = material::resolveOverrides(parentParamSet, instanceData.get());
+            if (!resolved.empty())
             {
-                auto ref = instanceData->getTextureOverride(slot);
-                if (ref.isValid()) return ref.resolve();
+                basePBR = material::MaterialGraphHelper::extractPBRFromGraph(*parentMaterial, &resolved);
+            }
+        }
+
+        params.albedo = albedoOverrideEnabled ? tempAlbedo : basePBR.albedo;
+        params.metallic = metallicOverrideEnabled ? tempMetallic : basePBR.metallic;
+        params.roughness = roughnessOverrideEnabled ? tempRoughness : basePBR.roughness;
+        params.ao = aoOverrideEnabled ? tempAo : basePBR.ao;
+        params.emission = emissionOverrideEnabled ? tempEmission : basePBR.emission;
+
+        std::map<material::TextureSlot, asset::AssetRef> effectiveTextures =
+            material::resolveTextureOverrides(parentParamSet, *instanceData);
+
+        auto getTexture = [&effectiveTextures](material::TextureSlot slot,
+                                               const std::string& parentPath) -> std::string
+        {
+            auto it = effectiveTextures.find(slot);
+            if (it != effectiveTextures.end() && it->second.isValid())
+            {
+                return it->second.resolve();
             }
             return parentPath;
         };

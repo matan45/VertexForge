@@ -326,6 +326,126 @@ namespace material
         return code;
     }
 
+    std::optional<ParameterValue> overrideValueForNode(
+        const ShaderNode& node,
+        const std::map<std::string, ParameterValue>& overrides)
+    {
+        if (overrides.empty() || !isParameterNode(node)) return std::nullopt;
+
+        auto it = overrides.find(parameterNameOf(node));
+        if (it == overrides.end()) return std::nullopt;
+
+        if (isValueParameterType(node.type) &&
+            valueMatchesType(it->second, parameterTypeForNode(node)))
+        {
+            return it->second;
+        }
+        return std::nullopt;
+    }
+
+    std::map<std::string, ParameterValue> resolveOverrides(
+        const MaterialParameterSet& parentSet,
+        const MaterialInstanceData* instance,
+        const std::map<std::string, ParameterValue>* runtimeOverrides)
+    {
+        std::map<std::string, ParameterValue> resolved;
+
+        auto apply = [&](const std::map<std::string, ParameterValue>& source)
+        {
+            for (const auto& [name, value] : source)
+            {
+                const ParameterDesc* desc = parentSet.find(name);
+                if (!desc) continue; // stale name — kept on disk, skipped here
+                if (!valueMatchesType(value, desc->type)) continue;
+                resolved[name] = value;
+            }
+        };
+
+        if (instance)
+        {
+            apply(instance->parameterOverrides);
+        }
+        if (runtimeOverrides)
+        {
+            apply(*runtimeOverrides);
+        }
+        return resolved;
+    }
+
+    std::map<TextureSlot, asset::AssetRef> resolveTextureOverrides(
+        const MaterialParameterSet& parentSet,
+        const MaterialInstanceData& instance)
+    {
+        std::map<TextureSlot, asset::AssetRef> resolved;
+
+        for (const auto& [name, ref] : instance.textureParameterOverrides)
+        {
+            if (!ref.isValid()) continue;
+            const TextureParameterDesc* desc = parentSet.findTexture(name);
+            if (!desc) continue; // stale name
+            resolved[static_cast<TextureSlot>(desc->slot)] = ref;
+        }
+
+        // Legacy slot-addressed overrides win over name-addressed ones
+        for (const auto& [slot, ref] : instance.textureOverrides)
+        {
+            if (ref.isValid())
+            {
+                resolved[slot] = ref;
+            }
+        }
+        return resolved;
+    }
+
+    bool isParameterWorldVisible(const ShaderGraph& graph, uint32_t sourceNodeId)
+    {
+        const ShaderNode* outputNode = graph.findOutputNode();
+        if (!outputNode) return false;
+
+        // Direct connection to any PBROutput pin — getConnectedValue folds these
+        for (const auto& link : graph.links)
+        {
+            if (link.sourceNodeId == sourceNodeId && link.targetNodeId == outputNode->id)
+            {
+                return true;
+            }
+        }
+
+        // Reaches EmissionStrength through the CPU-evaluable chain (evaluateFloatValue)
+        auto isEvaluableNode = [](NodeType type)
+        {
+            return type == NodeType::Sin || type == NodeType::Cos ||
+                   type == NodeType::Add || type == NodeType::Multiply ||
+                   type == NodeType::ConstantScalar || type == NodeType::Time;
+        };
+
+        std::vector<uint32_t> frontier{sourceNodeId};
+        std::vector<uint32_t> visited;
+        size_t guard = 0;
+        while (!frontier.empty() && guard++ < graph.nodes.size() * 4 + 16)
+        {
+            uint32_t current = frontier.back();
+            frontier.pop_back();
+            if (std::find(visited.begin(), visited.end(), current) != visited.end()) continue;
+            visited.push_back(current);
+
+            for (const auto& link : graph.links)
+            {
+                if (link.sourceNodeId != current) continue;
+                if (link.targetNodeId == outputNode->id && link.targetPin == "EmissionStrength")
+                {
+                    return true;
+                }
+                const ShaderNode* target = graph.findNode(link.targetNodeId);
+                if (target && isEvaluableNode(target->type))
+                {
+                    frontier.push_back(link.targetNodeId);
+                }
+            }
+        }
+        return false;
+    }
+
     void writeStd140(const MaterialParameterSet& set,
                      const std::map<std::string, ParameterValue>& overrides,
                      std::span<std::byte> out)

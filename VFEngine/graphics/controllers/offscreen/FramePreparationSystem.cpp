@@ -251,7 +251,8 @@ namespace controllers::offscreen
                         if (instanceData && instanceData->parentMaterialRef.isValid())
                         {
                             info.parentMaterialPath = instanceData->parentMaterialRef.resolve();
-                            info.hasTextureOverrides = !instanceData->textureOverrides.empty();
+                            info.hasTextureOverrides = !instanceData->textureOverrides.empty() ||
+                                                       !instanceData->textureParameterOverrides.empty();
                         }
                         cacheIt = instanceBatchCache.emplace(batchMaterialPath, std::move(info)).first;
                     }

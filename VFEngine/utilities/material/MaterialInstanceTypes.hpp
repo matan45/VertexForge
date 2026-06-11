@@ -10,7 +10,7 @@
 
 namespace material
 {
-    constexpr const char* MATERIAL_INSTANCE_FORMAT_VERSION = "1.0";
+    constexpr const char* MATERIAL_INSTANCE_FORMAT_VERSION = "1.1";
 
     struct MaterialInstanceData
     {
@@ -21,7 +21,14 @@ namespace material
 
         std::map<TextureSlot, asset::AssetRef> textureOverrides;
 
-        // Overridden PBR scalar values
+        // Overrides of the parent's named graph parameters (format 1.1, see
+        // MaterialParameterSet.hpp). Keyed by parameter display name; entries whose
+        // name or type no longer matches the parent are kept on disk but skipped at
+        // resolution, so re-exposing the parameter recovers the value.
+        std::map<std::string, ParameterValue> parameterOverrides;
+        std::map<std::string, asset::AssetRef> textureParameterOverrides;
+
+        // Overridden fixed PBR scalar values (PBROutput inputs — predate named parameters)
         std::optional<glm::vec4> albedoOverride;
         std::optional<float> metallicOverride;
         std::optional<float> roughnessOverride;
@@ -56,6 +63,8 @@ namespace material
         bool hasOverrides() const
         {
             return !textureOverrides.empty() ||
+                !parameterOverrides.empty() ||
+                !textureParameterOverrides.empty() ||
                 albedoOverride.has_value() ||
                 metallicOverride.has_value() ||
                 roughnessOverride.has_value() ||
@@ -68,6 +77,8 @@ namespace material
         void clearAllOverrides()
         {
             textureOverrides.clear();
+            parameterOverrides.clear();
+            textureParameterOverrides.clear();
             albedoOverride.reset();
             metallicOverride.reset();
             roughnessOverride.reset();

@@ -43,9 +43,16 @@ namespace render::mesh
     class MaterialPBRExtractor
     {
     public:
-        static ExtractedPBRValues extractPBRFromMaterial(const material::MaterialData& matData);
+        using ParameterOverrides = std::map<std::string, material::ParameterValue>;
 
-        // Extract PBR from material instance (applies overrides to parent values)
+        // paramOverrides: resolved named-parameter values (instance/runtime) consulted
+        // when the graph walk hits an exposed parameter node — see MaterialParameterSet.
+        static ExtractedPBRValues extractPBRFromMaterial(
+            const material::MaterialData& matData,
+            const ParameterOverrides* paramOverrides = nullptr);
+
+        // Extract PBR from material instance (applies named parameter overrides during
+        // the graph walk, then fixed PBR scalar + texture slot overrides on top)
         static ExtractedPBRValues extractPBRFromInstance(
             const material::MaterialInstanceData& instance,
             const material::MaterialData& parentMaterial);
@@ -62,24 +69,28 @@ namespace render::mesh
         static float evaluateEmissionStrength(
             const material::ShaderGraph& graph,
             uint32_t outputNodeId,
-            float time);
+            float time,
+            const ParameterOverrides* paramOverrides = nullptr);
 
     private:
         static std::optional<float> evaluateFloatValue(
             const material::ShaderGraph& graph,
             uint32_t nodeId,
-            float time);
+            float time,
+            const ParameterOverrides* paramOverrides);
 
         static std::optional<float> getInputFloat(
             const material::ShaderGraph& graph,
             uint32_t nodeId,
             const std::string& pinName,
-            float time);
+            float time,
+            const ParameterOverrides* paramOverrides);
 
         static std::optional<material::NodeProperty> getConnectedValue(
             const material::ShaderGraph& graph,
             uint32_t targetNodeId,
-            const std::string& targetPinName);
+            const std::string& targetPinName,
+            const ParameterOverrides* paramOverrides);
 
         static std::string getConnectedTexturePath(
             const material::ShaderGraph& graph,

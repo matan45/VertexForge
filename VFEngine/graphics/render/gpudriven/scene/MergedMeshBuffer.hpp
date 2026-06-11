@@ -141,6 +141,9 @@ namespace render::gpudriven
 
         std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
         std::unordered_map<std::string, std::string> instanceToParentCache;
+        // Resolved named-parameter overrides per instance path, so Time-driven emission
+        // evaluation honors instance overrides (lifecycle mirrors instanceToParentCache)
+        std::unordered_map<std::string, mesh::MaterialPBRExtractor::ParameterOverrides> instanceOverrideCache;
         material::CallbackId materialChangeCallbackId{};
 
         // Persistent slot mode (play mode streaming)

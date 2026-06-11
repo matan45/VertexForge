@@ -47,12 +47,16 @@ namespace render::gpudriven
                 [this](const std::string& materialPath) {
                     pbrCache.erase(materialPath);
                     instanceToParentCache.erase(materialPath);
+                    instanceOverrideCache.erase(materialPath);
                     if (!material::isInstanceFile(materialPath))
                     {
                         std::erase_if(pbrCache, [](const auto& pair) {
                             return material::isInstanceFile(pair.first);
                         });
                         std::erase_if(instanceToParentCache, [](const auto& pair) {
+                            return material::isInstanceFile(pair.first);
+                        });
+                        std::erase_if(instanceOverrideCache, [](const auto& pair) {
                             return material::isInstanceFile(pair.first);
                         });
                     }
@@ -77,6 +81,7 @@ namespace render::gpudriven
 
         pbrCache.clear();
         instanceToParentCache.clear();
+        instanceOverrideCache.clear();
 
         device.getLogicalDevice().waitIdle();
         transferManager.reset(); // Destroy StagingRingBuffer while VulkanMemoryManager is still alive

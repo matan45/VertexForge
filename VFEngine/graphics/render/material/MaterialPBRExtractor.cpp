@@ -1,5 +1,6 @@
 #include "MaterialPBRExtractor.hpp"
 #include "material/MaterialManager.hpp"
+#include "material/MaterialParameterSet.hpp"
 #include "resource/ResourceManager.hpp"
 #include "asset/AssetRef.hpp"
 #include <cmath>
@@ -9,20 +10,22 @@ namespace render::mesh
 {
     std::optional<float> MaterialPBRExtractor::getInputFloat(const material::ShaderGraph& graph,
                                                              uint32_t nodeId, const std::string& pinName,
-                                                             float time)
+                                                             float time,
+                                                             const ParameterOverrides* paramOverrides)
     {
         for (const auto& link : graph.links)
         {
             if (link.targetNodeId == nodeId && link.targetPin == pinName)
             {
-                return evaluateFloatValue(graph, link.sourceNodeId, time);
+                return evaluateFloatValue(graph, link.sourceNodeId, time, paramOverrides);
             }
         }
         return std::nullopt;
     }
 
     std::optional<float> MaterialPBRExtractor::evaluateFloatValue(const material::ShaderGraph& graph,
-                                                                  uint32_t nodeId, float time)
+                                                                  uint32_t nodeId, float time,
+                                                                  const ParameterOverrides* paramOverrides)
     {
         const auto* node = graph.findNode(nodeId);
         if (!node) return std::nullopt;
@@ -31,6 +34,13 @@ namespace render::mesh
         {
         case material::NodeType::ConstantScalar:
             {
+                if (paramOverrides)
+                {
+                    if (auto overridden = material::overrideValueForNode(*node, *paramOverrides))
+                    {
+                        if (const float* v = std::get_if<float>(&*overridden)) return *v;
+                    }
+                }
                 auto it = node->properties.find("value");
                 if (it != node->properties.end() && std::holds_alternative<float>(it->second))
                 {
@@ -44,7 +54,7 @@ namespace render::mesh
             }
         case material::NodeType::Sin:
             {
-                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
+                auto inputVal = getInputFloat(graph, nodeId, "Value", time, paramOverrides);
                 if (inputVal)
                 {
                     return std::sin(*inputVal);
@@ -53,7 +63,7 @@ namespace render::mesh
             }
         case material::NodeType::Cos:
             {
-                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
+                auto inputVal = getInputFloat(graph, nodeId, "Value", time, paramOverrides);
                 if (inputVal)
                 {
                     return std::cos(*inputVal);
@@ -62,16 +72,16 @@ namespace render::mesh
             }
         case material::NodeType::Multiply:
             {
-                auto a = getInputFloat(graph, nodeId, "A", time);
-                auto b = getInputFloat(graph, nodeId, "B", time);
+                auto a = getInputFloat(graph, nodeId, "A", time, paramOverrides);
+                auto b = getInputFloat(graph, nodeId, "B", time, paramOverrides);
                 float aVal = a.value_or(1.0f);
                 float bVal = b.value_or(1.0f);
                 return aVal * bVal;
             }
         case material::NodeType::Add:
             {
-                auto a = getInputFloat(graph, nodeId, "A", time);
-                auto b = getInputFloat(graph, nodeId, "B", time);
+                auto a = getInputFloat(graph, nodeId, "A", time, paramOverrides);
+                auto b = getInputFloat(graph, nodeId, "B", time, paramOverrides);
                 float aVal = a.value_or(0.0f);
                 float bVal = b.value_or(0.0f);
                 return aVal + bVal;
@@ -83,7 +93,8 @@ namespace render::mesh
     }
 
     std::optional<material::NodeProperty> MaterialPBRExtractor::getConnectedValue(const material::ShaderGraph& graph,
-        uint32_t targetNodeId, const std::string& targetPinName)
+        uint32_t targetNodeId, const std::string& targetPinName,
+        const ParameterOverrides* paramOverrides)
     {
         for (const auto& link : graph.links)
         {
@@ -95,18 +106,18 @@ namespace render::mesh
                 switch (sourceNode->type)
                 {
                 case material::NodeType::ConstantScalar:
-                    {
-                        auto it = sourceNode->properties.find("value");
-                        if (it != sourceNode->properties.end())
-                        {
-                            return it->second;
-                        }
-                        break;
-                    }
                 case material::NodeType::ConstantVec2:
                 case material::NodeType::ConstantVec3:
                 case material::NodeType::ConstantColor:
                     {
+                        if (paramOverrides)
+                        {
+                            if (auto overridden = material::overrideValueForNode(*sourceNode, *paramOverrides))
+                            {
+                                return std::visit([](const auto& v) -> material::NodeProperty { return v; },
+                                                  *overridden);
+                            }
+                        }
                         auto it = sourceNode->properties.find("value");
                         if (it != sourceNode->properties.end())
                         {
@@ -123,13 +134,14 @@ namespace render::mesh
     }
 
     float MaterialPBRExtractor::evaluateEmissionStrength(const material::ShaderGraph& graph,
-                                                         uint32_t outputNodeId, float time)
+                                                         uint32_t outputNodeId, float time,
+                                                         const ParameterOverrides* paramOverrides)
     {
         for (const auto& link : graph.links)
         {
             if (link.targetNodeId == outputNodeId && link.targetPin == "EmissionStrength")
             {
-                auto val = evaluateFloatValue(graph, link.sourceNodeId, time);
+                auto val = evaluateFloatValue(graph, link.sourceNodeId, time, paramOverrides);
                 if (val)
                 {
                     return *val;
@@ -187,7 +199,9 @@ namespace render::mesh
         return "";
     }
 
-    ExtractedPBRValues MaterialPBRExtractor::extractPBRFromMaterial(const material::MaterialData& matData)
+    ExtractedPBRValues MaterialPBRExtractor::extractPBRFromMaterial(
+        const material::MaterialData& matData,
+        const ParameterOverrides* paramOverrides)
     {
         ExtractedPBRValues pbr;
 
@@ -197,7 +211,7 @@ namespace render::mesh
             return pbr;
         }
 
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Albedo"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Albedo", paramOverrides))
         {
             if (std::holds_alternative<glm::vec4>(*val))
             {
@@ -210,7 +224,7 @@ namespace render::mesh
             }
         }
 
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Metallic"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Metallic", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -218,7 +232,7 @@ namespace render::mesh
             }
         }
 
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Roughness"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Roughness", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -226,7 +240,7 @@ namespace render::mesh
             }
         }
 
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "AO"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "AO", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -235,14 +249,14 @@ namespace render::mesh
         }
 
         float emissionStrength = 0.0f;
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "EmissionStrength"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "EmissionStrength", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
                 emissionStrength = std::get<float>(*val);
             }
         }
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Emission"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Emission", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -266,7 +280,7 @@ namespace render::mesh
             pbr.emission = emissionStrength;
         }
 
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Opacity"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Opacity", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -274,7 +288,7 @@ namespace render::mesh
             }
         }
 
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLDiffuse"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLDiffuse", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -283,7 +297,7 @@ namespace render::mesh
         }
 
 
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLSpecular"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLSpecular", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -336,8 +350,13 @@ namespace render::mesh
         const material::MaterialInstanceData& instance,
         const material::MaterialData& parentMaterial)
     {
-        // Start with parent's PBR values
-        ExtractedPBRValues pbr = extractPBRFromMaterial(parentMaterial);
+        // Named parameter overrides apply during the parent graph walk; the fixed PBR
+        // scalar overrides below still win on top (they target PBROutput inputs directly).
+        material::MaterialParameterSet parentSet = material::collectParameters(parentMaterial.graph);
+        ParameterOverrides resolved = material::resolveOverrides(parentSet, &instance);
+
+        ExtractedPBRValues pbr = extractPBRFromMaterial(parentMaterial,
+                                                        resolved.empty() ? nullptr : &resolved);
 
         // Apply scalar overrides
         if (instance.albedoOverride.has_value())
@@ -369,8 +388,11 @@ namespace render::mesh
             pbr.iblSpecular = *instance.iblSpecularOverride;
         }
 
-        // Apply texture overrides
-        for (const auto& [slot, texPath] : instance.textureOverrides)
+        // Apply texture overrides (named texture parameters resolved onto slots,
+        // legacy slot-addressed overrides winning ties)
+        std::map<material::TextureSlot, asset::AssetRef> effectiveTextures =
+            material::resolveTextureOverrides(parentSet, instance);
+        for (const auto& [slot, texPath] : effectiveTextures)
         {
             if (!texPath.isValid()) continue;
 

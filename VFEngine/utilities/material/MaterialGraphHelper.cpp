@@ -1,11 +1,13 @@
 #include "MaterialGraphHelper.hpp"
+#include "MaterialParameterSet.hpp"
 
 namespace material
 {
     std::optional<NodeProperty> MaterialGraphHelper::getConnectedValue(
         const ShaderGraph& graph,
         uint32_t targetNodeId,
-        const std::string& targetPinName)
+        const std::string& targetPinName,
+        const std::map<std::string, ParameterValue>* paramOverrides)
     {
         for (const auto& link : graph.links)
         {
@@ -21,6 +23,14 @@ namespace material
                 case NodeType::ConstantVec3:
                 case NodeType::ConstantColor:
                     {
+                        if (paramOverrides)
+                        {
+                            if (auto overridden = overrideValueForNode(*sourceNode, *paramOverrides))
+                            {
+                                return std::visit([](const auto& v) -> NodeProperty { return v; },
+                                                  *overridden);
+                            }
+                        }
                         auto it = sourceNode->properties.find("value");
                         if (it != sourceNode->properties.end())
                         {
@@ -87,7 +97,9 @@ namespace material
         return "";
     }
 
-    ExtractedParentPBR MaterialGraphHelper::extractPBRFromGraph(const MaterialData& matData)
+    ExtractedParentPBR MaterialGraphHelper::extractPBRFromGraph(
+        const MaterialData& matData,
+        const std::map<std::string, ParameterValue>* paramOverrides)
     {
         ExtractedParentPBR pbr;
 
@@ -98,7 +110,7 @@ namespace material
         }
 
         // Extract albedo
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Albedo"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Albedo", paramOverrides))
         {
             if (std::holds_alternative<glm::vec4>(*val))
             {
@@ -112,7 +124,7 @@ namespace material
         }
 
         // Extract metallic
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Metallic"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Metallic", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -121,7 +133,7 @@ namespace material
         }
 
         // Extract roughness
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Roughness"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Roughness", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -130,7 +142,7 @@ namespace material
         }
 
         // Extract AO
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "AO"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "AO", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -140,14 +152,14 @@ namespace material
 
         // Extract emission
         float emissionStrength = 0.0f;
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "EmissionStrength"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "EmissionStrength", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
                 emissionStrength = std::get<float>(*val);
             }
         }
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Emission"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Emission", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -172,7 +184,7 @@ namespace material
         }
 
         // Extract IBL values
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLDiffuse"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLDiffuse", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {
@@ -180,7 +192,7 @@ namespace material
             }
         }
 
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLSpecular"))
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLSpecular", paramOverrides))
         {
             if (std::holds_alternative<float>(*val))
             {

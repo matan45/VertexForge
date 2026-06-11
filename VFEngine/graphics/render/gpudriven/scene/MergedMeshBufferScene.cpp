@@ -5,6 +5,7 @@
 #include "print/Log.hpp"
 #include "threading/JobSystem.hpp"
 #include <material/MaterialInstanceTypes.hpp>
+#include <material/MaterialParameterSet.hpp>
 
 #include <cmath>
 #include <cstring>
@@ -135,8 +136,15 @@ namespace render::gpudriven
     void MergedMeshBuffer::applyDynamicEmission(GPUObjectData& obj, const std::string& materialPath, float time)
     {
         std::string effectiveMaterialPath = materialPath;
+        const mesh::MaterialPBRExtractor::ParameterOverrides* paramOverrides = nullptr;
         if (material::isInstanceFile(materialPath))
         {
+            auto overrideIt = instanceOverrideCache.find(materialPath);
+            if (overrideIt != instanceOverrideCache.end() && !overrideIt->second.empty())
+            {
+                paramOverrides = &overrideIt->second;
+            }
+
             auto cacheIt = instanceToParentCache.find(materialPath);
             if (cacheIt != instanceToParentCache.end())
             {
@@ -164,7 +172,7 @@ namespace render::gpudriven
             if (outputNode)
             {
                 float dynamicEmission = mesh::MaterialPBRExtractor::evaluateEmissionStrength(
-                    matData->graph, outputNode->id, time);
+                    matData->graph, outputNode->id, time, paramOverrides);
                 if (dynamicEmission != 0.0f)
                     obj.materialParams.w = dynamicEmission;
             }
@@ -447,7 +455,20 @@ namespace render::gpudriven
                             auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialPath));
                             if (instanceData && instanceData->parentMaterialRef.isValid())
                             {
-                                instanceToParentCache[materialPath] = instanceData->parentMaterialRef.resolve();
+                                std::string parentPath = instanceData->parentMaterialRef.resolve();
+                                instanceToParentCache[materialPath] = parentPath;
+
+                                // Cache resolved named-parameter overrides for the parallel
+                                // emission evaluation (applyDynamicEmission)
+                                auto parentMaterial = resource::ResourceManager::loadMaterial(
+                                    instanceData->parentMaterialRef);
+                                if (parentMaterial)
+                                {
+                                    material::MaterialParameterSet parentSet =
+                                        material::collectParameters(parentMaterial->graph);
+                                    instanceOverrideCache[materialPath] =
+                                        material::resolveOverrides(parentSet, instanceData.get());
+                                }
                             }
                         }
                     }

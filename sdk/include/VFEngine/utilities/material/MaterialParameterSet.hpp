@@ -1,7 +1,9 @@
 #pragma once
 #include "MaterialTypes.hpp"
+#include "MaterialInstanceTypes.hpp"
 #include <cstddef>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -85,4 +87,32 @@ namespace material
     void writeStd140(const MaterialParameterSet& set,
                      const std::map<std::string, ParameterValue>& overrides,
                      std::span<std::byte> out);
+
+    // Returns the override value for a flagged node if one is present in the map and its
+    // type matches the node's "value" property. Used by CPU graph evaluators so overrides
+    // flow through PBR extraction without touching the node defaults.
+    std::optional<ParameterValue> overrideValueForNode(
+        const ShaderNode& node,
+        const std::map<std::string, ParameterValue>& overrides);
+
+    // Flattens instance + runtime overrides into one name -> value map with precedence
+    // runtime > instance. Entries that don't match a parameter in parentSet (stale names
+    // after a parent edit) or whose type mismatches are skipped.
+    std::map<std::string, ParameterValue> resolveOverrides(
+        const MaterialParameterSet& parentSet,
+        const MaterialInstanceData* instance,
+        const std::map<std::string, ParameterValue>* runtimeOverrides = nullptr);
+
+    // Effective per-slot texture overrides: name-addressed texture parameter overrides
+    // resolved onto their slots, then legacy slot overrides applied on top (slot wins).
+    std::map<TextureSlot, asset::AssetRef> resolveTextureOverrides(
+        const MaterialParameterSet& parentSet,
+        const MaterialInstanceData& instance);
+
+    // True when overriding this parameter shows up in the GPU-driven world view (the
+    // uber-shader consumes CPU-extracted PBR, so only parameters the extractor can fold
+    // qualify: nodes feeding a PBROutput pin directly, or reaching EmissionStrength
+    // through the CPU-evaluable Sin/Cos/Add/Multiply chain). Everything else is visible
+    // in the material preview / generated-shader path only.
+    bool isParameterWorldVisible(const ShaderGraph& graph, uint32_t sourceNodeId);
 }
