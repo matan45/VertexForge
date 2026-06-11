@@ -22,18 +22,26 @@ namespace core
 
     BehaviorTreeAdapter::~BehaviorTreeAdapter() = default;
 
+    static std::string normalizeBTPath(std::string path)
+    {
+        std::replace(path.begin(), path.end(), '\\', '/');
+        return path;
+    }
+
     std::shared_ptr<const BehaviorTreeData> BehaviorTreeAdapter::getOrLoadTree(const std::string& treePath)
     {
         auto cacheIt = assetCache.find(treePath);
         if (cacheIt != assetCache.end())
             return cacheIt->second;
 
-        auto dataOpt = BehaviorTreeAsset::load(treePath);
+        std::vector<std::string> dependencies;
+        auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies);
         if (!dataOpt.has_value())
             return nullptr;
 
         auto shared = std::make_shared<const BehaviorTreeData>(std::move(dataOpt.value()));
         assetCache[treePath] = shared;
+        assetDependencies[treePath] = std::move(dependencies);
         return shared;
     }
 
@@ -174,10 +182,33 @@ namespace core
             std::lock_guard<std::mutex> lock(reloadMutex);
             reloads.swap(pendingReloads);
         }
+        if (reloads.empty()) return;
 
-        for (const auto& treePath : reloads)
+        // Saving a subtree must also rebind every cached root that spliced it in
+        std::vector<std::string> rootsToReload;
+        auto addRoot = [&rootsToReload](const std::string& path)
         {
-            auto dataOpt = BehaviorTreeAsset::load(treePath);
+            if (std::find(rootsToReload.begin(), rootsToReload.end(), path) == rootsToReload.end())
+                rootsToReload.push_back(path);
+        };
+
+        for (const auto& savedPath : reloads)
+        {
+            addRoot(savedPath);
+
+            std::string normalized = normalizeBTPath(savedPath);
+            for (const auto& [rootPath, dependencies] : assetDependencies)
+            {
+                if (rootPath == savedPath) continue;
+                if (std::find(dependencies.begin(), dependencies.end(), normalized) != dependencies.end())
+                    addRoot(rootPath);
+            }
+        }
+
+        for (const auto& treePath : rootsToReload)
+        {
+            std::vector<std::string> dependencies;
+            auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies);
             if (!dataOpt.has_value())
             {
                 vfLogError("BT hot reload: failed to load '{}', keeping old tree", treePath);
@@ -186,6 +217,7 @@ namespace core
 
             auto newData = std::make_shared<const BehaviorTreeData>(std::move(dataOpt.value()));
             assetCache[treePath] = newData;
+            assetDependencies[treePath] = std::move(dependencies);
 
             int rebound = 0;
             for (auto& [entityId, instance] : runtimes)
@@ -308,6 +340,7 @@ namespace core
         }
         // Play session over: drop cached assets so the next session reloads from disk
         assetCache.clear();
+        assetDependencies.clear();
 
         setDebugTarget(services::EntityHandle::invalid());
     }

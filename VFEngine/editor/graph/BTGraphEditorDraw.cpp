@@ -243,6 +243,17 @@ namespace editor::graph
                 ImGui::Text("Query: %s", std::get<std::string>(qIt->second).c_str());
             break;
         }
+        case BTNodeType::SubTree:
+        {
+            auto pIt = node.properties.find("treePath");
+            if (pIt != node.properties.end() && std::holds_alternative<std::string>(pIt->second))
+            {
+                const auto& path = std::get<std::string>(pIt->second);
+                size_t slash = path.find_last_of("/\\");
+                ImGui::Text("Tree: %s", slash == std::string::npos ? path.c_str() : path.c_str() + slash + 1);
+            }
+            break;
+        }
         case BTNodeType::LineOfSight:
         {
             auto keyIt = node.properties.find("targetKey");

@@ -107,7 +107,7 @@ namespace behaviortree
                type == BTNodeType::MoveTo || type == BTNodeType::PlayAnimation ||
                type == BTNodeType::SetBlackboardValue || type == BTNodeType::CheckBlackboardValue ||
                type == BTNodeType::ScriptTask || type == BTNodeType::EnvironmentQuery ||
-               type == BTNodeType::LineOfSight;
+               type == BTNodeType::LineOfSight || type == BTNodeType::SubTree;
     }
 
     bool isRootNode(BTNodeType type)
@@ -145,6 +145,7 @@ namespace behaviortree
         case BTNodeType::ScriptTask: return "ScriptTask";
         case BTNodeType::EnvironmentQuery: return "EnvironmentQuery";
         case BTNodeType::LineOfSight: return "LineOfSight";
+        case BTNodeType::SubTree: return "SubTree";
         default: return "Unknown";
         }
     }
@@ -171,6 +172,7 @@ namespace behaviortree
         if (str == "ScriptTask") return BTNodeType::ScriptTask;
         if (str == "EnvironmentQuery") return BTNodeType::EnvironmentQuery;
         if (str == "LineOfSight") return BTNodeType::LineOfSight;
+        if (str == "SubTree") return BTNodeType::SubTree;
         return BTNodeType::Sequence;
     }
 

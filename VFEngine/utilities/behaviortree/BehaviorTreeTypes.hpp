@@ -34,7 +34,8 @@ namespace behaviortree
         CheckBlackboardValue,
         ScriptTask,
         EnvironmentQuery,
-        LineOfSight
+        LineOfSight,
+        SubTree
     };
 
     enum class BTNodeStatus : uint8_t

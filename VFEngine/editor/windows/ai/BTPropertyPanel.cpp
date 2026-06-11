@@ -52,6 +52,7 @@ namespace editor::windows
         case BTNodeType::LineOfSight: drawLineOfSightProperties(*node, graph); break;
         case BTNodeType::BlackboardCondition: drawBlackboardConditionProperties(*node, graph); break;
         case BTNodeType::EnvironmentQuery: drawEnvironmentQueryProperties(*node, graph); break;
+        case BTNodeType::SubTree: drawSubTreeProperties(*node); break;
         default: break;
         }
     }
@@ -526,6 +527,26 @@ namespace editor::windows
             }
         }
         ImGui::TextDisabled("Best query position is written to the result key");
+    }
+
+    void BTPropertyPanel::drawSubTreeProperties(BTNode& node)
+    {
+        std::string treePath;
+        auto pIt = node.properties.find("treePath");
+        if (pIt != node.properties.end() && std::holds_alternative<std::string>(pIt->second))
+            treePath = std::get<std::string>(pIt->second);
+
+        char pathBuf[256];
+        strncpy(pathBuf, treePath.c_str(), sizeof(pathBuf) - 1);
+        pathBuf[sizeof(pathBuf) - 1] = '\0';
+        if (ImGui::InputText("Tree Path", pathBuf, sizeof(pathBuf)))
+        {
+            node.properties["treePath"] = std::string(pathBuf);
+            notifyChanged();
+        }
+
+        ImGui::TextDisabled("Inlined at load time; blackboard keys are merged");
+        ImGui::TextDisabled("(parent wins on name collision)");
     }
 
     void BTPropertyPanel::drawLineOfSightProperties(BTNode& node, const BTGraph* graph)

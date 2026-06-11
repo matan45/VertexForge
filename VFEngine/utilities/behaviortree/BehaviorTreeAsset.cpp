@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <format>
 #include <functional>
+#include <algorithm>
 
 namespace behaviortree
 {
@@ -460,6 +461,183 @@ namespace behaviortree
             vfLogError("Failed to save behavior tree file {}: {}", path, e.what());
             return false;
         }
+    }
+
+    static std::string normalizeTreePath(std::string path)
+    {
+        std::replace(path.begin(), path.end(), '\\', '/');
+        return path;
+    }
+
+    static bool expandSubTreesInto(BehaviorTreeData& data,
+                                   const BehaviorTreeAsset::TreeLoader& loader,
+                                   std::vector<std::string>& pathStack,
+                                   int maxDepth,
+                                   std::vector<std::string>* outDependencies = nullptr)
+    {
+        if (static_cast<int>(pathStack.size()) > maxDepth)
+        {
+            vfLogError("BT SubTree expansion: depth limit ({}) exceeded in '{}'",
+                       maxDepth, pathStack.empty() ? "?" : pathStack.front());
+            return false;
+        }
+
+        std::vector<uint32_t> subTreeNodeIds;
+        for (const auto& node : data.graph.nodes)
+        {
+            if (node.type == BTNodeType::SubTree)
+            {
+                subTreeNodeIds.push_back(node.id);
+            }
+        }
+
+        for (uint32_t nodeId : subTreeNodeIds)
+        {
+            const BTNode* node = data.graph.findNodeById(nodeId);
+            if (!node) continue;
+
+            std::string childPath;
+            auto pathIt = node->properties.find("treePath");
+            if (pathIt != node->properties.end() && std::holds_alternative<std::string>(pathIt->second))
+            {
+                childPath = std::get<std::string>(pathIt->second);
+            }
+
+            if (childPath.empty())
+            {
+                vfLogError("BT SubTree expansion: node {} has no treePath", nodeId);
+                return false;
+            }
+
+            std::string normalized = normalizeTreePath(childPath);
+            if (std::find(pathStack.begin(), pathStack.end(), normalized) != pathStack.end())
+            {
+                vfLogError("BT SubTree expansion: cyclic reference to '{}'", childPath);
+                return false;
+            }
+
+            auto childOpt = loader(childPath);
+            if (!childOpt.has_value())
+            {
+                vfLogError("BT SubTree expansion: failed to load '{}'", childPath);
+                return false;
+            }
+
+            if (outDependencies &&
+                std::find(outDependencies->begin(), outDependencies->end(), normalized) == outDependencies->end())
+            {
+                outDependencies->push_back(normalized);
+            }
+
+            BehaviorTreeData child = std::move(childOpt.value());
+            pathStack.push_back(normalized);
+            bool expanded = expandSubTreesInto(child, loader, pathStack, maxDepth, outDependencies);
+            pathStack.pop_back();
+            if (!expanded) return false;
+
+            // The child's Root node is just an entry marker — splice in everything below it
+            auto rootChildren = child.graph.getChildren(child.graph.rootNodeId);
+            if (rootChildren.empty())
+            {
+                vfLogError("BT SubTree expansion: '{}' has an empty root", childPath);
+                return false;
+            }
+            uint32_t entryOldId = rootChildren[0]->id;
+
+            std::unordered_map<uint32_t, uint32_t> idMap;
+            for (const auto& childNode : child.graph.nodes)
+            {
+                if (childNode.id == child.graph.rootNodeId) continue;
+                idMap[childNode.id] = data.graph.nextNodeId++;
+            }
+
+            for (const auto& childNode : child.graph.nodes)
+            {
+                if (childNode.id == child.graph.rootNodeId) continue;
+                BTNode copy = childNode;
+                copy.id = idMap[childNode.id];
+                data.graph.nodes.push_back(std::move(copy));
+            }
+
+            for (const auto& childLink : child.graph.links)
+            {
+                if (childLink.sourceNodeId == child.graph.rootNodeId) continue;
+                auto srcIt = idMap.find(childLink.sourceNodeId);
+                auto dstIt = idMap.find(childLink.targetNodeId);
+                if (srcIt == idMap.end() || dstIt == idMap.end()) continue;
+
+                BTLink copy = childLink;
+                copy.id = data.graph.nextLinkId++;
+                copy.sourceNodeId = srcIt->second;
+                copy.targetNodeId = dstIt->second;
+                data.graph.links.push_back(copy);
+            }
+
+            // Incoming link to the SubTree node now points at the spliced entry node
+            for (auto& link : data.graph.links)
+            {
+                if (link.targetNodeId == nodeId)
+                {
+                    link.targetNodeId = idMap[entryOldId];
+                }
+            }
+
+            data.graph.nodes.erase(
+                std::remove_if(data.graph.nodes.begin(), data.graph.nodes.end(),
+                               [nodeId](const BTNode& n) { return n.id == nodeId; }),
+                data.graph.nodes.end());
+
+            // Merge blackboard key definitions; the parent wins on name collision
+            for (const auto& childKey : child.graph.blackboardKeys)
+            {
+                bool exists = false;
+                for (const auto& parentKey : data.graph.blackboardKeys)
+                {
+                    if (parentKey.name == childKey.name) { exists = true; break; }
+                }
+                if (!exists)
+                {
+                    data.graph.blackboardKeys.push_back(childKey);
+                }
+            }
+        }
+
+        return true;
+    }
+
+    bool BehaviorTreeAsset::expandSubTrees(BehaviorTreeData& data, const TreeLoader& loader,
+                                           int maxDepth)
+    {
+        std::vector<std::string> pathStack;
+        return expandSubTreesInto(data, loader, pathStack, maxDepth);
+    }
+
+    std::optional<BehaviorTreeData> BehaviorTreeAsset::loadExpanded(std::string_view path,
+                                                                    std::vector<std::string>* outDependencies)
+    {
+        auto dataOpt = load(path);
+        if (!dataOpt.has_value())
+        {
+            return std::nullopt;
+        }
+
+        std::string rootPath = normalizeTreePath(std::string(path));
+        if (outDependencies)
+        {
+            outDependencies->push_back(rootPath);
+        }
+
+        std::vector<std::string> pathStack;
+        pathStack.push_back(std::move(rootPath));
+        if (!expandSubTreesInto(dataOpt.value(),
+                                [](const std::string& p) { return load(p); },
+                                pathStack, 8, outDependencies))
+        {
+            vfLogError("Behavior tree '{}' failed SubTree expansion", path);
+            return std::nullopt;
+        }
+
+        return dataOpt;
     }
 
     BehaviorTreeData BehaviorTreeAsset::createDefault(const std::string& name)

@@ -116,8 +116,11 @@ namespace core
         std::unordered_map<ScriptInstanceKey, uint64_t, ScriptInstanceKeyHash> scriptInstances;
         std::unordered_map<std::string, eqs::EQSQueryHandle> pendingEQSQueries; // key: "{entityId}:{queryName}"
 
-        // One immutable tree per asset path, shared by every runtime attached to it
+        // One immutable tree per asset path, shared by every runtime attached to it.
+        // assetDependencies maps each cached root to the normalized paths of every
+        // tree spliced into its expansion (so saving a subtree rebinds its parents).
         std::unordered_map<std::string, std::shared_ptr<const behaviortree::BehaviorTreeData>> assetCache;
+        std::unordered_map<std::string, std::vector<std::string>> assetDependencies;
 
         // Hot-reload requests queued from the editor thread, applied between ticks in updateAll
         std::vector<std::string> pendingReloads;

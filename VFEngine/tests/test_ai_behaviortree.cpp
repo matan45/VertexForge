@@ -1,6 +1,7 @@
 ﻿#include <doctest.h>
 #include <behaviortree/BehaviorTreeTypes.hpp>
 #include <behaviortree/BehaviorTreeRuntime.hpp>
+#include <behaviortree/BehaviorTreeAsset.hpp>
 #include <behaviortree/Blackboard.hpp>
 #include <string>
 #include <vector>
@@ -135,7 +136,8 @@ TEST_CASE("String/Enum roundtrip: nodeTypeToString and stringToNodeType") {
         behaviortree::BTNodeType::ScriptTask,
         behaviortree::BTNodeType::EnvironmentQuery,
         behaviortree::BTNodeType::LineOfSight,
-        behaviortree::BTNodeType::BlackboardCondition
+        behaviortree::BTNodeType::BlackboardCondition,
+        behaviortree::BTNodeType::SubTree
     };
 
     for (auto type : allTypes) {
@@ -429,6 +431,131 @@ TEST_CASE("Shared tree data: runtimes share one asset but keep independent state
     runtimeA.init(shared, services::EntityHandle{});
     CHECK(runtimeA.getBlackboard().getBool("ok") == true);
     CHECK(runtimeB.getBlackboard().getBool("ok") == false);
+}
+
+// ---- SubTree expansion ----
+
+namespace {
+
+behaviortree::BTNode makeSubTreeNode(uint32_t id, const std::string& treePath) {
+    auto node = makeBTNode(id, behaviortree::BTNodeType::SubTree);
+    node.properties["treePath"] = treePath;
+    return node;
+}
+
+// root(1) -> selector(2) -> wait(3); declares childKey + shared
+behaviortree::BehaviorTreeData makeChildTree() {
+    behaviortree::BehaviorTreeData data;
+    data.name = "Child";
+    data.graph.rootNodeId = 1;
+    data.graph.nodes.push_back(makeBTNode(1, behaviortree::BTNodeType::Root));
+    data.graph.nodes.push_back(makeBTNode(2, behaviortree::BTNodeType::Selector));
+    data.graph.nodes.push_back(makeWaitNode(3, 10.0f));
+    linkBTNodes(data.graph, 1, 2, 0);
+    linkBTNodes(data.graph, 2, 3, 0);
+    data.graph.blackboardKeys.push_back({"childKey", behaviortree::BlackboardValueType::Float, 5.0f});
+    data.graph.blackboardKeys.push_back({"shared", behaviortree::BlackboardValueType::Int, 7});
+    return data;
+}
+
+// root(1) -> sequence(2) -> [wait(3), subtree(4 -> "child.bt")]; declares shared
+behaviortree::BehaviorTreeData makeParentTree() {
+    behaviortree::BehaviorTreeData data;
+    data.name = "Parent";
+    data.graph.rootNodeId = 1;
+    data.graph.nodes.push_back(makeBTNode(1, behaviortree::BTNodeType::Root));
+    data.graph.nodes.push_back(makeBTNode(2, behaviortree::BTNodeType::Sequence));
+    data.graph.nodes.push_back(makeWaitNode(3, 0.05f));
+    data.graph.nodes.push_back(makeSubTreeNode(4, "child.bt"));
+    linkBTNodes(data.graph, 1, 2, 0);
+    linkBTNodes(data.graph, 2, 3, 0);
+    linkBTNodes(data.graph, 2, 4, 1);
+    data.graph.blackboardKeys.push_back({"shared", behaviortree::BlackboardValueType::Int, 1});
+    return data;
+}
+
+int countNodesOfType(const behaviortree::BTGraph& graph, behaviortree::BTNodeType type) {
+    int count = 0;
+    for (const auto& node : graph.nodes)
+        if (node.type == type) ++count;
+    return count;
+}
+
+} // namespace
+
+TEST_CASE("SubTree expansion: splices child graph with remapped ids") {
+    auto parent = makeParentTree();
+    auto loader = [](const std::string& path) -> std::optional<behaviortree::BehaviorTreeData> {
+        if (path == "child.bt") return makeChildTree();
+        return std::nullopt;
+    };
+
+    REQUIRE(behaviortree::BehaviorTreeAsset::expandSubTrees(parent, loader));
+
+    // SubTree node is gone, child content (minus its Root) is in
+    CHECK(countNodesOfType(parent.graph, behaviortree::BTNodeType::SubTree) == 0);
+    CHECK(countNodesOfType(parent.graph, behaviortree::BTNodeType::Selector) == 1);
+    CHECK(countNodesOfType(parent.graph, behaviortree::BTNodeType::Root) == 1);
+    CHECK(countNodesOfType(parent.graph, behaviortree::BTNodeType::Wait) == 2);
+
+    // The sequence's second child is now the spliced selector, which still owns its wait
+    auto sequenceChildren = parent.graph.getChildren(2);
+    REQUIRE(sequenceChildren.size() == 2);
+    CHECK(sequenceChildren[1]->type == behaviortree::BTNodeType::Selector);
+    auto selectorChildren = parent.graph.getChildren(sequenceChildren[1]->id);
+    REQUIRE(selectorChildren.size() == 1);
+    CHECK(selectorChildren[0]->type == behaviortree::BTNodeType::Wait);
+
+    // Blackboard merge: child-only key added, collision keeps the parent default
+    REQUIRE(parent.graph.blackboardKeys.size() == 2);
+    bool foundChildKey = false;
+    for (const auto& keyDef : parent.graph.blackboardKeys) {
+        if (keyDef.name == "childKey") foundChildKey = true;
+        if (keyDef.name == "shared") {
+            REQUIRE(std::holds_alternative<int32_t>(keyDef.defaultValue));
+            CHECK(std::get<int32_t>(keyDef.defaultValue) == 1);
+        }
+    }
+    CHECK(foundChildKey);
+
+    // The expanded tree actually runs: wait(0.05) succeeds, then the spliced selector runs
+    behaviortree::BehaviorTreeRuntime runtime;
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(std::move(parent)), services::EntityHandle{});
+    AbortRecorder executor;
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
+}
+
+TEST_CASE("SubTree expansion: cyclic references are rejected") {
+    behaviortree::BehaviorTreeData treeA;
+    treeA.graph.rootNodeId = 1;
+    treeA.graph.nodes.push_back(makeBTNode(1, behaviortree::BTNodeType::Root));
+    treeA.graph.nodes.push_back(makeSubTreeNode(2, "b.bt"));
+    linkBTNodes(treeA.graph, 1, 2, 0);
+
+    auto loader = [](const std::string& path) -> std::optional<behaviortree::BehaviorTreeData> {
+        behaviortree::BehaviorTreeData data;
+        data.graph.rootNodeId = 1;
+        data.graph.nodes.push_back(makeBTNode(1, behaviortree::BTNodeType::Root));
+        data.graph.nodes.push_back(makeSubTreeNode(2, path == "b.bt" ? "a.bt" : "b.bt"));
+        linkBTNodes(data.graph, 1, 2, 0);
+        return data;
+    };
+
+    CHECK_FALSE(behaviortree::BehaviorTreeAsset::expandSubTrees(treeA, loader));
+}
+
+TEST_CASE("SubTree expansion: missing reference fails") {
+    auto parent = makeParentTree();
+    auto loader = [](const std::string&) -> std::optional<behaviortree::BehaviorTreeData> {
+        return std::nullopt;
+    };
+
+    CHECK_FALSE(behaviortree::BehaviorTreeAsset::expandSubTrees(parent, loader));
+}
+
+TEST_CASE("Node classification: SubTree is a task (leaf)") {
+    CHECK(behaviortree::isTaskNode(behaviortree::BTNodeType::SubTree) == true);
+    CHECK(behaviortree::hasOutputPin(behaviortree::BTNodeType::SubTree) == false);
 }
 
 } // TEST_SUITE
