@@ -11,6 +11,7 @@ namespace serialization
         {
         case types::PhysicsAnimationMode::Kinematic: return "kinematic";
         case types::PhysicsAnimationMode::Ragdoll: return "ragdoll";
+        case types::PhysicsAnimationMode::PoweredRagdoll: return "poweredRagdoll";
         default: return "animated";
         }
     }
@@ -19,6 +20,7 @@ namespace serialization
     {
         if (str == "kinematic") return types::PhysicsAnimationMode::Kinematic;
         if (str == "ragdoll") return types::PhysicsAnimationMode::Ragdoll;
+        if (str == "poweredRagdoll") return types::PhysicsAnimationMode::PoweredRagdoll;
         return types::PhysicsAnimationMode::Animated;
     }
 
@@ -60,6 +62,107 @@ namespace serialization
             if (mJson.contains("restitution") && mJson["restitution"].is_number())
                 mapping.restitution = mJson["restitution"].get<float>();
             return mapping;
+        }
+
+        json serializeBoneMotor(const types::BoneMotorSettings& motor)
+        {
+            json m;
+            m["boneName"] = motor.boneName;
+            m["strength"] = motor.strength;
+            m["frequency"] = motor.frequency;
+            m["damping"] = motor.damping;
+            m["maxTorque"] = motor.maxTorque;
+            return m;
+        }
+
+        types::BoneMotorSettings deserializeBoneMotor(const json& mJson)
+        {
+            types::BoneMotorSettings motor;
+            if (mJson.contains("boneName") && mJson["boneName"].is_string())
+                motor.boneName = mJson["boneName"].get<std::string>();
+            if (mJson.contains("strength") && mJson["strength"].is_number())
+                motor.strength = mJson["strength"].get<float>();
+            if (mJson.contains("frequency") && mJson["frequency"].is_number())
+                motor.frequency = mJson["frequency"].get<float>();
+            if (mJson.contains("damping") && mJson["damping"].is_number())
+                motor.damping = mJson["damping"].get<float>();
+            if (mJson.contains("maxTorque") && mJson["maxTorque"].is_number())
+                motor.maxTorque = mJson["maxTorque"].get<float>();
+            return motor;
+        }
+
+        json serializeMotorConfig(const types::PhysicsAnimationConfig& config)
+        {
+            json j;
+            j["defaultMotorStrength"] = config.defaultMotorStrength;
+            j["defaultMotorFrequency"] = config.defaultMotorFrequency;
+            j["defaultMotorDamping"] = config.defaultMotorDamping;
+            j["defaultMotorMaxTorque"] = config.defaultMotorMaxTorque;
+            j["rootMotorStrength"] = config.rootMotorStrength;
+            j["poweredBlendInTime"] = config.poweredBlendInTime;
+            j["ragdollToAnimatedBlendTime"] = config.ragdollToAnimatedBlendTime;
+
+            json boneMotorsArray = json::array();
+            for (const auto& motor : config.boneMotors)
+                boneMotorsArray.push_back(serializeBoneMotor(motor));
+            j["boneMotors"] = boneMotorsArray;
+
+            json hr;
+            hr["defaultRecoverTime"] = config.hitReaction.defaultRecoverTime;
+            hr["strengthDip"] = config.hitReaction.strengthDip;
+            hr["chainDepth"] = config.hitReaction.chainDepth;
+            hr["chainFalloff"] = config.hitReaction.chainFalloff;
+            j["hitReaction"] = hr;
+
+            j["settleLinearVelocityThreshold"] = config.settleLinearVelocityThreshold;
+            j["settleAngularVelocityThreshold"] = config.settleAngularVelocityThreshold;
+            j["settleFrameCount"] = config.settleFrameCount;
+            return j;
+        }
+
+        void deserializeMotorConfig(const json& j, types::PhysicsAnimationConfig& config)
+        {
+            if (auto it = j.find("defaultMotorStrength"); it != j.end() && it->is_number())
+                config.defaultMotorStrength = it->get<float>();
+            if (auto it = j.find("defaultMotorFrequency"); it != j.end() && it->is_number())
+                config.defaultMotorFrequency = it->get<float>();
+            if (auto it = j.find("defaultMotorDamping"); it != j.end() && it->is_number())
+                config.defaultMotorDamping = it->get<float>();
+            if (auto it = j.find("defaultMotorMaxTorque"); it != j.end() && it->is_number())
+                config.defaultMotorMaxTorque = it->get<float>();
+            if (auto it = j.find("rootMotorStrength"); it != j.end() && it->is_number())
+                config.rootMotorStrength = it->get<float>();
+            if (auto it = j.find("poweredBlendInTime"); it != j.end() && it->is_number())
+                config.poweredBlendInTime = it->get<float>();
+            if (auto it = j.find("ragdollToAnimatedBlendTime"); it != j.end() && it->is_number())
+                config.ragdollToAnimatedBlendTime = it->get<float>();
+
+            config.boneMotors.clear();
+            if (j.contains("boneMotors") && j["boneMotors"].is_array())
+            {
+                for (const auto& mJson : j["boneMotors"])
+                    config.boneMotors.push_back(deserializeBoneMotor(mJson));
+            }
+
+            if (j.contains("hitReaction") && j["hitReaction"].is_object())
+            {
+                const auto& hr = j["hitReaction"];
+                if (auto it = hr.find("defaultRecoverTime"); it != hr.end() && it->is_number())
+                    config.hitReaction.defaultRecoverTime = it->get<float>();
+                if (auto it = hr.find("strengthDip"); it != hr.end() && it->is_number())
+                    config.hitReaction.strengthDip = it->get<float>();
+                if (auto it = hr.find("chainDepth"); it != hr.end() && it->is_number_integer())
+                    config.hitReaction.chainDepth = it->get<int>();
+                if (auto it = hr.find("chainFalloff"); it != hr.end() && it->is_number())
+                    config.hitReaction.chainFalloff = it->get<float>();
+            }
+
+            if (auto it = j.find("settleLinearVelocityThreshold"); it != j.end() && it->is_number())
+                config.settleLinearVelocityThreshold = it->get<float>();
+            if (auto it = j.find("settleAngularVelocityThreshold"); it != j.end() && it->is_number())
+                config.settleAngularVelocityThreshold = it->get<float>();
+            if (auto it = j.find("settleFrameCount"); it != j.end() && it->is_number_integer())
+                config.settleFrameCount = it->get<int>();
         }
 
         types::JointConstraintLimits deserializeJointLimit(const json& lJson)
@@ -114,6 +217,8 @@ namespace serialization
         }
         j["jointLimits"] = limitsArray;
 
+        j.update(serializeMotorConfig(config));
+
         return j;
     }
 
@@ -147,11 +252,18 @@ namespace serialization
                 config.jointLimits.push_back(deserializeJointLimit(lJson));
         }
 
+        deserializeMotorConfig(j, config);
+
         // Reset runtime state
         physAnim.currentMode = config.defaultMode;
         physAnim.isInitialized = false;
         physAnim.transitionProgress = 0.0f;
         physAnim.ragdollCollisionGroup = 0;
+        physAnim.globalMotorStrength = 1.0f;
+        physAnim.ragdollSettled = false;
+        physAnim.overrideBoneMatrices.clear();
+        physAnim.capturedPoseMatrices.clear();
+        physAnim.blendOutProgress = 1.0f;
     }
 
     json SceneSerialization::serializeVFX(const components::VFXComponent& vfx)
