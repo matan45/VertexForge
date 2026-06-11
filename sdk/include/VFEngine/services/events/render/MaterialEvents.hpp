@@ -51,13 +51,21 @@ namespace events::material {
         std::string_view getName() const override { return "SetSubMeshMaterial"; }
     };
 
-    // Set a runtime parameter override
+    // Set a runtime override of a named material parameter (typed)
     struct SetMaterialParameterCommand : ICommand<bool> {
         services::EntityHandle entity;
         std::string parameterName;
-        float value;
+        ::material::ParameterValue value = 0.0f;
 
         std::string_view getName() const override { return "SetMaterialParameter"; }
+    };
+
+    // Clear a runtime parameter override (empty name clears all)
+    struct ClearMaterialParameterCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        std::string parameterName;
+
+        std::string_view getName() const override { return "ClearMaterialParameter"; }
     };
 
     // Clear all submesh material assignments
@@ -100,6 +108,14 @@ namespace events::material {
         std::string_view getName() const override { return "GetAllSubMeshMaterials"; }
     };
 
+    // Get a runtime parameter override value (nullopt when not overridden)
+    struct GetMaterialParameterQuery : IQuery<std::optional<::material::ParameterValue>> {
+        services::EntityHandle entity;
+        std::string parameterName;
+
+        std::string_view getName() const override { return "GetMaterialParameter"; }
+    };
+
     // ============================================
     // NOTIFICATIONS - State change broadcasts
     // ============================================
@@ -135,11 +151,12 @@ namespace events::material {
         std::string_view getName() const override { return "SubMeshMaterialChanged"; }
     };
 
-    // Material parameter override changed
+    // Material parameter override changed (cleared == true when the override was removed)
     struct MaterialParameterChangedNotification : INotification {
         services::EntityHandle entity;
         std::string parameterName;
-        float value;
+        ::material::ParameterValue value = 0.0f;
+        bool cleared = false;
 
         std::string_view getName() const override { return "MaterialParameterChanged"; }
     };
