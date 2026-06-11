@@ -118,13 +118,17 @@ namespace core::physics
         const std::vector<glm::mat4>& animatorSkinningMatrices,
         const std::vector<int>& physicsToAnimBoneIndex,
         const resource::SkeletonData& skeletonData,
-        const glm::vec3& entityPosition)
+        const glm::vec3& entityPosition,
+        const glm::quat& entityRotation)
     {
         JPH::SkeletonPose pose;
         pose.SetSkeleton(physicsSkeleton);
         pose.SetRootOffset(toJoltR(entityPosition));
 
-        glm::mat4 globalTransform = glm::inverse(skeletonData.globalInverseTransform);
+        // Entity rotation cancels out of parent-relative joint states; it only
+        // orients the root joint so the root drive can track entity yaw
+        glm::mat4 globalTransform =
+            glm::mat4_cast(entityRotation) * glm::inverse(skeletonData.globalInverseTransform);
 
         auto& jointMatrices = pose.GetJointMatrices();
         jointMatrices.resize(physicsSkeleton->GetJointCount());

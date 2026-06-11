@@ -312,10 +312,11 @@ namespace services
                 continue;
             }
 
-            if (physAnimComp.config.defaultMode == types::PhysicsAnimationMode::Ragdoll)
+            if (physAnimComp.config.defaultMode == types::PhysicsAnimationMode::Ragdoll ||
+                physAnimComp.config.defaultMode == types::PhysicsAnimationMode::PoweredRagdoll)
             {
                 physicsProvider->activateRagdoll(handle);
-                physAnimComp.currentMode = types::PhysicsAnimationMode::Ragdoll;
+                physAnimComp.currentMode = physAnimComp.config.defaultMode;
             }
             else
             {

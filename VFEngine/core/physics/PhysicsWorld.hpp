@@ -159,6 +159,7 @@ namespace core::physics
                                 const std::vector<float>& perBoneMaxTorque);
         void driveRagdollRoot(uint64_t entityId, const JPH::SkeletonPose& targetPose,
                               float strength, float deltaTime);
+        void setRagdollMotorsOff(uint64_t entityId);
         bool isRagdollBelowVelocityThreshold(uint64_t entityId, float linearThreshold,
                                              float angularThreshold) const;
         bool createKinematicBoneBodies(uint64_t entityId, const RagdollBuildResult& buildResult,

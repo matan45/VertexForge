@@ -292,6 +292,7 @@ namespace core::physics
     void PhysicsWorld::applyRagdollBoneImpulse(uint64_t entityId, int physicsBoneIndex, const glm::vec3& impulse) { ragdollManager.applyRagdollBoneImpulse(entityId, physicsBoneIndex, impulse); }
     void PhysicsWorld::driveRagdollToPose(uint64_t entityId, const JPH::SkeletonPose& targetPose, const std::vector<float>& perBoneStrength, const std::vector<float>& perBoneMaxTorque) { ragdollManager.driveRagdollToPose(entityId, targetPose, perBoneStrength, perBoneMaxTorque); }
     void PhysicsWorld::driveRagdollRoot(uint64_t entityId, const JPH::SkeletonPose& targetPose, float strength, float deltaTime) { ragdollManager.driveRagdollRoot(entityId, targetPose, strength, deltaTime); }
+    void PhysicsWorld::setRagdollMotorsOff(uint64_t entityId) { ragdollManager.setRagdollMotorsOff(entityId); }
     bool PhysicsWorld::isRagdollBelowVelocityThreshold(uint64_t entityId, float linearThreshold, float angularThreshold) const { return ragdollManager.isRagdollBelowVelocityThreshold(entityId, linearThreshold, angularThreshold); }
 
     bool PhysicsWorld::createKinematicBoneBodies(uint64_t entityId, const RagdollBuildResult& buildResult, const glm::vec3& entityPosition)

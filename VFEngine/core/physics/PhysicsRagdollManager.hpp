@@ -47,6 +47,8 @@ namespace core::physics
         // Velocity-drive the root body toward the target pose's root joint
         void driveRagdollRoot(uint64_t entityId, const JPH::SkeletonPose& targetPose,
                               float strength, float deltaTime);
+        // Turn all joint motors off (powered ragdoll -> passive ragdoll)
+        void setRagdollMotorsOff(uint64_t entityId);
         bool isRagdollBelowVelocityThreshold(uint64_t entityId, float linearThreshold,
                                              float angularThreshold) const;
 

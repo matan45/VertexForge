@@ -70,6 +70,31 @@ namespace services
             [this](const auto& query) {
                 return hasPhysicsAnimation(query.entity);
             });
+
+        dispatcher.registerCommandHandler<events::physicsAnimation::SetPhysicsAnimationModeCommand>(
+            [this](const auto& cmd) {
+                setMode(cmd.entity, cmd.mode);
+            });
+
+        dispatcher.registerCommandHandler<events::physicsAnimation::SetBoneMotorStrengthCommand>(
+            [this](const auto& cmd) {
+                setBoneMotorStrength(cmd.entity, cmd.boneName, cmd.strength);
+            });
+
+        dispatcher.registerCommandHandler<events::physicsAnimation::SetGlobalMotorStrengthCommand>(
+            [this](const auto& cmd) {
+                setGlobalMotorStrength(cmd.entity, cmd.strength);
+            });
+
+        dispatcher.registerCommandHandler<events::physicsAnimation::HitReactionCommand>(
+            [this](const auto& cmd) {
+                applyHitReaction(cmd.entity, cmd.boneName, cmd.impulse, cmd.recoverTime);
+            });
+
+        dispatcher.registerQueryHandler<events::physicsAnimation::IsRagdollSettledQuery>(
+            [this](const auto& query) {
+                return isRagdollSettled(query.entity);
+            });
     }
 
     void PhysicsAnimationServiceImpl::activateRagdoll(EntityHandle entity, const glm::vec3& impulse,
@@ -150,5 +175,55 @@ namespace services
                                                                const glm::vec3& impulse)
     {
         if (physicsProvider) physicsProvider->applyRagdollBoneImpulse(entity, animBoneIndex, impulse);
+    }
+
+    void PhysicsAnimationServiceImpl::setMode(EntityHandle entity, types::PhysicsAnimationMode mode)
+    {
+        if (!physicsProvider || !physicsProvider->hasPhysicsAnimation(entity)) return;
+
+        types::PhysicsAnimationMode oldMode = getMode(entity);
+        if (oldMode == mode) return;
+
+        physicsProvider->setPhysicsAnimationMode(entity, mode);
+
+        bool oldUsesRagdollBodies = oldMode == types::PhysicsAnimationMode::Ragdoll ||
+                                    oldMode == types::PhysicsAnimationMode::PoweredRagdoll;
+        bool newUsesRagdollBodies = mode == types::PhysicsAnimationMode::Ragdoll ||
+                                    mode == types::PhysicsAnimationMode::PoweredRagdoll;
+
+        if (!oldUsesRagdollBodies && newUsesRagdollBodies)
+        {
+            events::physicsAnimation::RagdollActivatedNotification notification;
+            notification.entity = entity;
+            ::events::EventDispatcher::instance().publish(notification);
+        }
+        else if (oldUsesRagdollBodies && !newUsesRagdollBodies)
+        {
+            events::physicsAnimation::RagdollDeactivatedNotification notification;
+            notification.entity = entity;
+            ::events::EventDispatcher::instance().publish(notification);
+        }
+    }
+
+    void PhysicsAnimationServiceImpl::setBoneMotorStrength(EntityHandle entity,
+                                                            const std::string& boneName, float strength)
+    {
+        if (physicsProvider) physicsProvider->setBoneMotorStrength(entity, boneName, strength);
+    }
+
+    void PhysicsAnimationServiceImpl::setGlobalMotorStrength(EntityHandle entity, float strength)
+    {
+        if (physicsProvider) physicsProvider->setGlobalMotorStrength(entity, strength);
+    }
+
+    void PhysicsAnimationServiceImpl::applyHitReaction(EntityHandle entity, const std::string& boneName,
+                                                        const glm::vec3& impulse, float recoverTime)
+    {
+        if (physicsProvider) physicsProvider->applyHitReaction(entity, boneName, impulse, recoverTime);
+    }
+
+    bool PhysicsAnimationServiceImpl::isRagdollSettled(EntityHandle entity) const
+    {
+        return physicsProvider && physicsProvider->isRagdollSettled(entity);
     }
 }

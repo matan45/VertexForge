@@ -46,7 +46,8 @@ namespace core::physics
             const std::vector<glm::mat4>& animatorSkinningMatrices,
             const std::vector<int>& physicsToAnimBoneIndex,
             const resource::SkeletonData& skeletonData,
-            const glm::vec3& entityPosition = glm::vec3(0.0f));
+            const glm::vec3& entityPosition = glm::vec3(0.0f),
+            const glm::quat& entityRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
 
         static std::vector<glm::mat4> ragdollPoseToSkinningMatrices(
             const JPH::SkeletonPose& ragdollPose,

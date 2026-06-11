@@ -47,6 +47,37 @@ namespace events::physicsAnimation
         std::string_view getName() const override { return "ApplyRagdollBoneImpulse"; }
     };
 
+    struct SetPhysicsAnimationModeCommand : ::events::ICommand<void>
+    {
+        services::EntityHandle entity;
+        types::PhysicsAnimationMode mode = types::PhysicsAnimationMode::Animated;
+        std::string_view getName() const override { return "SetPhysicsAnimationMode"; }
+    };
+
+    struct SetBoneMotorStrengthCommand : ::events::ICommand<void>
+    {
+        services::EntityHandle entity;
+        std::string boneName;
+        float strength = 1.0f;
+        std::string_view getName() const override { return "SetBoneMotorStrength"; }
+    };
+
+    struct SetGlobalMotorStrengthCommand : ::events::ICommand<void>
+    {
+        services::EntityHandle entity;
+        float strength = 1.0f;
+        std::string_view getName() const override { return "SetGlobalMotorStrength"; }
+    };
+
+    struct HitReactionCommand : ::events::ICommand<void>
+    {
+        services::EntityHandle entity;
+        std::string boneName;
+        glm::vec3 impulse{0.0f};
+        float recoverTime = -1.0f; // < 0 = use config default
+        std::string_view getName() const override { return "HitReaction"; }
+    };
+
     // ============================================
     // QUERIES
     // ============================================
@@ -69,6 +100,12 @@ namespace events::physicsAnimation
         std::string_view getName() const override { return "HasPhysicsAnimation"; }
     };
 
+    struct IsRagdollSettledQuery : ::events::IQuery<bool>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "IsRagdollSettled"; }
+    };
+
     // ============================================
     // NOTIFICATIONS
     // ============================================
@@ -83,5 +120,11 @@ namespace events::physicsAnimation
     {
         services::EntityHandle entity;
         std::string_view getName() const override { return "RagdollDeactivated"; }
+    };
+
+    struct RagdollSettledNotification : ::events::INotification
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "RagdollSettled"; }
     };
 }

@@ -261,6 +261,22 @@ namespace core::physics
         bodyInterface.SetLinearAndAngularVelocity(rootBody, linearVelocity, angularVelocity);
     }
 
+    void PhysicsRagdollManager::setRagdollMotorsOff(uint64_t entityId)
+    {
+        auto it = entityRagdolls.find(entityId);
+        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+
+        JPH::Ragdoll* ragdoll = it->second.ragdoll;
+        for (int i = 0; i < static_cast<int>(ragdoll->GetConstraintCount()); ++i)
+        {
+            JPH::TwoBodyConstraint* constraint = ragdoll->GetConstraint(i);
+            if (constraint->GetSubType() != JPH::EConstraintSubType::SwingTwist) continue;
+            auto* swingTwist = static_cast<JPH::SwingTwistConstraint*>(constraint);
+            swingTwist->SetSwingMotorState(JPH::EMotorState::Off);
+            swingTwist->SetTwistMotorState(JPH::EMotorState::Off);
+        }
+    }
+
     bool PhysicsRagdollManager::isRagdollBelowVelocityThreshold(uint64_t entityId, float linearThreshold,
                                                                  float angularThreshold) const
     {
