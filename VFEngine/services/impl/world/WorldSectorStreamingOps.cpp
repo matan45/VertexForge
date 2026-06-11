@@ -35,15 +35,18 @@ namespace services
         // Poll completed async sector loads (works in both edit and play mode)
         pollAsyncSectorLoads();
 
-        // Only stream sectors during play mode (based on primary camera distance).
-        // In edit mode, sectors stay as-is — no auto load/unload from editor camera.
-        if (isPlayMode)
+        // Stream sectors during play mode (primary camera distance), and optionally in
+        // edit mode off the editor viewport camera when editModeStreaming is enabled.
+        // Dirty (unsaved) sectors are never auto-unloaded by the streamer, so edit-mode
+        // streaming cannot drop unsaved work.
+        if (isPlayMode || worldDefinition.streamingConfig.editModeStreaming)
         {
-            // Build streaming sources: camera is always source[0]
+            // Build streaming sources: camera is always source[0].
+            // The editor camera isn't an ECS entity — use the cached viewport position.
             std::vector<world::StreamingSource> sources;
             {
                 world::StreamingSource cameraSrc;
-                cameraSrc.position = getPrimaryCameraPosition();
+                cameraSrc.position = isPlayMode ? getPrimaryCameraPosition() : cachedCameraPos;
                 cameraSrc.radiusMultiplier = 1.0f;
                 cameraSrc.priority = 0;
                 cameraSrc.id = 0;
@@ -57,6 +60,29 @@ namespace services
 
             streamer.update(sources, sectorManager, streamingActions);
 
+            // Edit-mode rail: never auto-unload the sector holding the selected entity —
+            // panels and gizmos hold live references to it
+            std::optional<world::SectorCoord> selectedCoord;
+            if (!isPlayMode)
+            {
+                auto selected = ::events::EventDispatcher::instance().query(
+                    ::events::scene::GetSelectedEntityQuery{});
+                if (selected.has_value())
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto entity = internal::fromHandle(*selected);
+                    if (registry.valid(entity))
+                    {
+                        if (auto* uuidComp = registry.try_get<components::UUIDComponent>(entity))
+                        {
+                            uint64_t uuid = uuidComp->id.getValue();
+                            if (sectorManager.hasEntitySector(uuid))
+                                selectedCoord = sectorManager.getEntitySector(uuid);
+                        }
+                    }
+                }
+            }
+
             for (const auto& action : streamingActions)
             {
                 if (action.isLoad)
@@ -65,6 +91,13 @@ namespace services
                 }
                 else
                 {
+                    if (selectedCoord.has_value() && action.coord == *selectedCoord)
+                    {
+                        // The streamer already dropped this coord from its tracking;
+                        // force a reseed so it retries once the selection moves on
+                        streamer.setEnabled(true);
+                        continue;
+                    }
                     handleSectorUnload(action.coord);
                 }
             }

@@ -259,23 +259,58 @@ namespace windows
     void WorldSectorWindow::drawStreamingConfig()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        auto config = dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
 
-        ImGui::Text("Load Radius: %.0f sectors", config.loadRadius);
-        ImGui::Text("Unload Radius: %.0f sectors", config.unloadRadius);
-        ImGui::Text("Max Loads/Frame: %d", config.maxLoadsPerFrame);
-        ImGui::Text("Max Unloads/Frame: %d", config.maxUnloadsPerFrame);
-        ImGui::Text("Max Entities/Frame: %d", config.maxEntitiesPerFrame);
+        // Load once so slider edits aren't clobbered by the live query every frame
+        if (!streamingConfigLoaded)
+        {
+            editableStreaming = dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
+            streamingConfigLoaded = true;
+        }
+
+        bool changed = false;
+
+        changed |= ImGui::SliderFloat("Load Radius", &editableStreaming.loadRadius,
+                                      1.0f, 32.0f, "%.1f sectors");
+        changed |= ImGui::SliderFloat("Unload Radius", &editableStreaming.unloadRadius,
+                                      2.0f, 40.0f, "%.1f sectors");
+        changed |= ImGui::SliderInt("Max Loads/Frame", &editableStreaming.maxLoadsPerFrame, 1, 16);
+        changed |= ImGui::SliderInt("Max Unloads/Frame", &editableStreaming.maxUnloadsPerFrame, 1, 16);
+        changed |= ImGui::SliderInt("Max Entities/Frame", &editableStreaming.maxEntitiesPerFrame, 1, 64);
 
         ImGui::Separator();
         ImGui::Text("Terrain Tile Streaming (via Sector)");
-        ImGui::Text("Max Terrain Loads/Frame: %d", config.maxTerrainLoadsPerFrame);
-        ImGui::Text("Max Terrain Unloads/Frame: %d", config.maxTerrainUnloadsPerFrame);
+        changed |= ImGui::SliderInt("Max Terrain Loads/Frame",
+                                    &editableStreaming.maxTerrainLoadsPerFrame, 1, 16);
+        changed |= ImGui::SliderInt("Max Terrain Unloads/Frame",
+                                    &editableStreaming.maxTerrainUnloadsPerFrame, 1, 16);
 
         ImGui::Separator();
-        ImGui::Text("GPU Object Streaming: %s", config.enableGPUObjectStreaming ? "Enabled" : "Disabled");
+        changed |= ImGui::Checkbox("Edit-Mode Streaming", &editableStreaming.editModeStreaming);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Stream sectors around the editor camera while editing.\n"
+                              "Unsaved (dirty) sectors and the selected entity's sector\n"
+                              "are never auto-unloaded.");
 
-        if (config.enableGPUObjectStreaming)
+        if (changed)
+        {
+            events::world::SetStreamingConfigCommand cmd;
+            cmd.config = editableStreaming;
+            dispatcher.execute(cmd);
+            // Re-read so UI reflects validation (e.g. unloadRadius forced above loadRadius)
+            editableStreaming = dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
+        }
+
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 60.0f);
+        if (ImGui::SmallButton("Reload"))
+            streamingConfigLoaded = false;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Discard UI edits and re-read the active config");
+
+        ImGui::Separator();
+        ImGui::Text("GPU Object Streaming: %s",
+                    editableStreaming.enableGPUObjectStreaming ? "Enabled" : "Disabled");
+
+        if (editableStreaming.enableGPUObjectStreaming)
         {
             auto stats = dispatcher.query(events::render::objectstreaming::GetObjectStreamingStatsQuery{});
             ImGui::Text("Registered: %u | Active on GPU: %u | Queued: %u",
@@ -567,6 +602,28 @@ namespace windows
                 hlodGenerationStage = "Starting...";
                 hlodGenerating = true;
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Generate Missing"))
+            {
+                // Only sectors without a bake — covers invalidated (stale) HLODs
+                auto allCoords = dispatcher.query(events::world::GetLoadedSectorCoordsQuery{});
+                hlodPendingSectors.clear();
+                for (const auto& coord : allCoords)
+                {
+                    events::world::hlod::IsHLODGeneratedQuery q;
+                    q.coord = coord;
+                    if (!dispatcher.query(q))
+                        hlodPendingSectors.push_back(coord);
+                }
+                hlodTotalToGenerate = static_cast<int>(hlodPendingSectors.size());
+                hlodDoneCount = 0;
+                hlodGenerationProgress = 0.0f;
+                hlodGenerationStage = "Starting...";
+                hlodGenerating = hlodTotalToGenerate > 0;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Re-bake only sectors whose HLOD is missing or was\n"
+                                  "invalidated by a content change (saved dirty sector)");
         }
 
         // Status: use cached counts (refreshed on timer in refreshStats, not per-frame)

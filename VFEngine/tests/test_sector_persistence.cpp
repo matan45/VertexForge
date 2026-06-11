@@ -2,6 +2,8 @@
 #include <world/WorldSector.hpp>
 #include <world/WorldSectorManager.hpp>
 #include <world/WorldSectorSerialization.hpp>
+#include <world/WorldDefinition.hpp>
+#include <world/WorldDefinitionSerialization.hpp>
 #include <scene/Entity.hpp>
 #include <scene/EntityRegistry.hpp>
 #include <components/Components.hpp>
@@ -219,6 +221,38 @@ TEST_SUITE("SectorPersistence")
 
             CHECK_FALSE(world::WorldSectorSerialization::loadSector(path, entityData));
         }
+    }
+
+    TEST_CASE(".vfworld round-trips the full streaming config")
+    {
+        resetTestRoot();
+
+        world::WorldDefinition definition;
+        definition.name = "RoundTrip";
+        definition.sectorConfig.sectorWorldSize = 256.0f;
+        definition.sectorConfig.tilesPerSector = 8;
+        definition.streamingConfig.loadRadius = 6.0f;
+        definition.streamingConfig.unloadRadius = 9.0f;
+        definition.streamingConfig.maxLoadsPerFrame = 3;
+        definition.streamingConfig.maxEntitiesPerFrame = 16;
+        definition.streamingConfig.editModeStreaming = true;
+        definition.sectorFilePaths[{1, -2}] = "sectors/sector_1_-2.vfsector";
+
+        std::string path = (testRoot() / "roundtrip.vfworld").string();
+        REQUIRE(world::WorldDefinitionSerialization::save(definition, path));
+
+        world::WorldDefinition loaded;
+        REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
+        CHECK(loaded.name == "RoundTrip");
+        CHECK(loaded.sectorConfig.sectorWorldSize == doctest::Approx(256.0f));
+        CHECK(loaded.sectorConfig.tilesPerSector == 8);
+        CHECK(loaded.streamingConfig.loadRadius == doctest::Approx(6.0f));
+        CHECK(loaded.streamingConfig.unloadRadius == doctest::Approx(9.0f));
+        CHECK(loaded.streamingConfig.maxLoadsPerFrame == 3);
+        CHECK(loaded.streamingConfig.maxEntitiesPerFrame == 16);
+        CHECK(loaded.streamingConfig.editModeStreaming == true);
+        REQUIRE(loaded.sectorFilePaths.size() == 1);
+        CHECK(loaded.sectorFilePaths.at({1, -2}) == "sectors/sector_1_-2.vfsector");
     }
 
     TEST_CASE("dirty lifecycle: manager mutations mark sectors dirty")

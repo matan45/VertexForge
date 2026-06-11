@@ -513,6 +513,16 @@ namespace services
                 return debugDrawSectors;
             });
 
+        dispatcher.registerCommandHandler<::events::world::SetStreamingConfigCommand>(
+            [this](const ::events::world::SetStreamingConfigCommand& cmd)
+            {
+                if (!worldMode) return;
+                streamer.setConfig(cmd.config);
+                // Adopt the validated config (setConfig enforces unloadRadius > loadRadius)
+                worldDefinition.streamingConfig = streamer.getConfig();
+                hlodStreamer.setConfig(worldDefinition.streamingConfig, worldDefinition.hlodConfig);
+            });
+
         dispatcher.registerCommandHandler<::events::world::MarkEntitySectorDirtyCommand>(
             [this](const ::events::world::MarkEntitySectorDirtyCommand& cmd)
             {
@@ -725,6 +735,9 @@ namespace services
                         sector.entityUUIDs.clear();
                         sector.state = world::SectorState::Unloaded;
                     });
+
+                    // Sector states changed wholesale — make the streamer reseed its tracking
+                    streamer.setEnabled(true);
                 }
                 else if (notif.currentMode == services::EditorMode::Edit)
                 {
@@ -772,6 +785,9 @@ namespace services
                             sector.state = world::SectorState::Loaded;
                         }
                     });
+
+                    // Sector states changed wholesale — make the streamer reseed its tracking
+                    streamer.setEnabled(true);
                 }
             });
 

@@ -149,6 +149,15 @@ namespace events::world
         std::string_view getName() const override { return "GetWorldStreamingStats"; }
     };
 
+    // Live-updates the streaming configuration (streamer + HLOD streamer + world
+    // definition). Persisted on the next Save World.
+    struct SetStreamingConfigCommand : ICommand<>
+    {
+        ::world::SectorStreamingConfig config;
+
+        std::string_view getName() const override { return "SetStreamingConfig"; }
+    };
+
     struct GetSectorConfigQuery : IQuery<::world::SectorConfig>
     {
         std::string_view getName() const override { return "GetSectorConfig"; }

@@ -33,6 +33,7 @@ namespace world
             streamingJson["maxTerrainLoadsPerFrame"] = definition.streamingConfig.maxTerrainLoadsPerFrame;
             streamingJson["maxTerrainUnloadsPerFrame"] = definition.streamingConfig.maxTerrainUnloadsPerFrame;
             streamingJson["enableGPUObjectStreaming"] = definition.streamingConfig.enableGPUObjectStreaming;
+            streamingJson["editModeStreaming"] = definition.streamingConfig.editModeStreaming;
             streamingJson["hlodTier0Radius"] = definition.streamingConfig.hlodTier0Radius;
             streamingJson["hlodTier1Radius"] = definition.streamingConfig.hlodTier1Radius;
             streamingJson["hlodTier2Radius"] = definition.streamingConfig.hlodTier2Radius;
@@ -119,6 +120,7 @@ namespace world
                 outDefinition.streamingConfig.maxTerrainLoadsPerFrame = stc.value("maxTerrainLoadsPerFrame", 4);
                 outDefinition.streamingConfig.maxTerrainUnloadsPerFrame = stc.value("maxTerrainUnloadsPerFrame", 4);
                 outDefinition.streamingConfig.enableGPUObjectStreaming = stc.value("enableGPUObjectStreaming", true);
+                outDefinition.streamingConfig.editModeStreaming = stc.value("editModeStreaming", false);
                 outDefinition.streamingConfig.hlodTier0Radius = stc.value("hlodTier0Radius", 10.0f);
                 outDefinition.streamingConfig.hlodTier1Radius = stc.value("hlodTier1Radius", 20.0f);
                 outDefinition.streamingConfig.hlodTier2Radius = stc.value("hlodTier2Radius", 40.0f);
