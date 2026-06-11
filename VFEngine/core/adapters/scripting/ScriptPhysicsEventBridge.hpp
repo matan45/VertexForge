@@ -31,6 +31,7 @@ namespace core
         void dispatchCollisionCallback(const char* methodName,
                                        ::services::EntityHandle self,
                                        ::services::EntityHandle other);
+        void dispatchRagdollCallback(const char* methodName, ::services::EntityHandle self);
 
         ::services::ScriptInterpreter* interpreter;
         const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;

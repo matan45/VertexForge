@@ -4,6 +4,7 @@
 #include "ScriptPhysicsEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "events/physics/PhysicsEvents.hpp"
+#include "events/physics/PhysicsAnimationEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
@@ -52,6 +53,24 @@ namespace core
                 dispatchCollisionCallback("onTriggerExit", notif.triggerEntity, notif.otherEntity);
             }));
 
+        tokens.push_back(dispatcher.subscribe<::events::physicsAnimation::RagdollActivatedNotification>(
+            [this](const ::events::physicsAnimation::RagdollActivatedNotification& notif)
+            {
+                dispatchRagdollCallback("onRagdollActivated", notif.entity);
+            }));
+
+        tokens.push_back(dispatcher.subscribe<::events::physicsAnimation::RagdollDeactivatedNotification>(
+            [this](const ::events::physicsAnimation::RagdollDeactivatedNotification& notif)
+            {
+                dispatchRagdollCallback("onRagdollDeactivated", notif.entity);
+            }));
+
+        tokens.push_back(dispatcher.subscribe<::events::physicsAnimation::RagdollSettledNotification>(
+            [this](const ::events::physicsAnimation::RagdollSettledNotification& notif)
+            {
+                dispatchRagdollCallback("onRagdollSettled", notif.entity);
+            }));
+
         vfLogInfo("[ScriptPhysicsEventBridge] Subscribed to physics collision events");
     }
 
@@ -65,6 +84,42 @@ namespace core
         tokens.clear();
 
         vfLogInfo("[ScriptPhysicsEventBridge] Unsubscribed from physics collision events");
+    }
+
+    void ScriptPhysicsEventBridge::dispatchRagdollCallback(const char* methodName,
+                                                            ::services::EntityHandle self)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.valid(static_cast<entt::entity>(self.id))) return;
+
+        auto* scriptComp = registry.try_get<components::ScriptComponent>(
+            static_cast<entt::entity>(self.id));
+        if (!scriptComp) return;
+
+        for (const auto& [instanceId, entityHandle] : instanceToEntity)
+        {
+            if (entityHandle.id != self.id) continue;
+
+            auto interfaceIt = instanceToInterfaces.find(instanceId);
+            if (interfaceIt == instanceToInterfaces.end() ||
+                interfaceIt->second.find("IRagdollListener") == interfaceIt->second.end())
+                continue;
+
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end()) continue;
+
+            try
+            {
+                NativeAPIRegistry::setCurrentEntity(self);
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+                interpreter->callMethod(instance, methodName, {});
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("[ScriptPhysicsEventBridge] {} callback error: {}", methodName, e.what());
+            }
+        }
     }
 
     void ScriptPhysicsEventBridge::dispatchCollisionCallback(

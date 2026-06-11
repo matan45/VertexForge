@@ -154,6 +154,96 @@ namespace core::api
                 return value::Value(std::monostate{});
             }});
 
+        // ============================================
+        // Powered Ragdoll
+        // ============================================
+
+        interpreter->registerNativeFunction("_native_physanim_setMode",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(std::monostate{});
+                int64_t id = extractInt64(args[0]);
+                if (id < 0) return value::Value(std::monostate{});
+
+                int64_t mode = extractInt64(args[1]);
+                if (mode < 0 || mode > 3)
+                {
+                    vfLogError("[Script] PhysicsAnimation.setMode: invalid mode {}", mode);
+                    return value::Value(std::monostate{});
+                }
+
+                events::physicsAnimation::SetPhysicsAnimationModeCommand cmd;
+                cmd.entity = intToEntity(id);
+                cmd.mode = static_cast<types::PhysicsAnimationMode>(mode);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        interpreter->registerNativeFunction("_native_physanim_setBoneMotorStrength",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 3) return value::Value(std::monostate{});
+                int64_t id = extractInt64(args[0]);
+                if (id < 0) return value::Value(std::monostate{});
+
+                events::physicsAnimation::SetBoneMotorStrengthCommand cmd;
+                cmd.entity = intToEntity(id);
+                cmd.boneName = extractString(args[1], "PhysicsAnimation.setBoneMotorStrength");
+                cmd.strength = extractFloat(args[2]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        interpreter->registerNativeFunction("_native_physanim_setGlobalMotorStrength",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(std::monostate{});
+                int64_t id = extractInt64(args[0]);
+                if (id < 0) return value::Value(std::monostate{});
+
+                events::physicsAnimation::SetGlobalMotorStrengthCommand cmd;
+                cmd.entity = intToEntity(id);
+                cmd.strength = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        interpreter->registerNativeFunction("_native_physanim_hitReaction",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 5) return value::Value(std::monostate{});
+                int64_t id = extractInt64(args[0]);
+                if (id < 0) return value::Value(std::monostate{});
+
+                events::physicsAnimation::HitReactionCommand cmd;
+                cmd.entity = intToEntity(id);
+                cmd.boneName = extractString(args[1], "PhysicsAnimation.hitReaction");
+                cmd.impulse = clampMagnitude(
+                    glm::vec3(extractFloat(args[2]), extractFloat(args[3]), extractFloat(args[4])),
+                    MAX_RAGDOLL_IMPULSE_MAGNITUDE);
+
+                // Optional recover time (args[5]); < 0 = config default
+                if (args.size() >= 6)
+                {
+                    cmd.recoverTime = extractFloat(args[5]);
+                }
+
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        interpreter->registerNativeFunction("_native_physanim_isSettled",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(false);
+                int64_t id = extractInt64(args[0]);
+                if (id < 0) return value::Value(false);
+
+                events::physicsAnimation::IsRagdollSettledQuery query;
+                query.entity = intToEntity(id);
+                return value::Value(dispatcher.query(query));
+            }});
+
         vfLogInfo("[PhysicsAnimationAPI] Registered PhysicsAnimation native functions");
     }
 }
