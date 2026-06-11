@@ -1,6 +1,7 @@
 #include "MeshImporter.hpp"
 #include <algorithm>
 #include <ranges>
+#include <variant>
 
 namespace import::builtin
 {
@@ -46,6 +47,14 @@ namespace import::builtin
             return !result.empty();
         }
 
+        bool isAnimationOnly(const pipeline::ImportContext& context)
+        {
+            const auto& options = context.file.config.customOptions;
+            auto it = options.find("animationOnly");
+            return it != options.end() && std::holds_alternative<bool>(it->second) &&
+                   std::get<bool>(it->second);
+        }
+
         bool isOBJ(std::span<const unsigned char> header)
         {
             const std::vector<std::string> objKeywords = {"# ", "v ", "vn ", "vt ", "f ", "o ", "g "};
@@ -87,29 +96,59 @@ namespace import::builtin
 
     void MeshImporter::process(pipeline::ImportContext& context)
     {
-        // Mesh extraction reports 0-70% of the file, animation extraction 70-100%.
-        types::MeshProgressCallback meshProgress = nullptr;
-        if (context.progressCallback)
-        {
-            meshProgress = [&context](float progress)
-            {
-                context.progressCallback(context.fileName, context.fileIndex + 1,
-                                         context.totalFiles, progress * 0.7f);
-            };
-        }
+        const bool animationOnly = isAnimationOnly(context);
 
-        meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
+        if (!animationOnly)
+        {
+            // Mesh extraction reports 0-70% of the file, animation extraction 70-100%.
+            types::MeshProgressCallback meshProgress = nullptr;
+            if (context.progressCallback)
+            {
+                meshProgress = [&context](float progress)
+                {
+                    context.progressCallback(context.fileName, context.fileIndex + 1,
+                                             context.totalFiles, progress * 0.7f);
+                };
+            }
+
+            meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
+        }
 
         types::AnimationProgressCallback animProgress = nullptr;
         if (context.progressCallback)
         {
-            animProgress = [&context](float progress)
+            const float base = animationOnly ? 0.0f : 0.7f;
+            const float span = animationOnly ? 1.0f : 0.3f;
+            animProgress = [&context, base, span](float progress)
             {
                 context.progressCallback(context.fileName, context.fileIndex + 1,
-                                         context.totalFiles, 0.7f + progress * 0.3f);
+                                         context.totalFiles, base + progress * span);
             };
         }
 
         animationProcessor.loadFromFile(context.file, context.fileName, context.location, animProgress);
+    }
+
+    std::string MeshImporter::deriveOutputFile(const pipeline::ImportContext& context) const
+    {
+        if (isAnimationOnly(context))
+            return context.fileName + "." + FileExtension::animation;
+        return {};
+    }
+
+    resource::AssetType MeshImporter::deriveAssetType(const pipeline::ImportContext& context) const
+    {
+        return isAnimationOnly(context) ? resource::AssetType::Animation : resource::AssetType::COUNT;
+    }
+
+    std::vector<ImportOptionDesc> MeshImporter::options() const
+    {
+        ImportOptionDesc animationOnly;
+        animationOnly.key = "animationOnly";
+        animationOnly.label = "Animation Only";
+        animationOnly.tooltip = "Extract only animations (.vfAnim) and skip the mesh data entirely";
+        animationOnly.type = ImportOptionDesc::Type::Bool;
+        animationOnly.defaultValue = false;
+        return {animationOnly};
     }
 }

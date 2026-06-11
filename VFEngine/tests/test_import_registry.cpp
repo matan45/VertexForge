@@ -284,6 +284,31 @@ TEST_SUITE("ImporterRegistry")
         CHECK(registry.optionsForExtension("optfmt").empty());
     }
 
+    TEST_CASE("animation-only mesh import redirects output to .vfAnim")
+    {
+        import::builtin::ensureRegistered();
+        auto* importer = import::ImporterRegistry::instance().importerFor("FBX");
+        REQUIRE(importer != nullptr);
+
+        importConfig::ImportConfig config;
+        pipeline::ImportContext context(importConfig::ImportFiles("anim.fbx", config), "out");
+        context.fileName = "anim";
+        context.fileType = "FBX";
+
+        // Default: standard mesh output and the format's asset type.
+        CHECK(importer->deriveOutputFile(context).empty());
+        CHECK(importer->deriveAssetType(context) == resource::AssetType::COUNT);
+
+        context.file.config.customOptions["animationOnly"] = true;
+        CHECK(importer->deriveOutputFile(context) == "anim.vfAnim");
+        CHECK(importer->deriveAssetType(context) == resource::AssetType::Animation);
+
+        // The option surfaces in the import dialog for mesh extensions.
+        auto options = import::ImporterRegistry::instance().optionsForExtension("fbx");
+        REQUIRE(options.size() == 1);
+        CHECK(options[0].key == "animationOnly");
+    }
+
     TEST_CASE("parallel detection is stable")
     {
         import::builtin::ensureRegistered();

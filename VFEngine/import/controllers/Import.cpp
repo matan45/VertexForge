@@ -44,6 +44,17 @@ namespace controllers
             return info ? info->assetType : resource::AssetType::COUNT;
         }
 
+        resource::AssetType assetTypeForContext(const pipeline::ImportContext& ctx)
+        {
+            if (auto* importer = import::ImporterRegistry::instance().importerFor(ctx.fileType))
+            {
+                auto overridden = importer->deriveAssetType(ctx);
+                if (overridden != resource::AssetType::COUNT)
+                    return overridden;
+            }
+            return fileTypeToAssetType(ctx.fileType);
+        }
+
         void createVfMeta(const std::string& outputPath, const std::string& sourcePath,
                           resource::AssetType assetType)
         {
@@ -83,10 +94,12 @@ namespace controllers
             fileResult.fileType = ctx.fileType;
             vfLogInfo("Successfully processed: {}", ctx.file.path);
 
-            // Create .vfmeta sidecar with importSource and importTimestamp
-            if (!fileResult.outputPath.empty())
+            // Create .vfmeta sidecar with importSource and importTimestamp.
+            // Existence guard: config-dependent outputs (e.g. animation-only
+            // mesh import of a file without animations) may not be written.
+            if (!fileResult.outputPath.empty() && std::filesystem::exists(fileResult.outputPath))
             {
-                resource::AssetType assetType = fileTypeToAssetType(ctx.fileType);
+                resource::AssetType assetType = assetTypeForContext(ctx);
 
                 if (assetType != resource::AssetType::COUNT)
                 {
