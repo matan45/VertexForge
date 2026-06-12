@@ -42,6 +42,14 @@ namespace events::scene {
         std::string_view getName() const override { return "ReparentEntity"; }
     };
 
+    struct ReorderEntityCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::EntityHandle newParent;
+        int insertIndex = -1; // position among newParent's children; -1 = append
+
+        std::string_view getName() const override { return "ReorderEntity"; }
+    };
+
     // ============================================
     // Transform Commands
     // ============================================
@@ -82,6 +90,12 @@ namespace events::scene {
         std::optional<services::EntityHandle> entity;
 
         std::string_view getName() const override { return "SelectEntity"; }
+    };
+
+    struct SelectEntitiesCommand : ICommand<> {
+        std::vector<services::EntityHandle> entities; // front() is the primary selection
+
+        std::string_view getName() const override { return "SelectEntities"; }
     };
 
     struct SetEntityStaticCommand : ICommand<bool> {
@@ -125,6 +139,10 @@ namespace events::scene {
 
     struct GetSelectedEntityQuery : IQuery<std::optional<services::EntityHandle>> {
         std::string_view getName() const override { return "GetSelectedEntity"; }
+    };
+
+    struct GetSelectedEntitiesQuery : IQuery<std::vector<services::EntityHandle>> {
+        std::string_view getName() const override { return "GetSelectedEntities"; }
     };
 
     struct FindEntitiesByNameQuery : IQuery<std::vector<services::EntityHandle>> {
