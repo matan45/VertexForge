@@ -2,11 +2,14 @@
 #include "../../data/UndoTypes.hpp"
 #include "asset/AssetReferenceScanner.hpp"
 #include "asset/AssetGUID.hpp"
+#include "asset/AssetDatabase.hpp"
 #include "asset/AssetMetadataSerializer.hpp"
+#include "asset/DependencyScanner.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/FileOperationsEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
+#include "../../events/project/ResourceEvents.hpp"
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
@@ -14,6 +17,26 @@
 #include <vector>
 
 namespace fs = std::filesystem;
+
+namespace
+{
+    // Re-scan dependencies of files whose contents were rewritten by a
+    // reference update, so the GUID graph and .vfmeta sidecars stay in
+    // sync. Must run AFTER the AssetDatabase path entry is up to date
+    // (i.e. after FileMovedNotification), otherwise path-based references
+    // fail to resolve and valid edges get dropped.
+    void rescanDependencies(const std::vector<std::string>& files, const std::string& projectRoot)
+    {
+        auto& db = asset::AssetDatabase::instance();
+        for (const auto& file : files)
+        {
+            if (auto guid = db.getGUID(file))
+            {
+                asset::DependencyScanner::scanAsset(*guid, file, projectRoot);
+            }
+        }
+    }
+}
 
 namespace services
 {
@@ -221,6 +244,13 @@ namespace services
             vfLogWarning("Failed to publish file moved notification: {}", e.what());
         }
 
+        // After the notification the AssetDatabase maps the new path, so the
+        // rewritten referencing files re-scan to the same GUIDs
+        if (!projRoot.empty() && !result.updatedReferences.empty())
+        {
+            rescanDependencies(result.updatedReferences, projRoot);
+        }
+
         result.success = true;
         vfLogInfo("Moved {} to {}", sourcePath, dest.string());
         return result;
@@ -322,6 +352,24 @@ namespace services
             return result;
         }
 
+        // Capture referencing assets before the database entry disappears,
+        // so undo can restore their dependency-graph edges
+        std::string projRoot = getProjectRoot();
+        std::vector<std::string> dependentPaths;
+        {
+            auto& db = asset::AssetDatabase::instance();
+            if (auto guidOpt = db.getGUID(path))
+            {
+                for (const auto& dependent : db.getDependents(*guidOpt))
+                {
+                    if (auto depPath = db.getPath(dependent))
+                    {
+                        dependentPaths.push_back(*depPath);
+                    }
+                }
+            }
+        }
+
         std::string trashPath = generateTrashPath(path);
 
         std::error_code ec;
@@ -351,12 +399,20 @@ namespace services
             return result;
         }
 
-        // Also move .vfmeta to trash
+        // Also move .vfmeta to trash, remembering where so undo can restore
+        // the asset's GUID
+        std::string metaOriginalPath;
+        std::string metaBackupPath;
         auto metaPath = asset::AssetMetadataSerializer::getMetaPath(filePath);
         if (fs::exists(metaPath, ec))
         {
             std::string metaTrashPath = generateTrashPath(metaPath.string());
             fs::rename(metaPath, metaTrashPath, ec);
+            if (!ec)
+            {
+                metaOriginalPath = metaPath.string();
+                metaBackupPath = metaTrashPath;
+            }
         }
 
         // Remove stale ResourceManager cache entries
@@ -367,6 +423,10 @@ namespace services
             try
             {
                 auto undoCmd = std::make_unique<DeleteFileUndoCommand>(path, trashPath);
+                undoCmd->metaOriginalPath = metaOriginalPath;
+                undoCmd->metaBackupPath = metaBackupPath;
+                undoCmd->dependentPaths = std::move(dependentPaths);
+                undoCmd->projectRoot = projRoot;
                 undoRedoService->pushCommand(std::move(undoCmd));
             }
             catch (const std::exception& e)
@@ -410,6 +470,18 @@ namespace services
         }
 
         // With GUID-keyed caches, no migration needed
+
+        // Keep the AssetDatabase path entry in sync on redo (and refresh UI)
+        events::fileops::FileMovedNotification notification;
+        notification.oldPath = sourcePath;
+        notification.newPath = destPath;
+        notification.updatedReferences = updatedReferences;
+        events::EventDispatcher::instance().publish(notification);
+
+        if (!projectRoot.empty())
+        {
+            rescanDependencies(updatedReferences, projectRoot);
+        }
     }
 
     void MoveFileUndoCommand::undo()
@@ -432,6 +504,13 @@ namespace services
         notification.oldPath = destPath;
         notification.newPath = sourcePath;
         events::EventDispatcher::instance().publish(notification);
+
+        // Database maps the original path again — re-scan the restored
+        // referencing files so graph and .vfmeta deps stay in sync
+        if (!projectRoot.empty())
+        {
+            rescanDependencies(updatedReferences, projectRoot);
+        }
     }
 
     void CopyFileUndoCommand::execute()
@@ -496,35 +575,58 @@ namespace services
         }
 
         // With GUID-keyed caches, deletions don't need cache cleanup
+
+        // Re-trash the .vfmeta sidecar as the original delete did
+        if (!metaOriginalPath.empty())
+        {
+            fs::rename(metaOriginalPath, metaBackupPath, ec);
+        }
+
+        // Unregister from the AssetDatabase, as the original delete did
+        events::fileops::FileDeletedNotification notification;
+        notification.path = originalPath;
+        events::EventDispatcher::instance().publish(notification);
     }
 
     void DeleteFileUndoCommand::undo()
     {
         std::error_code ec;
         fs::rename(backupPath, originalPath, ec);
-        if (!ec)
-        {
-            // Notify UI to refresh
-            events::fileops::FileMovedNotification notification;
-            notification.oldPath = backupPath;
-            notification.newPath = originalPath;
-            events::EventDispatcher::instance().publish(notification);
-            return;
-        }
-
-        fs::path backup(backupPath);
-        if (fs::is_directory(backup))
-        {
-            fs::copy(backupPath, originalPath, fs::copy_options::recursive, ec);
-        }
-        else
-        {
-            fs::copy_file(backupPath, originalPath, ec);
-        }
-
         if (ec)
         {
-            throw std::runtime_error("Failed to restore deleted file: " + ec.message());
+            fs::path backup(backupPath);
+            if (fs::is_directory(backup))
+            {
+                fs::copy(backupPath, originalPath, fs::copy_options::recursive, ec);
+            }
+            else
+            {
+                fs::copy_file(backupPath, originalPath, ec);
+            }
+
+            if (ec)
+            {
+                throw std::runtime_error("Failed to restore deleted file: " + ec.message());
+            }
+        }
+
+        // Restore the .vfmeta sidecar so the asset keeps its GUID
+        if (!metaBackupPath.empty())
+        {
+            fs::rename(metaBackupPath, metaOriginalPath, ec);
+        }
+
+        // Re-register the asset (reuses the GUID from the restored .vfmeta)
+        // and re-scan its own dependencies
+        events::resource::AssetSavedNotification savedNotification;
+        savedNotification.filePath = originalPath;
+        events::EventDispatcher::instance().publish(savedNotification);
+
+        // Referencing assets lost their edges when this GUID was
+        // unregistered — re-scan them to restore the graph
+        if (!projectRoot.empty())
+        {
+            rescanDependencies(dependentPaths, projectRoot);
         }
 
         // Notify UI to refresh

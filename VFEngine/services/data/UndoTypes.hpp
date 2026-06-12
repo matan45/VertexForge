@@ -73,6 +73,15 @@ namespace services
 
         std::string originalPath;
         std::string backupPath;
+
+        // .vfmeta sidecar backup so undo restores the asset's GUID
+        std::string metaOriginalPath;
+        std::string metaBackupPath;
+
+        // Assets that referenced this one at delete time; re-scanned on undo
+        // to restore their dependency-graph edges
+        std::vector<std::string> dependentPaths;
+        std::string projectRoot;
     };
 
 

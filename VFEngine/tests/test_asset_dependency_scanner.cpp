@@ -323,6 +323,74 @@ TEST_CASE("rebuildFromMetaFiles seeds the dependency graph from v2 metas")
     CHECK(contains(db.getDependents(texGuid), matGuid));
 }
 
+TEST_CASE("unregister removes edges both ways; re-register plus rescan restores them")
+{
+    // Mirrors the delete -> undo flow: deleteFile unregisters the asset,
+    // undo re-registers it with the GUID from the restored .vfmeta and
+    // re-scans the former dependents
+    TempProject proj("vf_depscan_delete_undo");
+    auto& db = asset::AssetDatabase::instance();
+    REQUIRE(db.rebuildFromMetaFiles(proj.root.string()));
+
+    auto texPath = proj.writeFile("textures/wood.vfimage", "binary");
+    auto texGuid = registerAsset(texPath, resource::AssetType::Texture);
+
+    std::string texPathFwd = texPath.string();
+    std::replace(texPathFwd.begin(), texPathFwd.end(), '\\', '/');
+    auto matPath = proj.writeFile("materials/wood.vfmat",
+        "{ \"albedoTextureRefPath\": \"" + texPathFwd + "\" }");
+    auto matGuid = registerAsset(matPath, resource::AssetType::Material);
+
+    asset::DependencyScanner::scanAsset(matGuid, matPath.string(), proj.root.string());
+    REQUIRE(contains(db.getDependents(texGuid), matGuid));
+
+    // Delete: unregister cleans both directions
+    db.unregisterAsset(texGuid);
+    CHECK(db.getDependents(texGuid).empty());
+    CHECK_FALSE(contains(db.getDependencies(matGuid), texGuid));
+
+    // Undo: re-register with the same GUID, then re-scan the dependent
+    db.registerAssetWithGUID(texGuid, texPath.string(), resource::AssetType::Texture);
+    asset::DependencyScanner::scanAsset(matGuid, matPath.string(), proj.root.string());
+    CHECK(contains(db.getDependents(texGuid), matGuid));
+    CHECK(contains(db.getDependencies(matGuid), texGuid));
+}
+
+TEST_CASE("re-scan after a move keeps edges once the database maps the new path")
+{
+    // Mirrors moveFile: references rewritten to the new path, database
+    // entry updated via FileMovedNotification, THEN dependents re-scanned
+    TempProject proj("vf_depscan_move_rescan");
+    auto& db = asset::AssetDatabase::instance();
+    REQUIRE(db.rebuildFromMetaFiles(proj.root.string()));
+
+    auto texPath = proj.writeFile("textures/wood.vfimage", "binary");
+    auto texGuid = registerAsset(texPath, resource::AssetType::Texture);
+
+    std::string texPathFwd = texPath.string();
+    std::replace(texPathFwd.begin(), texPathFwd.end(), '\\', '/');
+    auto matPath = proj.writeFile("materials/wood.vfmat",
+        "{ \"albedoTextureRefPath\": \"" + texPathFwd + "\" }");
+    auto matGuid = registerAsset(matPath, resource::AssetType::Material);
+
+    asset::DependencyScanner::scanAsset(matGuid, matPath.string(), proj.root.string());
+    REQUIRE(contains(db.getDependencies(matGuid), texGuid));
+
+    // Simulate the move: file relocated, references rewritten, db updated
+    auto newTexPath = proj.root / "textures" / "moved" / "wood.vfimage";
+    std::string newTexFwd = newTexPath.string();
+    std::replace(newTexFwd.begin(), newTexFwd.end(), '\\', '/');
+    proj.writeFile("textures/moved/wood.vfimage", "binary");
+    proj.writeFile("materials/wood.vfmat",
+        "{ \"albedoTextureRefPath\": \"" + newTexFwd + "\" }");
+    REQUIRE(db.updatePathByOldPath(texPath.string(), newTexPath.string()));
+
+    // Re-scan resolves the new path to the same GUID — edge survives
+    asset::DependencyScanner::scanAsset(matGuid, matPath.string(), proj.root.string());
+    CHECK(contains(db.getDependencies(matGuid), texGuid));
+    CHECK(contains(db.getDependents(texGuid), matGuid));
+}
+
 TEST_CASE("extension registry covers new container types and stays consistent")
 {
     using asset::extensions::isJsonContainerExtension;

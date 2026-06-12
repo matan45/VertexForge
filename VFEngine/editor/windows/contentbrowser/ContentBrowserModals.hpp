@@ -42,6 +42,8 @@ namespace windows
         bool showRenameFileModal = false;
 
         bool showDeleteConfirmModal = false;
+        bool deleteDependentsChecked = false;
+        std::vector<asset::AssetGUID> deleteDependents;
 
         bool showReferencesModal = false;
         asset::AssetGUID referencesGuid;

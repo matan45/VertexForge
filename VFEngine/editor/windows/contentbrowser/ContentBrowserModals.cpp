@@ -34,6 +34,8 @@ namespace windows
     void ContentBrowserModals::triggerDeleteModal()
     {
         showDeleteConfirmModal = true;
+        deleteDependentsChecked = false;
+        deleteDependents.clear();
     }
 
     void ContentBrowserModals::showError(const std::string& title, const std::string& message,
@@ -171,7 +173,7 @@ namespace windows
             }
             if (ImGui::MenuItem("Delete", "Del", false, hasSelection))
             {
-                showDeleteConfirmModal = true;
+                triggerDeleteModal();
             }
 
             ImGui::Separator();
@@ -290,9 +292,47 @@ namespace windows
         if (showDeleteConfirmModal &&
             ImGui::BeginPopupModal("Delete File?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
+            if (!deleteDependentsChecked)
+            {
+                deleteDependentsChecked = true;
+                deleteDependents.clear();
+
+                // Read-only GUID lookup (AssetRef::fromPath would register
+                // the file we are about to delete)
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::assetdb::GetAssetGUIDQuery guidQuery;
+                guidQuery.path = StringUtil::wstringToUtf8(selectedFile.wstring());
+                if (auto guidOpt = dispatcher.query(guidQuery))
+                {
+                    events::assetdb::GetAssetDependentsQuery depsQuery;
+                    depsQuery.guid = *guidOpt;
+                    deleteDependents = dispatcher.query(depsQuery);
+                }
+            }
+
             ImGui::Text("Are you sure you want to delete:");
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "%s",
                                StringUtil::wstringToUtf8(selectedFile.filename().wstring()).c_str());
+
+            if (!deleteDependents.empty())
+            {
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f),
+                                   "Warning: %zu asset(s) reference this file:", deleteDependents.size());
+                ImGui::BeginChild("DeleteDependentsList", ImVec2(500, 150), true);
+                bool navigated = drawAssetGuidList(deleteDependents);
+                ImGui::EndChild();
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f),
+                                   "Deleting it will leave those references broken.");
+                if (navigated)
+                {
+                    ImGui::CloseCurrentPopup();
+                    showDeleteConfirmModal = false;
+                    ImGui::EndPopup();
+                    return;
+                }
+            }
+
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.3f, 1.0f), "Note: Files can be recovered via Undo (Ctrl+Z)");
 
