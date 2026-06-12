@@ -67,4 +67,5 @@ public class ComponentType {
     public static final string UI_PROGRESS_BAR = "UIProgressBar";
     public static final string UI_STYLE = "UIStyle";
     public static final string UI_TOOLTIP = "UITooltip";
+    public static final string UI_WINDOW = "UIWindow";
 }

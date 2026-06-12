@@ -465,6 +465,22 @@ namespace services
         std::string panelChildName;
     };
 
+    struct UIWindowData
+    {
+        std::string title = "Window";
+        bool showTitleBar = true;
+        float titleBarHeight = 28.0f;
+        bool draggable = true;
+        bool closable = true;
+        bool modal = false;
+        glm::vec4 backgroundColor{0.12f, 0.12f, 0.12f, 1.0f};
+        glm::vec4 titleBarColor{0.18f, 0.18f, 0.22f, 1.0f};
+        glm::vec4 titleTextColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 backdropColor{0.0f, 0.0f, 0.0f, 0.55f};
+        asset::AssetRef fontRef;
+        float titleFontSize = 16.0f;
+    };
+
     struct UIButtonData
     {
         // Per-state colors

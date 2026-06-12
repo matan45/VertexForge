@@ -169,6 +169,16 @@ namespace services {
         std::optional<UITooltipData> getUITooltipData(EntityHandle entity) const;
         bool setUITooltipData(EntityHandle entity, const UITooltipData& data);
 
+        // UI Window Operations
+        bool addUIWindowComponent(EntityHandle entity);
+        bool removeUIWindowComponent(EntityHandle entity);
+        bool hasUIWindowComponent(EntityHandle entity) const;
+        std::optional<UIWindowData> getUIWindowData(EntityHandle entity) const;
+        bool setUIWindowData(EntityHandle entity, const UIWindowData& data);
+        bool openUIWindow(EntityHandle entity);
+        bool closeUIWindow(EntityHandle entity);
+        bool isUIWindowOpen(EntityHandle entity) const;
+
         // UI Style / Theme Operations
         bool addUIStyleComponent(EntityHandle entity);
         bool removeUIStyleComponent(EntityHandle entity);
@@ -193,6 +203,7 @@ namespace services {
         void registerDragDropHandlers(events::EventDispatcher& dispatcher);
         void registerThemeHandlers(events::EventDispatcher& dispatcher);
         void registerTooltipHandlers(events::EventDispatcher& dispatcher);
+        void registerWindowHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

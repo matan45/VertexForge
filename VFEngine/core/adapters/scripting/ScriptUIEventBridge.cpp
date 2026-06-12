@@ -304,6 +304,24 @@ namespace core
     }
 
     // ============================================
+    // Window
+    // ============================================
+
+    void ScriptUIEventBridge::dispatchWindowCallback(
+        const char* methodName,
+        ::services::EntityHandle entity,
+        const std::string& entityName)
+    {
+        dispatchToListeners("IUIWindowListener", methodName, [&]()
+        {
+            return std::vector<value::Value>{
+                value::Value(static_cast<int>(entity.id)),
+                value::Value(entityName)
+            };
+        });
+    }
+
+    // ============================================
     // Subscribe / Unsubscribe All
     // ============================================
 
@@ -372,6 +390,12 @@ namespace core
             [this](const auto& n) { dispatchProgressBarCallback("onProgressBarValueChanged", n.entity, n.entityName, n.newValue, n.previousValue); }));
         tokens.push_back(dispatcher.subscribe<::events::ui::UIProgressBarCompletedNotification>(
             [this](const auto& n) { dispatchProgressBarCallback("onProgressBarCompleted", n.entity, n.entityName); }));
+
+        // Window events
+        tokens.push_back(dispatcher.subscribe<::events::ui::UIWindowOpenedNotification>(
+            [this](const auto& n) { dispatchWindowCallback("onWindowOpened", n.entity, n.entityName); }));
+        tokens.push_back(dispatcher.subscribe<::events::ui::UIWindowClosedNotification>(
+            [this](const auto& n) { dispatchWindowCallback("onWindowClosed", n.entity, n.entityName); }));
 
         // Drag & Drop events
         tokens.push_back(dispatcher.subscribe<::events::ui::UIDragStartNotification>(

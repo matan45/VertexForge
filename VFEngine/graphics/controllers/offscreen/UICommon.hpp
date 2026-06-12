@@ -33,6 +33,7 @@ namespace controllers::offscreen::ui_common
     using utilities::ui::applyScrollOffset;
     using utilities::ui::hitTestRect;
     using utilities::ui::isInteractionAllowed;
+    using utilities::ui::findOpenWindowAncestor;
     using utilities::ui::computeCanvasImageModelMatrix;
     using utilities::ui::computeCanvasSubRectModelMatrix;
 

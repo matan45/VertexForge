@@ -32,7 +32,7 @@ namespace components
                                                UITabsComponent, UISliderComponent,
                                                UICheckboxComponent, UIProgressBarComponent, UIMaskComponent,
                                                UIDraggableComponent, UIDropTargetComponent, UIAnimationComponent,
-                                               UIStyleComponent, UITooltipComponent,
+                                               UIStyleComponent, UITooltipComponent, UIWindowComponent,
                                                SocketAttachmentComponent, SocketOverrideComponent,
                                                NavmeshAgentComponent, NavmeshComponent, OffMeshLinkComponent, NavmeshObstacleComponent, NavmeshModifierVolumeComponent, NavInvokerComponent, ControllerComponent,
                                                IKTargetComponent, WorldSectorComponent,

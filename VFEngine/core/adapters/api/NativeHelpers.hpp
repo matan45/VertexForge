@@ -165,6 +165,7 @@ namespace core::api
         if (type == "UIProgressBar") return services::ComponentTypeId::UIProgressBar;
         if (type == "UIStyle") return services::ComponentTypeId::UIStyle;
         if (type == "UITooltip") return services::ComponentTypeId::UITooltip;
+        if (type == "UIWindow") return services::ComponentTypeId::UIWindow;
         if (type == "SocketAttachment") return services::ComponentTypeId::SocketAttachment;
         if (type == "SocketOverride") return services::ComponentTypeId::SocketOverride;
         if (type == "NavmeshAgent") return services::ComponentTypeId::NavmeshAgent;
@@ -215,6 +216,7 @@ namespace core::api
         case services::ComponentTypeId::UIProgressBar: return "UIProgressBar";
         case services::ComponentTypeId::UIStyle: return "UIStyle";
         case services::ComponentTypeId::UITooltip: return "UITooltip";
+        case services::ComponentTypeId::UIWindow: return "UIWindow";
         case services::ComponentTypeId::SocketAttachment: return "SocketAttachment";
         case services::ComponentTypeId::SocketOverride: return "SocketOverride";
         case services::ComponentTypeId::NavmeshAgent: return "NavmeshAgent";

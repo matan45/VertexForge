@@ -133,6 +133,15 @@ namespace components
     }
 
     template <>
+    inline void resetClonedRuntimeState<UIWindowComponent>(UIWindowComponent& c)
+    {
+        c.isDraggingWindow = false;
+        c.dragStartMousePos = {0.0f, 0.0f};
+        c.dragStartAnchoredPos = {0.0f, 0.0f};
+        c.closeHovered = false;
+    }
+
+    template <>
     inline void resetClonedRuntimeState<UIAnimationComponent>(UIAnimationComponent& c)
     {
         c.isPlaying = false;

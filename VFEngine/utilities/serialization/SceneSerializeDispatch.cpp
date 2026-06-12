@@ -109,6 +109,8 @@ namespace serialization
             out["uiLabel"] = serializeUILabel(entity.getComponent<components::UILabelComponent>());
         if (entity.hasComponent<components::UITooltipComponent>())
             out["uiTooltip"] = serializeUITooltip(entity.getComponent<components::UITooltipComponent>());
+        if (entity.hasComponent<components::UIWindowComponent>())
+            out["uiWindow"] = serializeUIWindow(entity.getComponent<components::UIWindowComponent>());
         if (entity.hasComponent<components::UIAnimationComponent>())
             out["uiAnimation"] = serializeUIAnimation(entity.getComponent<components::UIAnimationComponent>());
         if (entity.hasComponent<components::UIMaskComponent>())

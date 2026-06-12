@@ -20,6 +20,10 @@ namespace controllers::offscreen
         // Hover-delay tooltips: updates the UITooltipState registry-context
         // singleton (Text mode bubble placement / ChildPanel toggling).
         void processTooltipInteraction(const FrameContext& ctx);
+        // Windows: maintains the UIModalState stack, title-bar dragging and
+        // the close button. Must run BEFORE the other widget interactions so
+        // modal gating sees this frame's stack.
+        void processWindowInteraction(const FrameContext& ctx);
 
         // Updates the registry-context UIPointerState: true when the cursor is
         // over any visible UI element (so scripts can skip world raycasts).

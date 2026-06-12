@@ -235,6 +235,11 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::UITooltipComponent>();
             deserializeUITooltip(c["uiTooltip"], comp);
         }
+        if (c.contains("uiWindow"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::UIWindowComponent>();
+            deserializeUIWindow(c["uiWindow"], comp);
+        }
         if (c.contains("uiAnimation"))
         {
             auto& comp = entity.addOrReplaceComponent<components::UIAnimationComponent>();

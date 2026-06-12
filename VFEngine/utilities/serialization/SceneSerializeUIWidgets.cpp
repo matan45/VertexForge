@@ -94,6 +94,45 @@ namespace serialization {
         tooltip.panelChildName = j.value("panelChildName", std::string());
     }
 
+    // ---- Window ----
+
+    json SceneSerialization::serializeUIWindow(const components::UIWindowComponent& window)
+    {
+        json j;
+        j["title"] = window.title;
+        j["showTitleBar"] = window.showTitleBar;
+        j["titleBarHeight"] = window.titleBarHeight;
+        j["draggable"] = window.draggable;
+        j["closable"] = window.closable;
+        j["modal"] = window.modal;
+        j["backgroundColor"] = writeVec4(window.backgroundColor);
+        j["titleBarColor"] = writeVec4(window.titleBarColor);
+        j["titleTextColor"] = writeVec4(window.titleTextColor);
+        j["backdropColor"] = writeVec4(window.backdropColor);
+        if (window.fontRef.isValid())
+        {
+            writeAssetRef(j, "fontRef", window.fontRef);
+        }
+        j["titleFontSize"] = window.titleFontSize;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIWindow(const json& j, components::UIWindowComponent& window)
+    {
+        window.title = j.value("title", std::string("Window"));
+        window.showTitleBar = j.value("showTitleBar", true);
+        window.titleBarHeight = j.value("titleBarHeight", 28.0f);
+        window.draggable = j.value("draggable", true);
+        window.closable = j.value("closable", true);
+        window.modal = j.value("modal", false);
+        readVec4(j, "backgroundColor", window.backgroundColor);
+        readVec4(j, "titleBarColor", window.titleBarColor);
+        readVec4(j, "titleTextColor", window.titleTextColor);
+        readVec4(j, "backdropColor", window.backdropColor);
+        window.fontRef = readAssetRef(j, "fontRef", "");
+        window.titleFontSize = j.value("titleFontSize", 16.0f);
+    }
+
     // ---- Button ----
 
     json SceneSerialization::serializeUIButton(const components::UIButtonComponent& button)

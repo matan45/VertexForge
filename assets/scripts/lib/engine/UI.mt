@@ -558,4 +558,39 @@ public class UI {
     public static function setTooltipDelay(int entityId, float seconds): void {
         _native_ui_setTooltipDelay(entityId, seconds);
     }
+
+    // ============================================
+    // Window
+    // ============================================
+
+    // Open a window: activates the entity; modal windows also block the UI
+    // beneath them. Fires IUIWindowListener.onWindowOpened.
+    public static function openWindow(int entityId): bool {
+        return _native_ui_openWindow(entityId);
+    }
+
+    // Close a window: deactivates the entity and fires onWindowClosed
+    public static function closeWindow(int entityId): bool {
+        return _native_ui_closeWindow(entityId);
+    }
+
+    // True when the window entity is effectively active
+    public static function isWindowOpen(int entityId): bool {
+        return _native_ui_isWindowOpen(entityId);
+    }
+
+    // Toggle modal behavior (dim backdrop + interaction blocking)
+    public static function setWindowModal(int entityId, bool modal): void {
+        _native_ui_setWindowModal(entityId, modal);
+    }
+
+    // Set the title bar text
+    public static function setWindowTitle(int entityId, string title): void {
+        _native_ui_setWindowTitle(entityId, title);
+    }
+
+    // Get the title bar text (empty string if no window component)
+    public static function getWindowTitle(int entityId): string {
+        return _native_ui_getWindowTitle(entityId);
+    }
 }

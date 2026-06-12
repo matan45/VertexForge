@@ -193,6 +193,18 @@ namespace windows::details
                 ImGui::SetTooltip("Theme style key applied from the canvas .vfTheme asset");
         }
 
+        if (!c.hasUIWindow && matchesFilter("UI Window", filter))
+        {
+            if (ImGui::Selectable("  UI Window"))
+            {
+                events::ui::AddUIWindowComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Draggable window with title bar, close button and optional modal backdrop");
+        }
+
         if (!c.hasUITooltip && matchesFilter("UI Tooltip", filter))
         {
             if (ImGui::Selectable("  UI Tooltip"))
