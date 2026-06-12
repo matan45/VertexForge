@@ -145,6 +145,12 @@ namespace handlers
 		return true;
 	}
 
+	bool ExportHandler::handleCanExportQuery(const events::gameExport::CanExportQuery&)
+	{
+		auto projectOpt = events::EventDispatcher::instance().query(events::project::GetCurrentProjectQuery{});
+		return projectOpt && projectOpt->isValid();
+	}
+
 	bool ExportHandler::buildScriptsForExport(const fs::path& workingDirectory,
 											  std::string& errorMessage)
 	{
