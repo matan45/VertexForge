@@ -36,6 +36,9 @@ namespace controllers::offscreen
             if (!scene::Entity::isEffectivelyActive(registry, tabsEntity))
                 continue;
 
+            if (!ui_common::isInteractionAllowed(registry, tabsEntity))
+                continue;
+
             if (!registry.all_of<components::ChildrenComponent>(tabsEntity))
                 continue;
 
@@ -245,6 +248,9 @@ namespace controllers::offscreen
                 continue;
 
             if (!scene::Entity::isEffectivelyActive(registry, sliderEntity))
+                continue;
+
+            if (!ui_common::isInteractionAllowed(registry, sliderEntity))
                 continue;
 
             const auto* canvas = ui_common::findCanvasForEntity(registry, sliderEntity);

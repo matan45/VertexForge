@@ -34,9 +34,11 @@ namespace windows
     class TaskGraphWindow;
     class HeightmapGeneratorWindow;
     class BackgroundRemovalWindow;
+    class ThemeEditorWindow;
     class MemoryDiagnosticsWindow;
     class EditorPreferencesWindow;
     class EditorSettingsWindow;
+    class ExportGameWindow;
     class MainMenuBar
     {
     private:
@@ -74,9 +76,11 @@ namespace windows
         TaskGraphWindow* taskGraphWindow = nullptr;
         HeightmapGeneratorWindow* heightmapGeneratorWindow = nullptr;
         BackgroundRemovalWindow* backgroundRemovalWindow = nullptr;
+        ThemeEditorWindow* themeEditorWindow = nullptr;
         MemoryDiagnosticsWindow* memoryDiagnosticsWindow = nullptr;
         EditorPreferencesWindow* editorPreferencesWindow = nullptr;
         EditorSettingsWindow* editorSettingsWindow = nullptr;
+        ExportGameWindow* exportGameWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -206,6 +210,11 @@ namespace windows
             backgroundRemovalWindow = window;
         }
 
+        void setThemeEditorWindow(ThemeEditorWindow* window)
+        {
+            themeEditorWindow = window;
+        }
+
         void setMemoryDiagnosticsWindow(MemoryDiagnosticsWindow* window)
         {
             memoryDiagnosticsWindow = window;
@@ -219,6 +228,11 @@ namespace windows
         void setEditorSettingsWindow(EditorSettingsWindow* window)
         {
             editorSettingsWindow = window;
+        }
+
+        void setExportGameWindow(ExportGameWindow* window)
+        {
+            exportGameWindow = window;
         }
 
     private:

@@ -68,6 +68,10 @@ namespace windows
         int cachedHLODCount = 0;
         int cachedHLODTotal = 0;
 
+        // Editable streaming config (loaded once, pushed via SetStreamingConfigCommand)
+        world::SectorStreamingConfig editableStreaming;
+        bool streamingConfigLoaded = false;
+
     public:
         WorldSectorWindow() = default;
         ~WorldSectorWindow() override = default;

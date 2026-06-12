@@ -39,6 +39,8 @@
 #include "../core/DynamicRenderingHelpers.hpp"
 #include "threading/JobSystem.hpp"
 #include "stats/FrameDrawStats.hpp"
+#include "stats/GpuPassStats.hpp"
+#include "graph/RenderGraphProfiler.hpp"
 #include <chrono>
 
 namespace render
@@ -57,6 +59,10 @@ namespace render
         // RT shadow pipeline comes online — rebuilds them with RT_SHADOW_ENABLED
         // + set 13. Cheap no-op while the layout is unchanged.
         syncCustomPipelineRTShadow();
+
+        // GPU pass profiling: readback last frame's timestamps before this
+        // frame's graph records new ones into the same per-frame pool slot
+        syncGraphProfiler(imageIndex);
 
         frameGraph->reset();
         importFrameResources(imageIndex);
@@ -99,6 +105,57 @@ namespace render
     {
         if (!customPipelineManager || !gpuDrivenRendererInitialized || !gpuDrivenRenderer) return;
         customPipelineManager->setRTShadowMaskLayout(gpuDrivenRenderer->getActiveRTShadowMaskLayout());
+    }
+
+    void RenderPassHandler::syncGraphProfiler(uint32_t imageIndex)
+    {
+        if (!graphProfiler || graphProfilerUnsupported) return;
+
+        auto& sink = GpuPassStats::instance();
+        bool wanted = sink.isEnabledRequested();
+
+        if (wanted && !graphProfilerInitialized)
+        {
+            // 2 timestamp queries per pass; 64 is far above the current graph size
+            constexpr uint32_t kMaxProfiledPasses = 64;
+            if (graphProfiler->init(device, kMaxProfiledPasses))
+            {
+                frameGraph->setProfiler(graphProfiler.get());
+                graphProfilerInitialized = true;
+            }
+            else
+            {
+                graphProfilerUnsupported = true;
+                sink.markUnsupported();
+                return;
+            }
+        }
+
+        if (!graphProfilerInitialized) return;
+
+        if (graphProfiler->isEnabled() != wanted)
+        {
+            graphProfiler->setEnabled(wanted);
+            if (!wanted) sink.clear();
+        }
+
+        if (!wanted) return;
+
+        graphProfiler->readbackAndUpdate(device.getLogicalDevice(), imageIndex);
+
+        auto stats = graphProfiler->getStats();
+        GpuFrameStats out;
+        out.valid = stats.passCount > 0;
+        out.totalMs = stats.totalMs;
+        out.emaTotalMs = stats.emaTotalMs;
+        out.barrierCount = stats.barrierCount;
+        out.barrierFlushCount = stats.barrierFlushCount;
+        out.passTimings.reserve(stats.passTimings.size());
+        for (const auto& pass : stats.passTimings)
+        {
+            out.passTimings.push_back({pass.name, pass.ms, pass.emaMs});
+        }
+        sink.publish(std::move(out));
     }
 
     void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
@@ -192,6 +249,75 @@ namespace render
             distortionResources->getCompositeDescriptorSet());
     }
 
+    void RenderPassHandler::capturePreTransparencyColor(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        auto* upscaleManager = device.getUpscaleManager();
+        if (!upscaleManager || !upscaleManager->isActive()
+            || !offscreenResources.upscaleResourcesCreated
+            || !offscreenResources.preTransparencyColor.image)
+            return;
+
+        auto renderRes = upscaleManager->getResolutionManager().getRenderResolution();
+        vk::Image srcColorImage = offscreenResources.colorImages[imageIndex].colorImage;
+        vk::Image dstImage = offscreenResources.preTransparencyColor.image;
+
+        // Destination is fully overwritten - discard previous contents
+        vk::ImageMemoryBarrier toTransferDst{};
+        toTransferDst.oldLayout = vk::ImageLayout::eUndefined;
+        toTransferDst.newLayout = vk::ImageLayout::eTransferDstOptimal;
+        toTransferDst.image = dstImage;
+        toTransferDst.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        toTransferDst.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+        toTransferDst.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+        commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+                                      vk::PipelineStageFlagBits::eTransfer,
+                                      {}, {}, {}, toTransferDst);
+
+        vk::ImageMemoryBarrier srcToTransfer{};
+        srcToTransfer.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        srcToTransfer.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+        srcToTransfer.image = srcColorImage;
+        srcToTransfer.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        srcToTransfer.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+        srcToTransfer.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+        commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                      vk::PipelineStageFlagBits::eTransfer,
+                                      {}, {}, {}, srcToTransfer);
+
+        vk::ImageCopy copyRegion{};
+        copyRegion.srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+        copyRegion.dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+        copyRegion.extent = vk::Extent3D{renderRes.width, renderRes.height, 1};
+        commandBuffer.copyImage(srcColorImage, vk::ImageLayout::eTransferSrcOptimal,
+                                dstImage, vk::ImageLayout::eTransferDstOptimal,
+                                copyRegion);
+
+        vk::ImageMemoryBarrier dstToRead{};
+        dstToRead.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+        dstToRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        dstToRead.image = dstImage;
+        dstToRead.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        dstToRead.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        dstToRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                      vk::PipelineStageFlagBits::eComputeShader,
+                                      {}, {}, {}, dstToRead);
+
+        // Restore the scene color to the layout the render graph expects
+        vk::ImageMemoryBarrier srcBack{};
+        srcBack.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+        srcBack.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        srcBack.image = srcColorImage;
+        srcBack.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        srcBack.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+        srcBack.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eShaderRead;
+        commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                      vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eFragmentShader,
+                                      {}, {}, {}, srcBack);
+
+        preTransparencyCaptured = true;
+    }
+
     // ======================== Graph-managed dispatch variants ========================
 
     void RenderPassHandler::drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
@@ -229,6 +355,14 @@ namespace render
 
         if (hasUIText)
             uiTextPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
+
+        // Overlay layer (tooltips, modal windows) records after ALL main UI
+        // images and text so its backgrounds cover underlying labels too.
+        if (hasUIImages)
+            uiPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex, true);
+
+        if (hasUIText)
+            uiTextPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex, true);
 
         // Restore to SHADER_READ_ONLY_OPTIMAL so render() can sample displayColorImages for presentation.
         if (hasDisplay)
@@ -274,6 +408,25 @@ namespace render
             }
         }
 
+        // VFX proxy lights: instances with light emission illuminate the scene
+        // as transient point lights (set before dispatchCompute runs
+        // updateFromScene; an empty list clears last frame's lights)
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            if (auto* lbm = gpuDrivenRenderer->getLightBufferManager())
+            {
+                std::vector<lighting::GPULightBufferManager::TransientPointLight> transientLights;
+                if (hasVFX)
+                {
+                    auto proxyLights = vfxRuntimeProvider->getActiveProxyLights();
+                    transientLights.reserve(proxyLights.size());
+                    for (const auto& proxy : proxyLights)
+                        transientLights.push_back({proxy.position, proxy.color, proxy.intensity, proxy.radius});
+                }
+                lbm->setTransientPointLights(std::move(transientLights));
+            }
+        }
+
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()
             && terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
 
@@ -313,6 +466,7 @@ namespace render
                                               debugRendererPtr, currentView, currentProjection);
             if (hasVFX)
             {
+                capturePreTransparencyColor(commandBuffer, imageIndex);
                 meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
                 vfxRuntimeProvider->recordDrawCommands(commandBuffer);
                 meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
@@ -324,6 +478,7 @@ namespace render
             meshPipeline->beginRenderPassGraphManaged(commandBuffer, imageIndex);
             meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
 
+            capturePreTransparencyColor(commandBuffer, imageIndex);
             meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
             vfxRuntimeProvider->recordDrawCommands(commandBuffer);
             meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
@@ -379,6 +534,11 @@ namespace render
             decalPipeline->setCameraData(currentView, currentProjection, currentNearPlane, currentFarPlane);
             decalPipeline->renderGraphManaged(commandBuffer, imageIndex);
         }
+
+        // Opaque rendering (incl. decals) is complete - snapshot it for the
+        // upscaler reactive mask before transparency (WBOIT/VFX) draws
+        if ((wboitActive && gpuDrivenRenderer->hasTransparentObjects()) || hasVFX)
+            capturePreTransparencyColor(commandBuffer, imageIndex);
 
         if (wboitActive && gpuDrivenRenderer->hasTransparentObjects())
         {

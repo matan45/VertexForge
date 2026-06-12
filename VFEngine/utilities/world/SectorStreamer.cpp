@@ -1,4 +1,5 @@
 #include "SectorStreamer.hpp"
+#include "../streaming/FrameBudget.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -59,8 +60,20 @@ namespace world
         // Reuse member set to avoid per-frame allocation
         visitedCoords.clear();
 
+        // Scan higher-priority sources first: a sector covered by several sources is
+        // claimed (via visitedCoords) by the most important one, so its load candidates
+        // carry that source's priority-scaled sort key.
+        std::vector<const StreamingSource*> orderedSources;
+        orderedSources.reserve(sources.size());
         for (const auto& source : sources)
+            orderedSources.push_back(&source);
+        std::stable_sort(orderedSources.begin(), orderedSources.end(),
+                         [](const StreamingSource* a, const StreamingSource* b)
+                         { return a->priority > b->priority; });
+
+        for (const auto* sourcePtr : orderedSources)
         {
+            const auto& source = *sourcePtr;
             float loadWorldRadius = config.loadRadius * sectorSize * source.radiusMultiplier;
             float loadRadiusSq = loadWorldRadius * loadWorldRadius;
 
@@ -91,7 +104,10 @@ namespace world
 
                     if (sector->state == SectorState::Unloaded && !sector->filePath.empty())
                     {
-                        loadCandidates.push_back({coord, distSq});
+                        // Higher-priority sources win the per-frame load budget:
+                        // their candidates sort as if proportionally closer
+                        float sortKey = distSq / (1.0f + static_cast<float>(source.priority));
+                        loadCandidates.push_back({coord, distSq, sortKey});
                     }
                 }
             }
@@ -129,35 +145,41 @@ namespace world
 
                 if (outsideAllSources)
                 {
-                    unloadCandidates.push_back({*it, maxDistSq});
+                    unloadCandidates.push_back({*it, maxDistSq, maxDistSq});
                 }
             }
             ++it;
         }
 
-        // Sort: load nearest first, unload farthest first
+        // Sort: load nearest (priority-scaled) first, unload farthest first
         std::sort(loadCandidates.begin(), loadCandidates.end(),
-                  [](const Candidate& a, const Candidate& b) { return a.distSq < b.distSq; });
+                  [](const Candidate& a, const Candidate& b) { return a.sortKey < b.sortKey; });
 
         std::sort(unloadCandidates.begin(), unloadCandidates.end(),
                   [](const Candidate& a, const Candidate& b) { return a.distSq > b.distSq; });
 
-        // Apply budget
-        int loadCount = std::min(static_cast<int>(loadCandidates.size()), config.maxLoadsPerFrame);
-        int unloadCount = std::min(static_cast<int>(unloadCandidates.size()), config.maxUnloadsPerFrame);
+        // Apply per-frame budgets
+        streaming::FrameBudget loadBudget(config.maxLoadsPerFrame);
+        streaming::FrameBudget unloadBudget(config.maxUnloadsPerFrame);
 
-        outActions.reserve(loadCount + unloadCount);
+        outActions.reserve(
+            std::min(static_cast<int>(loadCandidates.size()), config.maxLoadsPerFrame) +
+            std::min(static_cast<int>(unloadCandidates.size()), config.maxUnloadsPerFrame));
 
-        for (int i = 0; i < unloadCount; ++i)
+        for (const auto& candidate : unloadCandidates)
         {
-            loadedSectors.erase(unloadCandidates[i].coord);
-            outActions.push_back({unloadCandidates[i].coord, false});
+            if (!unloadBudget.tryConsume())
+                break;
+            loadedSectors.erase(candidate.coord);
+            outActions.push_back({candidate.coord, false});
         }
 
-        for (int i = 0; i < loadCount; ++i)
+        for (const auto& candidate : loadCandidates)
         {
-            loadedSectors.insert(loadCandidates[i].coord);
-            outActions.push_back({loadCandidates[i].coord, true});
+            if (!loadBudget.tryConsume())
+                break;
+            loadedSectors.insert(candidate.coord);
+            outActions.push_back({candidate.coord, true});
         }
     }
 

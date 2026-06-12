@@ -15,6 +15,10 @@ namespace pipeline {
     class PipelineStage;
 }
 
+namespace import {
+    class AssetImporter;
+}
+
 namespace plugin {
 
     class PluginContextImpl : public PluginContext
@@ -29,6 +33,7 @@ namespace plugin {
         std::vector<events::SubscriptionToken> managedSubscriptions;
         std::vector<std::shared_ptr<controllers::imguiHandler::ImguiWindow>> registeredWindows;
         std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
+        std::vector<std::unique_ptr<import::AssetImporter>> registeredAssetImporters;
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
         std::vector<std::string> registeredScriptFunctions;
         std::vector<plugin::CustomPipelineHandle> managedCustomPipelines;
@@ -61,6 +66,7 @@ namespace plugin {
         void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window,
                                   const std::string& title) override;
         void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) override;
+        void registerAssetImporter(std::unique_ptr<import::AssetImporter> importer) override;
         void publishEvent(const std::string& eventName, const nlohmann::json& data) override;
         events::SubscriptionToken subscribeEvent(const std::string& eventName,
                                                   std::function<void(const nlohmann::json&)> handler) override;
@@ -188,6 +194,7 @@ namespace plugin {
         bool isActive() const { return activeState.load(std::memory_order_relaxed); }
 
         std::vector<std::unique_ptr<pipeline::PipelineStage>> takeImportStages();
+        std::vector<std::unique_ptr<import::AssetImporter>> takeAssetImporters();
 
         const std::string& getPluginName() const { return pluginName; }
     };

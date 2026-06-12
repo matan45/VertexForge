@@ -39,6 +39,19 @@ namespace core::physics
         void applyRagdollImpulse(uint64_t entityId, const glm::vec3& impulse);
         void applyRagdollBoneImpulse(uint64_t entityId, int physicsBoneIndex, const glm::vec3& impulse);
 
+        // Powered ragdoll: drive joint motors toward the target pose. Per-bone strength
+        // scales the motor torque limit; <= ~0.01 turns the joint's motors off entirely.
+        void driveRagdollToPose(uint64_t entityId, const JPH::SkeletonPose& targetPose,
+                                const std::vector<float>& perBoneStrength,
+                                const std::vector<float>& perBoneMaxTorque);
+        // Velocity-drive the root body toward the target pose's root joint
+        void driveRagdollRoot(uint64_t entityId, const JPH::SkeletonPose& targetPose,
+                              float strength, float deltaTime);
+        // Turn all joint motors off (powered ragdoll -> passive ragdoll)
+        void setRagdollMotorsOff(uint64_t entityId);
+        bool isRagdollBelowVelocityThreshold(uint64_t entityId, float linearThreshold,
+                                             float angularThreshold) const;
+
         bool createKinematicBoneBodies(uint64_t entityId, const RagdollBuildResult& buildResult,
                                         const glm::vec3& entityPosition = glm::vec3(0.0f));
         void destroyKinematicBoneBodies(uint64_t entityId);

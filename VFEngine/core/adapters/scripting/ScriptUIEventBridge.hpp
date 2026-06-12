@@ -72,6 +72,15 @@ namespace core
                                          const std::string& entityName,
                                          float newValue = 0.0f, float previousValue = 0.0f);
 
+        void dispatchWindowCallback(const char* methodName,
+                                    ::services::EntityHandle entity,
+                                    const std::string& entityName);
+
+        void dispatchListViewCallback(const char* methodName,
+                                      ::services::EntityHandle entity,
+                                      const std::string& entityName,
+                                      int previousIndex, int newIndex);
+
         void dispatchDragDropCallback(const char* methodName,
                                       ::services::EntityHandle sourceEntity,
                                       const std::string& sourceEntityName,

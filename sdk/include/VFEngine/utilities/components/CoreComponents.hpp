@@ -9,6 +9,7 @@
 #include "../uuid/UUID.hpp"
 #include "../asset/AssetRef.hpp"
 #include "../rendertexture/RenderTextureTypes.hpp"
+#include "../material/MaterialTypes.hpp"
 
 namespace components
 {
@@ -225,7 +226,9 @@ namespace components
     {
         asset::AssetRef defaultMaterialRef;
         std::map<std::string, asset::AssetRef> subMeshMaterials;
-        std::map<std::string, float> parameterOverrides;
+        // Per-entity runtime overrides of the material's named parameters (typed —
+        // scalar/vec2/vec3/vec4). Applied on top of instance overrides at extraction.
+        std::map<std::string, material::ParameterValue> parameterOverrides;
 
         void setSubMeshMaterial(const std::string& submeshName, const asset::AssetRef& matRef)
         {

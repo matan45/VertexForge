@@ -31,6 +31,13 @@ namespace services::events::vfxruntime
         std::string_view getName() const override { return "SetVFXInstanceTransform"; }
     };
 
+    struct ApplyVFXInstanceOverridesCommand : ::events::ICommand<void>
+    {
+        VFXInstanceId instanceId = 0;
+        VFXEmitterOverrides overrides;
+        std::string_view getName() const override { return "ApplyVFXInstanceOverrides"; }
+    };
+
     struct PlayVFXInstanceCommand : ::events::ICommand<void>
     {
         VFXInstanceId instanceId = 0;

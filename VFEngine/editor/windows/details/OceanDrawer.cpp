@@ -43,6 +43,8 @@ namespace windows::details
 
             ImGui::Text("Water Height: %.2f", data.waterHeight);
             ImGui::Text("Physics: %s", data.physicsEnabled ? "Enabled" : "Disabled");
+            ImGui::Text("Sea State: Beaufort %.1f%s", data.currentBeaufort,
+                        data.weatherDriven ? " (weather driven)" : "");
 
             ImGui::Separator();
             ImGui::Text("Ocean FFT Bands");

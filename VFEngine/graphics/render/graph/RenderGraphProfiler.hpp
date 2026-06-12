@@ -68,10 +68,13 @@ namespace render::graph
 
         raytracing::GPUTimestampQueryPool queryPool;
 
-        // Per-pass EMA state
+        // Per-pass EMA state + last raw samples (raw totals feed the
+        // profiler UI's history plot, where EMA would hide hitches)
         std::vector<std::string> passNames;
         std::vector<float> emaTimes;
+        std::vector<float> lastTimes;
         float emaTotalMs = 0.0f;
+        float lastTotalMs = 0.0f;
         bool emaInitialized = false;
 
         uint32_t maxPasses = 0;

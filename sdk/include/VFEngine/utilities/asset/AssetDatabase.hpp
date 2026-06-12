@@ -1,4 +1,5 @@
 #pragma once
+#include "AssetDBExport.hpp"
 #include "AssetGUID.hpp"
 #include "AssetMetadata.hpp"
 #include "../resource/AssetTypes.hpp"
@@ -19,7 +20,17 @@ namespace asset
         std::string importSource;
     };
 
-    class AssetDatabase
+    // Compiled into the AssetDB DLL so the singleton state is shared across
+    // every module (Serialization, World, Terrain, Animation, Audio, Import
+    // and the executables). A StaticLib copy per DLL would give each module
+    // its own empty database.
+    //
+    // C4251 (STL members need dll-interface) is safe to silence: the members
+    // are private and only ever touched by code inside AssetDB.dll — clients
+    // go through the exported member functions.
+#pragma warning(push)
+#pragma warning(disable : 4251)
+    class VF_ASSETDB_API AssetDatabase
     {
     public:
         static AssetDatabase& instance();
@@ -86,4 +97,5 @@ namespace asset
 
         mutable std::shared_mutex dbMutex;
     };
+#pragma warning(pop)
 }

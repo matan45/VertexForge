@@ -1,40 +1,123 @@
-#include "BehaviorTreeRuntime.hpp"
+﻿#include "BehaviorTreeRuntime.hpp"
 #include <cmath>
 
 namespace behaviortree
 {
-    void BehaviorTreeRuntime::init(BehaviorTreeData data, services::EntityHandle entity)
+    void BehaviorTreeRuntime::init(std::shared_ptr<const BehaviorTreeData> data, services::EntityHandle entity)
     {
         treeData = std::move(data);
         ownerEntity = entity;
-        blackboard.initializeFromGraph(treeData.graph);
+        blackboard.clear();
+        if (treeData)
+        {
+            blackboard.initializeFromGraph(treeData->graph);
+        }
         nodeStates.clear();
     }
 
     BTNodeStatus BehaviorTreeRuntime::tick(float deltaTime, IBTTaskExecutor* executor)
     {
-        if (treeData.graph.rootNodeId == 0)
+        if (!treeData || treeData->graph.rootNodeId == 0)
         {
             return BTNodeStatus::Failure;
         }
 
-        return tickNode(treeData.graph.rootNodeId, deltaTime, executor);
+        return tickNode(treeData->graph.rootNodeId, deltaTime, executor);
     }
 
     void BehaviorTreeRuntime::reset()
     {
         nodeStates.clear();
-        blackboard.initializeFromGraph(treeData.graph);
+        if (treeData)
+        {
+            blackboard.initializeFromGraph(treeData->graph);
+        }
     }
 
     void BehaviorTreeRuntime::resetSubtreeState(uint32_t nodeId)
     {
         nodeStates.erase(nodeId);
-        auto children = treeData.graph.getChildren(nodeId);
+        auto children = treeData->graph.getChildren(nodeId);
         for (const auto* child : children)
         {
             resetSubtreeState(child->id);
         }
+    }
+
+    void BehaviorTreeRuntime::abortSubtree(uint32_t nodeId, IBTTaskExecutor* executor)
+    {
+        auto it = nodeStates.find(nodeId);
+        if (it != nodeStates.end() && it->second.lastStatus == BTNodeStatus::Running && executor)
+        {
+            const BTNode* node = treeData->graph.findNodeById(nodeId);
+            if (node && isTaskNode(node->type))
+            {
+                executor->onAbort(ownerEntity, *node);
+            }
+        }
+        nodeStates.erase(nodeId);
+        auto children = treeData->graph.getChildren(nodeId);
+        for (const auto* child : children)
+        {
+            abortSubtree(child->id, executor);
+        }
+    }
+
+    template <typename T>
+    static BTNodeStatus compareValues(T a, T b, CompareOp op)
+    {
+        switch (op) {
+        case CompareOp::Equal:        return a == b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::NotEqual:     return a != b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::Greater:      return a > b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::Less:         return a < b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::GreaterEqual: return a >= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::LessEqual:    return a <= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        }
+        return BTNodeStatus::Failure;
+    }
+
+    static BTNodeStatus compareBlackboardValues(const BlackboardValue& bbVal, const BlackboardValue& compareVal, CompareOp op)
+    {
+        if (std::holds_alternative<float>(bbVal) && std::holds_alternative<float>(compareVal)) {
+            float a = std::get<float>(bbVal), b = std::get<float>(compareVal);
+            constexpr float epsilon = 1e-5f;
+            if (op == CompareOp::Equal) return std::abs(a - b) < epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
+            if (op == CompareOp::NotEqual) return std::abs(a - b) >= epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
+            return compareValues(a, b, op);
+        }
+        if (std::holds_alternative<int32_t>(bbVal) && std::holds_alternative<int32_t>(compareVal))
+            return compareValues(std::get<int32_t>(bbVal), std::get<int32_t>(compareVal), op);
+        if (std::holds_alternative<bool>(bbVal) && std::holds_alternative<bool>(compareVal)) {
+            if (op == CompareOp::Equal) return std::get<bool>(bbVal) == std::get<bool>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
+            if (op == CompareOp::NotEqual) return std::get<bool>(bbVal) != std::get<bool>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        }
+        if (std::holds_alternative<std::string>(bbVal) && std::holds_alternative<std::string>(compareVal)) {
+            if (op == CompareOp::Equal) return std::get<std::string>(bbVal) == std::get<std::string>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
+            if (op == CompareOp::NotEqual) return std::get<std::string>(bbVal) != std::get<std::string>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        }
+        return BTNodeStatus::Failure;
+    }
+
+    template <typename T>
+    static T getNodeProperty(const BTNode& node, const std::string& key, T defaultVal)
+    {
+        auto it = node.properties.find(key);
+        if (it != node.properties.end() && std::holds_alternative<T>(it->second))
+            return std::get<T>(it->second);
+        return defaultVal;
+    }
+
+    bool BehaviorTreeRuntime::evaluateCondition(const BTNode& node) const
+    {
+        std::string key = getNodeProperty<std::string>(node, "key", std::string{});
+        if (key.empty() || !blackboard.has(key)) return false;
+
+        CompareOp op = stringToCompareOp(getNodeProperty<std::string>(node, "compareOp", std::string("==")));
+        auto compareValIt = node.properties.find("compareValue");
+        if (compareValIt == node.properties.end()) return false;
+
+        return compareBlackboardValues(blackboard.get(key), compareValIt->second, op) == BTNodeStatus::Success;
     }
 
     BTNodeRuntime& BehaviorTreeRuntime::getNodeState(uint32_t nodeId)
@@ -44,7 +127,7 @@ namespace behaviortree
 
     BTNodeStatus BehaviorTreeRuntime::tickNode(uint32_t nodeId, float dt, IBTTaskExecutor* executor)
     {
-        const BTNode* node = treeData.graph.findNodeById(nodeId);
+        const BTNode* node = treeData->graph.findNodeById(nodeId);
         if (!node)
         {
             return BTNodeStatus::Failure;
@@ -54,7 +137,7 @@ namespace behaviortree
 
         if (isRootNode(node->type))
         {
-            auto children = treeData.graph.getChildren(nodeId);
+            auto children = treeData->graph.getChildren(nodeId);
             if (children.empty())
             {
                 status = BTNodeStatus::Failure;
@@ -86,7 +169,7 @@ namespace behaviortree
 
     BTNodeStatus BehaviorTreeRuntime::tickComposite(const BTNode& node, float dt, IBTTaskExecutor* executor)
     {
-        auto children = treeData.graph.getChildren(node.id);
+        auto children = treeData->graph.getChildren(node.id);
         if (children.empty())
         {
             return BTNodeStatus::Failure;
@@ -120,6 +203,26 @@ namespace behaviortree
 
         case BTNodeType::Selector:
         {
+            // Observer aborts: a higher-priority BlackboardCondition sibling whose
+            // condition now passes preempts the running lower-priority branch
+            if (state.currentChildIndex > 0)
+            {
+                for (int i = 0; i < state.currentChildIndex; ++i)
+                {
+                    const BTNode* candidate = children[i];
+                    if (candidate->type != BTNodeType::BlackboardCondition) continue;
+
+                    AbortMode mode = stringToAbortMode(
+                        getNodeProperty<std::string>(*candidate, "abortMode", std::string("None")));
+                    if (mode != AbortMode::LowerPriority && mode != AbortMode::Both) continue;
+                    if (!evaluateCondition(*candidate)) continue;
+
+                    abortSubtree(children[state.currentChildIndex]->id, executor);
+                    state.currentChildIndex = i;
+                    break;
+                }
+            }
+
             for (int i = state.currentChildIndex; i < static_cast<int>(children.size()); ++i)
             {
                 BTNodeStatus childStatus = tickNode(children[i]->id, dt, executor);
@@ -185,7 +288,7 @@ namespace behaviortree
 
     BTNodeStatus BehaviorTreeRuntime::tickDecorator(const BTNode& node, float dt, IBTTaskExecutor* executor)
     {
-        auto children = treeData.graph.getChildren(node.id);
+        auto children = treeData->graph.getChildren(node.id);
         auto& state = getNodeState(node.id);
 
         switch (node.type)
@@ -272,6 +375,36 @@ namespace behaviortree
             return childStatus;
         }
 
+        case BTNodeType::BlackboardCondition:
+        {
+            if (children.empty()) return BTNodeStatus::Failure;
+
+            AbortMode mode = stringToAbortMode(
+                getNodeProperty<std::string>(node, "abortMode", std::string("None")));
+            bool observesSelf = mode == AbortMode::Self || mode == AbortMode::Both;
+
+            auto childIt = nodeStates.find(children[0]->id);
+            bool childRunning = childIt != nodeStates.end() &&
+                                childIt->second.lastStatus == BTNodeStatus::Running;
+
+            // Once entered, only Self/Both modes keep observing the condition
+            if (childRunning && !observesSelf)
+            {
+                return tickNode(children[0]->id, dt, executor);
+            }
+
+            if (!evaluateCondition(node))
+            {
+                if (childRunning)
+                {
+                    abortSubtree(children[0]->id, executor);
+                }
+                return BTNodeStatus::Failure;
+            }
+
+            return tickNode(children[0]->id, dt, executor);
+        }
+
         case BTNodeType::TimeLimit:
         {
             if (children.empty()) return BTNodeStatus::Failure;
@@ -306,51 +439,6 @@ namespace behaviortree
         default:
             return BTNodeStatus::Failure;
         }
-    }
-
-    template <typename T>
-    static BTNodeStatus compareValues(T a, T b, CompareOp op)
-    {
-        switch (op) {
-        case CompareOp::Equal:        return a == b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-        case CompareOp::NotEqual:     return a != b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-        case CompareOp::Greater:      return a > b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-        case CompareOp::Less:         return a < b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-        case CompareOp::GreaterEqual: return a >= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-        case CompareOp::LessEqual:    return a <= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-        }
-        return BTNodeStatus::Failure;
-    }
-
-    static BTNodeStatus compareBlackboardValues(const BlackboardValue& bbVal, const BlackboardValue& compareVal, CompareOp op)
-    {
-        if (std::holds_alternative<float>(bbVal) && std::holds_alternative<float>(compareVal)) {
-            float a = std::get<float>(bbVal), b = std::get<float>(compareVal);
-            constexpr float epsilon = 1e-5f;
-            if (op == CompareOp::Equal) return std::abs(a - b) < epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
-            if (op == CompareOp::NotEqual) return std::abs(a - b) >= epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
-            return compareValues(a, b, op);
-        }
-        if (std::holds_alternative<int32_t>(bbVal) && std::holds_alternative<int32_t>(compareVal))
-            return compareValues(std::get<int32_t>(bbVal), std::get<int32_t>(compareVal), op);
-        if (std::holds_alternative<bool>(bbVal) && std::holds_alternative<bool>(compareVal)) {
-            if (op == CompareOp::Equal) return std::get<bool>(bbVal) == std::get<bool>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
-            if (op == CompareOp::NotEqual) return std::get<bool>(bbVal) != std::get<bool>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
-        }
-        if (std::holds_alternative<std::string>(bbVal) && std::holds_alternative<std::string>(compareVal)) {
-            if (op == CompareOp::Equal) return std::get<std::string>(bbVal) == std::get<std::string>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
-            if (op == CompareOp::NotEqual) return std::get<std::string>(bbVal) != std::get<std::string>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
-        }
-        return BTNodeStatus::Failure;
-    }
-
-    template <typename T>
-    static T getNodeProperty(const BTNode& node, const std::string& key, T defaultVal)
-    {
-        auto it = node.properties.find(key);
-        if (it != node.properties.end() && std::holds_alternative<T>(it->second))
-            return std::get<T>(it->second);
-        return defaultVal;
     }
 
     BTNodeStatus BehaviorTreeRuntime::tickTask(const BTNode& node, float dt, IBTTaskExecutor* executor)

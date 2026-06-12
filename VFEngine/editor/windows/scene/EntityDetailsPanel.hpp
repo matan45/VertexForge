@@ -12,6 +12,7 @@
 #include "../details/ScriptDrawer.hpp"
 #include "../details/ColliderDrawer.hpp"
 #include "../details/RigidBodyDrawer.hpp"
+#include "../details/BuoyancyDrawer.hpp"
 #include "../details/DestructibleDrawer.hpp"
 #include "../details/PhysicsAnimationDrawer.hpp"
 #include "../details/VFXDrawer.hpp"
@@ -38,6 +39,10 @@
 #include "../details/UIProgressBarDrawer.hpp"
 #include "../details/UIAnimationDrawer.hpp"
 #include "../details/UIMaskDrawer.hpp"
+#include "../details/UIStyleDrawer.hpp"
+#include "../details/UITooltipDrawer.hpp"
+#include "../details/UIWindowDrawer.hpp"
+#include "../details/UIListViewDrawer.hpp"
 #include "../details/UIDraggableDrawer.hpp"
 #include "../details/UIDropTargetDrawer.hpp"
 #include "../details/SocketAttachmentDrawer.hpp"
@@ -77,6 +82,7 @@ namespace windows
         details::ScriptDrawer scriptDrawer;
         details::ColliderDrawer colliderDrawer;
         details::RigidBodyDrawer rigidBodyDrawer;
+        details::BuoyancyDrawer buoyancyDrawer;
         details::DestructibleDrawer destructibleDrawer;
         details::PhysicsAnimationDrawer physicsAnimationDrawer;
         details::VFXDrawer vfxDrawer;
@@ -103,6 +109,10 @@ namespace windows
         details::UIProgressBarDrawer uiProgressBarDrawer;
         details::UIAnimationDrawer uiAnimationDrawer;
         details::UIMaskDrawer uiMaskDrawer;
+        details::UIStyleDrawer uiStyleDrawer;
+        details::UITooltipDrawer uiTooltipDrawer;
+        details::UIWindowDrawer uiWindowDrawer;
+        details::UIListViewDrawer uiListViewDrawer;
         details::UIDraggableDrawer uiDraggableDrawer;
         details::UIDropTargetDrawer uiDropTargetDrawer;
         details::SocketAttachmentDrawer socketAttachmentDrawer;

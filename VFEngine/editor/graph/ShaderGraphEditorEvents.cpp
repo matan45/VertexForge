@@ -265,8 +265,29 @@ namespace editor::graph {
                     createNode(material::NodeType::VertexNormal, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
+                if (ImGui::MenuItem("World Position")) {
+                    createNode(material::NodeType::WorldPosition, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
                 if (ImGui::MenuItem("Time")) {
                     createNode(material::NodeType::Time, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndMenu();
+            }
+
+            // Utility
+            if (ImGui::BeginMenu("Utility")) {
+                if (ImGui::MenuItem("Panner")) {
+                    createNode(material::NodeType::Panner, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("UV Transform")) {
+                    createNode(material::NodeType::UVTransform, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Remap")) {
+                    createNode(material::NodeType::Remap, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::EndMenu();

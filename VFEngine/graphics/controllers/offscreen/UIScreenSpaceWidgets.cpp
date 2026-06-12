@@ -9,6 +9,24 @@ using namespace controllers::offscreen::ui_common;
 
 namespace controllers::offscreen::ui_screenspace
 {
+    namespace
+    {
+        // Widgets inside a window join the window's overlay layer so their
+        // synthetic parts (fills, handles, carets, lists) draw above the
+        // modal backdrop with the rest of the window.
+        void markWindowOverlay(entt::registry& registry, entt::entity entity,
+                               std::vector<render::ui::UIImageRenderData>& drawList,
+                               size_t startIdx)
+        {
+            if (findOpenWindowAncestor(registry, entity) == entt::null)
+                return;
+            for (size_t i = startIdx; i < drawList.size(); ++i)
+            {
+                drawList[i].overlay = true;
+            }
+        }
+    }
+
     void generateSliderDrawData(
         entt::registry& registry, const FrameContext& ctx,
         const ScrollContainerMap& scrollContainers,
@@ -24,6 +42,7 @@ namespace controllers::offscreen::ui_screenspace
             if (!scene::Entity::isEffectivelyActive(registry, sliderEntity))
                 continue;
 
+            size_t entryStart = drawList.size();
             const auto& sliderComp = registry.get<components::UISliderComponent>(sliderEntity);
             const auto& rectComp = registry.get<components::UIRectComponent>(sliderEntity);
 
@@ -112,6 +131,8 @@ namespace controllers::offscreen::ui_screenspace
                 handle.scissorRect = scissor;
                 drawList.push_back(std::move(handle));
             }
+
+            markWindowOverlay(registry, sliderEntity, drawList, entryStart);
         }
     }
 
@@ -128,6 +149,7 @@ namespace controllers::offscreen::ui_screenspace
             if (!scene::Entity::isEffectivelyActive(registry, pbEntity))
                 continue;
 
+            size_t entryStart = drawList.size();
             auto& pbComp = registry.get<components::UIProgressBarComponent>(pbEntity);
             const auto& rectComp = registry.get<components::UIRectComponent>(pbEntity);
 
@@ -209,6 +231,8 @@ namespace controllers::offscreen::ui_screenspace
                     drawList.push_back(std::move(fill));
                 }
             }
+
+            markWindowOverlay(registry, pbEntity, drawList, entryStart);
         }
     }
 
@@ -228,6 +252,7 @@ namespace controllers::offscreen::ui_screenspace
             if (!scene::Entity::isEffectivelyActive(registry, scrollEntity))
                 continue;
 
+            size_t entryStart = drawList.size();
             const auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
 
             const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
@@ -320,6 +345,8 @@ namespace controllers::offscreen::ui_screenspace
                 thumb.scissorRect = scrollScissor;
                 drawList.push_back(std::move(thumb));
             }
+
+            markWindowOverlay(registry, scrollEntity, drawList, entryStart);
         }
     }
 
@@ -337,6 +364,7 @@ namespace controllers::offscreen::ui_screenspace
         if (tiComp.currentState != components::UITextInputState::Focused || !tiComp.fontRef.isValid())
             return;
 
+        size_t entryStart = drawList.size();
         const auto& rectComp = registry.get<components::UIRectComponent>(focusedEntity);
 
         const components::UICanvasComponent* canvas = findCanvasForEntity(registry, focusedEntity);
@@ -432,6 +460,8 @@ namespace controllers::offscreen::ui_screenspace
             caret.scissorRect = scissor;
             drawList.push_back(std::move(caret));
         }
+
+        markWindowOverlay(registry, focusedEntity, drawList, entryStart);
     }
 
     void generateDropdownDrawData(
@@ -447,6 +477,8 @@ namespace controllers::offscreen::ui_screenspace
 
             if (!scene::Entity::isEffectivelyActive(registry, dropdownEntity))
                 continue;
+
+            size_t entryStart = drawList.size();
 
             const auto* canvas = findCanvasForEntity(registry, dropdownEntity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(dropdownEntity))
@@ -502,6 +534,58 @@ namespace controllers::offscreen::ui_screenspace
                 itemBg.scissorRect = listScissor;
                 drawList.push_back(std::move(itemBg));
             }
+
+            markWindowOverlay(registry, dropdownEntity, drawList, entryStart);
+        }
+    }
+
+    void generateListSelectionDrawData(
+        entt::registry& registry, const FrameContext& ctx,
+        const ScrollContainerMap& scrollContainers,
+        std::vector<render::ui::UIImageRenderData>& drawList)
+    {
+        auto listView = registry.view<components::UIListViewComponent>();
+        for (auto listEntity : listView)
+        {
+            const auto& comp = listView.get<components::UIListViewComponent>(listEntity);
+            if (!comp.selectable || comp.selectedIndex < 0 ||
+                comp.selectedIndex >= static_cast<int>(comp.itemInstances.size()))
+                continue;
+            if (!scene::Entity::isEffectivelyActive(registry, listEntity))
+                continue;
+
+            entt::entity item = comp.itemInstances[static_cast<size_t>(comp.selectedIndex)];
+            if (!registry.valid(item) || !registry.all_of<components::UIRectComponent>(item))
+                continue;
+            if (!scene::Entity::isEffectivelyActive(registry, item))
+                continue;
+
+            const auto* canvas = findCanvasForEntity(registry, listEntity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(listEntity))
+                canvas = &registry.get<components::UICanvasComponent>(listEntity);
+            if (!canvas)
+                continue;
+
+            float vw = static_cast<float>(ctx.viewportWidth);
+            float vh = static_cast<float>(ctx.viewportHeight);
+            float scale = computeCanvasScale(canvas, vw, vh);
+
+            const auto& rectComp = registry.get<components::UIRectComponent>(item);
+            PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            auto [scrollAnc, scissor] = findScrollInfo(registry, item, scrollContainers);
+            applyScrollOffset(rect, scrollAnc, scrollContainers);
+
+            size_t entryStart = drawList.size();
+            render::ui::UIImageRenderData highlight;
+            highlight.texturePath = "__white_1x1__";
+            highlight.position = glm::vec2(rect.x, rect.y);
+            highlight.size = glm::vec2(rect.w, rect.h);
+            highlight.colorTint = comp.selectedTint;
+            highlight.scissorRect = scissor;
+            drawList.push_back(std::move(highlight));
+
+            markWindowOverlay(registry, listEntity, drawList, entryStart);
         }
     }
 

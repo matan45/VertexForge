@@ -1,0 +1,78 @@
+{
+    "version": "1.1",
+    "name": "Patrol",
+    "rootNodeId": 1,
+    "nodes": [
+        { "id": 1, "type": "Root", "name": "Root", "position": [500.0, 50.0] },
+        {
+            "id": 2,
+            "type": "Parallel",
+            "name": "Brain",
+            "position": [500.0, 180.0],
+            "properties": { "policy": "RequireAll" }
+        },
+        { "id": 3, "type": "RepeatUntilFail", "name": "Perception Loop", "position": [250.0, 320.0] },
+        { "id": 4, "type": "Succeeder", "name": "Never Fail", "position": [250.0, 440.0] },
+        { "id": 5, "type": "Sequence", "name": "Sense", "position": [250.0, 560.0] },
+        {
+            "id": 6,
+            "type": "ScriptTask",
+            "name": "Find Nearest Enemy",
+            "position": [150.0, 690.0],
+            "scriptPath": "game/ai/FindNearestEnemy.mt",
+            "scriptClassName": "FindNearestEnemy"
+        },
+        {
+            "id": 7,
+            "type": "Wait",
+            "name": "Sense Interval",
+            "position": [360.0, 690.0],
+            "properties": { "duration": 0.25 }
+        },
+        { "id": 8, "type": "Selector", "name": "Decide", "position": [800.0, 320.0] },
+        {
+            "id": 9,
+            "type": "BlackboardCondition",
+            "name": "Enemy Visible?",
+            "position": [700.0, 460.0],
+            "properties": { "key": "enemyVisible", "compareOp": "==", "compareValue": true, "abortMode": "Both" }
+        },
+        {
+            "id": 10,
+            "type": "SubTree",
+            "name": "Engage",
+            "position": [700.0, 590.0],
+            "properties": { "treePath": "assets/behaviortrees/Engage.bt" }
+        },
+        {
+            "id": 11,
+            "type": "ScriptTask",
+            "name": "Patrol Route",
+            "position": [920.0, 460.0],
+            "scriptPath": "game/ai/Patrol.mt",
+            "scriptClassName": "Patrol"
+        }
+    ],
+    "links": [
+        { "id": 1, "source": 1, "target": 2, "sortOrder": 0 },
+        { "id": 2, "source": 2, "target": 3, "sortOrder": 0 },
+        { "id": 3, "source": 2, "target": 8, "sortOrder": 1 },
+        { "id": 4, "source": 3, "target": 4, "sortOrder": 0 },
+        { "id": 5, "source": 4, "target": 5, "sortOrder": 0 },
+        { "id": 6, "source": 5, "target": 6, "sortOrder": 0 },
+        { "id": 7, "source": 5, "target": 7, "sortOrder": 1 },
+        { "id": 8, "source": 8, "target": 9, "sortOrder": 0 },
+        { "id": 9, "source": 8, "target": 11, "sortOrder": 1 },
+        { "id": 10, "source": 9, "target": 10, "sortOrder": 0 }
+    ],
+    "blackboardKeys": [
+        { "name": "enemyName", "type": "String", "default": "Enemy" },
+        { "name": "aggroRange", "type": "Float", "default": 20.0 },
+        { "name": "enemyVisible", "type": "Bool", "default": false },
+        { "name": "enemyId", "type": "Int", "default": 0 },
+        { "name": "enemyPos", "type": "Vec3", "default": [0.0, 0.0, 0.0] },
+        { "name": "attackRange", "type": "Float", "default": 2.5 },
+        { "name": "patrolA", "type": "Vec3", "default": [0.0, 0.0, 0.0] },
+        { "name": "patrolB", "type": "Vec3", "default": [10.0, 0.0, 0.0] }
+    ]
+}

@@ -8,7 +8,6 @@ namespace services
     {
         bool streamlineAvailable = false;
         bool dlssSupported = false;
-        bool directSRSupported = false;
         postprocess::UpscaleMode activeMode = postprocess::UpscaleMode::Off;
         uint32_t renderWidth = 0;
         uint32_t renderHeight = 0;

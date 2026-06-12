@@ -1,0 +1,90 @@
+{
+    "version": "1.0",
+    "uuid": "910000000000000007",
+    "name": "Sparks",
+    "graph": {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "Emitter",
+                "name": "Emitter",
+                "position": [100.0, 200.0],
+                "properties": {
+                    "spawnRate": { "type": "Float", "value": 0.0 },
+                    "lifetime": { "type": "Float", "value": 0.7 },
+                    "startSize": { "type": "Float", "value": 0.12 },
+                    "startSpeed": { "type": "Float", "value": 12.0 },
+                    "startVelocity": { "type": "Vec3", "value": [0.0, 1.0, 0.0] },
+                    "startColor": { "type": "Color", "value": [1.0, 0.9, 0.5, 1.0] },
+                    "looping": { "type": "Bool", "value": false },
+                    "texture": { "type": "String", "value": "" },
+                    "burstCount": { "type": "Int", "value": 1 },
+                    "burst0Time": { "type": "Float", "value": 0.0 },
+                    "burst0Count": { "type": "Int", "value": 60 },
+                    "burst0Cycles": { "type": "Int", "value": 1 },
+                    "burst0Interval": { "type": "Float", "value": 0.5 },
+                    "burst0Probability": { "type": "Float", "value": 1.0 },
+                    "additiveBlend": { "type": "Bool", "value": true },
+                    "alphaClipThreshold": { "type": "Float", "value": 0.02 },
+                    "renderMode": { "type": "Int", "value": 1 },
+                    "stretchMultiplier": { "type": "Float", "value": 2.0 },
+                    "collisionEnabled": { "type": "Bool", "value": true },
+                    "collisionBounce": { "type": "Float", "value": 0.4 },
+                    "collisionFriction": { "type": "Float", "value": 0.2 },
+                    "collisionLifetimeLoss": { "type": "Float", "value": 0.2 },
+                    "lightEmissionEnabled": { "type": "Bool", "value": true },
+                    "lightEmissionIntensity": { "type": "Float", "value": 4.0 },
+                    "lightEmissionRadius": { "type": "Float", "value": 4.0 }
+                }
+            },
+            {
+                "id": 3,
+                "type": "ColorOverLifetime",
+                "name": "Color Over Lifetime",
+                "position": [330.0, 100.0],
+                "properties": {
+                    "gradient": { "type": "Gradient", "value": { "stops": [
+                        [0.0, 1.0, 0.95, 0.7, 1.0],
+                        [0.6, 1.0, 0.6, 0.2, 0.8],
+                        [1.0, 0.6, 0.2, 0.05, 0.0]
+                    ] } }
+                }
+            },
+            {
+                "id": 4,
+                "type": "ForceGravity",
+                "name": "Gravity",
+                "position": [530.0, 100.0],
+                "properties": {
+                    "direction": { "type": "Vec3", "value": [0.0, -1.0, 0.0] },
+                    "strength": { "type": "Float", "value": 9.81 }
+                }
+            },
+            {
+                "id": 10,
+                "type": "Shape",
+                "name": "Sphere",
+                "position": [100.0, 420.0],
+                "properties": {
+                    "shapeType": { "type": "String", "value": "Sphere" },
+                    "emitFrom": { "type": "String", "value": "Volume" },
+                    "randomDirection": { "type": "Bool", "value": true },
+                    "radius": { "type": "Float", "value": 0.1 }
+                }
+            },
+            {
+                "id": 2,
+                "type": "OutSystem",
+                "name": "Output",
+                "position": [730.0, 200.0],
+                "properties": {}
+            }
+        ],
+        "links": [
+            { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 2, "sourceNode": 3, "targetNode": 4, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 3, "sourceNode": 4, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 4, "sourceNode": 10, "targetNode": 1, "sourcePin": "Output", "targetPin": "Shape" }
+        ]
+    }
+}

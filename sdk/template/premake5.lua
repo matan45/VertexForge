@@ -38,6 +38,7 @@ project (PLUGIN_NAME)
       sdkDir .. "/include/VFEngine/utilities",
       sdkDir .. "/include/VFEngine/services",
       sdkDir .. "/include/VFEngine/core/controllers",
+      sdkDir .. "/include/VFEngine/import",
       sdkDir .. "/deps/glm",
       sdkDir .. "/deps/entt",
       sdkDir .. "/deps/json",

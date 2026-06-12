@@ -52,17 +52,32 @@ namespace core::api
                     auto view = registry.view<components::OceanComponent>();
                     for (auto entity : view)
                     {
-                        const auto& ocean = view.get<components::OceanComponent>(entity);
-                        // Check if the camera position (from CameraComponent) is below water
+                        // Check if the camera position (from CameraComponent) is below the
+                        // displaced wave surface, not just the flat base height
                         auto camView = registry.view<components::CameraComponent, components::TransformComponent>();
                         for (auto camEntity : camView)
                         {
                             const auto& transform = camView.get<components::TransformComponent>(camEntity);
-                            if (transform.position.y < ocean.waterHeight)
+                            events::ocean::GetOceanHeightAtQuery query;
+                            query.worldXZ = glm::vec2(transform.position.x, transform.position.z);
+                            if (transform.position.y < dispatcher.query(query))
                                 return value::Value(true);
                         }
                     }
                     return value::Value(false);
+                }});
+
+            // ocean.isEntityInWater(entityId) -> bool
+            interpreter->registerNativeFunction("_native_ocean_isEntityInWater",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.empty()) return value::Value(false);
+                    int64_t id = extractInt64(args[0]);
+                    if (id < 0) return value::Value(false);
+
+                    events::ocean::IsEntityInWaterQuery query;
+                    query.entity = services::EntityHandle{static_cast<uint64_t>(id)};
+                    return value::Value(dispatcher.query(query));
                 }});
 
             // ocean.hasOcean(entityId) -> bool
@@ -155,6 +170,45 @@ namespace core::api
                     cmd.settings.density = extractFloat(args[1]);
                     cmd.settings.drag = extractFloat(args[2]);
                     cmd.settings.buoyancyStrength = extractFloat(args[3]);
+                    dispatcher.execute(cmd);
+
+                    return value::Value(std::monostate{});
+                }});
+
+            // ocean.setSeaState(beaufort, transitionSeconds)
+            interpreter->registerNativeFunction("_native_ocean_setSeaState",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.empty()) return value::Value(std::monostate{});
+
+                    events::ocean::SetOceanSeaStateCommand cmd;
+                    cmd.beaufort = extractFloat(args[0]);
+                    cmd.transitionSeconds = args.size() > 1 ? extractFloat(args[1]) : 0.0f;
+                    dispatcher.execute(cmd);
+
+                    return value::Value(std::monostate{});
+                }});
+
+            // ocean.getSeaState() -> float (current Beaufort number)
+            interpreter->registerNativeFunction("_native_ocean_getSeaState",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::ocean::GetOceanSeaStateQuery query;
+                    return value::Value(dispatcher.query(query));
+                }});
+
+            // ocean.setWeatherDriven(oceanEntityId, enabled)
+            interpreter->registerNativeFunction("_native_ocean_setWeatherDriven",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.size() < 2) return value::Value(std::monostate{});
+                    int64_t id = extractInt64(args[0]);
+                    if (id < 0) return value::Value(std::monostate{});
+
+                    events::ocean::SetOceanWeatherDrivenCommand cmd;
+                    cmd.oceanEntity = services::EntityHandle{static_cast<uint64_t>(id)};
+                    cmd.enabled = extractBool(args[1]);
+                    cmd.response = args.size() > 2 ? extractFloat(args[2]) : 1.0f;
                     dispatcher.execute(cmd);
 
                     return value::Value(std::monostate{});

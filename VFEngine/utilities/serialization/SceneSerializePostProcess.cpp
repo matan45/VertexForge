@@ -267,7 +267,7 @@ namespace serialization
                 s.enabled = u["enabled"].get<bool>();
             if (u.contains("mode") && u["mode"].is_number_integer())
                 s.mode = static_cast<postprocess::UpscaleMode>(
-                    std::clamp(u["mode"].get<int>(), 0, 3));
+                    std::clamp(u["mode"].get<int>(), 0, 2));
             if (u.contains("quality") && u["quality"].is_number_integer())
                 s.quality = static_cast<postprocess::UpscaleQuality>(
                     std::clamp(u["quality"].get<int>(), 0, 4));

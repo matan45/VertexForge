@@ -39,6 +39,12 @@ namespace ocean
         phys["drag"] = data.drag;
         phys["buoyancyStrength"] = data.buoyancyStrength;
 
+        // Weather-driven sea state
+        auto& sea = j["seaState"];
+        sea["weatherDriven"] = data.weatherDriven;
+        sea["weatherResponse"] = data.weatherResponse;
+        sea["currentBeaufort"] = data.currentBeaufort;
+
         // Ocean FFT bands
         auto& fft = j["oceanFFT"];
         fft["gravity"] = data.gravity;
@@ -55,6 +61,8 @@ namespace ocean
             b["foamThreshold"] = data.bands[i].foamThreshold;
             b["displacementScale"] = data.bands[i].displacementScale;
             b["enabled"] = data.bands[i].enabled;
+            b["foamPersistence"] = data.bands[i].foamPersistence;
+            b["foamDecay"] = data.bands[i].foamDecay;
             bandsArr.push_back(b);
         }
         fft["bands"] = bandsArr;
@@ -128,6 +136,15 @@ namespace ocean
             outData.buoyancyStrength = phys.value("buoyancyStrength", 2.0f);
         }
 
+        // Weather-driven sea state (absent in v1 files -> defaults)
+        if (j.contains("seaState"))
+        {
+            const auto& sea = j["seaState"];
+            outData.weatherDriven = sea.value("weatherDriven", false);
+            outData.weatherResponse = sea.value("weatherResponse", 1.0f);
+            outData.currentBeaufort = sea.value("currentBeaufort", 3.0f);
+        }
+
         // Ocean FFT bands
         if (j.contains("oceanFFT"))
         {
@@ -149,6 +166,8 @@ namespace ocean
                     outData.bands[i].foamThreshold = b.value("foamThreshold", -0.1f);
                     outData.bands[i].displacementScale = b.value("displacementScale", 4.0f);
                     outData.bands[i].enabled = b.value("enabled", true);
+                    outData.bands[i].foamPersistence = b.value("foamPersistence", outData.bands[i].foamPersistence);
+                    outData.bands[i].foamDecay = b.value("foamDecay", outData.bands[i].foamDecay);
                 }
             }
             else

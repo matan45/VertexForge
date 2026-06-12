@@ -129,6 +129,7 @@ namespace controllers
         instance.entityId = params.entityId;
         instance.priority = params.priority;
         instance.cameraRelative = params.cameraRelative;
+        instance.autoDestroy = params.autoDestroy;
 
         if (!params.vfxAssetPath.empty())
         {
@@ -608,12 +609,61 @@ namespace controllers
             updateCPU(deltaTime);
         }
 
+        // Fire-and-forget instances: destroy once emission is done and the
+        // longest-lived particles have expired (same margin as sub-emitters)
+        std::vector<VFXInstanceId> finishedAutoDestroy;
+        for (const auto& [id, instance] : instances)
+        {
+            if (instance.autoDestroy && !instance.loop && instance.active &&
+                instance.emissionTime >= instance.config.lifetime * 2.0f)
+            {
+                finishedAutoDestroy.push_back(id);
+            }
+        }
+        for (VFXInstanceId id : finishedAutoDestroy)
+        {
+            destroyInstance(id);
+        }
+
         frameNumber++;
 
         if (gpuBufferManager)
         {
             gpuBufferManager->advanceFrame();
         }
+    }
+
+    std::vector<VFXSceneRenderer::VFXProxyLight> VFXSceneRenderer::getActiveProxyLights() const
+    {
+        constexpr size_t MAX_PROXY_LIGHTS = 64;
+
+        std::vector<VFXProxyLight> lights;
+        for (const auto& [id, instance] : instances)
+        {
+            if (!instance.active || !instance.config.lightEmissionEnabled)
+                continue;
+            if (lights.size() >= MAX_PROXY_LIGHTS)
+                break;
+
+            VFXProxyLight light;
+            light.position = glm::vec3(instance.worldTransform[3]);
+            light.color = glm::vec3(instance.config.startColor);
+            light.intensity = instance.config.lightEmissionIntensity;
+            light.radius = instance.config.lightEmissionRadius;
+
+            // One-shot effects decay their light over the instance lifetime
+            if (!instance.loop && instance.config.lifetime > 0.0f)
+            {
+                float fade = 1.0f - std::clamp(
+                    instance.emissionTime / (instance.config.lifetime * 2.0f), 0.0f, 1.0f);
+                light.intensity *= fade;
+                if (light.intensity <= 0.01f)
+                    continue;
+            }
+
+            lights.push_back(light);
+        }
+        return lights;
     }
 
     void VFXSceneRenderer::processPendingEmitterFrees()

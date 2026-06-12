@@ -36,6 +36,7 @@ namespace core::physics
         static JPH::Ref<JPH::SwingTwistConstraintSettings> createJointConstraint(
             const types::JointConstraintLimits* limits,
             const JPH::Mat44& childWorldTransform,
-            const JPH::Mat44& parentWorldTransform);
+            const JPH::Mat44& parentWorldTransform,
+            const JPH::MotorSettings& motorSettings);
     };
 }

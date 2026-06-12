@@ -45,6 +45,12 @@ namespace services
             {
                 return reparentEntity(cmd.entity, cmd.newParent);
             });
+
+        dispatcher.registerCommandHandler<events::scene::ReorderEntityCommand>(
+            [this](const events::scene::ReorderEntityCommand& cmd)
+            {
+                return moveEntity(cmd.entity, cmd.newParent, cmd.insertIndex);
+            });
     }
 
     void HierarchyService::collectEntityAndDescendants(scene::Entity& entity, std::vector<EntityHandle>& outHandles) const
@@ -121,19 +127,34 @@ namespace services
             }
         }
 
-        // Clear global selection if the deleted entity (or any descendant) is currently selected
-        auto currentSelection = dispatcher.query(events::scene::GetSelectedEntityQuery{});
-        if (currentSelection.has_value())
+        // Prune the deleted subtree from the global selection (multi-select aware)
+        auto currentSelection = dispatcher.query(events::scene::GetSelectedEntitiesQuery{});
+        if (!currentSelection.empty())
         {
-            for (const auto& handle : entitiesToDelete)
+            auto isDeleted = [&entitiesToDelete](const EntityHandle& selected)
             {
-                if (handle.id == currentSelection->id)
+                for (const auto& handle : entitiesToDelete)
                 {
-                    events::scene::SelectEntityCommand clearCmd;
-                    clearCmd.entity = std::nullopt;
-                    dispatcher.execute(clearCmd);
-                    break;
+                    if (handle.id == selected.id) return true;
                 }
+                return false;
+            };
+
+            std::vector<EntityHandle> remaining;
+            remaining.reserve(currentSelection.size());
+            for (const auto& selected : currentSelection)
+            {
+                if (!isDeleted(selected))
+                {
+                    remaining.push_back(selected);
+                }
+            }
+
+            if (remaining.size() != currentSelection.size())
+            {
+                events::scene::SelectEntitiesCommand updateCmd;
+                updateCmd.entities = std::move(remaining);
+                dispatcher.execute(updateCmd);
             }
         }
 
@@ -257,15 +278,20 @@ namespace services
 
     bool HierarchyService::reparentEntity(EntityHandle entity, EntityHandle newParent)
     {
+        return moveEntity(entity, newParent, -1);
+    }
+
+    bool HierarchyService::moveEntity(EntityHandle entity, EntityHandle targetParent, int insertIndex)
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry) ||
-            !internal::isValidHandle(newParent, registry))
+            !internal::isValidHandle(targetParent, registry))
         {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        scene::Entity newParentEntity(internal::fromHandle(newParent));
+        scene::Entity newParentEntity(internal::fromHandle(targetParent));
 
         std::optional<EntityHandle> oldParent;
         if (sceneEntity.hasComponent<components::ParentComponent>())
@@ -273,20 +299,18 @@ namespace services
             oldParent = internal::toHandle(sceneEntity.getComponent<components::ParentComponent>().parent);
         }
 
-        sceneGraph->moveEntity(sceneEntity, newParentEntity);
+        if (!sceneGraph->moveEntity(sceneEntity, newParentEntity, insertIndex))
+        {
+            return false;
+        }
 
         events::scene::EntityReparentedNotification notification;
         notification.entity = entity;
         notification.oldParent = oldParent;
-        notification.newParent = newParent;
+        notification.newParent = targetParent;
         events::EventDispatcher::instance().publish(notification);
 
         return true;
-    }
-
-    bool HierarchyService::moveEntity(EntityHandle entity, EntityHandle targetParent, int insertIndex)
-    {
-        return reparentEntity(entity, targetParent);
     }
 
     EntityHandle HierarchyService::getRoot() const

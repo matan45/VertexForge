@@ -2,8 +2,12 @@
 #include "events/EventDispatcher.hpp"
 #include "events/threading/TaskGraphEvents.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/asset/AssetDatabaseEvents.hpp"
+#include "stats/FrameHistoryMath.hpp"
 #include "imgui.h"
 #include "print/Log.hpp"
+
+#include <filesystem>
 
 #include <algorithm>
 #include <cmath>
@@ -12,6 +16,37 @@
 
 namespace windows
 {
+	// Frame-time history plot with median-based hitch flagging, shared by
+	// the CPU (Timeline tab) and GPU (GPU Passes tab) sections.
+	static void drawFrameHistoryPlot(const char* label, const std::vector<float>& historyMs)
+	{
+		if (historyMs.size() < 4)
+		{
+			ImGui::TextDisabled("Collecting history...");
+			return;
+		}
+
+		float maxMs = *std::max_element(historyMs.begin(), historyMs.end());
+		float medianMs = render::history::median(historyMs);
+		auto hitches = render::history::findHitches(historyMs);
+
+		char overlay[64];
+		snprintf(overlay, sizeof(overlay), "%.2f ms (median %.2f)", historyMs.back(), medianMs);
+		ImGui::PlotLines(label, historyMs.data(), static_cast<int>(historyMs.size()), 0,
+			overlay, 0.0f, maxMs * 1.1f, ImVec2(-1.0f, 60.0f));
+
+		if (hitches.empty())
+		{
+			ImGui::TextDisabled("No hitches in the last %zu frames (>2x median)", historyMs.size());
+		}
+		else
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f),
+				"%zu hitch frame(s) in the last %zu (>2x median, peak %.2f ms)",
+				hitches.size(), historyMs.size(), maxMs);
+		}
+	}
+
 	// Color palette for task bars (distinguishable colors)
 	static ImU32 getTaskColor(uint32_t index)
 	{
@@ -118,6 +153,16 @@ namespace windows
 					drawDrawCalls();
 					ImGui::EndTabItem();
 				}
+				if (ImGui::BeginTabItem("GPU Passes"))
+				{
+					drawGpuPasses();
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Loading"))
+				{
+					drawLoading();
+					ImGui::EndTabItem();
+				}
 				ImGui::EndTabBar();
 			}
 		}
@@ -146,12 +191,44 @@ namespace windows
 				latestFrame = dispatcher.query(events::threading::GetTaskGraphProfileQuery{});
 				stats = dispatcher.query(events::threading::GetTaskGraphStatsQuery{});
 				maxThreadId = threading::TaskProfiler::instance().getMaxThreadId();
+
+				// Viewport frame totals across the history ring for the plot
+				auto history = threading::TaskProfiler::instance().getHistory();
+				cpuHistoryMs.clear();
+				cpuHistoryMs.reserve(history.size());
+				for (const auto& frame : history)
+				{
+					cpuHistoryMs.push_back(
+						static_cast<float>(threading::viewportFrameDurationNs(frame)) / 1e6f);
+				}
 			}
 			else
 			{
 				latestFrame = {};
 				stats.clear();
 				maxThreadId = 0;
+				cpuHistoryMs.clear();
+			}
+
+			// Resource loads are always tracked by the scheduler — no toggle
+			auto& loadScheduler = resource::ResourceLoadScheduler::instance();
+			loadStats = loadScheduler.getStats();
+			activeLoads = loadScheduler.getActiveLoads();
+			recentLoads = loadScheduler.getRecentCompletions();
+
+			// GPU pass timings flow through the GpuPassStats sink, independent
+			// of CPU task-graph profiling
+			auto& gpuSink = render::GpuPassStats::instance();
+			gpuProfilingEnabled = gpuSink.isEnabledRequested();
+			if (gpuProfilingEnabled)
+			{
+				gpuStats = gpuSink.snapshot();
+				gpuHistoryMs = gpuSink.totalMsHistory();
+			}
+			else
+			{
+				gpuStats = {};
+				gpuHistoryMs.clear();
 			}
 		}
 		catch (const std::exception&)
@@ -170,6 +247,8 @@ namespace windows
 
 		float frameDurationMs = static_cast<float>(latestFrame.frameDurationNs) / 1e6f;
 		ImGui::Text("Frame duration: %.3f ms", frameDurationMs);
+
+		drawFrameHistoryPlot("CPU##history", cpuHistoryMs);
 		ImGui::Separator();
 
 		// Timeline area
@@ -495,6 +574,251 @@ namespace windows
 
 				ImGui::TableNextColumn();
 				float frac = static_cast<float>(count) / static_cast<float>(drawCallTotal);
+				ImVec2 p0 = ImGui::GetCursorScreenPos();
+				float w = barMaxWidth * frac;
+				ImU32 color = getTaskColor(static_cast<uint32_t>(idx));
+				drawList->AddRectFilled(p0, ImVec2(p0.x + std::max(w, 2.0f), p0.y + barHeight), color, 2.0f);
+				char overlay[32];
+				snprintf(overlay, sizeof(overlay), "%.0f%%", frac * 100.0f);
+				drawList->AddText(ImVec2(p0.x + 4.0f, p0.y), IM_COL32(255, 255, 255, 255), overlay);
+				ImGui::Dummy(ImVec2(barMaxWidth, barHeight));
+			}
+
+			ImGui::EndTable();
+		}
+	}
+
+	std::string TaskGraphWindow::loadDisplayName(const asset::AssetGUID& guid,
+		const std::string& debugName)
+	{
+		// Non-asset loads (shaders) carry their path as a debug name
+		if (!debugName.empty())
+		{
+			return std::filesystem::path(debugName).filename().string();
+		}
+
+		auto it = loadNameCache.find(guid);
+		if (it != loadNameCache.end()) return it->second;
+
+		std::string name = guid.toString();
+		try
+		{
+			events::assetdb::GetAssetPathQuery pathQuery;
+			pathQuery.guid = guid;
+			if (auto pathOpt = events::EventDispatcher::instance().query(pathQuery))
+			{
+				name = std::filesystem::path(*pathOpt).filename().string();
+			}
+		}
+		catch (const std::exception&)
+		{
+		}
+		return loadNameCache.emplace(guid, std::move(name)).first->second;
+	}
+
+	void TaskGraphWindow::drawLoading()
+	{
+		ImGui::Text("Pending: %u  |  In flight: %u", loadStats.pendingCount, loadStats.inFlightCount);
+
+		// IO throughput estimate from recent completed loads that reported a size
+		double totalBytes = 0.0;
+		double totalLoadMs = 0.0;
+		for (const auto& rec : recentLoads)
+		{
+			if (rec.finalStage == resource::LoadStage::Completed && rec.bytes > 0 && rec.loadMs > 0.0f)
+			{
+				totalBytes += static_cast<double>(rec.bytes);
+				totalLoadMs += rec.loadMs;
+			}
+		}
+		if (totalLoadMs > 0.0)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("|  ~%.1f MB/s (decoded size over recent loads)",
+				totalBytes / 1024.0 / 1024.0 / (totalLoadMs / 1000.0));
+		}
+		ImGui::Separator();
+
+		// Active loads with progress bars
+		if (activeLoads.empty())
+		{
+			ImGui::TextDisabled("No loads in progress");
+		}
+		else if (ImGui::BeginTable("ActiveLoads", 5,
+			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+		{
+			ImGui::TableSetupColumn("Asset", ImGuiTableColumnFlags_WidthFixed, 220.0f);
+			ImGui::TableSetupColumn("Stage", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+			ImGui::TableSetupColumn("Wait (ms)", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			ImGui::TableSetupColumn("Progress", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			for (const auto& load : activeLoads)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", loadDisplayName(load.guid, load.debugName).c_str());
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", resource::loadStageName(load.stage));
+				ImGui::TableNextColumn();
+				ImGui::Text("%.2f", load.computedPriority);
+				ImGui::TableNextColumn();
+				ImGui::Text("%.1f", load.queueWaitMs);
+				ImGui::TableNextColumn();
+				if (load.stage == resource::LoadStage::Pending)
+				{
+					ImGui::TextDisabled("queued");
+				}
+				else
+				{
+					// Loaders report fraction at their own granularity; running
+					// without a reported fraction still shows elapsed time
+					char overlay[48];
+					if (load.fraction > 0.0f)
+						snprintf(overlay, sizeof(overlay), "%.0f%% (%.0f ms)", load.fraction * 100.0f, load.runMs);
+					else
+						snprintf(overlay, sizeof(overlay), "%.0f ms", load.runMs);
+					ImGui::ProgressBar(load.fraction, ImVec2(-1.0f, 0.0f), overlay);
+				}
+			}
+
+			ImGui::EndTable();
+		}
+
+		ImGui::Separator();
+		ImGui::Text("Recent loads");
+
+		if (recentLoads.empty())
+		{
+			ImGui::TextDisabled("No completed loads yet");
+			return;
+		}
+
+		if (ImGui::BeginTable("RecentLoads", 5,
+			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit |
+			ImGuiTableFlags_ScrollY))
+		{
+			ImGui::TableSetupScrollFreeze(0, 1);
+			ImGui::TableSetupColumn("Asset", ImGuiTableColumnFlags_WidthFixed, 220.0f);
+			ImGui::TableSetupColumn("Result", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Queue (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Load (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			// Newest first
+			for (auto it = recentLoads.rbegin(); it != recentLoads.rend(); ++it)
+			{
+				const auto& rec = *it;
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", loadDisplayName(rec.guid, rec.debugName).c_str());
+				ImGui::TableNextColumn();
+				switch (rec.finalStage)
+				{
+				case resource::LoadStage::Failed:
+					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), "Failed");
+					break;
+				case resource::LoadStage::Cancelled:
+					ImGui::TextDisabled("Cancelled");
+					break;
+				default:
+					ImGui::Text("OK");
+					break;
+				}
+				ImGui::TableNextColumn();
+				ImGui::Text("%.1f", rec.queueWaitMs);
+				ImGui::TableNextColumn();
+				ImGui::Text("%.1f", rec.loadMs);
+				ImGui::TableNextColumn();
+				if (rec.bytes > 0)
+					ImGui::Text("%.2f MB", static_cast<double>(rec.bytes) / 1024.0 / 1024.0);
+				else
+					ImGui::TextDisabled("-");
+			}
+
+			ImGui::EndTable();
+		}
+	}
+
+	void TaskGraphWindow::drawGpuPasses()
+	{
+		auto& gpuSink = render::GpuPassStats::instance();
+
+		if (gpuSink.isUnsupported())
+		{
+			ImGui::TextDisabled("GPU timestamp queries are not supported on this device");
+			return;
+		}
+
+		bool enabled = gpuProfilingEnabled;
+		if (ImGui::Checkbox("GPU Profiling", &enabled))
+		{
+			gpuProfilingEnabled = enabled;
+			gpuSink.requestEnabled(enabled);
+			if (!enabled)
+			{
+				gpuStats = {};
+				gpuHistoryMs.clear();
+			}
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("Per-pass render graph timings (timestamp queries, off by default)");
+
+		if (!gpuProfilingEnabled)
+		{
+			ImGui::TextDisabled("Enable GPU profiling to collect pass timings");
+			return;
+		}
+
+		if (!gpuStats.valid)
+		{
+			ImGui::TextDisabled("Waiting for first GPU readback...");
+			return;
+		}
+
+		ImGui::Text("GPU frame: %.3f ms (EMA %.3f ms)  |  Barriers: %u (%u flushes)",
+			gpuStats.totalMs, gpuStats.emaTotalMs, gpuStats.barrierCount, gpuStats.barrierFlushCount);
+
+		drawFrameHistoryPlot("GPU##history", gpuHistoryMs);
+		ImGui::Separator();
+
+		// Passes sorted by EMA cost, descending
+		std::vector<size_t> order(gpuStats.passTimings.size());
+		for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+		std::sort(order.begin(), order.end(),
+			[this](size_t a, size_t b)
+			{
+				return gpuStats.passTimings[a].emaMs > gpuStats.passTimings[b].emaMs;
+			});
+
+		const float barMaxWidth = 220.0f;
+		const float barHeight = ImGui::GetTextLineHeight();
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		if (ImGui::BeginTable("GpuPassTimings", 4,
+			ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg))
+		{
+			ImGui::TableSetupColumn("Pass", ImGuiTableColumnFlags_WidthFixed, 170.0f);
+			ImGui::TableSetupColumn("Last (ms)", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			ImGui::TableSetupColumn("EMA (ms)", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			ImGui::TableSetupColumn("Share", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			for (size_t idx : order)
+			{
+				const auto& pass = gpuStats.passTimings[idx];
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", pass.name.c_str());
+				ImGui::TableNextColumn();
+				ImGui::Text("%.3f", pass.ms);
+				ImGui::TableNextColumn();
+				ImGui::Text("%.3f", pass.emaMs);
+				ImGui::TableNextColumn();
+				float frac = (gpuStats.emaTotalMs > 0.0f) ? pass.emaMs / gpuStats.emaTotalMs : 0.0f;
 				ImVec2 p0 = ImGui::GetCursorScreenPos();
 				float w = barMaxWidth * frac;
 				ImU32 color = getTaskColor(static_cast<uint32_t>(idx));

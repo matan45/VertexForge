@@ -43,6 +43,12 @@ namespace events::lifecycle {
 		std::string_view getName() const override { return "ForceReleaseAsset"; }
 	};
 
+	struct SetMemoryBudgetCommand : ::events::ICommand<void> {
+		size_t totalBudgetBytes = 0; // 0 disables the budget
+
+		std::string_view getName() const override { return "SetMemoryBudget"; }
+	};
+
 	// ============================================================
 	// QUERIES
 	// ============================================================
@@ -59,6 +65,16 @@ namespace events::lifecycle {
 		std::string path;
 
 		std::string_view getName() const override { return "QueryAssetEntry"; }
+	};
+
+	struct MemoryBudgetStatus {
+		size_t totalBudgetBytes = 0;
+		size_t trackedBytes = 0;
+		bool overBudget = false;
+	};
+
+	struct QueryMemoryBudgetQuery : ::events::IQuery<MemoryBudgetStatus> {
+		std::string_view getName() const override { return "QueryMemoryBudget"; }
 	};
 
 }

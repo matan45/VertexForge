@@ -72,15 +72,18 @@ namespace render::graph
         // Resize EMA array if needed
         if (emaTimes.size() < currentPassCount)
             emaTimes.resize(currentPassCount, 0.0f);
+        lastTimes.assign(currentPassCount, 0.0f);
 
         for (uint32_t i = 0; i < currentPassCount && (i * 2 + 1) < timestamps.size(); ++i)
         {
             float ms = queryPool.toMilliseconds(timestamps[i * 2], timestamps[i * 2 + 1]);
             updateEMA(ms, emaTimes[i]);
+            lastTimes[i] = ms;
             totalMs += ms;
         }
 
         updateEMA(totalMs, emaTotalMs);
+        lastTotalMs = totalMs;
         emaInitialized = true;
     }
 
@@ -88,7 +91,7 @@ namespace render::graph
     {
         RenderGraphStats stats{};
         stats.passCount = currentPassCount;
-        stats.totalMs = emaTotalMs;
+        stats.totalMs = lastTotalMs;
         stats.emaTotalMs = emaTotalMs;
         stats.barrierCount = barrierCount;
         stats.barrierFlushCount = barrierFlushCount;
@@ -98,7 +101,7 @@ namespace render::graph
             PassTiming timing{};
             timing.name = passNames[i];
             timing.emaMs = (i < emaTimes.size()) ? emaTimes[i] : 0.0f;
-            timing.ms = timing.emaMs;
+            timing.ms = (i < lastTimes.size()) ? lastTimes[i] : timing.emaMs;
             stats.passTimings.push_back(timing);
         }
 

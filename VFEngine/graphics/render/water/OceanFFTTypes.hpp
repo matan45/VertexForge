@@ -17,6 +17,9 @@ namespace render::water
         float gravity = 9.81f;
         float foamThreshold = -0.1f;
         float displacementScale = 4.0f;
+        // Persistent foam (push-constant only — changing these never rebuilds the spectrum)
+        float foamPersistence = 0.85f;
+        float foamDecay = 0.5f;
     };
 
     struct SpectrumPushConstants
@@ -63,8 +66,11 @@ namespace render::water
         float patchSize;
         float foamThreshold;
         float displacementScale;
+        float deltaTime;
+        float foamPersistence;
+        float foamDecay;
     };
-    static_assert(sizeof(MergePushConstants) == 20);
+    static_assert(sizeof(MergePushConstants) == 32);
 
     struct FieldPair
     {

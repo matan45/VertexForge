@@ -64,6 +64,8 @@ namespace controllers
             gpuMeshPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuRibbonPipeline = std::make_unique<render::vfx::VFXRibbonGPUPipeline>(device, swapChain);
+            if (hasLightingLayouts)
+                gpuRibbonPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
             gpuRibbonPipeline->init(colorFormat, depthFormat);
             if (!gpuRibbonPipeline->isInitialized())
             {
@@ -171,6 +173,7 @@ namespace controllers
         static std::random_device rd;
         static std::mt19937 gen(rd());
         std::uniform_int_distribution<uint32_t> dist;
+        std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
 
         for (auto& [id, instance] : instances)
         {
@@ -187,6 +190,14 @@ namespace controllers
             {
                 effectiveDt = std::min(deltaTime, 1.0f / 30.0f);
                 instance.firstFrame = false;
+                instance.prevWorldTransform = instance.worldTransform;
+            }
+
+            if (effectiveDt > 0.0f)
+            {
+                glm::vec3 currentPos = glm::vec3(instance.worldTransform[3]);
+                glm::vec3 prevPos = glm::vec3(instance.prevWorldTransform[3]);
+                instance.emitterVelocity = (currentPos - prevPos) / effectiveDt;
             }
 
             instance.emissionTime += effectiveDt;
@@ -200,6 +211,25 @@ namespace controllers
                 instance.spawnAccumulator += lodAdjustedRate * effectiveDt;
                 spawnThisFrame = static_cast<uint32_t>(instance.spawnAccumulator);
                 instance.spawnAccumulator -= static_cast<float>(spawnThisFrame);
+
+                if (!instance.config.bursts.empty())
+                {
+                    float prevEmissionTime = instance.emissionTime - effectiveDt;
+                    uint32_t burstSpawns = ::vfx::evaluateBurstSpawns(
+                        instance.config.bursts, prevEmissionTime, instance.emissionTime,
+                        [&dist01]() { return dist01(gen); });
+                    burstSpawns = static_cast<uint32_t>(
+                        static_cast<float>(burstSpawns) * instance.lodSpawnMultiplier);
+
+                    if (burstSpawns > instance.gpuParticleCount && !instance.burstClampWarned)
+                    {
+                        vfLogWarning("VFX instance {}: burst of {} particles exceeds emitter pool size {} - clamped",
+                                     id, burstSpawns, instance.gpuParticleCount);
+                        instance.burstClampWarned = true;
+                    }
+
+                    spawnThisFrame += burstSpawns;
+                }
             }
 
             auto gpuConfig = toGPUConfig(instance.config, effectiveDt, instance.gpuParticleCount, dist(gen));
@@ -231,6 +261,8 @@ namespace controllers
             auto gpuState = toGPUState(instance);
             gpuState.spawnThisFrame = spawnThisFrame;
             gpuBufferManager->updateEmitterState(instance.gpuEmitterIndex, gpuState);
+
+            instance.prevWorldTransform = instance.worldTransform;
         }
     }
 
@@ -421,6 +453,9 @@ namespace controllers
     {
         render::vfx::GPUEmitterState gpuState{};
         gpuState.worldTransform = instance.worldTransform;
+        gpuState.prevWorldTransform = instance.prevWorldTransform;
+        gpuState.emitterVelocityAndInherit = glm::vec4(
+            instance.emitterVelocity, instance.config.inheritVelocityRatio);
         gpuState.particleOffset = instance.gpuParticleOffset;
         gpuState.maxParticles = instance.gpuParticleCount;
         gpuState.activeCount = 0;
@@ -450,6 +485,8 @@ namespace controllers
             gpuRenderPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
         if (gpuMeshPipeline)
             gpuMeshPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
+        if (gpuRibbonPipeline)
+            gpuRibbonPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
     }
 
     void VFXSceneRenderer::updateLightingDescriptorSets(
@@ -461,5 +498,7 @@ namespace controllers
             gpuRenderPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
         if (gpuMeshPipeline)
             gpuMeshPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
+        if (gpuRibbonPipeline)
+            gpuRibbonPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
     }
 }

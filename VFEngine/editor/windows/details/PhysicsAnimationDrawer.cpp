@@ -3,6 +3,7 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
+#include "events/physics/PhysicsAnimationEvents.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
@@ -51,6 +52,8 @@ namespace windows::details
             {
                 ImGui::Spacing();
                 drawConfigSummary(data);
+                ImGui::Spacing();
+                drawRuntimeControls(handle, data);
             }
 
             if (changed)
@@ -130,12 +133,8 @@ namespace windows::details
                 auto configOpt = physics::PhysicsAnimationAsset::load(path);
                 if (configOpt.has_value())
                 {
-                    const auto& config = *configOpt;
                     data.physicsAnimationRef = asset::AssetRef::fromPath(path);
-                    data.defaultMode = config.defaultMode;
-                    data.collisionLayer = config.collisionLayer;
-                    data.boneBodyMappings = config.boneBodyMappings;
-                    data.jointLimits = config.jointLimits;
+                    data.config = *configOpt;
                     changed = true;
                 }
                 else
@@ -151,12 +150,90 @@ namespace windows::details
             if (ImGui::Button("Clear"))
             {
                 data.physicsAnimationRef = asset::AssetRef::invalid();
-                data.defaultMode = types::PhysicsAnimationMode::Animated;
-                data.collisionLayer = 1;
-                data.boneBodyMappings.clear();
-                data.jointLimits.clear();
+                data.config = types::PhysicsAnimationConfig{};
                 changed = true;
             }
+        }
+    }
+
+    void PhysicsAnimationDrawer::drawRuntimeControls(services::EntityHandle handle,
+                                                      const services::PhysicsAnimationComponentData& data)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Ragdoll instances only exist during play mode
+        events::physicsAnimation::HasPhysicsAnimationQuery activeQuery;
+        activeQuery.entity = handle;
+        if (!dispatcher.query(activeQuery)) return;
+
+        if (ImGui::CollapsingHeader("Runtime (Play Mode)", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(10.0f);
+
+            events::physicsAnimation::GetPhysicsAnimationModeQuery modeQuery;
+            modeQuery.entity = handle;
+            int currentMode = static_cast<int>(dispatcher.query(modeQuery));
+
+            const char* modeNames[] = {"Animated", "Kinematic", "Ragdoll", "Powered Ragdoll"};
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::Combo("##RuntimeMode", &currentMode, modeNames, IM_ARRAYSIZE(modeNames)))
+            {
+                events::physicsAnimation::SetPhysicsAnimationModeCommand cmd;
+                cmd.entity = handle;
+                cmd.mode = static_cast<types::PhysicsAnimationMode>(currentMode);
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Switch physics animation mode live");
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::SliderFloat("##GlobalStrength", &globalStrength, 0.0f, 1.0f, "Global Strength: %.2f"))
+            {
+                events::physicsAnimation::SetGlobalMotorStrengthCommand cmd;
+                cmd.entity = handle;
+                cmd.strength = globalStrength;
+                dispatcher.execute(cmd);
+            }
+
+            events::physicsAnimation::IsRagdollSettledQuery settledQuery;
+            settledQuery.entity = handle;
+            bool settled = dispatcher.query(settledQuery);
+            ImGui::Text("Settled: %s", settled ? "yes" : "no");
+
+            if (!data.config.boneBodyMappings.empty())
+            {
+                ImGui::Separator();
+
+                if (selectedHitBone >= static_cast<int>(data.config.boneBodyMappings.size()))
+                    selectedHitBone = 0;
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::BeginCombo("##HitBone",
+                                      data.config.boneBodyMappings[selectedHitBone].boneName.c_str()))
+                {
+                    for (size_t i = 0; i < data.config.boneBodyMappings.size(); ++i)
+                    {
+                        bool isSelected = static_cast<int>(i) == selectedHitBone;
+                        if (ImGui::Selectable(data.config.boneBodyMappings[i].boneName.c_str(), isSelected))
+                            selectedHitBone = static_cast<int>(i);
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Bone for the test hit reaction");
+
+                if (ImGui::Button("Test Hit Reaction", ImVec2(-1, 0)))
+                {
+                    events::physicsAnimation::HitReactionCommand cmd;
+                    cmd.entity = handle;
+                    cmd.boneName = data.config.boneBodyMappings[selectedHitBone].boneName;
+                    cmd.impulse = glm::vec3(60.0f, 30.0f, 0.0f);
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Impulse + temporary motor dip on the selected bone's chain (powered ragdoll)");
+            }
+
+            ImGui::Unindent(10.0f);
         }
     }
 
@@ -167,20 +244,22 @@ namespace windows::details
             ImGui::Indent(10.0f);
 
             const char* modeStr = "Animated";
-            switch (data.defaultMode)
+            switch (data.config.defaultMode)
             {
             case types::PhysicsAnimationMode::Kinematic: modeStr = "Kinematic"; break;
             case types::PhysicsAnimationMode::Ragdoll: modeStr = "Ragdoll"; break;
+            case types::PhysicsAnimationMode::PoweredRagdoll: modeStr = "Powered Ragdoll"; break;
             default: break;
             }
             ImGui::Text("Default Mode: %s", modeStr);
-            ImGui::Text("Collision Layer: %d", static_cast<int>(data.collisionLayer));
-            ImGui::Text("Bone Mappings: %zu", data.boneBodyMappings.size());
-            ImGui::Text("Joint Limits: %zu", data.jointLimits.size());
+            ImGui::Text("Collision Layer: %d", static_cast<int>(data.config.collisionLayer));
+            ImGui::Text("Bone Mappings: %zu", data.config.boneBodyMappings.size());
+            ImGui::Text("Joint Limits: %zu", data.config.jointLimits.size());
+            ImGui::Text("Motor Overrides: %zu", data.config.boneMotors.size());
 
-            if (!data.boneBodyMappings.empty() && ImGui::TreeNode("Mapped Bones"))
+            if (!data.config.boneBodyMappings.empty() && ImGui::TreeNode("Mapped Bones"))
             {
-                for (const auto& mapping : data.boneBodyMappings)
+                for (const auto& mapping : data.config.boneBodyMappings)
                 {
                     const char* shapeStr = "Box";
                     switch (mapping.shape)

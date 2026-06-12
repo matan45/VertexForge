@@ -32,6 +32,7 @@ namespace services
         types::NavmeshBakeSettings bakeSettings;
         types::NavmeshLodConfig lodConfig;
         bool enabled = false;
+        int maxResidentTiles = 0;
 
         navigation::NavmeshTileCache* tileCache = nullptr;
         INavmeshProvider* navmeshProvider = nullptr;
@@ -53,6 +54,10 @@ namespace services
         void setProvider(INavmeshProvider* provider) { navmeshProvider = provider; }
         void setSettings(const types::NavmeshBakeSettings& s) { bakeSettings = s; }
         void setLodConfig(const types::NavmeshLodConfig& cfg) { lodConfig = cfg; }
+
+        // dtNavMesh resident budget (0 = unlimited): load candidates beyond this
+        // are skipped nearest-first; dtNavMesh::addTile would fail past it anyway.
+        void setMaxResidentTiles(int value) { maxResidentTiles = value; }
 
         // Single-position update (backward compat - uses global config radii)
         void update(const glm::vec3& cameraPos,

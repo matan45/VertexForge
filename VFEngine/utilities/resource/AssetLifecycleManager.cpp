@@ -72,6 +72,19 @@ namespace resource {
 		{
 			std::scoped_lock lock(registryMutex);
 
+			// Budget pressure: while over budget, pending releases skip the
+			// remaining grace (queue order = oldest unreferenced first) until
+			// the projected total is back under
+			size_t totalBytes = 0;
+			bool budgetEnabled = budgetConfig.totalBudgetBytes > 0;
+			if (budgetEnabled) {
+				for (const auto& [g, e] : registry) {
+					totalBytes += e.estimatedMemoryBytes;
+				}
+			}
+			bool pressure = budgetEnabled && totalBytes > budgetConfig.totalBudgetBytes;
+			uint32_t releaseCap = pressure ? budgetConfig.pressureMaxReleasesPerFrame : maxReleasesPerFrame;
+
 			uint32_t releasedThisFrame = 0;
 			std::vector<asset::AssetGUID> toRelease;
 
@@ -83,13 +96,16 @@ namespace resource {
 
 				it->second.graceTimeRemaining -= deltaTime;
 
-				if (it->second.graceTimeRemaining <= 0.0f) {
+				bool forced = pressure && totalBytes > budgetConfig.totalBudgetBytes;
+				if (it->second.graceTimeRemaining <= 0.0f || forced) {
 					toRelease.push_back(guid);
+					size_t bytes = it->second.estimatedMemoryBytes;
+					totalBytes -= (bytes < totalBytes) ? bytes : totalBytes;
 				}
 			}
 
 			for (const auto& guid : toRelease) {
-				if (releasedThisFrame >= maxReleasesPerFrame) {
+				if (releasedThisFrame >= releaseCap) {
 					break;
 				}
 
@@ -208,6 +224,40 @@ namespace resource {
 	{
 		std::scoped_lock lock(registryMutex);
 		releaseCallback = std::move(callback);
+	}
+
+	void AssetLifecycleManager::setMemoryBudget(const MemoryBudgetConfig& config)
+	{
+		std::scoped_lock lock(registryMutex);
+		budgetConfig = config;
+	}
+
+	MemoryBudgetConfig AssetLifecycleManager::getMemoryBudget() const
+	{
+		std::scoped_lock lock(registryMutex);
+		return budgetConfig;
+	}
+
+	size_t AssetLifecycleManager::getTotalTrackedBytes() const
+	{
+		std::scoped_lock lock(registryMutex);
+		size_t total = 0;
+		for (const auto& [guid, entry] : registry) {
+			total += entry.estimatedMemoryBytes;
+		}
+		return total;
+	}
+
+	bool AssetLifecycleManager::isOverBudget() const
+	{
+		std::scoped_lock lock(registryMutex);
+		if (budgetConfig.totalBudgetBytes == 0) return false;
+
+		size_t total = 0;
+		for (const auto& [guid, entry] : registry) {
+			total += entry.estimatedMemoryBytes;
+		}
+		return total > budgetConfig.totalBudgetBytes;
 	}
 
 	AssetEntry AssetLifecycleManager::getAssetEntry(const asset::AssetGUID& guid) const

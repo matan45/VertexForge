@@ -16,8 +16,11 @@ namespace editor::graph {
 
         std::string generateCode(const std::string& outputVarPrefix,
                                 const std::map<std::string, std::string>& /*inputVarNames*/) const override {
-            float value = getPropertyValue<float>("value", 0.0f);
-            return "float " + outputVarPrefix + "Value = " + floatToGLSL(value) + ";\n";
+            std::string uniformName = getPropertyValue<std::string>("glslUniformName", std::string());
+            std::string expr = uniformName.empty()
+                ? floatToGLSL(getPropertyValue<float>("value", 0.0f))
+                : "uParams." + uniformName;
+            return "float " + outputVarPrefix + "Value = " + expr + ";\n";
         }
 
         std::string getOutputVarName(const std::string& outputVarPrefix,
@@ -44,9 +47,12 @@ namespace editor::graph {
 
         std::string generateCode(const std::string& outputVarPrefix,
                                 const std::map<std::string, std::string>& /*inputVarNames*/) const override {
-            glm::vec2 value = getPropertyValue<glm::vec2>("value", glm::vec2(0.0f));
+            std::string uniformName = getPropertyValue<std::string>("glslUniformName", std::string());
+            std::string expr = uniformName.empty()
+                ? vec2ToGLSL(getPropertyValue<glm::vec2>("value", glm::vec2(0.0f)))
+                : "uParams." + uniformName;
             std::string code;
-            code += "vec2 " + outputVarPrefix + "Value = " + vec2ToGLSL(value) + ";\n";
+            code += "vec2 " + outputVarPrefix + "Value = " + expr + ";\n";
             code += "float " + outputVarPrefix + "X = " + outputVarPrefix + "Value.x;\n";
             code += "float " + outputVarPrefix + "Y = " + outputVarPrefix + "Value.y;\n";
             return code;
@@ -80,9 +86,12 @@ namespace editor::graph {
 
         std::string generateCode(const std::string& outputVarPrefix,
                                 const std::map<std::string, std::string>& /*inputVarNames*/) const override {
-            glm::vec3 value = getPropertyValue<glm::vec3>("value", glm::vec3(0.0f));
+            std::string uniformName = getPropertyValue<std::string>("glslUniformName", std::string());
+            std::string expr = uniformName.empty()
+                ? vec3ToGLSL(getPropertyValue<glm::vec3>("value", glm::vec3(0.0f)))
+                : "uParams." + uniformName;
             std::string code;
-            code += "vec3 " + outputVarPrefix + "Value = " + vec3ToGLSL(value) + ";\n";
+            code += "vec3 " + outputVarPrefix + "Value = " + expr + ";\n";
             code += "float " + outputVarPrefix + "X = " + outputVarPrefix + "Value.x;\n";
             code += "float " + outputVarPrefix + "Y = " + outputVarPrefix + "Value.y;\n";
             code += "float " + outputVarPrefix + "Z = " + outputVarPrefix + "Value.z;\n";
@@ -120,9 +129,12 @@ namespace editor::graph {
 
         std::string generateCode(const std::string& outputVarPrefix,
                                 const std::map<std::string, std::string>& /*inputVarNames*/) const override {
-            glm::vec4 value = getPropertyValue<glm::vec4>("value", glm::vec4(1.0f));
+            std::string uniformName = getPropertyValue<std::string>("glslUniformName", std::string());
+            std::string expr = uniformName.empty()
+                ? vec4ToGLSL(getPropertyValue<glm::vec4>("value", glm::vec4(1.0f)))
+                : "uParams." + uniformName;
             std::string code;
-            code += "vec4 " + outputVarPrefix + "RGBA = " + vec4ToGLSL(value) + ";\n";
+            code += "vec4 " + outputVarPrefix + "RGBA = " + expr + ";\n";
             code += "vec3 " + outputVarPrefix + "RGB = " + outputVarPrefix + "RGBA.rgb;\n";
             code += "float " + outputVarPrefix + "R = " + outputVarPrefix + "RGBA.r;\n";
             code += "float " + outputVarPrefix + "G = " + outputVarPrefix + "RGBA.g;\n";

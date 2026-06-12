@@ -10,7 +10,9 @@
 #include "world/PendingReferenceResolver.hpp"
 #include "world/HLODStreamer.hpp"
 #include "world/HLODProxyManager.hpp"
+#include "streaming/AsyncLoadQueue.hpp"
 #include <chrono>
+#include <deque>
 #include <future>
 #include <memory>
 #include <optional>
@@ -74,11 +76,14 @@ namespace services
 
         // Multiple streaming sources (camera + gameplay-registered sources)
         std::unordered_map<uint32_t, world::StreamingSource> streamingSources;
+        // sourceId -> owning entity UUID, for auto-unregister on entity deletion
+        std::unordered_map<uint32_t, uint64_t> streamingSourceOwners;
         uint32_t nextStreamingSourceId = 1;
 
         ::events::SubscriptionToken transformChangedToken;
         ::events::SubscriptionToken editorModeChangedToken;
         ::events::SubscriptionToken cameraPositionToken;
+        ::events::SubscriptionToken entityDeletedToken;
 
         ::events::SubscriptionToken sceneLoadedToken;
         ::events::SubscriptionToken sceneClearedToken;
@@ -96,17 +101,12 @@ namespace services
         struct AsyncSectorLoadResult
         {
             std::vector<nlohmann::json> entityData;
+            world::SectorDataLayers dataLayers;
             bool success = false;
         };
 
-        struct PendingAsyncSectorLoad
-        {
-            world::SectorCoord coord;
-            std::future<AsyncSectorLoadResult> future;
-            bool cancelled = false;
-        };
-
-        std::unordered_map<world::SectorCoord, PendingAsyncSectorLoad, world::SectorCoordHash> pendingAsyncLoads;
+        streaming::AsyncLoadQueue<world::SectorCoord, AsyncSectorLoadResult,
+                                  world::SectorCoordHash> pendingAsyncLoads;
 
         // Physics state snapshots for velocity/sleep preservation across sector streaming
         struct PhysicsSnapshot
@@ -146,8 +146,17 @@ namespace services
 
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
+        void invalidateHLODForSector(const world::SectorCoord& coord);
+        bool generateSectorHLOD(const world::SectorCoord& coord, uint8_t tier);
+        void processHLODRegenQueue();
+
+        // Sectors whose HLOD was invalidated, awaiting automatic re-bake
+        // (drained one per frame in edit mode while streaming is idle)
+        std::deque<world::SectorCoord> hlodRegenQueue;
         void pollAsyncSectorLoads();
-        void finalizeSectorLoad(const world::SectorCoord& coord, std::vector<nlohmann::json>& entityData);
+        void finalizeSectorLoad(const world::SectorCoord& coord,
+                                std::vector<nlohmann::json>& entityData,
+                                world::SectorDataLayers& dataLayers);
         void onTransformChanged(uint64_t uuid, const glm::vec3& newPosition);
         void onTerrainAvailable(float worldTileSize);
         glm::vec3 getPrimaryCameraPosition() const;

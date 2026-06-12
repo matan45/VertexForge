@@ -74,6 +74,12 @@ namespace serialization
                 entity.getComponent<components::RigidBodyComponent>());
         }
 
+        if (entity.hasComponent<components::BuoyancyComponent>())
+        {
+            out["buoyancy"] = SceneSerialization::serializeBuoyancy(
+                entity.getComponent<components::BuoyancyComponent>());
+        }
+
         if (entity.hasComponent<components::DestructibleComponent>())
         {
             out["destructible"] = SceneSerialization::serializeDestructible(
@@ -135,11 +141,141 @@ namespace serialization
         }
     }
 
+    void PrefabSerialization::serializeUIComponents(const scene::Entity& entity, json& out)
+    {
+        if (entity.hasComponent<components::UICanvasComponent>())
+        {
+            out["uiCanvas"] = SceneSerialization::serializeUICanvas(
+                entity.getComponent<components::UICanvasComponent>());
+        }
+
+        if (entity.hasComponent<components::UIRectComponent>())
+        {
+            out["uiRect"] = SceneSerialization::serializeUIRect(
+                entity.getComponent<components::UIRectComponent>());
+        }
+
+        if (entity.hasComponent<components::UIStyleComponent>())
+        {
+            out["uiStyle"] = SceneSerialization::serializeUIStyle(
+                entity.getComponent<components::UIStyleComponent>());
+        }
+
+        if (entity.hasComponent<components::UIImageComponent>())
+        {
+            out["uiImage"] = SceneSerialization::serializeUIImage(
+                entity.getComponent<components::UIImageComponent>());
+        }
+
+        if (entity.hasComponent<components::UIScrollComponent>())
+        {
+            out["uiScroll"] = SceneSerialization::serializeUIScroll(
+                entity.getComponent<components::UIScrollComponent>());
+        }
+
+        if (entity.hasComponent<components::UILayoutGroupComponent>())
+        {
+            out["uiLayoutGroup"] = SceneSerialization::serializeUILayoutGroup(
+                entity.getComponent<components::UILayoutGroupComponent>());
+        }
+
+        if (entity.hasComponent<components::UILabelComponent>())
+        {
+            out["uiLabel"] = SceneSerialization::serializeUILabel(
+                entity.getComponent<components::UILabelComponent>());
+        }
+
+        if (entity.hasComponent<components::UITooltipComponent>())
+        {
+            out["uiTooltip"] = SceneSerialization::serializeUITooltip(
+                entity.getComponent<components::UITooltipComponent>());
+        }
+
+        if (entity.hasComponent<components::UIWindowComponent>())
+        {
+            out["uiWindow"] = SceneSerialization::serializeUIWindow(
+                entity.getComponent<components::UIWindowComponent>());
+        }
+
+        if (entity.hasComponent<components::UIListViewComponent>())
+        {
+            out["uiListView"] = SceneSerialization::serializeUIListView(
+                entity.getComponent<components::UIListViewComponent>());
+        }
+
+        if (entity.hasComponent<components::UIAnimationComponent>())
+        {
+            out["uiAnimation"] = SceneSerialization::serializeUIAnimation(
+                entity.getComponent<components::UIAnimationComponent>());
+        }
+
+        if (entity.hasComponent<components::UIMaskComponent>())
+        {
+            out["uiMask"] = SceneSerialization::serializeUIMask(
+                entity.getComponent<components::UIMaskComponent>());
+        }
+
+        if (entity.hasComponent<components::UIDraggableComponent>())
+        {
+            out["uiDraggable"] = SceneSerialization::serializeUIDraggable(
+                entity.getComponent<components::UIDraggableComponent>());
+        }
+
+        if (entity.hasComponent<components::UIDropTargetComponent>())
+        {
+            out["uiDropTarget"] = SceneSerialization::serializeUIDropTarget(
+                entity.getComponent<components::UIDropTargetComponent>());
+        }
+
+        if (entity.hasComponent<components::UIButtonComponent>())
+        {
+            out["uiButton"] = SceneSerialization::serializeUIButton(
+                entity.getComponent<components::UIButtonComponent>());
+        }
+
+        if (entity.hasComponent<components::UITextInputComponent>())
+        {
+            out["uiTextInput"] = SceneSerialization::serializeUITextInput(
+                entity.getComponent<components::UITextInputComponent>());
+        }
+
+        if (entity.hasComponent<components::UICheckboxComponent>())
+        {
+            out["uiCheckbox"] = SceneSerialization::serializeUICheckbox(
+                entity.getComponent<components::UICheckboxComponent>());
+        }
+
+        if (entity.hasComponent<components::UIDropdownComponent>())
+        {
+            out["uiDropdown"] = SceneSerialization::serializeUIDropdown(
+                entity.getComponent<components::UIDropdownComponent>());
+        }
+
+        if (entity.hasComponent<components::UITabsComponent>())
+        {
+            out["uiTabs"] = SceneSerialization::serializeUITabs(
+                entity.getComponent<components::UITabsComponent>());
+        }
+
+        if (entity.hasComponent<components::UISliderComponent>())
+        {
+            out["uiSlider"] = SceneSerialization::serializeUISlider(
+                entity.getComponent<components::UISliderComponent>());
+        }
+
+        if (entity.hasComponent<components::UIProgressBarComponent>())
+        {
+            out["uiProgressBar"] = SceneSerialization::serializeUIProgressBar(
+                entity.getComponent<components::UIProgressBarComponent>());
+        }
+    }
+
     json PrefabSerialization::serializeEntityTreeComponents(const scene::Entity& entity)
     {
         json componentsJson = json::object();
         serializeRenderComponents(entity, componentsJson);
         serializePhysicsAndEffectComponents(entity, componentsJson);
+        serializeUIComponents(entity, componentsJson);
 
         // Plugin components
         if (SceneSerialization::pluginSerializeHook)
@@ -178,6 +314,12 @@ namespace serialization
         json childrenJson = json::array();
         for (const auto& child : entity.getChildren())
         {
+            // List-view item instances are engine-managed (rebuilt from the
+            // item template on load) — baking them would duplicate items.
+            if (child.hasComponent<components::UIListItemComponent>())
+            {
+                continue;
+            }
             childrenJson.push_back(serializeEntityTree(child));
         }
         entityJson["children"] = childrenJson;
@@ -244,6 +386,12 @@ namespace serialization
         {
             auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
             SceneSerialization::deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
+        }
+
+        if (componentsJson.contains("buoyancy"))
+        {
+            auto& buoyancyComp = entity.addOrReplaceComponent<components::BuoyancyComponent>();
+            SceneSerialization::deserializeBuoyancy(componentsJson["buoyancy"], buoyancyComp);
         }
 
         if (componentsJson.contains("destructible"))
@@ -356,12 +504,19 @@ namespace serialization
 
     }
 
+    void PrefabSerialization::deserializeUIComponents(const json& componentsJson, scene::Entity& entity)
+    {
+        SceneSerialization::deserializeUIStructuralComponents(componentsJson, entity);
+        SceneSerialization::deserializeUIInteractiveComponents(componentsJson, entity);
+    }
+
     void PrefabSerialization::deserializeComponents(const json& componentsJson, scene::Entity& entity)
     {
         deserializeRenderingComponents(componentsJson, entity);
         deserializeSceneComponents(componentsJson, entity);
         deserializeMediaComponents(componentsJson, entity);
         deserializeLightComponents(componentsJson, entity);
+        deserializeUIComponents(componentsJson, entity);
 
         // Plugin components
         if (SceneSerialization::pluginDeserializeHook)

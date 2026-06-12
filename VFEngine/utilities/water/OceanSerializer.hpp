@@ -17,6 +17,8 @@ namespace ocean
         float foamThreshold = -0.1f;
         float displacementScale = 4.0f;
         bool enabled = true;
+        float foamPersistence = 0.85f;
+        float foamDecay = 0.5f;
     };
 
     struct OceanFileData
@@ -46,12 +48,17 @@ namespace ocean
         float drag = 0.5f;
         float buoyancyStrength = 2.0f;
 
+        // Weather-driven sea state
+        bool weatherDriven = false;
+        float weatherResponse = 1.0f;
+        float currentBeaufort = 3.0f;
+
         // Multi-band FFT
         static constexpr uint32_t MAX_BANDS = 3;
         OceanBandFileData bands[MAX_BANDS] = {
-            {256, 500.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true},
-            {128, 100.0f,  8.0f, 60.0f, 0.00003f, 1.2f, -0.1f, 4.0f, true},
-            {128,  20.0f,  4.0f, 30.0f, 0.00001f, 0.8f, -0.1f, 4.0f, true},
+            {256, 500.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true, 0.85f, 0.5f},
+            {128, 100.0f,  8.0f, 60.0f, 0.00003f, 1.2f, -0.1f, 4.0f, true, 0.85f, 0.5f},
+            {128,  20.0f,  4.0f, 30.0f, 0.00001f, 0.8f, -0.1f, 4.0f, true, 0.0f,  0.5f},
         };
         float gravity = 9.81f;
     };

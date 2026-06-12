@@ -9,10 +9,13 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <thread>
 #include "../pipeline/stages/FileValidationStage.hpp"
 #include "../pipeline/stages/HeaderReadingStage.hpp"
 #include "../pipeline/stages/FileTypeDetectionStage.hpp"
 #include "../pipeline/stages/FileProcessingStage.hpp"
+#include "../registry/ImporterRegistry.hpp"
+#include "../registry/builtin/BuiltinImporters.hpp"
 
 namespace controllers
 {
@@ -20,38 +23,36 @@ namespace controllers
     {
         std::string deriveOutputPath(const pipeline::ImportContext& ctx)
         {
-            std::string ext;
-            std::string ft = ctx.fileType;
+            auto& registry = import::ImporterRegistry::instance();
 
-            if (ft == "PNG" || ft == "JPEG" || ft == "BMP" || ft == "TGA")
-                ext = FileExtension::textrue;
-            else if (ft == "HDR" || ft == "EXR")
-                ext = FileExtension::hdr;
-            else if (ft == "MP3" || ft == "WAV" || ft == "OGG")
-                ext = FileExtension::audio;
-            else if (ft == "OBJ" || ft == "FBX" || ft == "DAE" || ft == "GLTF" || ft == "GLB")
-                ext = FileExtension::mesh;
-            else if (ft == "TTF" || ft == "OTF")
-                ext = FileExtension::font;
+            if (auto* importer = registry.importerFor(ctx.fileType))
+            {
+                std::string fileName = importer->deriveOutputFile(ctx);
+                if (!fileName.empty())
+                    return (std::filesystem::path(ctx.location) / fileName).string();
+            }
 
-            if (ext.empty()) return {};
+            auto info = registry.formatInfo(ctx.fileType);
+            if (!info || info->outputExtension.empty()) return {};
 
-            return (std::filesystem::path(ctx.location) / (ctx.fileName + "." + ext)).string();
+            return (std::filesystem::path(ctx.location) / (ctx.fileName + "." + info->outputExtension)).string();
         }
 
         resource::AssetType fileTypeToAssetType(const std::string& ft)
         {
-            if (ft == "PNG" || ft == "JPEG" || ft == "BMP" || ft == "TGA")
-                return resource::AssetType::Texture;
-            if (ft == "HDR" || ft == "EXR")
-                return resource::AssetType::HDR;
-            if (ft == "MP3" || ft == "WAV" || ft == "OGG")
-                return resource::AssetType::Audio;
-            if (ft == "OBJ" || ft == "FBX" || ft == "DAE" || ft == "GLTF" || ft == "GLB")
-                return resource::AssetType::Mesh;
-            if (ft == "TTF" || ft == "OTF")
-                return resource::AssetType::Font;
-            return resource::AssetType::COUNT;
+            auto info = import::ImporterRegistry::instance().formatInfo(ft);
+            return info ? info->assetType : resource::AssetType::COUNT;
+        }
+
+        resource::AssetType assetTypeForContext(const pipeline::ImportContext& ctx)
+        {
+            if (auto* importer = import::ImporterRegistry::instance().importerFor(ctx.fileType))
+            {
+                auto overridden = importer->deriveAssetType(ctx);
+                if (overridden != resource::AssetType::COUNT)
+                    return overridden;
+            }
+            return fileTypeToAssetType(ctx.fileType);
         }
 
         void createVfMeta(const std::string& outputPath, const std::string& sourcePath,
@@ -93,10 +94,12 @@ namespace controllers
             fileResult.fileType = ctx.fileType;
             vfLogInfo("Successfully processed: {}", ctx.file.path);
 
-            // Create .vfmeta sidecar with importSource and importTimestamp
-            if (!fileResult.outputPath.empty())
+            // Create .vfmeta sidecar with importSource and importTimestamp.
+            // Existence guard: config-dependent outputs (e.g. animation-only
+            // mesh import of a file without animations) may not be written.
+            if (!fileResult.outputPath.empty() && std::filesystem::exists(fileResult.outputPath))
             {
-                resource::AssetType assetType = fileTypeToAssetType(ctx.fileType);
+                resource::AssetType assetType = assetTypeForContext(ctx);
 
                 if (assetType != resource::AssetType::COUNT)
                 {
@@ -157,6 +160,14 @@ namespace controllers
             initialize();
         }
 
+        // Tracks the whole synchronous run so waitForIdle() can drain
+        // in-flight imports before importers are unregistered.
+        struct ActiveImportScope
+        {
+            ActiveImportScope() { activeImports.fetch_add(1); }
+            ~ActiveImportScope() { activeImports.fetch_sub(1); }
+        } activeScope;
+
         vfLogInfo("Starting import of {} files", paths.size());
 
         auto futures = importPipeline->processFiles(paths, location, progressCallback);
@@ -176,11 +187,17 @@ namespace controllers
         // Import DLL has its own copy of Utilities (static lib), so its
         // JobSystem singleton needs separate initialization.
         threading::JobSystem::instance().init();
+        import::builtin::ensureRegistered();
         setupPipeline();
     }
 
     void Import::shutdown()
     {
+        // Plugin-owned importers must go before plugin DLLs unload — drain any
+        // running import first so no worker is inside a plugin vtable.
+        waitForIdle();
+        import::ImporterRegistry::instance().unregisterAllExceptOwner("engine");
+
         importPipeline.reset();
         threading::JobSystem::instance().shutdown();
     }
@@ -215,6 +232,50 @@ namespace controllers
     std::atomic<bool>* Import::getCancelFlag()
     {
         return &cancelRequested;
+    }
+
+    std::vector<import::FormatInfo> Import::supportedFormats()
+    {
+        import::builtin::ensureRegistered();
+        return import::ImporterRegistry::instance().allFormats();
+    }
+
+    resource::AssetType Import::assetTypeFor(const std::string& fileType)
+    {
+        import::builtin::ensureRegistered();
+        return fileTypeToAssetType(fileType);
+    }
+
+    std::vector<import::ImportOptionDesc> Import::optionsForExtension(const std::string& extension)
+    {
+        import::builtin::ensureRegistered();
+        return import::ImporterRegistry::instance().optionsForExtension(extension);
+    }
+
+    void Import::registerImporter(std::unique_ptr<import::AssetImporter> importer,
+                                  std::string_view ownerTag)
+    {
+        import::builtin::ensureRegistered();
+        import::ImporterRegistry::instance().registerImporter(std::move(importer), ownerTag);
+    }
+
+    void Import::unregisterImportersByOwner(std::string_view ownerTag)
+    {
+        waitForIdle();
+        import::ImporterRegistry::instance().unregisterByOwner(ownerTag);
+    }
+
+    void Import::waitForIdle()
+    {
+        if (activeImports.load() == 0)
+            return;
+
+        requestCancel();
+        while (activeImports.load() != 0)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        resetCancellation();
     }
 
     void Import::setupPipeline()

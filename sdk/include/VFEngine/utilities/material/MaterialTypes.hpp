@@ -9,7 +9,7 @@
 
 namespace material
 {
-    constexpr const char* MATERIAL_FORMAT_VERSION = "1.0";
+    constexpr const char* MATERIAL_FORMAT_VERSION = "1.1";
 
     constexpr int MAX_MATERIAL_TEXTURES = 16;
 
@@ -170,6 +170,12 @@ namespace material
         Vec4ToVec2,
         Vec4ToVec3,
 
+        // Utility nodes (format 1.1) — appended; the string-serialized format keeps
+        // older files loading on newer builds (and degrades to ConstantScalar on older)
+        WorldPosition,
+        Panner,
+        UVTransform,
+        Remap,
     };
 
     inline std::string nodeTypeToString(NodeType type)
@@ -225,6 +231,10 @@ namespace material
         case NodeType::Vec3ToVec4: return "Vec3ToVec4";
         case NodeType::Vec4ToVec2: return "Vec4ToVec2";
         case NodeType::Vec4ToVec3: return "Vec4ToVec3";
+        case NodeType::WorldPosition: return "WorldPosition";
+        case NodeType::Panner: return "Panner";
+        case NodeType::UVTransform: return "UVTransform";
+        case NodeType::Remap: return "Remap";
         default: return "Unknown";
         }
     }
@@ -280,11 +290,18 @@ namespace material
         if (str == "Vec3ToVec4") return NodeType::Vec3ToVec4;
         if (str == "Vec4ToVec2") return NodeType::Vec4ToVec2;
         if (str == "Vec4ToVec3") return NodeType::Vec4ToVec3;
+        if (str == "WorldPosition") return NodeType::WorldPosition;
+        if (str == "Panner") return NodeType::Panner;
+        if (str == "UVTransform") return NodeType::UVTransform;
+        if (str == "Remap") return NodeType::Remap;
         return NodeType::ConstantScalar;
     }
 
     using NodeProperty = std::variant<float, glm::vec2, glm::vec3, glm::vec4, std::string>;
 
+    // Exposed-parameter convention (format 1.1): constant and texture-sample nodes carrying
+    // properties "isParameter" (float != 0) + "parameterName" (string) become named material
+    // parameters. See MaterialParameterSet.hpp for collection/layout helpers.
     struct ShaderNode
     {
         uint32_t id = 0;

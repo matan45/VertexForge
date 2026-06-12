@@ -33,13 +33,15 @@ namespace render::water
         [[nodiscard]] vk::DescriptorSet getSpectrumDescSet() const { return spectrumDescSet; }
         [[nodiscard]] vk::DescriptorSet getTimeEvolveDescSet() const { return timeEvolveDescSet; }
         [[nodiscard]] const std::array<vk::DescriptorSet, 6>& getFFTDescSets() const { return fftDescSets; }
-        [[nodiscard]] vk::DescriptorSet getMergeDescSet() const { return mergeDescSet; }
+        // parity selects which foam-history image is read (prev) vs written (curr)
+        [[nodiscard]] vk::DescriptorSet getMergeDescSet(uint32_t parity) const { return mergeDescSets[parity & 1]; }
         [[nodiscard]] vk::DescriptorSet getOceanTextureDescSet() const { return oceanTextureDescSet; }
 
         // Image handles
         [[nodiscard]] vk::Image getDisplacementImage() const { return displacementImage; }
         [[nodiscard]] vk::Image getNormalImage() const { return normalImage; }
         [[nodiscard]] vk::Image getCausticImage() const { return causticImage; }
+        [[nodiscard]] vk::Image getFoamHistoryImage(uint32_t index) const { return foamHistoryImages[index & 1]; }
         [[nodiscard]] vk::ImageView getCausticView() const { return causticView; }
         [[nodiscard]] vk::ImageView getDisplacementView() const { return displacementView; }
         [[nodiscard]] vk::ImageView getNormalView() const { return normalView; }
@@ -69,6 +71,12 @@ namespace render::water
         core::VulkanAllocation causticAllocation;
         vk::ImageView causticView;
 
+        // Foam history ping-pong (R16F): merge reads one (advected previous foam) and
+        // writes the other each dispatch
+        vk::Image foamHistoryImages[2];
+        core::VulkanAllocation foamHistoryAllocations[2];
+        vk::ImageView foamHistoryViews[2];
+
         vk::Sampler outputSampler;
 
         // Descriptor set layouts
@@ -83,7 +91,7 @@ namespace render::water
         vk::DescriptorSet spectrumDescSet;
         vk::DescriptorSet timeEvolveDescSet;
         std::array<vk::DescriptorSet, 6> fftDescSets;
-        vk::DescriptorSet mergeDescSet;
+        std::array<vk::DescriptorSet, 2> mergeDescSets;
         vk::DescriptorSet oceanTextureDescSet;
 
         void createTextures(uint32_t resolution);

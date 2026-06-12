@@ -1,5 +1,6 @@
 #include "StaticMeshPipeline.hpp"
 #include "../material/MaterialTextureCache.hpp"
+#include "../material/MaterialParameterBufferCache.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -308,9 +309,10 @@ namespace render::mesh
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(MeshPushConstants);
 
-        std::array<vk::DescriptorSetLayout, 2> setLayouts = {
+        std::array<vk::DescriptorSetLayout, 3> setLayouts = {
             descriptorSetLayout,
-            textureDescriptorSetLayout
+            textureDescriptorSetLayout,
+            parameterBufferCache->getDescriptorSetLayout()
         };
 
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};

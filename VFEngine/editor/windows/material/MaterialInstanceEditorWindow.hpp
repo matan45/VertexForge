@@ -3,6 +3,7 @@
 #include <material/MaterialInstanceTypes.hpp>
 #include <material/MaterialTypes.hpp>
 #include <material/MaterialGraphHelper.hpp>
+#include <material/MaterialParameterSet.hpp>
 #include <memory>
 #include <string>
 
@@ -21,6 +22,7 @@ namespace windows
         std::shared_ptr<material::MaterialInstanceData> instanceData;
         std::shared_ptr<material::MaterialData> parentMaterial;
         material::ExtractedParentPBR parentPBR;
+        material::MaterialParameterSet parentParamSet;
 
         std::unique_ptr<editor::OrbitCamera> previewCamera;
         bool previewNeedsInit = true;
@@ -67,6 +69,7 @@ namespace windows
         void drawToolbar();
         void drawParentInfo();
         void drawScalarOverrides();
+        void drawParameterOverrides();
         void drawTextureOverrides();
         void drawPreviewPanel();
 

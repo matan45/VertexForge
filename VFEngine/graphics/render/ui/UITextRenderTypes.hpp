@@ -87,10 +87,15 @@ namespace render::ui
         components::TextOverflow overflow = components::TextOverflow::Overflow;
         components::FontStyle fontStyle = components::FontStyle::Normal;
         bool wordWrap = true;
+        bool richText = false;  // parse BBCode-style markup (UILabel only)
         glm::vec4 scissorRect{0.0f};     // x, y, width, height (0,0,0,0 = full viewport)
 
         // Stencil masking
         UIStencilOp stencilOp = UIStencilOp::None;
         uint8_t stencilRef = 0;
+
+        // Overlay layer: records after all main UI images and text
+        // (tooltips, modal windows). See UIImageRenderData::overlay.
+        bool overlay = false;
     };
 }

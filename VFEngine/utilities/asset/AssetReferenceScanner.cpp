@@ -81,10 +81,21 @@ namespace asset
             std::string targetWithBackslash = targetPath;
             std::replace(targetWithBackslash.begin(), targetWithBackslash.end(), '/', '\\');
 
+            // Backslash paths are stored JSON-escaped on disk ("C:\\dir\\file"),
+            // so the raw text never contains the single-backslash form — search
+            // the escaped variant too or such references are silently missed
+            std::string targetEscaped;
+            targetEscaped.reserve(targetWithBackslash.size() * 2);
+            for (char c : targetWithBackslash)
+            {
+                if (c == '\\') targetEscaped += "\\\\";
+                else targetEscaped += c;
+            }
 
             return content.find(targetPath) != std::string::npos ||
                 content.find(targetWithBackslash) != std::string::npos ||
-                content.find(normalizedTarget) != std::string::npos;
+                content.find(normalizedTarget) != std::string::npos ||
+                content.find(targetEscaped) != std::string::npos;
         }
         catch (const std::exception&)
         {

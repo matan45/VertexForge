@@ -83,6 +83,9 @@ namespace controllers::offscreen::ui_screenspace
             if (!scene::Entity::isEffectivelyActive(registry, scrollEntity))
                 continue;
 
+            if (!isInteractionAllowed(registry, scrollEntity))
+                continue;
+
             const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
             if (!scrollCanvas) continue;
 
@@ -158,6 +161,9 @@ namespace controllers::offscreen::ui_screenspace
         for (auto scrollEntity : scrollInputView)
         {
             if (!scene::Entity::isEffectivelyActive(registry, scrollEntity))
+                continue;
+
+            if (!isInteractionAllowed(registry, scrollEntity))
                 continue;
 
             const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);

@@ -34,10 +34,12 @@
 #include "config/InputActionMappingWindow.hpp"
 #include "procedural/HeightmapGeneratorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
+#include "theme/ThemeEditorWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
 #include "config/EditorSettingsWindow.hpp"
 #include "config/EnvironmentWindow.hpp"
+#include "export/ExportGameWindow.hpp"
 #include "weather/WeatherEditorWindow.hpp"
 #include "EngineToolbar.hpp"
 #include "StatusBar.hpp"
@@ -91,11 +93,13 @@ namespace windows
         InputActionMappingWindow inputActionMappingWindow;
         HeightmapGeneratorWindow heightmapGeneratorWindow;
         BackgroundRemovalWindow backgroundRemovalWindow;
+        ThemeEditorWindow themeEditorWindow;
         MemoryDiagnosticsWindow memoryDiagnosticsWindow;
         EditorPreferencesWindow editorPreferencesWindow;
         EditorSettingsWindow editorSettingsWindow;
         EnvironmentWindow environmentWindow;
         WeatherEditorWindow weatherEditorWindow;
+        ExportGameWindow exportGameWindow;
         EngineToolbar engineToolbar;
         StatusBar statusBar;
         MainMenuBar menuBar;

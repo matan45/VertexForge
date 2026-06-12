@@ -230,6 +230,11 @@ namespace resource
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
     {
         std::string key(path);
+        if (key.empty()) {
+            vfLogError("Empty path provided for shader loading");
+            return make_ready_future(std::shared_ptr<std::vector<ShaderModel>>(nullptr));
+        }
+
         {
             std::scoped_lock lock(cacheMutex);
             auto cacheIt = shaderCache.find(key);
@@ -243,39 +248,73 @@ namespace resource
             }
         }
 
+        // Routed through the scheduler like asset loads (priority handling,
+        // dedup, profiler visibility). Critical importance dispatches
+        // immediately past the concurrency cap — pipeline creation blocks on
+        // these futures.
+        auto sharedPromise = std::make_shared<std::promise<std::shared_ptr<std::vector<ShaderModel>>>>();
+        auto resultFuture = sharedPromise->get_future();
+        auto sharedResultPromise = std::make_shared<std::promise<std::shared_ptr<std::vector<ShaderModel>>>>();
+        std::shared_future<std::shared_ptr<std::vector<ShaderModel>>> sharedFuture =
+            sharedResultPromise->get_future().share();
+        {
+            std::scoped_lock lock(cacheMutex);
+            pendingShaderLoads[key] = sharedFuture;
+        }
+
         pendingAsyncOps.fetch_add(1, std::memory_order_relaxed);
-        auto sharedFuture = std::async(std::launch::async, [key]() -> std::shared_ptr<std::vector<ShaderModel>> {
+
+        LoadRequest request;
+        request.hint.importance = LoadImportance::Critical;
+        request.debugName = key;
+        request.progress = LoadProgress::create();
+        request.computedPriority = ResourceLoadScheduler::computePriority(request.hint, {0.0f, 0.0f, 0.0f});
+        request.executeLoad = [key, sharedPromise, sharedResultPromise,
+            progress = request.progress]() mutable {
             struct AsyncGuard { ~AsyncGuard() { pendingAsyncOps.fetch_sub(1, std::memory_order_release); } } guard;
             try {
-                if (shuttingDown.load(std::memory_order_acquire) || key.empty()) {
-                    if (key.empty()) vfLogError("Empty path provided for shader loading");
+                if (shuttingDown.load(std::memory_order_acquire)) {
+                    progress->setStage(LoadStage::Cancelled);
                     std::scoped_lock lock(cacheMutex);
                     pendingShaderLoads.erase(key);
-                    return nullptr;
+                    sharedResultPromise->set_value(nullptr);
+                    sharedPromise->set_value(nullptr);
+                    return;
                 }
+
                 auto resource = std::make_shared<std::vector<ShaderModel>>(ShaderResource::readShaderFile(key));
-                std::scoped_lock lock(cacheMutex);
-                pendingShaderLoads.erase(key);
-                if (resource && !shuttingDown.load(std::memory_order_acquire))
-                    shaderCache[key] = resource;
-                return resource;
+
+                {
+                    std::scoped_lock lock(cacheMutex);
+                    pendingShaderLoads.erase(key);
+                    if (resource && !shuttingDown.load(std::memory_order_acquire))
+                        shaderCache[key] = resource;
+                }
+
+                sharedResultPromise->set_value(resource);
+                sharedPromise->set_value(resource);
             }
             catch (const std::exception& e) {
+                progress->setStage(LoadStage::Failed);
                 std::scoped_lock lock(cacheMutex);
                 pendingShaderLoads.erase(key);
                 vfLogError("Exception loading shader '{}': {}", key, e.what());
-                return nullptr;
+                sharedResultPromise->set_value(nullptr);
+                sharedPromise->set_value(nullptr);
             }
             catch (...) {
+                progress->setStage(LoadStage::Failed);
                 std::scoped_lock lock(cacheMutex);
                 pendingShaderLoads.erase(key);
                 vfLogError("Unknown exception loading shader: {}", key);
-                return nullptr;
+                sharedResultPromise->set_value(nullptr);
+                sharedPromise->set_value(nullptr);
             }
-        }).share();
+        };
 
-        { std::scoped_lock lock(cacheMutex); pendingShaderLoads[key] = sharedFuture; }
-        return std::async(std::launch::deferred, [sf = std::move(sharedFuture)]() mutable { return sf.get(); });
+        ResourceLoadScheduler::instance().submit(std::move(request));
+
+        return resultFuture;
     }
 
     std::future<std::shared_ptr<FontData>> ResourceManager::loadFontAsync(const asset::AssetRef& ref, const LoadHint& hint, CancellationToken::Ptr cancellation)

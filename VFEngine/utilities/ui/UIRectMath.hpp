@@ -308,4 +308,64 @@ namespace utilities::ui
         bool coplanarSmaller = std::abs(t - bestT) <= epsilon && area < bestArea;
         return closer || coplanarSmaller;
     }
+
+    // Nearest ancestor (or self) carrying a UIWindowComponent, entt::null if
+    // none. Window subtrees render on the UI overlay layer so they sit above
+    // the modal backdrop and all main-pass UI.
+    inline entt::entity findOpenWindowAncestor(entt::registry& registry, entt::entity entity)
+    {
+        entt::entity current = entity;
+        while (current != entt::null && registry.valid(current))
+        {
+            if (registry.all_of<components::UIWindowComponent>(current))
+                return current;
+            auto* parent = registry.try_get<components::ParentComponent>(current);
+            current = parent ? parent->parent : entt::null;
+        }
+        return entt::null;
+    }
+
+    // Modal gating: true when no modal window is active, or `entity` is the
+    // active (top-of-stack) modal or one of its descendants. Every pointer
+    // interaction loop checks this so an open modal blocks the UI beneath it.
+    inline bool isInteractionAllowed(entt::registry& registry, entt::entity entity)
+    {
+        const auto* state = registry.ctx().find<components::UIModalState>();
+        if (!state || state->modalStack.empty())
+            return true;
+        entt::entity modal = state->modalStack.back();
+        if (modal == entt::null || !registry.valid(modal))
+            return true;
+
+        entt::entity current = entity;
+        while (current != entt::null && registry.valid(current))
+        {
+            if (current == modal)
+                return true;
+            auto* parent = registry.try_get<components::ParentComponent>(current);
+            current = parent ? parent->parent : entt::null;
+        }
+        return false;
+    }
+
+    // Places a tooltip of the given pixel size near anchorPos (cursor or element
+    // corner): below-right by default, flipped above the anchor when it would
+    // cross the bottom edge, then clamped into the viewport.
+    inline glm::vec2 computeTooltipPlacement(
+        const glm::vec2& anchorPos, const glm::vec2& offset,
+        const glm::vec2& tooltipSize, float viewportW, float viewportH)
+    {
+        glm::vec2 pos = anchorPos + offset;
+        if (pos.y + tooltipSize.y > viewportH)
+        {
+            pos.y = anchorPos.y - offset.y - tooltipSize.y;
+        }
+        if (pos.x + tooltipSize.x > viewportW)
+        {
+            pos.x = viewportW - tooltipSize.x;
+        }
+        pos.x = std::max(0.0f, pos.x);
+        pos.y = std::max(0.0f, pos.y);
+        return pos;
+    }
 }

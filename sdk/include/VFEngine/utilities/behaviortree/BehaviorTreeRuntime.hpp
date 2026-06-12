@@ -51,25 +51,37 @@ namespace behaviortree
                                                  float maxDistance,
                                                  float eyeOffset,
                                                  Blackboard& blackboard) = 0;
+
+        // Called when a Running task node is aborted (observer abort / self abort)
+        // so the executor can cancel in-flight side effects (nav requests, EQS queries, scripts)
+        virtual void onAbort(services::EntityHandle entity, const BTNode& node)
+        {
+            (void)entity;
+            (void)node;
+        }
     };
 
     class BehaviorTreeRuntime
     {
     private:
-        BehaviorTreeData treeData;
+        // Immutable tree data, shared between all runtimes attached to the same asset path.
+        // All mutable per-agent state lives in nodeStates/blackboard.
+        std::shared_ptr<const BehaviorTreeData> treeData;
         services::EntityHandle ownerEntity;
         Blackboard blackboard;
         std::unordered_map<uint32_t, BTNodeRuntime> nodeStates;
     public:
-        void init(BehaviorTreeData data, services::EntityHandle entity);
+        void init(std::shared_ptr<const BehaviorTreeData> data, services::EntityHandle entity);
         BTNodeStatus tick(float deltaTime, IBTTaskExecutor* executor);
         void reset();
 
         Blackboard& getBlackboard() { return blackboard; }
         const Blackboard& getBlackboard() const { return blackboard; }
 
-        const BehaviorTreeData& getTreeData() const { return treeData; }
+        const BehaviorTreeData& getTreeData() const { return *treeData; }
+        bool hasTreeData() const { return treeData != nullptr; }
         services::EntityHandle getOwnerEntity() const { return ownerEntity; }
+        const std::unordered_map<uint32_t, BTNodeRuntime>& getNodeStates() const { return nodeStates; }
 
     private:
         BTNodeStatus tickNode(uint32_t nodeId, float dt, IBTTaskExecutor* executor);
@@ -79,5 +91,7 @@ namespace behaviortree
 
         BTNodeRuntime& getNodeState(uint32_t nodeId);
         void resetSubtreeState(uint32_t nodeId);
+        void abortSubtree(uint32_t nodeId, IBTTaskExecutor* executor);
+        bool evaluateCondition(const BTNode& node) const;
     };
 }

@@ -1,9 +1,12 @@
 #pragma once
 #include "../../data/EntityHandle.hpp"
 #include "../../data/DTOs.hpp"
+#include "../../events/EventTypes.hpp"
+#include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace scene {
     class SceneGraphSystem;
@@ -159,7 +162,52 @@ namespace services {
         std::optional<UIDropTargetData> getUIDropTargetData(EntityHandle entity) const;
         bool setUIDropTargetData(EntityHandle entity, const UIDropTargetData& data);
 
+        // UI Tooltip Operations
+        bool addUITooltipComponent(EntityHandle entity);
+        bool removeUITooltipComponent(EntityHandle entity);
+        bool hasUITooltipComponent(EntityHandle entity) const;
+        std::optional<UITooltipData> getUITooltipData(EntityHandle entity) const;
+        bool setUITooltipData(EntityHandle entity, const UITooltipData& data);
+
+        // UI Window Operations
+        bool addUIWindowComponent(EntityHandle entity);
+        bool removeUIWindowComponent(EntityHandle entity);
+        bool hasUIWindowComponent(EntityHandle entity) const;
+        std::optional<UIWindowData> getUIWindowData(EntityHandle entity) const;
+        bool setUIWindowData(EntityHandle entity, const UIWindowData& data);
+        bool openUIWindow(EntityHandle entity);
+        bool closeUIWindow(EntityHandle entity);
+        bool isUIWindowOpen(EntityHandle entity) const;
+
+        // UI ListView Operations
+        bool addUIListViewComponent(EntityHandle entity);
+        bool removeUIListViewComponent(EntityHandle entity);
+        bool hasUIListViewComponent(EntityHandle entity) const;
+        std::optional<UIListViewData> getUIListViewData(EntityHandle entity) const;
+        bool setUIListViewData(EntityHandle entity, const UIListViewData& data);
+        bool setUIListItemCount(EntityHandle entity, int itemCount);
+        bool setUIListItemTemplate(EntityHandle entity, const std::string& templatePath);
+        EntityHandle getUIListItem(EntityHandle entity, int index) const;
+        bool setUIListSelectedIndex(EntityHandle entity, int selectedIndex);
+        bool reconcileUIListView(entt::entity listEntity);
+        void reconcileAllUIListViews();
+
+        // UI Style / Theme Operations
+        bool addUIStyleComponent(EntityHandle entity);
+        bool removeUIStyleComponent(EntityHandle entity);
+        bool hasUIStyleComponent(EntityHandle entity) const;
+        std::optional<std::string> getUIStyleKey(EntityHandle entity) const;
+        bool setUIStyleKey(EntityHandle entity, const std::string& styleKey);
+        bool setCanvasTheme(EntityHandle entity, const std::string& themePath);
+        std::optional<std::string> getCanvasThemePath(EntityHandle entity) const;
+        int reapplyUITheme(std::optional<EntityHandle> canvas);
+
     private:
+        int applyCanvasTheme(entt::entity canvasEntity);
+        void destroyUIListInstances(entt::entity listEntity);
+        events::SubscriptionToken sceneLoadedToken{};
+        events::SubscriptionToken listViewSceneLoadedToken{};
+
         void registerCanvasRectImageHandlers(events::EventDispatcher& dispatcher);
         void registerScrollLayoutHandlers(events::EventDispatcher& dispatcher);
         void registerInteractiveHandlers(events::EventDispatcher& dispatcher);
@@ -168,6 +216,10 @@ namespace services {
         void registerAnimationHandlers(events::EventDispatcher& dispatcher);
         void registerMaskHandlers(events::EventDispatcher& dispatcher);
         void registerDragDropHandlers(events::EventDispatcher& dispatcher);
+        void registerThemeHandlers(events::EventDispatcher& dispatcher);
+        void registerTooltipHandlers(events::EventDispatcher& dispatcher);
+        void registerWindowHandlers(events::EventDispatcher& dispatcher);
+        void registerListViewHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

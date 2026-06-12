@@ -28,7 +28,8 @@ namespace render::water
         void dispatchSpectrum(vk::CommandBuffer cmd, const OceanFFTConfig& config, const OceanFFTResources& resources);
         void dispatchTimeEvolve(vk::CommandBuffer cmd, const OceanFFTConfig& config, float time, const OceanFFTResources& resources);
         void dispatchFFT(vk::CommandBuffer cmd, const OceanFFTConfig& config, const OceanFFTResources& resources);
-        void dispatchMerge(vk::CommandBuffer cmd, const OceanFFTConfig& config, const OceanFFTResources& resources);
+        void dispatchMerge(vk::CommandBuffer cmd, const OceanFFTConfig& config, const OceanFFTResources& resources,
+                           float deltaTime, uint32_t foamParity);
 
         static void insertComputeBarrier(vk::CommandBuffer cmd);
 

@@ -1,4 +1,5 @@
 #include "MaterialAsset.hpp"
+#include "MaterialParameterSet.hpp"
 #include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
 #include <nlohmann/json.hpp>
@@ -265,6 +266,33 @@ namespace material
         j["opacity"] = material.opacity;
         j["alphaCutoff"] = material.alphaCutoff;
         j["graph"] = serializeGraph(material);
+
+        // Derived view of the exposed parameters for external tooling. The graph node
+        // properties remain authoritative; the loader ignores this block.
+        MaterialParameterSet paramSet = collectParameters(material.graph);
+        if (!paramSet.empty())
+        {
+            json paramsJson;
+            for (const auto& desc : paramSet.values)
+            {
+                json paramJson;
+                paramJson["type"] = static_cast<int>(desc.type);
+                paramJson["default"] = serializeParamValue(desc.defaultValue);
+                paramJson["min"] = desc.min;
+                paramJson["max"] = desc.max;
+                paramJson["nodeId"] = desc.sourceNodeId;
+                paramsJson[desc.name] = paramJson;
+            }
+            for (const auto& desc : paramSet.textures)
+            {
+                json paramJson;
+                paramJson["type"] = "texture";
+                paramJson["slot"] = desc.slot;
+                paramJson["nodeId"] = desc.sourceNodeId;
+                paramsJson[desc.name] = paramJson;
+            }
+            j["parameters"] = paramsJson;
+        }
 
         if (!material.cachedVertexShader.empty() || !material.cachedFragmentShader.empty())
         {

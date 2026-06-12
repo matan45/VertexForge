@@ -1,6 +1,7 @@
 #pragma once
 #include "nfd/FileDialog.hpp"
 #include "config/Config.hpp"
+#include <map>
 #include <vector>
 #include <string>
 
@@ -13,6 +14,8 @@ namespace windows
         std::vector<std::string> files;
         std::vector<bool> isFlip;
         std::vector<importConfig::MeshImportConfig> meshConfigs;
+        // Per-file values for importer-declared options (rendered generically)
+        std::vector<std::map<std::string, importConfig::ImportOptionValue>> customOptions;
         importConfig::TextureCompressionMode compressionMode = importConfig::TextureCompressionMode::BC;
         importConfig::TextureCompressionQuality compressionQuality = importConfig::TextureCompressionQuality::Balanced;
         importConfig::AudioCompressionQuality audioQuality = importConfig::AudioCompressionQuality::Medium;
@@ -21,6 +24,9 @@ namespace windows
 
     public:
         void draw();
+
+        // Generic UI for importer-declared options of the file at fileIndex
+        void drawCustomOptions(size_t fileIndex);
 
         // Opens file selection dialog and queues modal
         void openImportDialog();

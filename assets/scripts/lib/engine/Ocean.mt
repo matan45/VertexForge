@@ -33,6 +33,11 @@ public class Ocean {
         return _native_ocean_isCameraUnderwater();
     }
 
+    // Check if a physics entity is currently (partially) submerged in the ocean
+    public static function isEntityInWater(int entityId): bool {
+        return _native_ocean_isEntityInWater(entityId);
+    }
+
     // ============================================
     // Component Queries
     // ============================================
@@ -74,6 +79,22 @@ public class Ocean {
     public static function setPhysicsSettings(int oceanEntityId, float density, float drag,
                                                float buoyancyStrength): void {
         _native_ocean_setPhysicsSettings(oceanEntityId, density, drag, buoyancyStrength);
+    }
+
+    // Set the sea state by Beaufort number (0 = mirror calm .. 12 = hurricane).
+    // transitionSeconds > 0 ramps the waves smoothly over that duration.
+    public static function setSeaState(float beaufort, float transitionSeconds): void {
+        _native_ocean_setSeaState(beaufort, transitionSeconds);
+    }
+
+    // Get the current sea state as a Beaufort number
+    public static function getSeaState(): float {
+        return _native_ocean_getSeaState();
+    }
+
+    // Enable/disable weather-driven sea state (ocean follows WeatherState wind/gusts)
+    public static function setWeatherDriven(int oceanEntityId, bool enabled): void {
+        _native_ocean_setWeatherDriven(oceanEntityId, enabled);
     }
 
     // Set ocean visual settings

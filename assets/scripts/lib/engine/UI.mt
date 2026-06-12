@@ -195,6 +195,16 @@ public class UI {
         return _native_ui_getLabelWordWrap(entityId);
     }
 
+    // Enable/disable rich text markup parsing ([b], [i], [color=#RRGGBB])
+    public static function setLabelRichText(int entityId, bool richText): void {
+        _native_ui_setLabelRichText(entityId, richText);
+    }
+
+    // Get whether rich text markup parsing is enabled
+    public static function getLabelRichText(int entityId): bool {
+        return _native_ui_getLabelRichText(entityId);
+    }
+
     // Set line + letter spacing multipliers
     public static function setLabelSpacing(int entityId, float line, float letter): void {
         _native_ui_setLabelSpacing(entityId, line, letter);
@@ -491,5 +501,133 @@ public class UI {
     // Returns true if a drag was active and cancelled, false if nothing was being dragged
     public static function cancelDrag(): bool {
         return _native_ui_cancelDrag();
+    }
+
+    // ============================================
+    // Theme / Style
+    // ============================================
+
+    // Assign a .vfTheme asset to a canvas and apply it to the whole subtree.
+    // Pass an empty path to clear the theme.
+    public static function setCanvasTheme(int canvasId, string themePath): bool {
+        return _native_ui_setCanvasTheme(canvasId, themePath);
+    }
+
+    // Get the canvas theme as an asset path (empty string if none)
+    public static function getCanvasTheme(int canvasId): string {
+        return _native_ui_getCanvasTheme(canvasId);
+    }
+
+    // Set the theme style key on an element (adds a UIStyle component if
+    // missing) and apply it immediately when the canvas has a theme
+    public static function setStyleKey(int entityId, string styleKey): bool {
+        return _native_ui_setStyleKey(entityId, styleKey);
+    }
+
+    // Get the element's style key (empty string if it has no UIStyle component)
+    public static function getStyleKey(int entityId): string {
+        return _native_ui_getStyleKey(entityId);
+    }
+
+    // Re-apply canvas themes. Pass a canvas entity id, or -1 for every themed
+    // canvas in the scene. Returns the number of styled elements touched.
+    public static function reapplyTheme(int canvasId): int {
+        return _native_ui_reapplyTheme(canvasId);
+    }
+
+    // ============================================
+    // Tooltip
+    // ============================================
+
+    // Set the tooltip text (Text mode)
+    public static function setTooltipText(int entityId, string text): void {
+        _native_ui_setTooltipText(entityId, text);
+    }
+
+    // Get the tooltip text (empty string if no tooltip component)
+    public static function getTooltipText(int entityId): string {
+        return _native_ui_getTooltipText(entityId);
+    }
+
+    // Enable/disable the tooltip without removing it
+    public static function setTooltipEnabled(int entityId, bool enabled): void {
+        _native_ui_setTooltipEnabled(entityId, enabled);
+    }
+
+    // Set the hover delay before the tooltip appears (seconds)
+    public static function setTooltipDelay(int entityId, float seconds): void {
+        _native_ui_setTooltipDelay(entityId, seconds);
+    }
+
+    // ============================================
+    // Window
+    // ============================================
+
+    // Open a window: activates the entity; modal windows also block the UI
+    // beneath them. Fires IUIWindowListener.onWindowOpened.
+    public static function openWindow(int entityId): bool {
+        return _native_ui_openWindow(entityId);
+    }
+
+    // Close a window: deactivates the entity and fires onWindowClosed
+    public static function closeWindow(int entityId): bool {
+        return _native_ui_closeWindow(entityId);
+    }
+
+    // True when the window entity is effectively active
+    public static function isWindowOpen(int entityId): bool {
+        return _native_ui_isWindowOpen(entityId);
+    }
+
+    // Toggle modal behavior (dim backdrop + interaction blocking)
+    public static function setWindowModal(int entityId, bool modal): void {
+        _native_ui_setWindowModal(entityId, modal);
+    }
+
+    // Set the title bar text
+    public static function setWindowTitle(int entityId, string title): void {
+        _native_ui_setWindowTitle(entityId, title);
+    }
+
+    // Get the title bar text (empty string if no window component)
+    public static function getWindowTitle(int entityId): string {
+        return _native_ui_getWindowTitle(entityId);
+    }
+
+    // ============================================
+    // List View
+    // ============================================
+
+    // Set the bound item count; the engine instantiates/pools item-template
+    // copies and the layout group positions them
+    public static function setListItemCount(int entityId, int count): bool {
+        return _native_ui_setListItemCount(entityId, count);
+    }
+
+    // Get the bound item count
+    public static function getListItemCount(int entityId): int {
+        return _native_ui_getListItemCount(entityId);
+    }
+
+    // Get the root entity of the item instance at index (-1 on miss).
+    // Walk its children (Entity::getChildren + Entity::getName) and use
+    // UI::setLabelText/setImageTexture to fill in per-item data.
+    public static function getListItem(int entityId, int index): int {
+        return _native_ui_getListItem(entityId, index);
+    }
+
+    // Assign the .vfPrefab item template by asset path (rebuilds all items)
+    public static function setListItemTemplate(int entityId, string prefabPath): bool {
+        return _native_ui_setListItemTemplate(entityId, prefabPath);
+    }
+
+    // Get the selected item index (-1 = none)
+    public static function getListSelectedIndex(int entityId): int {
+        return _native_ui_getListSelectedIndex(entityId);
+    }
+
+    // Select an item by index (-1 clears). Fires IUIListViewListener.
+    public static function setListSelectedIndex(int entityId, int index): bool {
+        return _native_ui_setListSelectedIndex(entityId, index);
     }
 }

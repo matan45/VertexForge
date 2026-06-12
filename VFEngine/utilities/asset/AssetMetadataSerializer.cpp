@@ -2,6 +2,7 @@
 #include "../print/Log.hpp"
 #include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <fstream>
 
 namespace asset
@@ -18,6 +19,20 @@ namespace asset
             j["importSource"] = metadata.importSourcePath;
             j["importTimestamp"] = metadata.importTimestamp;
             j["formatVersion"] = metadata.formatVersion;
+
+            if (!metadata.dependencies.empty())
+            {
+                // Sorted for deterministic output (stable diffs under VCS)
+                auto sorted = metadata.dependencies;
+                std::sort(sorted.begin(), sorted.end());
+
+                json depsArr = json::array();
+                for (const auto& dep : sorted)
+                {
+                    depsArr.push_back(dep.toString());
+                }
+                j["dependencies"] = depsArr;
+            }
 
             if (metadata.fractureData.has_value())
             {
@@ -95,6 +110,19 @@ namespace asset
                 return std::nullopt;
             }
 
+            if (j.contains("dependencies") && j["dependencies"].is_array())
+            {
+                for (const auto& depJson : j["dependencies"])
+                {
+                    if (!depJson.is_string()) continue;
+                    std::string depStr = depJson.get<std::string>();
+                    if (!AssetGUID::isStrictHex16(depStr)) continue;
+
+                    AssetGUID dep = AssetGUID::fromString(depStr);
+                    if (dep.isValid()) metadata.dependencies.push_back(dep);
+                }
+            }
+
             if (j.contains("fractureData"))
             {
                 const auto& fj = j["fractureData"];
@@ -163,24 +191,11 @@ namespace asset
 
     resource::AssetType AssetMetadataSerializer::stringToAssetType(const std::string& str)
     {
-        if (str == "Texture")          return resource::AssetType::Texture;
-        if (str == "Mesh")             return resource::AssetType::Mesh;
-        if (str == "Audio")            return resource::AssetType::Audio;
-        if (str == "Animation")        return resource::AssetType::Animation;
-        if (str == "Animator")         return resource::AssetType::Animator;
-        if (str == "Material")         return resource::AssetType::Material;
-        if (str == "MaterialInstance")  return resource::AssetType::MaterialInstance;
-        if (str == "PhysicsShape")     return resource::AssetType::PhysicsShape;
-        if (str == "VFX")              return resource::AssetType::VFX;
-        if (str == "Script")           return resource::AssetType::Script;
-        if (str == "HDR")              return resource::AssetType::HDR;
-        if (str == "Font")             return resource::AssetType::Font;
-        if (str == "Skeleton")         return resource::AssetType::Skeleton;
-        if (str == "Navmesh")          return resource::AssetType::Navmesh;
-        if (str == "InputMapping")     return resource::AssetType::InputMapping;
-        if (str == "Terrain")          return resource::AssetType::Terrain;
-        if (str == "World")            return resource::AssetType::World;
-        if (str == "Scene")            return resource::AssetType::Scene;
+        for (uint8_t i = 0; i < static_cast<uint8_t>(resource::AssetType::COUNT); ++i)
+        {
+            auto type = static_cast<resource::AssetType>(i);
+            if (str == resource::assetTypeName(type)) return type;
+        }
         return resource::AssetType::COUNT;
     }
 }

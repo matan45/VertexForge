@@ -29,6 +29,7 @@ namespace core
     class ScriptSceneEventBridge;
     class ScriptWeatherEventBridge;
     class ScriptDestructionEventBridge;
+    class ScriptOceanEventBridge;
 
     class CoroutineManager;
     class ScriptCommunicationManager;
@@ -50,6 +51,7 @@ namespace core
         std::unique_ptr<ScriptSceneEventBridge> sceneEventBridge;
         std::unique_ptr<ScriptWeatherEventBridge> weatherEventBridge;
         std::unique_ptr<ScriptDestructionEventBridge> destructionEventBridge;
+        std::unique_ptr<ScriptOceanEventBridge> oceanEventBridge;
         std::unique_ptr<ScriptCommunicationManager> communicationManager;
         std::unique_ptr<ScriptDebugServer> debugServer;
 
@@ -114,6 +116,8 @@ namespace core
 
         std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
                                           const std::vector<std::any>& args = {}) override;
+
+        bool hasMethod(uint64_t instanceId, const std::string& methodName) const override;
 
         void playVFX(uint64_t instanceId) override;
         void setInstancePriority(uint64_t instanceId, int priority) override;

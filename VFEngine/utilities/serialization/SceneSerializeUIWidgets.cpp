@@ -27,6 +27,7 @@ namespace serialization {
         j["wordWrap"] = label.wordWrap;
         j["lineSpacing"] = label.lineSpacing;
         j["letterSpacing"] = label.letterSpacing;
+        j["richText"] = label.richText;
         return j;
     }
 
@@ -43,6 +44,117 @@ namespace serialization {
         label.wordWrap = j.value("wordWrap", true);
         label.lineSpacing = j.value("lineSpacing", 1.0f);
         label.letterSpacing = j.value("letterSpacing", 0.0f);
+        label.richText = j.value("richText", false);
+    }
+
+    // ---- Tooltip ----
+
+    json SceneSerialization::serializeUITooltip(const components::UITooltipComponent& tooltip)
+    {
+        json j;
+        j["mode"] = static_cast<int>(tooltip.mode);
+        if (!tooltip.text.empty())
+        {
+            j["text"] = tooltip.text;
+        }
+        j["showDelay"] = tooltip.showDelay;
+        j["followCursor"] = tooltip.followCursor;
+        j["offset"] = writeVec2(tooltip.offset);
+        j["maxWidth"] = tooltip.maxWidth;
+        j["backgroundColor"] = writeVec4(tooltip.backgroundColor);
+        j["textColor"] = writeVec4(tooltip.textColor);
+        if (tooltip.fontRef.isValid())
+        {
+            writeAssetRef(j, "fontRef", tooltip.fontRef);
+        }
+        j["fontSize"] = tooltip.fontSize;
+        j["padding"] = writeVec4(tooltip.padding);
+        j["enabled"] = tooltip.enabled;
+        if (!tooltip.panelChildName.empty())
+        {
+            j["panelChildName"] = tooltip.panelChildName;
+        }
+        return j;
+    }
+
+    void SceneSerialization::deserializeUITooltip(const json& j, components::UITooltipComponent& tooltip)
+    {
+        tooltip.mode = static_cast<components::UITooltipMode>(j.value("mode", 0));
+        tooltip.text = j.value("text", std::string());
+        tooltip.showDelay = j.value("showDelay", 0.5f);
+        tooltip.followCursor = j.value("followCursor", true);
+        readVec2(j, "offset", tooltip.offset);
+        tooltip.maxWidth = j.value("maxWidth", 280.0f);
+        readVec4(j, "backgroundColor", tooltip.backgroundColor);
+        readVec4(j, "textColor", tooltip.textColor);
+        tooltip.fontRef = readAssetRef(j, "fontRef", "");
+        tooltip.fontSize = j.value("fontSize", 14.0f);
+        readVec4(j, "padding", tooltip.padding);
+        tooltip.enabled = j.value("enabled", true);
+        tooltip.panelChildName = j.value("panelChildName", std::string());
+    }
+
+    // ---- Window ----
+
+    json SceneSerialization::serializeUIWindow(const components::UIWindowComponent& window)
+    {
+        json j;
+        j["title"] = window.title;
+        j["showTitleBar"] = window.showTitleBar;
+        j["titleBarHeight"] = window.titleBarHeight;
+        j["draggable"] = window.draggable;
+        j["closable"] = window.closable;
+        j["modal"] = window.modal;
+        j["backgroundColor"] = writeVec4(window.backgroundColor);
+        j["titleBarColor"] = writeVec4(window.titleBarColor);
+        j["titleTextColor"] = writeVec4(window.titleTextColor);
+        j["backdropColor"] = writeVec4(window.backdropColor);
+        if (window.fontRef.isValid())
+        {
+            writeAssetRef(j, "fontRef", window.fontRef);
+        }
+        j["titleFontSize"] = window.titleFontSize;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIWindow(const json& j, components::UIWindowComponent& window)
+    {
+        window.title = j.value("title", std::string("Window"));
+        window.showTitleBar = j.value("showTitleBar", true);
+        window.titleBarHeight = j.value("titleBarHeight", 28.0f);
+        window.draggable = j.value("draggable", true);
+        window.closable = j.value("closable", true);
+        window.modal = j.value("modal", false);
+        readVec4(j, "backgroundColor", window.backgroundColor);
+        readVec4(j, "titleBarColor", window.titleBarColor);
+        readVec4(j, "titleTextColor", window.titleTextColor);
+        readVec4(j, "backdropColor", window.backdropColor);
+        window.fontRef = readAssetRef(j, "fontRef", "");
+        window.titleFontSize = j.value("titleFontSize", 16.0f);
+    }
+
+    // ---- ListView ----
+
+    json SceneSerialization::serializeUIListView(const components::UIListViewComponent& listView)
+    {
+        json j;
+        if (listView.itemTemplateRef.isValid())
+        {
+            writeAssetRef(j, "itemTemplateRef", listView.itemTemplateRef);
+        }
+        j["itemCount"] = listView.itemCount;
+        j["selectable"] = listView.selectable;
+        j["selectedTint"] = writeVec4(listView.selectedTint);
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIListView(const json& j, components::UIListViewComponent& listView)
+    {
+        listView.itemTemplateRef = readAssetRef(j, "itemTemplateRef", "");
+        listView.itemCount = j.value("itemCount", 0);
+        listView.selectable = j.value("selectable", true);
+        readVec4(j, "selectedTint", listView.selectedTint);
+        listView.needsReconcile = true; // instances rebuild on load
     }
 
     // ---- Button ----

@@ -2,6 +2,7 @@
 #include <export/ExportConfig.hpp>
 #include <export/ExportManifest.hpp>
 #include <export/ShaderPermutationManifest.hpp>
+#include <filesystem>
 
 // ============================================================
 // VK-1097: Export Pipeline unit tests
@@ -102,6 +103,16 @@ TEST_CASE("ExportConfig: cleanBuild and verifyIntegrity defaults") {
     gameExport::ExportConfig config;
     CHECK_FALSE(config.cleanBuild);
     CHECK(config.verifyIntegrity);
+}
+
+TEST_CASE("ExportConfig: material shader gate defaults to failing the export") {
+    gameExport::ExportConfig config;
+    CHECK(config.failOnEmptyMaterialShaders);
+}
+
+TEST_CASE("ExportResult: broken material list starts empty") {
+    gameExport::ExportResult result;
+    CHECK(result.brokenMaterials.empty());
 }
 
 // ---- ShaderPermutationManifest ----
@@ -312,6 +323,27 @@ TEST_CASE("ExportManifest: hasSourceChanged returns false for unchanged") {
     std::vector<gameExport::ManifestSource> same;
     same.push_back({"texture.png", 1000, 42});
     CHECK_FALSE(manifest.hasSourceChanged("assets/tex.vfImage", same));
+}
+
+TEST_CASE("ExportManifest: version stamps round-trip through save/load") {
+    namespace fs = std::filesystem;
+    fs::path manifestPath = fs::temp_directory_path() / "vf_export_manifest_roundtrip.vfmanifest";
+
+    gameExport::ExportManifest manifest;
+    manifest.gameName = "TestGame";
+    manifest.gameVersion = "1.2.3";
+    manifest.engineVersion = "VertexForge 1.0.0";
+    manifest.pluginApiVersion = 12;
+    REQUIRE(manifest.save(manifestPath));
+
+    gameExport::ExportManifest loaded;
+    REQUIRE(loaded.load(manifestPath));
+    CHECK(loaded.gameName == "TestGame");
+    CHECK(loaded.engineVersion == "VertexForge 1.0.0");
+    CHECK(loaded.pluginApiVersion == 12);
+
+    std::error_code ec;
+    fs::remove(manifestPath, ec);
 }
 
 TEST_CASE("ExportManifest: hasSourceChanged detects count change") {

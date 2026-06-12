@@ -44,6 +44,33 @@ namespace events::ocean
         std::string_view getName() const override { return "SetOceanFFTConfig"; }
     };
 
+    // === Sea State Commands ===
+
+    struct UpdateOceanCommand : ICommand<void> {
+        float deltaTime = 0.0f;
+
+        std::string_view getName() const override { return "UpdateOcean"; }
+    };
+
+    struct SetOceanSeaStateCommand : ICommand<void> {
+        float beaufort = 3.0f;
+        float transitionSeconds = 0.0f;
+
+        std::string_view getName() const override { return "SetOceanSeaState"; }
+    };
+
+    struct SetOceanWeatherDrivenCommand : ICommand<void> {
+        services::EntityHandle oceanEntity;
+        bool enabled = false;
+        float response = 1.0f;
+
+        std::string_view getName() const override { return "SetOceanWeatherDriven"; }
+    };
+
+    struct GetOceanSeaStateQuery : IQuery<float> {
+        std::string_view getName() const override { return "GetOceanSeaState"; }
+    };
+
     // === Queries ===
 
     struct GetOceanEntityQuery : IQuery<services::EntityHandle> {
@@ -80,6 +107,12 @@ namespace events::ocean
         glm::vec3 position{0.0f};
 
         std::string_view getName() const override { return "IsPositionInOcean"; }
+    };
+
+    struct IsEntityInWaterQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "IsEntityInWater"; }
     };
 
     struct SaveOceanCommand : ICommand<bool> {
@@ -132,5 +165,21 @@ namespace events::ocean
         std::string path;
 
         std::string_view getName() const override { return "OceanLoaded"; }
+    };
+
+    struct ObjectEnteredWaterNotification : INotification {
+        services::EntityHandle entity;
+        glm::vec3 position{0.0f};
+        float verticalSpeed = 0.0f;
+        float submersion = 0.0f;
+
+        std::string_view getName() const override { return "ObjectEnteredWater"; }
+    };
+
+    struct ObjectExitedWaterNotification : INotification {
+        services::EntityHandle entity;
+        glm::vec3 position{0.0f};
+
+        std::string_view getName() const override { return "ObjectExitedWater"; }
     };
 }

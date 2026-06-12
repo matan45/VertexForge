@@ -55,6 +55,7 @@ namespace core
         controllerParams.modifiers = params.modifiers;
         controllerParams.forces = params.forces;
         controllerParams.shape = params.shape;
+        controllerParams.bursts = params.bursts;
         controllerParams.flipbookRows = params.flipbookRows;
         controllerParams.flipbookColumns = params.flipbookColumns;
         controllerParams.flipbookFrameRate = params.flipbookFrameRate;

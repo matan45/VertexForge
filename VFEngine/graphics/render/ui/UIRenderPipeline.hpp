@@ -33,6 +33,7 @@ namespace render::ui
     {
         glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f}; // 0,0,0,0 = full viewport
         std::vector<UITextureBatch> batches;
+        bool overlay = false; // overlay groups record in the second UI pass
     };
 
     class UIRenderPipeline
@@ -96,7 +97,11 @@ namespace render::ui
         void clearExternalTextures();
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
-        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        // overlayPass=false records the main UI groups; overlayPass=true records
+        // overlay groups (tooltips, modal windows) — called again after UI text
+        // so overlays cover underlying labels.
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                             bool overlayPass = false) const;
 
         bool isInitialized() const { return initialized; }
 

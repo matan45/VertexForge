@@ -35,6 +35,7 @@ namespace render::ui
     {
         glm::vec4 scissorRect{0.0f, 0.0f, 0.0f, 0.0f};
         std::vector<UITextFontBatch> batches;
+        bool overlay = false; // overlay groups record in the second UI pass
     };
 
     class UITextPipeline
@@ -79,7 +80,10 @@ namespace render::ui
         void setUITextDrawList(const std::vector<UITextRenderData>& labels);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
-        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        // overlayPass=false records main UI text; overlayPass=true records
+        // overlay text (tooltips, modal windows) after the overlay image pass.
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                             bool overlayPass = false) const;
 
         bool isInitialized() const { return initialized; }
 

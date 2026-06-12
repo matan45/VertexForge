@@ -105,6 +105,15 @@ namespace core::api
                 return value::Value(dispatcher.query(query));
             }});
 
+        // Monotonic tile version: bumped whenever streaming loads/unloads/rebakes a
+        // tile. Cache it next to a findPath result and re-path when it changes.
+        interpreter->registerNativeFunction("_native_navmesh_getTileVersion",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                uint64_t version = dispatcher.query(events::navmesh::GetNavmeshTileVersionQuery{});
+                return value::Value(static_cast<int64_t>(version));
+            }});
+
         interpreter->registerNativeFunction("_native_navmesh_getClosestPoint",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();

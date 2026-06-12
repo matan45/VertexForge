@@ -35,15 +35,18 @@ namespace services
         // Poll completed async sector loads (works in both edit and play mode)
         pollAsyncSectorLoads();
 
-        // Only stream sectors during play mode (based on primary camera distance).
-        // In edit mode, sectors stay as-is — no auto load/unload from editor camera.
-        if (isPlayMode)
+        // Stream sectors during play mode (primary camera distance), and optionally in
+        // edit mode off the editor viewport camera when editModeStreaming is enabled.
+        // Dirty (unsaved) sectors are never auto-unloaded by the streamer, so edit-mode
+        // streaming cannot drop unsaved work.
+        if (isPlayMode || worldDefinition.streamingConfig.editModeStreaming)
         {
-            // Build streaming sources: camera is always source[0]
+            // Build streaming sources: camera is always source[0].
+            // The editor camera isn't an ECS entity — use the cached viewport position.
             std::vector<world::StreamingSource> sources;
             {
                 world::StreamingSource cameraSrc;
-                cameraSrc.position = getPrimaryCameraPosition();
+                cameraSrc.position = isPlayMode ? getPrimaryCameraPosition() : cachedCameraPos;
                 cameraSrc.radiusMultiplier = 1.0f;
                 cameraSrc.priority = 0;
                 cameraSrc.id = 0;
@@ -57,6 +60,29 @@ namespace services
 
             streamer.update(sources, sectorManager, streamingActions);
 
+            // Edit-mode rail: never auto-unload the sector holding the selected entity —
+            // panels and gizmos hold live references to it
+            std::optional<world::SectorCoord> selectedCoord;
+            if (!isPlayMode)
+            {
+                auto selected = ::events::EventDispatcher::instance().query(
+                    ::events::scene::GetSelectedEntityQuery{});
+                if (selected.has_value())
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto entity = internal::fromHandle(*selected);
+                    if (registry.valid(entity))
+                    {
+                        if (auto* uuidComp = registry.try_get<components::UUIDComponent>(entity))
+                        {
+                            uint64_t uuid = uuidComp->id.getValue();
+                            if (sectorManager.hasEntitySector(uuid))
+                                selectedCoord = sectorManager.getEntitySector(uuid);
+                        }
+                    }
+                }
+            }
+
             for (const auto& action : streamingActions)
             {
                 if (action.isLoad)
@@ -65,6 +91,13 @@ namespace services
                 }
                 else
                 {
+                    if (selectedCoord.has_value() && action.coord == *selectedCoord)
+                    {
+                        // The streamer already dropped this coord from its tracking;
+                        // force a reseed so it retries once the selection moves on
+                        streamer.setEnabled(true);
+                        continue;
+                    }
                     handleSectorUnload(action.coord);
                 }
             }
@@ -105,6 +138,8 @@ namespace services
         }
 
         drawDebugSectors();
+
+        processHLODRegenQueue();
 
         entityLoader.update(*sceneGraph, worldDefinition.streamingConfig.maxEntitiesPerFrame);
 
@@ -271,59 +306,55 @@ namespace services
 
         std::string filePath = sector->filePath;
 
-        auto future = std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
-            AsyncSectorLoadResult result;
-            result.success = world::WorldSectorSerialization::loadSector(filePath, result.entityData);
-            return result;
-        });
-
-        PendingAsyncSectorLoad pending;
-        pending.coord = coord;
-        pending.future = std::move(future);
-        pending.cancelled = false;
-        pendingAsyncLoads.emplace(coord, std::move(pending));
+        pendingAsyncLoads.launch(coord,
+            std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
+                AsyncSectorLoadResult result;
+                result.success = world::WorldSectorSerialization::loadSector(
+                    filePath, result.entityData, &result.dataLayers);
+                return result;
+            }));
     }
 
     void WorldSectorServiceImpl::pollAsyncSectorLoads()
     {
-        auto it = pendingAsyncLoads.begin();
-        while (it != pendingAsyncLoads.end())
+        pendingAsyncLoads.poll([this](const world::SectorCoord& coord,
+                                      AsyncSectorLoadResult result)
         {
-            if (it->second.future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
-            {
-                ++it;
-                continue;
-            }
-
-            auto result = it->second.future.get();
-            auto coord = it->second.coord;
-            bool wasCancelled = it->second.cancelled;
-            it = pendingAsyncLoads.erase(it);
-
-            if (wasCancelled)
-                continue;
-
             auto* sector = sectorManager.getSector(coord);
             if (!sector)
-                continue;
+                return;
 
             if (!result.success)
             {
                 sector->state = world::SectorState::Unloaded;
                 vfLogError("Async sector load failed for ({},{})", coord.x, coord.z);
-                continue;
+                return;
             }
 
-            finalizeSectorLoad(coord, result.entityData);
-        }
+            finalizeSectorLoad(coord, result.entityData, result.dataLayers);
+        });
     }
 
     void WorldSectorServiceImpl::finalizeSectorLoad(const world::SectorCoord& coord,
-                                                     std::vector<nlohmann::json>& entityData)
+                                                     std::vector<nlohmann::json>& entityData,
+                                                     world::SectorDataLayers& dataLayers)
     {
         auto* sector = sectorManager.getSector(coord);
         if (!sector)
             return;
+
+        // Merge file layers under any in-memory ones: layers written at runtime
+        // (e.g. fog-of-war) survive unload on the sector struct and are newer
+        // than what the file holds
+        for (auto& [layerName, bytes] : dataLayers)
+            sector->dataLayers.try_emplace(layerName, std::move(bytes));
+        for (const auto& [layerName, bytes] : sector->dataLayers)
+        {
+            ::events::world::SectorDataLayerLoadedNotification notif;
+            notif.coord = coord;
+            notif.layerName = layerName;
+            ::events::EventDispatcher::instance().publish(notif);
+        }
 
         sector->entityUUIDs.clear();
         std::vector<std::pair<std::string, nlohmann::json>> entityNamesAndJson;
@@ -350,14 +381,9 @@ namespace services
         if (!sector)
             return;
 
-        // Cancel any in-flight async file I/O for this sector.
-        // The background thread still runs to completion (std::async has no cooperative
-        // cancellation), but pollAsyncSectorLoads() will discard the result.
-        auto asyncIt = pendingAsyncLoads.find(coord);
-        if (asyncIt != pendingAsyncLoads.end())
-        {
-            asyncIt->second.cancelled = true;
-        }
+        // Cancel any in-flight async file I/O for this sector — the result is
+        // discarded on the next poll (std::async has no cooperative cancellation)
+        pendingAsyncLoads.cancel(coord);
 
         sector->state = world::SectorState::Unloading;
 
@@ -428,7 +454,18 @@ namespace services
         world::SectorCoord newCoord = sectorManager.worldPositionToSectorCoord(newPosition);
 
         if (oldCoord == newCoord)
+        {
+            // Edit-mode moves within a sector must still mark it for save — otherwise
+            // Save World skips the clean sector and silently drops the edit.
+            // Play-mode motion must NOT dirty: dirty sectors are never auto-unloaded
+            // by the streamer, so a wandering entity would pin its sector forever.
+            if (!isPlayMode)
+            {
+                if (auto* sector = sectorManager.getSector(oldCoord))
+                    sector->dirty = true;
+            }
             return;
+        }
 
         sectorManager.removeEntityFromSector(uuid, oldCoord);
         sectorManager.assignEntityToSector(uuid, newPosition);

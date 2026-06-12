@@ -63,6 +63,9 @@ namespace plugin {
         // VK-1365: mutable access for the Plugin Manager window's live toggles.
         static PluginManager* getActiveMutable() { return activeInstance; }
         std::vector<std::unique_ptr<pipeline::PipelineStage>> takeAllImportStages();
+        // Plugin-registered asset importers paired with the owning plugin's
+        // name (used as the ImporterRegistry owner tag for unload cleanup).
+        std::vector<std::pair<std::string, std::unique_ptr<import::AssetImporter>>> takeAllAssetImporters();
 
         // VK-1365 per-scene soft-disable. setPluginActive is idempotent and returns
         // true only on an actual transition (false for unloaded/uninitialized

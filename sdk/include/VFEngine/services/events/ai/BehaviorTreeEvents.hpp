@@ -4,6 +4,7 @@
 #include "../../../utilities/behaviortree/BehaviorTreeTypes.hpp"
 #include <string>
 #include <optional>
+#include <vector>
 
 namespace events::ai {
 
@@ -25,6 +26,12 @@ namespace events::ai {
         bool enabled;
 
         std::string_view getName() const override { return "SetBehaviorTreeEnabled"; }
+    };
+
+    struct ReloadBehaviorTreeAssetCommand : ICommand<> {
+        std::string treePath;
+
+        std::string_view getName() const override { return "ReloadBehaviorTreeAsset"; }
     };
 
     struct SetBlackboardValueCommand : ICommand<> {
@@ -71,6 +78,30 @@ namespace events::ai {
         std::string key;
 
         std::string_view getName() const override { return "HasBlackboardKey"; }
+    };
+
+    // === Debug ===
+
+    struct BTAttachedTreeInfo {
+        services::EntityHandle entity;
+        std::string treePath;
+        std::string name;
+    };
+
+    struct GetAttachedBehaviorTreesQuery : IQuery<std::vector<BTAttachedTreeInfo>> {
+        std::string_view getName() const override { return "GetAttachedBehaviorTrees"; }
+    };
+
+    struct SetTreeDebugTargetCommand : ICommand<> {
+        services::EntityHandle entity; // invalid handle disables snapshot capture
+
+        std::string_view getName() const override { return "SetTreeDebugTarget"; }
+    };
+
+    struct GetTreeRuntimeSnapshotQuery : IQuery<behaviortree::BTRuntimeSnapshot> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetTreeRuntimeSnapshot"; }
     };
 
 }

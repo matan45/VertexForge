@@ -7,6 +7,9 @@ namespace ed = ax::NodeEditor;
 
 namespace editor::graph
 {
+    std::vector<vfx::VFXNode> VFXGraphEditor::clipboardNodes;
+    std::vector<vfx::VFXNodeLink> VFXGraphEditor::clipboardLinks;
+
     VFXGraphEditor::VFXGraphEditor() = default;
 
     VFXGraphEditor::~VFXGraphEditor()
@@ -104,6 +107,8 @@ namespace editor::graph
         handleCreation();
 
         handleDeletion();
+
+        handleClipboardShortcuts();
 
         ed::Suspend();
         if (ed::ShowBackgroundContextMenu())

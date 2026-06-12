@@ -38,6 +38,12 @@ namespace core {
 		vk::ImageView imageView;    // R8_UNORM
 	};
 
+	struct SceneColorCopyImage {
+		vk::Image image;
+		VulkanAllocation allocation;
+		vk::ImageView imageView;    // Scene color format
+	};
+
 	struct UpscaleOutputImage {
 		vk::Image image;
 		VulkanAllocation allocation;
@@ -75,6 +81,7 @@ namespace core {
 		// Upscaling resources (created when upscaling is enabled)
 		MotionVectorImage motionVectors;
 		ReactiveMaskImage reactiveMask;
+		SceneColorCopyImage preTransparencyColor; // opaque-only color for reactive mask generation
 		UpscaleOutputImage upscaleOutput;
 		ExposureImage exposureImage;
 		bool upscaleResourcesCreated = false;

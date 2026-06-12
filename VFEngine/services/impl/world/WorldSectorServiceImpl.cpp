@@ -22,6 +22,7 @@
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/AssetLifecycleHelpers.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
 #include <filesystem>
 
 namespace
@@ -501,6 +502,74 @@ namespace services
                 return result;
             });
 
+        dispatcher.registerQueryHandler<::events::world::GetAllSectorCoordsQuery>(
+            [this](const ::events::world::GetAllSectorCoordsQuery&)
+            {
+                std::vector<world::SectorCoord> result;
+                sectorManager.forEachSector([&](const world::WorldSector& sector)
+                {
+                    result.push_back(sector.coord);
+                });
+                return result;
+            });
+
+        dispatcher.registerCommandHandler<::events::world::SetSectorDataLayerCommand>(
+            [this](const ::events::world::SetSectorDataLayerCommand& cmd) -> bool
+            {
+                if (!worldMode || cmd.layerName.empty()) return false;
+                auto* sector = sectorManager.getSector(cmd.coord);
+                if (!sector) return false;
+
+                sector->dataLayers[cmd.layerName] = cmd.data;
+                // Edit-mode only dirty (play-mode dirty pins the sector against unload);
+                // play-mode layer writes live in memory until an editor-mode save
+                if (!isPlayMode)
+                    sector->dirty = true;
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<::events::world::RemoveSectorDataLayerCommand>(
+            [this](const ::events::world::RemoveSectorDataLayerCommand& cmd) -> bool
+            {
+                if (!worldMode) return false;
+                auto* sector = sectorManager.getSector(cmd.coord);
+                if (!sector) return false;
+
+                if (sector->dataLayers.erase(cmd.layerName) == 0)
+                    return false;
+                if (!isPlayMode)
+                    sector->dirty = true;
+                return true;
+            });
+
+        dispatcher.registerQueryHandler<::events::world::GetSectorDataLayerQuery>(
+            [this](const ::events::world::GetSectorDataLayerQuery& q)
+                -> std::optional<std::vector<uint8_t>>
+            {
+                const auto* sector = sectorManager.getSector(q.coord);
+                if (!sector) return std::nullopt;
+
+                auto it = sector->dataLayers.find(q.layerName);
+                if (it == sector->dataLayers.end()) return std::nullopt;
+                return it->second;
+            });
+
+        dispatcher.registerQueryHandler<::events::world::GetSectorReadinessQuery>(
+            [this](const ::events::world::GetSectorReadinessQuery& q)
+                -> ::events::world::SectorReadiness
+            {
+                ::events::world::SectorReadiness readiness;
+                const auto* sector = sectorManager.getSector(q.coord);
+                if (!sector)
+                    return readiness;
+
+                readiness.state = sector->state;
+                readiness.fileLoadPending = pendingAsyncLoads.contains(q.coord);
+                readiness.entitySpawnsPending = entityLoader.hasPendingLoadsForSector(q.coord);
+                readiness.entityCount = static_cast<uint32_t>(sector->entityUUIDs.size());
+                return readiness;
+            });
+
         dispatcher.registerCommandHandler<::events::world::SetSectorDebugDrawCommand>(
             [this](const ::events::world::SetSectorDebugDrawCommand& cmd)
             {
@@ -513,6 +582,28 @@ namespace services
                 return debugDrawSectors;
             });
 
+        dispatcher.registerCommandHandler<::events::world::SetStreamingConfigCommand>(
+            [this](const ::events::world::SetStreamingConfigCommand& cmd)
+            {
+                if (!worldMode) return;
+                streamer.setConfig(cmd.config);
+                // Adopt the validated config (setConfig enforces unloadRadius > loadRadius)
+                worldDefinition.streamingConfig = streamer.getConfig();
+                hlodStreamer.setConfig(worldDefinition.streamingConfig, worldDefinition.hlodConfig);
+            });
+
+        dispatcher.registerCommandHandler<::events::world::MarkEntitySectorDirtyCommand>(
+            [this](const ::events::world::MarkEntitySectorDirtyCommand& cmd)
+            {
+                // Edit-mode only: play-mode dirty sectors are pinned (never auto-unloaded)
+                if (!worldMode || isPlayMode) return;
+                if (!sectorManager.hasEntitySector(cmd.entityUUID)) return;
+
+                auto coord = sectorManager.getEntitySector(cmd.entityUUID);
+                if (auto* sector = sectorManager.getSector(coord))
+                    sector->dirty = true;
+            });
+
         dispatcher.registerCommandHandler<::events::world::RegisterStreamingSourceCommand>(
             [this](const ::events::world::RegisterStreamingSourceCommand& cmd) -> uint32_t
             {
@@ -523,6 +614,8 @@ namespace services
                 source.priority = cmd.priority;
                 source.id = id;
                 streamingSources[id] = source;
+                if (cmd.ownerEntityUUID != 0)
+                    streamingSourceOwners[id] = cmd.ownerEntityUUID;
                 return id;
             });
 
@@ -530,6 +623,7 @@ namespace services
             [this](const ::events::world::UnregisterStreamingSourceCommand& cmd)
             {
                 streamingSources.erase(cmd.sourceId);
+                streamingSourceOwners.erase(cmd.sourceId);
             });
 
         dispatcher.registerCommandHandler<::events::world::UpdateStreamingSourcePositionCommand>(
@@ -550,38 +644,7 @@ namespace services
         dispatcher.registerCommandHandler<::events::world::hlod::GenerateHLODCommand>(
             [this](const ::events::world::hlod::GenerateHLODCommand& cmd) -> bool
             {
-                if (!worldMode) return false;
-                const auto* sector = sectorManager.getSector(cmd.coord);
-                if (!sector || sector->filePath.empty()) return false;
-
-                auto& tiers = worldDefinition.hlodConfig.tiers;
-                world::HLODTierConfig tierConfig;
-                for (const auto& t : tiers)
-                {
-                    if (t.tier == cmd.tier) { tierConfig = t; break; }
-                }
-
-                // Generate output path alongside sector file
-                std::string hlodPath = sector->filePath;
-                auto dotPos = hlodPath.rfind('.');
-                if (dotPos != std::string::npos)
-                    hlodPath = hlodPath.substr(0, dotPos);
-                hlodPath += "_hlod" + std::to_string(cmd.tier) + ".vfHLOD";
-
-                world::HLODGenerator generator;
-                std::string workingDir = currentWorldPath.empty() ? "." :
-                    currentWorldPath.substr(0, currentWorldPath.find_last_of("/\\"));
-
-                bool result = generator.generateForSector(
-                    cmd.coord, sector->filePath, workingDir,
-                    tierConfig, hlodPath);
-
-                if (result)
-                {
-                    sectorManager.getSector(cmd.coord)->hlodFilePath = hlodPath;
-                }
-
-                return result;
+                return generateSectorHLOD(cmd.coord, cmd.tier);
             });
 
         dispatcher.registerCommandHandler<::events::world::hlod::SetHLODConfigCommand>(
@@ -638,12 +701,7 @@ namespace services
         dispatcher.registerCommandHandler<::events::world::hlod::InvalidateHLODCommand>(
             [this](const ::events::world::hlod::InvalidateHLODCommand& cmd)
             {
-                auto* sector = sectorManager.getSector(cmd.coord);
-                if (sector)
-                {
-                    sector->hlodFilePath.clear();
-                    vfLogInfo("HLOD invalidated for sector [{},{}]", cmd.coord.x, cmd.coord.z);
-                }
+                invalidateHLODForSector(cmd.coord);
             });
 
         dispatcher.registerQueryHandler<::events::vfx::snapshot::GetVFXSnapshotQuery>(
@@ -715,6 +773,9 @@ namespace services
                         sector.entityUUIDs.clear();
                         sector.state = world::SectorState::Unloaded;
                     });
+
+                    // Sector states changed wholesale — make the streamer reseed its tracking
+                    streamer.setEnabled(true);
                 }
                 else if (notif.currentMode == services::EditorMode::Edit)
                 {
@@ -724,6 +785,7 @@ namespace services
                     vfxSnapshots.clear();
                     audioSnapshots.clear();
                     streamingSources.clear();
+                    streamingSourceOwners.clear();
                     nextStreamingSourceId = 1;
 
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
@@ -761,6 +823,9 @@ namespace services
                             sector.state = world::SectorState::Loaded;
                         }
                     });
+
+                    // Sector states changed wholesale — make the streamer reseed its tracking
+                    streamer.setEnabled(true);
                 }
             });
 
@@ -781,6 +846,33 @@ namespace services
                 if (sectorManager.hasEntitySector(uuid))
                 {
                     onTransformChanged(uuid, notif.newTransform.position);
+                }
+            });
+
+        // Auto-unregister streaming sources whose owning entity is deleted
+        entityDeletedToken = dispatcher.subscribe<::events::scene::EntityDeletedNotification>(
+            [this](const ::events::scene::EntityDeletedNotification& notif)
+            {
+                if (!worldMode || streamingSourceOwners.empty()) return;
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(notif.entity);
+                if (!registry.valid(entity)) return;
+
+                auto* uuidComp = registry.try_get<components::UUIDComponent>(entity);
+                if (!uuidComp) return;
+                uint64_t uuid = uuidComp->id.getValue();
+
+                auto it = streamingSourceOwners.begin();
+                while (it != streamingSourceOwners.end())
+                {
+                    if (it->second == uuid)
+                    {
+                        streamingSources.erase(it->first);
+                        it = streamingSourceOwners.erase(it);
+                    }
+                    else
+                        ++it;
                 }
             });
 
@@ -881,6 +973,101 @@ namespace services
                     onTerrainAvailable(tileSize);
                 }
             });
+    }
+
+    bool WorldSectorServiceImpl::generateSectorHLOD(const world::SectorCoord& coord, uint8_t tier)
+    {
+        if (!worldMode) return false;
+        const auto* sector = sectorManager.getSector(coord);
+        if (!sector || sector->filePath.empty()) return false;
+
+        auto& tiers = worldDefinition.hlodConfig.tiers;
+        world::HLODTierConfig tierConfig;
+        for (const auto& t : tiers)
+        {
+            if (t.tier == tier) { tierConfig = t; break; }
+        }
+
+        // Generate output path alongside sector file
+        std::string hlodPath = sector->filePath;
+        auto dotPos = hlodPath.rfind('.');
+        if (dotPos != std::string::npos)
+            hlodPath = hlodPath.substr(0, dotPos);
+        hlodPath += "_hlod" + std::to_string(tier) + ".vfHLOD";
+
+        world::HLODGenerator generator;
+        std::string workingDir = currentWorldPath.empty() ? "." :
+            currentWorldPath.substr(0, currentWorldPath.find_last_of("/\\"));
+
+        bool result = generator.generateForSector(
+            coord, sector->filePath, workingDir,
+            tierConfig, hlodPath);
+
+        if (result)
+        {
+            sectorManager.getSector(coord)->hlodFilePath = hlodPath;
+        }
+
+        return result;
+    }
+
+    void WorldSectorServiceImpl::processHLODRegenQueue()
+    {
+        // One re-bake per frame, edit mode only (generation runs on the main
+        // thread — HLODGenerator's thread-safety is unproven), and only while
+        // sector streaming is idle so re-bakes never compete with loads
+        if (hlodRegenQueue.empty() || isPlayMode || !worldDefinition.hlodConfig.enabled)
+            return;
+        if (!pendingAsyncLoads.empty())
+            return;
+
+        auto coord = hlodRegenQueue.front();
+        hlodRegenQueue.pop_front();
+
+        auto* sector = sectorManager.getSector(coord);
+        if (!sector || sector->filePath.empty() || !sector->hlodFilePath.empty())
+            return; // gone, never saved, or already re-baked manually
+
+        if (generateSectorHLOD(coord, 0))
+            vfLogInfo("HLOD re-baked for sector [{},{}]", coord.x, coord.z);
+        else
+            vfLogWarning("HLOD re-bake failed for sector [{},{}]", coord.x, coord.z);
+    }
+
+    void WorldSectorServiceImpl::invalidateHLODForSector(const world::SectorCoord& coord)
+    {
+        auto* sector = sectorManager.getSector(coord);
+        if (!sector || sector->hlodFilePath.empty())
+            return;
+
+        // Delete the stale bake so loadWorld's disk probe doesn't resurrect it
+        std::error_code ec;
+        std::filesystem::remove(sector->hlodFilePath, ec);
+        sector->hlodFilePath.clear();
+
+        // Drop any loaded proxy covering this sector, per tier (real or future
+        // geometry replaces it; the streamer re-emits a load once a new bake exists)
+        auto floorDiv = [](int32_t v, int32_t s) { return (v >= 0) ? v / s : (v - s + 1) / s; };
+        for (const auto& tier : worldDefinition.hlodConfig.tiers)
+        {
+            int32_t cs = static_cast<int32_t>(tier.cellSize);
+            world::HLODCellCoord cell(floorDiv(coord.x, cs), floorDiv(coord.z, cs), tier.tier);
+            hlodProxyManager.unloadProxy(cell, *sceneGraph);
+            hlodStreamer.forgetProxy(cell);
+        }
+
+        ::events::world::hlod::HLODInvalidatedNotification notif;
+        notif.coord = coord;
+        ::events::EventDispatcher::instance().publish(notif);
+
+        // Queue an automatic re-bake (drained when streaming is idle, edit mode)
+        if (worldDefinition.hlodConfig.enabled &&
+            std::find(hlodRegenQueue.begin(), hlodRegenQueue.end(), coord) == hlodRegenQueue.end())
+        {
+            hlodRegenQueue.push_back(coord);
+        }
+
+        vfLogInfo("HLOD invalidated for sector [{},{}]", coord.x, coord.z);
     }
 
     void WorldSectorServiceImpl::onTerrainAvailable(float worldTileSize)

@@ -1,6 +1,7 @@
 #include "OceanEditorWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/OceanEvents.hpp"
+#include "water/SeaState.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -51,6 +52,9 @@ namespace windows
 
             physicsSettings.physicsEnabled = dataOpt->physicsEnabled;
             physicsSettingsDirty = false;
+
+            weatherDriven = dataOpt->weatherDriven;
+            weatherResponse = dataOpt->weatherResponse;
         }
 
         oceanConfig = dispatcher.query(events::ocean::GetOceanFFTConfigQuery{});
@@ -271,7 +275,65 @@ namespace windows
 
         ImGui::Indent();
 
+        // --- Sea state ---
+        ImGui::Text("Sea State");
+        ImGui::Indent();
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            if (ImGui::Checkbox("Weather Driven", &weatherDriven))
+            {
+                events::ocean::SetOceanWeatherDrivenCommand cmd;
+                cmd.oceanEntity = oceanEntity;
+                cmd.enabled = weatherDriven;
+                cmd.response = weatherResponse;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Map the live weather wind/gusts onto the ocean bands every frame");
+
+            if (weatherDriven)
+            {
+                if (labeledDragFloat("Response", "##WeatherResponse", &weatherResponse, 0.01f, 0.0f, 2.0f, "%.2f"))
+                {
+                    events::ocean::SetOceanWeatherDrivenCommand cmd;
+                    cmd.oceanEntity = oceanEntity;
+                    cmd.enabled = weatherDriven;
+                    cmd.response = weatherResponse;
+                    dispatcher.execute(cmd);
+                }
+            }
+
+            events::ocean::GetOceanSeaStateQuery beaufortQuery;
+            float currentBeaufort = dispatcher.query(beaufortQuery);
+            ImGui::Text("Current: Beaufort %.1f (%.1f m/s wind)", currentBeaufort,
+                        water::windSpeedFromBeaufort(currentBeaufort));
+
+            static const char* presetNames = "Calm\0Slight\0Moderate\0Rough\0Very Rough\0Storm\0";
+            ImGui::PushItemWidth(150.0f);
+            ImGui::Combo("##SeaStatePreset", &seaStatePresetIndex, presetNames);
+            ImGui::SameLine();
+            ImGui::DragFloat("##SeaStateSeconds", &seaStateTransitionSeconds, 0.5f, 0.0f, 300.0f, "%.0f s");
+            ImGui::PopItemWidth();
+            ImGui::SameLine();
+            if (ImGui::Button("Set Sea State"))
+            {
+                events::ocean::SetOceanSeaStateCommand cmd;
+                cmd.beaufort = water::beaufortForPreset(
+                    static_cast<water::SeaStatePreset>(seaStatePresetIndex));
+                cmd.transitionSeconds = seaStateTransitionSeconds;
+                dispatcher.execute(cmd);
+            }
+        }
+        ImGui::Unindent();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
         static const char* bandNames[] = {"Swell", "Agitation", "Ripples"};
+
+        if (weatherDriven)
+            ImGui::TextDisabled("Band wind/amplitude are driven by weather while Weather Driven is on");
 
         if (ImGui::BeginTabBar("OceanBands"))
         {
@@ -334,6 +396,18 @@ namespace windows
 
                         snprintf(id, sizeof(id), "##DisplacementScale%d", i);
                         oceanConfigDirty |= labeledDragFloat("Wave Height Scale", id, &band.displacementScale, 0.1f, 0.1f, 50.0f, "%.1f");
+
+                        ImGui::Spacing();
+
+                        snprintf(id, sizeof(id), "##FoamPersistence%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Foam Persistence", id, &band.foamPersistence, 0.01f, 0.0f, 0.99f, "%.2f");
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("How much advected previous-frame foam survives (0 = instantaneous foam only)");
+
+                        snprintf(id, sizeof(id), "##FoamDecay%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Foam Decay (1/s)", id, &band.foamDecay, 0.01f, 0.01f, 5.0f, "%.2f");
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("Exponential fade rate of persistent foam trails");
                     }
 
                     ImGui::EndTabItem();

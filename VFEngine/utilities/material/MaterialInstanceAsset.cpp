@@ -180,9 +180,9 @@ namespace material
                 vfLogWarning("Material instance file '{}' has unexpected type '{}'", path, type);
             }
 
-            // Check version
+            // Check version (1.0 is forward-compatible — 1.1 only adds override maps)
             std::string fileVersion = j.value("version", MATERIAL_INSTANCE_FORMAT_VERSION);
-            if (fileVersion != MATERIAL_INSTANCE_FORMAT_VERSION)
+            if (fileVersion != MATERIAL_INSTANCE_FORMAT_VERSION && fileVersion != "1.0")
             {
                 vfLogWarning("Material instance '{}' has version {} (current is {})",
                              path, fileVersion, MATERIAL_INSTANCE_FORMAT_VERSION);
@@ -232,6 +232,73 @@ namespace material
             if (j.contains("textureOverrides"))
             {
                 instance.textureOverrides = deserializeTextureOverrides(j["textureOverrides"]);
+            }
+
+            // Named parameter overrides (format 1.1). Tolerant: unknown names are kept —
+            // they resolve to nothing until the parent re-exposes the parameter.
+            if (j.contains("parameterOverrides") && j["parameterOverrides"].is_object())
+            {
+                for (auto& [name, entry] : j["parameterOverrides"].items())
+                {
+                    if (!entry.is_object() || !entry.contains("value")) continue;
+                    const auto& value = entry["value"];
+                    std::string type = entry.value("type", "scalar");
+
+                    if (type == "scalar" && value.is_number())
+                    {
+                        instance.parameterOverrides[name] = value.get<float>();
+                    }
+                    else if (type == "vec2" && value.is_array() && value.size() >= 2)
+                    {
+                        instance.parameterOverrides[name] =
+                            glm::vec2(value[0].get<float>(), value[1].get<float>());
+                    }
+                    else if (type == "vec3" && value.is_array() && value.size() >= 3)
+                    {
+                        instance.parameterOverrides[name] =
+                            glm::vec3(value[0].get<float>(), value[1].get<float>(), value[2].get<float>());
+                    }
+                    else if (type == "vec4" && value.is_array() && value.size() >= 4)
+                    {
+                        instance.parameterOverrides[name] = glm::vec4(
+                            value[0].get<float>(), value[1].get<float>(),
+                            value[2].get<float>(), value[3].get<float>());
+                    }
+                    else
+                    {
+                        vfLogWarning("Material instance '{}': parameter override '{}' has malformed value, skipping",
+                                     path, name);
+                    }
+                }
+            }
+
+            // Named texture parameter overrides (format 1.1)
+            if (j.contains("textureParameterOverrides") && j["textureParameterOverrides"].is_object())
+            {
+                for (auto& [name, entry] : j["textureParameterOverrides"].items())
+                {
+                    if (!entry.is_object()) continue;
+                    std::string hexStr = entry.value("guid", "");
+                    if (hexStr.empty()) continue;
+
+                    auto ref = asset::AssetRef::fromHexString(hexStr);
+                    if (ref.isValid() && ref.resolve().empty())
+                    {
+                        std::string fallbackPath = entry.value("path", "");
+                        if (!fallbackPath.empty())
+                        {
+                            auto pathRef = asset::AssetRef::fromPath(fallbackPath);
+                            if (pathRef.isValid())
+                            {
+                                ref = pathRef;
+                            }
+                        }
+                    }
+                    if (ref.isValid())
+                    {
+                        instance.textureParameterOverrides[name] = ref;
+                    }
+                }
             }
 
             // Scalar overrides
@@ -310,6 +377,64 @@ namespace material
         if (!instance.textureOverrides.empty())
         {
             j["textureOverrides"] = serializeTextureOverrides(instance.textureOverrides);
+        }
+
+        // Named parameter overrides (format 1.1)
+        if (!instance.parameterOverrides.empty())
+        {
+            json params = json::object();
+            for (const auto& [name, value] : instance.parameterOverrides)
+            {
+                json entry;
+                std::visit([&entry](const auto& v)
+                {
+                    using T = std::decay_t<decltype(v)>;
+                    if constexpr (std::is_same_v<T, float>)
+                    {
+                        entry["type"] = "scalar";
+                        entry["value"] = v;
+                    }
+                    else if constexpr (std::is_same_v<T, glm::vec2>)
+                    {
+                        entry["type"] = "vec2";
+                        entry["value"] = json::array({v.x, v.y});
+                    }
+                    else if constexpr (std::is_same_v<T, glm::vec3>)
+                    {
+                        entry["type"] = "vec3";
+                        entry["value"] = json::array({v.x, v.y, v.z});
+                    }
+                    else if constexpr (std::is_same_v<T, glm::vec4>)
+                    {
+                        entry["type"] = "vec4";
+                        entry["value"] = json::array({v.x, v.y, v.z, v.w});
+                    }
+                }, value);
+                params[name] = entry;
+            }
+            j["parameterOverrides"] = params;
+        }
+
+        // Named texture parameter overrides (format 1.1)
+        if (!instance.textureParameterOverrides.empty())
+        {
+            json params = json::object();
+            for (const auto& [name, ref] : instance.textureParameterOverrides)
+            {
+                if (!ref.isValid()) continue;
+                json entry;
+                entry["guid"] = ref.toHexString();
+                const std::string& texPath = ref.resolve();
+                if (!texPath.empty())
+                {
+                    entry["path"] = texPath;
+                }
+                params[name] = entry;
+            }
+            if (!params.empty())
+            {
+                j["textureParameterOverrides"] = params;
+            }
         }
 
         // Scalar overrides

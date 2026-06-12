@@ -15,5 +15,6 @@ namespace windows::details
         bool drawScaleMode(services::UICanvasData& data);
         bool drawPixelsPerUnit(services::UICanvasData& data);
         bool drawSortOrder(services::UICanvasData& data);
+        void drawTheme(services::EntityHandle handle);
     };
 }

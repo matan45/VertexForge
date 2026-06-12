@@ -103,6 +103,7 @@ namespace world
         int maxTerrainLoadsPerFrame = 4;    // terrain tiles loaded per frame via sector activation
         int maxTerrainUnloadsPerFrame = 4;  // terrain tiles unloaded per frame via sector deactivation
         bool enableGPUObjectStreaming = true; // Use persistent GPU slots with priority-based streaming
+        bool editModeStreaming = false;     // Run the streaming ring off the editor camera in edit mode
 
         // HLOD distance tiers (in sector counts, beyond unloadRadius)
         float hlodTier0Radius = 10.0f;

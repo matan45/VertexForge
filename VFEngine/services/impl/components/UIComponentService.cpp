@@ -16,6 +16,10 @@ namespace services {
         registerAnimationHandlers(dispatcher);
         registerMaskHandlers(dispatcher);
         registerDragDropHandlers(dispatcher);
+        registerThemeHandlers(dispatcher);
+        registerTooltipHandlers(dispatcher);
+        registerWindowHandlers(dispatcher);
+        registerListViewHandlers(dispatcher);
     }
 
 }

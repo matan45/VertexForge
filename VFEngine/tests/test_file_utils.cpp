@@ -5,10 +5,9 @@
 
 // ============================================================
 // FileExtension constants and Config tests
-// Note: FileUtils methods are VF_IMPORT_API (DLL exported from Import).
-// The Tests project does NOT link Import, so we cannot test FileUtils
-// functions here. Instead we verify the FileExtension constants
-// defined in Config.hpp.
+// FileUtils itself (VF_IMPORT_API, exported from Import.dll) is covered
+// in test_import_registry.cpp; this file verifies the FileExtension
+// constants defined in Config.hpp.
 // ============================================================
 
 TEST_SUITE("FileExtensionConstants") {

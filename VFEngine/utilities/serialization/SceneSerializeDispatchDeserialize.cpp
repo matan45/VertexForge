@@ -108,6 +108,11 @@ namespace serialization
             auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
             deserializeRigidBody(c["rigidBody"], rigidBodyComp);
         }
+        if (c.contains("buoyancy"))
+        {
+            auto& buoyancyComp = entity.addOrReplaceComponent<components::BuoyancyComponent>();
+            deserializeBuoyancy(c["buoyancy"], buoyancyComp);
+        }
         if (c.contains("destructible"))
         {
             auto& destructibleComp = entity.addOrReplaceComponent<components::DestructibleComponent>();
@@ -200,6 +205,11 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::UIRectComponent>();
             deserializeUIRect(c["uiRect"], comp);
         }
+        if (c.contains("uiStyle"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::UIStyleComponent>();
+            deserializeUIStyle(c["uiStyle"], comp);
+        }
         if (c.contains("uiImage"))
         {
             auto& comp = entity.addOrReplaceComponent<components::UIImageComponent>();
@@ -219,6 +229,21 @@ namespace serialization
         {
             auto& comp = entity.addOrReplaceComponent<components::UILabelComponent>();
             deserializeUILabel(c["uiLabel"], comp);
+        }
+        if (c.contains("uiTooltip"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::UITooltipComponent>();
+            deserializeUITooltip(c["uiTooltip"], comp);
+        }
+        if (c.contains("uiWindow"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::UIWindowComponent>();
+            deserializeUIWindow(c["uiWindow"], comp);
+        }
+        if (c.contains("uiListView"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::UIListViewComponent>();
+            deserializeUIListView(c["uiListView"], comp);
         }
         if (c.contains("uiAnimation"))
         {

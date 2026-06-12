@@ -30,6 +30,9 @@ namespace scene {
 		void clearScene();
 
 		void moveEntity(Entity& entity, Entity& newParent) const;
+		// insertIndex = position among newParent's children after the move; -1 appends.
+		// Returns false if the move would create a cycle (newParent inside entity's subtree).
+		bool moveEntity(Entity& entity, Entity& newParent, int insertIndex) const;
 
 		std::vector<Entity> findAllEntitiesByName(std::string_view name) const;
 

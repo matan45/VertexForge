@@ -6,6 +6,7 @@
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <asset/AssetRef.hpp>
 #include <resource/AssetTypes.hpp>
+#include <material/MaterialTypes.hpp>
 #include <components/DestructionComponents.hpp>
 #include <glm/glm.hpp>
 #include <string>
@@ -72,7 +73,7 @@ namespace services
     {
         asset::AssetRef defaultMaterialRef; // .vfMat asset for unmapped submeshes
         std::map<std::string, asset::AssetRef> subMeshMaterials; // submesh NAME -> .vfMat asset
-        std::map<std::string, float> parameterOverrides; // Runtime parameter tweaks
+        std::map<std::string, material::ParameterValue> parameterOverrides; // Runtime named-parameter tweaks
     };
 
     struct SubMeshInfo
@@ -253,13 +254,19 @@ namespace services
         bool freezeRotationZ = false;
     };
 
+    struct BuoyancyComponentData
+    {
+        bool customSampleMode = false;
+        glm::vec3 customPoints[8]{};
+        uint32_t customPointCount = 0;
+        float buoyancyScale = 1.0f;
+        float angularDrag = 0.5f;
+    };
+
     struct PhysicsAnimationComponentData
     {
         asset::AssetRef physicsAnimationRef;
-        types::PhysicsAnimationMode defaultMode = types::PhysicsAnimationMode::Animated;
-        uint8_t collisionLayer = 1;
-        std::vector<types::BoneBodyMapping> boneBodyMappings;
-        std::vector<types::JointConstraintLimits> jointLimits;
+        types::PhysicsAnimationConfig config;
     };
 
     struct VFXData
@@ -438,6 +445,49 @@ namespace services
         bool wordWrap = true;
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
+        bool richText = false;
+    };
+
+    struct UITooltipData
+    {
+        uint8_t mode = 0; // 0=Text, 1=ChildPanel
+        std::string text;
+        float showDelay = 0.5f;
+        bool followCursor = true;
+        glm::vec2 offset{12.0f, 16.0f};
+        float maxWidth = 280.0f;
+        glm::vec4 backgroundColor{0.08f, 0.08f, 0.08f, 0.95f};
+        glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
+        asset::AssetRef fontRef;
+        float fontSize = 14.0f;
+        glm::vec4 padding{8.0f, 8.0f, 6.0f, 6.0f}; // left, right, top, bottom
+        bool enabled = true;
+        std::string panelChildName;
+    };
+
+    struct UIListViewData
+    {
+        asset::AssetRef itemTemplateRef; // .vfPrefab
+        int itemCount = 0;
+        bool selectable = true;
+        glm::vec4 selectedTint{0.3f, 0.5f, 0.8f, 0.35f};
+        int selectedIndex = -1; // runtime, read-only through this DTO
+    };
+
+    struct UIWindowData
+    {
+        std::string title = "Window";
+        bool showTitleBar = true;
+        float titleBarHeight = 28.0f;
+        bool draggable = true;
+        bool closable = true;
+        bool modal = false;
+        glm::vec4 backgroundColor{0.12f, 0.12f, 0.12f, 1.0f};
+        glm::vec4 titleBarColor{0.18f, 0.18f, 0.22f, 1.0f};
+        glm::vec4 titleTextColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 backdropColor{0.0f, 0.0f, 0.0f, 0.55f};
+        asset::AssetRef fontRef;
+        float titleFontSize = 16.0f;
     };
 
     struct UIButtonData

@@ -6,6 +6,9 @@
 #include <unordered_map>
 #include <memory>
 #include <optional>
+#include <mutex>
+#include <vector>
+#include <atomic>
 
 namespace services
 {
@@ -32,12 +35,16 @@ namespace core
 
         void updateAll(float deltaTime) override;
         void stopAll() override;
+        void reloadAsset(const std::string& treePath) override;
 
         void setBlackboardValue(services::EntityHandle entity, const std::string& key,
                                 const behaviortree::BlackboardValue& value) override;
         behaviortree::BlackboardValue getBlackboardValue(services::EntityHandle entity,
                                                           const std::string& key) override;
         bool hasBlackboardKey(services::EntityHandle entity, const std::string& key) const override;
+
+        void setDebugTarget(services::EntityHandle entity) override;
+        behaviortree::BTRuntimeSnapshot getRuntimeSnapshot(services::EntityHandle entity) const override;
 
         // === IBTTaskExecutor ===
         behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle entity,
@@ -71,6 +78,8 @@ namespace core
                                                        float maxDistance,
                                                        float eyeOffset,
                                                        behaviortree::Blackboard& blackboard) override;
+
+        void onAbort(services::EntityHandle entity, const behaviortree::BTNode& node) override;
 
     private:
         struct RuntimeInstance
@@ -106,5 +115,28 @@ namespace core
         std::unordered_map<uint64_t, RuntimeInstance> runtimes; // keyed by EntityHandle::id
         std::unordered_map<ScriptInstanceKey, uint64_t, ScriptInstanceKeyHash> scriptInstances;
         std::unordered_map<std::string, eqs::EQSQueryHandle> pendingEQSQueries; // key: "{entityId}:{queryName}"
+
+        // One immutable tree per asset path, shared by every runtime attached to it.
+        // assetDependencies maps each cached root to the normalized paths of every
+        // tree spliced into its expansion (so saving a subtree rebinds its parents).
+        std::unordered_map<std::string, std::shared_ptr<const behaviortree::BehaviorTreeData>> assetCache;
+        std::unordered_map<std::string, std::vector<std::string>> assetDependencies;
+
+        // Hot-reload requests queued from the editor thread, applied between ticks in updateAll
+        std::vector<std::string> pendingReloads;
+        std::mutex reloadMutex;
+
+        // Debugger: snapshot of one entity's runtime, written after its tick (worker task)
+        // and read by the editor (main thread) — always copied under snapshotMutex
+        std::atomic<uint64_t> debugTargetEntityId{0};
+        mutable std::mutex snapshotMutex;
+        behaviortree::BTRuntimeSnapshot debugSnapshot;
+        uint64_t tickCounter = 0;
+
+        std::shared_ptr<const behaviortree::BehaviorTreeData> getOrLoadTree(const std::string& treePath);
+        void applyPendingReloads();
+        void captureDebugSnapshot(const behaviortree::BehaviorTreeRuntime& runtime);
+        void cleanupScriptInstances(uint64_t entityId, const behaviortree::BehaviorTreeData& treeData);
+        void cancelPendingEQSQueriesForEntity(uint64_t entityId);
     };
 }

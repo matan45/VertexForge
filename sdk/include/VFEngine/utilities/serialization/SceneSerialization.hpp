@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include "../scene/Entity.hpp"
 #include "../asset/AssetRef.hpp"
+#include "../material/MaterialTypes.hpp"
 #include "../types/PhysicsTypes.hpp"
 #include "../types/PhysicsAnimationTypes.hpp"
 #include "../types/NavmeshTypes.hpp"
@@ -72,6 +73,13 @@ namespace serialization
         static json serializeEntity(scene::Entity& entity);
         static void deserializeEntity(const json& entityJson, scene::Entity& entity,
                                       DeserializeEntityContext& ctx);
+
+        // Typed runtime material parameter overrides ({type, value} entries; the
+        // deserializer also accepts the legacy bare-float form). Public for tests.
+        static json serializeParameterOverrides(
+            const std::map<std::string, ::material::ParameterValue>& overrides);
+        static void deserializeParameterOverrides(
+            const json& j, std::map<std::string, ::material::ParameterValue>& overrides);
 
     private:
         static json serializeRootEntity(scene::Entity& root);
@@ -161,6 +169,9 @@ namespace serialization
         static json serializeRigidBody(const components::RigidBodyComponent& rigidBody);
         static void deserializeRigidBody(const json& j, components::RigidBodyComponent& rigidBody);
 
+        static json serializeBuoyancy(const components::BuoyancyComponent& buoyancy);
+        static void deserializeBuoyancy(const json& j, components::BuoyancyComponent& buoyancy);
+
         static json serializeDestructible(const components::DestructibleComponent& destructible);
         static void deserializeDestructible(const json& j, components::DestructibleComponent& destructible);
 
@@ -247,6 +258,9 @@ namespace serialization
         static json serializeUIRect(const components::UIRectComponent& rect);
         static void deserializeUIRect(const json& j, components::UIRectComponent& rect);
 
+        static json serializeUIStyle(const components::UIStyleComponent& style);
+        static void deserializeUIStyle(const json& j, components::UIStyleComponent& style);
+
         static json serializeUIImage(const components::UIImageComponent& image);
         static void deserializeUIImage(const json& j, components::UIImageComponent& image);
 
@@ -258,6 +272,15 @@ namespace serialization
 
         static json serializeUILabel(const components::UILabelComponent& label);
         static void deserializeUILabel(const json& j, components::UILabelComponent& label);
+
+        static json serializeUITooltip(const components::UITooltipComponent& tooltip);
+        static void deserializeUITooltip(const json& j, components::UITooltipComponent& tooltip);
+
+        static json serializeUIWindow(const components::UIWindowComponent& window);
+        static void deserializeUIWindow(const json& j, components::UIWindowComponent& window);
+
+        static json serializeUIListView(const components::UIListViewComponent& listView);
+        static void deserializeUIListView(const json& j, components::UIListViewComponent& listView);
 
         static json serializeUIButton(const components::UIButtonComponent& button);
         static void deserializeUIButton(const json& j, components::UIButtonComponent& button);

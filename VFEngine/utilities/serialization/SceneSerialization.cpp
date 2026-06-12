@@ -33,6 +33,12 @@ namespace serialization
         json childrenJson = json::array();
         for (auto& child : entity.getChildren())
         {
+            // List-view item instances are engine-managed (rebuilt from the
+            // item template on load) — baking them would duplicate items.
+            if (child.hasComponent<components::UIListItemComponent>())
+            {
+                continue;
+            }
             childrenJson.push_back(serializeEntity(child));
         }
         entityJson["children"] = childrenJson;

@@ -57,6 +57,26 @@ namespace services {
 				resource::AssetLifecycleManager::instance().forceRelease(asset::AssetRef::fromPath(std::string(cmd.path)).getGUID());
 			});
 
+		dispatcher.registerCommandHandler<events::lifecycle::SetMemoryBudgetCommand>(
+			[](const events::lifecycle::SetMemoryBudgetCommand& cmd)
+			{
+				auto& lifecycle = resource::AssetLifecycleManager::instance();
+				auto config = lifecycle.getMemoryBudget();
+				config.totalBudgetBytes = cmd.totalBudgetBytes;
+				lifecycle.setMemoryBudget(config);
+			});
+
+		dispatcher.registerQueryHandler<events::lifecycle::QueryMemoryBudgetQuery>(
+			[](const events::lifecycle::QueryMemoryBudgetQuery&)
+			{
+				auto& lifecycle = resource::AssetLifecycleManager::instance();
+				events::lifecycle::MemoryBudgetStatus status;
+				status.totalBudgetBytes = lifecycle.getMemoryBudget().totalBudgetBytes;
+				status.trackedBytes = lifecycle.getTotalTrackedBytes();
+				status.overBudget = lifecycle.isOverBudget();
+				return status;
+			});
+
 		dispatcher.registerQueryHandler<events::lifecycle::QueryAssetStatsQuery>(
 			[](const events::lifecycle::QueryAssetStatsQuery&)
 			{

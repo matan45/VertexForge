@@ -175,12 +175,15 @@ namespace resource {
 		request.guid = guid;
 		request.hint = hint;
 		request.cancellation = cancellation;
+		request.progress = LoadProgress::create();
 		request.computedPriority = ResourceLoadScheduler::computePriority(hint, {0.0f, 0.0f, 0.0f});
 		request.executeLoad = [path = std::move(path), guid, loader, &cache, &pendingLoads,
-			assetType, memEstimator, sharedPromise, sharedResultPromise, cancel = cancellation]() mutable {
+			assetType, memEstimator, sharedPromise, sharedResultPromise, cancel = cancellation,
+			progress = request.progress]() mutable {
 			struct AsyncGuard { ~AsyncGuard() { pendingAsyncOps.fetch_sub(1, std::memory_order_release); } } guard;
 			try {
 				if (shuttingDown.load(std::memory_order_acquire) || (cancel && cancel->isCancelled())) {
+					progress->setStage(LoadStage::Cancelled);
 					std::scoped_lock lock(cacheMutex);
 					pendingLoads.erase(guid);
 					sharedResultPromise->set_value(nullptr);
@@ -200,6 +203,7 @@ namespace resource {
 							if constexpr (!std::is_null_pointer_v<MemoryEstimator>) {
 								memBytes = memEstimator(*resource);
 							}
+							progress->setBytes(memBytes);
 							AssetLifecycleManager::instance().acquire(guid, assetType, memBytes);
 						}
 					}
@@ -209,6 +213,7 @@ namespace resource {
 				sharedPromise->set_value(resource);
 			}
 			catch (const std::exception& e) {
+				progress->setStage(LoadStage::Failed);
 				std::scoped_lock lock(cacheMutex);
 				pendingLoads.erase(guid);
 				vfLogError("Exception loading resource '{}': {}", path, e.what());
@@ -216,6 +221,7 @@ namespace resource {
 				sharedPromise->set_value(nullptr);
 			}
 			catch (...) {
+				progress->setStage(LoadStage::Failed);
 				std::scoped_lock lock(cacheMutex);
 				pendingLoads.erase(guid);
 				vfLogError("Unknown exception loading resource: {}", path);

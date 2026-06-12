@@ -9,6 +9,10 @@ layout(rg32f,   set = 0, binding = 2) readonly  uniform image2D chopZField;
 layout(rgba16f, set = 0, binding = 3) writeonly  uniform image2D displacementMap;
 layout(rgba16f, set = 0, binding = 4) writeonly  uniform image2D normalMap;
 layout(r16f,    set = 0, binding = 5) writeonly  uniform image2D causticMap;
+// Persistent foam ping-pong: previous frame's foam (bilinear, repeat — wraps the patch)
+// and this frame's output. The CPU swaps which image is bound to which binding.
+layout(set = 0, binding = 6) uniform sampler2D prevFoam;
+layout(r16f,    set = 0, binding = 7) writeonly  uniform image2D currFoam;
 
 layout(push_constant) uniform PushConstants {
     uint N;
@@ -16,6 +20,9 @@ layout(push_constant) uniform PushConstants {
     float patchSize;
     float foamThreshold;
     float displacementScale;
+    float deltaTime;
+    float foamPersistence;
+    float foamDecay;
 } pc;
 
 void main() {
@@ -72,14 +79,23 @@ void main() {
     // Foam only on strong wave crests that are actually folding
     // Use unscaled displacement magnitude so foam thresholds are independent of displacementScale
     float rawDispMag = length(vec3(dx, dy, dz)) / max(pc.displacementScale, 0.001);
-    float foam = 0.0;
+    float instantFoam = 0.0;
     if (jacobian < pc.foamThreshold) {
         // Wide smoothstep range for gradual transitions (avoids isolated pixel dots)
         float rawFoam = 1.0 - smoothstep(pc.foamThreshold - 1.5, pc.foamThreshold, jacobian);
         rawFoam *= smoothstep(1.0, 4.0, rawDispMag);
         // Quadratic falloff: suppresses weak foam at isolated texels
-        foam = rawFoam * rawFoam;
+        instantFoam = rawFoam * rawFoam;
     }
+
+    // Persistent foam: advect last frame's foam along the horizontal chop and decay it
+    // exponentially, so crests leave drifting trails instead of vanishing with the fold.
+    // The repeat sampler wraps prevUV across the periodic patch for free.
+    vec2 uv = (vec2(x, y) + 0.5) / float(pc.N);
+    vec2 prevUV = uv - vec2(dx, dz) / pc.patchSize * pc.deltaTime;
+    float previousFoam = texture(prevFoam, prevUV).r * exp(-pc.foamDecay * pc.deltaTime);
+    float foam = max(instantFoam, mix(instantFoam, previousFoam, pc.foamPersistence));
+    imageStore(currFoam, ivec2(x, y), vec4(foam, 0.0, 0.0, 0.0));
 
     imageStore(displacementMap, ivec2(x, y), vec4(dx, dy, dz, foam));
 

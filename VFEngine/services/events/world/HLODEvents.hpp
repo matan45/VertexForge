@@ -87,4 +87,13 @@ namespace events::world::hlod
         std::string_view getName() const override { return "HLODProxyUnloaded"; }
     };
 
+    // Published when a sector's baked HLOD becomes stale (sector content changed)
+    // and its .vfHLOD file was discarded. Regenerate via GenerateHLODCommand.
+    struct HLODInvalidatedNotification : INotification
+    {
+        ::world::SectorCoord coord;
+
+        std::string_view getName() const override { return "HLODInvalidated"; }
+    };
+
 } // namespace events::world::hlod

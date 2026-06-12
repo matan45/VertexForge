@@ -10,6 +10,7 @@
 #include "threading/EditorTaskStats.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/weather/WeatherEvents.hpp"
+#include "events/terrain/OceanEvents.hpp"
 
 #include <chrono>
 
@@ -80,6 +81,16 @@ namespace handlers
             }
         });
 
+        // Streaming/bake portions run in edit mode too (world baker, tile preview);
+        // only the crowd agent simulation is play-mode gated.
+        frameTaskGraph->addTask("Navmesh", [this]() {
+            if (navmeshService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                bool simulateAgents = editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused();
+                navmeshService->update(dt, simulateAgents);
+            }
+        });
+
         // VK-1330 / VK-1333: an "AudioListener" task used to live here that
         // called audioSceneUpdater->updateListenerFromPrimaryCamera() every
         // frame in Play mode. Multi-task layers in the FrameTaskGraph dispatch
@@ -103,6 +114,13 @@ namespace handlers
             events::EventDispatcher::instance().execute(cmd);
         });
 
+        frameTaskGraph->addTask("Ocean", [this]() {
+            float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            events::ocean::UpdateOceanCommand cmd;
+            cmd.deltaTime = dt;
+            events::EventDispatcher::instance().execute(cmd);
+        });
+
         frameTaskGraph->addTask("WorldSector", [this]() {
             if (worldSectorService) worldSectorService->update();
         });
@@ -122,6 +140,7 @@ namespace handlers
         });
 
         frameTaskGraph->addDependency("Weather", "Scene");
+        frameTaskGraph->addDependency("Ocean", "Weather");
         frameTaskGraph->addDependency("PhysicsKick", "Scene");
         frameTaskGraph->addDependency("PhysicsKick", "Input");
         frameTaskGraph->addDependency("PhysicsKick", "WindowState");
@@ -129,6 +148,7 @@ namespace handlers
         frameTaskGraph->addDependency("Scripts", "PhysicsSync");
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
+        frameTaskGraph->addDependency("Navmesh", "BehaviorTrees");
         frameTaskGraph->addDependency("VFX", "Scripts");
 
         auto sceneGraphFn = bootstrap->getSceneGraphUpdateFn();
@@ -164,6 +184,7 @@ namespace handlers
 
         frameTaskGraph->addDependency("Transforms", "Weather");
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
+        frameTaskGraph->addDependency("Transforms", "Navmesh");
         frameTaskGraph->addDependency("Transforms", "VFX");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");

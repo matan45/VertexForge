@@ -1,6 +1,7 @@
 #include "MaterialCacheManager.hpp"
 #include "../material/MaterialShaderCache.hpp"
 #include "../material/MaterialTextureCache.hpp"
+#include "../material/MaterialParameterBufferCache.hpp"
 #include "resource/ResourceManager.hpp"
 #include "asset/AssetRef.hpp"
 #include <material/MaterialInstanceTypes.hpp>
@@ -72,6 +73,11 @@ namespace render::mesh
             {
                 shaderCache->invalidateAll();
             }
+
+            if (parameterBufferCache)
+            {
+                parameterBufferCache->invalidateAll();
+            }
         }
         else
         {
@@ -87,6 +93,11 @@ namespace render::mesh
             if (textureCache)
             {
                 textureCache->invalidateMaterialDescriptorSet(materialPath);
+            }
+
+            if (parameterBufferCache)
+            {
+                parameterBufferCache->invalidate(materialPath);
             }
         }
     }

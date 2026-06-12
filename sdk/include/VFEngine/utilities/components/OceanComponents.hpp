@@ -19,6 +19,10 @@ namespace components
         float foamThreshold = -0.1f;
         float displacementScale = 4.0f;
         bool enabled = true;
+        // Persistent foam: how much advected previous-frame foam survives (0 = instantaneous
+        // Jacobian foam only) and its exponential decay rate per second
+        float foamPersistence = 0.85f;
+        float foamDecay = 0.5f;
     };
 
     struct OceanComponent
@@ -48,11 +52,18 @@ namespace components
 
         // Ocean FFT bands
         OceanBandData oceanBands[MAX_OCEAN_BANDS] = {
-            {256, 500.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true},   // Swell
-            {128, 100.0f,  8.0f, 60.0f, 0.00003f, 1.2f, -0.1f, 4.0f, true},   // Agitation
-            {128,  20.0f,  4.0f, 30.0f, 0.00001f, 0.8f, -0.1f, 4.0f, true},   // Ripples
+            {256, 500.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true, 0.85f, 0.5f},   // Swell
+            {128, 100.0f,  8.0f, 60.0f, 0.00003f, 1.2f, -0.1f, 4.0f, true, 0.85f, 0.5f},   // Agitation
+            {128,  20.0f,  4.0f, 30.0f, 0.00001f, 0.8f, -0.1f, 4.0f, true, 0.0f,  0.5f},   // Ripples
         };
         float oceanGravity = 9.81f;
+
+        // Weather-driven sea state: when enabled the ocean service maps the live
+        // WeatherState (wind/gusts) onto band wind/amplitude/choppiness each frame.
+        // Manual band authoring above stays untouched while this is off.
+        bool weatherDriven = false;
+        float weatherResponse = 1.0f;
+        float currentBeaufort = 3.0f;
 
         // Runtime
         float waterHeight = 0.0f;

@@ -53,6 +53,11 @@ namespace windows::details {
         bool hasVolumetricNavVolume = false;
         bool hasVolumetricAgent = false;
         bool hasDestructible = false;
+        bool hasBuoyancy = false;
+        bool hasUIStyle = false;
+        bool hasUITooltip = false;
+        bool hasUIWindow = false;
+        bool hasUIListView = false;
     };
 
     class AddComponentPopup {

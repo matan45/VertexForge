@@ -283,7 +283,20 @@ namespace core
         const int tileMaxZ = static_cast<int>(floorf(boundsMax.z / tileWorldSize));
         const int gridW = tileMaxX - tileMinX + 1;
         const int gridH = tileMaxZ - tileMinZ + 1;
-        const int maxTiles = std::max(1, gridW * gridH);
+        const int gridTiles = std::max(1, gridW * gridH);
+
+        // maxTiles caps concurrent residency, not the world grid: tiles are
+        // hash-addressed, so any grid coordinate fits as long as the resident
+        // count stays under budget. Clamping keeps saltBits >= 10 (dtNavMesh::init
+        // fails outright below that) for arbitrarily large streamed worlds.
+        const auto budget = navigation::computeNavmeshRefBudget(gridTiles, MAX_POLYS);
+        if (budget.clamped)
+        {
+            vfLogInfo("NavmeshAdapter: grid spans {} tiles, clamping resident tile budget to {} "
+                      "(salt {} / tile {} / poly {} bits) — streaming swaps tiles within the budget",
+                      gridTiles, budget.maxTiles, budget.saltBits, budget.tileBits, budget.polyBits);
+        }
+        maxResidentTiles = budget.maxTiles;
 
         dtNavMeshParams meshParams;
         memset(&meshParams, 0, sizeof(meshParams));
@@ -294,7 +307,7 @@ namespace core
         meshParams.orig[2] = 0.0f;
         meshParams.tileWidth = tileWorldSize;
         meshParams.tileHeight = tileWorldSize;
-        meshParams.maxTiles = maxTiles;
+        meshParams.maxTiles = budget.maxTiles;
         meshParams.maxPolys = MAX_POLYS;
 
         dtStatus status = navMesh->init(&meshParams);
@@ -340,6 +353,10 @@ namespace core
         dtStatus status = navMesh->addTile(data, tileData.dataSize, DT_TILE_FREE_DATA, 0, nullptr);
         if (dtStatusFailed(status))
         {
+            // Throttled: whole-world bakes past the budget would otherwise log per tile
+            if ((status & DT_OUT_OF_MEMORY) && (budgetWarnCount++ % 256) == 0)
+                vfLogWarning("NavmeshAdapter: resident tile budget ({}) exceeded — tile ({}, {}) not added "
+                             "({} occurrences)", maxResidentTiles, tileData.x, tileData.y, budgetWarnCount);
             dtFree(data);
             return false;
         }

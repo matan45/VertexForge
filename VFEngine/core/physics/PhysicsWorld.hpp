@@ -154,6 +154,14 @@ namespace core::physics
         bool getRagdollPose(uint64_t entityId, JPH::SkeletonPose& outPose) const;
         void applyRagdollImpulse(uint64_t entityId, const glm::vec3& impulse);
         void applyRagdollBoneImpulse(uint64_t entityId, int physicsBoneIndex, const glm::vec3& impulse);
+        void driveRagdollToPose(uint64_t entityId, const JPH::SkeletonPose& targetPose,
+                                const std::vector<float>& perBoneStrength,
+                                const std::vector<float>& perBoneMaxTorque);
+        void driveRagdollRoot(uint64_t entityId, const JPH::SkeletonPose& targetPose,
+                              float strength, float deltaTime);
+        void setRagdollMotorsOff(uint64_t entityId);
+        bool isRagdollBelowVelocityThreshold(uint64_t entityId, float linearThreshold,
+                                             float angularThreshold) const;
         bool createKinematicBoneBodies(uint64_t entityId, const RagdollBuildResult& buildResult,
                                         const glm::vec3& entityPosition = glm::vec3(0.0f));
         void destroyKinematicBoneBodies(uint64_t entityId);

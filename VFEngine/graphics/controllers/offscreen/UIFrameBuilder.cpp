@@ -10,6 +10,7 @@
 #include "../../render/text/TextTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "text/RichTextParser.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -150,6 +151,7 @@ namespace controllers::offscreen
                 renderData.lineSpacing = labelComp.lineSpacing;
                 renderData.letterSpacing = labelComp.letterSpacing;
                 renderData.wordWrap = labelComp.wordWrap;
+                renderData.richText = labelComp.richText;
                 renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
                 renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
                 renderData.overflow = labelComp.overflow;
@@ -159,6 +161,8 @@ namespace controllers::offscreen
                 renderData.stencilOp = (stencilDepth > 0)
                     ? render::ui::UIStencilOp::Test : render::ui::UIStencilOp::None;
                 renderData.stencilRef = stencilDepth;
+                // Labels inside windows join the overlay layer with the window
+                renderData.overlay = findOpenWindowAncestor(registry, entity) != entt::null;
                 drawList.push_back(std::move(renderData));
             }
         }
@@ -226,6 +230,7 @@ namespace controllers::offscreen
                 renderData.position = glm::vec2(rect.x + padding - tiComp.scrollOffsetX, rect.y);
                 renderData.size = glm::vec2(rect.w - padding * 2.0f + tiComp.scrollOffsetX, rect.h);
                 renderData.scissorRect = scissor;
+                renderData.overlay = findOpenWindowAncestor(registry, entity) != entt::null;
                 drawList.push_back(std::move(renderData));
             }
         }
@@ -315,7 +320,71 @@ namespace controllers::offscreen
                     renderData.position = glm::vec2(listX + padding, optionY);
                     renderData.size = glm::vec2(headerRect.w - padding * 2.0f, itemHeight);
                     renderData.scissorRect = listScissor;
+                    renderData.overlay = findOpenWindowAncestor(registry, dropdownEntity) != entt::null;
                     drawList.push_back(std::move(renderData));
+                }
+            }
+        }
+
+        // --- Screen-space labels: window title bar text + close glyph ---
+        void emitWindowTitleLabels(
+            entt::registry& registry,
+            std::vector<render::ui::UITextRenderData>& drawList,
+            float viewportW, float viewportH)
+        {
+            auto view = registry.view<components::UIWindowComponent, components::UIRectComponent>();
+            for (auto entity : view)
+            {
+                if (!isEntityActive(registry, entity))
+                    continue;
+
+                const auto& window = view.get<components::UIWindowComponent>(entity);
+                if (!window.showTitleBar || !window.fontRef.isValid())
+                    continue;
+
+                const auto* canvas = findCanvasForEntity(registry, entity);
+                if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                    canvas = &registry.get<components::UICanvasComponent>(entity);
+                if (!canvas) continue;
+
+                float scale = computeCanvasScale(canvas, viewportW, viewportH);
+                const auto& rectComp = view.get<components::UIRectComponent>(entity);
+                PixelRect rect = resolvePixelRect(rectComp, viewportW, viewportH, scale);
+                float titleH = window.titleBarHeight * scale;
+                float padding = 8.0f * scale;
+
+                if (!window.title.empty())
+                {
+                    render::ui::UITextRenderData title;
+                    title.fontPath = window.fontRef.resolve();
+                    title.text = window.title;
+                    title.fontSize = window.titleFontSize * scale;
+                    title.color = window.titleTextColor;
+                    title.wordWrap = false;
+                    title.horizontalAlignment = 0; // Left
+                    title.verticalAlignment = 1;   // Middle
+                    title.overflow = components::TextOverflow::Clip;
+                    title.position = glm::vec2(rect.x + padding, rect.y);
+                    title.size = glm::vec2(rect.w - titleH - padding * 2.0f, titleH);
+                    title.overlay = true;
+                    drawList.push_back(std::move(title));
+                }
+
+                if (window.closable)
+                {
+                    render::ui::UITextRenderData closeGlyph;
+                    closeGlyph.fontPath = window.fontRef.resolve();
+                    closeGlyph.text = "x";
+                    closeGlyph.fontSize = window.titleFontSize * scale;
+                    closeGlyph.color = window.titleTextColor;
+                    closeGlyph.wordWrap = false;
+                    closeGlyph.horizontalAlignment = 1; // Center
+                    closeGlyph.verticalAlignment = 1;   // Middle
+                    closeGlyph.overflow = components::TextOverflow::Overflow;
+                    closeGlyph.position = glm::vec2(rect.x + rect.w - titleH, rect.y);
+                    closeGlyph.size = glm::vec2(titleH, titleH);
+                    closeGlyph.overlay = true;
+                    drawList.push_back(std::move(closeGlyph));
                 }
             }
         }
@@ -488,7 +557,12 @@ namespace controllers::offscreen
 
             render::text::TextRenderData renderData;
             renderData.fontPath = labelComp.fontRef.resolve();
-            renderData.text = labelComp.text;
+            // World-space (edit-mode) labels render through the 3D text
+            // pipeline which has no per-char styles — strip markup so tags
+            // don't show literally; styled spans are screen-space only.
+            renderData.text = labelComp.richText
+                ? ::text::parseRichText(labelComp.text).strippedText
+                : labelComp.text;
             renderData.worldPosition = params.worldPosition;
             renderData.fontSize = params.worldFontSize;
             renderData.color = labelComp.color;
@@ -536,6 +610,33 @@ namespace controllers::offscreen
         emitLabelEntities(registry, drawList, viewportW, viewportH, scrollContainers);
         emitTextInputLabels(registry, drawList, viewportW, viewportH, scrollContainers);
         emitDropdownOptionLabels(registry, drawList, viewportW, viewportH);
+        emitWindowTitleLabels(registry, drawList, viewportW, viewportH);
+
+        // Text-mode tooltip content — overlay layer, drawn over the bubble
+        // background the image pass emitted this frame.
+        {
+            auto& tooltipState = registry.ctx().emplace<components::UITooltipState>();
+            if (tooltipState.visible && tooltipState.hoveredEntity != entt::null &&
+                registry.valid(tooltipState.hoveredEntity))
+            {
+                const auto* tip = registry.try_get<components::UITooltipComponent>(tooltipState.hoveredEntity);
+                if (tip && tip->mode == components::UITooltipMode::Text &&
+                    !tip->text.empty() && tip->fontRef.isValid())
+                {
+                    render::ui::UITextRenderData tipText;
+                    tipText.fontPath = tip->fontRef.resolve();
+                    tipText.text = tip->text;
+                    tipText.fontSize = tip->fontSize * tooltipState.canvasScale;
+                    tipText.color = tip->textColor;
+                    tipText.position = tooltipState.displayPos + tooltipState.contentOffset;
+                    tipText.size = tooltipState.contentSize;
+                    tipText.wordWrap = true;
+                    tipText.overflow = components::TextOverflow::Overflow;
+                    tipText.overlay = true;
+                    drawList.push_back(std::move(tipText));
+                }
+            }
+        }
 
         renderHandler->setUITextDrawList(std::move(drawList));
     }

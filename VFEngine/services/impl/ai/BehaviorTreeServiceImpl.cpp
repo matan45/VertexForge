@@ -40,6 +40,12 @@ namespace services
                 setEnabled(cmd.entity, cmd.enabled);
             });
 
+        dispatcher.registerCommandHandler<events::ai::ReloadBehaviorTreeAssetCommand>(
+            [this](const auto& cmd)
+            {
+                provider->reloadAsset(cmd.treePath);
+            });
+
         dispatcher.registerCommandHandler<events::ai::SetBlackboardValueCommand>(
             [this](const auto& cmd)
             {
@@ -81,6 +87,42 @@ namespace services
             [this](const auto& query)
             {
                 return provider->hasBlackboardKey(query.entity, query.key);
+            });
+
+        // === Debug ===
+        dispatcher.registerCommandHandler<events::ai::SetTreeDebugTargetCommand>(
+            [this](const auto& cmd)
+            {
+                provider->setDebugTarget(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ai::GetTreeRuntimeSnapshotQuery>(
+            [this](const auto& query)
+            {
+                return provider->getRuntimeSnapshot(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ai::GetAttachedBehaviorTreesQuery>(
+            [this](const auto&)
+            {
+                std::vector<events::ai::BTAttachedTreeInfo> result;
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::BehaviorTreeComponent>();
+                for (auto entity : view)
+                {
+                    auto handle = internal::toHandle(entity);
+                    if (!provider->hasTree(handle)) continue;
+
+                    events::ai::BTAttachedTreeInfo info;
+                    info.entity = handle;
+                    info.treePath = provider->getTreePath(handle);
+                    if (registry.all_of<components::NameComponent>(entity))
+                    {
+                        info.name = registry.get<components::NameComponent>(entity).name;
+                    }
+                    result.push_back(std::move(info));
+                }
+                return result;
             });
 
         // === ECS Component add/remove ===

@@ -34,12 +34,33 @@ namespace editor::graph
         return false;
     }
 
+    static bool liveStatusBorder(const std::unordered_map<uint32_t, BTNodeStatus>* statuses,
+                                 uint32_t nodeId, ImVec4& outColor)
+    {
+        if (!statuses) return false;
+        auto it = statuses->find(nodeId);
+        if (it == statuses->end()) return false;
+
+        switch (it->second)
+        {
+        case BTNodeStatus::Running: outColor = ImVec4(1.0f, 0.85f, 0.2f, 1.0f); return true;
+        case BTNodeStatus::Success: outColor = ImVec4(0.25f, 0.9f, 0.35f, 1.0f); return true;
+        case BTNodeStatus::Failure: outColor = ImVec4(0.95f, 0.25f, 0.25f, 1.0f); return true;
+        default: return false;
+        }
+    }
+
     void BTGraphEditor::drawNode(BTNode& node)
     {
         ImU32 nodeColor = getNodeColor(node.type);
 
+        ImVec4 borderColor(0.78f, 0.78f, 0.78f, 0.39f);
+        bool hasLiveStatus = liveStatusBorder(liveStatuses, node.id, borderColor);
+
         ed::PushStyleColor(ed::StyleColor_NodeBg, ImGui::ColorConvertU32ToFloat4(nodeColor));
-        ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.78f, 0.78f, 0.78f, 0.39f));
+        ed::PushStyleColor(ed::StyleColor_NodeBorder, borderColor);
+        if (hasLiveStatus)
+            ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 3.0f);
 
         ed::BeginNode(toEditorNodeId(node.id));
 
@@ -75,6 +96,8 @@ namespace editor::graph
 
         ed::EndNode();
 
+        if (hasLiveStatus)
+            ed::PopStyleVar();
         ed::PopStyleColor(2);
     }
 
@@ -82,10 +105,24 @@ namespace editor::graph
     {
         for (const auto& link : currentGraph->links)
         {
+            ImVec4 linkColor(0.8f, 0.8f, 0.8f, 1.0f);
+            float thickness = 2.0f;
+
+            // Highlight links feeding nodes that are Running this tick
+            if (liveStatuses)
+            {
+                auto it = liveStatuses->find(link.targetNodeId);
+                if (it != liveStatuses->end() && it->second == BTNodeStatus::Running)
+                {
+                    linkColor = ImVec4(1.0f, 0.85f, 0.2f, 1.0f);
+                    thickness = 3.5f;
+                }
+            }
+
             ed::Link(toEditorLinkId(link.id),
                       toOutputPinId(link.sourceNodeId),
                       toInputPinId(link.targetNodeId),
-                      ImVec4(0.8f, 0.8f, 0.8f, 1.0f), 2.0f);
+                      linkColor, thickness);
         }
     }
 
@@ -183,6 +220,38 @@ namespace editor::graph
             auto keyIt = node.properties.find("key");
             if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
                 ImGui::Text("Set: %s", std::get<std::string>(keyIt->second).c_str());
+            break;
+        }
+        case BTNodeType::BlackboardCondition:
+        {
+            auto keyIt = node.properties.find("key");
+            if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
+                ImGui::Text("If: %s", std::get<std::string>(keyIt->second).c_str());
+            auto modeIt = node.properties.find("abortMode");
+            if (modeIt != node.properties.end() && std::holds_alternative<std::string>(modeIt->second))
+            {
+                const auto& mode = std::get<std::string>(modeIt->second);
+                if (mode != "None")
+                    ImGui::Text("Abort: %s", mode.c_str());
+            }
+            break;
+        }
+        case BTNodeType::EnvironmentQuery:
+        {
+            auto qIt = node.properties.find("queryName");
+            if (qIt != node.properties.end() && std::holds_alternative<std::string>(qIt->second))
+                ImGui::Text("Query: %s", std::get<std::string>(qIt->second).c_str());
+            break;
+        }
+        case BTNodeType::SubTree:
+        {
+            auto pIt = node.properties.find("treePath");
+            if (pIt != node.properties.end() && std::holds_alternative<std::string>(pIt->second))
+            {
+                const auto& path = std::get<std::string>(pIt->second);
+                size_t slash = path.find_last_of("/\\");
+                ImGui::Text("Tree: %s", slash == std::string::npos ? path.c_str() : path.c_str() + slash + 1);
+            }
             break;
         }
         case BTNodeType::LineOfSight:

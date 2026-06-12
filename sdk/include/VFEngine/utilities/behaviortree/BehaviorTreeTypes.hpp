@@ -24,6 +24,7 @@ namespace behaviortree
         RepeatUntilFail,
         Cooldown,
         TimeLimit,
+        BlackboardCondition,
 
         Wait,
         Log,
@@ -33,7 +34,8 @@ namespace behaviortree
         CheckBlackboardValue,
         ScriptTask,
         EnvironmentQuery,
-        LineOfSight
+        LineOfSight,
+        SubTree
     };
 
     enum class BTNodeStatus : uint8_t
@@ -67,6 +69,17 @@ namespace behaviortree
         Less,
         GreaterEqual,
         LessEqual
+    };
+
+    // Observer-abort behavior for BlackboardCondition decorators:
+    // - Self: while the guarded subtree runs, re-evaluate each tick and abort it when the condition turns false
+    // - LowerPriority: when this condition (as a Selector child) becomes true, abort the running lower-priority sibling branch
+    enum class AbortMode : uint8_t
+    {
+        None,
+        Self,
+        LowerPriority,
+        Both
     };
 
     enum class LogLevel : uint8_t
@@ -131,6 +144,16 @@ namespace behaviortree
         BTGraph graph;
     };
 
+    // Point-in-time view of a live runtime for the editor debugger.
+    // Copied under a lock because trees tick on a worker task while ImGui reads on the main thread.
+    struct BTRuntimeSnapshot
+    {
+        bool valid = false;
+        uint64_t tickIndex = 0;
+        std::unordered_map<uint32_t, BTNodeStatus> nodeStatuses;
+        std::vector<std::pair<std::string, BlackboardValue>> blackboard;
+    };
+
     bool isCompositeNode(BTNodeType type);
     bool isDecoratorNode(BTNodeType type);
     bool isTaskNode(BTNodeType type);
@@ -145,6 +168,9 @@ namespace behaviortree
 
     const char* compareOpToString(CompareOp op);
     CompareOp stringToCompareOp(const std::string& str);
+
+    const char* abortModeToString(AbortMode mode);
+    AbortMode stringToAbortMode(const std::string& str);
 
     const char* logLevelToString(LogLevel level);
     LogLevel stringToLogLevel(const std::string& str);

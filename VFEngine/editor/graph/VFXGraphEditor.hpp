@@ -5,6 +5,7 @@
 #include <imgui_node_editor.h>
 #include <functional>
 #include <string>
+#include <vector>
 
 struct ImDrawList;
 
@@ -93,6 +94,15 @@ namespace editor::graph {
         void handleCreation();
         void handleDeletion();
         void handleContextMenu();
+        void handleClipboardShortcuts();
+        void copySelection();
+        void pasteClipboard();
+        void duplicateSelection();
+
+        // Shared across editor instances so nodes can be pasted between .vfx files
+        static std::vector<vfx::VFXNode> clipboardNodes;
+        static std::vector<vfx::VFXNodeLink> clipboardLinks;
+        int pasteCount = 0;
 
         void addNode(vfx::VFXNodeType type);
         void addShapeNode(vfx::ShapeType shapeType, const std::string& name);

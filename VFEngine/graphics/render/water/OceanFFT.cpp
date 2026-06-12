@@ -40,6 +40,8 @@ namespace render::water
 
         spectrumDirty = true;
         firstDispatch = true;
+        foamHistoryIndex = 0;
+        lastDispatchTime = -1.0f;
         initialized = true;
 
         vfLogInfo("OceanFFT: Initialized ({}x{}, patch={}, wind={})",
@@ -140,7 +142,38 @@ namespace render::water
         pipelines->dispatchFFT(cmd, config, *resources);
         OceanFFTPipelines::insertComputeBarrier(cmd);
 
-        pipelines->dispatchMerge(cmd, config, *resources);
+        // Foam history ping-pong: last frame's "curr" (written, General) becomes this
+        // frame's "prev" (sampled, ShaderReadOnly) and vice versa. The initial layouts
+        // set up in OceanFFTResources::transitionImagesInitial satisfy frame 0.
+        {
+            std::array<vk::ImageMemoryBarrier, 2> foamBarriers{};
+
+            foamBarriers[0].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+            foamBarriers[0].dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            foamBarriers[0].oldLayout = vk::ImageLayout::eGeneral;
+            foamBarriers[0].newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            foamBarriers[0].image = resources->getFoamHistoryImage(foamHistoryIndex);
+            foamBarriers[0].subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+
+            foamBarriers[1].srcAccessMask = vk::AccessFlagBits::eShaderRead;
+            foamBarriers[1].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+            foamBarriers[1].oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            foamBarriers[1].newLayout = vk::ImageLayout::eGeneral;
+            foamBarriers[1].image = resources->getFoamHistoryImage(foamHistoryIndex + 1);
+            foamBarriers[1].subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eComputeShader,
+                vk::PipelineStageFlagBits::eComputeShader,
+                {}, {}, {}, foamBarriers);
+        }
+
+        // dt for foam advection/decay; clamp so alt-tab pauses don't teleport the foam
+        float deltaTime = lastDispatchTime >= 0.0f ? glm::clamp(time - lastDispatchTime, 0.0f, 0.1f) : 0.0f;
+        lastDispatchTime = time;
+
+        pipelines->dispatchMerge(cmd, config, *resources, deltaTime, foamHistoryIndex);
+        foamHistoryIndex = 1 - foamHistoryIndex;
 
         readback->recordCopy(cmd, resources->getDisplacementImage(), config.resolution);
     }

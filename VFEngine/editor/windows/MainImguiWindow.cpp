@@ -40,6 +40,7 @@ namespace windows
         menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
+        menuBar.setThemeEditorWindow(&themeEditorWindow);
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
         menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
 
@@ -52,6 +53,7 @@ namespace windows
         environmentWindow.setWindows(&atmosphereConfigWindow, &cloudConfigWindow,
                                       &volumetricFogConfigWindow, &weatherEditorWindow);
         menuBar.setEnvironmentWindow(&environmentWindow);
+        menuBar.setExportGameWindow(&exportGameWindow);
 
         subscribeToEvents();
 
@@ -215,11 +217,13 @@ namespace windows
             inputActionMappingWindow.draw();
             heightmapGeneratorWindow.draw();
             backgroundRemovalWindow.draw();
+            themeEditorWindow.draw();
             memoryDiagnosticsWindow.draw();
             editorPreferencesWindow.draw();
             editorSettingsWindow.draw();
             environmentWindow.draw();
             weatherEditorWindow.draw();
+            exportGameWindow.draw();
         }
         ImGui::End();
 

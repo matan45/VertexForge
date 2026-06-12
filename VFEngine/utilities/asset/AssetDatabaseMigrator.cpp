@@ -1,5 +1,6 @@
 #include "AssetDatabaseMigrator.hpp"
 #include "AssetDatabase.hpp"
+#include "AssetExtensions.hpp"
 #include "AssetMetadataSerializer.hpp"
 #include "../print/Log.hpp"
 #include <algorithm>
@@ -12,30 +13,7 @@ namespace asset
 {
     resource::AssetType AssetDatabaseMigrator::detectAssetType(const std::string& extension)
     {
-        std::string ext = extension;
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-        if (ext == ".vfimage")         return resource::AssetType::Texture;
-        if (ext == ".vfhdr")           return resource::AssetType::HDR;
-        if (ext == ".vfmesh")          return resource::AssetType::Mesh;
-        if (ext == ".vfaudio")         return resource::AssetType::Audio;
-        if (ext == ".vfanim")          return resource::AssetType::Animation;
-        if (ext == ".vfmat")           return resource::AssetType::Material;
-        if (ext == ".vfmatinstance")    return resource::AssetType::MaterialInstance;
-        if (ext == ".vfanimator")      return resource::AssetType::Animator;
-        if (ext == ".vfvfx")           return resource::AssetType::VFX;
-        if (ext == ".vffont")          return resource::AssetType::Font;
-        if (ext == ".vfnavmesh")       return resource::AssetType::Navmesh;
-        if (ext == ".vfnavindex")      return resource::AssetType::Navmesh;
-        if (ext == ".vfinputmapping") return resource::AssetType::InputMapping;
-        if (ext == ".vfterrain")      return resource::AssetType::Terrain;
-        if (ext == ".vfterrainmat")   return resource::AssetType::TerrainMaterial;
-        if (ext == ".vfbehaviortree") return resource::AssetType::BehaviorTree;
-        if (ext == ".vfphysanim")  return resource::AssetType::PhysicsShape;
-        if (ext == ".vfscene")     return resource::AssetType::Scene;
-        if (ext == ".vfsettings")  return resource::AssetType::Scene;
-        if (ext == ".mt")          return resource::AssetType::Script;
-        return resource::AssetType::COUNT;
+        return extensions::typeForExtension(extension);
     }
 
     resource::AssetType AssetDatabaseMigrator::detectAssetTypeFromPath(const std::string& filePath)
@@ -49,14 +27,7 @@ namespace asset
     {
         MigrationResult result;
 
-        static const std::unordered_set<std::string> assetExtensions = {
-            ".vfimage", ".vfhdr", ".vfmesh", ".vfaudio", ".vfanim",
-            ".vfmat", ".vfmatinstance", ".vfanimator", ".vfvfx",
-            ".vffont", ".vfscene", ".vfsettings", ".vfprefab", ".vfterrain",
-            ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfnavindex", ".vfimposter",
-            ".vfinputmapping", ".vfbehaviortree", ".vfphysanim",
-            ".mt"
-        };
+        const auto& assetExtensions = extensions::allAssetExtensions();
 
         try
         {

@@ -36,6 +36,12 @@ namespace services
                 setInstanceTransform(cmd.instanceId, cmd.worldTransform);
             });
 
+        dispatcher.registerCommandHandler<events::vfxruntime::ApplyVFXInstanceOverridesCommand>(
+            [this](const events::vfxruntime::ApplyVFXInstanceOverridesCommand& cmd)
+            {
+                applyInstanceOverrides(cmd.instanceId, cmd.overrides);
+            });
+
         dispatcher.registerCommandHandler<events::vfxruntime::PlayVFXInstanceCommand>(
             [this](const events::vfxruntime::PlayVFXInstanceCommand& cmd)
             {
@@ -162,6 +168,12 @@ namespace services
     {
         if (vfxProvider)
             vfxProvider->destroyInstance(id);
+    }
+
+    void VFXRuntimeServiceImpl::applyInstanceOverrides(VFXInstanceId id, const VFXEmitterOverrides& overrides)
+    {
+        if (vfxProvider)
+            vfxProvider->applyInstanceOverrides(id, overrides);
     }
 
     void VFXRuntimeServiceImpl::setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform)

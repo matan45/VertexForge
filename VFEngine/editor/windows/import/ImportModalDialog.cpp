@@ -6,43 +6,116 @@
 #include "config/Config.hpp"
 #include <resource/AssetTypes.hpp>
 #include <imgui.h>
+#include <algorithm>
 #include <thread>
-
-namespace
-{
-    resource::AssetType importFileTypeToAssetType(const std::string& fileType)
-    {
-        if (fileType == "PNG" || fileType == "JPEG" || fileType == "BMP" || fileType == "TGA")
-            return resource::AssetType::Texture;
-        if (fileType == "HDR" || fileType == "EXR")
-            return resource::AssetType::HDR;
-        if (fileType == "MP3" || fileType == "WAV" || fileType == "OGG")
-            return resource::AssetType::Audio;
-        if (fileType == "OBJ" || fileType == "FBX" || fileType == "DAE" || fileType == "GLTF" || fileType == "GLB")
-            return resource::AssetType::Mesh;
-        if (fileType == "TTF" || fileType == "OTF")
-            return resource::AssetType::Font;
-        return resource::AssetType::COUNT;
-    }
-}
 
 namespace windows
 {
     void ImportModalDialog::openImportDialog()
     {
-        std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-            {L"Model Files (*.obj;*.fbx;*.dae;*.gltf)", L"*.obj;*.fbx;*.dae;*.gltf"},
-            {L"Image Files (*.png;*.jpg;*.jpeg;*.bmp;*.tga)", L"*.png;*.jpg;*.jpeg;*.bmp;*.tga"},
-            {L"Hdr Files (*.exr;*.hdr)", L"*.exr;*.hdr"},
-            {L"Audio Files (*.wav;*.ogg;*.mp3)", L"*.wav;*.ogg;*.mp3"},
-            {L"Font Files (*.ttf;*.otf)", L"*.ttf;*.otf"}
-        };
+        // Filter list comes from the importer registry, so plugin-registered
+        // formats appear automatically alongside the built-ins.
+        std::vector<std::pair<std::string, std::string>> categories; // displayName -> "*.a;*.b"
+        for (const auto& format : controllers::Import::supportedFormats())
+        {
+            auto category = std::find_if(categories.begin(), categories.end(),
+                                         [&](const auto& c) { return c.first == format.displayName; });
+            if (category == categories.end())
+            {
+                categories.emplace_back(format.displayName, "");
+                category = std::prev(categories.end());
+            }
+
+            for (const auto& ext : format.extensions)
+            {
+                std::string pattern = "*." + ext;
+                if (category->second.find(pattern) != std::string::npos)
+                    continue;
+                if (!category->second.empty())
+                    category->second += ";";
+                category->second += pattern;
+            }
+        }
+
+        std::vector<std::pair<std::wstring, std::wstring>> fileTypes;
+        fileTypes.reserve(categories.size());
+        for (const auto& [displayName, patterns] : categories)
+        {
+            std::wstring wName(displayName.begin(), displayName.end());
+            std::wstring wPatterns(patterns.begin(), patterns.end());
+            fileTypes.emplace_back(wName + L" (" + wPatterns + L")", wPatterns);
+        }
 
         files = fileDialog.multiSelectFileDialog(fileTypes);
         if (!files.empty())
         {
+            customOptions.clear();
             openModal = true;
         }
+    }
+
+    void ImportModalDialog::drawCustomOptions(size_t fileIndex)
+    {
+        std::string extension = files::FileUtils::getFileExtension(files[fileIndex]);
+        if (!extension.empty() && extension.front() == '.')
+            extension.erase(0, 1);
+
+        auto optionDescs = controllers::Import::optionsForExtension(extension);
+        if (optionDescs.empty())
+            return;
+
+        auto& values = customOptions[fileIndex];
+        ImGui::Indent();
+        for (const auto& desc : optionDescs)
+        {
+            auto [stored, inserted] = values.try_emplace(desc.key, desc.defaultValue);
+
+            switch (desc.type)
+            {
+                case import::ImportOptionDesc::Type::Bool:
+                {
+                    bool value = std::holds_alternative<bool>(stored->second) &&
+                                 std::get<bool>(stored->second);
+                    if (ImGui::Checkbox(desc.label.c_str(), &value))
+                        stored->second = value;
+                    break;
+                }
+                case import::ImportOptionDesc::Type::Int:
+                {
+                    int value = std::holds_alternative<int32_t>(stored->second)
+                                ? std::get<int32_t>(stored->second) : 0;
+                    if (ImGui::SliderInt(desc.label.c_str(), &value,
+                                         static_cast<int>(desc.minValue), static_cast<int>(desc.maxValue)))
+                        stored->second = static_cast<int32_t>(value);
+                    break;
+                }
+                case import::ImportOptionDesc::Type::Float:
+                {
+                    float value = std::holds_alternative<float>(stored->second)
+                                  ? std::get<float>(stored->second) : 0.0f;
+                    if (ImGui::SliderFloat(desc.label.c_str(), &value, desc.minValue, desc.maxValue))
+                        stored->second = value;
+                    break;
+                }
+                case import::ImportOptionDesc::Type::Enum:
+                {
+                    int value = std::holds_alternative<int32_t>(stored->second)
+                                ? std::get<int32_t>(stored->second) : 0;
+                    std::vector<const char*> names;
+                    names.reserve(desc.enumNames.size());
+                    for (const auto& name : desc.enumNames)
+                        names.push_back(name.c_str());
+                    if (ImGui::Combo(desc.label.c_str(), &value, names.data(),
+                                     static_cast<int>(names.size())))
+                        stored->second = static_cast<int32_t>(value);
+                    break;
+                }
+            }
+
+            if (!desc.tooltip.empty() && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", desc.tooltip.c_str());
+        }
+        ImGui::Unindent();
     }
 
     void ImportModalDialog::draw()
@@ -61,6 +134,7 @@ namespace windows
             requests.reserve(files.size());
             isFlip.resize(files.size(), false);
             meshConfigs.resize(files.size());
+            customOptions.resize(files.size());
 
             ImGui::Text("Files Dropped:");
             for (size_t i = 0; i < files.size(); i++)
@@ -230,6 +304,8 @@ namespace windows
                     ImGui::Unindent();
                 }
 
+                drawCustomOptions(i);
+
                 services::ImportFileRequest request;
                 request.path = files[i];
                 request.flipVertically = isFlip[i];
@@ -332,6 +408,7 @@ namespace windows
                     config.compressionQuality = compressionQuality;
                     config.audioConfig.quality = audioQuality;
                     config.audioConfig.loadType = audioLoadType;
+                    config.customOptions = customOptions[i];
                     importFiles.emplace_back(req.path, config);
                     filePaths.push_back(req.path);
                 }
@@ -367,7 +444,7 @@ namespace windows
                         services::ImportResult res;
                         res.sourcePath = fileResult.sourcePath;
                         res.outputPath = fileResult.outputPath;
-                        res.assetType = importFileTypeToAssetType(fileResult.fileType);
+                        res.assetType = controllers::Import::assetTypeFor(fileResult.fileType);
                         res.success = fileResult.success;
                         res.errorMessage = fileResult.errorMessage;
                         completeNotif.results.push_back(res);

@@ -72,6 +72,7 @@ namespace render::vfx
 namespace render::upscaling
 {
     class MotionVectorPass;
+    class ReactiveMaskPass;
     class UpscaleManager;
 }
 
@@ -176,6 +177,10 @@ namespace render
         bool wboitEnabled = true;
 
         std::unique_ptr<upscaling::MotionVectorPass> motionVectorPass;
+        std::unique_ptr<upscaling::ReactiveMaskPass> reactiveMaskPass;
+        // Set when the opaque-only scene color was copied this frame (consumed
+        // by executeUpscalePass to generate the reactive mask)
+        mutable bool preTransparencyCaptured = false;
         bool upscaleFirstFrame = true;
 
         std::unique_ptr<decal::DecalPipeline> decalPipeline;
@@ -272,6 +277,10 @@ namespace render
         // Render graph
         std::unique_ptr<graph::RenderGraph> frameGraph;
         std::unique_ptr<graph::RenderGraphProfiler> graphProfiler;
+        // Lazy init on first enable request from the profiler UI (GpuPassStats);
+        // unsupported = timestamp queries unavailable, never retry
+        bool graphProfilerInitialized = false;
+        bool graphProfilerUnsupported = false;
         graph::ResourceHandle sceneColorHandle;
         graph::ResourceHandle depthHandle;
         // Scoped MSAA: multisampled scene targets. Pre-resolve passes (ClearColor,
@@ -553,6 +562,10 @@ namespace render
         // Once-per-frame poll: forwards the active RT shadow mask layout to the
         // custom pipeline manager (rebuilds lit pipelines when it first arrives).
         void syncCustomPipelineRTShadow();
+        // Once-per-frame poll of the profiler UI's enable request (GpuPassStats):
+        // lazy-inits the GPU pass profiler, reads back last frame's timestamps
+        // and publishes the snapshot for the editor.
+        void syncGraphProfiler(uint32_t imageIndex);
         void drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void drawUIOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
@@ -563,6 +576,11 @@ namespace render
 
         void initDistortionPass();
         void executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+
+        // Copies the opaque-only scene color (pre-VFX/WBOIT) into
+        // offscreenResources.preTransparencyColor for reactive mask generation.
+        // No-op unless upscaling is active and its resources exist.
+        void capturePreTransparencyColor(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         // Render graph
         void importFrameResources(uint32_t imageIndex);

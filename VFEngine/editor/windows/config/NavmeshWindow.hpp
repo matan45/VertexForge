@@ -32,6 +32,7 @@ namespace windows
         void drawAreaCosts();
         void drawLodSettings();
         void drawActions();
+        void drawWorldBake();
         void drawTileStatus();
         void drawStreamingConfig();
 

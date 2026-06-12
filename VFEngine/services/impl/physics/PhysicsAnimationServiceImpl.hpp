@@ -25,6 +25,12 @@ namespace services
         void applyRagdollBoneImpulse(EntityHandle entity, int animBoneIndex,
                                       const glm::vec3& impulse) override;
 
-    
+        void setMode(EntityHandle entity, types::PhysicsAnimationMode mode) override;
+        void setBoneMotorStrength(EntityHandle entity, const std::string& boneName,
+                                   float strength) override;
+        void setGlobalMotorStrength(EntityHandle entity, float strength) override;
+        void applyHitReaction(EntityHandle entity, const std::string& boneName,
+                               const glm::vec3& impulse, float recoverTime = -1.0f) override;
+        bool isRagdollSettled(EntityHandle entity) const override;
     };
 }

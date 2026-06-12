@@ -9,6 +9,7 @@
 #include "../../common/CameraTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
 #include "vfx/VFXEventTypes.hpp"
+#include "vfx/VFXBurstTypes.hpp"
 
 namespace render::vfx
 {
@@ -215,10 +216,13 @@ namespace render::vfx
         float coneSpread = 0.5f;  // radians, cone half-angle for emission direction
         std::string texturePath;
         bool looping = true;
+        // Fraction of the emitter's own world velocity passed to new particles (0..1)
+        float inheritVelocityRatio = 0.0f;
 
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;
         ::vfx::ShapeConfig shape;
+        std::vector<::vfx::VFXBurst> bursts;
 
         int flipbookRows = 1;
         int flipbookColumns = 1;
@@ -249,6 +253,11 @@ namespace render::vfx
         float lightingInfluence = 0.0f;
         int normalMode = 0;
         float ambientAmount = 0.3f;
+
+        // Proxy light emission (instance illuminates the scene as a point light)
+        bool lightEmissionEnabled = false;
+        float lightEmissionIntensity = 5.0f;
+        float lightEmissionRadius = 10.0f;
 
         bool collisionEnabled = false;
         float collisionBounce = 0.5f;

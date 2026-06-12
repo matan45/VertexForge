@@ -2,6 +2,7 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -50,6 +51,8 @@ namespace windows::details
             changed |= drawPixelsPerUnit(data);
             ImGui::Spacing();
             changed |= drawSortOrder(data);
+            ImGui::Spacing();
+            drawTheme(handle);
 
             if (changed)
             {
@@ -137,6 +140,63 @@ namespace windows::details
         }
 
         return changed;
+    }
+
+    void UICanvasDrawer::drawTheme(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::ui::GetCanvasThemeQuery themeQuery;
+        themeQuery.entity = handle;
+        auto themePath = dispatcher.query(themeQuery);
+
+        ImGui::SeparatorText("Theme");
+
+        if (themePath.has_value() && !themePath->empty())
+        {
+            std::string filename = *themePath;
+            auto lastSlash = filename.find_last_of("/\\");
+            if (lastSlash != std::string::npos)
+                filename = filename.substr(lastSlash + 1);
+            ImGui::Text("Theme: %s", filename.c_str());
+        }
+        else
+        {
+            ImGui::TextDisabled("No theme assigned");
+        }
+
+        if (ImGui::Button("Select Theme##UICanvas"))
+        {
+            nfd::FileDialog fileDialog;
+            std::string path = fileDialog.openFileDialog(
+                {{L"VF Theme Files (*.vfTheme)", L"*.vfTheme"}});
+            if (!path.empty())
+            {
+                events::ui::SetCanvasThemeCommand cmd;
+                cmd.entity = handle;
+                cmd.themePath = path;
+                dispatcher.execute(cmd);
+            }
+        }
+
+        ImGui::SameLine();
+        bool noTheme = !themePath.has_value() || themePath->empty();
+        if (noTheme) ImGui::BeginDisabled();
+        if (ImGui::Button("Reapply##UICanvasTheme"))
+        {
+            events::ui::ReapplyUIThemeCommand cmd;
+            cmd.canvas = handle;
+            dispatcher.execute(cmd);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear##UICanvasTheme"))
+        {
+            events::ui::SetCanvasThemeCommand cmd;
+            cmd.entity = handle;
+            cmd.themePath = "";
+            dispatcher.execute(cmd);
+        }
+        if (noTheme) ImGui::EndDisabled();
     }
 
     bool UICanvasDrawer::drawSortOrder(services::UICanvasData& data)

@@ -97,7 +97,8 @@ namespace behaviortree
     {
         return type == BTNodeType::Inverter || type == BTNodeType::Repeater ||
                type == BTNodeType::Succeeder || type == BTNodeType::RepeatUntilFail ||
-               type == BTNodeType::Cooldown || type == BTNodeType::TimeLimit;
+               type == BTNodeType::Cooldown || type == BTNodeType::TimeLimit ||
+               type == BTNodeType::BlackboardCondition;
     }
 
     bool isTaskNode(BTNodeType type)
@@ -106,7 +107,7 @@ namespace behaviortree
                type == BTNodeType::MoveTo || type == BTNodeType::PlayAnimation ||
                type == BTNodeType::SetBlackboardValue || type == BTNodeType::CheckBlackboardValue ||
                type == BTNodeType::ScriptTask || type == BTNodeType::EnvironmentQuery ||
-               type == BTNodeType::LineOfSight;
+               type == BTNodeType::LineOfSight || type == BTNodeType::SubTree;
     }
 
     bool isRootNode(BTNodeType type)
@@ -134,6 +135,7 @@ namespace behaviortree
         case BTNodeType::RepeatUntilFail: return "RepeatUntilFail";
         case BTNodeType::Cooldown: return "Cooldown";
         case BTNodeType::TimeLimit: return "TimeLimit";
+        case BTNodeType::BlackboardCondition: return "BlackboardCondition";
         case BTNodeType::Wait: return "Wait";
         case BTNodeType::Log: return "Log";
         case BTNodeType::MoveTo: return "MoveTo";
@@ -143,6 +145,7 @@ namespace behaviortree
         case BTNodeType::ScriptTask: return "ScriptTask";
         case BTNodeType::EnvironmentQuery: return "EnvironmentQuery";
         case BTNodeType::LineOfSight: return "LineOfSight";
+        case BTNodeType::SubTree: return "SubTree";
         default: return "Unknown";
         }
     }
@@ -159,6 +162,7 @@ namespace behaviortree
         if (str == "RepeatUntilFail") return BTNodeType::RepeatUntilFail;
         if (str == "Cooldown") return BTNodeType::Cooldown;
         if (str == "TimeLimit") return BTNodeType::TimeLimit;
+        if (str == "BlackboardCondition") return BTNodeType::BlackboardCondition;
         if (str == "Wait") return BTNodeType::Wait;
         if (str == "Log") return BTNodeType::Log;
         if (str == "MoveTo") return BTNodeType::MoveTo;
@@ -168,6 +172,7 @@ namespace behaviortree
         if (str == "ScriptTask") return BTNodeType::ScriptTask;
         if (str == "EnvironmentQuery") return BTNodeType::EnvironmentQuery;
         if (str == "LineOfSight") return BTNodeType::LineOfSight;
+        if (str == "SubTree") return BTNodeType::SubTree;
         return BTNodeType::Sequence;
     }
 
@@ -219,6 +224,27 @@ namespace behaviortree
         if (str == ">=") return CompareOp::GreaterEqual;
         if (str == "<=") return CompareOp::LessEqual;
         return CompareOp::Equal;
+    }
+
+    const char* abortModeToString(AbortMode mode)
+    {
+        switch (mode)
+        {
+        case AbortMode::None: return "None";
+        case AbortMode::Self: return "Self";
+        case AbortMode::LowerPriority: return "LowerPriority";
+        case AbortMode::Both: return "Both";
+        default: return "None";
+        }
+    }
+
+    AbortMode stringToAbortMode(const std::string& str)
+    {
+        if (str == "None") return AbortMode::None;
+        if (str == "Self") return AbortMode::Self;
+        if (str == "LowerPriority") return AbortMode::LowerPriority;
+        if (str == "Both") return AbortMode::Both;
+        return AbortMode::None;
     }
 
     const char* logLevelToString(LogLevel level)

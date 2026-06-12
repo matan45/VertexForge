@@ -45,6 +45,11 @@ function vfExportPluginSDK()
       n = n + copyTree("VFEngine/services",         "**.hpp", sdk .. "/include/VFEngine/services")
       n = n + copyTree("VFEngine/utilities",        "**.hpp", sdk .. "/include/VFEngine/utilities")
       n = n + copyTree("VFEngine/core/controllers", "**.hpp", sdk .. "/include/VFEngine/core/controllers")
+      -- Import interfaces for registerAssetImporter / registerImportStage —
+      -- only the headers a plugin importer implements against; the registry
+      -- and the built-in importers stay engine-side.
+      n = n + copyTree("VFEngine/import/registry",  "AssetImporter.hpp", sdk .. "/include/VFEngine/import/registry")
+      n = n + copyTree("VFEngine/import/pipeline",  "Pipeline.hpp",      sdk .. "/include/VFEngine/import/pipeline")
       print("  engine headers: " .. n)
 
       -- Header-only third-party dependencies
@@ -120,6 +125,7 @@ project (PLUGIN_NAME)
       sdkDir .. "/include/VFEngine/utilities",
       sdkDir .. "/include/VFEngine/services",
       sdkDir .. "/include/VFEngine/core/controllers",
+      sdkDir .. "/include/VFEngine/import",
       sdkDir .. "/deps/glm",
       sdkDir .. "/deps/entt",
       sdkDir .. "/deps/json",

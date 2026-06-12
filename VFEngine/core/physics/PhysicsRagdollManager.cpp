@@ -6,6 +6,7 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/GroupFilterTable.h>
+#include <Jolt/Physics/Constraints/SwingTwistConstraint.h>
 #include "print/Log.hpp"
 
 namespace core::physics
@@ -179,6 +180,121 @@ namespace core::physics
         {
             ctx->getBodyInterface().AddImpulse(bodyId, toJolt(impulse));
         }
+    }
+
+    void PhysicsRagdollManager::driveRagdollToPose(uint64_t entityId, const JPH::SkeletonPose& targetPose,
+                                                    const std::vector<float>& perBoneStrength,
+                                                    const std::vector<float>& perBoneMaxTorque)
+    {
+        auto it = entityRagdolls.find(entityId);
+        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+
+        JPH::Ragdoll* ragdoll = it->second.ragdoll;
+        const JPH::RagdollSettings* settings = ragdoll->GetRagdollSettings();
+
+        // Mirrors Jolt's Ragdoll::DriveToPoseUsingMotors, with per-bone motor
+        // state/torque control instead of unconditional Position motors
+        int boneCount = static_cast<int>(targetPose.GetJointMatrices().size());
+        for (int i = 0; i < boneCount; ++i)
+        {
+            int constraintIdx = settings->GetConstraintIndexForBodyIndex(i);
+            if (constraintIdx < 0) continue;
+
+            JPH::TwoBodyConstraint* constraint = ragdoll->GetConstraint(constraintIdx);
+            if (constraint->GetSubType() != JPH::EConstraintSubType::SwingTwist) continue;
+            auto* swingTwist = static_cast<JPH::SwingTwistConstraint*>(constraint);
+
+            float strength = i < static_cast<int>(perBoneStrength.size()) ? perBoneStrength[i] : 1.0f;
+            if (strength <= 0.01f)
+            {
+                swingTwist->SetSwingMotorState(JPH::EMotorState::Off);
+                swingTwist->SetTwistMotorState(JPH::EMotorState::Off);
+                continue;
+            }
+
+            float maxTorque = i < static_cast<int>(perBoneMaxTorque.size()) ? perBoneMaxTorque[i] : 150.0f;
+            swingTwist->GetSwingMotorSettings().SetTorqueLimit(maxTorque * strength);
+            swingTwist->GetTwistMotorSettings().SetTorqueLimit(maxTorque * strength);
+            swingTwist->SetSwingMotorState(JPH::EMotorState::Position);
+            swingTwist->SetTwistMotorState(JPH::EMotorState::Position);
+            swingTwist->SetTargetOrientationBS(targetPose.GetJoint(i).mRotation);
+        }
+    }
+
+    void PhysicsRagdollManager::driveRagdollRoot(uint64_t entityId, const JPH::SkeletonPose& targetPose,
+                                                  float strength, float deltaTime)
+    {
+        if (strength <= 0.01f || deltaTime <= 0.0f) return;
+
+        auto it = entityRagdolls.find(entityId);
+        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+
+        JPH::Ragdoll* ragdoll = it->second.ragdoll;
+        if (ragdoll->GetBodyCount() == 0 || targetPose.GetJointMatrices().empty()) return;
+
+        JPH::BodyID rootBody = ragdoll->GetBodyID(0);
+        if (rootBody.IsInvalid()) return;
+
+        auto& bodyInterface = ctx->getBodyInterface();
+
+        const JPH::Mat44& rootJoint = targetPose.GetJointMatrix(0);
+        JPH::RVec3 targetPos = targetPose.GetRootOffset() + rootJoint.GetTranslation();
+        JPH::Quat targetRot = rootJoint.GetQuaternion().Normalized();
+
+        JPH::RVec3 currentPos = bodyInterface.GetPosition(rootBody);
+        JPH::Quat currentRot = bodyInterface.GetRotation(rootBody);
+
+        JPH::Vec3 linearVelocity = JPH::Vec3(targetPos - currentPos) * (strength / deltaTime);
+        JPH::Vec3 angularVelocity =
+            (targetRot * currentRot.Conjugated()).GetAngularVelocity(deltaTime) * strength;
+
+        // Cap correction speed so teleports/desyncs don't launch the ragdoll
+        constexpr float maxLinearCorrection = 20.0f;  // m/s
+        constexpr float maxAngularCorrection = 30.0f; // rad/s
+        float linearSpeed = linearVelocity.Length();
+        if (linearSpeed > maxLinearCorrection)
+            linearVelocity *= maxLinearCorrection / linearSpeed;
+        float angularSpeed = angularVelocity.Length();
+        if (angularSpeed > maxAngularCorrection)
+            angularVelocity *= maxAngularCorrection / angularSpeed;
+
+        bodyInterface.SetLinearAndAngularVelocity(rootBody, linearVelocity, angularVelocity);
+    }
+
+    void PhysicsRagdollManager::setRagdollMotorsOff(uint64_t entityId)
+    {
+        auto it = entityRagdolls.find(entityId);
+        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+
+        JPH::Ragdoll* ragdoll = it->second.ragdoll;
+        for (int i = 0; i < static_cast<int>(ragdoll->GetConstraintCount()); ++i)
+        {
+            JPH::TwoBodyConstraint* constraint = ragdoll->GetConstraint(i);
+            if (constraint->GetSubType() != JPH::EConstraintSubType::SwingTwist) continue;
+            auto* swingTwist = static_cast<JPH::SwingTwistConstraint*>(constraint);
+            swingTwist->SetSwingMotorState(JPH::EMotorState::Off);
+            swingTwist->SetTwistMotorState(JPH::EMotorState::Off);
+        }
+    }
+
+    bool PhysicsRagdollManager::isRagdollBelowVelocityThreshold(uint64_t entityId, float linearThreshold,
+                                                                 float angularThreshold) const
+    {
+        auto it = entityRagdolls.find(entityId);
+        if (it == entityRagdolls.end() || !it->second.ragdoll) return false;
+
+        const JPH::Ragdoll* ragdoll = it->second.ragdoll;
+        auto& bodyInterface = ctx->getBodyInterface();
+
+        for (int i = 0; i < static_cast<int>(ragdoll->GetBodyCount()); ++i)
+        {
+            JPH::BodyID bodyId = ragdoll->GetBodyID(i);
+            if (bodyId.IsInvalid()) continue;
+
+            if (bodyInterface.GetLinearVelocity(bodyId).Length() > linearThreshold) return false;
+            if (bodyInterface.GetAngularVelocity(bodyId).Length() > angularThreshold) return false;
+        }
+        return true;
     }
 
     bool PhysicsRagdollManager::createKinematicBoneBodies(uint64_t entityId, const RagdollBuildResult& buildResult,

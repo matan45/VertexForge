@@ -31,6 +31,9 @@ namespace windows
         std::string newBehaviorTreeName;
         bool showCreateBehaviorTreeModal = false;
 
+        std::string newThemeName;
+        bool showCreateThemeModal = false;
+
         std::string newPrefabName;
         bool showSavePrefabModal = false;
         services::EntityHandle pendingSavePrefabEntity;
@@ -39,6 +42,8 @@ namespace windows
         bool showRenameFileModal = false;
 
         bool showDeleteConfirmModal = false;
+        bool deleteDependentsChecked = false;
+        std::vector<asset::AssetGUID> deleteDependents;
 
         bool showReferencesModal = false;
         asset::AssetGUID referencesGuid;
@@ -79,12 +84,18 @@ namespace windows
         void drawCreateVFXModal(const fs::path& currentPath);
         void drawCreateTerrainMaterialModal(const fs::path& currentPath);
         void drawCreateBehaviorTreeModal(const fs::path& currentPath);
+        void drawCreateThemeModal(const fs::path& currentPath);
         void drawSavePrefabModal(const fs::path& currentPath);
         void drawRenameModal(const fs::path& selectedFile);
         void drawDeleteModal(const fs::path& selectedFile);
         void drawReferencesModal();
         void drawDependenciesModal();
         void drawErrorModal();
+
+        // Lists asset paths for the given GUIDs (unresolved GUIDs shown
+        // explicitly); returns true when a double-click navigated the
+        // content browser so the caller can close its modal
+        bool drawAssetGuidList(const std::vector<asset::AssetGUID>& guids);
 
         void createFolder(const fs::path& currentPath, const std::string& name);
 

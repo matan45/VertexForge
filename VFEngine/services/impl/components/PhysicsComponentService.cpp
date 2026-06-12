@@ -235,6 +235,109 @@ namespace services
         return true;
     }
 
+    // ========== BUOYANCY COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addBuoyancyComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::BuoyancyComponent>())
+        {
+            sceneEntity.addComponent<components::BuoyancyComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeBuoyancyComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::BuoyancyComponent>())
+        {
+            sceneEntity.removeComponent<components::BuoyancyComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasBuoyancyComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::BuoyancyComponent>();
+    }
+
+    std::optional<BuoyancyComponentData> PhysicsComponentService::getBuoyancyData(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::BuoyancyComponent>())
+        {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::BuoyancyComponent>();
+        BuoyancyComponentData data;
+        data.customSampleMode = comp.sampleMode == components::BuoyancyComponent::SampleMode::Custom;
+        data.customPointCount = comp.customPointCount;
+        for (uint32_t i = 0; i < 8; ++i)
+        {
+            data.customPoints[i] = comp.customPoints[i];
+        }
+        data.buoyancyScale = comp.buoyancyScale;
+        data.angularDrag = comp.angularDrag;
+        return data;
+    }
+
+    bool PhysicsComponentService::setBuoyancyData(EntityHandle entity, const BuoyancyComponentData& buoyancyData)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::BuoyancyComponent>())
+        {
+            sceneEntity.addComponent<components::BuoyancyComponent>();
+        }
+
+        auto& comp = sceneEntity.getComponent<components::BuoyancyComponent>();
+        comp.sampleMode = buoyancyData.customSampleMode
+                              ? components::BuoyancyComponent::SampleMode::Custom
+                              : components::BuoyancyComponent::SampleMode::Auto;
+        comp.customPointCount = buoyancyData.customPointCount > 8 ? 8 : buoyancyData.customPointCount;
+        for (uint32_t i = 0; i < 8; ++i)
+        {
+            comp.customPoints[i] = buoyancyData.customPoints[i];
+        }
+        comp.buoyancyScale = buoyancyData.buoyancyScale;
+        comp.angularDrag = buoyancyData.angularDrag;
+        return true;
+    }
+
     // ========== PHYSICS ANIMATION COMPONENT OPERATIONS ==========
 
     bool PhysicsComponentService::addPhysicsAnimationComponent(EntityHandle entity)
@@ -300,10 +403,7 @@ namespace services
         const auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
         PhysicsAnimationComponentData data;
         data.physicsAnimationRef = comp.physicsAnimationRef;
-        data.defaultMode = comp.config.defaultMode;
-        data.collisionLayer = comp.config.collisionLayer;
-        data.boneBodyMappings = comp.config.boneBodyMappings;
-        data.jointLimits = comp.config.jointLimits;
+        data.config = comp.config;
         return data;
     }
 
@@ -323,10 +423,7 @@ namespace services
 
         auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
         comp.physicsAnimationRef = data.physicsAnimationRef;
-        comp.config.defaultMode = data.defaultMode;
-        comp.config.collisionLayer = data.collisionLayer;
-        comp.config.boneBodyMappings = data.boneBodyMappings;
-        comp.config.jointLimits = data.jointLimits;
+        comp.config = data.config;
         return true;
     }
 
@@ -430,6 +527,37 @@ namespace services
             [this](const events::scene::GetRigidBodyDataQuery& query)
             {
                 return getRigidBodyData(query.entity);
+            });
+
+        // Buoyancy component handlers
+        dispatcher.registerCommandHandler<events::scene::AddBuoyancyComponentCommand>(
+            [this](const events::scene::AddBuoyancyComponentCommand& cmd)
+            {
+                return addBuoyancyComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveBuoyancyComponentCommand>(
+            [this](const events::scene::RemoveBuoyancyComponentCommand& cmd)
+            {
+                return removeBuoyancyComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetBuoyancyDataCommand>(
+            [this](const events::scene::SetBuoyancyDataCommand& cmd)
+            {
+                return setBuoyancyData(cmd.entity, cmd.buoyancyData);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasBuoyancyComponentQuery>(
+            [this](const events::scene::HasBuoyancyComponentQuery& query)
+            {
+                return hasBuoyancyComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetBuoyancyDataQuery>(
+            [this](const events::scene::GetBuoyancyDataQuery& query)
+            {
+                return getBuoyancyData(query.entity);
             });
 
         // PhysicsAnimation component handlers

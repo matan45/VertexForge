@@ -8,6 +8,7 @@
 #include "../../core/DynamicRenderingHelpers.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
+#include "text/RichTextParser.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
 #include <string_view>
@@ -114,7 +115,11 @@ namespace render::ui
         struct ScissorKey
         {
             int32_t x, y, w, h;
-            bool operator==(const ScissorKey& o) const { return x == o.x && y == o.y && w == o.w && h == o.h; }
+            bool overlay;
+            bool operator==(const ScissorKey& o) const
+            {
+                return x == o.x && y == o.y && w == o.w && h == o.h && overlay == o.overlay;
+            }
         };
         struct ScissorKeyHash
         {
@@ -124,6 +129,7 @@ namespace render::ui
                 h ^= std::hash<int32_t>{}(k.y) << 1;
                 h ^= std::hash<int32_t>{}(k.w) << 2;
                 h ^= std::hash<int32_t>{}(k.h) << 3;
+                h ^= std::hash<bool>{}(k.overlay) << 4;
                 return h;
             }
         };
@@ -159,11 +165,24 @@ namespace render::ui
                 ? 1.0f / fontData.sdfParams.spread * 0.5f
                 : 0.1f) : 0.0f;
 
+            // Rich text: strip markup first, then lay out the stripped text.
+            // Per-glyph styles resolve through LayoutGlyph::charIndex below.
+            ::text::RichTextResult richText;
+            if (label.richText)
+            {
+                richText = ::text::parseRichText(label.text);
+                if (richText.strippedText.empty())
+                {
+                    continue;
+                }
+            }
+            const std::string& layoutSource = label.richText ? richText.strippedText : label.text;
+
             // Layout text using shared text layout engine
             float maxWidth = label.wordWrap ? label.size.x : 0.0f;
             auto layout = ::text::layoutText(
                 fontData,
-                label.text,
+                layoutSource,
                 label.fontSize,
                 maxWidth,
                 label.lineSpacing,
@@ -266,7 +285,8 @@ namespace render::ui
                 static_cast<int32_t>(label.scissorRect.x),
                 static_cast<int32_t>(label.scissorRect.y),
                 static_cast<int32_t>(label.scissorRect.z),
-                static_cast<int32_t>(label.scissorRect.w)
+                static_cast<int32_t>(label.scissorRect.w),
+                label.overlay
             };
 
             uint32_t styleFlags = 0;
@@ -298,6 +318,21 @@ namespace render::ui
                     inst.sdfParams = glm::vec2(sdfEdge, sdfSmooth);
                     inst.styleFlags = styleFlags;
 
+                    // Rich text span overrides. Synthesized glyphs (ellipsis,
+                    // charIndex == UINT32_MAX) fail the bound check and keep
+                    // the base label style. Span colors inherit label alpha
+                    // so fade animations still apply.
+                    if (label.richText && glyph.charIndex < richText.perCodepoint.size())
+                    {
+                        const auto& span = richText.perCodepoint[glyph.charIndex];
+                        inst.styleFlags |= span.styleFlags;
+                        if (span.hasColor)
+                        {
+                            inst.color = glm::vec4(span.color.r, span.color.g,
+                                                   span.color.b, span.color.a * label.color.a);
+                        }
+                    }
+
                     scissorMap[scissorKey].push_back({label.fontPath, inst,
                         label.stencilOp, label.stencilRef});
                 }
@@ -311,6 +346,7 @@ namespace render::ui
         {
             UITextScissorGroup group;
             group.scissorRect = glm::vec4(key.x, key.y, key.w, key.h);
+            group.overlay = key.overlay;
 
             // Sub-group by font and stencil state within this scissor group
             struct BatchKey {
@@ -476,12 +512,19 @@ namespace render::ui
     }
 
     void UITextPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer,
-                                                          uint32_t imageIndex) const
+                                                          uint32_t imageIndex, bool overlayPass) const
     {
         if (!initialized || totalInstanceCount == 0)
         {
             return;
         }
+
+        bool anyGroupInPass = false;
+        for (const auto& group : scissorGroups)
+        {
+            if (group.overlay == overlayPass) { anyGroupInPass = true; break; }
+        }
+        if (!anyGroupInPass) return;
 
         bool hasDisplay = !offscreenResources.displayColorImages.empty();
         auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
@@ -510,6 +553,8 @@ namespace render::ui
 
         for (const auto& group : scissorGroups)
         {
+            if (group.overlay != overlayPass) continue;
+
             // Set scissor for this group
             vk::Rect2D scissor{};
             if (group.scissorRect.z > 0.0f && group.scissorRect.w > 0.0f)

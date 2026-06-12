@@ -6,6 +6,7 @@
 #include "../../events/EventTypes.hpp"
 #include "NavmeshTileManager.hpp"
 #include "NavmeshAgentManager.hpp"
+#include "NavmeshWorldBaker.hpp"
 #include <future>
 #include <memory>
 #include <unordered_set>
@@ -21,6 +22,12 @@ namespace services
 
         NavmeshTileManager tileManager;
         NavmeshAgentManager agentManager;
+        std::unique_ptr<NavmeshWorldBaker> worldBaker;
+        bool playModeActive = false;
+
+        // Bumped on every tile load/unload/update — scripts poll this to detect
+        // stale cached paths (see GetNavmeshTileVersionQuery)
+        uint64_t tileVersion = 0;
 
     public:
         explicit NavmeshServiceImpl(INavmeshProvider* navmeshProvider);
@@ -50,7 +57,7 @@ namespace services
         void removeAgent(EntityHandle entity) override;
         void setAgentDestination(EntityHandle entity, const glm::vec3& target) override;
         void stopAgent(EntityHandle entity) override;
-        void updateAgents(float deltaTime) override;
+        void update(float deltaTime, bool simulateAgents) override;
 
         void getNavmeshDebugMesh(std::vector<glm::vec3>& outVertices,
                                  std::vector<uint32_t>& outIndices) const override;

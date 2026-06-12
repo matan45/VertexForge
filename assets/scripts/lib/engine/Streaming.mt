@@ -43,4 +43,45 @@ public class Streaming {
     public static function isLoaded(string sceneName): bool {
         return _native_streaming_isLoaded(sceneName);
     }
+
+    // ---- World Sector streaming sources ----
+    // In a sector world, gameplay can register additional streaming sources so
+    // sectors stream in around squads / command centers, not just the camera.
+    //
+    //   int srcId = Streaming::registerWorldSource(pos.x, pos.y, pos.z, 1.0, 2, unit.getUUID());
+    //   Streaming::updateWorldSource(srcId, newPos.x, newPos.y, newPos.z);
+    //   Streaming::unregisterWorldSource(srcId);   // or automatic when the owner entity dies
+
+    // Register a gameplay streaming source. radiusMultiplier scales the world's
+    // load/unload radii for this source; priority > 0 wins the per-frame load
+    // budget over lower-priority sources (the camera is priority 0); a non-zero
+    // ownerEntityUUID auto-unregisters the source when that entity is deleted.
+    // Returns the source id, or 0 if no sector world is active.
+    public static function registerWorldSource(float x, float y, float z,
+                                               float radiusMultiplier, int priority,
+                                               int ownerEntityUUID): int {
+        return _native_streaming_registerWorldSource(x, y, z, radiusMultiplier, priority, ownerEntityUUID);
+    }
+
+    // Move a streaming source (call from movement ticks)
+    public static function updateWorldSource(int sourceId, float x, float y, float z): void {
+        _native_streaming_updateWorldSource(sourceId, x, y, z);
+    }
+
+    // Remove a streaming source explicitly
+    public static function unregisterWorldSource(int sourceId): void {
+        _native_streaming_unregisterWorldSource(sourceId);
+    }
+
+    // Whether a previously registered source still exists
+    public static function isWorldSourceValid(int sourceId): bool {
+        return _native_streaming_isWorldSourceValid(sourceId);
+    }
+
+    // Whether the sector containing the given world position is fully loaded.
+    // Use to gate AI activation / spawning on streamed content being present.
+    // Returns true when no sector world is active.
+    public static function isSectorLoadedAt(float worldX, float worldZ): bool {
+        return _native_streaming_isSectorLoadedAt(worldX, worldZ);
+    }
 }

@@ -95,7 +95,8 @@ project "Editor"
 	  "ProceduralGen",                  -- Procedural heightmap generation
 	  "ImageProcessing",                -- Image background removal
 	  "GameExport",                     -- Game export pipeline with shader pre-compilation
-	  "ECSRegistry"                     -- Shared ECS registry singleton DLL
+	  "ECSRegistry",                    -- Shared ECS registry singleton DLL
+	  "AssetDB"                         -- Shared asset database singleton DLL
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -227,7 +228,7 @@ project "Import"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
-   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp" }
+   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp", "AssetDB" }
 
    -- Copy DLLs to Editor output directory (Import is Editor-only)
    postbuildcommands {
@@ -356,7 +357,7 @@ project "Runtime"
       -- NOTE: NO VFEngine/core/controllers, NO VFEngine/graphics/controllers
    }
 
-   links { "Services", "Core", "Plugin", "ECSRegistry" }  -- Core linked for RuntimeBootstrap, not direct access
+   links { "Services", "Core", "Plugin", "ECSRegistry", "AssetDB" }  -- Core linked for RuntimeBootstrap, not direct access
 
    -- Delay-load shaderc: exported builds ship pre-compiled SPIR-V,
    -- so shaderc_shared.dll is not needed and never loaded at runtime
@@ -424,7 +425,8 @@ project "Utilities"
       "VFEngine/utilities/memory/**",
       "VFEngine/utilities/weather/**",
       "VFEngine/utilities/destruction/**",
-      "VFEngine/utilities/scene/EntityRegistry.cpp"  -- compiled by ECSRegistry DLL
+      "VFEngine/utilities/scene/EntityRegistry.cpp",  -- compiled by ECSRegistry DLL
+      "VFEngine/utilities/asset/AssetDatabase.cpp"    -- compiled by AssetDB DLL
    }
 
    includedirs {
@@ -505,6 +507,7 @@ project "Plugin"
       "dependencies/mType/mType",          -- value::Value header-inline use only (no mType.lib link)
       "VFEngine/utilities",
       "VFEngine/services",
+      "VFEngine/import",                   -- For registry/AssetImporter.hpp
       "VFEngine/import/pipeline",          -- For PipelineStage base class
       "VFEngine/core/controllers"          -- For ImguiWindow base class
    }
@@ -584,6 +587,46 @@ project "ECSRegistry"
    vfStandardConfigs()
 
 
+-- AssetDB subsystem (owns the AssetDatabase singleton, SharedLib/DLL)
+-- Required by any DLL that accesses AssetDatabase (Serialization, World,
+-- Terrain, Animation, Audio, Import, GameExport) so GUID<->path lookups and
+-- the dependency graph resolve to one instance across the process.
+project "AssetDB"
+   kind "SharedLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "VFEngine/utilities/asset/AssetDatabase.hpp",
+      "VFEngine/utilities/asset/AssetDatabase.cpp",
+      "VFEngine/utilities/asset/AssetDBExport.hpp"
+   }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/json/single_include",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_ASSETDB_BUILD_DLL" }
+
+   -- Utilities: AssetMetadataSerializer + VFSHelpers used by persistence/meta scan
+   links { "Utilities", "spdLog" }
+   linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols defined in this DLL
+
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/AssetDB/%{cfg.buildcfg}/x64/AssetDB.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/AssetDB/%{cfg.buildcfg}/x64/AssetDB.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
+
+   vfStandardConfigs()
+
+
 -- Audio subsystem (extracted from Core, SharedLib/DLL)
 project "Audio"
    kind "SharedLib"
@@ -608,7 +651,7 @@ project "Audio"
 
    -- Services: EventDispatcher used by AudioSceneUpdater
    -- Animation, Terrain: transitive deps from Utilities.lib (ResourceManager references AnimatorAsset/TerrainMaterialAsset)
-   links { "Utilities", "Services", "Animation", "Terrain", "ECSRegistry" }
+   links { "Utilities", "Services", "Animation", "Terrain", "ECSRegistry", "AssetDB" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
    links { "OpenAL32.lib" }
@@ -744,7 +787,7 @@ project "Terrain"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllimport)", "VF_TERRAIN_BUILD_DLL" }
 
-   links { "Utilities", "meshoptimizer", "enkiTS", "ECSRegistry" }
+   links { "Utilities", "meshoptimizer", "enkiTS", "ECSRegistry", "AssetDB" }
 
    buildoptions { "/bigobj" }
 
@@ -839,7 +882,7 @@ project "Serialization"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_SERIALIZATION_BUILD_DLL" }
 
-   links { "Utilities", "ECSRegistry" }
+   links { "Utilities", "ECSRegistry", "AssetDB" }
 
    buildoptions { "/bigobj" }
 
@@ -899,7 +942,7 @@ project "World"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_WORLD_BUILD_DLL" }
 
-   links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry" }
+   links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry", "AssetDB" }
 
    postbuildcommands {
       "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
@@ -949,7 +992,7 @@ project "Animation"
 
    -- Services: EventDispatcher used by RuntimeAnimatorSystem
    -- Terrain: transitive dep from Utilities.lib (ResourceManager references TerrainMaterialAsset)
-   links { "Utilities", "Services", "Terrain", "ECSRegistry" }
+   links { "Utilities", "Services", "Terrain", "ECSRegistry", "AssetDB" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
    postbuildcommands {
@@ -1033,7 +1076,7 @@ project "GameExport"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_GAMEEXPORT_BUILD_DLL" }
 
-   links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib" }
+   links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib", "AssetDB" }
 
    postbuildcommands {
       "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
@@ -1078,6 +1121,7 @@ project "Tests"
       "VFEngine/core",
       "VFEngine/window/controllers",
       "VFEngine/plugin",                   -- header-only PluginScaffolder (VK-1284), no link needed
+      "VFEngine/import",                   -- ImporterRegistry tests
       vulkanLibPath.."/Include"
    }
 
@@ -1087,7 +1131,7 @@ project "Tests"
 
    links {
       "Utilities", "Memory", "Destruction", "Terrain", "World", "Serialization",
-      "Animation", "ECSRegistry", "Services",
+      "Animation", "ECSRegistry", "AssetDB", "Services", "Import",
       "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW", "GameExport",
       "spdLog", "meshoptimizer", "enkiTS", "lz4", "recast",
       "vulkan-1.lib", "shaderc_shared.lib"
@@ -1106,12 +1150,14 @@ project "Tests"
 
    postbuildcommands {
       "{COPY} ../../bin/ECSRegistry/%{cfg.buildcfg}/x64/ECSRegistry.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/AssetDB/%{cfg.buildcfg}/x64/AssetDB.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/Terrain/%{cfg.buildcfg}/x64/Terrain.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/Serialization/%{cfg.buildcfg}/x64/Serialization.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/World/%{cfg.buildcfg}/x64/World.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/Animation/%{cfg.buildcfg}/x64/Animation.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/meshoptimizer/%{cfg.buildcfg}/x64/meshoptimizer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/GameExport/%{cfg.buildcfg}/x64/GameExport.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Import/%{cfg.buildcfg}/x64/Import.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
    }
 
@@ -1125,6 +1171,16 @@ project "Tests"
    filter "configurations:Release"
       postbuildcommands {
          "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
+      }
+
+   -- Import.dll runtime dependency: assimp CMake build (Debug uses /MDd variant)
+   filter "configurations:Debug"
+      postbuildcommands {
+         "{COPY} ../../dependencies/assimp/build/bin/Debug/assimp-vc145-mtd.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
+      }
+   filter "configurations:Development or Release"
+      postbuildcommands {
+         "{COPY} ../../dependencies/assimp/build/bin/Release/assimp-vc145-mt.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
       }
 
    filter {}  -- reset filters before next group

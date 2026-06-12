@@ -19,14 +19,16 @@ namespace services
         float foamThreshold = -0.1f;
         float displacementScale = 4.0f;
         bool enabled = true;
+        float foamPersistence = 0.85f;
+        float foamDecay = 0.5f;
     };
 
     struct OceanFFTConfigData
     {
         OceanBandConfigData bands[MAX_OCEAN_BANDS] = {
-            {128, 100.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true},   // Swell
-            {128, 100.0f,  8.0f, 60.0f, 0.00003f, 1.2f, -0.1f, 4.0f, true},   // Agitation
-            {128,  20.0f,  4.0f, 30.0f, 0.00001f, 0.8f, -0.1f, 4.0f, true},   // Ripples
+            {128, 100.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true, 0.85f, 0.5f},   // Swell
+            {128, 100.0f,  8.0f, 60.0f, 0.00003f, 1.2f, -0.1f, 4.0f, true, 0.85f, 0.5f},   // Agitation
+            {128,  20.0f,  4.0f, 30.0f, 0.00001f, 0.8f, -0.1f, 4.0f, true, 0.0f,  0.5f},   // Ripples
         };
         float gravity = 9.81f;
         bool enabled = false;
@@ -91,6 +93,11 @@ namespace services
         float shoreWetRange = 5.0f;
         float shoreWetDarkening = 0.3f;
         float shoreWetRoughness = 0.15f;
+
+        // Weather-driven sea state
+        bool weatherDriven = false;
+        float weatherResponse = 1.0f;
+        float currentBeaufort = 3.0f;
 
         OceanFFTConfigData oceanConfig;
     };

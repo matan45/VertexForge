@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 #include <optional>
+#include <vector>
 #include "../../data/VFXTypes.hpp"
 
 namespace services
@@ -75,6 +76,18 @@ namespace services
         // Distance culling
         virtual void setDistanceCullingEnabled(bool enabled) = 0;
         virtual void setMaxDrawDistance(float distance) = 0;
+
+        // Proxy point lights emitted by playing instances with light emission
+        // enabled (explosions/fires illuminating the scene). Collected each
+        // frame and injected into the scene light list as transient lights.
+        struct VFXProxyLight
+        {
+            glm::vec3 position{0.0f};
+            glm::vec3 color{1.0f};
+            float intensity = 1.0f;
+            float radius = 10.0f;
+        };
+        virtual std::vector<VFXProxyLight> getActiveProxyLights() const = 0;
 
         // Budget stats for debug UI
         struct BudgetStats

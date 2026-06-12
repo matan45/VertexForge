@@ -7,6 +7,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
 #include "Pipeline.hpp"
+#include "registry/AssetImporter.hpp"
 #include <algorithm>
 #include <unordered_set>
 #include <cassert>
@@ -892,6 +893,19 @@ namespace plugin {
             }
         }
         return allStages;
+    }
+
+    std::vector<std::pair<std::string, std::unique_ptr<import::AssetImporter>>> PluginManager::takeAllAssetImporters()
+    {
+        std::vector<std::pair<std::string, std::unique_ptr<import::AssetImporter>>> allImporters;
+        for (auto& plugin : plugins) {
+            if (plugin.initialized && plugin.context) {
+                for (auto& importer : plugin.context->takeAssetImporters()) {
+                    allImporters.emplace_back(plugin.context->getPluginName(), std::move(importer));
+                }
+            }
+        }
+        return allImporters;
     }
 
     bool PluginManager::validatePluginVersion(DynamicLibrary& lib) const

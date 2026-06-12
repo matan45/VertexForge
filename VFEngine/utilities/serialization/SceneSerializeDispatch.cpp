@@ -63,6 +63,8 @@ namespace serialization
             out["collider"] = serializeCollider(entity.getComponent<components::ColliderComponent>());
         if (entity.hasComponent<components::RigidBodyComponent>())
             out["rigidBody"] = serializeRigidBody(entity.getComponent<components::RigidBodyComponent>());
+        if (entity.hasComponent<components::BuoyancyComponent>())
+            out["buoyancy"] = serializeBuoyancy(entity.getComponent<components::BuoyancyComponent>());
         if (entity.hasComponent<components::DestructibleComponent>())
             out["destructible"] = serializeDestructible(entity.getComponent<components::DestructibleComponent>());
         if (entity.hasComponent<components::PhysicsAnimationComponent>())
@@ -95,6 +97,8 @@ namespace serialization
             out["uiCanvas"] = serializeUICanvas(entity.getComponent<components::UICanvasComponent>());
         if (entity.hasComponent<components::UIRectComponent>())
             out["uiRect"] = serializeUIRect(entity.getComponent<components::UIRectComponent>());
+        if (entity.hasComponent<components::UIStyleComponent>())
+            out["uiStyle"] = serializeUIStyle(entity.getComponent<components::UIStyleComponent>());
         if (entity.hasComponent<components::UIImageComponent>())
             out["uiImage"] = serializeUIImage(entity.getComponent<components::UIImageComponent>());
         if (entity.hasComponent<components::UIScrollComponent>())
@@ -103,6 +107,12 @@ namespace serialization
             out["uiLayoutGroup"] = serializeUILayoutGroup(entity.getComponent<components::UILayoutGroupComponent>());
         if (entity.hasComponent<components::UILabelComponent>())
             out["uiLabel"] = serializeUILabel(entity.getComponent<components::UILabelComponent>());
+        if (entity.hasComponent<components::UITooltipComponent>())
+            out["uiTooltip"] = serializeUITooltip(entity.getComponent<components::UITooltipComponent>());
+        if (entity.hasComponent<components::UIWindowComponent>())
+            out["uiWindow"] = serializeUIWindow(entity.getComponent<components::UIWindowComponent>());
+        if (entity.hasComponent<components::UIListViewComponent>())
+            out["uiListView"] = serializeUIListView(entity.getComponent<components::UIListViewComponent>());
         if (entity.hasComponent<components::UIAnimationComponent>())
             out["uiAnimation"] = serializeUIAnimation(entity.getComponent<components::UIAnimationComponent>());
         if (entity.hasComponent<components::UIMaskComponent>())

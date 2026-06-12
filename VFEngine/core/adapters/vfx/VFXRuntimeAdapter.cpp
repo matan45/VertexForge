@@ -81,6 +81,7 @@ namespace core
         controllerParams.entityId = params.entityId;
         controllerParams.priority = params.priority;
         controllerParams.cameraRelative = params.cameraRelative;
+        controllerParams.autoDestroy = params.autoDestroy;
 
         return renderer->createInstance(controllerParams);
     }
@@ -263,6 +264,26 @@ namespace core
     void VFXRuntimeAdapter::setMaxDrawDistance(float distance)
     {
         if (renderer) renderer->setMaxDrawDistance(distance);
+    }
+
+    std::vector<services::IVFXRuntimeProvider::VFXProxyLight> VFXRuntimeAdapter::getActiveProxyLights() const
+    {
+        std::vector<VFXProxyLight> lights;
+        if (!renderer)
+            return lights;
+
+        auto rendererLights = renderer->getActiveProxyLights();
+        lights.reserve(rendererLights.size());
+        for (const auto& src : rendererLights)
+        {
+            VFXProxyLight light;
+            light.position = src.position;
+            light.color = src.color;
+            light.intensity = src.intensity;
+            light.radius = src.radius;
+            lights.push_back(light);
+        }
+        return lights;
     }
 
     services::IVFXRuntimeProvider::BudgetStats VFXRuntimeAdapter::getBudgetStats() const

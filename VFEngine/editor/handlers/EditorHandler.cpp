@@ -68,6 +68,10 @@ namespace handlers
             controllers::Import::addCustomStage(std::move(stage));
         }
 
+        for (auto& [importerPluginName, importer] : pluginManager->takeAllAssetImporters()) {
+            controllers::Import::registerImporter(std::move(importer), importerPluginName);
+        }
+
         buildFrameTaskGraph();
 
         bootstrap->setFrameCallback([this]()
@@ -119,6 +123,11 @@ namespace handlers
             frameTaskGraph->unregisterEventHandlers();
             frameTaskGraph.reset();
         }
+
+        // Import shuts down before the plugin DLLs unload: plugin-registered
+        // importers (and the pipeline that may reference them) must be torn
+        // down while their vtables still exist.
+        controllers::Import::shutdown();
 
         pluginManager.reset();
         exportHandler.reset();
@@ -172,7 +181,6 @@ namespace handlers
         actionMappingService.reset();
         inputService.reset();
 
-        controllers::Import::shutdown();
         bootstrap->cleanUp();
     }
 

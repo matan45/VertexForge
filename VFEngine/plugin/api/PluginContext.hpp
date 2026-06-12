@@ -36,6 +36,10 @@ namespace pipeline {
     class PipelineStage;
 }
 
+namespace import {
+    class AssetImporter;
+}
+
 namespace plugin {
 
     // Type-erased bridge for accessing plugin-defined native components from the engine.
@@ -94,6 +98,17 @@ namespace plugin {
         // === Import Pipeline Extension ===
         // Only available when hasCapability(capability::import_) is true.
         virtual void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) = 0;
+
+        // === Asset Importer Registration (API v12) ===
+        // Register a full custom asset importer (detection + processing +
+        // output format + declarative import-dialog options) — it behaves like
+        // a built-in: appears in the import dialog's file filters and its
+        // chosen options arrive in ImportConfig::customOptions. Implement
+        // import::AssetImporter (sdk include/VFEngine/import). Register only
+        // during onInitialize; auto-unregistered (after draining in-flight
+        // imports) before the plugin unloads.
+        // Only available when hasCapability(capability::import_) is true.
+        virtual void registerAssetImporter(std::unique_ptr<import::AssetImporter> importer) = 0;
 
         // === Script Native Functions (API v10 — mType plugin C ABI) ===
         // Register a native function callable from mType scripts, using mType's

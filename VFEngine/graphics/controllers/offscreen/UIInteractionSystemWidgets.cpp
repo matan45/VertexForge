@@ -225,6 +225,9 @@ namespace controllers::offscreen
             if (!ui_common::isEntityActive(registry, entity))
                 continue;
 
+            if (!ui_common::isInteractionAllowed(registry, entity))
+                continue;
+
             const auto* canvas = ui_common::findCanvasForEntity(registry, entity);
             if (!canvas) continue;
 

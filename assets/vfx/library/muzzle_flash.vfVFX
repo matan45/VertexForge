@@ -1,0 +1,57 @@
+{
+    "version": "1.0",
+    "uuid": "910000000000000002",
+    "name": "Muzzle Flash",
+    "graph": {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "Emitter",
+                "name": "Emitter",
+                "position": [100.0, 200.0],
+                "properties": {
+                    "spawnRate": { "type": "Float", "value": 0.0 },
+                    "lifetime": { "type": "Float", "value": 0.08 },
+                    "startSize": { "type": "Float", "value": 0.5 },
+                    "startSpeed": { "type": "Float", "value": 6.0 },
+                    "startVelocity": { "type": "Vec3", "value": [0.0, 0.0, 1.0] },
+                    "startColor": { "type": "Color", "value": [1.0, 0.85, 0.4, 1.0] },
+                    "looping": { "type": "Bool", "value": false },
+                    "texture": { "type": "String", "value": "" },
+                    "burstCount": { "type": "Int", "value": 1 },
+                    "burst0Time": { "type": "Float", "value": 0.0 },
+                    "burst0Count": { "type": "Int", "value": 12 },
+                    "burst0Cycles": { "type": "Int", "value": 1 },
+                    "burst0Interval": { "type": "Float", "value": 0.5 },
+                    "burst0Probability": { "type": "Float", "value": 1.0 },
+                    "additiveBlend": { "type": "Bool", "value": true },
+                    "alphaClipThreshold": { "type": "Float", "value": 0.02 },
+                    "coneSpread": { "type": "Float", "value": 0.5 },
+                    "lightEmissionEnabled": { "type": "Bool", "value": true },
+                    "lightEmissionIntensity": { "type": "Float", "value": 12.0 },
+                    "lightEmissionRadius": { "type": "Float", "value": 6.0 }
+                }
+            },
+            {
+                "id": 3,
+                "type": "SizeOverLifetime",
+                "name": "Size Over Lifetime",
+                "position": [350.0, 120.0],
+                "properties": {
+                    "curve": { "type": "Curve", "value": { "keys": [[0.0, 1.0, 0.0, 0.0], [1.0, 0.2, 0.0, 0.0]] } }
+                }
+            },
+            {
+                "id": 2,
+                "type": "OutSystem",
+                "name": "Output",
+                "position": [600.0, 200.0],
+                "properties": {}
+            }
+        ],
+        "links": [
+            { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 2, "sourceNode": 3, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" }
+        ]
+    }
+}

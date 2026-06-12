@@ -95,6 +95,20 @@ namespace render::vfx
                 spawnAccumulator -= 1.0f;
             }
         }
+
+        if (!config.bursts.empty() && canSpawn)
+        {
+            std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+            float prevEmissionTime = emissionTime - deltaTime;
+            uint32_t burstSpawns = ::vfx::evaluateBurstSpawns(
+                config.bursts, prevEmissionTime, emissionTime,
+                [this, &dist01]() { return dist01(rng); });
+
+            for (uint32_t i = 0; i < burstSpawns; ++i)
+            {
+                spawnParticle();
+            }
+        }
     }
 
     void VFXParticleSystem::reset()

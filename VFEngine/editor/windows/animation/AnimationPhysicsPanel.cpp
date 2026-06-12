@@ -29,11 +29,19 @@ namespace windows::animation
         changed |= drawGlobalConfig(config, showColliderOverlay);
         ImGui::Spacing();
 
+        changed |= drawMotorConfig(config);
+        ImGui::Spacing();
+
+        changed |= drawHitReactionConfig(config);
+        ImGui::Spacing();
+
         if (selectedChannel >= 0 && selectedChannel < static_cast<int>(evaluatedBones.size()))
         {
             changed |= drawSelectedBoneMapping(config, selectedChannel, evaluatedBones);
             ImGui::Spacing();
             changed |= drawSelectedBoneJointLimits(config, selectedChannel, evaluatedBones);
+            ImGui::Spacing();
+            changed |= drawSelectedBoneMotor(config, selectedChannel, evaluatedBones);
             ImGui::Spacing();
         }
         else
@@ -128,7 +136,7 @@ namespace windows::animation
         {
             ImGui::Indent(5.0f);
 
-            const char* modeNames[] = {"Animated", "Kinematic", "Ragdoll"};
+            const char* modeNames[] = {"Animated", "Kinematic", "Ragdoll", "Powered Ragdoll"};
             int currentMode = static_cast<int>(config.defaultMode);
             ImGui::SetNextItemWidth(-1);
             if (ImGui::Combo("##Mode", &currentMode, modeNames, IM_ARRAYSIZE(modeNames)))
@@ -147,6 +155,168 @@ namespace windows::animation
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Kinematic to Ragdoll blend time");
 
             ImGui::Checkbox("Show Colliders", &showColliderOverlay);
+
+            ImGui::Unindent(5.0f);
+        }
+
+        return changed;
+    }
+
+    bool AnimationPhysicsPanel::drawMotorConfig(types::PhysicsAnimationConfig& config)
+    {
+        bool changed = false;
+
+        if (ImGui::CollapsingHeader("Motors (Powered Ragdoll)"))
+        {
+            ImGui::Indent(5.0f);
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::SliderFloat("##DefStrength", &config.defaultMotorStrength, 0.0f, 1.0f, "Strength: %.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Default motor strength for bones without an override");
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##DefFreq", &config.defaultMotorFrequency, 0.5f, 1.0f, 120.0f, "Frequency: %.1f Hz"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Motor spring frequency (higher = snappier pose tracking)");
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##DefDamp", &config.defaultMotorDamping, 0.05f, 0.0f, 5.0f, "Damping: %.2f"))
+                changed = true;
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##DefTorque", &config.defaultMotorMaxTorque, 1.0f, 0.0f, 10000.0f, "Max Torque: %.0f N*m"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Torque available at strength 1.0 (heavy bones like hips/spine need more)");
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::SliderFloat("##RootStrength", &config.rootMotorStrength, 0.0f, 1.0f, "Root: %.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("How strongly the root body tracks the entity transform (0 = free)");
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##BlendIn", &config.poweredBlendInTime, 0.01f, 0.0f, 2.0f, "Blend In: %.2fs"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Visual blend when entering powered ragdoll");
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##BlendOut", &config.ragdollToAnimatedBlendTime, 0.01f, 0.0f, 2.0f, "Blend Out: %.2fs"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Crossfade from the captured ragdoll pose back to animation");
+
+            ImGui::Unindent(5.0f);
+        }
+
+        return changed;
+    }
+
+    bool AnimationPhysicsPanel::drawHitReactionConfig(types::PhysicsAnimationConfig& config)
+    {
+        bool changed = false;
+
+        if (ImGui::CollapsingHeader("Hit Reaction / Settle"))
+        {
+            ImGui::Indent(5.0f);
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##RecoverTime", &config.hitReaction.defaultRecoverTime, 0.01f, 0.0f, 5.0f, "Recover: %.2fs"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Time for motor strength to recover after a hit");
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::SliderFloat("##StrengthDip", &config.hitReaction.strengthDip, 0.0f, 1.0f, "Dip To: %.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Strength the affected chain drops to on impact (0 = limp)");
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragInt("##ChainDepth", &config.hitReaction.chainDepth, 0.1f, -1, 16, "Chain Depth: %d"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("How many levels of child bones a hit affects (-1 = all descendants)");
+
+            ImGui::Separator();
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##SettleLin", &config.settleLinearVelocityThreshold, 0.005f, 0.0f, 2.0f, "Settle Lin: %.3f m/s"))
+                changed = true;
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragFloat("##SettleAng", &config.settleAngularVelocityThreshold, 0.01f, 0.0f, 5.0f, "Settle Ang: %.2f rad/s"))
+                changed = true;
+
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::DragInt("##SettleFrames", &config.settleFrameCount, 1.0f, 1, 600, "Settle Frames: %d"))
+                changed = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Consecutive near-still frames before the ragdoll counts as settled");
+
+            ImGui::Unindent(5.0f);
+        }
+
+        return changed;
+    }
+
+    bool AnimationPhysicsPanel::drawSelectedBoneMotor(types::PhysicsAnimationConfig& config,
+                                                       int selectedChannel,
+                                                       const std::vector<services::EvaluatedBoneInfo>& evaluatedBones)
+    {
+        bool changed = false;
+        const std::string& boneName = evaluatedBones[selectedChannel].name;
+
+        if (ImGui::CollapsingHeader("Bone Motor"))
+        {
+            ImGui::Indent(5.0f);
+
+            types::BoneMotorSettings* motor = nullptr;
+            int motorIndex = -1;
+            for (size_t i = 0; i < config.boneMotors.size(); ++i)
+            {
+                if (config.boneMotors[i].boneName == boneName)
+                {
+                    motor = &config.boneMotors[i];
+                    motorIndex = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            if (motor)
+            {
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderFloat("##MotStrength", &motor->strength, 0.0f, 1.0f, "Strength: %.2f"))
+                    changed = true;
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##MotFreq", &motor->frequency, 0.5f, 1.0f, 120.0f, "Frequency: %.1f Hz"))
+                    changed = true;
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##MotDamp", &motor->damping, 0.05f, 0.0f, 5.0f, "Damping: %.2f"))
+                    changed = true;
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat("##MotTorque", &motor->maxTorque, 1.0f, 0.0f, 10000.0f, "Max Torque: %.0f N*m"))
+                    changed = true;
+
+                ImGui::Spacing();
+                if (ImGui::Button("Remove Motor Override", ImVec2(-1, 0)))
+                {
+                    config.boneMotors.erase(config.boneMotors.begin() + motorIndex);
+                    changed = true;
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("Using motor defaults");
+                if (ImGui::Button("Add Motor Override", ImVec2(-1, 0)))
+                {
+                    types::BoneMotorSettings newMotor;
+                    newMotor.boneName = boneName;
+                    newMotor.strength = config.defaultMotorStrength;
+                    newMotor.frequency = config.defaultMotorFrequency;
+                    newMotor.damping = config.defaultMotorDamping;
+                    newMotor.maxTorque = config.defaultMotorMaxTorque;
+                    config.boneMotors.push_back(newMotor);
+                    changed = true;
+                }
+            }
 
             ImGui::Unindent(5.0f);
         }

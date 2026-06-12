@@ -163,6 +163,7 @@ namespace editor::graph
                 if (ImGui::MenuItem("Repeat Until Fail")) createNode(BTNodeType::RepeatUntilFail, newNodePosition);
                 if (ImGui::MenuItem("Cooldown")) createNode(BTNodeType::Cooldown, newNodePosition);
                 if (ImGui::MenuItem("Time Limit")) createNode(BTNodeType::TimeLimit, newNodePosition);
+                if (ImGui::MenuItem("Blackboard Condition")) createNode(BTNodeType::BlackboardCondition, newNodePosition);
                 ImGui::EndMenu();
             }
 
@@ -175,7 +176,9 @@ namespace editor::graph
                 if (ImGui::MenuItem("Set Blackboard Value")) createNode(BTNodeType::SetBlackboardValue, newNodePosition);
                 if (ImGui::MenuItem("Check Blackboard Value")) createNode(BTNodeType::CheckBlackboardValue, newNodePosition);
                 if (ImGui::MenuItem("Script Task")) createNode(BTNodeType::ScriptTask, newNodePosition);
+                if (ImGui::MenuItem("Environment Query")) createNode(BTNodeType::EnvironmentQuery, newNodePosition);
                 if (ImGui::MenuItem("Line Of Sight")) createNode(BTNodeType::LineOfSight, newNodePosition);
+                if (ImGui::MenuItem("Run Subtree")) createNode(BTNodeType::SubTree, newNodePosition);
                 ImGui::EndMenu();
             }
 
@@ -230,6 +233,19 @@ namespace editor::graph
             node.properties["key"] = std::string("");
             node.properties["compareOp"] = std::string("==");
             node.properties["compareValue"] = 0.0f;
+            break;
+        case BTNodeType::BlackboardCondition:
+            node.properties["key"] = std::string("");
+            node.properties["compareOp"] = std::string("==");
+            node.properties["compareValue"] = 0.0f;
+            node.properties["abortMode"] = std::string("None");
+            break;
+        case BTNodeType::EnvironmentQuery:
+            node.properties["queryName"] = std::string("");
+            node.properties["resultKey"] = std::string("eqsResult");
+            break;
+        case BTNodeType::SubTree:
+            node.properties["treePath"] = std::string("");
             break;
         case BTNodeType::LineOfSight:
             node.properties["targetKey"] = std::string("target");

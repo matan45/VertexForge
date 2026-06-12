@@ -25,6 +25,9 @@ namespace editor::graph
         bool needsPositionInit = false;
         ImVec2 newNodePosition;
 
+        // Live per-node statuses while debugging a running tree (owned by the window, null when idle)
+        const std::unordered_map<uint32_t, behaviortree::BTNodeStatus>* liveStatuses = nullptr;
+
         // ID offsets
         static constexpr uintptr_t NODE_ID_OFFSET = 100000;
         static constexpr uintptr_t PIN_ID_OFFSET = 200000;
@@ -43,6 +46,10 @@ namespace editor::graph
         void setOnGraphChanged(BTGraphChangedCallback callback);
         uint32_t getSelectedNodeId() const { return selectedNodeId; }
         void navigateToContent();
+        void setLiveStatus(const std::unordered_map<uint32_t, behaviortree::BTNodeStatus>* statuses)
+        {
+            liveStatuses = statuses;
+        }
 
     private:
         ax::NodeEditor::NodeId toEditorNodeId(uint32_t nodeId) const;

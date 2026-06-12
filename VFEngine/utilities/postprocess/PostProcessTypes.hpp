@@ -238,8 +238,7 @@ namespace postprocess
     {
         Off = 0,
         DLSS,
-        FSR2,
-        Auto  // DLSS if available, else FSR2
+        Auto  // DLSS if available
     };
 
     enum class UpscaleQuality : uint8_t

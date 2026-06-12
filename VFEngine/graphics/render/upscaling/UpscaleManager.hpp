@@ -55,7 +55,7 @@ namespace render::upscaling
         float farPlane = 1000.0f;
     };
 
-    /// Manages DLSS and FSR2 upscaling via NVIDIA Streamline SDK.
+    /// Manages DLSS upscaling via NVIDIA Streamline SDK.
     /// All Streamline calls are behind #ifdef VF_STREAMLINE_ENABLED.
     class UpscaleManager
     {
@@ -76,12 +76,11 @@ namespace render::upscaling
         /// Shut down Streamline. Call before device destruction.
         void shutdown();
 
-        /// Free DLSS/DirectSR feature resources. Call before resolution change.
+        /// Free DLSS feature resources. Call before resolution change.
         void freeFeatureResources();
 
         /// Check feature availability (call after setVulkanDevice).
         bool isDLSSSupported() const { return dlssSupported; }
-        bool isDirectSRSupported() const { return directSRSupported; }
         bool isDLSSGSupported() const { return dlssGSupported; }
 
         /// Frame Generation (DLSS 3.x)
@@ -160,7 +159,6 @@ namespace render::upscaling
         static bool isStreamlineAvailable() { return streamlineAvailable; }
         static bool isDLSSAvailable() { return instance && instance->dlssSupported; }
         static bool isDLSSGAvailable() { return instance && instance->dlssGSupported; }
-        static bool isDirectSRAvailable() { return instance && instance->directSRSupported; }
         static const UpscaleManager* getInstance() { return instance; }
         /// Mutable singleton accessor for the per-frame marker/sleep API (MainLoop, RenderManager).
         static UpscaleManager* getMutableInstance() { return instance; }
@@ -171,7 +169,6 @@ namespace render::upscaling
         ::postprocess::UpscaleMode activeMode = ::postprocess::UpscaleMode::Off;
         bool dlssSupported = false;
         bool dlssGSupported = false;
-        bool directSRSupported = false;
         bool deviceSet = false;
         bool frameGenActive = false;
 

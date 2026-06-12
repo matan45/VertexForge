@@ -25,6 +25,8 @@ namespace core
         types::NavmeshBakeProgress currentProgress;
         types::NavmeshBakeSettings storedSettings;
         TileGraph tileGraph;
+        int maxResidentTiles = 0;
+        int budgetWarnCount = 0;
     public:
         explicit NavmeshAdapter();
         ~NavmeshAdapter() override;
@@ -54,6 +56,7 @@ namespace core
                                                       uint8_t lod = 0) override;
         bool addNavmeshTile(const navigation::NavmeshTileData& tileData) override;
         bool removeNavmeshTile(int tx, int tz) override;
+        int getMaxResidentTiles() const override { return maxResidentTiles; }
 
         // === Serialization ===
         std::vector<navigation::NavmeshTileData> serializeNavmesh() const override;

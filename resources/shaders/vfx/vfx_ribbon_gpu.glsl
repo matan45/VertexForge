@@ -9,6 +9,8 @@ layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out float fragViewDepth;
 layout(location = 4) out float fragGlowIntensity;
+layout(location = 5) out vec3 fragWorldPos;
+layout(location = 6) out vec3 fragNormal;
 
 struct GPUParticle
 {
@@ -159,6 +161,8 @@ void main() {
         fragLifetimeRatio = 1.0;
         fragViewDepth = 0.0;
         fragGlowIntensity = 0.0;
+        fragWorldPos = vec3(0.0);
+        fragNormal = vec3(0.0, 1.0, 0.0);
         return;
     }
 
@@ -178,6 +182,8 @@ void main() {
         fragLifetimeRatio = 1.0;
         fragViewDepth = 0.0;
         fragGlowIntensity = 0.0;
+        fragWorldPos = vec3(0.0);
+        fragNormal = vec3(0.0, 1.0, 0.0);
         return;
     }
     segDir /= segLen;
@@ -187,6 +193,14 @@ void main() {
 
     float width = mix(pA.size, pB.size, along) * config.ribbonWidth;
     pos += right * inPosition.x * width;
+
+    // Tube-style lighting normal: blend the camera-facing normal with the
+    // across-width direction so the ribbon shades like a cylinder
+    vec3 facing = normalize(cross(right, segDir));
+    if (dot(facing, toCamera) < 0.0) facing = -facing;
+    float across = clamp(inPosition.x * 2.0, -1.0, 1.0);
+    fragNormal = normalize(facing * sqrt(max(1.0 - across * across, 0.0)) + right * across);
+    fragWorldPos = pos;
 
     gl_Position = camera.projection * camera.view * vec4(pos, 1.0);
 
@@ -218,6 +232,8 @@ layout(location = 1) in vec4 fragColor;
 layout(location = 2) in float fragLifetimeRatio;
 layout(location = 3) in float fragViewDepth;
 layout(location = 4) in float fragGlowIntensity;
+layout(location = 5) in vec3 fragWorldPos;
+layout(location = 6) in vec3 fragNormal;
 
 layout(location = 0) out vec4 outColor;
 
@@ -308,6 +324,42 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
 
 layout(binding = 4) uniform sampler2D sceneDepthTexture;
 
+// Lighting types (struct definitions + cluster helpers, no buffer references)
+#include "../common/lighting_functions.glsl"
+#include "../common/cluster_culling.glsl"
+
+// Lighting descriptor sets (shared from main renderer)
+layout(std430, set = 1, binding = 0) readonly buffer DirectionalLightBuffer {
+    DirectionalLight directionalLights[];
+};
+
+layout(std430, set = 1, binding = 1) readonly buffer PointLightBuffer {
+    PointLight pointLights[];
+};
+
+layout(std430, set = 1, binding = 2) readonly buffer SpotLightBuffer {
+    SpotLight spotLights[];
+};
+
+layout(std140, set = 1, binding = 3) uniform LightCountsUBO {
+    LightCounts lightCounts;
+};
+
+layout(std140, set = 2, binding = 0) uniform ClusterParamsUBO {
+    ClusterGridParams clusterParams;
+};
+
+layout(std430, set = 3, binding = 0) readonly buffer ClusterLightGridBuffer {
+    ClusterLightData clusterLightGrid[];
+};
+
+layout(std430, set = 3, binding = 1) readonly buffer ClusterLightIndexListBuffer {
+    uint lightIndexList[];
+};
+
+// VFX lighting evaluation (must come after buffer declarations above)
+#include "vfx_lighting.glsl"
+
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
@@ -335,7 +387,14 @@ void main() {
         finalColor.a *= softFactor;
     }
 
-    // Glow: additive emissive color
+    // Scene lighting evaluation (tube normal from the vertex stage)
+    if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
+        finalColor.rgb = evaluateVFXLighting(
+            finalColor.rgb, normalize(fragNormal), fragWorldPos, fragViewDepth,
+            config.ambientAmount, config.lightingInfluence);
+    }
+
+    // Glow: additive emissive color (applied after lighting)
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
 

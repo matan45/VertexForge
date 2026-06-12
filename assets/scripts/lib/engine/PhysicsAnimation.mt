@@ -37,6 +37,7 @@ public class PhysicsAnimation {
     public static final int MODE_ANIMATED = 0;
     public static final int MODE_KINEMATIC = 1;
     public static final int MODE_RAGDOLL = 2;
+    public static final int MODE_POWERED_RAGDOLL = 3;
 
     public constructor() {
     }
@@ -102,5 +103,49 @@ public class PhysicsAnimation {
     // Only works when ragdoll is active
     public static function applyRagdollBoneImpulse(int entityId, int boneIndex, Vec3f impulse): void {
         _native_physanim_applyRagdollBoneImpulse(entityId, boneIndex, impulse.x, impulse.y, impulse.z);
+    }
+
+    // ============================================
+    // Powered Ragdoll
+    // ============================================
+
+    // Switch physics animation mode with proper transitions
+    // (MODE_ANIMATED, MODE_KINEMATIC, MODE_RAGDOLL, MODE_POWERED_RAGDOLL)
+    public static function setMode(int entityId, int mode): void {
+        _native_physanim_setMode(entityId, mode);
+    }
+
+    // Activate powered ragdoll: joint motors drive bones toward the playing
+    // animation while still reacting to collisions and impulses
+    public static function activatePoweredRagdoll(int entityId): void {
+        _native_physanim_setMode(entityId, MODE_POWERED_RAGDOLL);
+    }
+
+    // Per-bone motor strength override (0 = limp ragdoll joint, 1 = full tracking)
+    // Lasts until play mode ends; bone name must match the skeleton
+    public static function setBoneMotorStrength(int entityId, string boneName, float strength): void {
+        _native_physanim_setBoneMotorStrength(entityId, boneName, strength);
+    }
+
+    // Whole-body motor strength multiplier (0 = full ragdoll, 1 = config profile)
+    public static function setGlobalMotorStrength(int entityId, float strength): void {
+        _native_physanim_setGlobalMotorStrength(entityId, strength);
+    }
+
+    // Impulse on a bone plus a temporary motor-strength dip on that bone and its
+    // descendants, recovering over the config's default recover time
+    public static function hitReaction(int entityId, string boneName, Vec3f impulse): void {
+        _native_physanim_hitReaction(entityId, boneName, impulse.x, impulse.y, impulse.z);
+    }
+
+    // Same with an explicit recover time in seconds
+    public static function hitReactionTimed(int entityId, string boneName, Vec3f impulse, float recoverTime): void {
+        _native_physanim_hitReaction(entityId, boneName, impulse.x, impulse.y, impulse.z, recoverTime);
+    }
+
+    // True once all ragdoll bodies have been near-still for the configured
+    // settle window (use for get-up logic)
+    public static function isSettled(int entityId): bool {
+        return _native_physanim_isSettled(entityId);
     }
 }

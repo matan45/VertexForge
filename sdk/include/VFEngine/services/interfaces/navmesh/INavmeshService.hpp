@@ -36,7 +36,11 @@ namespace services
         virtual void removeAgent(EntityHandle entity) = 0;
         virtual void setAgentDestination(EntityHandle entity, const glm::vec3& target) = 0;
         virtual void stopAgent(EntityHandle entity) = 0;
-        virtual void updateAgents(float deltaTime) = 0;
+
+        // Per-frame pipeline: bake polls, tile streaming, dirty tiles, agent simulation.
+        // simulateAgents gates the crowd simulation (play mode only); streaming/bake
+        // portions always run so the editor can stream and bake tiles in edit mode.
+        virtual void update(float deltaTime, bool simulateAgents) = 0;
 
         virtual void getNavmeshDebugMesh(std::vector<glm::vec3>& outVertices,
                                           std::vector<uint32_t>& outIndices) const = 0;

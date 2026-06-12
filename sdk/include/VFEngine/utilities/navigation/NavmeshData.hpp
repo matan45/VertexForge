@@ -89,7 +89,56 @@ namespace navigation
     // Version 3: added off-mesh link + obstacle fields to NavmeshBakeSettings
     // Version 4: added areaCosts[64] to NavmeshBakeSettings
     // Version 5: added LOD support (lod field in NavmeshTileData, NavmeshLodConfig in settings)
-    constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 5;
+    // Version 6: added streaming settings block (enabled flag + radii/budgets/LOD distances)
+    constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 6;
+    constexpr uint32_t NAVMESH_TILE_MIN_SUPPORTED_VERSION = 5;
+
+    // dtPolyRef is 32 bits laid out as [salt | tile | poly]. Detour requires
+    // saltBits >= 10, so tileBits + polyBits <= 22. maxTiles passed to
+    // dtNavMesh::init caps CONCURRENTLY RESIDENT tiles (hash-addressed), not
+    // the world grid — streaming swaps tiles in and out of that budget, so an
+    // open world of any size works as long as residency stays under the cap.
+    struct NavmeshRefBudget
+    {
+        int maxTiles = 0;
+        int tileBits = 0;
+        int polyBits = 0;
+        int saltBits = 0;
+        bool clamped = false;
+    };
+
+    inline int navmeshBitsFor(int value)
+    {
+        int bits = 1;
+        while ((1 << bits) < value && bits < 31)
+            ++bits;
+        return bits;
+    }
+
+    inline NavmeshRefBudget computeNavmeshRefBudget(int requestedTiles, int maxPolysPerTile)
+    {
+        constexpr int MIN_SALT_BITS = 10;        // enforced by dtNavMesh::init
+        constexpr int MAX_RESIDENT_TILES = 1024; // generous streaming residency cap
+
+        NavmeshRefBudget budget;
+        budget.polyBits = navmeshBitsFor(maxPolysPerTile > 1 ? maxPolysPerTile : 2);
+
+        int tileBitsCap = 32 - MIN_SALT_BITS - budget.polyBits;
+        int hardCap = tileBitsCap >= 1 ? (1 << tileBitsCap) : 1;
+        if (hardCap > MAX_RESIDENT_TILES)
+            hardCap = MAX_RESIDENT_TILES;
+
+        budget.maxTiles = requestedTiles < 1 ? 1 : requestedTiles;
+        if (budget.maxTiles > hardCap)
+        {
+            budget.maxTiles = hardCap;
+            budget.clamped = true;
+        }
+
+        budget.tileBits = navmeshBitsFor(budget.maxTiles > 1 ? budget.maxTiles : 2);
+        budget.saltBits = 32 - budget.tileBits - budget.polyBits;
+        return budget;
+    }
 
     struct NavmeshFileHeader
     {

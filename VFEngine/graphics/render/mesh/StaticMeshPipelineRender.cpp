@@ -4,6 +4,7 @@
 #include "../DebugRenderer.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialShaderCache.hpp"
+#include "../material/MaterialParameterBufferCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
@@ -141,6 +142,23 @@ namespace render::mesh
         }
     }
 
+    void StaticMeshPipeline::bindSubmeshParameters(
+        const vk::CommandBuffer& commandBuffer,
+        const ExtractedPBRValues& pbrValues,
+        const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& materialCache,
+        RenderState& state) const
+    {
+        if (!parameterBufferCache || pbrValues.materialPath.empty()) return;
+        if (state.lastParameterMaterialPath == pbrValues.materialPath) return;
+        state.lastParameterMaterialPath = pbrValues.materialPath;
+
+        auto matIt = materialCache.find(pbrValues.materialPath);
+        if (matIt == materialCache.end() || !matIt->second) return;
+
+        parameterBufferCache->updateAndBind(commandBuffer, pipelineLayout, state.imageIndex,
+                                            pbrValues.materialPath, *matIt->second);
+    }
+
     MeshPushConstants StaticMeshPipeline::buildSubmeshPushConstants(
         const MeshRenderData& meshData,
         const SubMeshGPUData& subMesh,
@@ -223,6 +241,7 @@ namespace render::mesh
 
         bindSubmeshPipeline(commandBuffer, pbrValues, materialCache, state);
         bindSubmeshMaterial(commandBuffer, pbrValues, state);
+        bindSubmeshParameters(commandBuffer, pbrValues, materialCache, state);
 
         MeshPushConstants pushConstants = buildSubmeshPushConstants(meshData, subMesh, subMeshIndex, pbrValues);
         commandBuffer.pushConstants(pipelineLayout,
@@ -294,6 +313,7 @@ namespace render::mesh
         RenderState state;
         state.currentMaterialDescriptorSet = frameTextureDescriptorSet;
         state.defaultMaterialDescriptorSet = frameTextureDescriptorSet;
+        state.imageIndex = imageIndex;
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         state.currentPipeline = graphicsPipeline;
@@ -351,6 +371,7 @@ namespace render::mesh
         RenderState state;
         state.currentMaterialDescriptorSet = frameTextureDescriptorSet;
         state.defaultMaterialDescriptorSet = frameTextureDescriptorSet;
+        state.imageIndex = imageIndex;
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         state.currentPipeline = graphicsPipeline;
@@ -474,6 +495,9 @@ namespace render::mesh
         info.depthAttachment = core::depthClear(depthView);
 
         core::beginDynamicRendering(commandBuffer, info);
+        // Non-graph preview/classic targets are single-sample; the mesh pipeline
+        // has dynamic rasterization samples enabled, so set it before drawing.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
     }
 
     void StaticMeshPipeline::beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
@@ -599,6 +623,7 @@ namespace render::mesh
         RenderState state;
         state.currentMaterialDescriptorSet = frameTextureDescriptorSet;
         state.defaultMaterialDescriptorSet = frameTextureDescriptorSet;
+        state.imageIndex = imageIndex;
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         state.currentPipeline = graphicsPipeline;

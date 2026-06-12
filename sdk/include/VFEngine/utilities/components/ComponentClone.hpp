@@ -133,6 +133,25 @@ namespace components
     }
 
     template <>
+    inline void resetClonedRuntimeState<UIWindowComponent>(UIWindowComponent& c)
+    {
+        c.isDraggingWindow = false;
+        c.dragStartMousePos = {0.0f, 0.0f};
+        c.dragStartAnchoredPos = {0.0f, 0.0f};
+        c.closeHovered = false;
+    }
+
+    template <>
+    inline void resetClonedRuntimeState<UIListViewComponent>(UIListViewComponent& c)
+    {
+        // Instances belong to the source list; the clone rebuilds its own.
+        c.itemInstances.clear();
+        c.pool.clear();
+        c.selectedIndex = -1;
+        c.needsReconcile = true;
+    }
+
+    template <>
     inline void resetClonedRuntimeState<UIAnimationComponent>(UIAnimationComponent& c)
     {
         c.isPlaying = false;

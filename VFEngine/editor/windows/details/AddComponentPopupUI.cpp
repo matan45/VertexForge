@@ -181,6 +181,54 @@ namespace windows::details
                 ImGui::SetTooltip("Tween animation system for UI elements");
         }
 
+        if (!c.hasUIStyle && matchesFilter("UI Style", filter))
+        {
+            if (ImGui::Selectable("  UI Style"))
+            {
+                events::ui::AddUIStyleComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Theme style key applied from the canvas .vfTheme asset");
+        }
+
+        if (!c.hasUIListView && matchesFilter("UI List View", filter))
+        {
+            if (ImGui::Selectable("  UI List View"))
+            {
+                events::ui::AddUIListViewComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Data-driven repeated rows from a .vfPrefab item template (auto layout + pooling)");
+        }
+
+        if (!c.hasUIWindow && matchesFilter("UI Window", filter))
+        {
+            if (ImGui::Selectable("  UI Window"))
+            {
+                events::ui::AddUIWindowComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Draggable window with title bar, close button and optional modal backdrop");
+        }
+
+        if (!c.hasUITooltip && matchesFilter("UI Tooltip", filter))
+        {
+            if (ImGui::Selectable("  UI Tooltip"))
+            {
+                events::ui::AddUITooltipComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Hover-delay tooltip: engine-drawn text bubble or a child panel");
+        }
+
         if (!c.hasUIMask && matchesFilter("UI Mask", filter))
         {
             if (ImGui::Selectable("  UI Mask"))

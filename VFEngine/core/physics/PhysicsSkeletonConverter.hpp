@@ -39,6 +39,16 @@ namespace core::physics
             const std::vector<int>& physicsToAnimBoneIndex,
             const glm::vec3& entityPosition = glm::vec3(0.0f));
 
+        // Animator output is skinning matrices (globalInverse * boneModel * inverseBind);
+        // this recovers model space before building the pose
+        static JPH::SkeletonPose buildTargetPoseFromAnimatorMatrices(
+            const JPH::Skeleton* physicsSkeleton,
+            const std::vector<glm::mat4>& animatorSkinningMatrices,
+            const std::vector<int>& physicsToAnimBoneIndex,
+            const resource::SkeletonData& skeletonData,
+            const glm::vec3& entityPosition = glm::vec3(0.0f),
+            const glm::quat& entityRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+
         static std::vector<glm::mat4> ragdollPoseToSkinningMatrices(
             const JPH::SkeletonPose& ragdollPose,
             const SkeletonConversionResult& conversion,

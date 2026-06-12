@@ -3,6 +3,7 @@
 #include "../EventTypes.hpp"
 #include "world/WorldTypes.hpp"
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <string>
 #include <optional>
 #include <vector>
@@ -71,11 +72,23 @@ namespace events::world
         std::string_view getName() const override { return "UpdateWorldStreaming"; }
     };
 
+    // Marks the sector owning the given entity as needing save. Editor code should
+    // execute this after mutating components on a sector-managed entity (transform
+    // moves are tracked automatically via TransformChangedNotification).
+    struct MarkEntitySectorDirtyCommand : ICommand<>
+    {
+        uint64_t entityUUID = 0;
+
+        std::string_view getName() const override { return "MarkEntitySectorDirty"; }
+    };
+
     struct RegisterStreamingSourceCommand : ICommand<uint32_t>
     {
         glm::vec3 position{0.0f};
         float radiusMultiplier = 1.0f;
         uint8_t priority = 0;
+        // Optional owning entity: the source auto-unregisters when this entity is deleted
+        uint64_t ownerEntityUUID = 0;
 
         std::string_view getName() const override { return "RegisterStreamingSource"; }
     };
@@ -100,6 +113,45 @@ namespace events::world
         uint32_t sourceId = 0;
 
         std::string_view getName() const override { return "IsStreamingSourceValid"; }
+    };
+
+    // ============================================
+    // Per-sector data layers (named binary payloads persisted in vfsector v3:
+    // gameplay grids, fog-of-war, plugin data)
+    // ============================================
+
+    struct SetSectorDataLayerCommand : ICommand<bool>
+    {
+        ::world::SectorCoord coord;
+        std::string layerName;
+        std::vector<uint8_t> data;
+
+        std::string_view getName() const override { return "SetSectorDataLayer"; }
+    };
+
+    struct RemoveSectorDataLayerCommand : ICommand<bool>
+    {
+        ::world::SectorCoord coord;
+        std::string layerName;
+
+        std::string_view getName() const override { return "RemoveSectorDataLayer"; }
+    };
+
+    struct GetSectorDataLayerQuery : IQuery<std::optional<std::vector<uint8_t>>>
+    {
+        ::world::SectorCoord coord;
+        std::string layerName;
+
+        std::string_view getName() const override { return "GetSectorDataLayer"; }
+    };
+
+    // Published once per layer when a streamed-in sector carries data layers
+    struct SectorDataLayerLoadedNotification : INotification
+    {
+        ::world::SectorCoord coord;
+        std::string layerName;
+
+        std::string_view getName() const override { return "SectorDataLayerLoaded"; }
     };
 
     // ============================================
@@ -137,6 +189,15 @@ namespace events::world
         std::string_view getName() const override { return "GetWorldStreamingStats"; }
     };
 
+    // Live-updates the streaming configuration (streamer + HLOD streamer + world
+    // definition). Persisted on the next Save World.
+    struct SetStreamingConfigCommand : ICommand<>
+    {
+        ::world::SectorStreamingConfig config;
+
+        std::string_view getName() const override { return "SetStreamingConfig"; }
+    };
+
     struct GetSectorConfigQuery : IQuery<::world::SectorConfig>
     {
         std::string_view getName() const override { return "GetSectorConfig"; }
@@ -145,6 +206,29 @@ namespace events::world
     struct GetLoadedSectorCoordsQuery : IQuery<std::vector<::world::SectorCoord>>
     {
         std::string_view getName() const override { return "GetLoadedSectorCoords"; }
+    };
+
+    // Every sector in the world definition regardless of state (world bake passes)
+    struct GetAllSectorCoordsQuery : IQuery<std::vector<::world::SectorCoord>>
+    {
+        std::string_view getName() const override { return "GetAllSectorCoords"; }
+    };
+
+    // Per-sector content readiness: which parts of a Loading sector are still in
+    // flight. A sector is fully ready when state == Loaded and both flags are false.
+    struct SectorReadiness
+    {
+        ::world::SectorState state = ::world::SectorState::Unloaded;
+        bool fileLoadPending = false;    // .vfsector async read in flight
+        bool entitySpawnsPending = false; // deserialized entities awaiting frame-budgeted spawn
+        uint32_t entityCount = 0;
+    };
+
+    struct GetSectorReadinessQuery : IQuery<SectorReadiness>
+    {
+        ::world::SectorCoord coord;
+
+        std::string_view getName() const override { return "GetSectorReadiness"; }
     };
 
     struct SetSectorDebugDrawCommand : ICommand<>

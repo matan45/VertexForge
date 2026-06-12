@@ -1,6 +1,8 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
 #include <value/ValueShim.hpp>
+#include <value/ObjectInstance.hpp>
+#include <environment/registry/ClassDefinition.hpp>
 
 #include "ScriptingAdapter.hpp"
 #include "CoroutineManager.hpp"
@@ -215,6 +217,27 @@ namespace core
         {
             vfLogError("[Script] {} failed: {}", methodName, e.what());
             return "";
+        }
+    }
+
+    bool ScriptingAdapter::hasMethod(uint64_t instanceId, const std::string& methodName) const
+    {
+        if (!isScriptLoaded(instanceId)) return false;
+
+        auto objIt = instanceToObject.find(instanceId);
+        if (objIt == instanceToObject.end()) return false;
+
+        try
+        {
+            const auto& instance = std::any_cast<const value::Value&>(objIt->second);
+            if (!value::isObject(instance)) return false;
+
+            auto classDef = value::asObject(instance)->getClassDefinition();
+            return classDef && classDef->findInstanceMethodInHierarchy(methodName, 0) != nullptr;
+        }
+        catch (const std::exception&)
+        {
+            return false;
         }
     }
 

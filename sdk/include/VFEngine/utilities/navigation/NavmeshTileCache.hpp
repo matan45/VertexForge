@@ -7,6 +7,19 @@
 
 namespace navigation
 {
+    // Utilities-local mirror of events::navmesh::NavmeshStreamingConfig plus the
+    // on/off flag — persisted in index.vfNavIndex so streaming is an asset-level
+    // opt-in (terrain parity). Defaults keep streaming OFF (eager full load).
+    struct NavmeshIndexStreamingSettings
+    {
+        uint8_t enabled = 0;
+        float loadRadius = 512.0f;
+        float unloadRadius = 640.0f;
+        int32_t maxLoadsPerFrame = 2;
+        int32_t maxUnloadsPerFrame = 2;
+        float lodDistances[3] = {256.0f, 512.0f, 1024.0f};
+    };
+
     struct NavmeshTileIndex
     {
         uint32_t magic = NAVMESH_FILE_MAGIC;
@@ -14,13 +27,23 @@ namespace navigation
         types::NavmeshBakeSettings settings;
         glm::vec3 boundsMin{0.0f};
         glm::vec3 boundsMax{0.0f};
+        NavmeshIndexStreamingSettings streaming;
         std::vector<NavmeshTileCoord> tileCoords;
     };
 
     class NavmeshTileCache
     {
     public:
+        // Reads route through these so tiles resolve from the .vfpak in shipped
+        // builds (default: VirtualFileSystem) and tests can inject in-memory data.
+        // Writes always target the real filesystem (editor-only) and are rejected
+        // in archive mode.
+        using FileReadFn = std::function<std::vector<uint8_t>(const std::string&)>;
+        using FileExistsFn = std::function<bool(const std::string&)>;
+
         explicit NavmeshTileCache(const std::string& directory);
+
+        void setFileAccess(FileReadFn read, FileExistsFn exists);
 
         // Non-LOD methods (default to LOD 0)
         bool saveTile(const NavmeshTileCoord& coord, const NavmeshTileData& data);
@@ -42,6 +65,8 @@ namespace navigation
 
     private:
         std::string directory;
+        FileReadFn readFileFn;
+        FileExistsFn fileExistsFn;
         std::unordered_set<NavmeshTileCoord, NavmeshTileCoordHash> knownTiles;
         std::unordered_set<NavmeshTileLodKey, NavmeshTileLodKeyHash> knownTileLods;
 

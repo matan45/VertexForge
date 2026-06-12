@@ -66,6 +66,11 @@ namespace services
         std::optional<EntityHandle> loadPrefab(const std::string& filePath,
                                                std::optional<EntityHandle> parent = std::nullopt);
 
+        // Editor copy/paste of entity subtrees (prefab-format JSON, in-memory)
+        std::string copyEntityToJson(EntityHandle entity) const;
+        std::optional<EntityHandle> instantiateEntityFromJson(const std::string& jsonText,
+                                                              std::optional<EntityHandle> parent);
+
         // Additive scene management
         bool loadSceneAdditive(const std::string& scenePath, const std::string& sceneName);
         bool unloadAdditiveScene(const std::string& sceneName);
@@ -87,5 +92,6 @@ namespace services
         void performDeferredLoad(const std::string& filePath);
         void performDeferredAdditiveLoad(const PendingAdditiveLoad& load);
         void triggerResourceLoadingForEntity(scene::Entity& entity) const;
+        void acquireAndNotifyResources(scene::Entity& entity) const;
     };
 }

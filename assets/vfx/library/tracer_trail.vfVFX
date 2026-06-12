@@ -1,0 +1,54 @@
+{
+    "version": "1.0",
+    "uuid": "910000000000000008",
+    "name": "Tracer Trail",
+    "graph": {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "Emitter",
+                "name": "Emitter",
+                "position": [100.0, 200.0],
+                "properties": {
+                    "spawnRate": { "type": "Float", "value": 60.0 },
+                    "lifetime": { "type": "Float", "value": 0.5 },
+                    "startSize": { "type": "Float", "value": 1.0 },
+                    "startSpeed": { "type": "Float", "value": 0.0 },
+                    "startVelocity": { "type": "Vec3", "value": [0.0, 1.0, 0.0] },
+                    "startColor": { "type": "Color", "value": [0.4, 0.9, 1.0, 1.0] },
+                    "looping": { "type": "Bool", "value": true },
+                    "texture": { "type": "String", "value": "" },
+                    "additiveBlend": { "type": "Bool", "value": true },
+                    "alphaClipThreshold": { "type": "Float", "value": 0.02 },
+                    "renderMode": { "type": "Int", "value": 4 },
+                    "maxTrailPoints": { "type": "Int", "value": 32 },
+                    "ribbonWidth": { "type": "Float", "value": 0.08 },
+                    "ribbonMinDistance": { "type": "Float", "value": 0.05 }
+                }
+            },
+            {
+                "id": 3,
+                "type": "ColorOverLifetime",
+                "name": "Color Over Lifetime",
+                "position": [330.0, 100.0],
+                "properties": {
+                    "gradient": { "type": "Gradient", "value": { "stops": [
+                        [0.0, 0.5, 0.95, 1.0, 1.0],
+                        [1.0, 0.1, 0.3, 0.5, 0.0]
+                    ] } }
+                }
+            },
+            {
+                "id": 2,
+                "type": "OutSystem",
+                "name": "Output",
+                "position": [560.0, 200.0],
+                "properties": {}
+            }
+        ],
+        "links": [
+            { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 2, "sourceNode": 3, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" }
+        ]
+    }
+}

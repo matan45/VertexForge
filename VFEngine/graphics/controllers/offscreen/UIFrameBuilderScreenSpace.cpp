@@ -301,6 +301,11 @@ namespace controllers::offscreen
             if (!scene::Entity::isEffectivelyActive(registry, entity))
                 return;
 
+            // Window subtrees render on the overlay layer (above the modal
+            // backdrop). Everything this subtree emits gets marked below.
+            bool isWindowRoot = registry.all_of<components::UIWindowComponent>(entity);
+            size_t windowStartIdx = drawList.size();
+
             // Track scroll ancestor
             entt::entity effectiveScrollAncestor = scrollAncestor;
             if (effectiveScrollAncestor == entt::null
@@ -370,6 +375,14 @@ namespace controllers::offscreen
                     }
                 }
             }
+
+            if (isWindowRoot)
+            {
+                for (size_t i = windowStartIdx; i < drawList.size(); ++i)
+                {
+                    drawList[i].overlay = true;
+                }
+            }
         }
 
         // Dedupes orphan warnings across frames. Best-effort: not cleared on scene
@@ -427,6 +440,93 @@ namespace controllers::offscreen
             warnOrphanUIEntities(registry);
         }
 
+        // Window chrome: modal backdrop, window background, title bar and the
+        // close button. Emitted BEFORE the canvas traversal so window children
+        // (also overlay-tagged) draw over the chrome; the backdrop leads the
+        // overlay layer so it dims everything beneath.
+        void emitWindowChrome(
+            entt::registry& registry, const FrameContext& ctx,
+            std::vector<render::ui::UIImageRenderData>& drawList)
+        {
+            float vw = static_cast<float>(ctx.viewportWidth);
+            float vh = static_cast<float>(ctx.viewportHeight);
+
+            auto& modalState = registry.ctx().emplace<components::UIModalState>();
+            entt::entity modal = modalState.activeModal();
+            if (modal != entt::null && registry.valid(modal) &&
+                registry.all_of<components::UIWindowComponent>(modal) &&
+                scene::Entity::isEffectivelyActive(registry, modal))
+            {
+                const auto& window = registry.get<components::UIWindowComponent>(modal);
+                render::ui::UIImageRenderData backdrop;
+                backdrop.texturePath = "__white_1x1__";
+                backdrop.position = glm::vec2(0.0f, 0.0f);
+                backdrop.size = glm::vec2(vw, vh);
+                backdrop.colorTint = window.backdropColor;
+                backdrop.overlay = true;
+                drawList.push_back(std::move(backdrop));
+            }
+
+            auto view = registry.view<components::UIWindowComponent, components::UIRectComponent>();
+            for (auto entity : view)
+            {
+                if (!scene::Entity::isEffectivelyActive(registry, entity))
+                    continue;
+
+                const auto& window = view.get<components::UIWindowComponent>(entity);
+
+                const auto* canvas = findCanvasForEntity(registry, entity);
+                if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                    canvas = &registry.get<components::UICanvasComponent>(entity);
+                if (!canvas)
+                    continue;
+
+                float scale = computeCanvasScale(canvas, vw, vh);
+                const auto& rectComp = view.get<components::UIRectComponent>(entity);
+                PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+                if (window.backgroundColor.a > 0.01f)
+                {
+                    render::ui::UIImageRenderData bg;
+                    bg.texturePath = "__white_1x1__";
+                    bg.position = glm::vec2(rect.x, rect.y);
+                    bg.size = glm::vec2(rect.w, rect.h);
+                    bg.colorTint = window.backgroundColor;
+                    bg.overlay = true;
+                    drawList.push_back(std::move(bg));
+                }
+
+                if (window.showTitleBar)
+                {
+                    float titleH = window.titleBarHeight * scale;
+
+                    render::ui::UIImageRenderData titleBar;
+                    titleBar.texturePath = "__white_1x1__";
+                    titleBar.position = glm::vec2(rect.x, rect.y);
+                    titleBar.size = glm::vec2(rect.w, titleH);
+                    titleBar.colorTint = window.titleBarColor;
+                    titleBar.overlay = true;
+                    drawList.push_back(std::move(titleBar));
+
+                    if (window.closable)
+                    {
+                        render::ui::UIImageRenderData closeBtn;
+                        closeBtn.texturePath = "__white_1x1__";
+                        closeBtn.position = glm::vec2(rect.x + rect.w - titleH, rect.y);
+                        closeBtn.size = glm::vec2(titleH, titleH);
+                        closeBtn.colorTint = window.closeHovered
+                            ? glm::vec4(0.8f, 0.2f, 0.2f, 1.0f)
+                            : glm::vec4(window.titleBarColor.r * 1.3f,
+                                        window.titleBarColor.g * 1.1f,
+                                        window.titleBarColor.b * 1.1f,
+                                        window.titleBarColor.a);
+                        closeBtn.overlay = true;
+                        drawList.push_back(std::move(closeBtn));
+                    }
+                }
+            }
+        }
+
     } // anonymous namespace
 
     void UIFrameBuilder::prepareUIImagesScreenSpace(const FrameContext& ctx, UIInteractionSystem& interactionSystem,
@@ -449,6 +549,8 @@ namespace controllers::offscreen
         }
 
         animationSystem.processAnimations(ctx);
+        // Windows run first so this frame's modal stack gates the other widgets
+        interactionSystem.processWindowInteraction(ctx);
         interactionSystem.processButtonInteraction(ctx);
         interactionSystem.processCheckboxInteraction(ctx);
         interactionSystem.processTextInputInteraction(ctx);
@@ -456,6 +558,8 @@ namespace controllers::offscreen
         interactionSystem.processTabsInteraction(ctx);
         interactionSystem.processSliderInteraction(ctx);
         interactionSystem.processDragDropInteraction(ctx);
+        interactionSystem.processListViewInteraction(ctx);
+        interactionSystem.processTooltipInteraction(ctx);
         interactionSystem.computePointerOverUI(ctx);
 
         std::vector<render::ui::UIImageRenderData> drawList;
@@ -471,6 +575,7 @@ namespace controllers::offscreen
 
         auto scrollContainers = ui_screenspace::buildScrollContainerData(registry, ctx);
 
+        emitWindowChrome(registry, ctx, drawList);
         emitUIImagePasses(registry, ctx, scrollContainers, drawList);
 
         ui_screenspace::generateSliderDrawData(registry, ctx, scrollContainers, drawList);
@@ -478,7 +583,29 @@ namespace controllers::offscreen
         ui_screenspace::generateScrollbarDrawData(registry, ctx, drawList);
         ui_screenspace::generateTextInputCaretDrawData(registry, ctx, interactionSystem.getFocusedTextInput(), drawList);
         ui_screenspace::generateDropdownDrawData(registry, ctx, drawList);
+        ui_screenspace::generateListSelectionDrawData(registry, ctx, scrollContainers, drawList);
         ui_screenspace::generateDragGhostDrawData(registry, ctx, drawList);
+
+        // Text-mode tooltip bubble background — overlay layer (records after
+        // all main UI images AND text, so it covers underlying labels too).
+        {
+            auto& tooltipState = registry.ctx().emplace<components::UITooltipState>();
+            if (tooltipState.visible && tooltipState.hoveredEntity != entt::null &&
+                registry.valid(tooltipState.hoveredEntity))
+            {
+                const auto* tip = registry.try_get<components::UITooltipComponent>(tooltipState.hoveredEntity);
+                if (tip && tip->mode == components::UITooltipMode::Text && !tip->text.empty())
+                {
+                    render::ui::UIImageRenderData bg;
+                    bg.texturePath = "__white_1x1__";
+                    bg.position = tooltipState.displayPos;
+                    bg.size = tooltipState.bgSize;
+                    bg.colorTint = tip->backgroundColor;
+                    bg.overlay = true;
+                    drawList.push_back(std::move(bg));
+                }
+            }
+        }
 
         renderHandler->setUIImageDrawList(std::move(drawList));
     }

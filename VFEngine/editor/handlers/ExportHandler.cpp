@@ -1,11 +1,17 @@
 #include "print/Log.hpp"
 #include "ExportHandler.hpp"
+#include "../graph/ShaderGraphCompiler.hpp"
+#include "api/PluginVersion.hpp"
 #include "events/project/ProjectEvents.hpp"
+#include "events/scripting/ScriptingEvents.hpp"
 #include "export/GameExporter.hpp"
+#include "material/MaterialAsset.hpp"
 #include <filesystem>
 
 namespace handlers
 {
+	namespace fs = std::filesystem;
+
 	ExportHandler::~ExportHandler()
 	{
 		unregisterEventHandlers();
@@ -63,6 +69,14 @@ namespace handlers
 		config.workingDirectory = projectOpt->workingDirectory;
 		config.startupScene = projectOpt->startupScene;
 		config.iconPath = projectOpt->exeIconPath;
+		config.cleanBuild = cmd.cleanBuild;
+		config.verifyIntegrity = cmd.verifyIntegrity;
+		config.stripUnreferencedAssets = cmd.stripUnreferencedAssets;
+		config.alwaysIncludePatterns = cmd.alwaysIncludePatterns;
+		config.pluginOverrides = cmd.pluginOverrides;
+		// The editor links Plugin; the GameExport DLL must not, so the expected
+		// API version travels through the config.
+		config.expectedPluginApiVersion = plugin::VF_PLUGIN_API_VERSION;
 
 		if (projectPathOpt)
 		{
@@ -72,6 +86,23 @@ namespace handlers
 		events::gameExport::ExportStartedNotification startNotif;
 		startNotif.outputDirectory = cmd.outputDirectory;
 		dispatcher.publish(startNotif);
+
+		// Pre-export passes run before the export thread spawns: the scripting
+		// service and ShaderGraphCompiler belong to the main thread. A failure
+		// here aborts the export — shipping stale scripts or broken materials
+		// is worse than no export.
+		std::string preExportError;
+		if (cmd.buildScripts && !buildScriptsForExport(config.workingDirectory, preExportError))
+		{
+			publishFailure(cmd.outputDirectory, preExportError);
+			return false;
+		}
+
+		if (!recompileStaleMaterials(config.workingDirectory, preExportError))
+		{
+			publishFailure(cmd.outputDirectory, preExportError);
+			return false;
+		}
 
 		exporting.store(true);
 
@@ -116,18 +147,104 @@ namespace handlers
 
 	bool ExportHandler::handleCanExportQuery(const events::gameExport::CanExportQuery&)
 	{
-		if (exporting.load()) return false;
+		auto projectOpt = events::EventDispatcher::instance().query(events::project::GetCurrentProjectQuery{});
+		return projectOpt && projectOpt->isValid();
+	}
 
+	bool ExportHandler::buildScriptsForExport(const fs::path& workingDirectory,
+											  std::string& errorMessage)
+	{
+		if (!fs::exists(workingDirectory / "scripts" / "scripts.mtproj"))
+		{
+			return true; // Project has no scripts to build
+		}
+
+		vfLogInfo("Export: building scripts...");
 		auto& dispatcher = events::EventDispatcher::instance();
-
-		bool isLoaded = dispatcher.query(events::project::IsProjectLoadedQuery{});
-		if (!isLoaded) return false;
-
-		auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
-		if (!projectOpt || !projectOpt->isValid()) return false;
-
-		if (!std::filesystem::exists(projectOpt->workingDirectory)) return false;
+		if (!dispatcher.execute(events::scripting::BuildScriptsCommand{}))
+		{
+			errorMessage = "Script build failed — fix script errors before exporting (see console log).";
+			return false;
+		}
 
 		return true;
+	}
+
+	bool ExportHandler::recompileStaleMaterials(const fs::path& workingDirectory,
+												std::string& errorMessage)
+	{
+		// Graph-authored materials whose cached shader is missing or stale (e.g.
+		// cleared by the texture-array-outdated check on load) render wrong in
+		// shipped builds — the runtime cannot regenerate them. Recompile and
+		// re-save them here, where the editor-side ShaderGraphCompiler exists.
+		std::vector<std::string> failedMaterials;
+		int recompiledCount = 0;
+
+		std::error_code ec;
+		for (auto it = fs::recursive_directory_iterator(workingDirectory, ec);
+		     it != fs::recursive_directory_iterator(); it.increment(ec))
+		{
+			if (ec) break;
+			if (!it->is_regular_file() || it->path().extension() != ".vfmaterial") continue;
+
+			auto materialOpt = material::MaterialAsset::load(it->path().string());
+			if (!materialOpt) continue;
+
+			auto& materialData = *materialOpt;
+			if (materialData.graph.findOutputNode() == nullptr) continue; // standard PBR material
+
+			bool hasCachedShader = !materialData.cachedVertexShader.empty() &&
+								   !materialData.cachedFragmentShader.empty();
+			if (hasCachedShader && !materialData.needsRecompile) continue;
+
+			std::string relativePath = fs::relative(it->path(), workingDirectory, ec).generic_string();
+			auto compileResult = editor::graph::ShaderGraphCompiler::compileGraph(materialData.graph);
+			if (!compileResult.success)
+			{
+				failedMaterials.push_back(relativePath + ": " + compileResult.errorMessage);
+				continue;
+			}
+
+			materialData.cachedVertexShader = compileResult.vertexShader;
+			materialData.cachedFragmentShader = compileResult.fragmentShader;
+			materialData.needsRecompile = false;
+
+			if (!material::MaterialAsset::save(it->path().string(), materialData))
+			{
+				failedMaterials.push_back(relativePath + ": failed to save recompiled material");
+				continue;
+			}
+
+			recompiledCount++;
+			vfLogInfo("Export: recompiled material shader: {}", relativePath);
+		}
+
+		if (recompiledCount > 0)
+		{
+			vfLogInfo("Export: recompiled {} stale material shader(s)", recompiledCount);
+		}
+
+		if (!failedMaterials.empty())
+		{
+			errorMessage = "Material shader compilation failed:";
+			for (const auto& failure : failedMaterials)
+			{
+				errorMessage += "\n  - " + failure;
+			}
+			return false;
+		}
+
+		return true;
+	}
+
+	void ExportHandler::publishFailure(const std::string& outputDirectory,
+									   const std::string& errorMessage)
+	{
+		events::gameExport::ExportCompletedNotification completeNotif;
+		completeNotif.success = false;
+		completeNotif.errorMessage = errorMessage;
+		completeNotif.outputPath = outputDirectory;
+		events::EventDispatcher::instance().publish(completeNotif);
+		vfLogError("Game export failed: {}", errorMessage);
 	}
 }

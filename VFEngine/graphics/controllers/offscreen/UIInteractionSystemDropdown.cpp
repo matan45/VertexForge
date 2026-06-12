@@ -42,6 +42,9 @@ namespace controllers::offscreen
             if (!scene::Entity::isEffectivelyActive(registry, dropdownEntity))
                 continue;
 
+            if (!ui_common::isInteractionAllowed(registry, dropdownEntity))
+                continue;
+
             const auto* canvas = ui_common::findCanvasForEntity(registry, dropdownEntity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(dropdownEntity))
                 canvas = &registry.get<components::UICanvasComponent>(dropdownEntity);

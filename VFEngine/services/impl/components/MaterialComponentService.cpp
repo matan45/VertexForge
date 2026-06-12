@@ -208,6 +208,76 @@ namespace services {
         return result;
     }
 
+    bool MaterialComponentService::setMaterialParameter(EntityHandle entity, const std::string& parameterName,
+                                                        const ::material::ParameterValue& value) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry) || parameterName.empty()) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
+        comp.parameterOverrides[parameterName] = value;
+
+        events::material::MaterialParameterChangedNotification notification;
+        notification.entity = entity;
+        notification.parameterName = parameterName;
+        notification.value = value;
+        events::EventDispatcher::instance().publish(notification);
+        return true;
+    }
+
+    bool MaterialComponentService::clearMaterialParameter(EntityHandle entity, const std::string& parameterName) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
+        if (parameterName.empty()) {
+            if (comp.parameterOverrides.empty()) return false;
+            comp.parameterOverrides.clear();
+        } else if (comp.parameterOverrides.erase(parameterName) == 0) {
+            return false;
+        }
+
+        events::material::MaterialParameterChangedNotification notification;
+        notification.entity = entity;
+        notification.parameterName = parameterName;
+        notification.cleared = true;
+        events::EventDispatcher::instance().publish(notification);
+        return true;
+    }
+
+    std::optional<::material::ParameterValue> MaterialComponentService::getMaterialParameter(
+        EntityHandle entity, const std::string& parameterName) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
+        auto it = comp.parameterOverrides.find(parameterName);
+        if (it == comp.parameterOverrides.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
     void MaterialComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
         dispatcher.registerCommandHandler<events::material::AddMaterialComponentCommand>(
             [this](const events::material::AddMaterialComponentCommand& cmd) {
@@ -234,6 +304,16 @@ namespace services {
                 return setSubMeshMaterial(cmd.entity, cmd.submeshName, cmd.materialPath);
             });
 
+        dispatcher.registerCommandHandler<events::material::SetMaterialParameterCommand>(
+            [this](const events::material::SetMaterialParameterCommand& cmd) {
+                return setMaterialParameter(cmd.entity, cmd.parameterName, cmd.value);
+            });
+
+        dispatcher.registerCommandHandler<events::material::ClearMaterialParameterCommand>(
+            [this](const events::material::ClearMaterialParameterCommand& cmd) {
+                return clearMaterialParameter(cmd.entity, cmd.parameterName);
+            });
+
         dispatcher.registerQueryHandler<events::material::HasMaterialComponentQuery>(
             [this](const events::material::HasMaterialComponentQuery& query) {
                 return hasMaterialComponent(query.entity);
@@ -252,6 +332,11 @@ namespace services {
         dispatcher.registerQueryHandler<events::material::GetAllSubMeshMaterialsQuery>(
             [this](const events::material::GetAllSubMeshMaterialsQuery& query) {
                 return getAllSubMeshMaterials(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::material::GetMaterialParameterQuery>(
+            [this](const events::material::GetMaterialParameterQuery& query) {
+                return getMaterialParameter(query.entity, query.parameterName);
             });
     }
 

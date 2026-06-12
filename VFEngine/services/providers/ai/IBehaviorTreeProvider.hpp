@@ -22,12 +22,21 @@ namespace services {
         virtual void updateAll(float deltaTime) = 0;
         virtual void stopAll() = 0;
 
+        // Reload a tree asset from disk and rebind every live runtime using it
+        // (hot reload during play; surviving blackboard values are preserved)
+        virtual void reloadAsset(const std::string& treePath) = 0;
+
         // === Blackboard ===
         virtual void setBlackboardValue(EntityHandle entity, const std::string& key,
                                         const behaviortree::BlackboardValue& value) = 0;
         virtual behaviortree::BlackboardValue getBlackboardValue(EntityHandle entity,
                                                                   const std::string& key) = 0;
         virtual bool hasBlackboardKey(EntityHandle entity, const std::string& key) const = 0;
+
+        // === Debug ===
+        // Enable per-tick snapshot capture for one entity (invalid handle disables)
+        virtual void setDebugTarget(EntityHandle entity) = 0;
+        virtual behaviortree::BTRuntimeSnapshot getRuntimeSnapshot(EntityHandle entity) const = 0;
     };
 
 }

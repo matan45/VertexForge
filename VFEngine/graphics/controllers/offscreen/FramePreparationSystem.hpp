@@ -75,7 +75,13 @@ namespace controllers::offscreen
         UIAnimationSystem uiAnimation;
 
         const render::mesh::ExtractedPBRValues* getCachedPBRValues(const std::string& materialPath);
-        void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo, const std::string& materialPath);
+        // Override-aware variant: caches per (materialPath, override-hash) so entities
+        // with distinct runtime parameter values don't thrash one cache slot
+        const render::mesh::ExtractedPBRValues* getCachedPBRValues(
+            const std::string& materialPath,
+            const render::mesh::MaterialPBRExtractor::ParameterOverrides* runtimeOverrides);
+        void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo, const std::string& materialPath,
+                                  const render::mesh::MaterialPBRExtractor::ParameterOverrides* runtimeOverrides = nullptr);
 
     public:
         FramePreparationSystem() = default;

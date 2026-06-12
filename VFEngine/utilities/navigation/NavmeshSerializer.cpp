@@ -1,6 +1,8 @@
 #include "../print/Log.hpp"
+#include "../resource/VirtualFileSystem.hpp"
 #include "NavmeshSerializer.hpp"
 #include <fstream>
+#include <cstring>
 
 namespace navigation
 {
@@ -35,14 +37,27 @@ namespace navigation
                                   NavmeshFileHeader& outHeader,
                                   std::vector<NavmeshTileData>& outTiles)
     {
-        std::ifstream file(filePath, std::ios::binary);
-        if (!file.is_open())
+        // Reads go through the VFS so the navmesh resolves from the .vfpak in
+        // shipped builds (falls back to the filesystem in dev mode)
+        auto bytes = resource::VirtualFileSystem::instance().readFile(filePath);
+        if (bytes.empty())
         {
             vfLogError("NavmeshSerializer: Failed to open file for reading: {}", filePath);
             return false;
         }
 
-        file.read(reinterpret_cast<char*>(&outHeader), sizeof(NavmeshFileHeader));
+        size_t pos = 0;
+        auto read = [&](void* dst, size_t size)
+        {
+            if (pos + size > bytes.size())
+                return false;
+            std::memcpy(dst, bytes.data() + pos, size);
+            pos += size;
+            return true;
+        };
+
+        if (!read(&outHeader, sizeof(NavmeshFileHeader)))
+            return false;
 
         if (outHeader.magic != NAVMESH_FILE_MAGIC)
         {
@@ -60,16 +75,18 @@ namespace navigation
         for (uint32_t i = 0; i < outHeader.tileCount; ++i)
         {
             auto& tile = outTiles[i];
-            file.read(reinterpret_cast<char*>(&tile.x), sizeof(tile.x));
-            file.read(reinterpret_cast<char*>(&tile.y), sizeof(tile.y));
-            file.read(reinterpret_cast<char*>(&tile.dataSize), sizeof(tile.dataSize));
+            if (!read(&tile.x, sizeof(tile.x)) ||
+                !read(&tile.y, sizeof(tile.y)) ||
+                !read(&tile.dataSize, sizeof(tile.dataSize)))
+                return false;
             if (tile.dataSize > 0)
             {
                 tile.data.resize(tile.dataSize);
-                file.read(reinterpret_cast<char*>(tile.data.data()), tile.dataSize);
+                if (!read(tile.data.data(), tile.dataSize))
+                    return false;
             }
         }
 
-        return file.good();
+        return true;
     }
 }

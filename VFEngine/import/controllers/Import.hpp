@@ -6,6 +6,7 @@
 #include <atomic>
 #include "config/Config.hpp"
 #include "../pipeline/Pipeline.hpp"
+#include "../registry/AssetImporter.hpp"
 #include "../ImportExport.hpp"
 
 namespace controllers
@@ -46,6 +47,7 @@ namespace controllers
         inline static std::string location;
         inline static std::unique_ptr<pipeline::ImportPipeline> importPipeline;
         inline static std::atomic<bool> cancelRequested{false};
+        inline static std::atomic<uint32_t> activeImports{0};
 
     public:
         static ImportResult importFiles(const std::vector<importConfig::ImportFiles>& paths,
@@ -56,6 +58,22 @@ namespace controllers
 
         // Add a custom pipeline stage (appended after built-in stages).
         static void addCustomStage(std::unique_ptr<pipeline::PipelineStage> stage);
+
+        // Registry queries (built-in importers are registered on first use).
+        static std::vector<import::FormatInfo> supportedFormats();
+        static resource::AssetType assetTypeFor(const std::string& fileType);
+        // Import-dialog options for a file extension (lowercase, no dot).
+        static std::vector<import::ImportOptionDesc> optionsForExtension(const std::string& extension);
+
+        // Full importer registration (plugins use this via PluginContext).
+        // Register only during initialization; unregister drains in-flight
+        // imports first so importer vtables stay valid until idle.
+        static void registerImporter(std::unique_ptr<import::AssetImporter> importer,
+                                     std::string_view ownerTag);
+        static void unregisterImportersByOwner(std::string_view ownerTag);
+
+        // Blocks until no import is running (requests cancellation first).
+        static void waitForIdle();
 
         // Cancellation support
         static void requestCancel();

@@ -72,6 +72,10 @@ namespace services {
         RenderTexture,
         Controller,
         Decal,
+        UIStyle,
+        UITooltip,
+        UIWindow,
+        UIListView,
     };
 
 }

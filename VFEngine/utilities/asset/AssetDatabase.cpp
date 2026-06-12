@@ -452,6 +452,10 @@ namespace asset
 
             lock.unlock();
 
+            // Dependency lists collected from v2 metas; applied after all
+            // registrations so the graph only contains known assets
+            std::vector<std::pair<AssetGUID, std::vector<AssetGUID>>> metaDependencies;
+
             uint32_t count = 0;
             std::error_code ec;
             for (const auto& entry : fs::recursive_directory_iterator(
@@ -477,10 +481,30 @@ namespace asset
 
                 registerAssetWithGUID(metadata->guid, assetPath.string(),
                                       metadata->type, metadata->importSourcePath);
+
+                if (!metadata->dependencies.empty())
+                {
+                    metaDependencies.emplace_back(metadata->guid, std::move(metadata->dependencies));
+                }
                 count++;
             }
 
-            vfLogInfo("Rebuilt asset database from {} meta files", count);
+            // Seed the dependency graph so Find References works immediately,
+            // before (or without) a content scan
+            uint32_t seeded = 0;
+            for (auto& [guid, deps] : metaDependencies)
+            {
+                deps.erase(std::remove_if(deps.begin(), deps.end(),
+                                          [this](const AssetGUID& dep)
+                                          { return !getEntry(dep).has_value(); }),
+                           deps.end());
+                if (deps.empty()) continue;
+
+                setDependencies(guid, deps);
+                seeded++;
+            }
+
+            vfLogInfo("Rebuilt asset database from {} meta files ({} with dependencies)", count, seeded);
             return true;
         }
         catch (const std::exception& e)

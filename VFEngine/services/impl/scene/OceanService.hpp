@@ -7,6 +7,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../../utilities/world/WorldTypes.hpp"
 #include "../../../utilities/terrain/TerrainTypes.hpp"
+#include "../../../utilities/water/SeaState.hpp"
 #include <glm/glm.hpp>
 #include <functional>
 #include <memory>
@@ -42,6 +43,32 @@ namespace services
         std::function<float(const glm::vec2&)> oceanHeightSampler;
 
         std::unordered_set<EntityHandle, EntityHandle::Hash> entitiesInWater;
+
+        // Enter/exit transitions recorded during updateBuoyancy (physics worker task) and
+        // published from flushWaterEvents on the main thread — script callbacks must not
+        // run on the worker.
+        struct WaterTransition
+        {
+            EntityHandle entity;
+            glm::vec3 position{0.0f};
+            float verticalSpeed = 0.0f;
+            float submersion = 0.0f;
+            bool entered = false;
+        };
+        std::vector<WaterTransition> pendingWaterTransitions;
+
+        // Manual sea-state transition (SetOceanSeaStateCommand)
+        bool seaStateTransitionActive = false;
+        float seaStateTransitionElapsed = 0.0f;
+        float seaStateTransitionDuration = 0.0f;
+        float seaStateStartBeaufort = 3.0f;
+        float seaStateTargetBeaufort = 3.0f;
+        water::SeaState seaStateTransitionStart;
+        water::SeaState seaStateTransitionTarget;
+
+        // Last weather-driven values applied (quantized) — avoids config-version churn
+        float lastAppliedBeaufort = -1.0f;
+        float lastAppliedWindDirection = -10000.0f;
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
@@ -92,8 +119,14 @@ namespace services
         bool saveOcean(EntityHandle oceanEntity, const std::string& path);
         EntityHandle loadOcean(const std::string& path);
 
+        void update(float deltaTime);
+        void setSeaState(float beaufort, float transitionSeconds);
+        float getSeaState() const;
+
         void updateBuoyancy();
+        void flushWaterEvents();
         void clearBuoyancyTracking();
+        bool isEntityInWater(EntityHandle entity) const { return entitiesInWater.contains(entity); }
 
         void rebuildOceanFromComponents();
 
@@ -109,6 +142,12 @@ namespace services
 
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
+
+        // Sea state helpers
+        void applySeaState(const water::SeaState& state);
+        water::SeaState seaStateFromComponentBands() const;
+        void updateWeatherDrivenSeaState();
+        void updateManualSeaStateTransition(float deltaTime);
 
         // Sector-driven water tile streaming
         void onSectorActivated(const world::SectorCoord& coord, const world::SectorConfig& config);

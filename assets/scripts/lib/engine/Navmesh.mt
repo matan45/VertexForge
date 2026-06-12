@@ -58,6 +58,15 @@ public class Navmesh {
         return _native_navmesh_raycast(fromVec.x, fromVec.y, fromVec.z, to.x, to.y, to.z);
     }
 
+    // Monotonic tile version, bumped whenever navmesh streaming loads, unloads
+    // or rebakes a tile. Cached findPath() waypoint lists go stale when tiles
+    // change underneath them — store the version next to the path and re-path
+    // when it differs:
+    //   if (Navmesh::getTileVersion() != this.pathVersion) { recomputePath(); }
+    public static function getTileVersion(): int {
+        return _native_navmesh_getTileVersion();
+    }
+
     // ============================================
     // Agent Control
     // ============================================

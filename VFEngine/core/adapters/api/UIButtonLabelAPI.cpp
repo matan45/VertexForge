@@ -442,6 +442,46 @@ namespace core::api
                 return value::Value(data->wordWrap);
             }});
 
+        interpreter->registerNativeFunction("_native_ui_setLabelRichText",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelRichText"));
+                bool richText = extractBool(args[1], "_native_ui_setLabelRichText");
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.richText = richText;
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelRichText",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(false);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelRichText"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return value::Value(false);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value(false);
+
+                return value::Value(data->richText);
+            }});
+
         interpreter->registerNativeFunction("_native_ui_setLabelSpacing",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();

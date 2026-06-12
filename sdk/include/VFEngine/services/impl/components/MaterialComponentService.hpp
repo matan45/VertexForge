@@ -35,6 +35,13 @@ namespace services {
         bool setSubMeshMaterial(EntityHandle entity, const std::string& submeshName, const std::string& materialPath);
         std::string getSubMeshMaterial(EntityHandle entity, const std::string& submeshName) const;
         std::map<std::string, std::string> getAllSubMeshMaterials(EntityHandle entity) const;
+
+        // Runtime named-parameter overrides (typed)
+        bool setMaterialParameter(EntityHandle entity, const std::string& parameterName,
+                                  const ::material::ParameterValue& value);
+        bool clearMaterialParameter(EntityHandle entity, const std::string& parameterName);
+        std::optional<::material::ParameterValue> getMaterialParameter(
+            EntityHandle entity, const std::string& parameterName) const;
     };
 
 }

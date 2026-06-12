@@ -70,6 +70,7 @@ namespace controllers
         uint32_t entityId = 0;
         services::VFXEmitterPriority priority = services::VFXEmitterPriority::Normal;
         bool cameraRelative = false;
+        bool autoDestroy = false;
     };
 
     struct VFXRuntimeInstance
@@ -77,6 +78,8 @@ namespace controllers
         VFXInstanceId id = 0;
         std::unique_ptr<render::vfx::VFXParticleSystem> particleSystem;
         glm::mat4 worldTransform{1.0f};
+        glm::mat4 prevWorldTransform{1.0f};
+        glm::vec3 emitterVelocity{0.0f};
         render::vfx::VFXEmitterConfig config;
         bool loop = true;
         bool active = true;
@@ -95,6 +98,8 @@ namespace controllers
         uint8_t currentLOD = 0;
         float lodSpawnMultiplier = 1.0f;
         float lodBias = 0.0f;
+        bool burstClampWarned = false;
+        bool autoDestroy = false;
     };
 
     class VFXSceneRenderer
@@ -239,6 +244,15 @@ namespace controllers
 
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
         void setMaxDrawDistance(float distance) { maxVFXDistSq = distance * distance; }
+
+        struct VFXProxyLight
+        {
+            glm::vec3 position{0.0f};
+            glm::vec3 color{1.0f};
+            float intensity = 1.0f;
+            float radius = 10.0f;
+        };
+        std::vector<VFXProxyLight> getActiveProxyLights() const;
 
         struct VFXBudgetStats
         {

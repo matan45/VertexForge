@@ -45,6 +45,23 @@ namespace events::scene {
         std::string_view getName() const override { return "LoadPrefab"; }
     };
 
+    // Editor copy/paste: serialize an entity subtree to prefab-format JSON text.
+    // Returns an empty string for invalid entities or the scene root.
+    struct CopyEntityToJsonQuery : IQuery<std::string> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "CopyEntityToJson"; }
+    };
+
+    // Editor copy/paste: instantiate an entity subtree from prefab-format JSON text
+    // (fresh UUIDs, assets acquired — same post-load path as prefab instantiation).
+    struct InstantiateEntityFromJsonCommand : ICommand<std::optional<services::EntityHandle>> {
+        std::string jsonText;
+        std::optional<services::EntityHandle> parent;  // nullopt = add to scene root
+
+        std::string_view getName() const override { return "InstantiateEntityFromJson"; }
+    };
+
     // ============================================
     // Scene Queries
     // ============================================

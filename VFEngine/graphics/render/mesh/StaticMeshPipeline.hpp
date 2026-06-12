@@ -46,6 +46,7 @@ namespace render::mesh
     class MeshGPUCache;
     class MaterialTextureCache;
     class MaterialCacheManager;
+    class MaterialParameterBufferCache;
 }
 
 namespace render::mesh
@@ -74,6 +75,7 @@ namespace render::mesh
         std::unique_ptr<MeshGPUCache> meshCache;
         std::unique_ptr<MaterialTextureCache> textureCache;
         std::unique_ptr<MaterialShaderCache> materialShaderCache;
+        std::unique_ptr<MaterialParameterBufferCache> parameterBufferCache;
 
         vk::Buffer cameraUBO;
         core::VulkanAllocation cameraUBOAllocation;
@@ -226,6 +228,8 @@ namespace render::mesh
             vk::Pipeline currentPipeline = nullptr;
             vk::DescriptorSet currentMaterialDescriptorSet = nullptr;
             vk::DescriptorSet defaultMaterialDescriptorSet = nullptr;
+            uint32_t imageIndex = 0;
+            std::string lastParameterMaterialPath;
         };
 
         void collectSortedSubmeshes(
@@ -253,6 +257,12 @@ namespace render::mesh
         void bindSubmeshMaterial(
             const vk::CommandBuffer& commandBuffer,
             const ExtractedPBRValues& pbrValues,
+            RenderState& state) const;
+
+        void bindSubmeshParameters(
+            const vk::CommandBuffer& commandBuffer,
+            const ExtractedPBRValues& pbrValues,
+            const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& materialCache,
             RenderState& state) const;
 
         MeshPushConstants buildSubmeshPushConstants(

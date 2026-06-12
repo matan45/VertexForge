@@ -46,5 +46,10 @@ namespace controllers::offscreen
         void generateDragGhostDrawData(
             entt::registry& registry, const FrameContext& ctx,
             std::vector<render::ui::UIImageRenderData>& drawList);
+
+        void generateListSelectionDrawData(
+            entt::registry& registry, const FrameContext& ctx,
+            const ScrollContainerMap& scrollContainers,
+            std::vector<render::ui::UIImageRenderData>& drawList);
     }
 }

@@ -5,11 +5,14 @@
 #include "../../physics/PhysicsWorld.hpp"
 #include "../../physics/FixedTimestep.hpp"
 #include "../../physics/RagdollSettingsBuilder.hpp"
+#include "physics/HitReactionState.hpp"
 #include <memory>
 #include <mutex>
 #include <future>
 #include <unordered_map>
 #include <unordered_set>
+
+namespace components { struct PhysicsAnimationComponent; }
 
 namespace core
 {
@@ -146,6 +149,14 @@ namespace core
                                       const glm::vec3& impulse) override;
         void updatePhysicsAnimations(float deltaTime) override;
 
+        void setPhysicsAnimationMode(services::EntityHandle entity, types::PhysicsAnimationMode mode) override;
+        void setBoneMotorStrength(services::EntityHandle entity, const std::string& boneName,
+                                   float strength) override;
+        void setGlobalMotorStrength(services::EntityHandle entity, float strength) override;
+        void applyHitReaction(services::EntityHandle entity, const std::string& boneName,
+                               const glm::vec3& impulse, float recoverTime) override;
+        bool isRagdollSettled(services::EntityHandle entity) const override;
+
         // Character controller
         bool addCharacterController(services::EntityHandle entity, const CharacterControllerInfo& info,
                                      const glm::vec3& position, const glm::quat& rotation) override;
@@ -171,8 +182,21 @@ namespace core
         {
             physics::RagdollBuildResult buildResult;
             resource::SkeletonData skeletonData;
+
+            // Powered ragdoll runtime state, indexed by physics bone
+            std::vector<float> profileStrengths;
+            std::vector<float> maxTorques;
+            ::physics::HitReactionState hitReactions;
+            int settleFrames = 0;
+            bool settledNotified = false;
+            float blendInProgress = 1.0f;
         };
         std::unordered_map<uint64_t, PhysicsAnimationState> physicsAnimationEntities;
+
+        void resolveMotorProfile(PhysicsAnimationState& state,
+                                  const types::PhysicsAnimationConfig& config) const;
+        void updateSettleDetection(uint64_t entityId, PhysicsAnimationState& state,
+                                    components::PhysicsAnimationComponent& physAnimComp);
 
         void onContactAdded(const physics::ContactEvent& event);
         void onContactRemoved(const physics::ContactEvent& event);

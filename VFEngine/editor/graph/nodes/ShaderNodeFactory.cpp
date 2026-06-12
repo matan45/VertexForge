@@ -3,6 +3,7 @@
 #include "MathNodes.hpp"
 #include "PBROutputNode.hpp"
 #include "ConversionNodes.hpp"
+#include "UtilityNodes.hpp"
 
 namespace editor::graph {
 
@@ -103,6 +104,15 @@ namespace editor::graph {
                 return std::make_unique<Vec4ToVec2Node>();
             case material::NodeType::Vec4ToVec3:
                 return std::make_unique<Vec4ToVec3Node>();
+
+            case material::NodeType::WorldPosition:
+                return std::make_unique<WorldPositionNode>();
+            case material::NodeType::Panner:
+                return std::make_unique<PannerNode>();
+            case material::NodeType::UVTransform:
+                return std::make_unique<UVTransformNode>();
+            case material::NodeType::Remap:
+                return std::make_unique<RemapNode>();
 
             default:
                 return std::make_unique<ConstantScalarNode>();  // Default fallback

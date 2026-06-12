@@ -24,6 +24,7 @@
 #include "imguiHandler/PluginWindowRegistry.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "Pipeline.hpp"
+#include "registry/AssetImporter.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <fstream>
@@ -96,6 +97,28 @@ namespace plugin {
     std::vector<std::unique_ptr<pipeline::PipelineStage>> PluginContextImpl::takeImportStages()
     {
         return std::move(registeredImportStages);
+    }
+
+    void PluginContextImpl::registerAssetImporter(std::unique_ptr<import::AssetImporter> importer)
+    {
+        if (!hasCapability(std::string(capability::import_))) {
+            vfLogWarning("[Plugin:{}] Cannot register asset importer - import capability not available", pluginName);
+            return;
+        }
+
+        if (!importer) {
+            vfLogWarning("[Plugin:{}] Cannot register null asset importer", pluginName);
+            return;
+        }
+
+        vfLogInfo("[Plugin:{}] Registered asset importer ({} format(s))",
+                  pluginName, importer->formats().size());
+        registeredAssetImporters.push_back(std::move(importer));
+    }
+
+    std::vector<std::unique_ptr<import::AssetImporter>> PluginContextImpl::takeAssetImporters()
+    {
+        return std::move(registeredAssetImporters);
     }
 
     void PluginContextImpl::publishEvent(const std::string& eventName, const nlohmann::json& data)

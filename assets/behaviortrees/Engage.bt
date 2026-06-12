@@ -1,0 +1,29 @@
+{
+    "version": "1.1",
+    "name": "Engage",
+    "rootNodeId": 1,
+    "nodes": [
+        {
+            "id": 1,
+            "type": "Root",
+            "name": "Root",
+            "position": [300.0, 50.0]
+        },
+        {
+            "id": 2,
+            "type": "ScriptTask",
+            "name": "Attack Target",
+            "position": [300.0, 200.0],
+            "scriptPath": "game/ai/AttackTarget.mt",
+            "scriptClassName": "AttackTarget"
+        }
+    ],
+    "links": [
+        { "id": 1, "source": 1, "target": 2, "sortOrder": 0 }
+    ],
+    "blackboardKeys": [
+        { "name": "enemyId", "type": "Int", "default": 0 },
+        { "name": "enemyPos", "type": "Vec3", "default": [0.0, 0.0, 0.0] },
+        { "name": "attackRange", "type": "Float", "default": 2.5 }
+    ]
+}
