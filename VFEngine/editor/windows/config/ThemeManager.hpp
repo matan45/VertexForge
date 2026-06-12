@@ -1,7 +1,10 @@
 #pragma once
 #include "config/EditorPreferences.hpp"
+#include "config/EditorTheme.hpp"
+#include "config/EditorThemeStorage.hpp"
 #include <imgui.h>
 #include <algorithm>
+#include <string>
 
 namespace windows
 {
@@ -10,7 +13,20 @@ namespace windows
     public:
         static inline void applyTheme(const config::AppearanceSettings& settings)
         {
-            ImGuiStyle& style = ImGui::GetStyle();
+            // Custom theme names resolve to files in the themes directory;
+            // a missing/corrupt file falls back to the built-in Dark path.
+            if (settings.theme != "Dark" && settings.theme != "Light")
+            {
+                auto custom = config::EditorThemeStorage::load(
+                    config::EditorThemeStorage::defaultThemesDirectory(), settings.theme);
+                if (custom)
+                {
+                    applyCustomTheme(*custom, settings);
+                    return;
+                }
+            }
+
+            ImGuiStyle& style = resetStyle();
 
             if (settings.theme == "Light")
             {
@@ -24,6 +40,63 @@ namespace windows
             }
 
             applyAccentColor(style, settings.accentColor);
+            applyCommonSettings(style, settings, settings.theme == "Light");
+        }
+
+        static inline void applyCustomTheme(const config::EditorTheme& theme, const config::AppearanceSettings& settings)
+        {
+            ImGuiStyle& style = resetStyle();
+
+            // Built-in base first, so colors missing from the theme stay sensible.
+            if (theme.basedOn == "Light")
+            {
+                ImGui::StyleColorsLight();
+                applyLightTheme(style);
+            }
+            else
+            {
+                ImGui::StyleColorsDark();
+                applyDarkTheme(style);
+            }
+
+            for (int i = 0; i < ImGuiCol_COUNT; ++i)
+            {
+                auto it = theme.colors.find(ImGui::GetStyleColorName(i));
+                if (it != theme.colors.end())
+                    style.Colors[i] = ImVec4(it->second.x, it->second.y, it->second.z, it->second.w);
+            }
+
+            // No accent overlay: a custom theme owns the interactive slots it would clobber.
+            applyCommonSettings(style, settings, theme.basedOn == "Light");
+        }
+
+        static inline config::EditorTheme snapshotCurrentStyle(const std::string& name, const std::string& basedOn)
+        {
+            const ImGuiStyle& style = ImGui::GetStyle();
+
+            config::EditorTheme theme;
+            theme.name = name;
+            theme.basedOn = basedOn;
+            for (int i = 0; i < ImGuiCol_COUNT; ++i)
+            {
+                const ImVec4& c = style.Colors[i];
+                theme.colors[ImGui::GetStyleColorName(i)] = glm::vec4(c.x, c.y, c.z, c.w);
+            }
+            return theme;
+        }
+
+    private:
+        static inline ImGuiStyle& resetStyle()
+        {
+            // Reset size fields to ImGui defaults so ScaleAllSizes doesn't
+            // compound across repeated applies (live theme preview re-applies often).
+            ImGuiStyle& style = ImGui::GetStyle();
+            style = ImGuiStyle();
+            return style;
+        }
+
+        static inline void applyCommonSettings(ImGuiStyle& style, const config::AppearanceSettings& settings, bool lightBase)
+        {
             applyStyleVariables(style, settings);
 
             style.ScaleAllSizes(settings.uiScale);
@@ -37,7 +110,7 @@ namespace windows
 
             if (settings.panelShadows)
             {
-                float shadowAlpha = (settings.theme == "Light") ? 0.15f : 0.3f;
+                float shadowAlpha = lightBase ? 0.15f : 0.3f;
                 style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, shadowAlpha);
             }
             else
@@ -48,7 +121,6 @@ namespace windows
             style.FontScaleMain = static_cast<float>(settings.fontSize) / 18.0f;
         }
 
-    private:
         static inline void applyDarkTheme(ImGuiStyle& style)
         {
             // Unreal Engine-style deep dark theme

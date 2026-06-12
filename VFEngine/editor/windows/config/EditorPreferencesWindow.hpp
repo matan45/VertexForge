@@ -1,6 +1,7 @@
 #pragma once
 #include "SettingsEntry.hpp"
 #include "config/EditorPreferences.hpp"
+#include "config/EditorTheme.hpp"
 #include <imgui.h>
 #include <string>
 #include <vector>
@@ -38,10 +39,28 @@ namespace windows
         // Window Layout UI state
         char saveLayoutNameBuffer[128] = {};
 
+        // Custom theme UI state
+        std::vector<std::string> customThemes;
+        config::EditorTheme editedTheme;      // in-memory copy of the selected custom theme
+        bool editingCustomTheme = false;
+        char newThemeNameBuffer[128] = {};
+        std::string themeError;
+        std::string themeColorFilter;
+        bool themePreviewActive = false;      // live preview diverges from savedSettings
+
         void loadSettings();
         void saveSettings();
         void resetToDefaults();
         void markDirty();
+
+        void refreshThemeList();
+        void selectTheme(const std::string& name);
+        void createThemeFromCurrent();
+        void deleteSelectedTheme();
+        void revertThemePreview();
+        void drawThemeCombo(const char* label);
+        void drawThemeManagement();
+        void drawThemeColorEditor();
 
         void drawSearchBar();
         void drawCategoryList();

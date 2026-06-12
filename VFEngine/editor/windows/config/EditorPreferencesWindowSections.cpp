@@ -1,6 +1,7 @@
 #include "EditorPreferencesWindow.hpp"
 #include "SettingsTooltip.hpp"
 #include "../../handlers/EditorLayoutManager.hpp"
+#include "string/StringUtil.hpp"
 #include <imgui.h>
 #include <cstring>
 
@@ -10,23 +11,132 @@ namespace windows
     // Appearance
     // ============================================
 
+    void EditorPreferencesWindow::drawThemeCombo(const char* label)
+    {
+        if (ImGui::BeginCombo(label, settings.appearance.theme.c_str()))
+        {
+            const char* builtIns[] = {"Dark", "Light"};
+            for (const char* name : builtIns)
+            {
+                bool selected = (settings.appearance.theme == name);
+                if (ImGui::Selectable(name, selected))
+                    selectTheme(name);
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+
+            if (!customThemes.empty())
+                ImGui::Separator();
+
+            for (const auto& name : customThemes)
+            {
+                bool selected = (settings.appearance.theme == name);
+                if (ImGui::Selectable(name.c_str(), selected))
+                    selectTheme(name);
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        drawSettingTooltip("Editor color theme (changes preview immediately, Apply to keep)");
+    }
+
+    void EditorPreferencesWindow::drawThemeManagement()
+    {
+        ImGui::SetNextItemWidth(220.0f);
+        bool submitted = ImGui::InputTextWithHint("##NewThemeName", "New theme name", newThemeNameBuffer,
+                                                  sizeof(newThemeNameBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(newThemeNameBuffer[0] == '\0');
+        if (ImGui::Button("Create") || submitted)
+            createThemeFromCurrent();
+        ImGui::EndDisabled();
+        drawSettingTooltip("Save the current colors as a new editable theme");
+
+        if (editingCustomTheme)
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("Delete"))
+                ImGui::OpenPopup("DeleteThemeConfirm");
+        }
+
+        if (!themeError.empty())
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", themeError.c_str());
+
+        if (ImGui::BeginPopupModal("DeleteThemeConfirm", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Delete theme \"%s\"? This cannot be undone.", settings.appearance.theme.c_str());
+            ImGui::Spacing();
+            if (ImGui::Button("Delete", ImVec2(80, 0)))
+            {
+                deleteSelectedTheme();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(80, 0)))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+    }
+
+    void EditorPreferencesWindow::drawThemeColorEditor()
+    {
+        if (!editingCustomTheme)
+        {
+            ImGui::TextDisabled("Create a new theme to edit individual colors");
+            return;
+        }
+
+        if (!ImGui::CollapsingHeader("Theme Colors"))
+            return;
+
+        char filterBuffer[128];
+        std::strncpy(filterBuffer, themeColorFilter.c_str(), sizeof(filterBuffer) - 1);
+        filterBuffer[sizeof(filterBuffer) - 1] = '\0';
+        ImGui::SetNextItemWidth(220.0f);
+        if (ImGui::InputTextWithHint("##ThemeColorFilter", "Filter colors", filterBuffer, sizeof(filterBuffer)))
+            themeColorFilter = filterBuffer;
+
+        std::string filterLower = StringUtil::toLower(themeColorFilter);
+
+        ImGuiStyle& style = ImGui::GetStyle();
+        ImGui::BeginChild("ThemeColorList", ImVec2(0, 280.0f), true);
+        for (int i = 0; i < ImGuiCol_COUNT; ++i)
+        {
+            const char* colorName = ImGui::GetStyleColorName(i);
+            if (!filterLower.empty() && StringUtil::toLower(colorName).find(filterLower) == std::string::npos)
+                continue;
+
+            // Edit the live style directly for instant preview; mirror into the theme.
+            if (ImGui::ColorEdit4(colorName, &style.Colors[i].x))
+            {
+                const ImVec4& c = style.Colors[i];
+                editedTheme.colors[colorName] = glm::vec4(c.x, c.y, c.z, c.w);
+                themePreviewActive = true;
+                markDirty();
+            }
+        }
+        ImGui::EndChild();
+    }
+
     void EditorPreferencesWindow::drawAppearanceSection()
     {
         ImGui::Text("Theme");
         ImGui::Spacing();
 
-        const char* themes[] = {"Dark", "Light"};
-        int themeIdx = (settings.appearance.theme == "Light") ? 1 : 0;
-        if (ImGui::Combo("Theme", &themeIdx, themes, 2))
-        {
-            settings.appearance.theme = themes[themeIdx];
-            markDirty();
-        }
-        drawSettingTooltip("Editor color theme");
+        drawThemeCombo("Theme");
+        drawThemeManagement();
+        drawThemeColorEditor();
 
+        ImGui::Spacing();
+
+        ImGui::BeginDisabled(editingCustomTheme);
         if (ImGui::ColorEdit4("Accent Color", &settings.appearance.accentColor.x))
             markDirty();
-        drawSettingTooltip("Accent color used for highlights and active elements");
+        ImGui::EndDisabled();
+        drawSettingTooltip(editingCustomTheme
+            ? "Custom themes define their own colors"
+            : "Accent color used for highlights and active elements");
 
         ImGui::Spacing();
         ImGui::Text("UI");
@@ -205,12 +315,9 @@ namespace windows
         settingsRegistry.clear();
 
         // Appearance
-        settingsRegistry.push_back({"Theme", "Editor color theme", {"theme", "dark", "light", "appearance"}, Appearance,
+        settingsRegistry.push_back({"Theme", "Editor color theme", {"theme", "dark", "light", "custom", "color", "appearance"}, Appearance,
             [this]() {
-                const char* themes[] = {"Dark", "Light"};
-                int idx = (settings.appearance.theme == "Light") ? 1 : 0;
-                if (ImGui::Combo("Theme##s", &idx, themes, 2)) { settings.appearance.theme = themes[idx]; markDirty(); }
-                drawSettingTooltip("Editor color theme");
+                drawThemeCombo("Theme##s");
             }});
 
         settingsRegistry.push_back({"Accent Color", "Highlight and active element color", {"color", "accent", "appearance"}, Appearance,
