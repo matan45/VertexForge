@@ -193,6 +193,18 @@ namespace windows::details
                 ImGui::SetTooltip("Theme style key applied from the canvas .vfTheme asset");
         }
 
+        if (!c.hasUIListView && matchesFilter("UI List View", filter))
+        {
+            if (ImGui::Selectable("  UI List View"))
+            {
+                events::ui::AddUIListViewComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Data-driven repeated rows from a .vfPrefab item template (auto layout + pooling)");
+        }
+
         if (!c.hasUIWindow && matchesFilter("UI Window", filter))
         {
             if (ImGui::Selectable("  UI Window"))

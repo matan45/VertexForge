@@ -558,6 +558,7 @@ namespace controllers::offscreen
         interactionSystem.processTabsInteraction(ctx);
         interactionSystem.processSliderInteraction(ctx);
         interactionSystem.processDragDropInteraction(ctx);
+        interactionSystem.processListViewInteraction(ctx);
         interactionSystem.processTooltipInteraction(ctx);
         interactionSystem.computePointerOverUI(ctx);
 
@@ -582,6 +583,7 @@ namespace controllers::offscreen
         ui_screenspace::generateScrollbarDrawData(registry, ctx, drawList);
         ui_screenspace::generateTextInputCaretDrawData(registry, ctx, interactionSystem.getFocusedTextInput(), drawList);
         ui_screenspace::generateDropdownDrawData(registry, ctx, drawList);
+        ui_screenspace::generateListSelectionDrawData(registry, ctx, scrollContainers, drawList);
         ui_screenspace::generateDragGhostDrawData(registry, ctx, drawList);
 
         // Text-mode tooltip bubble background — overlay layer (records after

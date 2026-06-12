@@ -68,4 +68,5 @@ public class ComponentType {
     public static final string UI_STYLE = "UIStyle";
     public static final string UI_TOOLTIP = "UITooltip";
     public static final string UI_WINDOW = "UIWindow";
+    public static final string UI_LIST_VIEW = "UIListView";
 }

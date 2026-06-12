@@ -8,6 +8,7 @@
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/ui/UITooltipEvents.hpp"
 #include "../../../services/events/ui/UIWindowEvents.hpp"
+#include "../../../services/events/ui/UIListViewEvents.hpp"
 
 namespace core::api
 {
@@ -157,6 +158,70 @@ namespace core::api
                 query.entity = intToEntity(extractInt64(args[0], "_native_ui_getWindowTitle"));
                 auto data = dispatcher.query(query);
                 return value::Value(data.has_value() ? data->title : std::string(""));
+            }});
+
+        // ===== ListView =====
+
+        interpreter->registerNativeFunction("_native_ui_setListItemCount",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(false);
+                events::ui::SetUIListItemCountCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0], "_native_ui_setListItemCount"));
+                cmd.itemCount = static_cast<int>(extractInt64(args[1], "_native_ui_setListItemCount"));
+                return value::Value(dispatcher.execute(cmd));
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getListItemCount",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(static_cast<int64_t>(0));
+                events::ui::GetUIListViewDataQuery query;
+                query.entity = intToEntity(extractInt64(args[0], "_native_ui_getListItemCount"));
+                auto data = dispatcher.query(query);
+                return value::Value(static_cast<int64_t>(data.has_value() ? data->itemCount : 0));
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getListItem",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(static_cast<int64_t>(-1));
+                events::ui::GetUIListItemQuery query;
+                query.entity = intToEntity(extractInt64(args[0], "_native_ui_getListItem"));
+                query.index = static_cast<int>(extractInt64(args[1], "_native_ui_getListItem"));
+                auto item = dispatcher.query(query);
+                if (!item.isValid()) return value::Value(static_cast<int64_t>(-1));
+                return value::Value(static_cast<int64_t>(item.id));
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setListItemTemplate",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(false);
+                events::ui::SetUIListItemTemplateCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0], "_native_ui_setListItemTemplate"));
+                cmd.templatePath = extractString(args[1], "_native_ui_setListItemTemplate");
+                return value::Value(dispatcher.execute(cmd));
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getListSelectedIndex",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(static_cast<int64_t>(-1));
+                events::ui::GetUIListViewDataQuery query;
+                query.entity = intToEntity(extractInt64(args[0], "_native_ui_getListSelectedIndex"));
+                auto data = dispatcher.query(query);
+                return value::Value(static_cast<int64_t>(data.has_value() ? data->selectedIndex : -1));
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setListSelectedIndex",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(false);
+                events::ui::SetUIListSelectedIndexCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0], "_native_ui_setListSelectedIndex"));
+                cmd.selectedIndex = static_cast<int>(extractInt64(args[1], "_native_ui_setListSelectedIndex"));
+                return value::Value(dispatcher.execute(cmd));
             }});
     }
 }

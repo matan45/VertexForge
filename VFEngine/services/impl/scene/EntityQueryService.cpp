@@ -129,6 +129,7 @@ namespace services
             COLLECT_CASE(UIStyle, UIStyleComponent);
             COLLECT_CASE(UITooltip, UITooltipComponent);
             COLLECT_CASE(UIWindow, UIWindowComponent);
+            COLLECT_CASE(UIListView, UIListViewComponent);
             COLLECT_CASE(RenderTexture, RenderTextureComponent);
             COLLECT_CASE(Decal, DecalComponent);
         default:
@@ -198,6 +199,7 @@ namespace services
             HAS_CASE(UIStyle, UIStyleComponent);
             HAS_CASE(UITooltip, UITooltipComponent);
             HAS_CASE(UIWindow, UIWindowComponent);
+            HAS_CASE(UIListView, UIListViewComponent);
             HAS_CASE(RenderTexture, RenderTextureComponent);
             HAS_CASE(Decal, DecalComponent);
         default:
@@ -255,6 +257,7 @@ namespace services
         CHECK_COMP(UIStyle, UIStyleComponent);
         CHECK_COMP(UITooltip, UITooltipComponent);
         CHECK_COMP(UIWindow, UIWindowComponent);
+        CHECK_COMP(UIListView, UIListViewComponent);
         CHECK_COMP(RenderTexture, RenderTextureComponent);
         CHECK_COMP(Decal, DecalComponent);
 

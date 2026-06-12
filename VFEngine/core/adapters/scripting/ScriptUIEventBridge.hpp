@@ -76,6 +76,11 @@ namespace core
                                     ::services::EntityHandle entity,
                                     const std::string& entityName);
 
+        void dispatchListViewCallback(const char* methodName,
+                                      ::services::EntityHandle entity,
+                                      const std::string& entityName,
+                                      int previousIndex, int newIndex);
+
         void dispatchDragDropCallback(const char* methodName,
                                       ::services::EntityHandle sourceEntity,
                                       const std::string& sourceEntityName,

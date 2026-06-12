@@ -384,6 +384,11 @@ namespace windows
                     auto& dispatcher = events::EventDispatcher::instance();
                     if (dispatcher.execute(cmd))
                     {
+                        // Register with the AssetDatabase immediately so the
+                        // prefab gets its .vfmeta + GUID without a rescan
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        dispatcher.publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }

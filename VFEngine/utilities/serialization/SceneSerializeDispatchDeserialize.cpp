@@ -240,6 +240,11 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::UIWindowComponent>();
             deserializeUIWindow(c["uiWindow"], comp);
         }
+        if (c.contains("uiListView"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::UIListViewComponent>();
+            deserializeUIListView(c["uiListView"], comp);
+        }
         if (c.contains("uiAnimation"))
         {
             auto& comp = entity.addOrReplaceComponent<components::UIAnimationComponent>();

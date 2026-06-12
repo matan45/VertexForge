@@ -182,6 +182,7 @@ namespace asset
         if (str == "World")            return resource::AssetType::World;
         if (str == "Scene")            return resource::AssetType::Scene;
         if (str == "Theme")            return resource::AssetType::Theme;
+        if (str == "Prefab")           return resource::AssetType::Prefab;
         return resource::AssetType::COUNT;
     }
 }

@@ -42,6 +42,7 @@
 #include "../details/UIStyleDrawer.hpp"
 #include "../details/UITooltipDrawer.hpp"
 #include "../details/UIWindowDrawer.hpp"
+#include "../details/UIListViewDrawer.hpp"
 #include "../details/UIDraggableDrawer.hpp"
 #include "../details/UIDropTargetDrawer.hpp"
 #include "../details/SocketAttachmentDrawer.hpp"
@@ -111,6 +112,7 @@ namespace windows
         details::UIStyleDrawer uiStyleDrawer;
         details::UITooltipDrawer uiTooltipDrawer;
         details::UIWindowDrawer uiWindowDrawer;
+        details::UIListViewDrawer uiListViewDrawer;
         details::UIDraggableDrawer uiDraggableDrawer;
         details::UIDropTargetDrawer uiDropTargetDrawer;
         details::SocketAttachmentDrawer socketAttachmentDrawer;

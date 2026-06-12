@@ -35,6 +35,7 @@ namespace asset
         if (ext == ".vfscene")     return resource::AssetType::Scene;
         if (ext == ".vfsettings")  return resource::AssetType::Scene;
         if (ext == ".vftheme")     return resource::AssetType::Theme;
+        if (ext == ".vfprefab")    return resource::AssetType::Prefab;
         if (ext == ".mt")          return resource::AssetType::Script;
         return resource::AssetType::COUNT;
     }

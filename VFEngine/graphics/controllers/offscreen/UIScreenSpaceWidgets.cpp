@@ -539,6 +539,56 @@ namespace controllers::offscreen::ui_screenspace
         }
     }
 
+    void generateListSelectionDrawData(
+        entt::registry& registry, const FrameContext& ctx,
+        const ScrollContainerMap& scrollContainers,
+        std::vector<render::ui::UIImageRenderData>& drawList)
+    {
+        auto listView = registry.view<components::UIListViewComponent>();
+        for (auto listEntity : listView)
+        {
+            const auto& comp = listView.get<components::UIListViewComponent>(listEntity);
+            if (!comp.selectable || comp.selectedIndex < 0 ||
+                comp.selectedIndex >= static_cast<int>(comp.itemInstances.size()))
+                continue;
+            if (!scene::Entity::isEffectivelyActive(registry, listEntity))
+                continue;
+
+            entt::entity item = comp.itemInstances[static_cast<size_t>(comp.selectedIndex)];
+            if (!registry.valid(item) || !registry.all_of<components::UIRectComponent>(item))
+                continue;
+            if (!scene::Entity::isEffectivelyActive(registry, item))
+                continue;
+
+            const auto* canvas = findCanvasForEntity(registry, listEntity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(listEntity))
+                canvas = &registry.get<components::UICanvasComponent>(listEntity);
+            if (!canvas)
+                continue;
+
+            float vw = static_cast<float>(ctx.viewportWidth);
+            float vh = static_cast<float>(ctx.viewportHeight);
+            float scale = computeCanvasScale(canvas, vw, vh);
+
+            const auto& rectComp = registry.get<components::UIRectComponent>(item);
+            PixelRect rect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            auto [scrollAnc, scissor] = findScrollInfo(registry, item, scrollContainers);
+            applyScrollOffset(rect, scrollAnc, scrollContainers);
+
+            size_t entryStart = drawList.size();
+            render::ui::UIImageRenderData highlight;
+            highlight.texturePath = "__white_1x1__";
+            highlight.position = glm::vec2(rect.x, rect.y);
+            highlight.size = glm::vec2(rect.w, rect.h);
+            highlight.colorTint = comp.selectedTint;
+            highlight.scissorRect = scissor;
+            drawList.push_back(std::move(highlight));
+
+            markWindowOverlay(registry, listEntity, drawList, entryStart);
+        }
+    }
+
     void generateDragGhostDrawData(
         entt::registry& registry, const FrameContext& ctx,
         std::vector<render::ui::UIImageRenderData>& drawList)

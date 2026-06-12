@@ -593,4 +593,41 @@ public class UI {
     public static function getWindowTitle(int entityId): string {
         return _native_ui_getWindowTitle(entityId);
     }
+
+    // ============================================
+    // List View
+    // ============================================
+
+    // Set the bound item count; the engine instantiates/pools item-template
+    // copies and the layout group positions them
+    public static function setListItemCount(int entityId, int count): bool {
+        return _native_ui_setListItemCount(entityId, count);
+    }
+
+    // Get the bound item count
+    public static function getListItemCount(int entityId): int {
+        return _native_ui_getListItemCount(entityId);
+    }
+
+    // Get the root entity of the item instance at index (-1 on miss).
+    // Walk its children (Entity::getChildren + Entity::getName) and use
+    // UI::setLabelText/setImageTexture to fill in per-item data.
+    public static function getListItem(int entityId, int index): int {
+        return _native_ui_getListItem(entityId, index);
+    }
+
+    // Assign the .vfPrefab item template by asset path (rebuilds all items)
+    public static function setListItemTemplate(int entityId, string prefabPath): bool {
+        return _native_ui_setListItemTemplate(entityId, prefabPath);
+    }
+
+    // Get the selected item index (-1 = none)
+    public static function getListSelectedIndex(int entityId): int {
+        return _native_ui_getListSelectedIndex(entityId);
+    }
+
+    // Select an item by index (-1 clears). Fires IUIListViewListener.
+    public static function setListSelectedIndex(int entityId, int index): bool {
+        return _native_ui_setListSelectedIndex(entityId, index);
+    }
 }

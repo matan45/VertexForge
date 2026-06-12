@@ -142,6 +142,16 @@ namespace components
     }
 
     template <>
+    inline void resetClonedRuntimeState<UIListViewComponent>(UIListViewComponent& c)
+    {
+        // Instances belong to the source list; the clone rebuilds its own.
+        c.itemInstances.clear();
+        c.pool.clear();
+        c.selectedIndex = -1;
+        c.needsReconcile = true;
+    }
+
+    template <>
     inline void resetClonedRuntimeState<UIAnimationComponent>(UIAnimationComponent& c)
     {
         c.isPlaying = false;

@@ -133,6 +133,30 @@ namespace serialization {
         window.titleFontSize = j.value("titleFontSize", 16.0f);
     }
 
+    // ---- ListView ----
+
+    json SceneSerialization::serializeUIListView(const components::UIListViewComponent& listView)
+    {
+        json j;
+        if (listView.itemTemplateRef.isValid())
+        {
+            writeAssetRef(j, "itemTemplateRef", listView.itemTemplateRef);
+        }
+        j["itemCount"] = listView.itemCount;
+        j["selectable"] = listView.selectable;
+        j["selectedTint"] = writeVec4(listView.selectedTint);
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIListView(const json& j, components::UIListViewComponent& listView)
+    {
+        listView.itemTemplateRef = readAssetRef(j, "itemTemplateRef", "");
+        listView.itemCount = j.value("itemCount", 0);
+        listView.selectable = j.value("selectable", true);
+        readVec4(j, "selectedTint", listView.selectedTint);
+        listView.needsReconcile = true; // instances rebuild on load
+    }
+
     // ---- Button ----
 
     json SceneSerialization::serializeUIButton(const components::UIButtonComponent& button)

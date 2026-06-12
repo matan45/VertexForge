@@ -19,6 +19,7 @@ namespace services {
         registerThemeHandlers(dispatcher);
         registerTooltipHandlers(dispatcher);
         registerWindowHandlers(dispatcher);
+        registerListViewHandlers(dispatcher);
     }
 
 }

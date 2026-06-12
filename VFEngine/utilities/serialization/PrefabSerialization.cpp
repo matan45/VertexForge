@@ -197,6 +197,12 @@ namespace serialization
                 entity.getComponent<components::UIWindowComponent>());
         }
 
+        if (entity.hasComponent<components::UIListViewComponent>())
+        {
+            out["uiListView"] = SceneSerialization::serializeUIListView(
+                entity.getComponent<components::UIListViewComponent>());
+        }
+
         if (entity.hasComponent<components::UIAnimationComponent>())
         {
             out["uiAnimation"] = SceneSerialization::serializeUIAnimation(
@@ -308,6 +314,12 @@ namespace serialization
         json childrenJson = json::array();
         for (const auto& child : entity.getChildren())
         {
+            // List-view item instances are engine-managed (rebuilt from the
+            // item template on load) — baking them would duplicate items.
+            if (child.hasComponent<components::UIListItemComponent>())
+            {
+                continue;
+            }
             childrenJson.push_back(serializeEntityTree(child));
         }
         entityJson["children"] = childrenJson;

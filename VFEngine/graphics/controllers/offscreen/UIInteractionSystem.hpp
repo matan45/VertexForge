@@ -24,6 +24,8 @@ namespace controllers::offscreen
         // the close button. Must run BEFORE the other widget interactions so
         // modal gating sees this frame's stack.
         void processWindowInteraction(const FrameContext& ctx);
+        // List views: click-to-select on item instance roots.
+        void processListViewInteraction(const FrameContext& ctx);
 
         // Updates the registry-context UIPointerState: true when the cursor is
         // over any visible UI element (so scripts can skip world raycasts).

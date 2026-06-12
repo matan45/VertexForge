@@ -465,6 +465,15 @@ namespace services
         std::string panelChildName;
     };
 
+    struct UIListViewData
+    {
+        asset::AssetRef itemTemplateRef; // .vfPrefab
+        int itemCount = 0;
+        bool selectable = true;
+        glm::vec4 selectedTint{0.3f, 0.5f, 0.8f, 0.35f};
+        int selectedIndex = -1; // runtime, read-only through this DTO
+    };
+
     struct UIWindowData
     {
         std::string title = "Window";
