@@ -1,4 +1,5 @@
 #pragma once
+#include "AssetDBExport.hpp"
 #include "AssetGUID.hpp"
 #include "AssetMetadata.hpp"
 #include "../resource/AssetTypes.hpp"
@@ -19,7 +20,11 @@ namespace asset
         std::string importSource;
     };
 
-    class AssetDatabase
+    // Compiled into the AssetDB DLL so the singleton state is shared across
+    // every module (Serialization, World, Terrain, Animation, Audio, Import
+    // and the executables). A StaticLib copy per DLL would give each module
+    // its own empty database.
+    class VF_ASSETDB_API AssetDatabase
     {
     public:
         static AssetDatabase& instance();

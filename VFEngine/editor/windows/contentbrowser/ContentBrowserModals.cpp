@@ -6,6 +6,7 @@
 #include "events/project/SceneEvents.hpp"
 #include "events/project/FileOperationsEvents.hpp"
 #include "events/asset/AssetDatabaseEvents.hpp"
+#include "../scene/FolderStructureWindow.hpp"
 #include "../../fileops/AsyncFileOperations.hpp"
 
 namespace windows
@@ -317,6 +318,44 @@ namespace windows
         }
     }
 
+    bool ContentBrowserModals::drawAssetGuidList(const std::vector<asset::AssetGUID>& guids)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool navigated = false;
+
+        for (const auto& guid : guids)
+        {
+            events::assetdb::GetAssetPathQuery pathQuery;
+            pathQuery.guid = guid;
+            auto pathOpt = dispatcher.query(pathQuery);
+
+            if (!pathOpt)
+            {
+                // Stale graph entry (asset deleted/unregistered) — show it
+                // instead of silently skipping so the count stays honest
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.4f, 1.0f), "<unresolved> %s",
+                                   guid.toString().c_str());
+                continue;
+            }
+
+            std::string label = *pathOpt + "##" + guid.toString();
+            ImGui::Selectable(label.c_str());
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Double-click to show in Content Browser");
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                {
+                    FolderSelectedNotification notification;
+                    notification.folderPath = fs::path(*pathOpt).parent_path().string();
+                    dispatcher.publish(notification);
+                    navigated = true;
+                }
+            }
+        }
+
+        return navigated;
+    }
+
     void ContentBrowserModals::drawReferencesModal()
     {
         if (showReferencesModal &&
@@ -339,17 +378,13 @@ namespace windows
             {
                 ImGui::Text("%zu asset(s) reference this file:", dependentGuids.size());
                 ImGui::BeginChild("ReferencesList", ImVec2(500, 200), true);
-                for (const auto& depGuid : dependentGuids)
-                {
-                    events::assetdb::GetAssetPathQuery pathQuery;
-                    pathQuery.guid = depGuid;
-                    auto pathOpt = dispatcher.query(pathQuery);
-                    if (pathOpt)
-                    {
-                        ImGui::BulletText("%s", pathOpt->c_str());
-                    }
-                }
+                bool navigated = drawAssetGuidList(dependentGuids);
                 ImGui::EndChild();
+                if (navigated)
+                {
+                    ImGui::CloseCurrentPopup();
+                    showReferencesModal = false;
+                }
             }
 
             ImGui::Spacing();
@@ -387,17 +422,13 @@ namespace windows
             {
                 ImGui::Text("This asset depends on %zu asset(s):", depGuids.size());
                 ImGui::BeginChild("DependenciesList", ImVec2(500, 200), true);
-                for (const auto& depGuid : depGuids)
-                {
-                    events::assetdb::GetAssetPathQuery pathQuery;
-                    pathQuery.guid = depGuid;
-                    auto pathOpt = dispatcher.query(pathQuery);
-                    if (pathOpt)
-                    {
-                        ImGui::BulletText("%s", pathOpt->c_str());
-                    }
-                }
+                bool navigated = drawAssetGuidList(depGuids);
                 ImGui::EndChild();
+                if (navigated)
+                {
+                    ImGui::CloseCurrentPopup();
+                    showDependenciesModal = false;
+                }
             }
 
             ImGui::Spacing();

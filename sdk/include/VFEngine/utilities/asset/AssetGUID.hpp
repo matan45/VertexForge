@@ -1,5 +1,7 @@
 #pragma once
 #include "../uuid/UUID.hpp"
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <sstream>
 #include <iomanip>
@@ -25,6 +27,17 @@ namespace asset
             AssetGUID guid;
             guid.id = uuid::UUID(value);
             return guid;
+        }
+
+        // True only for the exact 16-hex-digit form toString() emits.
+        // fromString stays lenient (stoull base 16), so callers extracting
+        // GUIDs from arbitrary strings must gate on this first.
+        static bool isStrictHex16(const std::string& str)
+        {
+            if (str.size() != 16) return false;
+            return std::all_of(str.begin(), str.end(), [](unsigned char c) {
+                return std::isxdigit(c) != 0;
+            });
         }
 
         static AssetGUID fromString(const std::string& hexStr)

@@ -90,6 +90,11 @@ namespace windows
         void drawDependenciesModal();
         void drawErrorModal();
 
+        // Lists asset paths for the given GUIDs (unresolved GUIDs shown
+        // explicitly); returns true when a double-click navigated the
+        // content browser so the caller can close its modal
+        bool drawAssetGuidList(const std::vector<asset::AssetGUID>& guids);
+
         void createFolder(const fs::path& currentPath, const std::string& name);
 
         RefreshCallback refreshCallback;
