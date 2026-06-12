@@ -42,6 +42,7 @@
 #include <filesystem>
 #include "time/Timer.hpp"
 #include "core/PluginManager.hpp"
+#include "api/PluginVersion.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"
@@ -159,6 +160,16 @@ namespace handlers {
             vfLogError("Failed to get project configuration");
             dispatcher.execute(events::scene::NewSceneCommand{});
             return false;
+        }
+
+        // Version-skew check: exported projects are stamped with the exporting
+        // editor's plugin API version. A mismatch means the shipped plugin DLLs
+        // were built against a different engine build and will be rejected.
+        if (projectOpt->pluginApiVersion.has_value() &&
+            *projectOpt->pluginApiVersion != plugin::VF_PLUGIN_API_VERSION) {
+            vfLogWarning("This game was exported with plugin API v{} but the runtime expects v{} — "
+                         "plugins may fail to load (re-export the game)",
+                         *projectOpt->pluginApiVersion, plugin::VF_PLUGIN_API_VERSION);
         }
 
         // Set window title from project config

@@ -64,6 +64,8 @@ namespace gameExport
 			gameName = j.value("gameName", "");
 			gameVersion = j.value("gameVersion", "");
 			exportTimestamp = j.value("exportTimestamp", "");
+			engineVersion = j.value("engineVersion", "");
+			pluginApiVersion = j.value("pluginApiVersion", uint32_t(0));
 
 			entries.clear();
 			archivePathIndex.clear();
@@ -105,6 +107,8 @@ namespace gameExport
 		j["gameName"] = gameName;
 		j["gameVersion"] = gameVersion;
 		j["exportTimestamp"] = exportTimestamp;
+		j["engineVersion"] = engineVersion;
+		j["pluginApiVersion"] = pluginApiVersion;
 
 		auto& jEntries = j["entries"] = nlohmann::json::array();
 		for (const auto& entry : entries)

@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 #include <functional>
@@ -35,6 +37,15 @@ namespace gameExport
 		// Matched against project-relative forward-slash paths; a pattern
 		// without '/' matches the filename only.
 		std::vector<std::string> alwaysIncludePatterns;
+
+		// Plugin name -> ship?, on top of each descriptor's global "enabled"
+		// flag. Descriptor dependencies are still pulled in transitively.
+		std::map<std::string, bool> pluginOverrides;
+
+		// The editor's plugin::VF_PLUGIN_API_VERSION (GameExport must not link
+		// the Plugin module). Shipped plugins built against a different API
+		// version fail the export; 0 skips the check.
+		uint32_t expectedPluginApiVersion = 0;
 
 		bool isValid() const
 		{

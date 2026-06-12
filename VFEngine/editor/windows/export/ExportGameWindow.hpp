@@ -1,6 +1,8 @@
 #pragma once
 #include "nfd/FileDialog.hpp"
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace windows
 {
@@ -23,8 +25,21 @@ namespace windows
 		std::string gameName;
 		std::string gameVersion;
 
+		// Plugins discovered next to the editor; ship defaults to the
+		// descriptor's global enabled flag, the checkbox overrides it.
+		struct PluginRow
+		{
+			std::string name;
+			std::string version;
+			uint32_t apiVersion = 0;
+			bool defaultEnabled = true;
+			bool ship = true;
+		};
+		std::vector<PluginRow> plugins;
+
 		void loadFromPreferences();
 		void saveToPreferences() const;
+		void refreshPluginList();
 		void startExport();
 
 	public:

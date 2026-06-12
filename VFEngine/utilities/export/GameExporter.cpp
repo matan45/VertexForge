@@ -6,6 +6,7 @@
 #include "ShaderCompiler.hpp"
 #include "ShaderPermutationManifest.hpp"
 #include "../asset/AssetDatabase.hpp"
+#include "../config/Config.hpp"
 #include "../serialization/ProjectSerialization.hpp"
 #include "../resource/ShaderResource.hpp"
 #include "../resource/ShaderBinaryFormat.hpp"
@@ -44,6 +45,9 @@ namespace gameExport
 		newManifest = ExportManifest{};
 		newManifest.gameName = config.gameName;
 		newManifest.gameVersion = config.gameVersion;
+		newManifest.engineVersion = "VertexForge " + std::to_string(Version::major) + "." +
+			std::to_string(Version::minor) + "." + std::to_string(Version::patch);
+		newManifest.pluginApiVersion = config.expectedPluginApiVersion;
 
 		if (!config.cleanBuild && fs::exists(manifestPath))
 		{
@@ -75,7 +79,11 @@ namespace gameExport
 		report(0.40f, "Packing assets into archive...");
 		if (!packAssets(config, result)) return result;
 
-		// Save export manifest
+		report(0.80f, "Copying plugins...");
+		if (!copyPlugins(config, result)) return result;
+
+		// Save export manifest (after copyPlugins — plugin files are manifest
+		// entries too, for incremental re-copy)
 		{
 			auto now = std::chrono::system_clock::now();
 			auto time = std::chrono::system_clock::to_time_t(now);
@@ -85,9 +93,6 @@ namespace gameExport
 			newManifest.save(manifestPath);
 			vfLogInfo("Export manifest saved with {} entries", newManifest.getEntries().size());
 		}
-
-		report(0.80f, "Copying plugins...");
-		if (!copyPlugins(config, result)) return result;
 
 		report(0.85f, "Generating project config...");
 		if (!generateProjectConfig(config, result)) return result;
@@ -799,64 +804,115 @@ namespace gameExport
 			return true;
 		}
 
-		// Plugin folders are full development workspaces (source, premake5.lua,
-		// PDBs) — only ship what the runtime loads: descriptor, the DLL the
-		// descriptor names, and the plugin's assets/resources data.
-		fs::path pluginsDst = config.outputDirectory / "plugins";
+		// Collect descriptors, then let the planner decide what ships (global
+		// enabled flags + export overrides + transitive dependencies + API
+		// version validation).
+		std::vector<ParsedPluginDescriptor> descriptors;
 		std::error_code ec;
-
 		for (const auto& pluginEntry : fs::directory_iterator(pluginsDir, ec))
 		{
 			if (!pluginEntry.is_directory()) continue;
 
-			std::optional<ParsedPluginDescriptor> descriptor;
 			std::error_code scanEc;
 			for (const auto& file : fs::directory_iterator(pluginEntry.path(), scanEc))
 			{
 				if (file.is_regular_file() && file.path().extension() == ".vfplugin")
 				{
-					descriptor = parsePluginDescriptor(file.path());
+					if (auto descriptor = parsePluginDescriptor(file.path()))
+					{
+						descriptors.push_back(std::move(*descriptor));
+					}
 					break;
 				}
 			}
+		}
 
-			if (!descriptor)
+		auto plan = planPluginExport(descriptors, config.pluginOverrides, config.expectedPluginApiVersion);
+		for (const auto& warning : plan.warnings)
+		{
+			result.warnings.push_back(warning);
+		}
+		if (!plan.errors.empty())
+		{
+			result.errorMessage = "Plugin export failed:";
+			for (const auto& error : plan.errors)
 			{
-				continue; // Not a plugin folder (or unreadable descriptor)
+				result.errorMessage += "\n  - " + error;
 			}
+			return false;
+		}
 
-			fs::path dllPath = pluginEntry.path() / descriptor->library;
+		// Plugin folders are full development workspaces (source, premake5.lua,
+		// PDBs) — only ship what the runtime loads: descriptor, the DLL the
+		// descriptor names, and the plugin's assets/resources data. Files are
+		// manifest entries ("plugin" source type, verified on disk rather than
+		// in the archive), so unchanged plugins skip the copy.
+		fs::path pluginsDst = config.outputDirectory / "plugins";
+
+		for (const auto& descriptor : plan.pluginsToShip)
+		{
+			fs::path pluginSrc = descriptor.descriptorPath.parent_path();
+			fs::path dllPath = pluginSrc / descriptor.library;
 			if (!fs::exists(dllPath))
 			{
-				result.warnings.push_back("Plugin '" + descriptor->name +
-					"' skipped: library not found: " + dllPath.string());
-				continue;
+				result.errorMessage = "Plugin '" + descriptor.name +
+					"': library not found: " + dllPath.string();
+				return false;
 			}
 
-			fs::path pluginDst = pluginsDst / pluginEntry.path().filename();
+			fs::path pluginDst = pluginsDst / pluginSrc.filename();
+			int copiedCount = 0;
+			int skippedCount = 0;
 
 			std::error_code copyEc;
-			for (auto it = fs::recursive_directory_iterator(pluginEntry.path(), copyEc);
+			for (auto it = fs::recursive_directory_iterator(pluginSrc, copyEc);
 			     it != fs::recursive_directory_iterator(); it.increment(copyEc))
 			{
 				if (copyEc) break;
 				if (!it->is_regular_file()) continue;
 
-				fs::path relativePath = fs::relative(it->path(), pluginEntry.path(), copyEc);
-				if (!shouldShipPluginFile(relativePath, descriptor->library)) continue;
+				fs::path relativePath = fs::relative(it->path(), pluginSrc, copyEc);
+				if (!shouldShipPluginFile(relativePath, descriptor.library)) continue;
+
+				std::string manifestKey = "plugins/" + pluginSrc.filename().generic_string() +
+					"/" + relativePath.generic_string();
+
+				ManifestSource src;
+				src.path = manifestKey;
+				src.modifiedTime = getFileModifiedTime(it->path());
+				src.contentHash = hashFile(it->path());
 
 				fs::path destPath = pluginDst / relativePath;
-				fs::create_directories(destPath.parent_path(), copyEc);
-				fs::copy_file(it->path(), destPath, fs::copy_options::overwrite_existing, copyEc);
-				if (copyEc)
+				if (!previousManifest.hasSourceChanged(manifestKey, {src}) && fs::exists(destPath))
 				{
-					result.warnings.push_back("Warning while copying " + it->path().string() +
-						": " + copyEc.message());
-					copyEc.clear();
+					skippedCount++;
 				}
+				else
+				{
+					fs::create_directories(destPath.parent_path(), copyEc);
+					fs::copy_file(it->path(), destPath, fs::copy_options::overwrite_existing, copyEc);
+					if (copyEc)
+					{
+						result.warnings.push_back("Warning while copying " + it->path().string() +
+							": " + copyEc.message());
+						copyEc.clear();
+						continue;
+					}
+					copiedCount++;
+				}
+
+				ManifestEntry manifestEntry;
+				manifestEntry.archivePath = manifestKey;
+				manifestEntry.contentHash = src.contentHash;
+				std::error_code sizeEc;
+				manifestEntry.uncompressedSize = static_cast<uint64_t>(fs::file_size(it->path(), sizeEc));
+				manifestEntry.sourceType = "plugin";
+				manifestEntry.sources = {src};
+				newManifest.addEntry(std::move(manifestEntry));
 			}
 
-			vfLogInfo("Shipped plugin '{}' ({})", descriptor->name, descriptor->library);
+			vfLogInfo("Shipped plugin '{}' ({} copied, {} unchanged)", descriptor.name,
+					  copiedCount, skippedCount);
 		}
 
 		return true;
@@ -870,6 +926,10 @@ namespace gameExport
 		projConfig.workingDirectory = "Assets";
 		projConfig.startupScene = config.startupScene;
 		projConfig.exeIconPath = config.iconPath;
+		if (config.expectedPluginApiVersion != 0)
+		{
+			projConfig.pluginApiVersion = config.expectedPluginApiVersion;
+		}
 
 		fs::path projPath = config.outputDirectory / (config.gameName + ".vfproj");
 
@@ -971,6 +1031,24 @@ namespace gameExport
 					int verified = 0;
 					for (const auto& entry : manifest.getEntries())
 					{
+						// Plugin files live loose next to the exe, not in the archive
+						if (entry.sourceType == "plugin")
+						{
+							fs::path pluginFile = config.outputDirectory / entry.archivePath;
+							if (!fs::exists(pluginFile))
+							{
+								result.errorMessage = "Integrity check failed: missing plugin file: " + entry.archivePath;
+								return false;
+							}
+							if (hashFile(pluginFile) != entry.contentHash)
+							{
+								result.errorMessage = "Integrity check failed: hash mismatch for " + entry.archivePath;
+								return false;
+							}
+							verified++;
+							continue;
+						}
+
 						if (!reader.contains(entry.archivePath))
 						{
 							result.errorMessage = "Integrity check failed: missing from archive: " + entry.archivePath;

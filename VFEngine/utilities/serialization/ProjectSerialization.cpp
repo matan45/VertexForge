@@ -78,6 +78,11 @@ namespace serialization
                 project.lastModified = projectJson["lastModified"].get<std::string>();
             }
 
+            if (projectJson.contains("pluginApiVersion") && projectJson["pluginApiVersion"].is_number_unsigned())
+            {
+                project.pluginApiVersion = projectJson["pluginApiVersion"].get<uint32_t>();
+            }
+
             vfLogInfo("Project loaded successfully: {}", project.projectName);
             return project;
         }
@@ -117,6 +122,11 @@ namespace serialization
 
             projectJson["engineVersion"] = getEngineVersionString();
             projectJson["lastModified"] = getCurrentTimestamp();
+
+            if (project.pluginApiVersion.has_value())
+            {
+                projectJson["pluginApiVersion"] = *project.pluginApiVersion;
+            }
 
             std::string filePath{filename};
             std::ofstream file{filePath};

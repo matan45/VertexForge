@@ -1,5 +1,6 @@
 #pragma once
 #include "../EventTypes.hpp"
+#include <map>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@ namespace events::gameExport
 		bool buildScripts = true;
 		bool stripUnreferencedAssets = false;
 		std::vector<std::string> alwaysIncludePatterns;
+		std::map<std::string, bool> pluginOverrides; // plugin name -> ship?
 
 		std::string_view getName() const override { return "ExportGame"; }
 	};

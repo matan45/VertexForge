@@ -1,6 +1,7 @@
 #include "print/Log.hpp"
 #include "ExportHandler.hpp"
 #include "../graph/ShaderGraphCompiler.hpp"
+#include "api/PluginVersion.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "export/GameExporter.hpp"
@@ -72,6 +73,10 @@ namespace handlers
 		config.verifyIntegrity = cmd.verifyIntegrity;
 		config.stripUnreferencedAssets = cmd.stripUnreferencedAssets;
 		config.alwaysIncludePatterns = cmd.alwaysIncludePatterns;
+		config.pluginOverrides = cmd.pluginOverrides;
+		// The editor links Plugin; the GameExport DLL must not, so the expected
+		// API version travels through the config.
+		config.expectedPluginApiVersion = plugin::VF_PLUGIN_API_VERSION;
 
 		if (projectPathOpt)
 		{

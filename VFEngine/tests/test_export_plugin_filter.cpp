@@ -2,6 +2,9 @@
 #include <export/PluginExportPlanner.hpp>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <string>
+#include <vector>
 
 // ============================================================
 // Export Pipeline v2: plugin ship filter — plugin folders are
@@ -140,6 +143,127 @@ TEST_CASE("parsePluginDescriptor: rejects malformed JSON and missing file")
 
 	CHECK_FALSE(gameExport::parsePluginDescriptor(path).has_value());
 	CHECK_FALSE(gameExport::parsePluginDescriptor(dir.root / "Missing.vfplugin").has_value());
+}
+
+// ---- planPluginExport ----
+
+namespace
+{
+	gameExport::ParsedPluginDescriptor makeDescriptor(const std::string& name, bool enabled,
+													  uint32_t apiVersion = 12,
+													  std::vector<std::string> dependencies = {})
+	{
+		gameExport::ParsedPluginDescriptor descriptor;
+		descriptor.name = name;
+		descriptor.library = name + ".dll";
+		descriptor.enabled = enabled;
+		descriptor.apiVersion = apiVersion;
+		descriptor.dependencies = std::move(dependencies);
+		return descriptor;
+	}
+
+	bool plansToShip(const gameExport::PluginExportPlan& plan, const std::string& name)
+	{
+		for (const auto& descriptor : plan.pluginsToShip)
+		{
+			if (descriptor.name == name) return true;
+		}
+		return false;
+	}
+}
+
+TEST_CASE("planPluginExport: ships enabled, skips disabled")
+{
+	auto plan = gameExport::planPluginExport(
+		{makeDescriptor("A", true), makeDescriptor("B", false)}, {}, 12);
+
+	CHECK(plan.errors.empty());
+	CHECK(plansToShip(plan, "A"));
+	CHECK_FALSE(plansToShip(plan, "B"));
+}
+
+TEST_CASE("planPluginExport: overrides beat the descriptor's enabled flag both ways")
+{
+	std::map<std::string, bool> overrides = {{"A", false}, {"B", true}};
+	auto plan = gameExport::planPluginExport(
+		{makeDescriptor("A", true), makeDescriptor("B", false)}, overrides, 12);
+
+	CHECK(plan.errors.empty());
+	CHECK_FALSE(plansToShip(plan, "A"));
+	CHECK(plansToShip(plan, "B"));
+}
+
+TEST_CASE("planPluginExport: dependencies pull in disabled plugins with a warning")
+{
+	auto plan = gameExport::planPluginExport(
+		{makeDescriptor("A", true, 12, {"Base"}), makeDescriptor("Base", false)}, {}, 12);
+
+	CHECK(plan.errors.empty());
+	CHECK(plansToShip(plan, "A"));
+	CHECK(plansToShip(plan, "Base"));
+	REQUIRE(plan.warnings.size() == 1);
+	CHECK(plan.warnings[0].find("Base") != std::string::npos);
+}
+
+TEST_CASE("planPluginExport: transitive dependency chains resolve")
+{
+	auto plan = gameExport::planPluginExport(
+		{makeDescriptor("A", true, 12, {"B"}),
+		 makeDescriptor("B", false, 12, {"C"}),
+		 makeDescriptor("C", false)}, {}, 12);
+
+	CHECK(plan.errors.empty());
+	CHECK(plansToShip(plan, "A"));
+	CHECK(plansToShip(plan, "B"));
+	CHECK(plansToShip(plan, "C"));
+}
+
+TEST_CASE("planPluginExport: unknown dependency is an error")
+{
+	auto plan = gameExport::planPluginExport(
+		{makeDescriptor("A", true, 12, {"Ghost"})}, {}, 12);
+
+	REQUIRE(plan.errors.size() == 1);
+	CHECK(plan.errors[0].find("Ghost") != std::string::npos);
+}
+
+TEST_CASE("planPluginExport: API version mismatch on a shipped plugin is an error")
+{
+	auto plan = gameExport::planPluginExport(
+		{makeDescriptor("Old", true, 11)}, {}, 12);
+
+	REQUIRE(plan.errors.size() == 1);
+	CHECK(plan.errors[0].find("Old") != std::string::npos);
+	CHECK_FALSE(plansToShip(plan, "Old"));
+}
+
+TEST_CASE("planPluginExport: API version of excluded plugins is not checked")
+{
+	auto plan = gameExport::planPluginExport(
+		{makeDescriptor("A", true, 12), makeDescriptor("Stale", false, 9)}, {}, 12);
+
+	CHECK(plan.errors.empty());
+	CHECK(plansToShip(plan, "A"));
+}
+
+TEST_CASE("planPluginExport: expectedApiVersion 0 skips the version check")
+{
+	auto plan = gameExport::planPluginExport(
+		{makeDescriptor("A", true, 11)}, {}, 0);
+
+	CHECK(plan.errors.empty());
+	CHECK(plansToShip(plan, "A"));
+}
+
+TEST_CASE("planPluginExport: dependency cycles terminate")
+{
+	auto plan = gameExport::planPluginExport(
+		{makeDescriptor("A", true, 12, {"B"}),
+		 makeDescriptor("B", false, 12, {"A"})}, {}, 12);
+
+	CHECK(plan.errors.empty());
+	CHECK(plansToShip(plan, "A"));
+	CHECK(plansToShip(plan, "B"));
 }
 
 } // TEST_SUITE
