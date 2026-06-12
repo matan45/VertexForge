@@ -167,6 +167,9 @@ namespace components
         bool wordWrap = true;
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
+        // Parse BBCode-style markup in text: [b], [i], [color=#RRGGBB(AA)],
+        // [[ escapes a literal '['. Unknown tags render literally.
+        bool richText = false;
     };
 
     enum class UIButtonState : uint8_t

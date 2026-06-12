@@ -20,6 +20,11 @@ namespace text
         float lineY = 0.0f;  // cursorY of the line this glyph was placed on.
                              // Use this (not offset.y) to group glyphs by line,
                              // since offset.y varies per glyph by bearingY.
+        // Index of this glyph's codepoint in the source string's decoded
+        // codepoint sequence (every decodeUTF8 result counts, including
+        // whitespace and glyphless codepoints). UINT32_MAX for synthesized
+        // glyphs (e.g. the ellipsis), which render with the base style.
+        uint32_t charIndex = 0;
     };
 
     struct LayoutResult

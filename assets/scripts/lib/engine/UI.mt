@@ -195,6 +195,16 @@ public class UI {
         return _native_ui_getLabelWordWrap(entityId);
     }
 
+    // Enable/disable rich text markup parsing ([b], [i], [color=#RRGGBB])
+    public static function setLabelRichText(int entityId, bool richText): void {
+        _native_ui_setLabelRichText(entityId, richText);
+    }
+
+    // Get whether rich text markup parsing is enabled
+    public static function getLabelRichText(int entityId): bool {
+        return _native_ui_getLabelRichText(entityId);
+    }
+
     // Set line + letter spacing multipliers
     public static function setLabelSpacing(int entityId, float line, float letter): void {
         _native_ui_setLabelSpacing(entityId, line, letter);

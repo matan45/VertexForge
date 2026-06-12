@@ -116,6 +116,7 @@ namespace text
 
         uint32_t prevCodepoint = 0;
         size_t i = 0;
+        uint32_t charCounter = 0;
 
         // Track word boundaries for word wrap
         size_t wordStartGlyphIndex = 0;
@@ -124,6 +125,7 @@ namespace text
         while (i < text.size())
         {
             uint32_t codepoint = decodeUTF8(text, i);
+            uint32_t charIndex = charCounter++;
 
             if (codepoint == '\n')
             {
@@ -210,6 +212,7 @@ namespace text
             lg.uvRect = glm::vec4(u0, v0, u1, v1);
             lg.codepoint = codepoint;
             lg.lineY = cursorY;
+            lg.charIndex = charIndex;
             result.glyphs.push_back(lg);
 
             cursorX += glyphAdvance;
@@ -406,6 +409,7 @@ namespace text
                     static_cast<float>(eg->atlasY + eg->atlasHeight) / atlasH);
                 lg.codepoint = eg->codepoint;
                 lg.lineY = line.lineY;
+                lg.charIndex = UINT32_MAX; // synthesized — renders with base style
                 rebuilt.push_back(lg);
 
                 cursorX += eg->advanceX * scale + letterSpacing;

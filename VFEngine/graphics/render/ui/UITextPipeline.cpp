@@ -8,6 +8,7 @@
 #include "../../core/DynamicRenderingHelpers.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
+#include "text/RichTextParser.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
 #include <string_view>
@@ -159,11 +160,24 @@ namespace render::ui
                 ? 1.0f / fontData.sdfParams.spread * 0.5f
                 : 0.1f) : 0.0f;
 
+            // Rich text: strip markup first, then lay out the stripped text.
+            // Per-glyph styles resolve through LayoutGlyph::charIndex below.
+            ::text::RichTextResult richText;
+            if (label.richText)
+            {
+                richText = ::text::parseRichText(label.text);
+                if (richText.strippedText.empty())
+                {
+                    continue;
+                }
+            }
+            const std::string& layoutSource = label.richText ? richText.strippedText : label.text;
+
             // Layout text using shared text layout engine
             float maxWidth = label.wordWrap ? label.size.x : 0.0f;
             auto layout = ::text::layoutText(
                 fontData,
-                label.text,
+                layoutSource,
                 label.fontSize,
                 maxWidth,
                 label.lineSpacing,
@@ -297,6 +311,21 @@ namespace render::ui
                     inst.color = label.color;
                     inst.sdfParams = glm::vec2(sdfEdge, sdfSmooth);
                     inst.styleFlags = styleFlags;
+
+                    // Rich text span overrides. Synthesized glyphs (ellipsis,
+                    // charIndex == UINT32_MAX) fail the bound check and keep
+                    // the base label style. Span colors inherit label alpha
+                    // so fade animations still apply.
+                    if (label.richText && glyph.charIndex < richText.perCodepoint.size())
+                    {
+                        const auto& span = richText.perCodepoint[glyph.charIndex];
+                        inst.styleFlags |= span.styleFlags;
+                        if (span.hasColor)
+                        {
+                            inst.color = glm::vec4(span.color.r, span.color.g,
+                                                   span.color.b, span.color.a * label.color.a);
+                        }
+                    }
 
                     scissorMap[scissorKey].push_back({label.fontPath, inst,
                         label.stencilOp, label.stencilRef});

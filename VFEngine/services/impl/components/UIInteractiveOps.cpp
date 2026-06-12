@@ -85,6 +85,7 @@ namespace services {
         data.wordWrap = comp.wordWrap;
         data.lineSpacing = comp.lineSpacing;
         data.letterSpacing = comp.letterSpacing;
+        data.richText = comp.richText;
         return data;
     }
 
@@ -111,6 +112,7 @@ namespace services {
         comp.wordWrap = labelData.wordWrap;
         comp.lineSpacing = labelData.lineSpacing;
         comp.letterSpacing = labelData.letterSpacing;
+        comp.richText = labelData.richText;
         return true;
     }
 

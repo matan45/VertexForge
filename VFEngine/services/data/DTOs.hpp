@@ -445,6 +445,7 @@ namespace services
         bool wordWrap = true;
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
+        bool richText = false;
     };
 
     struct UIButtonData

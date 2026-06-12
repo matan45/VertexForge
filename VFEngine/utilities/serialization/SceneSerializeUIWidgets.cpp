@@ -27,6 +27,7 @@ namespace serialization {
         j["wordWrap"] = label.wordWrap;
         j["lineSpacing"] = label.lineSpacing;
         j["letterSpacing"] = label.letterSpacing;
+        j["richText"] = label.richText;
         return j;
     }
 
@@ -43,6 +44,7 @@ namespace serialization {
         label.wordWrap = j.value("wordWrap", true);
         label.lineSpacing = j.value("lineSpacing", 1.0f);
         label.letterSpacing = j.value("letterSpacing", 0.0f);
+        label.richText = j.value("richText", false);
     }
 
     // ---- Button ----

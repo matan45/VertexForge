@@ -10,6 +10,7 @@
 #include "../../render/text/TextTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "text/RichTextParser.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -150,6 +151,7 @@ namespace controllers::offscreen
                 renderData.lineSpacing = labelComp.lineSpacing;
                 renderData.letterSpacing = labelComp.letterSpacing;
                 renderData.wordWrap = labelComp.wordWrap;
+                renderData.richText = labelComp.richText;
                 renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
                 renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
                 renderData.overflow = labelComp.overflow;
@@ -488,7 +490,12 @@ namespace controllers::offscreen
 
             render::text::TextRenderData renderData;
             renderData.fontPath = labelComp.fontRef.resolve();
-            renderData.text = labelComp.text;
+            // World-space (edit-mode) labels render through the 3D text
+            // pipeline which has no per-char styles — strip markup so tags
+            // don't show literally; styled spans are screen-space only.
+            renderData.text = labelComp.richText
+                ? ::text::parseRichText(labelComp.text).strippedText
+                : labelComp.text;
             renderData.worldPosition = params.worldPosition;
             renderData.fontSize = params.worldFontSize;
             renderData.color = labelComp.color;

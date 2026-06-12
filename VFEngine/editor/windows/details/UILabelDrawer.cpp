@@ -277,6 +277,15 @@ namespace windows::details
             changed = true;
         }
 
+        if (ImGui::Checkbox("Rich Text##UILabel", &data.richText))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Parse [b], [i], [color=#RRGGBB] markup. [[ escapes a literal [.");
+        }
+
         return changed;
     }
 }
