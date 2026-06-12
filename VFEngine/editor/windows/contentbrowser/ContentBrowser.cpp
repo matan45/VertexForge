@@ -312,7 +312,10 @@ namespace windows
 
                 std::error_code sizeEc;
                 if (entry.is_regular_file(sizeEc))
+                {
                     asset.fileSize = entry.file_size(sizeEc);
+                    asset.fileSizeKnown = !sizeEc;
+                }
 
                 std::error_code timeEc;
                 auto ftime = entry.last_write_time(timeEc);
@@ -615,15 +618,17 @@ namespace windows
 
     void ContentBrowser::handleProjectResultClick(const AssetClickResult& clickResult)
     {
-        if (!clickResult.wasClicked)
+        if (!clickResult.wasClicked && !clickResult.wasRightClicked)
             return;
 
         selectedFile = clickResult.clickedPath;
         selectedType = clickResult.clickedType;
+        selectedPaths.clear();
+        selectedPaths.insert(StringUtil::wstringToUtf8(selectedFile.wstring()));
 
         // Same double-click behavior as the directory view: open the asset's
         // preview/editor (scenes load, scripts open externally, etc.).
-        if (clickResult.wasDoubleClicked)
+        if (clickResult.wasClicked && clickResult.wasDoubleClicked)
         {
             handleDoubleClick();
         }

@@ -27,7 +27,6 @@ namespace windows
 
             drawToolbar();
             ImGui::Separator();
-            modals->drawContextMenu(selectedFile);
 
             if (showFileWindow)
             {
@@ -72,6 +71,18 @@ namespace windows
             else
                 handleAssetClick(clickResult);
 
+            const std::string selectedPath = StringUtil::wstringToUtf8(selectedFile.wstring());
+            const Asset* selectedAsset = nullptr;
+            for (const auto& asset : visibleAssets)
+            {
+                if (asset.path == selectedPath)
+                {
+                    selectedAsset = &asset;
+                    break;
+                }
+            }
+            modals->drawContextMenu(selectedAsset);
+
             ImGui::Columns(1);
             handleDragDrop();
         }
@@ -81,10 +92,10 @@ namespace windows
 
     void ContentBrowser::handleAssetClick(const AssetClickResult& clickResult)
     {
-        if (!clickResult.wasClicked && clickResult.pendingNavigation.empty())
+        if (!clickResult.wasClicked && !clickResult.wasRightClicked && clickResult.pendingNavigation.empty())
             return;
 
-        if (clickResult.wasClicked)
+        if (clickResult.wasClicked || clickResult.wasRightClicked)
         {
             selectedFile = clickResult.clickedPath;
             selectedType = clickResult.clickedType;
@@ -101,9 +112,22 @@ namespace windows
 
             if (clickedIndex >= 0)
             {
-                bool ctrlHeld = ImGui::IsKeyDown(ImGuiMod_Ctrl);
-                bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
-                selectAsset(static_cast<size_t>(clickedIndex), ctrlHeld, shiftHeld);
+                if (clickResult.wasRightClicked)
+                {
+                    const std::string& clickedPath = assets[static_cast<size_t>(clickedIndex)].path;
+                    if (selectedPaths.find(clickedPath) == selectedPaths.end())
+                    {
+                        selectedPaths.clear();
+                        selectedPaths.insert(clickedPath);
+                    }
+                    lastSelectedIndex = clickedIndex;
+                }
+                else
+                {
+                    bool ctrlHeld = ImGui::IsKeyDown(ImGuiMod_Ctrl);
+                    bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
+                    selectAsset(static_cast<size_t>(clickedIndex), ctrlHeld, shiftHeld);
+                }
 
                 for (auto& asset : assets)
                 {
@@ -111,7 +135,7 @@ namespace windows
                 }
             }
 
-            if (clickResult.wasDoubleClicked)
+            if (clickResult.wasClicked && clickResult.wasDoubleClicked)
             {
                 handleDoubleClick();
             }

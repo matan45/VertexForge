@@ -167,6 +167,13 @@ namespace windows
                     result.wasDoubleClicked = true;
                 }
             }
+
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+            {
+                result.wasRightClicked = true;
+                result.clickedPath = asset->path;
+                result.clickedType = asset->type;
+            }
         }
         ImGui::PopStyleColor();
 

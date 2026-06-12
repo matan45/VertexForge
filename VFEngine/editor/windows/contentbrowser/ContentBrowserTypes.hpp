@@ -1,6 +1,7 @@
 #pragma once
 #include "resource/AssetTypes.hpp"
 #include <array>
+#include <cstdio>
 #include <optional>
 #include <string>
 #include <unordered_set>
@@ -114,6 +115,26 @@ namespace windows
         return assetTypeTable().back(); // Other
     }
 
+    inline std::string formatFileSize(uint64_t bytes)
+    {
+        static constexpr std::array<const char*, 5> units = {"B", "KB", "MB", "GB", "TB"};
+        double value = static_cast<double>(bytes);
+        size_t unitIndex = 0;
+
+        while (value >= 1024.0 && unitIndex + 1 < units.size())
+        {
+            value /= 1024.0;
+            ++unitIndex;
+        }
+
+        if (unitIndex == 0)
+            return std::to_string(bytes) + " B";
+
+        char buffer[32];
+        std::snprintf(buffer, sizeof(buffer), "%.1f %s", value, units[unitIndex]);
+        return buffer;
+    }
+
     // The asset database speaks resource::AssetType; the browser has its own
     // enum (Ocean/Project/Plugin exist only here, Skeleton/World/Theme only
     // there). Total mapping — anything without a browser counterpart is Other.
@@ -154,6 +175,7 @@ namespace windows
         AssetType type;
         std::string extension;
         uint64_t fileSize = 0;
+        bool fileSizeKnown = false;
         int64_t lastModified = 0;
         bool isDirectory = false;
         bool isSelected = false;

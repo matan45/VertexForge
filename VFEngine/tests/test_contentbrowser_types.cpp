@@ -37,6 +37,16 @@ TEST_CASE("assetTypeInfo returns the matching entry")
     CHECK(std::string(windows::assetTypeInfo(AssetType::MaterialInstance).label) == "Material Instance");
 }
 
+TEST_CASE("formatFileSize uses binary units")
+{
+    CHECK(windows::formatFileSize(0) == "0 B");
+    CHECK(windows::formatFileSize(1023) == "1023 B");
+    CHECK(windows::formatFileSize(1024) == "1.0 KB");
+    CHECK(windows::formatFileSize(1536) == "1.5 KB");
+    CHECK(windows::formatFileSize(1024ull * 1024ull) == "1.0 MB");
+    CHECK(windows::formatFileSize(5ull * 1024ull * 1024ull * 1024ull * 1024ull) == "5.0 TB");
+}
+
 TEST_CASE("fromResourceType is total and maps known pairs")
 {
     using windows::AssetType;

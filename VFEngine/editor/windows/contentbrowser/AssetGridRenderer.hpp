@@ -13,6 +13,7 @@ namespace windows
     struct AssetClickResult
     {
         bool wasClicked = false;
+        bool wasRightClicked = false;
         bool wasDoubleClicked = false;
         fs::path clickedPath;
         AssetType clickedType = AssetType::Other;

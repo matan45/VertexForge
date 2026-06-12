@@ -9,6 +9,24 @@
 #include "../scene/FolderStructureWindow.hpp"
 #include "../../fileops/AsyncFileOperations.hpp"
 
+namespace
+{
+    std::string toClipboardPath(const fs::path& path)
+    {
+        std::error_code ec;
+        fs::path fullPath = fs::weakly_canonical(path, ec);
+        if (ec)
+        {
+            ec.clear();
+            fullPath = fs::absolute(path, ec);
+            if (ec)
+                fullPath = path;
+        }
+
+        return StringUtil::wstringToUtf8(fullPath.wstring());
+    }
+}
+
 namespace windows
 {
     ContentBrowserModals::ContentBrowserModals(RefreshCallback onRefresh)
@@ -102,7 +120,7 @@ namespace windows
         drawErrorModal();
     }
 
-    void ContentBrowserModals::drawContextMenu(const fs::path& selectedFile)
+    void ContentBrowserModals::drawContextMenu(const Asset* selectedAsset)
     {
         if (ImGui::BeginPopupContextWindow())
         {
@@ -148,7 +166,31 @@ namespace windows
 
             ImGui::Separator();
 
-            bool hasSelection = !selectedFile.empty();
+            bool hasSelection = selectedAsset != nullptr && !selectedAsset->path.empty();
+            fs::path selectedFile = hasSelection ? fs::path(selectedAsset->path) : fs::path{};
+
+            if (hasSelection)
+            {
+                std::string sizeLabel = "Size: ";
+                if (selectedAsset->isDirectory)
+                    sizeLabel += "Folder";
+                else if (selectedAsset->fileSizeKnown)
+                    sizeLabel += formatFileSize(selectedAsset->fileSize);
+                else
+                    sizeLabel += "Unavailable";
+
+                ImGui::BeginDisabled();
+                ImGui::MenuItem(sizeLabel.c_str());
+                ImGui::EndDisabled();
+
+                if (ImGui::MenuItem("Copy Full Path"))
+                {
+                    const std::string fullPath = toClipboardPath(selectedFile);
+                    ImGui::SetClipboardText(fullPath.c_str());
+                }
+
+                ImGui::Separator();
+            }
 
             if (ImGui::MenuItem("Cut", "Ctrl+X", false, hasSelection))
             {
