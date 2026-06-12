@@ -1,5 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
+#include "PreviewWindowChrome.hpp"
 #include <string>
 #include <vector>
 #include <map>
@@ -60,6 +61,10 @@ namespace windows
         // Window state
         bool isOpen = true;
         bool needsInit = true;
+
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
 
         // Async loading state
         std::future<PrefabLoadResult> loadFuture;

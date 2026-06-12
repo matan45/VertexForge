@@ -1,5 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
+#include "PreviewWindowChrome.hpp"
 #include "resource/Types.hpp"
 #include "data/DTOs.hpp"
 #include <imgui.h>
@@ -28,6 +29,10 @@ namespace windows
 
         bool isOpen = true;
         bool needsInit = true;
+
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
 
         std::future<FontLoadResult> loadFuture;
         std::atomic<bool> loadingInProgress{false};

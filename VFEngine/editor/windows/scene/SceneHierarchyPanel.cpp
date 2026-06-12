@@ -4,11 +4,16 @@
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
+#include "events/render/MaterialEvents.hpp"
+#include "events/scripting/ScriptingEvents.hpp"
+#include "asset/AssetRef.hpp"
+#include "../../dragdrop/DragDropManager.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 
 namespace windows
 {
@@ -867,6 +872,58 @@ namespace windows
                     cmd.entity = draggedHandle;
                     cmd.newParent = handle;
                     dispatcher.execute(cmd);
+                }
+            }
+
+            if (ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
+            {
+                std::vector<std::string> dragPaths = DragDropManager::instance().getDragPaths();
+                DragDropManager::instance().endDrag();
+
+                auto& dispatcher = events::EventDispatcher::instance();
+
+                for (const auto& path : dragPaths)
+                {
+                    std::string ext = std::filesystem::path(path).extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                    if (ext == ".vfmat" || ext == ".vfmatinstance")
+                    {
+                        events::material::HasMaterialComponentQuery hasMatQuery;
+                        hasMatQuery.entity = handle;
+                        if (!dispatcher.query(hasMatQuery))
+                        {
+                            events::material::AddMaterialComponentCommand addCmd;
+                            addCmd.entity = handle;
+                            dispatcher.execute(addCmd);
+                        }
+
+                        events::material::SetDefaultMaterialCommand matCmd;
+                        matCmd.entity = handle;
+                        matCmd.materialPath = path;
+                        dispatcher.execute(matCmd);
+                    }
+                    else if (ext == ".vfanimator")
+                    {
+                        events::scene::GetMeshDataQuery meshQuery;
+                        meshQuery.entity = handle;
+                        auto meshOpt = dispatcher.query(meshQuery);
+                        if (meshOpt.has_value())
+                        {
+                            events::scene::SetMeshDataCommand meshCmd;
+                            meshCmd.entity = handle;
+                            meshCmd.meshData = *meshOpt;
+                            meshCmd.meshData.animatorRef = asset::AssetRef::fromPath(path);
+                            dispatcher.execute(meshCmd);
+                        }
+                    }
+                    else if (ext == ".mt")
+                    {
+                        events::scripting::AttachScriptCommand scriptCmd;
+                        scriptCmd.entity = handle;
+                        scriptCmd.data.scriptPath = path;
+                        dispatcher.execute(scriptCmd);
+                    }
                 }
             }
             ImGui::EndDragDropTarget();

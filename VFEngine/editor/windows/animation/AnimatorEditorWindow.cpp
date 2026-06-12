@@ -112,9 +112,15 @@ namespace windows
             ensureLayersInitialized();
         }
 
-        std::string title = windowTitle + (isDirty ? " *###AnimatorEditor" : "###AnimatorEditor");
+        // Per-asset ID so two open animators don't merge into one window.
+        std::string title = windowTitle + (isDirty ? " *###Animator_" : "###Animator_") + animatorPath;
 
-        ImGui::SetNextWindowSize(ImVec2(1200, 800), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = editor::preview::initialWindowSize("AnimatorEditor", ImVec2(1200, 800));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoScrollbar;
         if (ImGui::Begin(title.c_str(), &isOpen, flags))
@@ -127,8 +133,11 @@ namespace windows
             ImGui::BeginChild("MainContent", ImVec2(0, contentSize.y), false, ImGuiWindowFlags_NoScrollbar);
             {
                 ImVec2 innerSize = ImGui::GetContentRegionAvail();
-                float panelWidth = 300.0f;
-                float graphWidth = innerSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
+                static float panelWidth = 300.0f;
+                const float splitterThickness = 5.0f;
+                panelWidth = std::clamp(panelWidth, 220.0f,
+                                        std::max(220.0f, innerSize.x - 300.0f - splitterThickness));
+                float graphWidth = innerSize.x - panelWidth - splitterThickness;
 
                 // Save previous layer index to detect changes
                 uint32_t layerIndexBeforePanel = selectedLayerIndex;
@@ -202,7 +211,10 @@ namespace windows
 
                 ImGui::EndChild();
 
-                ImGui::SameLine();
+                ImGui::SameLine(0.0f, 0.0f);
+                editor::preview::splitterV("##animatorSplit", splitterThickness, &panelWidth,
+                                           &graphWidth, 220.0f, 300.0f, innerSize.y);
+                ImGui::SameLine(0.0f, 0.0f);
 
                 ImGui::BeginChild("NodeGraphPanel", ImVec2(graphWidth, innerSize.y), true,
                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -223,6 +235,12 @@ namespace windows
             ImGui::EndChild();
         }
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            editor::preview::rememberWindowSize("AnimatorEditor", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
     }
 
     void AnimatorEditorWindow::drawMenuBar()
@@ -269,6 +287,8 @@ namespace windows
                 }
                 ImGui::EndMenu();
             }
+
+            maximizer.drawButton();
 
             ImGui::EndMenuBar();
         }

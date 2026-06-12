@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "PreviewEnvironment.hpp"
+#include "PreviewWindowChrome.hpp"
 #include "data/DTOs.hpp"
 #include "data/AsyncLoadingTypes.hpp"
 #include "animator/SocketTypes.hpp"
@@ -43,6 +44,10 @@ namespace windows
         bool isOpen = true;
         bool needsInit = true;
         bool previewCleanedUp = false;
+
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
 
         services::MeshLoadingProgress loadingProgress;
 

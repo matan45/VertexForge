@@ -1,11 +1,14 @@
 #include "ImagePreviewWindow.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "resource/ResourceManager.hpp"
 #include "asset/AssetRef.hpp"
 #include "TextureCompressor.hpp"
+#include "../../dragdrop/DragDropManager.hpp"
 #include <glm/glm.hpp>
+#include <algorithm>
 #include <filesystem>
 #include <cmath>
 
@@ -13,10 +16,17 @@ namespace windows
 {
     ImagePreviewWindow::ImagePreviewWindow(const std::string& filePath, bool hdr)
         : imagePath(filePath)
+          , windowId(filePath)
           , isHDR(hdr)
     {
-        std::filesystem::path path(filePath);
-        windowTitle = (hdr ? "HDR Preview: " : "Image Preview: ") + path.filename().string();
+        updateWindowTitle();
+    }
+
+    void ImagePreviewWindow::updateWindowTitle()
+    {
+        std::filesystem::path path(imagePath);
+        windowTitle = (isHDR ? "HDR Preview: " : "Image Preview: ") + path.filename().string()
+            + "##ImagePreview:" + windowId;
     }
 
     ImagePreviewWindow::~ImagePreviewWindow()
@@ -62,12 +72,19 @@ namespace windows
         updateAsyncLoading();
         updateChannelLoading();
 
-        ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = editor::preview::initialWindowSize("ImagePreview", ImVec2(800, 600));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
 
         if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
         {
             if (isOpen)
             {
+                maximizer.drawButton();
+
                 float panelWidth = 150.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
 
@@ -91,9 +108,95 @@ namespace windows
                     drawImagePanel();
                 }
                 ImGui::EndChild();
+
+                handleAssetDrop();
             }
         }
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            editor::preview::rememberWindowSize("ImagePreview", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
+    }
+
+    void ImagePreviewWindow::handleAssetDrop()
+    {
+        ImVec2 windowPos = ImGui::GetWindowPos();
+        ImVec2 regionMin = ImGui::GetWindowContentRegionMin();
+        ImVec2 regionMax = ImGui::GetWindowContentRegionMax();
+        ImRect dropRect(
+            ImVec2(windowPos.x + regionMin.x, windowPos.y + regionMin.y),
+            ImVec2(windowPos.x + regionMax.x, windowPos.y + regionMax.y)
+        );
+
+        if (!ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID("ImagePreviewDropZone")))
+            return;
+
+        const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+            DND_CONTENT_BROWSER,
+            ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+        if (payload)
+        {
+            const auto& dragPaths = DragDropManager::instance().getDragPaths();
+
+            std::string ext;
+            if (dragPaths.size() == 1)
+            {
+                ext = std::filesystem::path(dragPaths[0]).extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            }
+            bool droppedHDR = (ext == ".vfhdr");
+            bool valid = (ext == ".vfimage") || droppedHDR;
+
+            DragDropManager::drawDropTargetHighlight(dropRect, valid);
+
+            if (valid && payload->IsDelivery())
+            {
+                std::string newPath = dragPaths[0];
+                DragDropManager::instance().endDrag();
+                switchToImage(newPath, droppedHDR);
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    void ImagePreviewWindow::switchToImage(const std::string& path, bool hdr)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (loadingProgress.isLoading())
+        {
+            events::render::CancelTextureLoadingCommand cancelCmd;
+            cancelCmd.instanceId = this;
+            dispatcher.execute(cancelCmd);
+            loadingProgress = {};
+        }
+
+        if (channelFuture.valid())
+        {
+            channelFuture.wait();
+            channelFuture = {};
+        }
+        releaseChannelTexture();
+        channelView = 0;
+        pendingChannel = 0;
+
+        if (imageHandle.isValid())
+        {
+            events::render::ReleaseEditorTextureCommand releaseCmd;
+            releaseCmd.handle = imageHandle.imguiDescriptorSet;
+            dispatcher.execute(releaseCmd);
+            imageHandle = {};
+        }
+
+        imagePath = path;
+        isHDR = hdr;
+        selectedMipLevel = 0;
+        zoom = 1.0f;
+        updateWindowTitle();
+        loadImageAsync();
     }
 
     void ImagePreviewWindow::loadImageAsync()

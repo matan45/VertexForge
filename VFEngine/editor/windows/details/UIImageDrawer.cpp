@@ -5,11 +5,43 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include <imgui.h>
 #include <fstream>
 
 namespace windows::details
 {
+    namespace
+    {
+        // Assign a .vfImage to the component, reading the source dimensions
+        // from the file header (1 byte file type + 12 bytes version, then
+        // uint32 width, uint32 height).
+        bool assignUIImageTexture(services::UIImageData& data, const std::string& path)
+        {
+            std::ifstream file(path, std::ios::binary);
+            if (!file.good())
+            {
+                vfLogError("Selected texture file does not exist or cannot be read: {}", path);
+                return false;
+            }
+
+            file.seekg(13, std::ios::beg);
+            uint32_t w = 0, h = 0;
+            file.read(reinterpret_cast<char*>(&w), sizeof(uint32_t));
+            file.read(reinterpret_cast<char*>(&h), sizeof(uint32_t));
+            if (!file.good())
+            {
+                vfLogWarning("Failed to read .vfImage header (file too short): {}", path);
+                return false;
+            }
+
+            data.textureRef = asset::AssetRef::fromPath(path);
+            data.sourceWidth = w;
+            data.sourceHeight = h;
+            return true;
+        }
+    }
+
     bool UIImageDrawer::draw(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -116,6 +148,10 @@ namespace windows::details
         {
             ImGui::TextDisabled("No texture selected");
         }
+        if (auto dropped = acceptAssetDropOnLastItem("UIImageTexDrop", {".vfimage"}))
+        {
+            changed = assignUIImageTexture(data, *dropped);
+        }
 
         if (ImGui::Button("Select Texture##UIImage"))
         {
@@ -124,33 +160,7 @@ namespace windows::details
                 {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
             if (!path.empty())
             {
-                std::ifstream file(path, std::ios::binary);
-                if (file.good())
-                {
-                    // Read texture dimensions from .vfImage header:
-                    // 1 byte file type + 12 bytes version = 13 bytes, then uint32 width, uint32 height
-                    file.seekg(13, std::ios::beg);
-                    uint32_t w = 0, h = 0;
-                    file.read(reinterpret_cast<char*>(&w), sizeof(uint32_t));
-                    file.read(reinterpret_cast<char*>(&h), sizeof(uint32_t));
-                    if (!file.good())
-                    {
-                        vfLogWarning("Failed to read .vfImage header (file too short): {}", path);
-                        file.close();
-                    }
-                    else
-                    {
-                        file.close();
-                        data.textureRef = asset::AssetRef::fromPath(path);
-                        data.sourceWidth = w;
-                        data.sourceHeight = h;
-                        changed = true;
-                    }
-                }
-                else
-                {
-                    vfLogError("Selected texture file does not exist or cannot be read: {}", path);
-                }
+                changed = assignUIImageTexture(data, path) || changed;
             }
         }
 

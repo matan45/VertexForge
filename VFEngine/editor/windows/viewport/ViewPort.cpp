@@ -18,6 +18,9 @@
 #include "events/ui/UIPickEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
+#include "events/render/MaterialEvents.hpp"
+#include "events/physics/PhysicsEvents.hpp"
+#include "asset/AssetRef.hpp"
 #include "time/Timer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -26,6 +29,7 @@
 #include "../../dragdrop/DragDropManager.hpp"
 #include <imgui.h>
 #include "ImGuizmo.h"
+#include <algorithm>
 #include <filesystem>
 
 namespace windows
@@ -90,7 +94,7 @@ namespace windows
             if (texture.isValid())
             {
                 ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
-                handlePrefabDrop();
+                handleAssetDrop(vp, vs);
             }
 
             overlay.draw(gizmo);
@@ -212,7 +216,62 @@ namespace windows
         dispatcher.execute(listenerCmd);
     }
 
-    void ViewPort::handlePrefabDrop()
+    glm::vec3 ViewPort::computeDropPosition(glm::vec2 mousePos, glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        if (viewportSize.x > 0.0f && viewportSize.y > 0.0f)
+        {
+            math::Ray ray = picker.screenToWorldRay(*editorCamera, mousePos, viewportPos, viewportSize);
+
+            events::physics::RaycastQuery rayQuery;
+            rayQuery.origin = ray.origin;
+            rayQuery.direction = ray.direction;
+            rayQuery.maxDistance = 10000.0f;
+            auto hit = events::EventDispatcher::instance().query(rayQuery);
+            if (hit.hit)
+            {
+                return hit.point;
+            }
+        }
+
+        return editorCamera->position + editorCamera->getForwardDirection() * 5.0f;
+    }
+
+    void ViewPort::spawnPrefabAt(const std::string& path, const glm::vec3& dropPos)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::scene::LoadPrefabCommand loadCmd;
+        loadCmd.filePath = path;
+        loadCmd.parent = std::nullopt;
+        auto result = dispatcher.execute(loadCmd);
+        if (!result.has_value())
+        {
+            return;
+        }
+
+        events::scene::GetTransformQuery transformQuery;
+        transformQuery.entity = *result;
+        auto prefabTransform = dispatcher.query(transformQuery);
+
+        if (prefabTransform.has_value())
+        {
+            services::TransformData transform;
+            transform.position = dropPos;
+            transform.rotation = prefabTransform->rotation;
+            transform.scale = prefabTransform->scale;
+
+            events::scene::SetTransformCommand transformCmd;
+            transformCmd.entity = *result;
+            transformCmd.transform = transform;
+            dispatcher.execute(transformCmd);
+        }
+
+        events::scene::SelectEntityCommand selectCmd;
+        selectCmd.entity = *result;
+        dispatcher.execute(selectCmd);
+    }
+
+    void ViewPort::handleAssetDrop(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         if (!ImGui::BeginDragDropTarget())
         {
@@ -223,59 +282,117 @@ namespace windows
 
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
         {
-            const auto& dragPaths = DragDropManager::instance().getDragPaths();
+            // Copy out of the singleton before dispatching — the spawn commands
+            // below can trigger UI refreshes that touch the drag state.
+            std::vector<std::string> dragPaths = DragDropManager::instance().getDragPaths();
+            DragDropManager::instance().endDrag();
+
+            ImVec2 mouse = ImGui::GetMousePos();
+            glm::vec2 mousePos(mouse.x, mouse.y);
+            glm::vec3 dropPos = computeDropPosition(mousePos, viewportPos, viewportSize);
+
+            auto spawnComponentEntity = [&](const std::filesystem::path& fsPath,
+                                            auto&& addAndConfigure)
+            {
+                events::scene::CreateEntityCommand createCmd;
+                createCmd.name = fsPath.stem().string();
+                services::EntityHandle entity = dispatcher.execute(createCmd);
+
+                addAndConfigure(entity);
+
+                events::scene::SetTransformCommand transformCmd;
+                transformCmd.entity = entity;
+                transformCmd.transform.position = dropPos;
+                dispatcher.execute(transformCmd);
+
+                events::scene::SelectEntityCommand selectCmd;
+                selectCmd.entity = entity;
+                dispatcher.execute(selectCmd);
+            };
 
             for (const auto& path : dragPaths)
             {
                 std::filesystem::path fsPath(path);
-                auto ext = fsPath.extension().string();
+                std::string ext = fsPath.extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-                if (ext == ".vfTerrain")
+                if (ext == ".vfterrain")
                 {
                     events::terrain::BeginTerrainLoadCommand loadCmd;
                     loadCmd.path = path;
                     dispatcher.execute(loadCmd);
-                    continue;
                 }
-
-                if (ext != ".vfPrefab")
+                else if (ext == ".vfprefab")
                 {
-                    continue;
+                    spawnPrefabAt(path, dropPos);
                 }
-
-                events::scene::LoadPrefabCommand loadCmd;
-                loadCmd.filePath = path;
-                loadCmd.parent = std::nullopt;
-                auto result = dispatcher.execute(loadCmd);
-
-                if (result.has_value())
+                else if (ext == ".vfmesh")
                 {
-                    events::scene::GetTransformQuery transformQuery;
-                    transformQuery.entity = *result;
-                    auto prefabTransform = dispatcher.query(transformQuery);
-
-                    if (prefabTransform.has_value())
+                    spawnComponentEntity(fsPath, [&](services::EntityHandle entity)
                     {
-                        glm::vec3 spawnPos = editorCamera->position + editorCamera->getForwardDirection() * 5.0f;
+                        events::scene::AddMeshComponentCommand addCmd;
+                        addCmd.entity = entity;
+                        dispatcher.execute(addCmd);
 
-                        services::TransformData transform;
-                        transform.position = spawnPos;
-                        transform.rotation = prefabTransform->rotation;
-                        transform.scale = prefabTransform->scale;
+                        events::scene::SetMeshDataCommand meshCmd;
+                        meshCmd.entity = entity;
+                        meshCmd.meshData.meshRef = asset::AssetRef::fromPath(path);
+                        dispatcher.execute(meshCmd);
 
-                        events::scene::SetTransformCommand transformCmd;
-                        transformCmd.entity = *result;
-                        transformCmd.transform = transform;
-                        dispatcher.execute(transformCmd);
+                        events::material::AddMaterialComponentCommand matCmd;
+                        matCmd.entity = entity;
+                        dispatcher.execute(matCmd);
+                    });
+                }
+                else if (ext == ".vfvfx")
+                {
+                    spawnComponentEntity(fsPath, [&](services::EntityHandle entity)
+                    {
+                        events::scene::AddVFXComponentCommand addCmd;
+                        addCmd.entity = entity;
+                        dispatcher.execute(addCmd);
+
+                        events::scene::SetVFXDataCommand vfxCmd;
+                        vfxCmd.entity = entity;
+                        vfxCmd.vfxData.vfxRef = asset::AssetRef::fromPath(path);
+                        dispatcher.execute(vfxCmd);
+                    });
+                }
+                else if (ext == ".vfaudio")
+                {
+                    spawnComponentEntity(fsPath, [&](services::EntityHandle entity)
+                    {
+                        events::scene::AddAudioSource3DComponentCommand addCmd;
+                        addCmd.entity = entity;
+                        dispatcher.execute(addCmd);
+
+                        events::scene::SetAudioSource3DDataCommand audioCmd;
+                        audioCmd.entity = entity;
+                        audioCmd.audioData.audioRef = asset::AssetRef::fromPath(path);
+                        dispatcher.execute(audioCmd);
+                    });
+                }
+                else if (ext == ".vfmat" || ext == ".vfmatinstance")
+                {
+                    auto target = picker.pickMeshAt(*editorCamera, mousePos, viewportPos, viewportSize);
+                    if (target.has_value())
+                    {
+                        events::material::HasMaterialComponentQuery hasMatQuery;
+                        hasMatQuery.entity = *target;
+                        if (!dispatcher.query(hasMatQuery))
+                        {
+                            events::material::AddMaterialComponentCommand addCmd;
+                            addCmd.entity = *target;
+                            dispatcher.execute(addCmd);
+                        }
+
+                        events::material::SetDefaultMaterialCommand matCmd;
+                        matCmd.entity = *target;
+                        matCmd.materialPath = path;
+                        dispatcher.execute(matCmd);
                     }
-
-                    events::scene::SelectEntityCommand selectCmd;
-                    selectCmd.entity = *result;
-                    dispatcher.execute(selectCmd);
                 }
             }
-
-            DragDropManager::instance().endDrag();
         }
         ImGui::EndDragDropTarget();
     }

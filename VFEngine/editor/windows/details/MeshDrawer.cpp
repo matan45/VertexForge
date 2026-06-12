@@ -5,6 +5,7 @@
 #include "events/project/SceneEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -42,6 +43,14 @@ namespace windows::details
             ImGui::Indent(10.0f);
 
             drawMeshPath(meshOpt->meshRef.resolve());
+            if (auto dropped = acceptAssetDropOnLastItem("MeshSlotDrop", {".vfmesh"}))
+            {
+                events::scene::SetMeshDataCommand cmd;
+                cmd.entity = handle;
+                cmd.meshData = *meshOpt;
+                cmd.meshData.meshRef = asset::AssetRef::fromPath(*dropped);
+                dispatcher.execute(cmd);
+            }
             drawSelectMeshButton(handle, *meshOpt);
 
             ImGui::Spacing();
@@ -49,6 +58,14 @@ namespace windows::details
             ImGui::Spacing();
 
             drawAnimatorPath(meshOpt->animatorRef.resolve());
+            if (auto dropped = acceptAssetDropOnLastItem("AnimatorSlotDrop", {".vfanimator"}))
+            {
+                events::scene::SetMeshDataCommand cmd;
+                cmd.entity = handle;
+                cmd.meshData = *meshOpt;
+                cmd.meshData.animatorRef = asset::AssetRef::fromPath(*dropped);
+                dispatcher.execute(cmd);
+            }
             drawAnimatorButtons(handle, *meshOpt);
 
             if (meshOpt->animatorRef.isValid())

@@ -121,22 +121,35 @@ namespace windows
 
         updateAsyncLoading();
 
-        ImGui::SetNextWindowSize(ImVec2(550, 400), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = editor::preview::initialWindowSize("PrefabPreview", ImVec2(800, 550));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
 
         if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
         {
             if (isOpen)
             {
-                float panelWidth = 150.0f;
+                maximizer.drawButton();
+
+                static float panelWidth = 150.0f;
+                const float splitterThickness = 5.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
+                panelWidth = std::clamp(panelWidth, 120.0f,
+                                        std::max(120.0f, contentSize.x - 250.0f - splitterThickness));
+                float treeWidth = contentSize.x - panelWidth - splitterThickness;
 
                 ImGui::BeginChild("InfoPanel", ImVec2(panelWidth, contentSize.y), true);
                 drawInfoPanel();
                 ImGui::EndChild();
 
-                ImGui::SameLine();
+                ImGui::SameLine(0.0f, 0.0f);
+                editor::preview::splitterV("##prefabSplit", splitterThickness, &panelWidth,
+                                           &treeWidth, 120.0f, 250.0f, contentSize.y);
+                ImGui::SameLine(0.0f, 0.0f);
 
-                float treeWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
                 ImGui::BeginChild("EntityTreePanel", ImVec2(treeWidth, contentSize.y), true);
 
                 if (loadingInProgress.load())
@@ -152,6 +165,12 @@ namespace windows
             }
         }
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            editor::preview::rememberWindowSize("PrefabPreview", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
     }
 
     void PrefabPreviewWindow::startAsyncLoad()

@@ -1122,6 +1122,7 @@ project "Tests"
       "VFEngine/window/controllers",
       "VFEngine/plugin",                   -- header-only PluginScaffolder (VK-1284), no link needed
       "VFEngine/import",                   -- ImporterRegistry tests
+      "VFEngine/editor",                   -- header-only content browser type table / query parser tests
       vulkanLibPath.."/Include"
    }
 

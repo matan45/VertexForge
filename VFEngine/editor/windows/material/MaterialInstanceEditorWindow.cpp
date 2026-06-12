@@ -9,6 +9,7 @@
 #include "events/project/ResourceEvents.hpp"
 #include "time/Timer.hpp"
 #include "nfd/FileDialog.hpp"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include <asset/AssetRef.hpp>
 #include <imgui.h>
 #include <glm/glm.hpp>
@@ -160,7 +161,12 @@ namespace windows
             initEditor();
         }
 
-        ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = editor::preview::initialWindowSize("MaterialInstanceEditor", ImVec2(900, 650));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
 
         std::string windowId = windowTitle + "###" + instancePath;
         if (!ImGui::Begin(windowId.c_str(), &isOpen, ImGuiWindowFlags_MenuBar))
@@ -171,14 +177,20 @@ namespace windows
 
         drawToolbar();
 
-        float availWidth = ImGui::GetContentRegionAvail().x;
-        float propertiesWidth = availWidth - previewPanelWidth - 8.0f;
+        const float splitterThickness = 5.0f;
+        ImVec2 contentSize = ImGui::GetContentRegionAvail();
+        previewPanelWidth = std::clamp(previewPanelWidth, 180.0f,
+                                       std::max(180.0f, contentSize.x - 300.0f - splitterThickness));
+        float propertiesWidth = contentSize.x - previewPanelWidth - splitterThickness;
 
         ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, 0), true);
         drawPreviewPanel();
         ImGui::EndChild();
 
-        ImGui::SameLine();
+        ImGui::SameLine(0.0f, 0.0f);
+        editor::preview::splitterV("##matInstSplit", splitterThickness, &previewPanelWidth,
+                                   &propertiesWidth, 180.0f, 300.0f, contentSize.y);
+        ImGui::SameLine(0.0f, 0.0f);
 
         ImGui::BeginChild("PropertiesPanel", ImVec2(propertiesWidth, 0), true);
         drawParentInfo();
@@ -191,6 +203,12 @@ namespace windows
         ImGui::EndChild();
 
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            editor::preview::rememberWindowSize("MaterialInstanceEditor", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
     }
 
     void MaterialInstanceEditorWindow::drawToolbar()
@@ -218,6 +236,8 @@ namespace windows
                 }
                 isDirty = false;
             }
+
+            maximizer.drawButton();
 
             ImGui::EndMenuBar();
         }
@@ -408,6 +428,12 @@ namespace windows
             {
                 ImGui::TextDisabled("%s", displayName.c_str());
             }
+            if (auto dropped = acceptAssetDropOnLastItem("TexParamDrop", {".vfimage"}))
+            {
+                instanceData->textureParameterOverrides[texDesc.name] =
+                    asset::AssetRef::fromPath(*dropped);
+                changed = true;
+            }
 
             ImGui::SameLine();
             if (ImGui::SmallButton("..."))
@@ -511,6 +537,11 @@ namespace windows
         {
             ImGui::TextDisabled("%s", displayName.c_str());
         }
+        if (auto dropped = acceptAssetDropOnLastItem("TexSlotDrop", {".vfimage"}))
+        {
+            instanceData->textureOverrides[slot] = asset::AssetRef::fromPath(*dropped);
+            changed = true;
+        }
 
         ImGui::SameLine();
         if (ImGui::SmallButton("..."))
@@ -583,13 +614,16 @@ namespace windows
         }
 
         ImVec2 previewSize = ImGui::GetContentRegionAvail();
-        float viewportSize = std::min(previewSize.x - 10.0f, previewSize.y - 20.0f);
-        viewportSize = std::max(viewportSize, 100.0f);
+        float viewportWidth = std::max(previewSize.x, 100.0f);
+        float viewportHeight = std::max(previewSize.y, 100.0f);
 
-        ImGui::BeginChild("PreviewViewport", ImVec2(viewportSize, viewportSize), true,
+        ImGui::BeginChild("PreviewViewport", ImVec2(viewportWidth, viewportHeight), true,
                           ImGuiWindowFlags_NoScrollbar);
         {
-            previewCamera->setAspectRatio(1.0f);
+            ImVec2 imageSize = ImGui::GetContentRegionAvail();
+            imageSize.x = std::max(imageSize.x, 1.0f);
+            imageSize.y = std::max(imageSize.y, 1.0f);
+            previewCamera->setAspectRatio(imageSize.x / imageSize.y);
 
             handlePreviewInput();
 
@@ -609,8 +643,7 @@ namespace windows
 
             if (textureHandle.imguiDescriptorSet)
             {
-                ImVec2 size(viewportSize - 16, viewportSize - 16);
-                ImGui::Image(textureHandle.imguiDescriptorSet, size);
+                ImGui::Image(textureHandle.imguiDescriptorSet, imageSize);
             }
             else
             {

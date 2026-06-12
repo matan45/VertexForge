@@ -137,13 +137,17 @@ namespace editor::vfxeditor
         }
 
         ImVec2 previewSize = ImGui::GetContentRegionAvail();
-        float viewportSize = std::min(previewSize.x - 10.0f, previewSize.y - 100.0f);
-        viewportSize = std::max(viewportSize, 100.0f);
+        // Reserve 100px for the playback controls below the viewport.
+        float viewportWidth = std::max(previewSize.x, 100.0f);
+        float viewportHeight = std::max(previewSize.y - 100.0f, 100.0f);
 
-        ImGui::BeginChild("VFXPreviewViewport", ImVec2(viewportSize, viewportSize), true,
+        ImGui::BeginChild("VFXPreviewViewport", ImVec2(viewportWidth, viewportHeight), true,
                          ImGuiWindowFlags_NoScrollbar);
         {
-            camera->setAspectRatio(1.0f);
+            ImVec2 imageSize = ImGui::GetContentRegionAvail();
+            imageSize.x = std::max(imageSize.x, 1.0f);
+            imageSize.y = std::max(imageSize.y, 1.0f);
+            camera->setAspectRatio(imageSize.x / imageSize.y);
 
             handleInput();
 
@@ -175,8 +179,7 @@ namespace editor::vfxeditor
 
             if (textureHandle.imguiDescriptorSet)
             {
-                ImVec2 size(viewportSize - 16, viewportSize - 16);
-                ImGui::Image(textureHandle.imguiDescriptorSet, size);
+                ImGui::Image(textureHandle.imguiDescriptorSet, imageSize);
             }
             else
             {

@@ -119,6 +119,35 @@ namespace config
     }
 
     // ============================================
+    // PreviewWindowSettings
+    // ============================================
+
+    inline void to_json(json& j, const PreviewWindowSettings& s)
+    {
+        json sizes = json::object();
+        for (const auto& [windowType, size] : s.lastSizes)
+        {
+            sizes[windowType] = json::array({size.x, size.y});
+        }
+        j = json{{"lastSizes", sizes}};
+    }
+
+    inline void from_json(const json& j, PreviewWindowSettings& s)
+    {
+        if (j.contains("lastSizes") && j["lastSizes"].is_object())
+        {
+            for (auto it = j["lastSizes"].begin(); it != j["lastSizes"].end(); ++it)
+            {
+                const auto& value = it.value();
+                if (value.is_array() && value.size() >= 2)
+                {
+                    s.lastSizes[it.key()] = glm::vec2(value[0].get<float>(), value[1].get<float>());
+                }
+            }
+        }
+    }
+
+    // ============================================
     // EditorPreferences (master struct)
     // ============================================
 
@@ -129,7 +158,8 @@ namespace config
             {"appearance", prefs.appearance},
             {"debug", prefs.debug},
             {"windowLayout", prefs.windowLayout},
-            {"export", prefs.exportSettings}
+            {"export", prefs.exportSettings},
+            {"previewWindows", prefs.previewWindows}
         };
     }
 
@@ -146,5 +176,8 @@ namespace config
 
         if (j.contains("export") && j["export"].is_object())
             prefs.exportSettings = j["export"].get<ExportSettings>();
+
+        if (j.contains("previewWindows") && j["previewWindows"].is_object())
+            prefs.previewWindows = j["previewWindows"].get<PreviewWindowSettings>();
     }
 }

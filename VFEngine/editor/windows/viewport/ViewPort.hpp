@@ -48,7 +48,9 @@ namespace windows
         bool tryGetGameCameraState(CameraState& state, float aspectRatio);
         CameraState getActiveCameraState(bool isPlayMode, float aspectRatio);
         void updateRendererCameras(const CameraState& camera);
-        void handlePrefabDrop();
+        void handleAssetDrop(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        glm::vec3 computeDropPosition(glm::vec2 mousePos, glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void spawnPrefabAt(const std::string& path, const glm::vec3& dropPos);
         void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
         void drawSelectedUIOutline(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void updateBrushCursors(glm::vec2 viewportPos, glm::vec2 viewportSize);

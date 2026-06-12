@@ -4,6 +4,7 @@
 #include "events/render/RenderEvents.hpp"
 #include "string/StringUtil.hpp"
 #include "asset/AssetRef.hpp"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -57,7 +58,17 @@ namespace windows
 
             ImGui::SameLine();
             std::string filePath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
-            ImGui::Text("%s", filePath.c_str());
+            ImGui::Text("%s", filePath.empty() ? "(drop a .vfHdr here)" : filePath.c_str());
+            if (auto dropped = acceptAssetDropOnLastItem("IBLHdrDrop", {".vfhdr"}))
+            {
+                selectedIBLFile = *dropped;
+                filePath = *dropped;
+
+                events::scene::SetIBLDataCommand iblCmd;
+                iblCmd.entity = rootHandle;
+                iblCmd.iblData.hdrRef = asset::AssetRef::fromPath(*dropped);
+                dispatcher.execute(iblCmd);
+            }
 
             const bool hasFile = !filePath.empty();
 

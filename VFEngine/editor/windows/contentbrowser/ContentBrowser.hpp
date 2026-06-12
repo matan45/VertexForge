@@ -11,8 +11,10 @@
 #include <filesystem>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include <unordered_set>
 #include <atomic>
+#include <chrono>
 
 namespace fs = std::filesystem;
 
@@ -29,6 +31,20 @@ namespace windows
         fs::path selectedFile;
         AssetType selectedType = AssetType::Other;
         AssetFilter filter;
+
+        // Search-query resolution (type:/ext:/guid:/ref: tokens), recomputed
+        // only when the query string changes.
+        ResolvedAssetFilter resolvedFilter;
+        std::string lastResolvedQuery;
+
+        // Project-wide search (globe toggle): results come from the asset
+        // database, no directory walk and no per-file stat.
+        bool searchProjectWide = false;
+        std::vector<Asset> projectResults;
+        std::string pendingProjectQuery;
+        std::chrono::steady_clock::time_point projectQueryEditTime{};
+        bool projectResultsPending = false;
+        std::atomic<bool> projectResultsStale{true};
 
         // Multi-selection state
         std::unordered_set<std::string> selectedPaths;
@@ -70,8 +86,14 @@ namespace windows
         void drawBookmarkPanel();
         void drawFilterPopup();
         void handleAssetClick(const AssetClickResult& clickResult);
+        void handleProjectResultClick(const AssetClickResult& clickResult);
         void handleDoubleClick();
         void handleDragDrop();
+
+        // Search helpers
+        void updateResolvedFilter();
+        void updateProjectSearchResults();
+        bool isProjectSearchActive() const { return searchProjectWide && !filter.searchQuery.empty(); }
 
         // Keyboard shortcut handling
         void handleKeyboardShortcuts();
@@ -88,7 +110,18 @@ namespace windows
         void performCopy();
         bool performPaste();
 
-        // Asset type detection
-        static AssetType detectAssetType(const fs::directory_entry& entry);
+        // Asset type detection. Cached per (path, size, mtime) so the header
+        // reads for ambiguous .vf* extensions happen once per file lifetime,
+        // not on every refresh notification.
+        AssetType detectAssetType(const fs::directory_entry& entry,
+                                  uint64_t fileSize, int64_t lastModified);
+
+        struct CachedAssetType
+        {
+            uint64_t fileSize = 0;
+            int64_t lastModified = 0;
+            AssetType type = AssetType::Other;
+        };
+        std::unordered_map<std::string, CachedAssetType> typeCache;
     };
 }

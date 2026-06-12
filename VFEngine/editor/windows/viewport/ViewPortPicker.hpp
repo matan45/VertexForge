@@ -49,7 +49,6 @@ namespace windows
                                                        glm::vec2 viewportPos,
                                                        glm::vec2 viewportSize);
 
-    private:
         math::Ray screenToWorldRay(const editor::EditorCamera& camera,
                                    glm::vec2 screenPos,
                                    glm::vec2 viewportPos,

@@ -1,4 +1,5 @@
 #pragma once
+#include "ContentBrowserTypes.hpp"
 #include "data/EntityHandle.hpp"
 #include <asset/AssetGUID.hpp>
 #include <filesystem>
@@ -70,7 +71,7 @@ namespace windows
                                    PasteCallback onPaste, std::function<bool()> hasClipboardItems);
 
         void processModals(const fs::path& currentPath, const fs::path& selectedFile);
-        void drawContextMenu(const fs::path& selectedFile);
+        void drawContextMenu(const Asset* selectedAsset);
         void triggerSavePrefabModal(const services::EntityHandle& entity);
         void triggerDeleteModal();
 

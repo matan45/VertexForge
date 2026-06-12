@@ -1,5 +1,7 @@
 #include "EditorPreferencesWindow.hpp"
 #include "SettingsTooltip.hpp"
+#include "ThemeManager.hpp"
+#include "config/EditorThemeStorage.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
 #include "events/save/ConfigEvents.hpp"
@@ -35,6 +37,19 @@ namespace windows
         settingsLoaded = true;
         isDirty = false;
 
+        refreshThemeList();
+        editingCustomTheme = false;
+        if (settings.appearance.theme != "Dark" && settings.appearance.theme != "Light")
+        {
+            auto loaded = config::EditorThemeStorage::load(
+                config::EditorThemeStorage::defaultThemesDirectory(), settings.appearance.theme);
+            if (loaded)
+            {
+                editedTheme = *loaded;
+                editingCustomTheme = true;
+            }
+        }
+
         settingsPath = dispatcher.query(events::editor::GetEditorSettingsPathQuery{});
 
         events::save::GetConfigIntQuery tabQuery;
@@ -55,12 +70,18 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
+        // Persist the edited theme before dispatching: the settings-changed
+        // notification re-applies the theme from disk and must see fresh colors.
+        if (editingCustomTheme)
+            config::EditorThemeStorage::save(config::EditorThemeStorage::defaultThemesDirectory(), editedTheme);
+
         events::editor::SetEditorSettingsCommand cmd;
         cmd.settings = settings;
         dispatcher.execute(cmd);
 
         savedSettings = settings;
         isDirty = false;
+        themePreviewActive = false;
 
         events::save::SetConfigIntCommand tabCmd;
         tabCmd.key = "editorPreferences_lastCategory";
@@ -72,6 +93,95 @@ namespace windows
     {
         settings = config::EditorPreferences::createDefault();
         isDirty = true;
+        editingCustomTheme = false;
+        ThemeManager::applyTheme(settings.appearance);
+        themePreviewActive = true;
+    }
+
+    void EditorPreferencesWindow::refreshThemeList()
+    {
+        customThemes = config::EditorThemeStorage::listThemes(config::EditorThemeStorage::defaultThemesDirectory());
+    }
+
+    void EditorPreferencesWindow::selectTheme(const std::string& name)
+    {
+        settings.appearance.theme = name;
+        editingCustomTheme = false;
+        if (name != "Dark" && name != "Light")
+        {
+            auto loaded = config::EditorThemeStorage::load(config::EditorThemeStorage::defaultThemesDirectory(), name);
+            if (loaded)
+            {
+                editedTheme = *loaded;
+                editingCustomTheme = true;
+            }
+        }
+        ThemeManager::applyTheme(settings.appearance);
+        themePreviewActive = true;
+        themeError.clear();
+        markDirty();
+    }
+
+    void EditorPreferencesWindow::createThemeFromCurrent()
+    {
+        std::string name = config::EditorThemeStorage::sanitizeName(newThemeNameBuffer);
+        if (name.empty())
+        {
+            themeError = "Invalid or reserved theme name";
+            return;
+        }
+        if (std::find(customThemes.begin(), customThemes.end(), name) != customThemes.end())
+        {
+            themeError = "A theme with this name already exists";
+            return;
+        }
+
+        std::string basedOn = "Dark";
+        if (settings.appearance.theme == "Light" || (editingCustomTheme && editedTheme.basedOn == "Light"))
+            basedOn = "Light";
+
+        config::EditorTheme theme = ThemeManager::snapshotCurrentStyle(name, basedOn);
+        if (!config::EditorThemeStorage::save(config::EditorThemeStorage::defaultThemesDirectory(), theme))
+        {
+            themeError = "Failed to save theme file";
+            return;
+        }
+
+        themeError.clear();
+        newThemeNameBuffer[0] = '\0';
+        refreshThemeList();
+        editedTheme = theme;
+        editingCustomTheme = true;
+        settings.appearance.theme = name;
+        themePreviewActive = true;
+        markDirty();
+    }
+
+    void EditorPreferencesWindow::deleteSelectedTheme()
+    {
+        config::EditorThemeStorage::remove(config::EditorThemeStorage::defaultThemesDirectory(), settings.appearance.theme);
+        refreshThemeList();
+        selectTheme("Dark");
+    }
+
+    void EditorPreferencesWindow::revertThemePreview()
+    {
+        if (!themePreviewActive)
+            return;
+
+        ThemeManager::applyTheme(savedSettings.appearance);
+        editingCustomTheme = false;
+        if (savedSettings.appearance.theme != "Dark" && savedSettings.appearance.theme != "Light")
+        {
+            auto loaded = config::EditorThemeStorage::load(
+                config::EditorThemeStorage::defaultThemesDirectory(), savedSettings.appearance.theme);
+            if (loaded)
+            {
+                editedTheme = *loaded;
+                editingCustomTheme = true;
+            }
+        }
+        themePreviewActive = false;
     }
 
     void EditorPreferencesWindow::markDirty()
@@ -216,16 +326,19 @@ namespace windows
         {
             drawSearchBar();
 
+            const float footerReserveHeight =
+                ImGui::GetFrameHeightWithSpacing() * (settingsPath.empty() ? 2.0f : 3.0f);
+
             if (!searchQuery.empty())
             {
-                ImGui::BeginChild("SearchResults", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() - 8.0f), true);
+                ImGui::BeginChild("SearchResults", ImVec2(0, -footerReserveHeight), true);
                 drawSearchResults();
                 ImGui::EndChild();
             }
             else
             {
                 float leftPanelWidth = 160.0f;
-                float contentHeight = -ImGui::GetFrameHeightWithSpacing() - 8.0f;
+                float contentHeight = -footerReserveHeight;
 
                 ImGui::BeginChild("CategoryList", ImVec2(leftPanelWidth, contentHeight), true);
                 drawCategoryList();
@@ -241,5 +354,14 @@ namespace windows
             drawButtonBar();
         }
         ImGui::End();
+
+        // Cancel button or close-via-X while a live theme preview is active:
+        // restore the last applied appearance.
+        if (!visible && themePreviewActive)
+        {
+            settings = savedSettings;
+            isDirty = false;
+            revertThemePreview();
+        }
     }
 }

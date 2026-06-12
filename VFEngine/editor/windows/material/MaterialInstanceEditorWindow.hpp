@@ -1,5 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 #include <material/MaterialInstanceTypes.hpp>
 #include <material/MaterialTypes.hpp>
 #include <material/MaterialGraphHelper.hpp>
@@ -33,6 +34,10 @@ namespace windows
 
         float previewPanelWidth = 250.0f;
         bool isDraggingPreview = false;
+
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
 
         glm::vec4 tempAlbedo{1.0f};
         float tempMetallic = 0.0f;

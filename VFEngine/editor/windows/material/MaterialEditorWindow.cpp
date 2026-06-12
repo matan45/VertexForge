@@ -168,7 +168,12 @@ namespace windows
             needsInit = false;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(1200, 800), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = editor::preview::initialWindowSize("MaterialEditor", ImVec2(1200, 800));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
 
         std::string title = windowTitle + (isDirty ? " *" : "  ");
 
@@ -180,9 +185,15 @@ namespace windows
                 drawToolbar();
 
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
+                const float splitterThickness = 5.0f;
+                float spacingY = ImGui::GetStyle().ItemSpacing.y;
 
-                float graphHeight = contentSize.y * 0.7f;
-                float bottomHeight = contentSize.y - graphHeight - ImGui::GetStyle().ItemSpacing.y;
+                graphHeightFraction = std::clamp(graphHeightFraction, 0.3f, 0.9f);
+                float graphHeight = contentSize.y * graphHeightFraction;
+                float bottomHeight = contentSize.y - graphHeight - splitterThickness - spacingY * 2.0f;
+
+                previewPanelWidth = std::clamp(previewPanelWidth, 180.0f,
+                                               std::max(180.0f, contentSize.x - 300.0f - splitterThickness));
 
                 ImGui::BeginChild("TopRow", ImVec2(0, graphHeight), false, ImGuiWindowFlags_NoScrollbar);
                 {
@@ -192,15 +203,24 @@ namespace windows
                     previewPanel->draw(materialData, materialPath);
                     ImGui::EndChild();
 
-                    ImGui::SameLine();
+                    ImGui::SameLine(0.0f, 0.0f);
+                    float graphWidth = topSize.x - previewPanelWidth - splitterThickness;
+                    editor::preview::splitterV("##matSplit", splitterThickness, &previewPanelWidth,
+                                               &graphWidth, 180.0f, 300.0f, topSize.y);
+                    ImGui::SameLine(0.0f, 0.0f);
 
-                    float graphWidth = topSize.x - previewPanelWidth - ImGui::GetStyle().ItemSpacing.x;
                     ImGui::BeginChild("GraphPanel", ImVec2(graphWidth, topSize.y), true,
                                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
                     drawGraphPanel();
                     ImGui::EndChild();
                 }
                 ImGui::EndChild();
+
+                if (editor::preview::splitterH("##matRowSplit", splitterThickness, &graphHeight,
+                                               &bottomHeight, 150.0f, 100.0f, contentSize.x))
+                {
+                    graphHeightFraction = graphHeight / std::max(contentSize.y, 1.0f);
+                }
 
                 ImGui::BeginChild("BottomRow", ImVec2(0, bottomHeight), false, ImGuiWindowFlags_NoScrollbar);
                 {
@@ -223,6 +243,12 @@ namespace windows
             ormPackDialog->draw();
         }
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            editor::preview::rememberWindowSize("MaterialEditor", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
 
         if (previewPanel->hasShaderError() && !showCompileError)
         {
@@ -334,6 +360,9 @@ namespace windows
         }
         ImGui::PopItemWidth();
         ImGui::EndGroup();
+
+        ImGui::SameLine();
+        maximizer.drawButton();
 
         ImGui::Separator();
     }

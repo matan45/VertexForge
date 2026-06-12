@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../core/controllers/imguiHandler/ImguiWindow.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 #include "../../graph/BTGraphEditor.hpp"
 #include "BTPropertyPanel.hpp"
 #include "../../../utilities/behaviortree/BehaviorTreeTypes.hpp"
@@ -19,6 +20,10 @@ namespace editor::windows
         bool isOpen = true;
         bool needsInit = true;
         bool isDirty = false;
+
+        ::editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
 
         editor::graph::BTGraphEditor graphEditor;
         BTPropertyPanel propertyPanel;

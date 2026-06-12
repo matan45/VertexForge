@@ -27,7 +27,6 @@ namespace windows
 
             drawToolbar();
             ImGui::Separator();
-            modals->drawContextMenu(selectedFile);
 
             if (showFileWindow)
             {
@@ -48,13 +47,41 @@ namespace windows
                 ImGui::End();
             }
 
-            for (auto& asset : assets)
+            updateResolvedFilter();
+
+            bool projectMode = isProjectSearchActive();
+            if (projectMode)
+                updateProjectSearchResults();
+
+            std::vector<Asset>& visibleAssets = projectMode ? projectResults : assets;
+            for (auto& asset : visibleAssets)
             {
                 asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
             }
 
-            AssetClickResult clickResult = gridRenderer->draw(assets, filter);
-            handleAssetClick(clickResult);
+            // Project-wide results carry no file stats (no disk walk), so only
+            // the name sort is meaningful there.
+            AssetFilter effectiveFilter = filter;
+            if (projectMode)
+                effectiveFilter.sortBy = SortField::Name;
+
+            AssetClickResult clickResult = gridRenderer->draw(visibleAssets, effectiveFilter, resolvedFilter);
+            if (projectMode)
+                handleProjectResultClick(clickResult);
+            else
+                handleAssetClick(clickResult);
+
+            const std::string selectedPath = StringUtil::wstringToUtf8(selectedFile.wstring());
+            const Asset* selectedAsset = nullptr;
+            for (const auto& asset : visibleAssets)
+            {
+                if (asset.path == selectedPath)
+                {
+                    selectedAsset = &asset;
+                    break;
+                }
+            }
+            modals->drawContextMenu(selectedAsset);
 
             ImGui::Columns(1);
             handleDragDrop();
@@ -65,10 +92,10 @@ namespace windows
 
     void ContentBrowser::handleAssetClick(const AssetClickResult& clickResult)
     {
-        if (!clickResult.wasClicked && clickResult.pendingNavigation.empty())
+        if (!clickResult.wasClicked && !clickResult.wasRightClicked && clickResult.pendingNavigation.empty())
             return;
 
-        if (clickResult.wasClicked)
+        if (clickResult.wasClicked || clickResult.wasRightClicked)
         {
             selectedFile = clickResult.clickedPath;
             selectedType = clickResult.clickedType;
@@ -85,9 +112,22 @@ namespace windows
 
             if (clickedIndex >= 0)
             {
-                bool ctrlHeld = ImGui::IsKeyDown(ImGuiMod_Ctrl);
-                bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
-                selectAsset(static_cast<size_t>(clickedIndex), ctrlHeld, shiftHeld);
+                if (clickResult.wasRightClicked)
+                {
+                    const std::string& clickedPath = assets[static_cast<size_t>(clickedIndex)].path;
+                    if (selectedPaths.find(clickedPath) == selectedPaths.end())
+                    {
+                        selectedPaths.clear();
+                        selectedPaths.insert(clickedPath);
+                    }
+                    lastSelectedIndex = clickedIndex;
+                }
+                else
+                {
+                    bool ctrlHeld = ImGui::IsKeyDown(ImGuiMod_Ctrl);
+                    bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
+                    selectAsset(static_cast<size_t>(clickedIndex), ctrlHeld, shiftHeld);
+                }
 
                 for (auto& asset : assets)
                 {
@@ -95,7 +135,7 @@ namespace windows
                 }
             }
 
-            if (clickResult.wasDoubleClicked)
+            if (clickResult.wasClicked && clickResult.wasDoubleClicked)
             {
                 handleDoubleClick();
             }
@@ -184,6 +224,22 @@ namespace windows
         {
             filter.searchQuery = std::string(searchBuffer);
         }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Plain words match names; type: ext: guid: ref: add filters");
+
+        ImGui::SameLine();
+        bool globeActive = searchProjectWide;
+        if (globeActive)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.26f, 0.46f, 0.78f, 1.0f));
+        if (ImGui::Button(ICON_FA_GLOBE "##ProjectSearch"))
+        {
+            searchProjectWide = !searchProjectWide;
+            projectResultsStale.store(true);
+        }
+        if (globeActive)
+            ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Search the entire project (asset database)");
 
         ImGui::SameLine();
         if (ImGui::Button("Filter"))
@@ -216,12 +272,17 @@ namespace windows
     {
         if (ImGui::BeginPopup("AssetFilterPopup"))
         {
-            const char* typeNames[] = {"All", "Texture", "HDR", "Model", "Audio", "Animation",
-                "Scene", "Material", "Animator", "VFX", "Prefab", "Script", "Font"};
-            int typeIdx = (filter.typeFilter == AssetType::Other) ? 0 : static_cast<int>(filter.typeFilter) + 1;
-            if (ImGui::Combo("Type", &typeIdx, typeNames, 13))
+            const char* currentLabel = filter.typeFilter ? assetTypeInfo(*filter.typeFilter).label : "All";
+            if (ImGui::BeginCombo("Type", currentLabel))
             {
-                filter.typeFilter = (typeIdx == 0) ? AssetType::Other : static_cast<AssetType>(typeIdx - 1);
+                if (ImGui::Selectable("All", !filter.typeFilter.has_value()))
+                    filter.typeFilter.reset();
+                for (const auto& info : assetTypeTable())
+                {
+                    if (ImGui::Selectable(info.label, filter.typeFilter == info.type))
+                        filter.typeFilter = info.type;
+                }
+                ImGui::EndCombo();
             }
 
             const char* sortNames[] = {"Name", "Date", "Size", "Type"};
