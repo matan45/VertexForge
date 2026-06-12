@@ -11,6 +11,9 @@ namespace events::gameExport
 
 	struct ExportGameCommand : ICommand<bool> {
 		std::string outputDirectory;
+		bool cleanBuild = false;
+		bool verifyIntegrity = true;
+		bool buildScripts = true;
 
 		std::string_view getName() const override { return "ExportGame"; }
 	};

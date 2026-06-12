@@ -53,6 +53,7 @@ namespace windows
         environmentWindow.setWindows(&atmosphereConfigWindow, &cloudConfigWindow,
                                       &volumetricFogConfigWindow, &weatherEditorWindow);
         menuBar.setEnvironmentWindow(&environmentWindow);
+        menuBar.setExportGameWindow(&exportGameWindow);
 
         subscribeToEvents();
 
@@ -222,6 +223,7 @@ namespace windows
             editorSettingsWindow.draw();
             environmentWindow.draw();
             weatherEditorWindow.draw();
+            exportGameWindow.draw();
         }
         ImGui::End();
 

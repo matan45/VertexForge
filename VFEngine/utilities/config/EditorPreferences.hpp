@@ -35,11 +35,21 @@ namespace config
         std::string startupLayout = "Default";
     };
 
+    // Last-used options of the Export Game dialog (per-user, not per-project)
+    struct ExportSettings
+    {
+        std::string lastOutputDirectory;
+        bool cleanBuild = false;
+        bool verifyIntegrity = true;
+        bool buildScripts = true;
+    };
+
     struct EditorPreferences
     {
         AppearanceSettings appearance;
         DebugSettings debug;
         WindowLayoutSettings windowLayout;
+        ExportSettings exportSettings;
 
         static EditorPreferences createDefault()
         {

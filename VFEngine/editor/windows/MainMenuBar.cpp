@@ -33,6 +33,7 @@
 #include "theme/ThemeEditorWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
+#include "export/ExportGameWindow.hpp"
 #include "../handlers/EditorLayoutManager.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
@@ -136,15 +137,9 @@ namespace windows
             {
                 bool canExport = events::EventDispatcher::instance().query(events::gameExport::CanExportQuery{});
                 ImGui::BeginDisabled(!canExport);
-                if (ImGui::MenuItem("Export Game..."))
+                if (ImGui::MenuItem("Export Game...") && exportGameWindow)
                 {
-                    std::string outputDir = fileDialog.selectFolderDialog();
-                    if (!outputDir.empty())
-                    {
-                        events::gameExport::ExportGameCommand cmd;
-                        cmd.outputDirectory = outputDir;
-                        events::EventDispatcher::instance().execute(cmd);
-                    }
+                    exportGameWindow->show();
                 }
                 ImGui::EndDisabled();
 

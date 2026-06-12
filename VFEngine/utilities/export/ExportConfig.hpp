@@ -18,6 +18,12 @@ namespace gameExport
 		bool cleanBuild = false;
 		bool verifyIntegrity = true;
 
+		// Graph-authored materials (PBROutput node present) with no cached shader
+		// render with the wrong look in shipped builds (runtime has no shaderc to
+		// recover). When true such materials fail the export; the editor-side
+		// pre-export pass normally recompiles them before this is ever hit.
+		bool failOnEmptyMaterialShaders = true;
+
 		bool isValid() const
 		{
 			return !gameName.empty() &&
@@ -34,6 +40,7 @@ namespace gameExport
 		std::string errorMessage;
 		std::vector<std::string> warnings;
 		std::filesystem::path outputPath;
+		std::vector<std::string> brokenMaterials;
 	};
 
 	using ExportProgressCallback = std::function<void(float progress, const std::string& status)>;

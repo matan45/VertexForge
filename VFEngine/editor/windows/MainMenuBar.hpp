@@ -38,6 +38,7 @@ namespace windows
     class MemoryDiagnosticsWindow;
     class EditorPreferencesWindow;
     class EditorSettingsWindow;
+    class ExportGameWindow;
     class MainMenuBar
     {
     private:
@@ -79,6 +80,7 @@ namespace windows
         MemoryDiagnosticsWindow* memoryDiagnosticsWindow = nullptr;
         EditorPreferencesWindow* editorPreferencesWindow = nullptr;
         EditorSettingsWindow* editorSettingsWindow = nullptr;
+        ExportGameWindow* exportGameWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -226,6 +228,11 @@ namespace windows
         void setEditorSettingsWindow(EditorSettingsWindow* window)
         {
             editorSettingsWindow = window;
+        }
+
+        void setExportGameWindow(ExportGameWindow* window)
+        {
+            exportGameWindow = window;
         }
 
     private:

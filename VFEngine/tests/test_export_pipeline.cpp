@@ -104,6 +104,16 @@ TEST_CASE("ExportConfig: cleanBuild and verifyIntegrity defaults") {
     CHECK(config.verifyIntegrity);
 }
 
+TEST_CASE("ExportConfig: material shader gate defaults to failing the export") {
+    gameExport::ExportConfig config;
+    CHECK(config.failOnEmptyMaterialShaders);
+}
+
+TEST_CASE("ExportResult: broken material list starts empty") {
+    gameExport::ExportResult result;
+    CHECK(result.brokenMaterials.empty());
+}
+
 // ---- ShaderPermutationManifest ----
 
 TEST_CASE("ShaderPermutations: getShaderPermutations returns non-empty list") {

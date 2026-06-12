@@ -39,6 +39,7 @@
 #include "config/EditorPreferencesWindow.hpp"
 #include "config/EditorSettingsWindow.hpp"
 #include "config/EnvironmentWindow.hpp"
+#include "export/ExportGameWindow.hpp"
 #include "weather/WeatherEditorWindow.hpp"
 #include "EngineToolbar.hpp"
 #include "StatusBar.hpp"
@@ -98,6 +99,7 @@ namespace windows
         EditorSettingsWindow editorSettingsWindow;
         EnvironmentWindow environmentWindow;
         WeatherEditorWindow weatherEditorWindow;
+        ExportGameWindow exportGameWindow;
         EngineToolbar engineToolbar;
         StatusBar statusBar;
         MainMenuBar menuBar;

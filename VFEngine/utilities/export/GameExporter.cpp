@@ -1,6 +1,7 @@
 #include "../print/Log.hpp"
 #include "GameExporter.hpp"
 #include "ExeIconEmbedder.hpp"
+#include "PluginExportPlanner.hpp"
 #include "ShaderCompiler.hpp"
 #include "ShaderPermutationManifest.hpp"
 #include "../serialization/ProjectSerialization.hpp"
@@ -135,13 +136,17 @@ namespace gameExport
 			return false;
 		}
 
+		// Shipped games run only the compiled bytecode (.mt sources are stripped
+		// from the pak), so a missing scripts.mtcLib means every script silently
+		// no-ops in the exported build — hard error, not a warning.
 		fs::path scriptsDir = config.workingDirectory / "scripts";
-		if (fs::exists(scriptsDir))
+		if (fs::exists(scriptsDir / "scripts.mtproj"))
 		{
 			fs::path compiledLib = scriptsDir / "compiled" / "scripts.mtcLib";
 			if (!fs::exists(compiledLib))
 			{
-				result.warnings.push_back("Scripts found but not compiled. Build scripts before exporting (Scripts > Build Scripts).");
+				result.errorMessage = "Scripts found but not compiled (scripts/compiled/scripts.mtcLib missing). Build scripts before exporting (Scripts > Build Scripts).";
+				return false;
 			}
 		}
 
@@ -417,6 +422,15 @@ namespace gameExport
 
 			if (materialData.cachedVertexShader.empty() || materialData.cachedFragmentShader.empty())
 			{
+				// No cached shader is fine for plain PBR materials (they use the
+				// standard pipeline), but a graph-authored material (PBROutput node)
+				// without one renders wrong in shipped builds — the runtime has no
+				// shaderc to regenerate it.
+				if (materialData.graph.findOutputNode() != nullptr)
+				{
+					result.brokenMaterials.push_back(
+						fs::relative(it->path(), config.workingDirectory, ec).generic_string());
+				}
 				continue;
 			}
 
@@ -501,6 +515,23 @@ namespace gameExport
 		if (compiledCount > 0 || skippedMaterialCount > 0)
 		{
 			vfLogInfo("Compiled {} material shader variants ({} unchanged, skipped)", compiledCount, skippedMaterialCount);
+		}
+
+		if (!result.brokenMaterials.empty())
+		{
+			std::string materialList;
+			for (const auto& path : result.brokenMaterials)
+			{
+				materialList += "\n  - " + path;
+			}
+
+			if (config.failOnEmptyMaterialShaders)
+			{
+				result.errorMessage = "Materials with a shader graph but no compiled shader (open and re-save them in the Material Editor):" + materialList;
+				return false;
+			}
+
+			result.warnings.push_back("Materials with a shader graph but no compiled shader (will render with the standard pipeline):" + materialList);
 		}
 
 		return true;
@@ -717,12 +748,69 @@ namespace gameExport
 			pluginsDir = cwd / "../../plugins";
 		}
 
-		if (fs::exists(pluginsDir) && fs::is_directory(pluginsDir))
+		if (!fs::exists(pluginsDir) || !fs::is_directory(pluginsDir))
 		{
-			fs::path pluginsDst = config.outputDirectory / "plugins";
-			std::error_code ec;
-			fs::create_directories(pluginsDst, ec);
-			copyDirectoryRecursive(pluginsDir, pluginsDst, result);
+			return true;
+		}
+
+		// Plugin folders are full development workspaces (source, premake5.lua,
+		// PDBs) — only ship what the runtime loads: descriptor, the DLL the
+		// descriptor names, and the plugin's assets/resources data.
+		fs::path pluginsDst = config.outputDirectory / "plugins";
+		std::error_code ec;
+
+		for (const auto& pluginEntry : fs::directory_iterator(pluginsDir, ec))
+		{
+			if (!pluginEntry.is_directory()) continue;
+
+			std::optional<ParsedPluginDescriptor> descriptor;
+			std::error_code scanEc;
+			for (const auto& file : fs::directory_iterator(pluginEntry.path(), scanEc))
+			{
+				if (file.is_regular_file() && file.path().extension() == ".vfplugin")
+				{
+					descriptor = parsePluginDescriptor(file.path());
+					break;
+				}
+			}
+
+			if (!descriptor)
+			{
+				continue; // Not a plugin folder (or unreadable descriptor)
+			}
+
+			fs::path dllPath = pluginEntry.path() / descriptor->library;
+			if (!fs::exists(dllPath))
+			{
+				result.warnings.push_back("Plugin '" + descriptor->name +
+					"' skipped: library not found: " + dllPath.string());
+				continue;
+			}
+
+			fs::path pluginDst = pluginsDst / pluginEntry.path().filename();
+
+			std::error_code copyEc;
+			for (auto it = fs::recursive_directory_iterator(pluginEntry.path(), copyEc);
+			     it != fs::recursive_directory_iterator(); it.increment(copyEc))
+			{
+				if (copyEc) break;
+				if (!it->is_regular_file()) continue;
+
+				fs::path relativePath = fs::relative(it->path(), pluginEntry.path(), copyEc);
+				if (!shouldShipPluginFile(relativePath, descriptor->library)) continue;
+
+				fs::path destPath = pluginDst / relativePath;
+				fs::create_directories(destPath.parent_path(), copyEc);
+				fs::copy_file(it->path(), destPath, fs::copy_options::overwrite_existing, copyEc);
+				if (copyEc)
+				{
+					result.warnings.push_back("Warning while copying " + it->path().string() +
+						": " + copyEc.message());
+					copyEc.clear();
+				}
+			}
+
+			vfLogInfo("Shipped plugin '{}' ({})", descriptor->name, descriptor->library);
 		}
 
 		return true;
