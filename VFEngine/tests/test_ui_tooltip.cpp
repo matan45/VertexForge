@@ -68,7 +68,10 @@ TEST_SUITE("UITooltip")
         registry.ctx().erase<components::UITooltipState>();
         auto& state = registry.ctx().emplace<components::UITooltipState>();
         CHECK_FALSE(state.visible);
-        CHECK(state.hoveredEntity == entt::null);
+        // Compare outside CHECK: doctest's expression decomposition is
+        // ambiguous against entt::null_t's operator== overloads.
+        bool noHoverTarget = state.hoveredEntity == entt::null;
+        CHECK(noHoverTarget);
         CHECK(state.hoverTime == doctest::Approx(0.0f));
     }
 }

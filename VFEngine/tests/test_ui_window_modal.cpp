@@ -141,7 +141,10 @@ TEST_SUITE("UIWindowModal")
 
         CHECK(utilities::ui::findOpenWindowAncestor(registry, window) == window);
         CHECK(utilities::ui::findOpenWindowAncestor(registry, child) == window);
-        CHECK(utilities::ui::findOpenWindowAncestor(registry, orphan) == entt::null);
+        // Compare outside CHECK: doctest's expression decomposition is
+        // ambiguous against entt::null_t's operator== overloads.
+        bool orphanHasNoWindow = utilities::ui::findOpenWindowAncestor(registry, orphan) == entt::null;
+        CHECK(orphanHasNoWindow);
 
         registry.destroy(child);
         registry.destroy(window);

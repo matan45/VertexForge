@@ -13,9 +13,10 @@ TEST_SUITE("AssetPrefabType")
 {
     TEST_CASE("extension detection maps .vfprefab and .vftheme")
     {
-        CHECK(asset::AssetDatabaseMigrator::detectAssetType(".vfprefab") == resource::AssetType::Prefab);
-        CHECK(asset::AssetDatabaseMigrator::detectAssetType(".vfPrefab") == resource::AssetType::Prefab);
-        CHECK(asset::AssetDatabaseMigrator::detectAssetType(".vftheme") == resource::AssetType::Theme);
+        // detectAssetType(ext) is private — go through the public path-based API
+        CHECK(asset::AssetDatabaseMigrator::detectAssetTypeFromPath("a.vfprefab") == resource::AssetType::Prefab);
+        CHECK(asset::AssetDatabaseMigrator::detectAssetTypeFromPath("a.vfPrefab") == resource::AssetType::Prefab);
+        CHECK(asset::AssetDatabaseMigrator::detectAssetTypeFromPath("a.vftheme") == resource::AssetType::Theme);
         CHECK(asset::AssetDatabaseMigrator::detectAssetTypeFromPath("ui/CommandCard.vfPrefab")
               == resource::AssetType::Prefab);
     }
