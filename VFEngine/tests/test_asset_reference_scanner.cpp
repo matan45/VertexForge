@@ -38,7 +38,9 @@ namespace
 
         fs::path writeFile(const std::string& relPath, const std::string& content) const
         {
-            fs::path p = root / relPath;
+            // make_preferred so .string() matches directory-iterator output
+            // (all backslashes on Windows) instead of mixed separators
+            fs::path p = (root / relPath).make_preferred();
             std::error_code ec;
             fs::create_directories(p.parent_path(), ec);
             std::ofstream file(p);
@@ -69,9 +71,17 @@ namespace
         return s;
     }
 
+    // Separator-insensitive: scanner results are directory-iterator native
+    // strings, expected values come from fs::path composition
     bool contains(const std::vector<std::string>& list, const std::string& value)
     {
-        return std::find(list.begin(), list.end(), value) != list.end();
+        std::string want = value;
+        std::replace(want.begin(), want.end(), '\\', '/');
+        return std::any_of(list.begin(), list.end(), [&want](std::string item)
+        {
+            std::replace(item.begin(), item.end(), '\\', '/');
+            return item == want;
+        });
     }
 }
 
@@ -86,13 +96,21 @@ TEST_CASE("findReferencingFiles matches forward-slash and backslash references")
     std::string texFwd = forwardSlashes(texPath);
     std::string texBack = backSlashes(texPath);
 
-    // JSON needs escaped backslashes; raw content holds single ones after parse,
-    // but the scanner does a plain substring search on the file text, so embed
-    // the literal single-backslash form
+    // Real JSON stores backslash paths escaped ("C:\\dir\\file")
+    std::string texBackJson = texBack;
+    for (size_t pos = 0; (pos = texBackJson.find('\\', pos)) != std::string::npos; pos += 2)
+    {
+        texBackJson.insert(pos, 1, '\\');
+    }
+
     auto matFwd = tree.writeFile("materials/fwd.vfmat",
         "{ \"albedoTextureRefPath\": \"" + texFwd + "\" }");
+    // Raw single-backslash form (legacy/hand-edited files)
     auto matBack = tree.writeFile("materials/back.vfmat",
         "{ \"albedoTextureRefPath\": \"" + texBack + "\" }");
+    // JSON-escaped form as nlohmann writes it
+    auto matEscaped = tree.writeFile("materials/escaped.vfmat",
+        "{ \"albedoTextureRefPath\": \"" + texBackJson + "\" }");
     auto matOther = tree.writeFile("materials/other.vfmat",
         "{ \"albedoTextureRefPath\": \"somewhere/else.vfimage\" }");
     // Non-container extensions are never scanned
@@ -103,6 +121,7 @@ TEST_CASE("findReferencingFiles matches forward-slash and backslash references")
         auto result = asset::AssetReferenceScanner::findReferencingFiles(texFwd, tree.root.string());
         CHECK(contains(result.referencingFiles, matFwd.string()));
         CHECK(contains(result.referencingFiles, matBack.string()));
+        CHECK(contains(result.referencingFiles, matEscaped.string()));
         CHECK_FALSE(contains(result.referencingFiles, matOther.string()));
     }
 
@@ -111,6 +130,7 @@ TEST_CASE("findReferencingFiles matches forward-slash and backslash references")
         auto result = asset::AssetReferenceScanner::findReferencingFiles(texBack, tree.root.string());
         CHECK(contains(result.referencingFiles, matFwd.string()));
         CHECK(contains(result.referencingFiles, matBack.string()));
+        CHECK(contains(result.referencingFiles, matEscaped.string()));
     }
 }
 
