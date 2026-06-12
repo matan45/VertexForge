@@ -5,6 +5,7 @@
 #include "events/project/SceneEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -116,6 +117,11 @@ namespace windows::details
         else
         {
             ImGui::TextDisabled("No texture selected");
+        }
+        if (auto dropped = acceptAssetDropOnLastItem("BillboardTexDrop", {".vfimage"}))
+        {
+            data.textureRef = asset::AssetRef::fromPath(*dropped);
+            changed = true;
         }
 
         if (ImGui::Button("Select Texture##Billboard"))

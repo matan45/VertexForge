@@ -621,18 +621,11 @@ namespace windows
         selectedFile = clickResult.clickedPath;
         selectedType = clickResult.clickedType;
 
+        // Same double-click behavior as the directory view: open the asset's
+        // preview/editor (scenes load, scripts open externally, etc.).
         if (clickResult.wasDoubleClicked)
         {
-            fs::path target = clickResult.clickedPath;
-            AssetType targetType = clickResult.clickedType;
-
-            navigateTo(target.parent_path());
-            filter.searchQuery.clear();
-
-            // navigateTo cleared the selection state; re-select the result.
-            selectedFile = target;
-            selectedType = targetType;
-            selectedPaths.insert(StringUtil::wstringToUtf8(target.wstring()));
+            handleDoubleClick();
         }
     }
 }

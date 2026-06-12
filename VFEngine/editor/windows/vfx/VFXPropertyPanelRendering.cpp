@@ -1,5 +1,6 @@
 #include "VFXPropertyPanel.hpp"
 #include "imgui.h"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include <nfd/FileDialog.hpp>
 #include <vfx/VFXBurstTypes.hpp>
 #include <cstring>
@@ -394,6 +395,11 @@ namespace editor::vfxeditor
                     ImGui::SetNextItemWidth(inputWidth * 1.5f);
                     ImGui::InputText("##distortionTexture", display.data(), display.size() + 1,
                                      ImGuiInputTextFlags_ReadOnly);
+                    if (auto dropped = windows::acceptAssetDropOnLastItem("DistortionTexDrop", {".vfimage"}))
+                    {
+                        *val = *dropped;
+                        notifyChanged();
+                    }
                     ImGui::SameLine();
                     if (ImGui::Button("...##distortionTexBrowse"))
                     {

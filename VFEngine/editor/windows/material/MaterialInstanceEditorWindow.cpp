@@ -9,6 +9,7 @@
 #include "events/project/ResourceEvents.hpp"
 #include "time/Timer.hpp"
 #include "nfd/FileDialog.hpp"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include <asset/AssetRef.hpp>
 #include <imgui.h>
 #include <glm/glm.hpp>
@@ -427,6 +428,12 @@ namespace windows
             {
                 ImGui::TextDisabled("%s", displayName.c_str());
             }
+            if (auto dropped = acceptAssetDropOnLastItem("TexParamDrop", {".vfimage"}))
+            {
+                instanceData->textureParameterOverrides[texDesc.name] =
+                    asset::AssetRef::fromPath(*dropped);
+                changed = true;
+            }
 
             ImGui::SameLine();
             if (ImGui::SmallButton("..."))
@@ -529,6 +536,11 @@ namespace windows
         else
         {
             ImGui::TextDisabled("%s", displayName.c_str());
+        }
+        if (auto dropped = acceptAssetDropOnLastItem("TexSlotDrop", {".vfimage"}))
+        {
+            instanceData->textureOverrides[slot] = asset::AssetRef::fromPath(*dropped);
+            changed = true;
         }
 
         ImGui::SameLine();
