@@ -2,6 +2,7 @@
 #include "../print/Log.hpp"
 #include "../components/MediaComponents.hpp"
 #include "../threading/JobSystem.hpp"
+#include <algorithm>
 
 namespace scene
 {
@@ -70,20 +71,49 @@ namespace scene
 
     void SceneGraphSystem::moveEntity(Entity& entity, Entity& newParent) const
     {
-        if (isDescendant(entity, newParent))
+        moveEntity(entity, newParent, -1);
+    }
+
+    bool SceneGraphSystem::moveEntity(Entity& entity, Entity& newParent, int insertIndex) const
+    {
+        if (entity == newParent || isDescendant(entity, newParent))
         {
             vfLogError("Invalid entity or parent.");
-            return;
+            return false;
         }
 
         Entity oldParent = entity.getParent();
+
+        // Removing the entity from its current slot shifts later siblings down one;
+        // compensate so insertIndex still refers to the pre-move child list.
+        if (insertIndex >= 0 && oldParent.isValid() && oldParent == newParent &&
+            oldParent.hasComponent<components::ChildrenComponent>())
+        {
+            const auto& siblings = oldParent.getComponent<components::ChildrenComponent>().children;
+            auto it = std::find(siblings.begin(), siblings.end(), entity.getHandle());
+            if (it != siblings.end() && std::distance(siblings.begin(), it) < insertIndex)
+            {
+                insertIndex--;
+            }
+        }
+
         if (oldParent.isValid())
         {
             oldParent.removeChildren(entity);
         }
 
         newParent.addChildren(entity);
+
+        if (insertIndex >= 0 && newParent.hasComponent<components::ChildrenComponent>())
+        {
+            auto& children = newParent.getComponent<components::ChildrenComponent>().children;
+            children.pop_back(); // addChildren appended; re-insert at the requested slot
+            size_t index = std::min(static_cast<size_t>(insertIndex), children.size());
+            children.insert(children.begin() + index, entity.getHandle());
+        }
+
         markTransformDirty(entity);
+        return true;
     }
 
     std::vector<scene::Entity> SceneGraphSystem::findAllEntitiesByName(std::string_view name) const

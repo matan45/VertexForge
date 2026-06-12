@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace scene
 {
@@ -20,7 +21,9 @@ namespace services
     {
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
-        std::optional<EntityHandle> selectedEntity;
+        // Multi-selection: front() is the primary entity (what the gizmo,
+        // details panel and single-selection consumers operate on).
+        std::vector<EntityHandle> selectedEntities;
 
     public:
         explicit EntityStateService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -29,7 +32,9 @@ namespace services
 
         // Selection state
         void setSelectedEntity(std::optional<EntityHandle> entity);
+        void setSelectedEntities(std::vector<EntityHandle> entities);
         std::optional<EntityHandle> getSelectedEntity() const;
+        const std::vector<EntityHandle>& getSelectedEntities() const;
         void clearSelection();
 
         // Entity metadata

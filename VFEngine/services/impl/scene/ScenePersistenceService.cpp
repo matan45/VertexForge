@@ -75,6 +75,18 @@ namespace services
                 return loadPrefab(cmd.filePath, cmd.parent);
             });
 
+        dispatcher.registerQueryHandler<events::scene::CopyEntityToJsonQuery>(
+            [this](const events::scene::CopyEntityToJsonQuery& query)
+            {
+                return copyEntityToJson(query.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::InstantiateEntityFromJsonCommand>(
+            [this](const events::scene::InstantiateEntityFromJsonCommand& cmd)
+            {
+                return instantiateEntityFromJson(cmd.jsonText, cmd.parent);
+            });
+
         dispatcher.registerQueryHandler<events::scene::GetPhysicsSettingsQuery>(
             [this](const events::scene::GetPhysicsSettingsQuery&)
             {
@@ -563,33 +575,7 @@ namespace services
             auto handle = internal::toHandle(result->getHandle());
             auto& dispatcher = events::EventDispatcher::instance();
 
-            auto& lifecycle = resource::AssetLifecycleManager::instance();
-            std::function<void(scene::Entity&)> triggerResourceLoading = [&](scene::Entity& entity)
-            {
-                // Balance the per-entity releaseEntityAssets() that fires on delete —
-                // without this, deleting the instantiated prefab drops refcounts to zero
-                // and the GPU resources get released even if the prefab is re-added.
-                resource::acquireEntityAssets(entity, lifecycle);
-
-                if (entity.hasComponent<components::MeshComponent>())
-                {
-                    const auto& meshComp = entity.getComponent<components::MeshComponent>();
-                    if (meshComp.meshRef.isValid())
-                    {
-                        events::scene::MeshDataChangedNotification meshNotif;
-                        meshNotif.entity = internal::toHandle(entity.getHandle());
-                        meshNotif.meshPath = meshComp.meshRef.resolve();
-                        meshNotif.animatorPath = meshComp.animatorRef.resolve();
-                        dispatcher.publish(meshNotif);
-                    }
-                }
-
-                for (auto& child : entity.getChildren())
-                {
-                    triggerResourceLoading(child);
-                }
-            };
-            triggerResourceLoading(*result);
+            acquireAndNotifyResources(*result);
 
             events::scene::PrefabInstantiatedNotification notification;
             notification.filePath = filePath;
@@ -600,6 +586,88 @@ namespace services
         }
 
         return std::nullopt;
+    }
+
+    void ScenePersistenceService::acquireAndNotifyResources(scene::Entity& entity) const
+    {
+        // Balance the per-entity releaseEntityAssets() that fires on delete —
+        // without this, deleting the instantiated subtree drops refcounts to zero
+        // and the GPU resources get released even if the subtree is re-added.
+        resource::acquireEntityAssets(entity, resource::AssetLifecycleManager::instance());
+
+        if (entity.hasComponent<components::MeshComponent>())
+        {
+            const auto& meshComp = entity.getComponent<components::MeshComponent>();
+            if (meshComp.meshRef.isValid())
+            {
+                events::scene::MeshDataChangedNotification meshNotif;
+                meshNotif.entity = internal::toHandle(entity.getHandle());
+                meshNotif.meshPath = meshComp.meshRef.resolve();
+                meshNotif.animatorPath = meshComp.animatorRef.resolve();
+                events::EventDispatcher::instance().publish(meshNotif);
+            }
+        }
+
+        for (auto& child : entity.getChildren())
+        {
+            acquireAndNotifyResources(child);
+        }
+    }
+
+    std::string ScenePersistenceService::copyEntityToJson(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!sceneGraph || !internal::isValidHandle(entity, registry))
+        {
+            return {};
+        }
+
+        scene::Entity& root = sceneGraph->GetRoot();
+        if (internal::fromHandle(entity) == root.getHandle())
+        {
+            vfLogWarning("Cannot copy the root entity");
+            return {};
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return serialization::PrefabSerialization::serializeEntityTree(sceneEntity).dump();
+    }
+
+    std::optional<EntityHandle> ScenePersistenceService::instantiateEntityFromJson(
+        const std::string& jsonText, std::optional<EntityHandle> parent)
+    {
+        if (!sceneGraph || jsonText.empty())
+        {
+            return std::nullopt;
+        }
+
+        nlohmann::json entityJson = nlohmann::json::parse(jsonText, nullptr, false);
+        if (entityJson.is_discarded() || !entityJson.is_object())
+        {
+            vfLogError("instantiateEntityFromJson: invalid entity JSON");
+            return std::nullopt;
+        }
+
+        scene::Entity parentEntity = sceneGraph->GetRoot();
+        if (parent.has_value() && parent->isValid())
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (internal::isValidHandle(*parent, registry))
+            {
+                parentEntity = scene::Entity(internal::fromHandle(*parent));
+            }
+        }
+
+        scene::Entity instantiated = serialization::PrefabSerialization::deserializeEntityTree(
+            entityJson, parentEntity, *sceneGraph);
+        if (!instantiated.isValid())
+        {
+            return std::nullopt;
+        }
+
+        acquireAndNotifyResources(instantiated);
+
+        return internal::toHandle(instantiated.getHandle());
     }
 
     bool ScenePersistenceService::loadSceneAdditive(const std::string& scenePath, const std::string& sceneName)

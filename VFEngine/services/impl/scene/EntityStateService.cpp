@@ -22,10 +22,22 @@ namespace services
                 setSelectedEntity(cmd.entity);
             });
 
+        dispatcher.registerCommandHandler<events::scene::SelectEntitiesCommand>(
+            [this](const events::scene::SelectEntitiesCommand& cmd)
+            {
+                setSelectedEntities(cmd.entities);
+            });
+
         dispatcher.registerQueryHandler<events::scene::GetSelectedEntityQuery>(
             [this](const events::scene::GetSelectedEntityQuery&)
             {
                 return getSelectedEntity();
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetSelectedEntitiesQuery>(
+            [this](const events::scene::GetSelectedEntitiesQuery&)
+            {
+                return getSelectedEntities();
             });
 
         dispatcher.registerCommandHandler<events::scene::SetEntityNameCommand>(
@@ -55,21 +67,46 @@ namespace services
 
     void EntityStateService::setSelectedEntity(std::optional<EntityHandle> entity)
     {
-        selectedEntity = entity;
+        selectedEntities.clear();
+        if (entity.has_value() && entity->isValid())
+        {
+            selectedEntities.push_back(*entity);
+        }
 
         events::scene::EntitySelectedNotification notification;
         notification.entity = entity;
         events::EventDispatcher::instance().publish(notification);
     }
 
+    void EntityStateService::setSelectedEntities(std::vector<EntityHandle> entities)
+    {
+        selectedEntities = std::move(entities);
+
+        // Single-selection consumers (gizmo, details panel) track the primary entity.
+        events::scene::EntitySelectedNotification notification;
+        notification.entity = selectedEntities.empty()
+                                  ? std::nullopt
+                                  : std::optional{selectedEntities.front()};
+        events::EventDispatcher::instance().publish(notification);
+    }
+
     std::optional<EntityHandle> EntityStateService::getSelectedEntity() const
     {
-        return selectedEntity;
+        if (selectedEntities.empty())
+        {
+            return std::nullopt;
+        }
+        return selectedEntities.front();
+    }
+
+    const std::vector<EntityHandle>& EntityStateService::getSelectedEntities() const
+    {
+        return selectedEntities;
     }
 
     void EntityStateService::clearSelection()
     {
-        selectedEntity = std::nullopt;
+        selectedEntities.clear();
     }
 
     void EntityStateService::setEntityName(EntityHandle entity, const std::string& name)
