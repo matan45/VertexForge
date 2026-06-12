@@ -352,8 +352,13 @@ namespace render
             distortionResources->cleanup();
             distortionInitialized = false;
         }
-        if (graphProfiler && graphProfiler->isEnabled())
+        // Initialized covers enabled-then-disabled too (query pools exist
+        // independently of the enable flag)
+        if (graphProfiler && graphProfilerInitialized)
+        {
             graphProfiler->cleanup(device.getLogicalDevice());
+            graphProfilerInitialized = false;
+        }
         if (postProcessPipeline) postProcessPipeline->cleanup();
         meshPipeline->cleanUp();
         if (sharedCameraUBO) sharedCameraUBO->cleanup();

@@ -4,6 +4,7 @@
 #include "asset/AssetRef.hpp"
 #include "imgui.h"
 #include <algorithm>
+#include <cstdio>
 
 namespace windows
 {
@@ -47,6 +48,16 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         cachedAssets = dispatcher.query(events::lifecycle::QueryAssetStatsQuery{});
         cachedPending = dispatcher.query(events::lifecycle::QueryPendingReleasesQuery{});
+
+        auto budgetStatus = dispatcher.query(events::lifecycle::QueryMemoryBudgetQuery{});
+        budgetBytes = budgetStatus.totalBudgetBytes;
+        trackedBytes = budgetStatus.trackedBytes;
+        overBudget = budgetStatus.overBudget;
+        if (!budgetEditInitialized)
+        {
+            budgetEditMb = static_cast<int>(budgetBytes / (1024 * 1024));
+            budgetEditInitialized = true;
+        }
     }
 
     void AssetLifecycleWindow::drawSummary()
@@ -86,6 +97,44 @@ namespace windows
                             typeCounts[static_cast<int>(resource::AssetType::Material)] +
                             typeCounts[static_cast<int>(resource::AssetType::MaterialInstance)],
                             totalAssets - knownCount);
+
+        // Memory budget gauge + control. Over budget, the lifecycle manager
+        // releases unreferenced assets immediately (no grace period) until
+        // the tracked total is back under; referenced assets are never evicted.
+        ImGui::SetNextItemWidth(100);
+        if (ImGui::InputInt("Budget (MB)", &budgetEditMb, 0, 0))
+        {
+            budgetEditMb = std::max(budgetEditMb, 0);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Apply"))
+        {
+            events::lifecycle::SetMemoryBudgetCommand cmd;
+            cmd.totalBudgetBytes = static_cast<size_t>(budgetEditMb) * 1024 * 1024;
+            events::EventDispatcher::instance().execute(cmd);
+            refreshTimer = REFRESH_INTERVAL;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(0 disables)");
+
+        if (budgetBytes > 0)
+        {
+            float usedMb = static_cast<float>(trackedBytes) / (1024.0f * 1024.0f);
+            float budgetMb = static_cast<float>(budgetBytes) / (1024.0f * 1024.0f);
+            float fraction = (budgetMb > 0.0f) ? usedMb / budgetMb : 0.0f;
+
+            char overlay[64];
+            snprintf(overlay, sizeof(overlay), "%.1f / %.0f MB", usedMb, budgetMb);
+            if (overBudget)
+                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.9f, 0.3f, 0.2f, 1.0f));
+            ImGui::ProgressBar(std::min(fraction, 1.0f), ImVec2(-1.0f, 0.0f), overlay);
+            if (overBudget)
+            {
+                ImGui::PopStyleColor();
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f),
+                    "Over budget — unreferenced assets release without grace");
+            }
+        }
     }
 
     void AssetLifecycleWindow::drawAssetTable()
@@ -112,9 +161,36 @@ namespace windows
             ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 90);
             ImGui::TableSetupColumn("Refs", ImGuiTableColumnFlags_WidthFixed, 50);
             ImGui::TableSetupColumn("Memory", ImGuiTableColumnFlags_WidthFixed, 80);
-            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 80);
+            ImGui::TableSetupColumn("Action",
+                                    ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 80);
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableHeadersRow();
+
+            // Sort the cached snapshot in place (Memory descending = top
+            // consumers view). Re-applied every frame because refreshData()
+            // replaces the vector in query order every 0.5s.
+            if (ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs())
+            {
+                if (sortSpecs->SpecsCount > 0)
+                {
+                    const ImGuiTableColumnSortSpecs& spec = sortSpecs->Specs[0];
+                    bool ascending = spec.SortDirection == ImGuiSortDirection_Ascending;
+                    std::stable_sort(cachedAssets.begin(), cachedAssets.end(),
+                        [&spec, ascending](const resource::AssetEntry& a, const resource::AssetEntry& b)
+                        {
+                            bool less = false;
+                            switch (spec.ColumnIndex)
+                            {
+                            case 1: less = static_cast<int>(a.type) < static_cast<int>(b.type); break;
+                            case 2: less = a.refCount < b.refCount; break;
+                            case 3: less = a.estimatedMemoryBytes < b.estimatedMemoryBytes; break;
+                            default: less = a.guid.toString() < b.guid.toString(); break;
+                            }
+                            return ascending ? less : !less;
+                        });
+                    sortSpecs->SpecsDirty = false;
+                }
+            }
 
             for (const auto& asset : cachedAssets)
             {

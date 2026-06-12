@@ -277,6 +277,10 @@ namespace render
         // Render graph
         std::unique_ptr<graph::RenderGraph> frameGraph;
         std::unique_ptr<graph::RenderGraphProfiler> graphProfiler;
+        // Lazy init on first enable request from the profiler UI (GpuPassStats);
+        // unsupported = timestamp queries unavailable, never retry
+        bool graphProfilerInitialized = false;
+        bool graphProfilerUnsupported = false;
         graph::ResourceHandle sceneColorHandle;
         graph::ResourceHandle depthHandle;
         // Scoped MSAA: multisampled scene targets. Pre-resolve passes (ClearColor,
@@ -558,6 +562,10 @@ namespace render
         // Once-per-frame poll: forwards the active RT shadow mask layout to the
         // custom pipeline manager (rebuilds lit pipelines when it first arrives).
         void syncCustomPipelineRTShadow();
+        // Once-per-frame poll of the profiler UI's enable request (GpuPassStats):
+        // lazy-inits the GPU pass profiler, reads back last frame's timestamps
+        // and publishes the snapshot for the editor.
+        void syncGraphProfiler(uint32_t imageIndex);
         void drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void drawUIOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);

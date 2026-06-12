@@ -11,6 +11,17 @@ namespace resource {
 
 	using ReleaseCallback = std::function<void(const asset::AssetGUID& guid, AssetType type)>;
 
+	// Memory budget enforcement. Assets with refCount > 0 are never evicted —
+	// the budget accelerates the existing release pipeline instead: while the
+	// tracked total exceeds totalBudgetBytes, pending releases skip their
+	// grace period (oldest unreferenced first) and the per-frame release
+	// throttle is raised, until the total drops back under budget.
+	struct MemoryBudgetConfig
+	{
+		size_t totalBudgetBytes = 0; // 0 = budget disabled
+		uint32_t pressureMaxReleasesPerFrame = 64;
+	};
+
 	class AssetLifecycleManager
 	{
 	public:
@@ -22,6 +33,11 @@ namespace resource {
 		void acquire(const asset::AssetGUID& guid, AssetType type, size_t estimatedMemoryBytes = 0);
 		void release(const asset::AssetGUID& guid);
 		void tick(float deltaTime);
+
+		void setMemoryBudget(const MemoryBudgetConfig& config);
+		MemoryBudgetConfig getMemoryBudget() const;
+		size_t getTotalTrackedBytes() const;
+		bool isOverBudget() const;
 
 		void forceRelease(const asset::AssetGUID& guid);
 
@@ -55,6 +71,7 @@ namespace resource {
 
 		float gracePeriodSeconds = 5.0f;
 		uint32_t maxReleasesPerFrame = 8;
+		MemoryBudgetConfig budgetConfig;
 
 		mutable std::mutex registryMutex;
 	};

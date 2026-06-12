@@ -39,6 +39,8 @@
 #include "../core/DynamicRenderingHelpers.hpp"
 #include "threading/JobSystem.hpp"
 #include "stats/FrameDrawStats.hpp"
+#include "stats/GpuPassStats.hpp"
+#include "graph/RenderGraphProfiler.hpp"
 #include <chrono>
 
 namespace render
@@ -57,6 +59,10 @@ namespace render
         // RT shadow pipeline comes online — rebuilds them with RT_SHADOW_ENABLED
         // + set 13. Cheap no-op while the layout is unchanged.
         syncCustomPipelineRTShadow();
+
+        // GPU pass profiling: readback last frame's timestamps before this
+        // frame's graph records new ones into the same per-frame pool slot
+        syncGraphProfiler(imageIndex);
 
         frameGraph->reset();
         importFrameResources(imageIndex);
@@ -99,6 +105,57 @@ namespace render
     {
         if (!customPipelineManager || !gpuDrivenRendererInitialized || !gpuDrivenRenderer) return;
         customPipelineManager->setRTShadowMaskLayout(gpuDrivenRenderer->getActiveRTShadowMaskLayout());
+    }
+
+    void RenderPassHandler::syncGraphProfiler(uint32_t imageIndex)
+    {
+        if (!graphProfiler || graphProfilerUnsupported) return;
+
+        auto& sink = GpuPassStats::instance();
+        bool wanted = sink.isEnabledRequested();
+
+        if (wanted && !graphProfilerInitialized)
+        {
+            // 2 timestamp queries per pass; 64 is far above the current graph size
+            constexpr uint32_t kMaxProfiledPasses = 64;
+            if (graphProfiler->init(device, kMaxProfiledPasses))
+            {
+                frameGraph->setProfiler(graphProfiler.get());
+                graphProfilerInitialized = true;
+            }
+            else
+            {
+                graphProfilerUnsupported = true;
+                sink.markUnsupported();
+                return;
+            }
+        }
+
+        if (!graphProfilerInitialized) return;
+
+        if (graphProfiler->isEnabled() != wanted)
+        {
+            graphProfiler->setEnabled(wanted);
+            if (!wanted) sink.clear();
+        }
+
+        if (!wanted) return;
+
+        graphProfiler->readbackAndUpdate(device.getLogicalDevice(), imageIndex);
+
+        auto stats = graphProfiler->getStats();
+        GpuFrameStats out;
+        out.valid = stats.passCount > 0;
+        out.totalMs = stats.totalMs;
+        out.emaTotalMs = stats.emaTotalMs;
+        out.barrierCount = stats.barrierCount;
+        out.barrierFlushCount = stats.barrierFlushCount;
+        out.passTimings.reserve(stats.passTimings.size());
+        for (const auto& pass : stats.passTimings)
+        {
+            out.passTimings.push_back({pass.name, pass.ms, pass.emaMs});
+        }
+        sink.publish(std::move(out));
     }
 
     void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
