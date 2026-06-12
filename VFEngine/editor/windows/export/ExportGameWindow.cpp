@@ -4,6 +4,8 @@
 #include "events/project/ExportEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include <imgui.h>
+#include <cstdio>
+#include <vector>
 
 namespace windows
 {
@@ -21,6 +23,28 @@ namespace windows
 		visible = true;
 	}
 
+	namespace
+	{
+		std::vector<std::string> parsePatternLines(const std::string& text)
+		{
+			std::vector<std::string> patterns;
+			size_t start = 0;
+			while (start <= text.size())
+			{
+				size_t end = text.find('\n', start);
+				std::string line = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+				while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
+					line.pop_back();
+				size_t firstNonSpace = line.find_first_not_of(" \t");
+				if (firstNonSpace != std::string::npos)
+					patterns.push_back(line.substr(firstNonSpace));
+				if (end == std::string::npos) break;
+				start = end + 1;
+			}
+			return patterns;
+		}
+	}
+
 	void ExportGameWindow::loadFromPreferences()
 	{
 		auto prefs = events::EventDispatcher::instance().query(events::editor::GetEditorSettingsQuery{});
@@ -28,6 +52,13 @@ namespace windows
 		cleanBuild = prefs.exportSettings.cleanBuild;
 		verifyIntegrity = prefs.exportSettings.verifyIntegrity;
 		buildScripts = prefs.exportSettings.buildScripts;
+		stripUnreferencedAssets = prefs.exportSettings.stripUnreferencedAssets;
+
+		alwaysIncludeText.clear();
+		for (const auto& pattern : prefs.exportSettings.alwaysIncludePatterns)
+		{
+			alwaysIncludeText += pattern + "\n";
+		}
 	}
 
 	void ExportGameWindow::saveToPreferences() const
@@ -38,6 +69,8 @@ namespace windows
 		prefs.exportSettings.cleanBuild = cleanBuild;
 		prefs.exportSettings.verifyIntegrity = verifyIntegrity;
 		prefs.exportSettings.buildScripts = buildScripts;
+		prefs.exportSettings.stripUnreferencedAssets = stripUnreferencedAssets;
+		prefs.exportSettings.alwaysIncludePatterns = parsePatternLines(alwaysIncludeText);
 
 		events::editor::SetEditorSettingsCommand setCmd;
 		setCmd.settings = prefs;
@@ -54,6 +87,8 @@ namespace windows
 		cmd.cleanBuild = cleanBuild;
 		cmd.verifyIntegrity = verifyIntegrity;
 		cmd.buildScripts = buildScripts;
+		cmd.stripUnreferencedAssets = stripUnreferencedAssets;
+		cmd.alwaysIncludePatterns = parsePatternLines(alwaysIncludeText);
 		events::EventDispatcher::instance().execute(cmd);
 
 		visible = false;
@@ -101,6 +136,29 @@ namespace windows
 
 			ImGui::Checkbox("Verify archive integrity", &verifyIntegrity);
 			ImGui::SetItemTooltip("After packing, re-read every archive entry and check its content hash.");
+
+			ImGui::Spacing();
+			ImGui::SeparatorText("Asset Packing");
+
+			ImGui::Checkbox("Strip unreferenced assets", &stripUnreferencedAssets);
+			ImGui::SetItemTooltip("Leave assets no scene references out of the archive.\n"
+								  "Scripts load assets by raw paths the dependency graph cannot see —\n"
+								  "review the unreferenced-asset report in the log first, and protect\n"
+								  "script-loaded paths with the patterns below.");
+
+			ImGui::Text("Always include (one glob per line)");
+			ImGui::SetItemTooltip("Ship these regardless of scene references, e.g. assets/prefabs/**\n"
+								  "A pattern without '/' matches file names only (*.vfImage).\n"
+								  "Built-in: scripts/**, *.vfSettings, *.vfmeta, navmesh, input mappings, fonts.");
+			{
+				char patternBuffer[4096];
+				snprintf(patternBuffer, sizeof(patternBuffer), "%s", alwaysIncludeText.c_str());
+				if (ImGui::InputTextMultiline("##exportAlwaysInclude", patternBuffer, sizeof(patternBuffer),
+											  ImVec2(-1.0f, ImGui::GetTextLineHeight() * 4.0f)))
+				{
+					alwaysIncludeText = patternBuffer;
+				}
+			}
 
 			ImGui::Spacing();
 			ImGui::Separator();

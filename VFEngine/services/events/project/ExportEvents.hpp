@@ -14,6 +14,8 @@ namespace events::gameExport
 		bool cleanBuild = false;
 		bool verifyIntegrity = true;
 		bool buildScripts = true;
+		bool stripUnreferencedAssets = false;
+		std::vector<std::string> alwaysIncludePatterns;
 
 		std::string_view getName() const override { return "ExportGame"; }
 	};

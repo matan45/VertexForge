@@ -17,6 +17,8 @@ namespace windows
 		bool cleanBuild = false;
 		bool verifyIntegrity = true;
 		bool buildScripts = true;
+		bool stripUnreferencedAssets = false;
+		std::string alwaysIncludeText; // one glob per line, parsed on export
 
 		std::string gameName;
 		std::string gameVersion;

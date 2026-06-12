@@ -1,9 +1,11 @@
 #include "../print/Log.hpp"
 #include "GameExporter.hpp"
+#include "AssetClosureResolver.hpp"
 #include "ExeIconEmbedder.hpp"
 #include "PluginExportPlanner.hpp"
 #include "ShaderCompiler.hpp"
 #include "ShaderPermutationManifest.hpp"
+#include "../asset/AssetDatabase.hpp"
 #include "../serialization/ProjectSerialization.hpp"
 #include "../resource/ShaderResource.hpp"
 #include "../resource/ShaderBinaryFormat.hpp"
@@ -582,6 +584,12 @@ namespace gameExport
 			newManifest.addEntry(std::move(manifestEntry));
 		};
 
+		// Reachability from scenes through the AssetDatabase graph. Invalid
+		// closure (empty/stale database) skips classification — everything packs.
+		AssetClosure closure = AssetClosureResolver::resolve(config.workingDirectory);
+		auto& assetDb = asset::AssetDatabase::instance();
+		uint64_t unreferencedBytes = 0;
+
 		// 1. Pack game assets from working directory
 		std::error_code ec;
 		fs::path excludeAbsolute;
@@ -681,6 +689,27 @@ namespace gameExport
 				continue;
 			}
 
+			// Tracked assets no scene reaches are reported, and skipped when
+			// stripping is enabled. Untracked files (no database GUID) and
+			// always-include matches ship unconditionally.
+			if (closure.valid)
+			{
+				std::string relativeGeneric = relativePath.generic_string();
+				if (!AssetClosureResolver::isAlwaysIncluded(relativeGeneric, config.alwaysIncludePatterns))
+				{
+					auto guid = assetDb.getGUID(entry.path().string());
+					if (guid && closure.referencedGuids.count(*guid) == 0)
+					{
+						std::error_code sizeEc;
+						uint64_t sizeBytes = static_cast<uint64_t>(fs::file_size(entry.path(), sizeEc));
+						result.unreferencedAssets.push_back({relativeGeneric, sizeBytes});
+						unreferencedBytes += sizeBytes;
+
+						if (config.stripUnreferencedAssets) continue;
+					}
+				}
+			}
+
 			addToArchiveWithManifest(archivePath, entry.path(), shouldCompress(ext), "asset", {assetSource});
 			assetCount++;
 		}
@@ -731,6 +760,23 @@ namespace gameExport
 		{
 			result.errorMessage = "Failed to finalize archive";
 			return false;
+		}
+
+		if (!result.unreferencedAssets.empty())
+		{
+			char summary[160];
+			snprintf(summary, sizeof(summary), "%zu unreferenced asset(s), %.1f MB — %s (see log for the full list)",
+					 result.unreferencedAssets.size(),
+					 static_cast<double>(unreferencedBytes) / (1024.0 * 1024.0),
+					 config.stripUnreferencedAssets ? "stripped from the archive" : "packed anyway");
+			result.warnings.push_back(summary);
+
+			for (const auto& unreferenced : result.unreferencedAssets)
+			{
+				vfLogInfo("Unreferenced asset{}: {} ({} bytes)",
+						  config.stripUnreferencedAssets ? " (stripped)" : "",
+						  unreferenced.path, unreferenced.sizeBytes);
+			}
 		}
 
 		vfLogInfo("Packed {} game assets into archive", assetCount);

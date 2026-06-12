@@ -93,7 +93,9 @@ namespace config
             {"lastOutputDirectory", s.lastOutputDirectory},
             {"cleanBuild", s.cleanBuild},
             {"verifyIntegrity", s.verifyIntegrity},
-            {"buildScripts", s.buildScripts}
+            {"buildScripts", s.buildScripts},
+            {"stripUnreferencedAssets", s.stripUnreferencedAssets},
+            {"alwaysIncludePatterns", s.alwaysIncludePatterns}
         };
     }
 
@@ -104,6 +106,16 @@ namespace config
         s.cleanBuild = j.value("cleanBuild", defaults.cleanBuild);
         s.verifyIntegrity = j.value("verifyIntegrity", defaults.verifyIntegrity);
         s.buildScripts = j.value("buildScripts", defaults.buildScripts);
+        s.stripUnreferencedAssets = j.value("stripUnreferencedAssets", defaults.stripUnreferencedAssets);
+        if (j.contains("alwaysIncludePatterns") && j["alwaysIncludePatterns"].is_array())
+        {
+            s.alwaysIncludePatterns.clear();
+            for (const auto& pattern : j["alwaysIncludePatterns"])
+            {
+                if (pattern.is_string())
+                    s.alwaysIncludePatterns.push_back(pattern.get<std::string>());
+            }
+        }
     }
 
     // ============================================

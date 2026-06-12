@@ -70,6 +70,8 @@ namespace handlers
 		config.iconPath = projectOpt->exeIconPath;
 		config.cleanBuild = cmd.cleanBuild;
 		config.verifyIntegrity = cmd.verifyIntegrity;
+		config.stripUnreferencedAssets = cmd.stripUnreferencedAssets;
+		config.alwaysIncludePatterns = cmd.alwaysIncludePatterns;
 
 		if (projectPathOpt)
 		{

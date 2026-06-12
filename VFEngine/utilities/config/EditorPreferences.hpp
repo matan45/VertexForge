@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 #include <cstdint>
 #include <glm/glm.hpp>
 
@@ -42,6 +43,8 @@ namespace config
         bool cleanBuild = false;
         bool verifyIntegrity = true;
         bool buildScripts = true;
+        bool stripUnreferencedAssets = false;
+        std::vector<std::string> alwaysIncludePatterns;
     };
 
     struct EditorPreferences
