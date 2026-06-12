@@ -70,6 +70,10 @@ namespace windows
             ImGui::OpenPopup("Create New Behavior Tree");
         drawCreateBehaviorTreeModal(currentPath);
 
+        if (showCreateThemeModal)
+            ImGui::OpenPopup("Create New UI Theme");
+        drawCreateThemeModal(currentPath);
+
         if (showSavePrefabModal)
             ImGui::OpenPopup("Save Prefab");
         drawSavePrefabModal(currentPath);
@@ -130,6 +134,11 @@ namespace windows
                 {
                     showCreateBehaviorTreeModal = true;
                     newBehaviorTreeName.clear();
+                }
+                if (ImGui::MenuItem("UI Theme"))
+                {
+                    showCreateThemeModal = true;
+                    newThemeName.clear();
                 }
                 ImGui::EndMenu();
             }

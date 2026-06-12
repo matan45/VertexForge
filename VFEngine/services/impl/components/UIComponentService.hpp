@@ -1,9 +1,12 @@
 #pragma once
 #include "../../data/EntityHandle.hpp"
 #include "../../data/DTOs.hpp"
+#include "../../events/EventTypes.hpp"
+#include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace scene {
     class SceneGraphSystem;
@@ -159,7 +162,20 @@ namespace services {
         std::optional<UIDropTargetData> getUIDropTargetData(EntityHandle entity) const;
         bool setUIDropTargetData(EntityHandle entity, const UIDropTargetData& data);
 
+        // UI Style / Theme Operations
+        bool addUIStyleComponent(EntityHandle entity);
+        bool removeUIStyleComponent(EntityHandle entity);
+        bool hasUIStyleComponent(EntityHandle entity) const;
+        std::optional<std::string> getUIStyleKey(EntityHandle entity) const;
+        bool setUIStyleKey(EntityHandle entity, const std::string& styleKey);
+        bool setCanvasTheme(EntityHandle entity, const std::string& themePath);
+        std::optional<std::string> getCanvasThemePath(EntityHandle entity) const;
+        int reapplyUITheme(std::optional<EntityHandle> canvas);
+
     private:
+        int applyCanvasTheme(entt::entity canvasEntity);
+        events::SubscriptionToken sceneLoadedToken{};
+
         void registerCanvasRectImageHandlers(events::EventDispatcher& dispatcher);
         void registerScrollLayoutHandlers(events::EventDispatcher& dispatcher);
         void registerInteractiveHandlers(events::EventDispatcher& dispatcher);
@@ -168,6 +184,7 @@ namespace services {
         void registerAnimationHandlers(events::EventDispatcher& dispatcher);
         void registerMaskHandlers(events::EventDispatcher& dispatcher);
         void registerDragDropHandlers(events::EventDispatcher& dispatcher);
+        void registerThemeHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

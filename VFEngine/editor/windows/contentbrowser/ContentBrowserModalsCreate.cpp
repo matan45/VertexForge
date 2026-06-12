@@ -10,6 +10,7 @@
 #include <vfx/VFXAsset.hpp>
 #include <terrain/TerrainMaterialAsset.hpp>
 #include <behaviortree/BehaviorTreeAsset.hpp>
+#include <ui/UIThemeSerialization.hpp>
 
 namespace windows
 {
@@ -287,6 +288,63 @@ namespace windows
             {
                 ImGui::CloseCurrentPopup();
                 showCreateBehaviorTreeModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawCreateThemeModal(const fs::path& currentPath)
+    {
+        if (showCreateThemeModal &&
+            ImGui::BeginPopupModal("Create New UI Theme", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            char buffer[256];
+            std::strncpy(buffer, newThemeName.c_str(), sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText("Theme Name", buffer, IM_ARRAYSIZE(buffer)))
+            {
+                newThemeName = std::string(buffer);
+            }
+
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                if (!newThemeName.empty())
+                {
+                    std::string extension = ".vfTheme";
+                    fs::path newPath = currentPath / (newThemeName + extension);
+
+                    int counter = 1;
+                    while (fs::exists(newPath))
+                    {
+                        newPath = currentPath / (newThemeName + "_" + std::to_string(counter) + extension);
+                        counter++;
+                    }
+
+                    std::string pathStr = StringUtil::wstringToUtf8(newPath.wstring());
+
+                    // Starter theme with one example style so the format is discoverable
+                    utilities::ui::UITheme defaultTheme;
+                    utilities::ui::UIThemeStyle exampleStyle;
+                    exampleStyle.colors["labelColor"] = {1.0f, 1.0f, 1.0f, 1.0f};
+                    exampleStyle.floats["fontSize"] = 16.0f;
+                    defaultTheme.styles["Default"] = exampleStyle;
+
+                    if (utilities::ui::UIThemeSerialization::saveToFile(defaultTheme, pathStr))
+                    {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
+                        if (refreshCallback) refreshCallback();
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+                showCreateThemeModal = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showCreateThemeModal = false;
             }
             ImGui::EndPopup();
         }

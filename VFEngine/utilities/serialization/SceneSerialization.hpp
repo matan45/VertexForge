@@ -258,6 +258,9 @@ namespace serialization
         static json serializeUIRect(const components::UIRectComponent& rect);
         static void deserializeUIRect(const json& j, components::UIRectComponent& rect);
 
+        static json serializeUIStyle(const components::UIStyleComponent& style);
+        static void deserializeUIStyle(const json& j, components::UIStyleComponent& style);
+
         static json serializeUIImage(const components::UIImageComponent& image);
         static void deserializeUIImage(const json& j, components::UIImageComponent& image);
 

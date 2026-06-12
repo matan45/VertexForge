@@ -40,6 +40,7 @@ namespace windows
         menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
+        menuBar.setThemeEditorWindow(&themeEditorWindow);
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
         menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
 
@@ -215,6 +216,7 @@ namespace windows
             inputActionMappingWindow.draw();
             heightmapGeneratorWindow.draw();
             backgroundRemovalWindow.draw();
+            themeEditorWindow.draw();
             memoryDiagnosticsWindow.draw();
             editorPreferencesWindow.draw();
             editorSettingsWindow.draw();

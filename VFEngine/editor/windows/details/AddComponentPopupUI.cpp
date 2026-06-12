@@ -181,6 +181,18 @@ namespace windows::details
                 ImGui::SetTooltip("Tween animation system for UI elements");
         }
 
+        if (!c.hasUIStyle && matchesFilter("UI Style", filter))
+        {
+            if (ImGui::Selectable("  UI Style"))
+            {
+                events::ui::AddUIStyleComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Theme style key applied from the canvas .vfTheme asset");
+        }
+
         if (!c.hasUIMask && matchesFilter("UI Mask", filter))
         {
             if (ImGui::Selectable("  UI Mask"))

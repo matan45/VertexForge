@@ -181,6 +181,7 @@ namespace asset
         if (str == "Terrain")          return resource::AssetType::Terrain;
         if (str == "World")            return resource::AssetType::World;
         if (str == "Scene")            return resource::AssetType::Scene;
+        if (str == "Theme")            return resource::AssetType::Theme;
         return resource::AssetType::COUNT;
     }
 }

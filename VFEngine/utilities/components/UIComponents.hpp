@@ -29,6 +29,16 @@ namespace components
         UIScaleMode scaleMode = UIScaleMode::ScaleWithScreenSize;
         float pixelsPerUnit = 100.0f;
         int sortOrder = 0;
+        // Optional .vfTheme asset applied to every UIStyleComponent in this
+        // canvas subtree (invalid = no theme).
+        asset::AssetRef themeRef;
+    };
+
+    // Marks a widget as themed: when the owning canvas has a themeRef, the
+    // style with this key writes its properties into the widget's components.
+    struct UIStyleComponent
+    {
+        std::string styleKey;
     };
 
     struct UIRectComponent

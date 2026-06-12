@@ -34,6 +34,7 @@
 #include "config/InputActionMappingWindow.hpp"
 #include "procedural/HeightmapGeneratorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
+#include "theme/ThemeEditorWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
 #include "config/EditorSettingsWindow.hpp"
@@ -91,6 +92,7 @@ namespace windows
         InputActionMappingWindow inputActionMappingWindow;
         HeightmapGeneratorWindow heightmapGeneratorWindow;
         BackgroundRemovalWindow backgroundRemovalWindow;
+        ThemeEditorWindow themeEditorWindow;
         MemoryDiagnosticsWindow memoryDiagnosticsWindow;
         EditorPreferencesWindow editorPreferencesWindow;
         EditorSettingsWindow editorSettingsWindow;

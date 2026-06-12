@@ -5,6 +5,7 @@
 #include "UIButtonLabelAPI.hpp"
 #include "UIInputAPI.hpp"
 #include "UIValueAPI.hpp"
+#include "UIThemeAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core::api
@@ -14,6 +15,7 @@ namespace core::api
         UIButtonLabelAPI::registerAPI(interpreter);
         UIInputAPI::registerAPI(interpreter);
         UIValueAPI::registerAPI(interpreter);
+        UIThemeAPI::registerAPI(interpreter);
 
         vfLogInfo("[UIAPI] Registered UI native functions");
     }

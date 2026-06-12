@@ -126,6 +126,7 @@ namespace services
             COLLECT_CASE(UITabs, UITabsComponent);
             COLLECT_CASE(UISlider, UISliderComponent);
             COLLECT_CASE(UIProgressBar, UIProgressBarComponent);
+            COLLECT_CASE(UIStyle, UIStyleComponent);
             COLLECT_CASE(RenderTexture, RenderTextureComponent);
             COLLECT_CASE(Decal, DecalComponent);
         default:
@@ -192,6 +193,7 @@ namespace services
             HAS_CASE(UITabs, UITabsComponent);
             HAS_CASE(UISlider, UISliderComponent);
             HAS_CASE(UIProgressBar, UIProgressBarComponent);
+            HAS_CASE(UIStyle, UIStyleComponent);
             HAS_CASE(RenderTexture, RenderTextureComponent);
             HAS_CASE(Decal, DecalComponent);
         default:
@@ -246,6 +248,7 @@ namespace services
         CHECK_COMP(UITabs, UITabsComponent);
         CHECK_COMP(UISlider, UISliderComponent);
         CHECK_COMP(UIProgressBar, UIProgressBarComponent);
+        CHECK_COMP(UIStyle, UIStyleComponent);
         CHECK_COMP(RenderTexture, RenderTextureComponent);
         CHECK_COMP(Decal, DecalComponent);
 

@@ -155,6 +155,12 @@ namespace serialization
                 entity.getComponent<components::UIRectComponent>());
         }
 
+        if (entity.hasComponent<components::UIStyleComponent>())
+        {
+            out["uiStyle"] = SceneSerialization::serializeUIStyle(
+                entity.getComponent<components::UIStyleComponent>());
+        }
+
         if (entity.hasComponent<components::UIImageComponent>())
         {
             out["uiImage"] = SceneSerialization::serializeUIImage(

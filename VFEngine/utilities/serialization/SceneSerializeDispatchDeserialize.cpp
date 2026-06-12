@@ -205,6 +205,11 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::UIRectComponent>();
             deserializeUIRect(c["uiRect"], comp);
         }
+        if (c.contains("uiStyle"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::UIStyleComponent>();
+            deserializeUIStyle(c["uiStyle"], comp);
+        }
         if (c.contains("uiImage"))
         {
             auto& comp = entity.addOrReplaceComponent<components::UIImageComponent>();

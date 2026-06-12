@@ -39,6 +39,7 @@
 #include "../details/UIProgressBarDrawer.hpp"
 #include "../details/UIAnimationDrawer.hpp"
 #include "../details/UIMaskDrawer.hpp"
+#include "../details/UIStyleDrawer.hpp"
 #include "../details/UIDraggableDrawer.hpp"
 #include "../details/UIDropTargetDrawer.hpp"
 #include "../details/SocketAttachmentDrawer.hpp"
@@ -105,6 +106,7 @@ namespace windows
         details::UIProgressBarDrawer uiProgressBarDrawer;
         details::UIAnimationDrawer uiAnimationDrawer;
         details::UIMaskDrawer uiMaskDrawer;
+        details::UIStyleDrawer uiStyleDrawer;
         details::UIDraggableDrawer uiDraggableDrawer;
         details::UIDropTargetDrawer uiDropTargetDrawer;
         details::SocketAttachmentDrawer socketAttachmentDrawer;

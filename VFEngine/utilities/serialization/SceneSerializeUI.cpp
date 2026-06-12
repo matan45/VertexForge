@@ -15,6 +15,10 @@ namespace serialization {
         j["scaleMode"] = uiScaleModeToString(canvas.scaleMode);
         j["pixelsPerUnit"] = canvas.pixelsPerUnit;
         j["sortOrder"] = canvas.sortOrder;
+        if (canvas.themeRef.isValid())
+        {
+            writeAssetRef(j, "themeRef", canvas.themeRef);
+        }
         return j;
     }
 
@@ -25,6 +29,21 @@ namespace serialization {
         canvas.scaleMode = stringToUIScaleMode(j.value("scaleMode", "scaleWithScreenSize"));
         canvas.pixelsPerUnit = j.value("pixelsPerUnit", 100.0f);
         canvas.sortOrder = j.value("sortOrder", 0);
+        canvas.themeRef = readAssetRef(j, "themeRef", "");
+    }
+
+    // ---- Style ----
+
+    json SceneSerialization::serializeUIStyle(const components::UIStyleComponent& style)
+    {
+        json j;
+        j["styleKey"] = style.styleKey;
+        return j;
+    }
+
+    void SceneSerialization::deserializeUIStyle(const json& j, components::UIStyleComponent& style)
+    {
+        style.styleKey = j.value("styleKey", std::string());
     }
 
     // ---- Rect ----

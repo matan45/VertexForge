@@ -34,6 +34,7 @@ namespace asset
         if (ext == ".vfphysanim")  return resource::AssetType::PhysicsShape;
         if (ext == ".vfscene")     return resource::AssetType::Scene;
         if (ext == ".vfsettings")  return resource::AssetType::Scene;
+        if (ext == ".vftheme")     return resource::AssetType::Theme;
         if (ext == ".mt")          return resource::AssetType::Script;
         return resource::AssetType::COUNT;
     }
@@ -52,7 +53,7 @@ namespace asset
         static const std::unordered_set<std::string> assetExtensions = {
             ".vfimage", ".vfhdr", ".vfmesh", ".vfaudio", ".vfanim",
             ".vfmat", ".vfmatinstance", ".vfanimator", ".vfvfx",
-            ".vffont", ".vfscene", ".vfsettings", ".vfprefab", ".vfterrain",
+            ".vffont", ".vfscene", ".vfsettings", ".vfprefab", ".vftheme", ".vfterrain",
             ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfnavindex", ".vfimposter",
             ".vfinputmapping", ".vfbehaviortree", ".vfphysanim",
             ".mt"

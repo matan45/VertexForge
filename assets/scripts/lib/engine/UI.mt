@@ -492,4 +492,36 @@ public class UI {
     public static function cancelDrag(): bool {
         return _native_ui_cancelDrag();
     }
+
+    // ============================================
+    // Theme / Style
+    // ============================================
+
+    // Assign a .vfTheme asset to a canvas and apply it to the whole subtree.
+    // Pass an empty path to clear the theme.
+    public static function setCanvasTheme(int canvasId, string themePath): bool {
+        return _native_ui_setCanvasTheme(canvasId, themePath);
+    }
+
+    // Get the canvas theme as an asset path (empty string if none)
+    public static function getCanvasTheme(int canvasId): string {
+        return _native_ui_getCanvasTheme(canvasId);
+    }
+
+    // Set the theme style key on an element (adds a UIStyle component if
+    // missing) and apply it immediately when the canvas has a theme
+    public static function setStyleKey(int entityId, string styleKey): bool {
+        return _native_ui_setStyleKey(entityId, styleKey);
+    }
+
+    // Get the element's style key (empty string if it has no UIStyle component)
+    public static function getStyleKey(int entityId): string {
+        return _native_ui_getStyleKey(entityId);
+    }
+
+    // Re-apply canvas themes. Pass a canvas entity id, or -1 for every themed
+    // canvas in the scene. Returns the number of styled elements touched.
+    public static function reapplyTheme(int canvasId): int {
+        return _native_ui_reapplyTheme(canvasId);
+    }
 }

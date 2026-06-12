@@ -97,6 +97,8 @@ namespace serialization
             out["uiCanvas"] = serializeUICanvas(entity.getComponent<components::UICanvasComponent>());
         if (entity.hasComponent<components::UIRectComponent>())
             out["uiRect"] = serializeUIRect(entity.getComponent<components::UIRectComponent>());
+        if (entity.hasComponent<components::UIStyleComponent>())
+            out["uiStyle"] = serializeUIStyle(entity.getComponent<components::UIStyleComponent>());
         if (entity.hasComponent<components::UIImageComponent>())
             out["uiImage"] = serializeUIImage(entity.getComponent<components::UIImageComponent>());
         if (entity.hasComponent<components::UIScrollComponent>())

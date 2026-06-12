@@ -34,6 +34,7 @@ namespace windows
     class TaskGraphWindow;
     class HeightmapGeneratorWindow;
     class BackgroundRemovalWindow;
+    class ThemeEditorWindow;
     class MemoryDiagnosticsWindow;
     class EditorPreferencesWindow;
     class EditorSettingsWindow;
@@ -74,6 +75,7 @@ namespace windows
         TaskGraphWindow* taskGraphWindow = nullptr;
         HeightmapGeneratorWindow* heightmapGeneratorWindow = nullptr;
         BackgroundRemovalWindow* backgroundRemovalWindow = nullptr;
+        ThemeEditorWindow* themeEditorWindow = nullptr;
         MemoryDiagnosticsWindow* memoryDiagnosticsWindow = nullptr;
         EditorPreferencesWindow* editorPreferencesWindow = nullptr;
         EditorSettingsWindow* editorSettingsWindow = nullptr;
@@ -204,6 +206,11 @@ namespace windows
         void setBackgroundRemovalWindow(BackgroundRemovalWindow* window)
         {
             backgroundRemovalWindow = window;
+        }
+
+        void setThemeEditorWindow(ThemeEditorWindow* window)
+        {
+            themeEditorWindow = window;
         }
 
         void setMemoryDiagnosticsWindow(MemoryDiagnosticsWindow* window)
