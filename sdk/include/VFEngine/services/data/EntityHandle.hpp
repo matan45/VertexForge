@@ -74,6 +74,7 @@ namespace services {
         Decal,
         UIStyle,
         UITooltip,
+        UIWindow,
     };
 
 }
