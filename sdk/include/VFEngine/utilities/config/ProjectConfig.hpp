@@ -54,6 +54,10 @@ namespace config
         std::optional<std::string> inputMapping;
         std::optional<std::string> engineVersion;
         std::optional<std::string> lastModified;
+        // Stamped into exported .vfproj files; the Runtime warns on boot when it
+        // differs from its own plugin::VF_PLUGIN_API_VERSION (plugin DLLs built
+        // against another engine build would be rejected at load time).
+        std::optional<uint32_t> pluginApiVersion;
 
         ProjectFileVersion schemaVersion;
 

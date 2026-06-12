@@ -1,5 +1,6 @@
 #pragma once
 #include "../EventTypes.hpp"
+#include <map>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,12 @@ namespace events::gameExport
 
 	struct ExportGameCommand : ICommand<bool> {
 		std::string outputDirectory;
+		bool cleanBuild = false;
+		bool verifyIntegrity = true;
+		bool buildScripts = true;
+		bool stripUnreferencedAssets = false;
+		std::vector<std::string> alwaysIncludePatterns;
+		std::map<std::string, bool> pluginOverrides; // plugin name -> ship?
 
 		std::string_view getName() const override { return "ExportGame"; }
 	};

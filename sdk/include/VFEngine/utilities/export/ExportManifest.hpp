@@ -45,6 +45,8 @@ namespace gameExport
 		std::string gameName;
 		std::string gameVersion;
 		std::string exportTimestamp;
+		std::string engineVersion;
+		uint32_t pluginApiVersion = 0;
 
 	private:
 		std::vector<ManifestEntry> entries;

@@ -84,6 +84,41 @@ namespace config
     }
 
     // ============================================
+    // ExportSettings
+    // ============================================
+
+    inline void to_json(json& j, const ExportSettings& s)
+    {
+        j = json{
+            {"lastOutputDirectory", s.lastOutputDirectory},
+            {"cleanBuild", s.cleanBuild},
+            {"verifyIntegrity", s.verifyIntegrity},
+            {"buildScripts", s.buildScripts},
+            {"stripUnreferencedAssets", s.stripUnreferencedAssets},
+            {"alwaysIncludePatterns", s.alwaysIncludePatterns}
+        };
+    }
+
+    inline void from_json(const json& j, ExportSettings& s)
+    {
+        ExportSettings defaults;
+        s.lastOutputDirectory = j.value("lastOutputDirectory", defaults.lastOutputDirectory);
+        s.cleanBuild = j.value("cleanBuild", defaults.cleanBuild);
+        s.verifyIntegrity = j.value("verifyIntegrity", defaults.verifyIntegrity);
+        s.buildScripts = j.value("buildScripts", defaults.buildScripts);
+        s.stripUnreferencedAssets = j.value("stripUnreferencedAssets", defaults.stripUnreferencedAssets);
+        if (j.contains("alwaysIncludePatterns") && j["alwaysIncludePatterns"].is_array())
+        {
+            s.alwaysIncludePatterns.clear();
+            for (const auto& pattern : j["alwaysIncludePatterns"])
+            {
+                if (pattern.is_string())
+                    s.alwaysIncludePatterns.push_back(pattern.get<std::string>());
+            }
+        }
+    }
+
+    // ============================================
     // EditorPreferences (master struct)
     // ============================================
 
@@ -93,7 +128,8 @@ namespace config
             {"schemaVersion", json{{"major", EditorSettingsSchemaVersion::major}, {"minor", EditorSettingsSchemaVersion::minor}}},
             {"appearance", prefs.appearance},
             {"debug", prefs.debug},
-            {"windowLayout", prefs.windowLayout}
+            {"windowLayout", prefs.windowLayout},
+            {"export", prefs.exportSettings}
         };
     }
 
@@ -107,5 +143,8 @@ namespace config
 
         if (j.contains("windowLayout") && j["windowLayout"].is_object())
             prefs.windowLayout = j["windowLayout"].get<WindowLayoutSettings>();
+
+        if (j.contains("export") && j["export"].is_object())
+            prefs.exportSettings = j["export"].get<ExportSettings>();
     }
 }
