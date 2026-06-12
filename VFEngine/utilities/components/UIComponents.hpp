@@ -498,6 +498,42 @@ namespace components
         bool showMaskGraphic = false; // render the mask shape visually
     };
 
+    struct UIWindowComponent
+    {
+        // Config (serialized). Window visibility = the entity's active state;
+        // UI::openWindow / UI::closeWindow toggle it (+ modal stack + events).
+        std::string title = "Window";
+        bool showTitleBar = true;
+        float titleBarHeight = 28.0f;
+        bool draggable = true;  // drag by title bar
+        bool closable = true;   // show the title-bar close button
+        bool modal = false;     // dim backdrop + block interaction beneath
+        glm::vec4 backgroundColor{0.12f, 0.12f, 0.12f, 1.0f};
+        glm::vec4 titleBarColor{0.18f, 0.18f, 0.22f, 1.0f};
+        glm::vec4 titleTextColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 backdropColor{0.0f, 0.0f, 0.0f, 0.55f};
+        asset::AssetRef fontRef;
+        float titleFontSize = 16.0f;
+
+        // Runtime state (NOT serialized)
+        bool isDraggingWindow = false;
+        glm::vec2 dragStartMousePos{0.0f, 0.0f};
+        glm::vec2 dragStartAnchoredPos{0.0f, 0.0f};
+        bool closeHovered = false;
+    };
+
+    // Registry-context singleton: open modal windows, oldest first. The top
+    // (back) modal blocks interaction for everything outside its subtree.
+    struct UIModalState
+    {
+        std::vector<entt::entity> modalStack;
+
+        entt::entity activeModal() const
+        {
+            return modalStack.empty() ? entt::null : modalStack.back();
+        }
+    };
+
     enum class UITooltipMode : uint8_t
     {
         Text,      // engine draws a synthetic text bubble (no entities)

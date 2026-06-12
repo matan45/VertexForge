@@ -117,6 +117,7 @@ namespace controllers::offscreen
             auto& comp = registry.get<components::UITextInputComponent>(entity);
             if (!comp.interactable) continue;
             if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
+            if (!ui_common::isInteractionAllowed(registry, entity)) continue;
 
             const auto* canvas = ui_common::findCanvasForEntity(registry, entity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(entity))

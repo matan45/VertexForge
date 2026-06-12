@@ -83,6 +83,8 @@ namespace controllers::offscreen
                 continue;
             if (!scene::Entity::isEffectivelyActive(registry, entity))
                 continue;
+            if (!isInteractionAllowed(registry, entity))
+                continue;
 
             const auto* canvas = findCanvasForEntity(registry, entity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(entity))

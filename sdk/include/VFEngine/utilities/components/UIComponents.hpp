@@ -29,6 +29,16 @@ namespace components
         UIScaleMode scaleMode = UIScaleMode::ScaleWithScreenSize;
         float pixelsPerUnit = 100.0f;
         int sortOrder = 0;
+        // Optional .vfTheme asset applied to every UIStyleComponent in this
+        // canvas subtree (invalid = no theme).
+        asset::AssetRef themeRef;
+    };
+
+    // Marks a widget as themed: when the owning canvas has a themeRef, the
+    // style with this key writes its properties into the widget's components.
+    struct UIStyleComponent
+    {
+        std::string styleKey;
     };
 
     struct UIRectComponent
@@ -157,6 +167,9 @@ namespace components
         bool wordWrap = true;
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
+        // Parse BBCode-style markup in text: [b], [i], [color=#RRGGBB(AA)],
+        // [[ escapes a literal '['. Unknown tags render literally.
+        bool richText = false;
     };
 
     enum class UIButtonState : uint8_t
@@ -483,6 +496,85 @@ namespace components
         asset::AssetRef maskTextureRef;  // alpha texture used as mask shape
         float alphaThreshold = 0.5f;
         bool showMaskGraphic = false; // render the mask shape visually
+    };
+
+    struct UIWindowComponent
+    {
+        // Config (serialized). Window visibility = the entity's active state;
+        // UI::openWindow / UI::closeWindow toggle it (+ modal stack + events).
+        std::string title = "Window";
+        bool showTitleBar = true;
+        float titleBarHeight = 28.0f;
+        bool draggable = true;  // drag by title bar
+        bool closable = true;   // show the title-bar close button
+        bool modal = false;     // dim backdrop + block interaction beneath
+        glm::vec4 backgroundColor{0.12f, 0.12f, 0.12f, 1.0f};
+        glm::vec4 titleBarColor{0.18f, 0.18f, 0.22f, 1.0f};
+        glm::vec4 titleTextColor{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 backdropColor{0.0f, 0.0f, 0.0f, 0.55f};
+        asset::AssetRef fontRef;
+        float titleFontSize = 16.0f;
+
+        // Runtime state (NOT serialized)
+        bool isDraggingWindow = false;
+        glm::vec2 dragStartMousePos{0.0f, 0.0f};
+        glm::vec2 dragStartAnchoredPos{0.0f, 0.0f};
+        bool closeHovered = false;
+    };
+
+    // Registry-context singleton: open modal windows, oldest first. The top
+    // (back) modal blocks interaction for everything outside its subtree.
+    struct UIModalState
+    {
+        std::vector<entt::entity> modalStack;
+
+        entt::entity activeModal() const
+        {
+            return modalStack.empty() ? entt::null : modalStack.back();
+        }
+    };
+
+    enum class UITooltipMode : uint8_t
+    {
+        Text,      // engine draws a synthetic text bubble (no entities)
+        ChildPanel // a designated (inactive) child panel is shown + positioned
+    };
+
+    struct UITooltipComponent
+    {
+        // Config (serialized) — no runtime state; hover tracking lives in the
+        // UITooltipState registry-context singleton.
+        UITooltipMode mode = UITooltipMode::Text;
+        std::string text;
+        float showDelay = 0.5f;
+        bool followCursor = true;
+        glm::vec2 offset{12.0f, 16.0f};
+        float maxWidth = 280.0f; // wrap width for Text mode (pixels)
+        glm::vec4 backgroundColor{0.08f, 0.08f, 0.08f, 0.95f};
+        glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
+        asset::AssetRef fontRef;
+        float fontSize = 14.0f;
+        glm::vec4 padding{8.0f, 8.0f, 6.0f, 6.0f}; // left, right, top, bottom
+        bool enabled = true;
+        // ChildPanel mode: name of the child entity to toggle (empty = first
+        // inactive child carrying a UIRectComponent).
+        std::string panelChildName;
+    };
+
+    // Registry-context singleton updated each UI frame by the tooltip
+    // interaction pass. The frame builders read it to emit the Text-mode
+    // bubble (background quad + text) on the UI overlay layer.
+    struct UITooltipState
+    {
+        entt::entity hoveredEntity = entt::null;
+        float hoverTime = 0.0f;
+        bool visible = false;
+        glm::vec2 displayPos{0.0f, 0.0f};  // bg top-left, viewport px, clamped
+        glm::vec2 bgSize{0.0f, 0.0f};      // estimated bubble size (Text mode)
+        glm::vec2 contentOffset{0.0f, 0.0f};
+        glm::vec2 contentSize{0.0f, 0.0f};
+        float canvasScale = 1.0f;
+        entt::entity shownPanelChild = entt::null; // ChildPanel mode bookkeeping
     };
 
     struct UIDraggableComponent

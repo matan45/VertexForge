@@ -40,6 +40,8 @@ namespace controllers::offscreen
                     continue;
                 if (!scene::Entity::isEffectivelyActive(registry, entity))
                     continue;
+                if (!isInteractionAllowed(registry, entity))
+                    continue;
 
                 const auto* canvas = findCanvasForEntity(registry, entity);
                 if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
@@ -275,6 +277,16 @@ namespace controllers::offscreen
         if (!ctx.playModeActive)
         {
             pointerState.overUI = false;
+            return;
+        }
+
+        // Any active modal blocks the world outright — the pointer counts as
+        // over UI everywhere (the backdrop swallows clicks).
+        if (const auto* modalState = registry.ctx().find<components::UIModalState>();
+            modalState && modalState->activeModal() != entt::null &&
+            registry.valid(modalState->activeModal()))
+        {
+            pointerState.overUI = true;
             return;
         }
 

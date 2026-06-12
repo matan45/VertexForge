@@ -9,3 +9,5 @@
 #include "UIMaskEvents.hpp"
 #include "UIDragDropEvents.hpp"
 #include "UIPickEvents.hpp"
+#include "UIThemeEvents.hpp"
+#include "UITooltipEvents.hpp"

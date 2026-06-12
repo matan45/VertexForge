@@ -445,6 +445,24 @@ namespace services
         bool wordWrap = true;
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
+        bool richText = false;
+    };
+
+    struct UITooltipData
+    {
+        uint8_t mode = 0; // 0=Text, 1=ChildPanel
+        std::string text;
+        float showDelay = 0.5f;
+        bool followCursor = true;
+        glm::vec2 offset{12.0f, 16.0f};
+        float maxWidth = 280.0f;
+        glm::vec4 backgroundColor{0.08f, 0.08f, 0.08f, 0.95f};
+        glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
+        asset::AssetRef fontRef;
+        float fontSize = 14.0f;
+        glm::vec4 padding{8.0f, 8.0f, 6.0f, 6.0f}; // left, right, top, bottom
+        bool enabled = true;
+        std::string panelChildName;
     };
 
     struct UIButtonData
