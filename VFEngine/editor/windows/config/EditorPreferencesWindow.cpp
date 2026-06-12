@@ -326,16 +326,19 @@ namespace windows
         {
             drawSearchBar();
 
+            const float footerReserveHeight =
+                ImGui::GetFrameHeightWithSpacing() * (settingsPath.empty() ? 2.0f : 3.0f);
+
             if (!searchQuery.empty())
             {
-                ImGui::BeginChild("SearchResults", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() - 8.0f), true);
+                ImGui::BeginChild("SearchResults", ImVec2(0, -footerReserveHeight), true);
                 drawSearchResults();
                 ImGui::EndChild();
             }
             else
             {
                 float leftPanelWidth = 160.0f;
-                float contentHeight = -ImGui::GetFrameHeightWithSpacing() - 8.0f;
+                float contentHeight = -footerReserveHeight;
 
                 ImGui::BeginChild("CategoryList", ImVec2(leftPanelWidth, contentHeight), true);
                 drawCategoryList();
