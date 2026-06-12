@@ -308,4 +308,25 @@ namespace utilities::ui
         bool coplanarSmaller = std::abs(t - bestT) <= epsilon && area < bestArea;
         return closer || coplanarSmaller;
     }
+
+    // Places a tooltip of the given pixel size near anchorPos (cursor or element
+    // corner): below-right by default, flipped above the anchor when it would
+    // cross the bottom edge, then clamped into the viewport.
+    inline glm::vec2 computeTooltipPlacement(
+        const glm::vec2& anchorPos, const glm::vec2& offset,
+        const glm::vec2& tooltipSize, float viewportW, float viewportH)
+    {
+        glm::vec2 pos = anchorPos + offset;
+        if (pos.y + tooltipSize.y > viewportH)
+        {
+            pos.y = anchorPos.y - offset.y - tooltipSize.y;
+        }
+        if (pos.x + tooltipSize.x > viewportW)
+        {
+            pos.x = viewportW - tooltipSize.x;
+        }
+        pos.x = std::max(0.0f, pos.x);
+        pos.y = std::max(0.0f, pos.y);
+        return pos;
+    }
 }

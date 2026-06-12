@@ -40,6 +40,7 @@
 #include "../details/UIAnimationDrawer.hpp"
 #include "../details/UIMaskDrawer.hpp"
 #include "../details/UIStyleDrawer.hpp"
+#include "../details/UITooltipDrawer.hpp"
 #include "../details/UIDraggableDrawer.hpp"
 #include "../details/UIDropTargetDrawer.hpp"
 #include "../details/SocketAttachmentDrawer.hpp"
@@ -107,6 +108,7 @@ namespace windows
         details::UIAnimationDrawer uiAnimationDrawer;
         details::UIMaskDrawer uiMaskDrawer;
         details::UIStyleDrawer uiStyleDrawer;
+        details::UITooltipDrawer uiTooltipDrawer;
         details::UIDraggableDrawer uiDraggableDrawer;
         details::UIDropTargetDrawer uiDropTargetDrawer;
         details::SocketAttachmentDrawer socketAttachmentDrawer;

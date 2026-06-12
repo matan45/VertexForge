@@ -47,6 +47,53 @@ namespace serialization {
         label.richText = j.value("richText", false);
     }
 
+    // ---- Tooltip ----
+
+    json SceneSerialization::serializeUITooltip(const components::UITooltipComponent& tooltip)
+    {
+        json j;
+        j["mode"] = static_cast<int>(tooltip.mode);
+        if (!tooltip.text.empty())
+        {
+            j["text"] = tooltip.text;
+        }
+        j["showDelay"] = tooltip.showDelay;
+        j["followCursor"] = tooltip.followCursor;
+        j["offset"] = writeVec2(tooltip.offset);
+        j["maxWidth"] = tooltip.maxWidth;
+        j["backgroundColor"] = writeVec4(tooltip.backgroundColor);
+        j["textColor"] = writeVec4(tooltip.textColor);
+        if (tooltip.fontRef.isValid())
+        {
+            writeAssetRef(j, "fontRef", tooltip.fontRef);
+        }
+        j["fontSize"] = tooltip.fontSize;
+        j["padding"] = writeVec4(tooltip.padding);
+        j["enabled"] = tooltip.enabled;
+        if (!tooltip.panelChildName.empty())
+        {
+            j["panelChildName"] = tooltip.panelChildName;
+        }
+        return j;
+    }
+
+    void SceneSerialization::deserializeUITooltip(const json& j, components::UITooltipComponent& tooltip)
+    {
+        tooltip.mode = static_cast<components::UITooltipMode>(j.value("mode", 0));
+        tooltip.text = j.value("text", std::string());
+        tooltip.showDelay = j.value("showDelay", 0.5f);
+        tooltip.followCursor = j.value("followCursor", true);
+        readVec2(j, "offset", tooltip.offset);
+        tooltip.maxWidth = j.value("maxWidth", 280.0f);
+        readVec4(j, "backgroundColor", tooltip.backgroundColor);
+        readVec4(j, "textColor", tooltip.textColor);
+        tooltip.fontRef = readAssetRef(j, "fontRef", "");
+        tooltip.fontSize = j.value("fontSize", 14.0f);
+        readVec4(j, "padding", tooltip.padding);
+        tooltip.enabled = j.value("enabled", true);
+        tooltip.panelChildName = j.value("panelChildName", std::string());
+    }
+
     // ---- Button ----
 
     json SceneSerialization::serializeUIButton(const components::UIButtonComponent& button)

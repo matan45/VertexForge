@@ -456,6 +456,7 @@ namespace controllers::offscreen
         interactionSystem.processTabsInteraction(ctx);
         interactionSystem.processSliderInteraction(ctx);
         interactionSystem.processDragDropInteraction(ctx);
+        interactionSystem.processTooltipInteraction(ctx);
         interactionSystem.computePointerOverUI(ctx);
 
         std::vector<render::ui::UIImageRenderData> drawList;
@@ -479,6 +480,27 @@ namespace controllers::offscreen
         ui_screenspace::generateTextInputCaretDrawData(registry, ctx, interactionSystem.getFocusedTextInput(), drawList);
         ui_screenspace::generateDropdownDrawData(registry, ctx, drawList);
         ui_screenspace::generateDragGhostDrawData(registry, ctx, drawList);
+
+        // Text-mode tooltip bubble background — overlay layer (records after
+        // all main UI images AND text, so it covers underlying labels too).
+        {
+            auto& tooltipState = registry.ctx().emplace<components::UITooltipState>();
+            if (tooltipState.visible && tooltipState.hoveredEntity != entt::null &&
+                registry.valid(tooltipState.hoveredEntity))
+            {
+                const auto* tip = registry.try_get<components::UITooltipComponent>(tooltipState.hoveredEntity);
+                if (tip && tip->mode == components::UITooltipMode::Text && !tip->text.empty())
+                {
+                    render::ui::UIImageRenderData bg;
+                    bg.texturePath = "__white_1x1__";
+                    bg.position = tooltipState.displayPos;
+                    bg.size = tooltipState.bgSize;
+                    bg.colorTint = tip->backgroundColor;
+                    bg.overlay = true;
+                    drawList.push_back(std::move(bg));
+                }
+            }
+        }
 
         renderHandler->setUIImageDrawList(std::move(drawList));
     }

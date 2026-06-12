@@ -193,6 +193,18 @@ namespace windows::details
                 ImGui::SetTooltip("Theme style key applied from the canvas .vfTheme asset");
         }
 
+        if (!c.hasUITooltip && matchesFilter("UI Tooltip", filter))
+        {
+            if (ImGui::Selectable("  UI Tooltip"))
+            {
+                events::ui::AddUITooltipComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Hover-delay tooltip: engine-drawn text bubble or a child panel");
+        }
+
         if (!c.hasUIMask && matchesFilter("UI Mask", filter))
         {
             if (ImGui::Selectable("  UI Mask"))

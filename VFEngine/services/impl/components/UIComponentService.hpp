@@ -162,6 +162,13 @@ namespace services {
         std::optional<UIDropTargetData> getUIDropTargetData(EntityHandle entity) const;
         bool setUIDropTargetData(EntityHandle entity, const UIDropTargetData& data);
 
+        // UI Tooltip Operations
+        bool addUITooltipComponent(EntityHandle entity);
+        bool removeUITooltipComponent(EntityHandle entity);
+        bool hasUITooltipComponent(EntityHandle entity) const;
+        std::optional<UITooltipData> getUITooltipData(EntityHandle entity) const;
+        bool setUITooltipData(EntityHandle entity, const UITooltipData& data);
+
         // UI Style / Theme Operations
         bool addUIStyleComponent(EntityHandle entity);
         bool removeUIStyleComponent(EntityHandle entity);
@@ -185,6 +192,7 @@ namespace services {
         void registerMaskHandlers(events::EventDispatcher& dispatcher);
         void registerDragDropHandlers(events::EventDispatcher& dispatcher);
         void registerThemeHandlers(events::EventDispatcher& dispatcher);
+        void registerTooltipHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

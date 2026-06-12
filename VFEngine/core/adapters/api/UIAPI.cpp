@@ -6,6 +6,7 @@
 #include "UIInputAPI.hpp"
 #include "UIValueAPI.hpp"
 #include "UIThemeAPI.hpp"
+#include "UIWidgetExtrasAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core::api
@@ -16,6 +17,7 @@ namespace core::api
         UIInputAPI::registerAPI(interpreter);
         UIValueAPI::registerAPI(interpreter);
         UIThemeAPI::registerAPI(interpreter);
+        UIWidgetExtrasAPI::registerAPI(interpreter);
 
         vfLogInfo("[UIAPI] Registered UI native functions");
     }

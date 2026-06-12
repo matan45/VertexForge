@@ -93,5 +93,9 @@ namespace render::ui
         // Stencil masking
         UIStencilOp stencilOp = UIStencilOp::None;
         uint8_t stencilRef = 0;
+
+        // Overlay layer: records after all main UI images and text
+        // (tooltips, modal windows). See UIImageRenderData::overlay.
+        bool overlay = false;
     };
 }

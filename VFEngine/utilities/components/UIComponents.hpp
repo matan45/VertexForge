@@ -498,6 +498,49 @@ namespace components
         bool showMaskGraphic = false; // render the mask shape visually
     };
 
+    enum class UITooltipMode : uint8_t
+    {
+        Text,      // engine draws a synthetic text bubble (no entities)
+        ChildPanel // a designated (inactive) child panel is shown + positioned
+    };
+
+    struct UITooltipComponent
+    {
+        // Config (serialized) — no runtime state; hover tracking lives in the
+        // UITooltipState registry-context singleton.
+        UITooltipMode mode = UITooltipMode::Text;
+        std::string text;
+        float showDelay = 0.5f;
+        bool followCursor = true;
+        glm::vec2 offset{12.0f, 16.0f};
+        float maxWidth = 280.0f; // wrap width for Text mode (pixels)
+        glm::vec4 backgroundColor{0.08f, 0.08f, 0.08f, 0.95f};
+        glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
+        asset::AssetRef fontRef;
+        float fontSize = 14.0f;
+        glm::vec4 padding{8.0f, 8.0f, 6.0f, 6.0f}; // left, right, top, bottom
+        bool enabled = true;
+        // ChildPanel mode: name of the child entity to toggle (empty = first
+        // inactive child carrying a UIRectComponent).
+        std::string panelChildName;
+    };
+
+    // Registry-context singleton updated each UI frame by the tooltip
+    // interaction pass. The frame builders read it to emit the Text-mode
+    // bubble (background quad + text) on the UI overlay layer.
+    struct UITooltipState
+    {
+        entt::entity hoveredEntity = entt::null;
+        float hoverTime = 0.0f;
+        bool visible = false;
+        glm::vec2 displayPos{0.0f, 0.0f};  // bg top-left, viewport px, clamped
+        glm::vec2 bgSize{0.0f, 0.0f};      // estimated bubble size (Text mode)
+        glm::vec2 contentOffset{0.0f, 0.0f};
+        glm::vec2 contentSize{0.0f, 0.0f};
+        float canvasScale = 1.0f;
+        entt::entity shownPanelChild = entt::null; // ChildPanel mode bookkeeping
+    };
+
     struct UIDraggableComponent
     {
         // Config (serialized)

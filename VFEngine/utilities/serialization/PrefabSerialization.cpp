@@ -185,6 +185,12 @@ namespace serialization
                 entity.getComponent<components::UILabelComponent>());
         }
 
+        if (entity.hasComponent<components::UITooltipComponent>())
+        {
+            out["uiTooltip"] = SceneSerialization::serializeUITooltip(
+                entity.getComponent<components::UITooltipComponent>());
+        }
+
         if (entity.hasComponent<components::UIAnimationComponent>())
         {
             out["uiAnimation"] = SceneSerialization::serializeUIAnimation(

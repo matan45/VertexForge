@@ -17,6 +17,7 @@ namespace services {
         registerMaskHandlers(dispatcher);
         registerDragDropHandlers(dispatcher);
         registerThemeHandlers(dispatcher);
+        registerTooltipHandlers(dispatcher);
     }
 
 }

@@ -544,6 +544,32 @@ namespace controllers::offscreen
         emitTextInputLabels(registry, drawList, viewportW, viewportH, scrollContainers);
         emitDropdownOptionLabels(registry, drawList, viewportW, viewportH);
 
+        // Text-mode tooltip content — overlay layer, drawn over the bubble
+        // background the image pass emitted this frame.
+        {
+            auto& tooltipState = registry.ctx().emplace<components::UITooltipState>();
+            if (tooltipState.visible && tooltipState.hoveredEntity != entt::null &&
+                registry.valid(tooltipState.hoveredEntity))
+            {
+                const auto* tip = registry.try_get<components::UITooltipComponent>(tooltipState.hoveredEntity);
+                if (tip && tip->mode == components::UITooltipMode::Text &&
+                    !tip->text.empty() && tip->fontRef.isValid())
+                {
+                    render::ui::UITextRenderData tipText;
+                    tipText.fontPath = tip->fontRef.resolve();
+                    tipText.text = tip->text;
+                    tipText.fontSize = tip->fontSize * tooltipState.canvasScale;
+                    tipText.color = tip->textColor;
+                    tipText.position = tooltipState.displayPos + tooltipState.contentOffset;
+                    tipText.size = tooltipState.contentSize;
+                    tipText.wordWrap = true;
+                    tipText.overflow = components::TextOverflow::Overflow;
+                    tipText.overlay = true;
+                    drawList.push_back(std::move(tipText));
+                }
+            }
+        }
+
         renderHandler->setUITextDrawList(std::move(drawList));
     }
 

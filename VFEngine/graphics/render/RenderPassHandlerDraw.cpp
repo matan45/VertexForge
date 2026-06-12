@@ -299,6 +299,14 @@ namespace render
         if (hasUIText)
             uiTextPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
 
+        // Overlay layer (tooltips, modal windows) records after ALL main UI
+        // images and text so its backgrounds cover underlying labels too.
+        if (hasUIImages)
+            uiPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex, true);
+
+        if (hasUIText)
+            uiTextPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex, true);
+
         // Restore to SHADER_READ_ONLY_OPTIMAL so render() can sample displayColorImages for presentation.
         if (hasDisplay)
             core::ImageUtilities::transitionImageLayout(commandBuffer,

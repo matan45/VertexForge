@@ -273,6 +273,9 @@ namespace serialization
         static json serializeUILabel(const components::UILabelComponent& label);
         static void deserializeUILabel(const json& j, components::UILabelComponent& label);
 
+        static json serializeUITooltip(const components::UITooltipComponent& tooltip);
+        static void deserializeUITooltip(const json& j, components::UITooltipComponent& tooltip);
+
         static json serializeUIButton(const components::UIButtonComponent& button);
         static void deserializeUIButton(const json& j, components::UIButtonComponent& button);
 

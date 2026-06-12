@@ -534,4 +534,28 @@ public class UI {
     public static function reapplyTheme(int canvasId): int {
         return _native_ui_reapplyTheme(canvasId);
     }
+
+    // ============================================
+    // Tooltip
+    // ============================================
+
+    // Set the tooltip text (Text mode)
+    public static function setTooltipText(int entityId, string text): void {
+        _native_ui_setTooltipText(entityId, text);
+    }
+
+    // Get the tooltip text (empty string if no tooltip component)
+    public static function getTooltipText(int entityId): string {
+        return _native_ui_getTooltipText(entityId);
+    }
+
+    // Enable/disable the tooltip without removing it
+    public static function setTooltipEnabled(int entityId, bool enabled): void {
+        _native_ui_setTooltipEnabled(entityId, enabled);
+    }
+
+    // Set the hover delay before the tooltip appears (seconds)
+    public static function setTooltipDelay(int entityId, float seconds): void {
+        _native_ui_setTooltipDelay(entityId, seconds);
+    }
 }

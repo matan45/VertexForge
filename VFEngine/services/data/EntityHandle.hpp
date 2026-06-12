@@ -73,6 +73,7 @@ namespace services {
         Controller,
         Decal,
         UIStyle,
+        UITooltip,
     };
 
 }

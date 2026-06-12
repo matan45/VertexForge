@@ -17,6 +17,9 @@ namespace controllers::offscreen
         void processTabsInteraction(const FrameContext& ctx);
         void processSliderInteraction(const FrameContext& ctx);
         void processDragDropInteraction(const FrameContext& ctx);
+        // Hover-delay tooltips: updates the UITooltipState registry-context
+        // singleton (Text mode bubble placement / ChildPanel toggling).
+        void processTooltipInteraction(const FrameContext& ctx);
 
         // Updates the registry-context UIPointerState: true when the cursor is
         // over any visible UI element (so scripts can skip world raycasts).

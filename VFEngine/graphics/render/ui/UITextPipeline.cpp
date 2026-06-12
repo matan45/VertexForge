@@ -115,7 +115,11 @@ namespace render::ui
         struct ScissorKey
         {
             int32_t x, y, w, h;
-            bool operator==(const ScissorKey& o) const { return x == o.x && y == o.y && w == o.w && h == o.h; }
+            bool overlay;
+            bool operator==(const ScissorKey& o) const
+            {
+                return x == o.x && y == o.y && w == o.w && h == o.h && overlay == o.overlay;
+            }
         };
         struct ScissorKeyHash
         {
@@ -125,6 +129,7 @@ namespace render::ui
                 h ^= std::hash<int32_t>{}(k.y) << 1;
                 h ^= std::hash<int32_t>{}(k.w) << 2;
                 h ^= std::hash<int32_t>{}(k.h) << 3;
+                h ^= std::hash<bool>{}(k.overlay) << 4;
                 return h;
             }
         };
@@ -280,7 +285,8 @@ namespace render::ui
                 static_cast<int32_t>(label.scissorRect.x),
                 static_cast<int32_t>(label.scissorRect.y),
                 static_cast<int32_t>(label.scissorRect.z),
-                static_cast<int32_t>(label.scissorRect.w)
+                static_cast<int32_t>(label.scissorRect.w),
+                label.overlay
             };
 
             uint32_t styleFlags = 0;
@@ -340,6 +346,7 @@ namespace render::ui
         {
             UITextScissorGroup group;
             group.scissorRect = glm::vec4(key.x, key.y, key.w, key.h);
+            group.overlay = key.overlay;
 
             // Sub-group by font and stencil state within this scissor group
             struct BatchKey {
@@ -505,12 +512,19 @@ namespace render::ui
     }
 
     void UITextPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer,
-                                                          uint32_t imageIndex) const
+                                                          uint32_t imageIndex, bool overlayPass) const
     {
         if (!initialized || totalInstanceCount == 0)
         {
             return;
         }
+
+        bool anyGroupInPass = false;
+        for (const auto& group : scissorGroups)
+        {
+            if (group.overlay == overlayPass) { anyGroupInPass = true; break; }
+        }
+        if (!anyGroupInPass) return;
 
         bool hasDisplay = !offscreenResources.displayColorImages.empty();
         auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
@@ -539,6 +553,8 @@ namespace render::ui
 
         for (const auto& group : scissorGroups)
         {
+            if (group.overlay != overlayPass) continue;
+
             // Set scissor for this group
             vk::Rect2D scissor{};
             if (group.scissorRect.z > 0.0f && group.scissorRect.w > 0.0f)

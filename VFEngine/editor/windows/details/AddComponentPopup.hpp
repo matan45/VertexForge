@@ -55,6 +55,7 @@ namespace windows::details {
         bool hasDestructible = false;
         bool hasBuoyancy = false;
         bool hasUIStyle = false;
+        bool hasUITooltip = false;
     };
 
     class AddComponentPopup {

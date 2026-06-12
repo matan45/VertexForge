@@ -184,11 +184,12 @@ namespace render::ui
                 static_cast<int32_t>(image.scissorRect.z), static_cast<int32_t>(image.scissorRect.w)
             };
 
-            if (!currentGroup || scissorKey != currentScissor)
+            if (!currentGroup || scissorKey != currentScissor || currentGroup->overlay != image.overlay)
             {
                 scissorGroups.emplace_back();
                 currentGroup = &scissorGroups.back();
                 currentGroup->scissorRect = glm::vec4(scissorKey);
+                currentGroup->overlay = image.overlay;
                 currentScissor = scissorKey;
             }
 
@@ -327,9 +328,17 @@ namespace render::ui
             vk::ImageAspectFlagBits::eColor);
     }
 
-    void UIRenderPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    void UIRenderPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                                           bool overlayPass) const
     {
         if (!initialized || totalInstanceCount == 0) return;
+
+        bool anyGroupInPass = false;
+        for (const auto& group : scissorGroups)
+        {
+            if (group.overlay == overlayPass) { anyGroupInPass = true; break; }
+        }
+        if (!anyGroupInPass) return;
 
         bool hasDisplay = !offscreenResources.displayColorImages.empty();
         auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
@@ -360,6 +369,8 @@ namespace render::ui
 
         for (const auto& group : scissorGroups)
         {
+            if (group.overlay != overlayPass) continue;
+
             vk::Rect2D scissor{};
             if (group.scissorRect.z > 0.0f && group.scissorRect.w > 0.0f)
             {

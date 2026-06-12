@@ -116,5 +116,9 @@ namespace render::ui
         uint8_t stencilRef = 0;
         bool discardColor = false;   // true = no color write (invisible mask)
         float alphaThreshold = 0.0f; // for alpha-texture masks
+
+        // Overlay layer: records in a second pass AFTER all main UI images and
+        // text, so it covers underlying labels too (tooltips, modal backdrops).
+        bool overlay = false;
     };
 }
