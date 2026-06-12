@@ -33,7 +33,7 @@ namespace windows
         if (!visible) return;
 
         ImGui::SetNextWindowSize(ImVec2(640, 480), ImGuiCond_FirstUseEver);
-        std::string title = "Theme Editor";
+        std::string title = "UI Theme Editor";
         if (!themePath.empty())
         {
             std::string filename = themePath;

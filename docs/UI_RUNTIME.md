@@ -24,8 +24,9 @@ Recognized property names (`UIThemeApplier`):
 | floats | `fontSize` |
 | assets | `font`, `imageTexture`, `buttonNormalTexture`, `buttonHoveredTexture`, `buttonPressedTexture`, `buttonDisabledTexture` |
 
-Authoring: content browser **Create > UI Theme**, then **Tools > Theme Editor**
-(open/edit/save + "Apply to Scene"). Assign per canvas in the UI Canvas drawer.
+Authoring: content browser **Create > UI Theme**, then **Tools > UI Theme
+Editor** (open/edit/save + "Apply to Scene"). Assign per canvas in the UI
+Canvas drawer.
 
 Scripts: `UI::setCanvasTheme(canvasId, path)`, `UI::setStyleKey(id, key)`,
 `UI::reapplyTheme(canvasId /* -1 = all */)`.

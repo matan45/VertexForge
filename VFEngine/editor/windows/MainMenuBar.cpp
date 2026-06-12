@@ -223,7 +223,7 @@ namespace windows
         if (!ImGui::BeginMenu("Tools")) return;
         if (ImGui::MenuItem("Generate Heightmap") && heightmapGeneratorWindow) heightmapGeneratorWindow->show();
         if (ImGui::MenuItem("Remove Background") && backgroundRemovalWindow) backgroundRemovalWindow->show();
-        if (ImGui::MenuItem("Theme Editor") && themeEditorWindow) themeEditorWindow->show();
+        if (ImGui::MenuItem("UI Theme Editor") && themeEditorWindow) themeEditorWindow->show();
         ImGui::EndMenu();
     }
 
