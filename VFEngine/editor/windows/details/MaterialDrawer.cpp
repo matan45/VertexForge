@@ -6,6 +6,7 @@
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -96,6 +97,13 @@ namespace windows::details
             defaultMatDisplay = "..." + defaultMatDisplay.substr(defaultMatDisplay.length() - 32);
         }
         ImGui::TextDisabled("%s", defaultMatDisplay.c_str());
+        if (auto dropped = acceptAssetDropOnLastItem("DefaultMatDrop", {".vfmat", ".vfmatinstance"}))
+        {
+            events::material::SetDefaultMaterialCommand cmd;
+            cmd.entity = handle;
+            cmd.materialPath = *dropped;
+            dispatcher.execute(cmd);
+        }
 
         ImGui::SameLine();
         if (ImGui::Button("Browse##DefaultMat"))
@@ -173,6 +181,14 @@ namespace windows::details
             matDisplay = "..." + matDisplay.substr(matDisplay.length() - 27);
         }
         ImGui::TextDisabled("%s", matDisplay.c_str());
+        if (auto dropped = acceptAssetDropOnLastItem("SubmeshMatDrop", {".vfmat", ".vfmatinstance"}))
+        {
+            events::material::SetSubMeshMaterialCommand cmd;
+            cmd.entity = handle;
+            cmd.submeshName = submeshName;
+            cmd.materialPath = *dropped;
+            dispatcher.execute(cmd);
+        }
 
         ImGui::SameLine();
         std::string browseId = "Browse##submesh" + std::to_string(index);

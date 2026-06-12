@@ -2,6 +2,7 @@
 #include "../../graph/ShaderGraphEditor.hpp"
 #include <material/MaterialParameterSet.hpp>
 #include <nfd/FileDialog.hpp>
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include "imgui.h"
 #include <algorithm>
 #include <cstring>
@@ -290,6 +291,10 @@ namespace editor::materialeditor
                     std::string displayPath = value.empty() ? "(None)" :
                         (value.length() > 30 ? "..." + value.substr(value.length() - 27) : value);
                     ImGui::TextDisabled("%s", displayPath.c_str());
+                    if (auto dropped = windows::acceptAssetDropOnLastItem("TextureSlotDrop", {".vfimage"})) {
+                        propValue = *dropped;
+                        changed = true;
+                    }
 
                     if (ImGui::Button("Browse...")) {
                         nfd::FileDialog fileDialog;

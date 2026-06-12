@@ -1,4 +1,5 @@
 #include "AssetGridRenderer.hpp"
+#include "AssetQueryParser.hpp"
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -50,19 +51,37 @@ namespace windows
         return {uv0, uv1};
     }
 
-    bool AssetGridRenderer::matchesFilter(const Asset& asset, const AssetFilter& filter)
+    bool AssetGridRenderer::matchesFilter(const Asset& asset, const AssetFilter& filter, const ResolvedAssetFilter& resolved)
     {
-        if (filter.typeFilter != AssetType::Other && asset.type != filter.typeFilter)
+        if (filter.typeFilter && asset.type != *filter.typeFilter)
         {
-            if (!fs::is_directory(asset.path))
+            if (!asset.isDirectory)
                 return false;
         }
 
-        if (!filter.searchQuery.empty())
+        // Plain terms apply to everything, folders included.
+        if (!resolved.terms.empty())
         {
             std::string assetNameLower = StringUtil::toLower(asset.name);
-            std::string searchQueryLower = StringUtil::toLower(filter.searchQuery);
-            if (assetNameLower.find(searchQueryLower) == std::string::npos)
+            for (const auto& term : resolved.terms)
+            {
+                if (assetNameLower.find(term) == std::string::npos)
+                    return false;
+            }
+        }
+
+        // Structured tokens constrain files only; folders stay navigable.
+        if (!asset.isDirectory)
+        {
+            if (resolved.matchNothing)
+                return false;
+            if (resolved.queryType && asset.type != *resolved.queryType)
+                return false;
+            if (!resolved.extToken.empty() && StringUtil::toLower(asset.extension) != resolved.extToken)
+                return false;
+            if (resolved.hasGuidToken && normalizePathForCompare(asset.path) != resolved.guidPath)
+                return false;
+            if (resolved.hasRefToken && resolved.refMatchPaths.count(normalizePathForCompare(asset.path)) == 0)
                 return false;
         }
 
@@ -71,7 +90,8 @@ namespace windows
 
     AssetClickResult AssetGridRenderer::draw(
         const std::vector<Asset>& assets,
-        const AssetFilter& filter)
+        const AssetFilter& filter,
+        const ResolvedAssetFilter& resolved)
     {
         AssetClickResult result;
 
@@ -80,14 +100,14 @@ namespace windows
         filtered.reserve(assets.size());
         for (const auto& asset : assets)
         {
-            if (matchesFilter(asset, filter))
+            if (matchesFilter(asset, filter, resolved))
                 filtered.push_back(&asset);
         }
 
         std::sort(filtered.begin(), filtered.end(), [&](const Asset* a, const Asset* b) {
             // Folders always first
-            bool aDir = fs::is_directory(a->path);
-            bool bDir = fs::is_directory(b->path);
+            bool aDir = a->isDirectory;
+            bool bDir = b->isDirectory;
             if (aDir != bDir) return aDir > bDir;
 
             int cmp = 0;
@@ -142,7 +162,7 @@ namespace windows
                 result.clickedType = asset->type;
 
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
-                    && (asset->type != AssetType::Other || !fs::is_directory(asset->path)))
+                    && (asset->type != AssetType::Other || !asset->isDirectory))
                 {
                     result.wasDoubleClicked = true;
                 }
@@ -193,87 +213,17 @@ namespace windows
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alphaMultiplier);
         }
 
-        AtlasIcon icon = AtlasIcon::File;
+        AtlasIcon icon;
         bool isFolder = false;
 
-        switch (asset.type)
+        if (asset.type == AssetType::Other && asset.isDirectory)
         {
-            using enum windows::AssetType;
-        case Texture:
-            icon = AtlasIcon::Texture;
-            break;
-        case HDR:
-            icon = AtlasIcon::Hdr;
-            break;
-        case Scene:
-            icon = AtlasIcon::Scene;
-            break;
-        case Project:
-            icon = AtlasIcon::Project;
-            break;
-        case Font:
-            icon = AtlasIcon::Font;
-            break;
-        case Model:
-            icon = AtlasIcon::Mesh;
-            break;
-        case Audio:
-            icon = AtlasIcon::Audio;
-            break;
-        case Animation:
-            icon = AtlasIcon::Animation;
-            break;
-        case Script:
-            icon = AtlasIcon::Mtype;
-            break;
-        case Material:
-        case MaterialInstance:
-            icon = AtlasIcon::Material;
-            break;
-        case Prefab:
-            icon = AtlasIcon::Prefab;
-            break;
-        case Animator:
-            icon = AtlasIcon::Animator;
-            break;
-        case VFX:
-            icon = AtlasIcon::VFX;
-            break;
-        case TerrainMaterial:
-            icon = AtlasIcon::Material;
-            break;
-        case Terrain:
-            icon = AtlasIcon::Terrain;
-            break;
-        case Navmesh:
-            icon = AtlasIcon::Navmesh;
-            break;
-        case PhysAnim:
-            icon = AtlasIcon::PhysAnim;
-            break;
-        case Ocean:
-            icon = AtlasIcon::Water;
-            break;
-        case BehaviorTree:
-            icon = AtlasIcon::BehaviorTree;
-            break;
-        case Plugin:
-            icon = AtlasIcon::Plugin;
-            break;
-        case InputMapping:
-            icon = AtlasIcon::InputMapping;
-            break;
-        case Other:
-            if (fs::is_directory(asset.path))
-            {
-                icon = AtlasIcon::Folder;
-                isFolder = true;
-            }
-            else
-            {
-                icon = AtlasIcon::File;
-            }
-            break;
+            icon = AtlasIcon::Folder;
+            isFolder = true;
+        }
+        else
+        {
+            icon = assetTypeInfo(asset.type).icon;
         }
 
         auto [uv0, uv1] = getAtlasUV(icon);

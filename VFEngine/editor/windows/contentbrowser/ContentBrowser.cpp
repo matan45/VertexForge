@@ -1,4 +1,5 @@
 #include "ContentBrowser.hpp"
+#include "AssetQueryParser.hpp"
 #include "../scene/FolderStructureWindow.hpp"
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
@@ -12,11 +13,13 @@
 #include "events/terrain/TerrainEvents.hpp"
 #include "events/terrain/OceanEvents.hpp"
 #include "events/project/SceneEvents.hpp"
+#include "events/asset/AssetDatabaseEvents.hpp"
 #include "../../clipboard/ClipboardManager.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include "Import.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui_internal.h>
+#include <algorithm>
 #include <windows.h>
 #include <shellapi.h>
 
@@ -77,6 +80,7 @@ namespace windows
         projectLoadedToken = dispatcher.subscribe<events::project::ProjectLoadedNotification>(
             [this](const events::project::ProjectLoadedNotification& notification)
             {
+                typeCache.clear();
                 if (!notification.project.workingDirectory.empty())
                 {
                     navigateTo(notification.project.workingDirectory);
@@ -86,6 +90,7 @@ namespace windows
         importCompletedToken = dispatcher.subscribe<events::resource::ImportCompletedNotification>(
             [this](const events::resource::ImportCompletedNotification&)
             {
+                projectResultsStale.store(true);
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
                     loadDirectory(currentPath);
             });
@@ -93,6 +98,7 @@ namespace windows
         assetSavedToken = dispatcher.subscribe<events::resource::AssetSavedNotification>(
             [this](const events::resource::AssetSavedNotification&)
             {
+                projectResultsStale.store(true);
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
                     loadDirectory(currentPath);
             });
@@ -100,6 +106,7 @@ namespace windows
         fileMovedToken = dispatcher.subscribe<events::fileops::FileMovedNotification>(
             [this](const events::fileops::FileMovedNotification&)
             {
+                projectResultsStale.store(true);
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
                 {
                     loadDirectory(currentPath);
@@ -110,6 +117,7 @@ namespace windows
         fileDeletedToken = dispatcher.subscribe<events::fileops::FileDeletedNotification>(
             [this](const events::fileops::FileDeletedNotification&)
             {
+                projectResultsStale.store(true);
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
                 {
                     loadDirectory(currentPath);
@@ -127,6 +135,7 @@ namespace windows
             [this](const events::fileops::FileOpBatchCompletedNotification&)
             {
                 pendingRefresh.store(true);
+                projectResultsStale.store(true);
             });
     }
 
@@ -206,7 +215,8 @@ namespace windows
         }
     }
 
-    AssetType ContentBrowser::detectAssetType(const fs::directory_entry& entry)
+    AssetType ContentBrowser::detectAssetType(const fs::directory_entry& entry,
+                                              uint64_t fileSize, int64_t lastModified)
     {
         using enum windows::AssetType;
 
@@ -242,16 +252,35 @@ namespace windows
         if (!isVfAsset)
             return Other;
 
-        resource::FileType fileType = resource::ResourceManager::readHeaderFile(entry);
+        std::string pathKey = StringUtil::wstringToUtf8(entry.path().wstring());
+        if (auto it = typeCache.find(pathKey); it != typeCache.end() &&
+            it->second.fileSize == fileSize && it->second.lastModified == lastModified)
+        {
+            return it->second.type;
+        }
 
-        if (fileType == resource::FileType::TEXTURE) return Texture;
-        if (fileType == resource::FileType::SCENE) return Scene;
-        if (fileType == resource::FileType::HDR) return HDR;
-        if (fileType == resource::FileType::MESH) return Model;
-        if (fileType == resource::FileType::AUDIO) return Audio;
-        if (fileType == resource::FileType::ANIMATION) return Animation;
+        // Asset database already holds path -> type in memory; only unregistered
+        // files still pay the header read.
+        AssetType resolved = Other;
+        events::assetdb::GetAssetTypeQuery query;
+        query.path = pathKey;
+        if (auto dbType = events::EventDispatcher::instance().query(query))
+            resolved = fromResourceType(*dbType);
 
-        return Other;
+        if (resolved == Other)
+        {
+            resource::FileType fileType = resource::ResourceManager::readHeaderFile(entry);
+
+            if (fileType == resource::FileType::TEXTURE) resolved = Texture;
+            else if (fileType == resource::FileType::SCENE) resolved = Scene;
+            else if (fileType == resource::FileType::HDR) resolved = HDR;
+            else if (fileType == resource::FileType::MESH) resolved = Model;
+            else if (fileType == resource::FileType::AUDIO) resolved = Audio;
+            else if (fileType == resource::FileType::ANIMATION) resolved = Animation;
+        }
+
+        typeCache[pathKey] = {fileSize, lastModified, resolved};
+        return resolved;
     }
 
     void ContentBrowser::loadDirectory(const fs::path& path)
@@ -276,8 +305,10 @@ namespace windows
                 Asset asset;
                 asset.path = StringUtil::wstringToUtf8(entry.path().wstring());
                 asset.name = StringUtil::wstringToUtf8(entry.path().filename().wstring());
-                asset.type = detectAssetType(entry);
                 asset.extension = entry.path().extension().string();
+
+                std::error_code dirEc;
+                asset.isDirectory = entry.is_directory(dirEc) && !dirEc;
 
                 std::error_code sizeEc;
                 if (entry.is_regular_file(sizeEc))
@@ -288,6 +319,8 @@ namespace windows
                 if (!timeEc)
                     asset.lastModified = std::chrono::duration_cast<std::chrono::seconds>(
                         ftime.time_since_epoch()).count();
+
+                asset.type = detectAssetType(entry, asset.fileSize, asset.lastModified);
 
                 assets.push_back(asset);
             }
@@ -453,5 +486,153 @@ namespace windows
             return true;
         }
         return false;
+    }
+
+    void ContentBrowser::updateResolvedFilter()
+    {
+        if (filter.searchQuery == lastResolvedQuery)
+            return;
+        lastResolvedQuery = filter.searchQuery;
+        resolvedFilter = {};
+
+        ParsedAssetQuery parsed = parseAssetQuery(filter.searchQuery);
+        resolvedFilter.terms = std::move(parsed.terms);
+        resolvedFilter.extToken = parsed.extToken;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (!parsed.typeToken.empty())
+        {
+            // Match the table labels case- and space-insensitively, so both
+            // type:materialinstance and type:"material instance" work.
+            std::string wanted = parsed.typeToken;
+            wanted.erase(std::remove(wanted.begin(), wanted.end(), ' '), wanted.end());
+
+            bool found = false;
+            for (const auto& info : assetTypeTable())
+            {
+                std::string label = StringUtil::toLower(info.label);
+                label.erase(std::remove(label.begin(), label.end(), ' '), label.end());
+                if (label == wanted)
+                {
+                    resolvedFilter.queryType = info.type;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                resolvedFilter.matchNothing = true;
+        }
+
+        if (!parsed.guidToken.empty())
+        {
+            resolvedFilter.hasGuidToken = true;
+            if (asset::AssetGUID::isStrictHex16(parsed.guidToken))
+            {
+                events::assetdb::GetAssetPathQuery pathQuery;
+                pathQuery.guid = asset::AssetGUID::fromString(parsed.guidToken);
+                auto pathOpt = dispatcher.query(pathQuery);
+                if (pathOpt)
+                    resolvedFilter.guidPath = normalizePathForCompare(*pathOpt);
+                else
+                    resolvedFilter.matchNothing = true;
+            }
+            else
+            {
+                resolvedFilter.matchNothing = true;
+            }
+        }
+
+        if (!parsed.refToken.empty())
+        {
+            resolvedFilter.hasRefToken = true;
+
+            asset::AssetGUID target = asset::AssetGUID::invalid();
+            if (asset::AssetGUID::isStrictHex16(parsed.refToken))
+            {
+                target = asset::AssetGUID::fromString(parsed.refToken);
+            }
+            else
+            {
+                events::assetdb::GetAssetGUIDQuery guidQuery;
+                guidQuery.path = parsed.refToken;
+                if (auto guidOpt = dispatcher.query(guidQuery))
+                    target = *guidOpt;
+            }
+
+            if (target.isValid())
+            {
+                events::assetdb::GetAssetDependentsQuery dependentsQuery;
+                dependentsQuery.guid = target;
+                for (const auto& dependent : dispatcher.query(dependentsQuery))
+                {
+                    events::assetdb::GetAssetPathQuery pathQuery;
+                    pathQuery.guid = dependent;
+                    if (auto pathOpt = dispatcher.query(pathQuery))
+                        resolvedFilter.refMatchPaths.insert(normalizePathForCompare(*pathOpt));
+                }
+            }
+            else
+            {
+                resolvedFilter.matchNothing = true;
+            }
+        }
+    }
+
+    void ContentBrowser::updateProjectSearchResults()
+    {
+        using namespace std::chrono;
+        auto now = steady_clock::now();
+
+        if (filter.searchQuery != pendingProjectQuery)
+        {
+            pendingProjectQuery = filter.searchQuery;
+            projectQueryEditTime = now;
+            projectResultsPending = true;
+        }
+
+        bool stale = projectResultsStale.exchange(false);
+        bool debounceElapsed = projectResultsPending && (now - projectQueryEditTime >= milliseconds(250));
+        if (!stale && !debounceElapsed)
+            return;
+        projectResultsPending = false;
+
+        projectResults.clear();
+        auto entries = events::EventDispatcher::instance().query(events::assetdb::GetAllAssetsQuery{});
+        projectResults.reserve(entries.size());
+        for (const auto& entry : entries)
+        {
+            fs::path entryPath(entry.path);
+
+            Asset asset;
+            asset.path = entry.path;
+            asset.name = StringUtil::wstringToUtf8(entryPath.filename().wstring());
+            asset.extension = entryPath.extension().string();
+            asset.type = fromResourceType(entry.type);
+            projectResults.push_back(std::move(asset));
+        }
+    }
+
+    void ContentBrowser::handleProjectResultClick(const AssetClickResult& clickResult)
+    {
+        if (!clickResult.wasClicked)
+            return;
+
+        selectedFile = clickResult.clickedPath;
+        selectedType = clickResult.clickedType;
+
+        if (clickResult.wasDoubleClicked)
+        {
+            fs::path target = clickResult.clickedPath;
+            AssetType targetType = clickResult.clickedType;
+
+            navigateTo(target.parent_path());
+            filter.searchQuery.clear();
+
+            // navigateTo cleared the selection state; re-select the result.
+            selectedFile = target;
+            selectedType = targetType;
+            selectedPaths.insert(StringUtil::wstringToUtf8(target.wstring()));
+        }
     }
 }

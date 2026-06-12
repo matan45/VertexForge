@@ -62,6 +62,32 @@ namespace events::assetdb {
         std::string_view getName() const override { return "GetAssetCount"; }
     };
 
+    // Registered type for a path (absolute or project-relative); nullopt when
+    // the asset is not in the database. Lets the content browser resolve types
+    // without opening files.
+    struct GetAssetTypeQuery : IQuery<std::optional<resource::AssetType>> {
+        std::string path;
+
+        std::string_view getName() const override { return "GetAssetType"; }
+    };
+
+    // Lightweight projection of a database entry for enumeration queries.
+    struct AssetEntryData {
+        asset::AssetGUID guid;
+        std::string path;
+        resource::AssetType type = resource::AssetType::COUNT;
+    };
+
+    struct GetAllAssetsQuery : IQuery<std::vector<AssetEntryData>> {
+        std::string_view getName() const override { return "GetAllAssets"; }
+    };
+
+    struct GetAssetsByTypeQuery : IQuery<std::vector<AssetEntryData>> {
+        resource::AssetType type = resource::AssetType::COUNT;
+
+        std::string_view getName() const override { return "GetAssetsByType"; }
+    };
+
     // ============================================
     // NOTIFICATIONS
     // ============================================

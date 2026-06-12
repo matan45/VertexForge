@@ -115,6 +115,40 @@ namespace services
                 return asset::AssetDatabase::instance().getAssetCount();
             });
 
+        dispatcher.registerQueryHandler<events::assetdb::GetAssetTypeQuery>(
+            [](const events::assetdb::GetAssetTypeQuery& q) -> std::optional<resource::AssetType>
+            {
+                auto& db = asset::AssetDatabase::instance();
+                auto guid = db.getGUID(db.resolveAssetPath(q.path));
+                if (!guid) return std::nullopt;
+                auto entry = db.getEntry(*guid);
+                if (!entry || entry->type == resource::AssetType::COUNT) return std::nullopt;
+                return entry->type;
+            });
+
+        auto toEntryData = [](const std::vector<asset::AssetDatabaseEntry>& entries)
+        {
+            std::vector<events::assetdb::AssetEntryData> result;
+            result.reserve(entries.size());
+            for (const auto& entry : entries)
+            {
+                result.push_back({entry.guid, entry.path, entry.type});
+            }
+            return result;
+        };
+
+        dispatcher.registerQueryHandler<events::assetdb::GetAllAssetsQuery>(
+            [toEntryData](const events::assetdb::GetAllAssetsQuery&)
+            {
+                return toEntryData(asset::AssetDatabase::instance().getAllAssets());
+            });
+
+        dispatcher.registerQueryHandler<events::assetdb::GetAssetsByTypeQuery>(
+            [toEntryData](const events::assetdb::GetAssetsByTypeQuery& q)
+            {
+                return toEntryData(asset::AssetDatabase::instance().getAssetsByType(q.type));
+            });
+
         // Subscribe to notifications
         subscriptions.push_back(
             dispatcher.subscribe<events::project::ProjectLoadedNotification>(
