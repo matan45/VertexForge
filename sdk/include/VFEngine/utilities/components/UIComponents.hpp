@@ -498,6 +498,33 @@ namespace components
         bool showMaskGraphic = false; // render the mask shape visually
     };
 
+    // Data-driven repeated rows: binds an item count to a .vfPrefab item
+    // template. The engine instantiates/pools/destroys item instances under
+    // this entity; a UILayoutGroupComponent on the same entity lays them out.
+    struct UIListViewComponent
+    {
+        // Config (serialized)
+        asset::AssetRef itemTemplateRef; // .vfPrefab
+        int itemCount = 0;
+        bool selectable = true;
+        glm::vec4 selectedTint{0.3f, 0.5f, 0.8f, 0.35f}; // overlay on the selected item
+
+        // Runtime state (NOT serialized). Item instances are engine-managed:
+        // they are skipped by scene/prefab serialization and rebuilt on load.
+        std::vector<entt::entity> itemInstances; // active items [0..itemCount)
+        std::vector<entt::entity> pool;          // deactivated spares
+        int selectedIndex = -1;
+        bool needsReconcile = true;
+    };
+
+    // Marker on every instantiated item root: links the instance back to its
+    // owning list view. NEVER serialized (instances are rebuilt on load).
+    struct UIListItemComponent
+    {
+        entt::entity listView = entt::null;
+        int index = -1;
+    };
+
     struct UIWindowComponent
     {
         // Config (serialized). Window visibility = the entity's active state;

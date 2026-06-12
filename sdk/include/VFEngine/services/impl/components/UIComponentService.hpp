@@ -179,6 +179,19 @@ namespace services {
         bool closeUIWindow(EntityHandle entity);
         bool isUIWindowOpen(EntityHandle entity) const;
 
+        // UI ListView Operations
+        bool addUIListViewComponent(EntityHandle entity);
+        bool removeUIListViewComponent(EntityHandle entity);
+        bool hasUIListViewComponent(EntityHandle entity) const;
+        std::optional<UIListViewData> getUIListViewData(EntityHandle entity) const;
+        bool setUIListViewData(EntityHandle entity, const UIListViewData& data);
+        bool setUIListItemCount(EntityHandle entity, int itemCount);
+        bool setUIListItemTemplate(EntityHandle entity, const std::string& templatePath);
+        EntityHandle getUIListItem(EntityHandle entity, int index) const;
+        bool setUIListSelectedIndex(EntityHandle entity, int selectedIndex);
+        bool reconcileUIListView(entt::entity listEntity);
+        void reconcileAllUIListViews();
+
         // UI Style / Theme Operations
         bool addUIStyleComponent(EntityHandle entity);
         bool removeUIStyleComponent(EntityHandle entity);
@@ -191,7 +204,9 @@ namespace services {
 
     private:
         int applyCanvasTheme(entt::entity canvasEntity);
+        void destroyUIListInstances(entt::entity listEntity);
         events::SubscriptionToken sceneLoadedToken{};
+        events::SubscriptionToken listViewSceneLoadedToken{};
 
         void registerCanvasRectImageHandlers(events::EventDispatcher& dispatcher);
         void registerScrollLayoutHandlers(events::EventDispatcher& dispatcher);
@@ -204,6 +219,7 @@ namespace services {
         void registerThemeHandlers(events::EventDispatcher& dispatcher);
         void registerTooltipHandlers(events::EventDispatcher& dispatcher);
         void registerWindowHandlers(events::EventDispatcher& dispatcher);
+        void registerListViewHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

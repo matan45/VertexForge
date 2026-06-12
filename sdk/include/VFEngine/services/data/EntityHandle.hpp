@@ -75,6 +75,7 @@ namespace services {
         UIStyle,
         UITooltip,
         UIWindow,
+        UIListView,
     };
 
 }

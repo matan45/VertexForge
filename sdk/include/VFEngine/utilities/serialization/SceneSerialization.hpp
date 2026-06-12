@@ -279,6 +279,9 @@ namespace serialization
         static json serializeUIWindow(const components::UIWindowComponent& window);
         static void deserializeUIWindow(const json& j, components::UIWindowComponent& window);
 
+        static json serializeUIListView(const components::UIListViewComponent& listView);
+        static void deserializeUIListView(const json& j, components::UIListViewComponent& listView);
+
         static json serializeUIButton(const components::UIButtonComponent& button);
         static void deserializeUIButton(const json& j, components::UIButtonComponent& button);
 

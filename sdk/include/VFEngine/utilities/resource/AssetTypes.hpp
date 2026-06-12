@@ -29,6 +29,7 @@ namespace resource {
 		World = 18,
 		Scene = 19,
 		Theme = 20,
+		Prefab = 21,
 		COUNT
 	};
 
@@ -55,6 +56,7 @@ namespace resource {
 		case AssetType::World:            return "World";
 		case AssetType::Scene:            return "Scene";
 		case AssetType::Theme:            return "Theme";
+		case AssetType::Prefab:           return "Prefab";
 		default:                          return "Unknown";
 		}
 	}
