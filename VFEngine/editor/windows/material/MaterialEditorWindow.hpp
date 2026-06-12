@@ -1,5 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 #include <material/MaterialTypes.hpp>
 #include <memory>
 #include <string>
@@ -37,6 +38,11 @@ namespace windows
         std::string compileErrorMessage;
 
         float previewPanelWidth = 250.0f;
+        float graphHeightFraction = 0.7f;
+
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
 
     public:
         explicit MaterialEditorWindow(const std::string& materialPath);

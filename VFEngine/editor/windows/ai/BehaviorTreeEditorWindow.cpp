@@ -93,7 +93,12 @@ namespace editor::windows
             needsInit = false;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(1200, 700), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = ::editor::preview::initialWindowSize("BehaviorTreeEditor", ImVec2(1200, 700));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
 
         std::string title = windowTitle;
         if (isDirty) title = "* " + title;
@@ -107,14 +112,21 @@ namespace editor::windows
         drawToolbar();
         updateDebugState();
 
-        float rightPanelWidth = 300.0f;
+        static float rightPanelWidth = 300.0f;
+        const float splitterThickness = 5.0f;
         ImVec2 contentRegion = ImGui::GetContentRegionAvail();
+        rightPanelWidth = std::clamp(rightPanelWidth, 220.0f,
+                                     std::max(220.0f, contentRegion.x - 200.0f - splitterThickness));
+        float graphWidth = contentRegion.x - rightPanelWidth - splitterThickness;
 
-        ImGui::BeginChild("BTGraphPanel", ImVec2(contentRegion.x - rightPanelWidth - 4.0f, 0), ImGuiChildFlags_None);
+        ImGui::BeginChild("BTGraphPanel", ImVec2(graphWidth, 0), ImGuiChildFlags_None);
         drawGraphPanel();
         ImGui::EndChild();
 
-        ImGui::SameLine();
+        ImGui::SameLine(0.0f, 0.0f);
+        ::editor::preview::splitterV("##btSplit", splitterThickness, &graphWidth,
+                                     &rightPanelWidth, 200.0f, 220.0f, contentRegion.y);
+        ImGui::SameLine(0.0f, 0.0f);
 
         ImGui::BeginChild("BTRightPanel", ImVec2(rightPanelWidth, 0), ImGuiChildFlags_None);
 
@@ -134,6 +146,12 @@ namespace editor::windows
         ImGui::EndChild();
 
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            ::editor::preview::rememberWindowSize("BehaviorTreeEditor", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
     }
 
     void BehaviorTreeEditorWindow::drawToolbar()
@@ -163,6 +181,8 @@ namespace editor::windows
             }
 
             drawDebugMenu();
+
+            maximizer.drawButton();
 
             ImGui::EndMenuBar();
         }

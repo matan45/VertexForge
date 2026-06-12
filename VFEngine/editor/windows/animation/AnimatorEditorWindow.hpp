@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imguiHandler/ImguiWindow.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 #include "AnimatorNodeGraph.hpp"
 #include "AnimatorPropertiesPanel.hpp"
 #include "AnimatorLayerPanel.hpp"
@@ -24,6 +25,11 @@ namespace windows
         bool isOpen = true;
         bool needsInit = true;
         bool isDirty = false;
+
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
+
         bool needsPositionInit = false;
         bool needsNavigateToContent = false;
         int pendingZoomSteps = 0;

@@ -67,16 +67,27 @@ namespace windows
             updatePlayback(deltaTime);
         }
 
-        ImGui::SetNextWindowSize(ImVec2(1200, 750), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = editor::preview::initialWindowSize("AnimationPreview", ImVec2(1200, 750));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
 
         if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
         {
             if (isOpen)
             {
-                float leftPanelWidth = 220.0f;
-                float rightPanelWidth = 300.0f;
+                maximizer.drawButton();
+
+                static float leftPanelWidth = 220.0f;
+                static float rightPanelWidth = 300.0f;
+                const float splitterThickness = 5.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
-                float spacing = ImGui::GetStyle().ItemSpacing.x;
+                leftPanelWidth = std::clamp(leftPanelWidth, 160.0f,
+                                            std::max(160.0f, contentSize.x * 0.4f));
+                rightPanelWidth = std::clamp(rightPanelWidth, 220.0f,
+                                             std::max(220.0f, contentSize.x * 0.4f));
 
                 ImGui::BeginChild("InfoPanel", ImVec2(leftPanelWidth, contentSize.y), true);
                 infoPanel.draw(panelState, getPreviewInstanceId());
@@ -86,9 +97,13 @@ namespace windows
                 ImGui::Checkbox("IK Chain Panel", &showIKChainPanel);
                 ImGui::EndChild();
 
-                ImGui::SameLine();
+                float middleWidth = contentSize.x - leftPanelWidth - rightPanelWidth - splitterThickness * 2.0f;
 
-                float middleWidth = contentSize.x - leftPanelWidth - rightPanelWidth - spacing * 2;
+                ImGui::SameLine(0.0f, 0.0f);
+                editor::preview::splitterV("##animSplitLeft", splitterThickness, &leftPanelWidth,
+                                           &middleWidth, 160.0f, 300.0f, contentSize.y);
+                ImGui::SameLine(0.0f, 0.0f);
+
                 ImGui::BeginChild("MiddlePanel", ImVec2(middleWidth, contentSize.y), false);
 
                 if (loadingInProgress.load())
@@ -97,7 +112,9 @@ namespace windows
                 }
                 else if (panelState.animationLoaded)
                 {
-                    float previewHeight = contentSize.y * 0.6f;
+                    static float previewHeightFraction = 0.6f;
+                    previewHeightFraction = std::clamp(previewHeightFraction, 0.25f, 0.85f);
+                    float previewHeight = contentSize.y * previewHeightFraction;
                     ImGui::BeginChild("3DViewportPanel", ImVec2(middleWidth - 5, previewHeight), true,
                                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
                     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
@@ -121,6 +138,15 @@ namespace windows
                     updateBoneTransformsFromService();
                     ImGui::EndChild();
 
+                    float timelineHeight = ImGui::GetContentRegionAvail().y - splitterThickness
+                        - ImGui::GetStyle().ItemSpacing.y * 2.0f;
+                    if (editor::preview::splitterH("##animSplitTimeline", splitterThickness,
+                                                   &previewHeight, &timelineHeight,
+                                                   150.0f, 100.0f, middleWidth - 5))
+                    {
+                        previewHeightFraction = previewHeight / std::max(contentSize.y, 1.0f);
+                    }
+
                     ImGui::BeginChild("TimelinePanel", ImVec2(middleWidth - 5, 0), true);
                     timelinePanel.draw({currentFrame, selectedChannel, sequencerExpanded, firstFrame,
                                        &animationData, getPreviewInstanceId(), &animationEvents,
@@ -130,7 +156,10 @@ namespace windows
 
                 ImGui::EndChild();
 
-                ImGui::SameLine();
+                ImGui::SameLine(0.0f, 0.0f);
+                editor::preview::splitterV("##animSplitRight", splitterThickness, &middleWidth,
+                                           &rightPanelWidth, 300.0f, 220.0f, contentSize.y);
+                ImGui::SameLine(0.0f, 0.0f);
 
                 ImGui::BeginChild("RightPanel", ImVec2(rightPanelWidth, contentSize.y), false);
 
@@ -202,6 +231,12 @@ namespace windows
             }
         }
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            editor::preview::rememberWindowSize("AnimationPreview", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
     }
 
     void AnimationPreviewWindow::initPreviewRenderer()

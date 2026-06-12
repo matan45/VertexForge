@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <map>
 #include <cstdint>
 #include <glm/glm.hpp>
 
@@ -9,7 +10,7 @@ namespace config
     struct EditorSettingsSchemaVersion
     {
         static constexpr uint32_t major = 1;
-        static constexpr uint32_t minor = 1;
+        static constexpr uint32_t minor = 2;
     };
 
     struct AppearanceSettings
@@ -47,12 +48,20 @@ namespace config
         std::vector<std::string> alwaysIncludePatterns;
     };
 
+    // Last-used size per preview window type ("MeshPreview", "AudioPreview", ...),
+    // used as the default for assets that have never been opened before.
+    struct PreviewWindowSettings
+    {
+        std::map<std::string, glm::vec2> lastSizes;
+    };
+
     struct EditorPreferences
     {
         AppearanceSettings appearance;
         DebugSettings debug;
         WindowLayoutSettings windowLayout;
         ExportSettings exportSettings;
+        PreviewWindowSettings previewWindows;
 
         static EditorPreferences createDefault()
         {

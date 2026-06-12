@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imguiHandler/ImguiWindow.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 #include "AnimationInfoPanel.hpp"
 #include "AnimationViewport.hpp"
 #include "AnimationTimelinePanel.hpp"
@@ -76,6 +77,11 @@ namespace windows
 
         bool isOpen = true;
         bool needsInit = true;
+
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
+
         bool showBoneVisualization = true;
 
         animation::AnimationInfoPanel::State panelState;
