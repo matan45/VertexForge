@@ -110,6 +110,25 @@ namespace core::api
                 return value::Value();
             }});
 
+        // padding(left, right, top, bottom) in pixels. The Text-mode bubble hugs
+        // its text, so left/right padding is the lever for a wider bubble.
+        interpreter->registerNativeFunction("_native_ui_setTooltipPadding",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 5) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setTooltipPadding"));
+
+                auto data = getTooltipData(dispatcher, handle);
+                if (!data.has_value()) return value::Value();
+                data->padding = glm::vec4(
+                    extractFloat(args[1], "_native_ui_setTooltipPadding"),
+                    extractFloat(args[2], "_native_ui_setTooltipPadding"),
+                    extractFloat(args[3], "_native_ui_setTooltipPadding"),
+                    extractFloat(args[4], "_native_ui_setTooltipPadding"));
+                setTooltipData(dispatcher, handle, *data);
+                return value::Value();
+            }});
+
         // ===== Window =====
 
         interpreter->registerNativeFunction("_native_ui_openWindow",

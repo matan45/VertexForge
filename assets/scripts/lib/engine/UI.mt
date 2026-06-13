@@ -591,6 +591,12 @@ public class UI {
         _native_ui_setTooltipFontSize(entityId, size);
     }
 
+    // Set the tooltip padding in pixels (left, right, top, bottom). The Text-mode
+    // bubble hugs its text, so larger left/right padding makes the bubble wider.
+    public static function setTooltipPadding(int entityId, float left, float right, float top, float bottom): void {
+        _native_ui_setTooltipPadding(entityId, left, right, top, bottom);
+    }
+
     // ============================================
     // Window
     // ============================================
