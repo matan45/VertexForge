@@ -304,7 +304,7 @@ namespace services
     }
 
     void TerrainService::restoreCaveState(uint64_t entityId,
-                                          const std::vector<events::caveBrush::CaveTileState>& tiles)
+                                          const std::vector<::events::caveBrush::CaveTileState>& tiles)
     {
         auto gridIt = terrainGrids.find(entityId);
         if (gridIt == terrainGrids.end())

@@ -753,8 +753,8 @@ namespace services
             });
 
         // Undo/redo restore of a cave stroke (SDF + hole mask) for a set of tiles.
-        dispatcher.registerCommandHandler<events::caveBrush::RestoreCaveStateCommand>(
-            [this](const events::caveBrush::RestoreCaveStateCommand& cmd)
+        dispatcher.registerCommandHandler<::events::caveBrush::RestoreCaveStateCommand>(
+            [this](const ::events::caveBrush::RestoreCaveStateCommand& cmd)
             {
                 restoreCaveState(cmd.entityId, cmd.tiles);
             });

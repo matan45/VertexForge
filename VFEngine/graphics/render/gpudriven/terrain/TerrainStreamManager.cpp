@@ -203,7 +203,14 @@ namespace render::gpudriven
                     nc.plusXZ = it->second->caveData.get();
                 terrain::CaveMeshGenerator::generate(*tile, nc);
             }
-            if (!tile->hasCaveGeometry() || tile->caveLOD.isEmpty()) { tile->caveGPUDirty = false; continue; }
+            if (!tile->hasCaveGeometry() || tile->caveLOD.isEmpty())
+            {
+                // Cave was filled/undone away — free its GPU allocation so it stops
+                // rendering (otherwise the stale mesh lingers).
+                adapter.releaseCaveMesh(*tile);
+                tile->caveGPUDirty = false;
+                continue;
+            }
             if (adapter.uploadCaveMesh(*tile))
                 tile->caveGPUDirty = false;
         }

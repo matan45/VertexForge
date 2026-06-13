@@ -121,6 +121,9 @@ namespace render::gpudriven
 
         bool uploadWeightMap(const terrain::TerrainTile& tile);
         bool uploadCaveMesh(const terrain::TerrainTile& tile);
+        // Frees a tile's GPU cave allocation (when a cave is filled/undone away). The
+        // next buildGPUTileData zeroes caveMeshletData so the cave stops rendering.
+        bool releaseCaveMesh(const terrain::TerrainTile& tile);
 
         // Keeps other LODs intact
         void removeTileLOD(const TerrainTileKey& key, uint32_t lodLevel);

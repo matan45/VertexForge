@@ -482,6 +482,25 @@ namespace render::gpudriven
         return true;
     }
 
+    bool TerrainGPUAdapter::releaseCaveMesh(const terrain::TerrainTile& tile)
+    {
+        TerrainTileKey key{tile.coord.x, tile.coord.z};
+
+        auto it = allocations_.find(key);
+        if (it == allocations_.end() || !it->second.caveAlloc.isAllocated)
+            return false; // nothing allocated -> nothing to free
+
+        std::string caveKey = "terrain_" + std::to_string(key.coordX) + "_" + std::to_string(key.coordZ) + "_cave";
+        terrainBuffer_.freeTileLOD(caveKey, 0);
+
+        it->second.caveAlloc = TerrainLODAllocation{}; // isAllocated = false, offsets cleared
+
+        // buildGPUTileData now writes caveMeshletData = 0 for this tile, so the task
+        // shader emits no cave meshlets and the cave stops rendering.
+        gpuTileDataDirty_ = true;
+        return true;
+    }
+
     bool TerrainGPUAdapter::uploadCaveMeshlets(const std::string& caveKey,
                                                 const terrain::TileLODData& caveLOD,
                                                 const TerrainLODGeometry& geomLod)

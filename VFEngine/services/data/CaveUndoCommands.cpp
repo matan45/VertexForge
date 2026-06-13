@@ -26,12 +26,12 @@ namespace services
 
     void CaveStrokeUndoCommand::applyAll(bool useAfter)
     {
-        events::caveBrush::RestoreCaveStateCommand cmd;
+        ::events::caveBrush::RestoreCaveStateCommand cmd;
         cmd.entityId = entityId;
         cmd.tiles.reserve(tiles.size());
         for (const auto& t : tiles)
         {
-            events::caveBrush::CaveTileState state;
+            ::events::caveBrush::CaveTileState state;
             state.tileX = t.tileX;
             state.tileZ = t.tileZ;
             state.sdf = useAfter ? t.sdfAfter : t.sdfBefore;
