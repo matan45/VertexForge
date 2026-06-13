@@ -667,14 +667,13 @@ namespace windows
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
             if (hitResult.hit)
             {
-                // Offset brush center INTO the mountain (opposite of surface normal)
-                // so the carve sphere is fully inside the solid, not half in air
-                auto brushParams = dispatcher.query(events::caveBrush::GetCaveBrushParamsQuery{});
-                float offset = brushParams.radius * 0.5f;
-                glm::vec3 carveCenter = hitResult.position - hitResult.normal * offset;
-
+                // Carve at the cursor hit so the carve matches the brush-overlay ghost
+                // (drawn at the hit position). The carve only affects originally-solid
+                // voxels (CaveBrushApplicator's checkOriginalSolid guard), so a surface
+                // click scoops inward without wasting the brush on air — no inward
+                // surface-normal offset hack needed.
                 events::caveBrush::ApplyCaveBrushCommand applyCmd;
-                applyCmd.worldPosition = carveCenter;
+                applyCmd.worldPosition = hitResult.position;
                 applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
                 applyCmd.invert = ImGui::GetIO().KeyShift;
                 applyCmd.isFirstApplication = !caveDragging;
