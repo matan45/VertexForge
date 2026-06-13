@@ -580,6 +580,17 @@ public class UI {
         _native_ui_setTooltipDelay(entityId, seconds);
     }
 
+    // Set the tooltip font (Text mode). A valid font is required for the bubble
+    // text to render.
+    public static function setTooltipFont(int entityId, string fontPath): void {
+        _native_ui_setTooltipFont(entityId, fontPath);
+    }
+
+    // Set the tooltip font size (points, Text mode)
+    public static function setTooltipFontSize(int entityId, float size): void {
+        _native_ui_setTooltipFontSize(entityId, size);
+    }
+
     // ============================================
     // Window
     // ============================================

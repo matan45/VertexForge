@@ -5,6 +5,7 @@
 
 #include "UIWidgetExtrasAPI.hpp"
 #include "NativeHelpers.hpp"
+#include "asset/AssetRef.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/ui/UITooltipEvents.hpp"
 #include "../../../services/events/ui/UIWindowEvents.hpp"
@@ -79,6 +80,32 @@ namespace core::api
                 auto data = getTooltipData(dispatcher, handle);
                 if (!data.has_value()) return value::Value();
                 data->showDelay = extractFloat(args[1], "_native_ui_setTooltipDelay");
+                setTooltipData(dispatcher, handle, *data);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setTooltipFont",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setTooltipFont"));
+
+                auto data = getTooltipData(dispatcher, handle);
+                if (!data.has_value()) return value::Value();
+                data->fontRef = asset::AssetRef::fromPath(extractString(args[1], "_native_ui_setTooltipFont"));
+                setTooltipData(dispatcher, handle, *data);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setTooltipFontSize",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setTooltipFontSize"));
+
+                auto data = getTooltipData(dispatcher, handle);
+                if (!data.has_value()) return value::Value();
+                data->fontSize = extractFloat(args[1], "_native_ui_setTooltipFontSize");
                 setTooltipData(dispatcher, handle, *data);
                 return value::Value();
             }});
