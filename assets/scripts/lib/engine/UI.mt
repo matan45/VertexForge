@@ -597,6 +597,11 @@ public class UI {
         _native_ui_setTooltipPadding(entityId, left, right, top, bottom);
     }
 
+    // Set extra pixels between glyphs of the tooltip text (Text mode)
+    public static function setTooltipLetterSpacing(int entityId, float spacing): void {
+        _native_ui_setTooltipLetterSpacing(entityId, spacing);
+    }
+
     // ============================================
     // Window
     // ============================================

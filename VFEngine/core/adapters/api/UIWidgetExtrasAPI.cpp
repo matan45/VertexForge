@@ -110,6 +110,19 @@ namespace core::api
                 return value::Value();
             }});
 
+        interpreter->registerNativeFunction("_native_ui_setTooltipLetterSpacing",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setTooltipLetterSpacing"));
+
+                auto data = getTooltipData(dispatcher, handle);
+                if (!data.has_value()) return value::Value();
+                data->letterSpacing = extractFloat(args[1], "_native_ui_setTooltipLetterSpacing");
+                setTooltipData(dispatcher, handle, *data);
+                return value::Value();
+            }});
+
         // padding(left, right, top, bottom) in pixels. The Text-mode bubble hugs
         // its text, so left/right padding is the lever for a wider bubble.
         interpreter->registerNativeFunction("_native_ui_setTooltipPadding",

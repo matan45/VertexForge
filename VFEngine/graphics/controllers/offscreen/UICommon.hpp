@@ -70,6 +70,8 @@ namespace controllers::offscreen::ui_common
 
         float maxContentW = std::max(avgCharWidth, tip.maxWidth * scale - padL - padR);
         float textW = static_cast<float>(tip.text.size()) * avgCharWidth;
+        if (tip.text.size() > 1)
+            textW += static_cast<float>(tip.text.size() - 1) * tip.letterSpacing * scale;
         float contentW = std::min(std::max(textW, avgCharWidth), maxContentW);
         int lineCount = std::max(1, static_cast<int>(std::ceil(textW / maxContentW)));
 
