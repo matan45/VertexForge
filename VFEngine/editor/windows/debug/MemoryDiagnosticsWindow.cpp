@@ -143,10 +143,9 @@ namespace windows
         if (ImGui::SmallButton("Reset Peaks"))
         {
             uint64_t dlUsed = Stats::deviceLocalUsedBytes.load(std::memory_order_relaxed);
-            uint64_t ded = Stats::dedicatedAllocatedBytes.load(std::memory_order_relaxed);
             uint64_t hvUsed = Stats::hostVisibleUsedBytes.load(std::memory_order_relaxed);
             uint64_t managed = Stats::managedAllocatedBytes.load(std::memory_order_relaxed);
-            Stats::resetPeaks(dlUsed + ded, hvUsed, managed);
+            Stats::resetPeaks(dlUsed, hvUsed, managed);
         }
 
         if (ImGui::BeginTable("##GpuBlocks", 6,
@@ -223,17 +222,24 @@ namespace windows
             for (float v : r.values) m = std::max(m, v);
             return m;
         };
+        auto last = [](const SampleRing& r) {
+            return r.values[(r.head - 1 + SAMPLE_COUNT) % SAMPLE_COUNT];
+        };
 
-        float dlMax = std::max(1.0f, maxOf(deviceUsedMB) * 1.1f);
-        ImGui::PlotLines("Device Used (MB)", deviceUsedMB.values, SAMPLE_COUNT, deviceUsedMB.head,
-            nullptr, 0.0f, dlMax, ImVec2(-1, 60));
+        // Label above + hidden PlotLines label (its side label would otherwise be
+        // clipped off the right edge of a full-width plot); current value as overlay.
+        auto plot = [&](const char* id, const char* title, const SampleRing& ring,
+                        float scaleMax, const char* fmt) {
+            char overlay[48];
+            std::snprintf(overlay, sizeof(overlay), fmt, last(ring));
+            ImGui::TextUnformatted(title);
+            ImGui::PlotLines(id, ring.values, SAMPLE_COUNT, ring.head,
+                overlay, 0.0f, scaleMax, ImVec2(-1, 60));
+        };
 
-        float hvMax = std::max(1.0f, maxOf(hostUsedMB) * 1.1f);
-        ImGui::PlotLines("Host Used (MB)", hostUsedMB.values, SAMPLE_COUNT, hostUsedMB.head,
-            nullptr, 0.0f, hvMax, ImVec2(-1, 60));
-
-        ImGui::PlotLines("Device Frag (%)", deviceFragPct.values, SAMPLE_COUNT, deviceFragPct.head,
-            nullptr, 0.0f, 100.0f, ImVec2(-1, 60));
+        plot("##devUsed", "Device Used (MB)", deviceUsedMB, std::max(1.0f, maxOf(deviceUsedMB) * 1.1f), "%.1f MB");
+        plot("##hostUsed", "Host Used (MB)", hostUsedMB, std::max(1.0f, maxOf(hostUsedMB) * 1.1f), "%.1f MB");
+        plot("##devFrag", "Device Frag (%)", deviceFragPct, 100.0f, "%.1f %%");
     }
 
     void MemoryDiagnosticsWindow::drawFragmentationMapPanel()

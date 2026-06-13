@@ -335,7 +335,9 @@ namespace core
 			uint64_t prev = peak.load(std::memory_order_relaxed);
 			while (current > prev && !peak.compare_exchange_weak(prev, current, std::memory_order_relaxed)) {}
 		};
-		bumpPeak(memory::GpuAllocationStats::deviceLocalPeakUsedBytes, dlUsed + dedBytes);
+		// Per-row peaks mirror the row's Used column (block sub-allocation only);
+		// dedicated bytes have their own row, and the grand total is managedPeakBytes.
+		bumpPeak(memory::GpuAllocationStats::deviceLocalPeakUsedBytes, dlUsed);
 		bumpPeak(memory::GpuAllocationStats::hostVisiblePeakUsedBytes, hvUsed);
 		bumpPeak(memory::GpuAllocationStats::managedPeakBytes,
 			memory::GpuAllocationStats::managedAllocatedBytes.load(std::memory_order_relaxed));
