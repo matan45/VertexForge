@@ -76,6 +76,8 @@ namespace services {
         UITooltip,
         UIWindow,
         UIListView,
+        Terrain,
+        TerrainTile,
     };
 
 }

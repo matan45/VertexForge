@@ -48,8 +48,8 @@ namespace windows
         visibleOrder.clear();
         lastVisibleOrder.clear();
         rootSeeded = false;
-        renamingHandle = 0;
-        rangeAnchorHandle = 0;
+        renamingHandle = services::EntityHandle::INVALID_ID;
+        rangeAnchorHandle = services::EntityHandle::INVALID_ID;
     }
 
     const char* SceneHierarchyPanel::getEntityIcon(const services::EntityData& data) const
@@ -250,7 +250,7 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         const ImGuiIO& io = ImGui::GetIO();
 
-        if (io.KeyShift && rangeAnchorHandle != 0)
+        if (io.KeyShift && rangeAnchorHandle != services::EntityHandle::INVALID_ID)
         {
             // Range over last frame's visible order, anchor..clicked inclusive
             int anchorIndex = -1;
@@ -325,6 +325,17 @@ namespace windows
             return;
         }
 
+        // Structural / engine-generated entities aren't user-named — block inline
+        // rename on them: the scene Root (no parent), and the Terrain node plus its
+        // auto-generated tile sub-entities.
+        using CT = services::ComponentTypeId;
+        if (!entityDataOpt->parent.has_value()
+            || entityDataOpt->hasComponent(CT::Terrain)
+            || entityDataOpt->hasComponent(CT::TerrainTile))
+        {
+            return;
+        }
+
         renamingHandle = handle.id;
         renameFocusPending = true;
         snprintf(renameBuffer, sizeof(renameBuffer), "%s", entityDataOpt->name.c_str());
@@ -345,7 +356,7 @@ namespace windows
 
         if (canceled)
         {
-            renamingHandle = 0;
+            renamingHandle = services::EntityHandle::INVALID_ID;
         }
         else if (committed || ImGui::IsItemDeactivated())
         {
@@ -356,7 +367,7 @@ namespace windows
                 cmd.newName = renameBuffer;
                 events::EventDispatcher::instance().execute(cmd);
             }
-            renamingHandle = 0;
+            renamingHandle = services::EntityHandle::INVALID_ID;
         }
     }
 
@@ -819,7 +830,7 @@ namespace windows
     void SceneHierarchyPanel::handleShortcuts()
     {
         if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
-            renamingHandle != 0 || ImGui::IsAnyItemActive())
+            renamingHandle != services::EntityHandle::INVALID_ID || ImGui::IsAnyItemActive())
         {
             return;
         }
