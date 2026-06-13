@@ -323,7 +323,17 @@ namespace render::gpudriven
             }
         }
         batchManager->insertBarriersAfterCompute(cmd);
-        recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
+
+        // VK-1380: the shadow pass uses the process-wide shared ShadowSystem command pool. In an
+        // RTT pass (e.g. the minimap render-to-texture) we must NOT re-run it. The main viewport
+        // already reset, recorded and submitted this frame's VSM secondaries; re-running here
+        // records into a *separate* RTT command buffer and resets those same secondaries while the
+        // main submission is still pending -> "vkResetCommandBuffer is in use" /
+        // "secondaries were destroyed or rerecorded" -> DEVICE_LOST. RTT scene draws sample the VSM
+        // the main pass already produced (a top-down minimap does not need its own shadow map).
+        const bool inRTTContext = GPUDrivenRenderer::getThreadLocalCullDescriptorSet() != nullptr;
+        if (!inRTTContext)
+            recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
 
         if (vegetation.grassInitialized && vegetation.grassRenderingEnabled)
             dispatchGrassCompute(cmd, vegetation.cachedVisibleTiles);
