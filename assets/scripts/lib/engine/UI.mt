@@ -86,6 +86,27 @@ public class UI {
         return _native_ui_getRectPixels(entityId);
     }
 
+    // Authored UIRect fields in CANVAS UNITS (anchors normalized [0,1], plus pivot,
+    // sizeDelta and anchoredPosition in canvas units). Unlike getRectPixels this is
+    // viewport/extent-independent: two elements expressed in the same basis stay
+    // aligned under any viewport (e.g. the editor play panel vs the framebuffer).
+    // Returns [valid, anchorMinX, anchorMinY, anchorMaxX, anchorMaxY, pivotX, pivotY,
+    // sizeDeltaX, sizeDeltaY, anchoredX, anchoredY]; valid <= 0.5 means no UIRect.
+    public static function getRectData(int entityId): float[] {
+        return _native_ui_getRectData(entityId);
+    }
+
+    // Set the authored UIRect fields in canvas units (anchors normalized [0,1]).
+    // Preserves the element's existing blocksRaycast flag. Returns true on success.
+    public static function setRectData(int entityId,
+        float anchorMinX, float anchorMinY, float anchorMaxX, float anchorMaxY,
+        float pivotX, float pivotY, float sizeDeltaX, float sizeDeltaY,
+        float anchoredX, float anchoredY): bool {
+        return _native_ui_setRectData(entityId,
+            anchorMinX, anchorMinY, anchorMaxX, anchorMaxY,
+            pivotX, pivotY, sizeDeltaX, sizeDeltaY, anchoredX, anchoredY);
+    }
+
     // ============================================
     // Button Control
     // ============================================
