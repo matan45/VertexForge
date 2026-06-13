@@ -35,9 +35,12 @@ namespace memory {
 			return {};
 		}
 
-		FreeBlock& block = freeBlocks[bestIndex];
-		uint64_t alignedOffset = alignUp(block.offset, alignment);
-		uint64_t alignmentWaste = alignedOffset - block.offset;
+		// Capture by value: inserting into freeBlocks below may reallocate and
+		// invalidate a reference into the vector.
+		const uint64_t blockOffset = freeBlocks[bestIndex].offset;
+		const uint64_t blockSize = freeBlocks[bestIndex].size;
+		uint64_t alignedOffset = alignUp(blockOffset, alignment);
+		uint64_t alignmentWaste = alignedOffset - blockOffset;
 		uint64_t totalRequired = alignmentWaste + size;
 
 		AllocationHandle handle;
@@ -45,21 +48,22 @@ namespace memory {
 		handle.size = size;
 		handle.allocatorId = allocatorId;
 
-		// If alignment created a gap at the start, keep it as a free block
+		// If alignment created a gap at the start, keep it as a free block. The
+		// gap keeps the same offset (sorted order preserved) and the trailing
+		// remainder lands immediately after it (index bestIndex + 1).
 		if (alignmentWaste > 0) {
-			uint64_t remainingAfter = block.size - totalRequired;
-			// Shrink original block to the alignment gap
-			block.size = alignmentWaste;
-
-			// If there's space after the allocation, add a new free block
+			uint64_t remainingAfter = blockSize - totalRequired;
+			freeBlocks[bestIndex].size = alignmentWaste;
 			if (remainingAfter > 0) {
-				freeBlocks.push_back({alignedOffset + size, remainingAfter});
+				freeBlocks.insert(freeBlocks.begin() + bestIndex + 1,
+					{alignedOffset + size, remainingAfter});
 			}
 		} else {
-			uint64_t remaining = block.size - size;
+			uint64_t remaining = blockSize - size;
 			if (remaining > 0) {
-				block.offset += size;
-				block.size = remaining;
+				// Shrink in place; new offset stays below the next block's offset.
+				freeBlocks[bestIndex].offset += size;
+				freeBlocks[bestIndex].size = remaining;
 			} else {
 				freeBlocks.erase(freeBlocks.begin() + bestIndex);
 			}
@@ -81,11 +85,9 @@ namespace memory {
 
 		std::lock_guard<std::mutex> lock(mtx);
 
-		freeBlocks.push_back({handle.offset, handle.size});
+		insertFreeBlock(handle.offset, handle.size);
 		totalAllocated -= handle.size;
 		freeCount++;
-
-		coalesce();
 	}
 
 	void FreeListHeapAllocator::reset() {
@@ -135,30 +137,58 @@ namespace memory {
 		return buffer + handle.offset;
 	}
 
-	void FreeListHeapAllocator::coalesce() {
-		if (freeBlocks.size() < 2) {
-			return;
+	uint64_t FreeListHeapAllocator::getFreeBytes() const {
+		std::lock_guard<std::mutex> lock(mtx);
+		return capacity - totalAllocated;
+	}
+
+	std::vector<FreeSpan> FreeListHeapAllocator::getFreeSpans() const {
+		std::lock_guard<std::mutex> lock(mtx);
+		std::vector<FreeSpan> spans;
+		spans.reserve(freeBlocks.size());
+		for (const auto& block : freeBlocks) {
+			spans.push_back({block.offset, block.size});
 		}
+		return spans;
+	}
 
-		std::sort(freeBlocks.begin(), freeBlocks.end(),
-			[](const FreeBlock& a, const FreeBlock& b) { return a.offset < b.offset; });
+	void FreeListHeapAllocator::insertFreeBlock(uint64_t offset, uint64_t size) {
+		// freeBlocks is kept sorted by offset and fully coalesced, so the freed
+		// region can only be adjacent to its immediate neighbours. Find the first
+		// block that starts at/after the freed offset (binary search).
+		size_t pos = static_cast<size_t>(
+			std::lower_bound(freeBlocks.begin(), freeBlocks.end(), offset,
+				[](const FreeBlock& b, uint64_t off) { return b.offset < off; })
+			- freeBlocks.begin());
 
-		std::vector<FreeBlock> merged;
-		merged.reserve(freeBlocks.size());
-		merged.push_back(freeBlocks[0]);
-
-		for (size_t i = 1; i < freeBlocks.size(); ++i) {
-			FreeBlock& last = merged.back();
-			const FreeBlock& current = freeBlocks[i];
-
-			if (last.offset + last.size == current.offset) {
-				last.size += current.size;
-			} else {
-				merged.push_back(current);
+		// Merge with the left neighbour if it is address-contiguous.
+		bool mergedLeft = false;
+		if (pos > 0) {
+			FreeBlock& left = freeBlocks[pos - 1];
+			if (left.offset + left.size == offset) {
+				left.size += size;
+				offset = left.offset;
+				size = left.size;
+				mergedLeft = true;
 			}
 		}
 
-		freeBlocks = std::move(merged);
+		// Merge with the right neighbour if the (possibly left-merged) region is
+		// address-contiguous with it.
+		if (pos < freeBlocks.size() && offset + size == freeBlocks[pos].offset) {
+			if (mergedLeft) {
+				freeBlocks[pos - 1].size += freeBlocks[pos].size;
+				freeBlocks.erase(freeBlocks.begin() + pos);
+			} else {
+				freeBlocks[pos].offset = offset;
+				freeBlocks[pos].size = size + freeBlocks[pos].size;
+			}
+			return;
+		}
+
+		if (!mergedLeft) {
+			freeBlocks.insert(freeBlocks.begin() + pos, {offset, size});
+		}
 	}
 
 	size_t FreeListHeapAllocator::findBestFit(uint64_t requiredSize, uint64_t alignment) const {

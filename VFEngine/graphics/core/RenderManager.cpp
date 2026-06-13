@@ -172,6 +172,13 @@ namespace core {
 			device.getMemoryManager().reclaimEmptyBlocks();
 		}
 
+		// Refresh the memory-diagnostics snapshot + real VRAM budget a few times a
+		// second so the editor window stays live without touching the alloc hot path.
+		if ((globalFrameCounter % 16) == 0)
+		{
+			device.getMemoryManager().refreshDiagnostics();
+		}
+
 		// Advance to next frame
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}

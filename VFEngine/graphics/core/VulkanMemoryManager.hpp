@@ -32,7 +32,7 @@ namespace core
 	{
 	public:
 		VulkanMemoryBlock(const vk::Device& device, uint32_t memoryTypeIndex,
-			vk::DeviceSize blockSize, bool hostVisible);
+			vk::DeviceSize blockSize, bool hostVisible, bool deviceAddress = false);
 		~VulkanMemoryBlock();
 
 		VulkanMemoryBlock(const VulkanMemoryBlock&) = delete;
@@ -46,9 +46,13 @@ namespace core
 		vk::DeviceSize getBlockSize() const { return blockSize; }
 		uint32_t getMemoryTypeIndex() const { return memoryTypeIndex; }
 		bool isHostVisible() const { return hostVisible; }
+		bool isDeviceAddress() const { return deviceAddress; }
 		void* getBaseMappedPtr() const { return baseMappedPtr; }
 
 		memory::AllocatorStats getStats() const { return allocator.getStats(); }
+		// O(1) hint: skip this block in the search loop if it can't possibly fit.
+		vk::DeviceSize freeBytes() const { return allocator.getFreeBytes(); }
+		std::vector<memory::FreeSpan> getFreeSpans() const { return allocator.getFreeSpans(); }
 
 	private:
 		const vk::Device& device;
@@ -56,6 +60,7 @@ namespace core
 		vk::DeviceSize blockSize;
 		uint32_t memoryTypeIndex;
 		bool hostVisible;
+		bool deviceAddress;
 		void* baseMappedPtr = nullptr;
 		bool hasBuffers = false;
 		bool hasImages = false;
@@ -82,6 +87,12 @@ namespace core
 		// Call at a safe point when no GPU work is in flight (e.g., after device idle).
 		void reclaimEmptyBlocks();
 
+		// Refresh the heavier diagnostics consumed by the editor memory window:
+		// queries the real VRAM budget (throttled) and assembles the per-block
+		// occupancy snapshot. Call periodically (a few times per second), not in
+		// the allocation hot path.
+		void refreshDiagnostics() const;
+
 		struct MemoryTypeStats
 		{
 			uint32_t memoryTypeIndex = 0;
@@ -101,22 +112,33 @@ namespace core
 
 		struct MemoryTypeData
 		{
+			// Plain sub-allocation blocks and device-address-capable blocks are kept
+			// separate so a device-address request only draws from memory that was
+			// allocated with VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT.
 			std::vector<std::unique_ptr<VulkanMemoryBlock>> blocks;
+			std::vector<std::unique_ptr<VulkanMemoryBlock>> deviceAddressBlocks;
 		};
 
 		std::unordered_map<uint32_t, MemoryTypeData> memoryTypes;
 		mutable std::mutex managerMutex;
 		vk::DeviceSize bufferImageGranularity = 1;
 
-		// Dedicated allocations (oversized, device-address)
+		// Dedicated allocations (oversized) — keyed by their VkDeviceMemory handle
+		// for O(1) free.
 		struct DedicatedAllocation
 		{
 			vk::DeviceMemory memory;
 			vk::DeviceSize size;
 			void* mappedPtr = nullptr;
 			bool hostVisible = false;
+			bool deviceAddress = false;
 		};
-		std::vector<DedicatedAllocation> dedicatedAllocations;
+		std::unordered_map<VkDeviceMemory, DedicatedAllocation> dedicatedAllocations;
+
+		// VK_EXT_memory_budget query throttle (refreshDiagnostics runs often; the
+		// syscall need not).
+		mutable bool memoryBudgetSupported = false;
+		mutable bool memoryBudgetChecked = false;
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
 		bool isHostVisible(uint32_t memoryTypeIndex) const;
@@ -124,5 +146,15 @@ namespace core
 
 		VulkanAllocation allocateDedicated(vk::DeviceSize size, uint32_t memoryTypeIndex,
 			bool hostVisible, bool needsDeviceAddress, bool autoMap = true);
+
+		// Try to sub-allocate from an existing block list, appending a new block if
+		// none fit. Caller holds managerMutex.
+		VulkanAllocation allocateFromBlocks(std::vector<std::unique_ptr<VulkanMemoryBlock>>& blocks,
+			const vk::MemoryRequirements& memRequirements, uint32_t memTypeIndex,
+			bool hostVisible, bool deviceAddress, vk::DeviceSize blockSize,
+			GpuResourceType resourceType);
+
+		void queryVramBudget() const;       // fills GpuAllocationStats vram* atomics
+		void buildSnapshot() const;         // publishes GpuMemorySnapshot
 	};
 }

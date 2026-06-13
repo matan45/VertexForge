@@ -132,7 +132,8 @@ namespace core
 		vk::DeviceSize used = (writeOffset >= readOffset) ? (writeOffset - readOffset) : (ringSize - readOffset + writeOffset);
 		memory::GpuAllocationStats::stagingRingSize.store(ringSize, std::memory_order_relaxed);
 		memory::GpuAllocationStats::stagingRingUsed.store(used, std::memory_order_relaxed);
-		memory::GpuAllocationStats::stagingPendingTransfers.store(0, std::memory_order_relaxed);
+		// stagingPendingTransfers is owned/published by TransferManager (it tracks the
+		// in-flight operations), so it is intentionally not written here.
 		memory::GpuAllocationStats::stagingOverflowCount.store(overflowCount.load(std::memory_order_relaxed), std::memory_order_relaxed);
 	}
 }

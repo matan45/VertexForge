@@ -581,6 +581,7 @@ namespace components
         glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
         asset::AssetRef fontRef;
         float fontSize = 14.0f;
+        float letterSpacing = 0.0f; // extra pixels between glyphs (Text mode)
         glm::vec4 padding{8.0f, 8.0f, 6.0f, 6.0f}; // left, right, top, bottom
         bool enabled = true;
         // ChildPanel mode: name of the child entity to toggle (empty = first

@@ -28,7 +28,17 @@ namespace memory {
 		void* getPointer(const AllocationHandle& handle) const;
 		uint64_t getCapacity() const { return capacity; }
 
+		// O(1) free-byte total (capacity - live). Used as a cheap "can this block
+		// possibly fit" hint before attempting a (potentially failing) allocate.
+		uint64_t getFreeBytes() const;
+
+		// Snapshot of the current free regions, address-ordered. For the memory
+		// diagnostics fragmentation map.
+		std::vector<FreeSpan> getFreeSpans() const;
+
 	private:
+		// freeBlocks is maintained as an invariant: sorted by offset ascending and
+		// fully coalesced (no two entries are address-contiguous).
 		struct FreeBlock {
 			uint64_t offset;
 			uint64_t size;
@@ -51,7 +61,9 @@ namespace memory {
 			return (value + alignment - 1) & ~(alignment - 1);
 		}
 
-		void coalesce();
+		// Insert a freed region keeping freeBlocks sorted+coalesced, merging only
+		// with the immediate left/right neighbours (no global re-sort).
+		void insertFreeBlock(uint64_t offset, uint64_t size);
 		size_t findBestFit(uint64_t requiredSize, uint64_t alignment) const;
 	};
 

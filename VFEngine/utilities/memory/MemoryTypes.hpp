@@ -54,4 +54,11 @@ namespace memory {
 		float fragmentationPercent = 0.0f;
 	};
 
+	// A free region within an allocator's backing range. Used to build the
+	// per-block fragmentation/occupancy map in the memory-diagnostics window.
+	struct FreeSpan {
+		uint64_t offset = 0;
+		uint64_t size = 0;
+	};
+
 }
