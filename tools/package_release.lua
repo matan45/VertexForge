@@ -75,6 +75,14 @@ function vfPackageRelease()
    copyTree("resources", "**", dist .. "/bin/Runtime/resources")
    print("  resources (x2): " .. n .. " files each")
 
+   -- 4b. Splash logo — SplashScreen::loadSplashImage() searches exe-relative paths
+   --     (4-up to the dev-tree resources/, then beside the exe), NOT the engine's
+   --     cwd-relative "../../resources/". Drop the PNG beside Editor.exe so the
+   --     beside-the-exe fallback resolves in the packaged layout.
+   os.copyfile("resources/editor/VertexForge-logo.png",
+               dist .. "/bin/Editor/Release/x64/VertexForge-logo.png")
+   print("  splash logo: beside Editor.exe")
+
    -- 5. SDK — refresh lib/Release/imgui.lib from this Release build, then copy.
    if vfExportPluginSDK then
       vfExportPluginSDK()

@@ -44,6 +44,8 @@ bld/
 [Ll]ogs/
 VFEngine/.claude/
 
+dist/
+
 runPremake.bat
 
 # Visual Studio 2015/2017 cache/options directory
