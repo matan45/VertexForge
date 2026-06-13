@@ -86,6 +86,27 @@ public class UI {
         return _native_ui_getRectPixels(entityId);
     }
 
+    // Authored UIRect fields in CANVAS UNITS (anchors normalized [0,1], plus pivot,
+    // sizeDelta and anchoredPosition in canvas units). Unlike getRectPixels this is
+    // viewport/extent-independent: two elements expressed in the same basis stay
+    // aligned under any viewport (e.g. the editor play panel vs the framebuffer).
+    // Returns [valid, anchorMinX, anchorMinY, anchorMaxX, anchorMaxY, pivotX, pivotY,
+    // sizeDeltaX, sizeDeltaY, anchoredX, anchoredY]; valid <= 0.5 means no UIRect.
+    public static function getRectData(int entityId): float[] {
+        return _native_ui_getRectData(entityId);
+    }
+
+    // Set the authored UIRect fields in canvas units (anchors normalized [0,1]).
+    // Preserves the element's existing blocksRaycast flag. Returns true on success.
+    public static function setRectData(int entityId,
+        float anchorMinX, float anchorMinY, float anchorMaxX, float anchorMaxY,
+        float pivotX, float pivotY, float sizeDeltaX, float sizeDeltaY,
+        float anchoredX, float anchoredY): bool {
+        return _native_ui_setRectData(entityId,
+            anchorMinX, anchorMinY, anchorMaxX, anchorMaxY,
+            pivotX, pivotY, sizeDeltaX, sizeDeltaY, anchoredX, anchoredY);
+    }
+
     // ============================================
     // Button Control
     // ============================================
@@ -557,6 +578,28 @@ public class UI {
     // Set the hover delay before the tooltip appears (seconds)
     public static function setTooltipDelay(int entityId, float seconds): void {
         _native_ui_setTooltipDelay(entityId, seconds);
+    }
+
+    // Set the tooltip font (Text mode). A valid font is required for the bubble
+    // text to render.
+    public static function setTooltipFont(int entityId, string fontPath): void {
+        _native_ui_setTooltipFont(entityId, fontPath);
+    }
+
+    // Set the tooltip font size (points, Text mode)
+    public static function setTooltipFontSize(int entityId, float size): void {
+        _native_ui_setTooltipFontSize(entityId, size);
+    }
+
+    // Set the tooltip padding in pixels (left, right, top, bottom). The Text-mode
+    // bubble hugs its text, so larger left/right padding makes the bubble wider.
+    public static function setTooltipPadding(int entityId, float left, float right, float top, float bottom): void {
+        _native_ui_setTooltipPadding(entityId, left, right, top, bottom);
+    }
+
+    // Set extra pixels between glyphs of the tooltip text (Text mode)
+    public static function setTooltipLetterSpacing(int entityId, float spacing): void {
+        _native_ui_setTooltipLetterSpacing(entityId, spacing);
     }
 
     // ============================================

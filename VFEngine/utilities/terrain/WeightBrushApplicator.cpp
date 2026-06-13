@@ -1,5 +1,6 @@
 #include "WeightBrushApplicator.hpp"
 #include "TerrainMaterialTypes.hpp"
+#include "BrushFalloff.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -111,14 +112,7 @@ namespace terrain
     // Must match GPU shader brush_influence.glsl:28-38
     float WeightBrushApplicator::applyFalloff(float t, BrushFalloff falloff)
     {
-        switch (falloff)
-        {
-            case BrushFalloff::Constant: return 1.0f;
-            case BrushFalloff::Linear:   return 1.0f - t;
-            case BrushFalloff::Smooth:   return 1.0f - t * t * (3.0f - 2.0f * t);
-            case BrushFalloff::Sharp:    return 1.0f - t * t;
-            default: return 0.0f;
-        }
+        return terrain::applyFalloff(t, falloff);
     }
 
     void WeightBrushApplicator::paintLayer(

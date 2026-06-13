@@ -1,4 +1,5 @@
 #include "CaveBrushApplicator.hpp"
+#include "BrushFalloff.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -182,13 +183,6 @@ namespace terrain
 
     float CaveBrushApplicator::applyFalloff(float t, BrushFalloff falloff)
     {
-        switch (falloff)
-        {
-        case BrushFalloff::Constant: return 1.0f;
-        case BrushFalloff::Linear:   return 1.0f - t;
-        case BrushFalloff::Smooth:   return 1.0f - t * t * (3.0f - 2.0f * t);
-        case BrushFalloff::Sharp:    return 1.0f - t * t;
-        default: return 0.0f;
-        }
+        return terrain::applyFalloff(t, falloff);
     }
 }

@@ -33,6 +33,12 @@ namespace events::vegetationBrush
         std::string_view getName() const override { return "SetVegetationBrushType"; }
     };
 
+    // Ends the current paint/erase stroke and records a single undo entry for it.
+    struct FinalizeVegetationBrushCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "FinalizeVegetationBrush"; }
+    };
+
     // ---- Mode Commands ----
 
     struct SetVegetationBrushModeActiveCommand : ICommand<>
@@ -81,5 +87,12 @@ namespace events::vegetationBrush
         std::optional<services::EntityHandle> terrainEntity;
 
         std::string_view getName() const override { return "VegetationBrushModeChanged"; }
+    };
+
+    struct VegetationBrushParamsChangedNotification : INotification
+    {
+        ::vegetation::VegetationBrushParams params;
+
+        std::string_view getName() const override { return "VegetationBrushParamsChanged"; }
     };
 }

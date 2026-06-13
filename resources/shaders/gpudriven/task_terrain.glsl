@@ -298,7 +298,10 @@ void main() {
                 atomicAdd(stats.visibleMeshlets, 1);
                 uint slot = atomicAdd(sharedVisibleCount, 1);
                 if (slot < MAX_MESHLETS_PER_PAYLOAD) {
-                    sharedMeshletIndices[slot] = globalMeshletIndex;
+                    // Pack the cave flag into the high bit so the mesh/fragment stages can
+                    // select the cave-interior material. Meshlet indices never reach 2^31.
+                    bool isCave = (localMeshletIndex >= meshletCount);
+                    sharedMeshletIndices[slot] = globalMeshletIndex | (isCave ? 0x80000000u : 0u);
                 }
             }
         }

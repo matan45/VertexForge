@@ -720,6 +720,22 @@ namespace services
                 }
                 return {};
             });
+
+        // Replace a tile's billboard instances wholesale (undo/redo snapshots)
+        dispatcher.registerCommandHandler<events::vegetation::SetTileBillboardInstancesCommand>(
+            [this](const events::vegetation::SetTileBillboardInstancesCommand& cmd)
+            {
+                terrain::TileCoord coord{cmd.tileX, cmd.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (!tile) continue;
+                    tile->billboardInstances = cmd.instances;
+                    tile->billboardInstancesDirty = true;
+                    tile->billboardInstancesGPUDirty = true;
+                    return;
+                }
+            });
     }
 
     void TerrainService::registerCaveBrushHandlers(::events::EventDispatcher& dispatcher)
@@ -734,6 +750,13 @@ namespace services
             [this](const events::caveBrush::FinalizeCaveBrushCommand&)
             {
                 finalizeCaveBrush();
+            });
+
+        // Undo/redo restore of a cave stroke (SDF + hole mask) for a set of tiles.
+        dispatcher.registerCommandHandler<::events::caveBrush::RestoreCaveStateCommand>(
+            [this](const ::events::caveBrush::RestoreCaveStateCommand& cmd)
+            {
+                restoreCaveState(cmd.entityId, cmd.tiles);
             });
     }
 

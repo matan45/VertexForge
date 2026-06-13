@@ -627,6 +627,7 @@ namespace controllers::offscreen
                     tipText.fontPath = tip->fontRef.resolve();
                     tipText.text = tip->text;
                     tipText.fontSize = tip->fontSize * tooltipState.canvasScale;
+                    tipText.letterSpacing = tip->letterSpacing * tooltipState.canvasScale;
                     tipText.color = tip->textColor;
                     tipText.position = tooltipState.displayPos + tooltipState.contentOffset;
                     tipText.size = tooltipState.contentSize;

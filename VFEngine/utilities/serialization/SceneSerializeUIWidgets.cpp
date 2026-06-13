@@ -68,6 +68,7 @@ namespace serialization {
             writeAssetRef(j, "fontRef", tooltip.fontRef);
         }
         j["fontSize"] = tooltip.fontSize;
+        j["letterSpacing"] = tooltip.letterSpacing;
         j["padding"] = writeVec4(tooltip.padding);
         j["enabled"] = tooltip.enabled;
         if (!tooltip.panelChildName.empty())
@@ -89,6 +90,7 @@ namespace serialization {
         readVec4(j, "textColor", tooltip.textColor);
         tooltip.fontRef = readAssetRef(j, "fontRef", "");
         tooltip.fontSize = j.value("fontSize", 14.0f);
+        tooltip.letterSpacing = j.value("letterSpacing", 0.0f);
         readVec4(j, "padding", tooltip.padding);
         tooltip.enabled = j.value("enabled", true);
         tooltip.panelChildName = j.value("panelChildName", std::string());

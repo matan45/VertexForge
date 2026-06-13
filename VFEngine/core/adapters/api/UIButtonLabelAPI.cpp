@@ -646,6 +646,77 @@ namespace core::api
                 return value::Value(result);
             }});
 
+        // _native_ui_getRectData(entityId) — the AUTHORED UIRect fields in canvas
+        // units (anchors normalized [0,1], pivot, sizeDelta + anchoredPosition in
+        // canvas units). Extent-independent, unlike getRectPixels — two elements
+        // expressed in the same basis stay aligned under any viewport. miss -> [0.0];
+        // hit -> [1, anchorMinX, anchorMinY, anchorMaxX, anchorMaxY, pivotX, pivotY,
+        //         sizeDeltaX, sizeDeltaY, anchoredX, anchoredY].
+        interpreter->registerNativeFunction("_native_ui_getRectData",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto missArray = []() -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(0.0f));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return missArray();
+
+                events::ui::GetUIRectDataQuery query;
+                query.entity = intToEntity(extractInt64(args[0], "_native_ui_getRectData"));
+                auto data = dispatcher.query(query);
+                if (!data.has_value()) return missArray();
+
+                auto result = std::make_shared<value::NativeArray>(11, value::ValueType::FLOAT);
+                result->set(0, value::Value(1.0f));
+                result->set(1, value::Value(data->anchorMin.x));
+                result->set(2, value::Value(data->anchorMin.y));
+                result->set(3, value::Value(data->anchorMax.x));
+                result->set(4, value::Value(data->anchorMax.y));
+                result->set(5, value::Value(data->pivot.x));
+                result->set(6, value::Value(data->pivot.y));
+                result->set(7, value::Value(data->sizeDelta.x));
+                result->set(8, value::Value(data->sizeDelta.y));
+                result->set(9, value::Value(data->anchoredPosition.x));
+                result->set(10, value::Value(data->anchoredPosition.y));
+                return value::Value(result);
+            }});
+
+        // _native_ui_setRectData(entityId, anchorMinX, anchorMinY, anchorMaxX,
+        //   anchorMaxY, pivotX, pivotY, sizeDeltaX, sizeDeltaY, anchoredX, anchoredY)
+        // — set the AUTHORED UIRect fields in canvas units. Read-modify-write so the
+        // element's existing blocksRaycast flag is preserved. Returns true on success.
+        interpreter->registerNativeFunction("_native_ui_setRectData",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 11) return value::Value(false);
+
+                services::EntityHandle entity = intToEntity(extractInt64(args[0], "_native_ui_setRectData"));
+
+                // Preserve blocksRaycast (and any future non-geometry field) by
+                // starting from the current data when present.
+                events::ui::GetUIRectDataQuery getQuery;
+                getQuery.entity = entity;
+                auto existing = dispatcher.query(getQuery);
+                services::UIRectData rectData = existing.value_or(services::UIRectData{});
+
+                rectData.anchorMin = glm::vec2(extractFloat(args[1], "_native_ui_setRectData"),
+                                               extractFloat(args[2], "_native_ui_setRectData"));
+                rectData.anchorMax = glm::vec2(extractFloat(args[3], "_native_ui_setRectData"),
+                                               extractFloat(args[4], "_native_ui_setRectData"));
+                rectData.pivot = glm::vec2(extractFloat(args[5], "_native_ui_setRectData"),
+                                           extractFloat(args[6], "_native_ui_setRectData"));
+                rectData.sizeDelta = glm::vec2(extractFloat(args[7], "_native_ui_setRectData"),
+                                               extractFloat(args[8], "_native_ui_setRectData"));
+                rectData.anchoredPosition = glm::vec2(extractFloat(args[9], "_native_ui_setRectData"),
+                                                      extractFloat(args[10], "_native_ui_setRectData"));
+
+                events::ui::SetUIRectDataCommand cmd;
+                cmd.entity = entity;
+                cmd.rectData = rectData;
+                return value::Value(dispatcher.execute(cmd));
+            }});
+
         interpreter->registerNativeFunction("_native_ui_getImageColor",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();

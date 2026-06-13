@@ -45,6 +45,7 @@ layout(location = 2) out vec2 outUV[];
 layout(location = 3) out float outAlpha[];
 layout(location = 4) flat out uint outVegType[];
 layout(location = 5) flat out uint outTexIndex[];
+layout(location = 6) flat out float outTint[];
 
 float windHash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -69,7 +70,7 @@ vec3 calcWind(vec3 worldPos, float vertH, float windPhase) {
     return disp;
 }
 
-void emitVert(uint i, vec3 wp, vec3 n, vec2 uv, float a, uint vt, uint ti) {
+void emitVert(uint i, vec3 wp, vec3 n, vec2 uv, float a, uint vt, uint ti, float tint) {
     gl_MeshVerticesEXT[i].gl_Position = camera.projection * camera.view * vec4(wp, 1.0);
     outWorldPos[i] = wp;
     outNormal[i] = n;
@@ -77,16 +78,18 @@ void emitVert(uint i, vec3 wp, vec3 n, vec2 uv, float a, uint vt, uint ti) {
     outAlpha[i] = a;
     outVegType[i] = vt;
     outTexIndex[i] = ti;
+    outTint[i] = tint;
 }
 
 void main() {
     uint instanceIdx = payload.instanceIndices[gl_WorkGroupID.x];
     float dist = payload.distanceToCamera[gl_WorkGroupID.x];
 
-    uint base = instanceIdx * 3u;
+    uint base = instanceIdx * 4u;
     vec4 posAndRot = grassInstances[base];
     vec4 scaleAndDensity = grassInstances[base + 1u];
     vec4 colorTint = grassInstances[base + 2u];
+    vec4 normalAndPad = grassInstances[base + 3u];
 
     vec3 rootPos = posAndRot.xyz;
     float rot = posAndRot.w;
@@ -96,6 +99,11 @@ void main() {
     uint vt = uint(colorTint.w + 0.5); // round to nearest uint
     uint ti = floatBitsToUint(colorTint.x); // texture index packed as uint bits
     uint bbMode = floatBitsToUint(colorTint.y);
+    float tint = colorTint.z;
+
+    // Align-to-normal: tilt the blade's up axis toward the terrain normal.
+    // CPU stores (0,1,0) when alignment is disabled.
+    vec3 upDir = (length(normalAndPad.xyz) > 0.001) ? normalize(normalAndPad.xyz) : vec3(0.0, 1.0, 0.0);
 
     float alpha = 1.0;
     if (dist > fadeStartDistance) {
@@ -108,21 +116,22 @@ void main() {
     // Billboard - use height as both height and width for square-ish billboard
     float bbSize = bH * 0.5;
 
+    vec3 top = upDir * bH;
+
     if (bbMode == 1u) {
         // Camera-facing quad
         vec3 toCamera = normalize(camera.cameraPosition.xyz - rootPos);
-        vec3 up = vec3(0.0, 1.0, 0.0);
-        vec3 right = normalize(cross(up, toCamera));
+        vec3 right = normalize(cross(upDir, toCamera));
         float hw = bbSize;
 
         vec3 w0 = calcWind(rootPos, 0.0, wp);
         vec3 w1 = calcWind(rootPos, 1.0, wp);
 
         SetMeshOutputsEXT(4, 2);
-        emitVert(0, rootPos - right*hw + w0,          toCamera, vec2(0,1), alpha, vt, ti);
-        emitVert(1, rootPos + right*hw + w0,          toCamera, vec2(1,1), alpha, vt, ti);
-        emitVert(2, rootPos - right*hw + up*bH + w1,  toCamera, vec2(0,0), alpha, vt, ti);
-        emitVert(3, rootPos + right*hw + up*bH + w1,  toCamera, vec2(1,0), alpha, vt, ti);
+        emitVert(0, rootPos - right*hw + w0,        toCamera, vec2(0,1), alpha, vt, ti, tint);
+        emitVert(1, rootPos + right*hw + w0,        toCamera, vec2(1,1), alpha, vt, ti, tint);
+        emitVert(2, rootPos - right*hw + top + w1,  toCamera, vec2(0,0), alpha, vt, ti, tint);
+        emitVert(3, rootPos + right*hw + top + w1,  toCamera, vec2(1,0), alpha, vt, ti, tint);
         gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0,1,2);
         gl_PrimitiveTriangleIndicesEXT[1] = uvec3(1,3,2);
     } else {
@@ -136,24 +145,24 @@ void main() {
 
         vec3 a0 = vec3(-hw*cr, 0.0, -hw*sr);
         vec3 a1 = vec3( hw*cr, 0.0,  hw*sr);
-        vec3 a2 = vec3(-hw*cr, bH, -hw*sr);
-        vec3 a3 = vec3( hw*cr, bH,  hw*sr);
+        vec3 a2 = a0 + top;
+        vec3 a3 = a1 + top;
 
         float cr90 = -sr, sr90 = cr;
         vec3 b0 = vec3(-hw*cr90, 0.0, -hw*sr90);
         vec3 b1 = vec3( hw*cr90, 0.0,  hw*sr90);
-        vec3 b2 = vec3(-hw*cr90, bH, -hw*sr90);
-        vec3 b3 = vec3( hw*cr90, bH,  hw*sr90);
+        vec3 b2 = b0 + top;
+        vec3 b3 = b1 + top;
 
         SetMeshOutputsEXT(8, 4);
-        emitVert(0, rootPos+a0+w0, nA, vec2(0,1), alpha, vt, ti);
-        emitVert(1, rootPos+a1+w0, nA, vec2(1,1), alpha, vt, ti);
-        emitVert(2, rootPos+a2+w1, nA, vec2(0,0), alpha, vt, ti);
-        emitVert(3, rootPos+a3+w1, nA, vec2(1,0), alpha, vt, ti);
-        emitVert(4, rootPos+b0+w0, nB, vec2(0,1), alpha, vt, ti);
-        emitVert(5, rootPos+b1+w0, nB, vec2(1,1), alpha, vt, ti);
-        emitVert(6, rootPos+b2+w1, nB, vec2(0,0), alpha, vt, ti);
-        emitVert(7, rootPos+b3+w1, nB, vec2(1,0), alpha, vt, ti);
+        emitVert(0, rootPos+a0+w0, nA, vec2(0,1), alpha, vt, ti, tint);
+        emitVert(1, rootPos+a1+w0, nA, vec2(1,1), alpha, vt, ti, tint);
+        emitVert(2, rootPos+a2+w1, nA, vec2(0,0), alpha, vt, ti, tint);
+        emitVert(3, rootPos+a3+w1, nA, vec2(1,0), alpha, vt, ti, tint);
+        emitVert(4, rootPos+b0+w0, nB, vec2(0,1), alpha, vt, ti, tint);
+        emitVert(5, rootPos+b1+w0, nB, vec2(1,1), alpha, vt, ti, tint);
+        emitVert(6, rootPos+b2+w1, nB, vec2(0,0), alpha, vt, ti, tint);
+        emitVert(7, rootPos+b3+w1, nB, vec2(1,0), alpha, vt, ti, tint);
         gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0,1,2);
         gl_PrimitiveTriangleIndicesEXT[1] = uvec3(1,3,2);
         gl_PrimitiveTriangleIndicesEXT[2] = uvec3(4,5,6);

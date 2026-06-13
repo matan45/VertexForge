@@ -48,8 +48,8 @@ namespace windows
         visibleOrder.clear();
         lastVisibleOrder.clear();
         rootSeeded = false;
-        renamingHandle = 0;
-        rangeAnchorHandle = 0;
+        renamingHandle = services::EntityHandle::INVALID_ID;
+        rangeAnchorHandle = services::EntityHandle::INVALID_ID;
     }
 
     const char* SceneHierarchyPanel::getEntityIcon(const services::EntityData& data) const
@@ -250,7 +250,7 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         const ImGuiIO& io = ImGui::GetIO();
 
-        if (io.KeyShift && rangeAnchorHandle != 0)
+        if (io.KeyShift && rangeAnchorHandle != services::EntityHandle::INVALID_ID)
         {
             // Range over last frame's visible order, anchor..clicked inclusive
             int anchorIndex = -1;
@@ -313,13 +313,34 @@ namespace windows
         rangeAnchorHandle = handle.id;
     }
 
+    bool SceneHierarchyPanel::canRename(services::EntityHandle handle) const
+    {
+        events::scene::GetEntityQuery entityQuery;
+        entityQuery.entity = handle;
+        auto entityDataOpt = events::EventDispatcher::instance().query(entityQuery);
+        if (!entityDataOpt.has_value())
+        {
+            return false;
+        }
+
+        // Structural / engine-generated entities aren't user-named: the scene Root
+        // (no parent), and the Terrain node plus its auto-generated tile sub-entities.
+        using CT = services::ComponentTypeId;
+        return entityDataOpt->parent.has_value()
+            && !entityDataOpt->hasComponent(CT::Terrain)
+            && !entityDataOpt->hasComponent(CT::TerrainTile);
+    }
+
     void SceneHierarchyPanel::beginRename(services::EntityHandle handle)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
+        if (!canRename(handle))
+        {
+            return;
+        }
 
         events::scene::GetEntityQuery entityQuery;
         entityQuery.entity = handle;
-        auto entityDataOpt = dispatcher.query(entityQuery);
+        auto entityDataOpt = events::EventDispatcher::instance().query(entityQuery);
         if (!entityDataOpt.has_value())
         {
             return;
@@ -345,7 +366,7 @@ namespace windows
 
         if (canceled)
         {
-            renamingHandle = 0;
+            renamingHandle = services::EntityHandle::INVALID_ID;
         }
         else if (committed || ImGui::IsItemDeactivated())
         {
@@ -356,7 +377,7 @@ namespace windows
                 cmd.newName = renameBuffer;
                 events::EventDispatcher::instance().execute(cmd);
             }
-            renamingHandle = 0;
+            renamingHandle = services::EntityHandle::INVALID_ID;
         }
     }
 
@@ -609,9 +630,13 @@ namespace windows
 
             ImGui::Separator();
 
-            if (count == 1 && ImGui::MenuItem("Rename", "F2"))
+            if (count == 1)
             {
-                beginRename(topLevelSelection.front());
+                bool renamable = canRename(topLevelSelection.front());
+                if (ImGui::MenuItem("Rename", "F2", false, renamable))
+                {
+                    beginRename(topLevelSelection.front());
+                }
             }
 
             snprintf(menuLabel, sizeof(menuLabel), count > 1 ? "Duplicate (%d)" : "Duplicate", count);
@@ -819,7 +844,7 @@ namespace windows
     void SceneHierarchyPanel::handleShortcuts()
     {
         if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
-            renamingHandle != 0 || ImGui::IsAnyItemActive())
+            renamingHandle != services::EntityHandle::INVALID_ID || ImGui::IsAnyItemActive())
         {
             return;
         }

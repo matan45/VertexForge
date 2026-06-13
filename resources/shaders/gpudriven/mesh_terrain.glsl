@@ -20,6 +20,7 @@ layout(location = 3) flat out uint fragTileIndex[];
 layout(location = 4) flat out uint fragMeshletIndex[];
 layout(location = 5) flat out uint fragLODLevel[];
 layout(location = 6) out vec2 fragWorldUV[];
+layout(location = 7) flat out uint fragIsCave[];
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -100,7 +101,9 @@ void main() {
         return;
     }
 
-    uint globalMeshletIndex = payload.meshletIndices[payloadMeshletIndex];
+    uint packedMeshletIndex = payload.meshletIndices[payloadMeshletIndex];
+    bool isCave = (packedMeshletIndex & 0x80000000u) != 0u;
+    uint globalMeshletIndex = packedMeshletIndex & 0x7FFFFFFFu;
     uint tileIndex = payload.tileIndex;
     uint lodLevel = payload.lodLevel;
 
@@ -160,6 +163,7 @@ void main() {
             fragTileIndex[localVertexIndex] = tileIndex;
             fragMeshletIndex[localVertexIndex] = globalMeshletIndex;
             fragLODLevel[localVertexIndex] = lodLevel;
+            fragIsCave[localVertexIndex] = isCave ? 1u : 0u;
 
             fragWorldUV[localVertexIndex] = worldPos.xz * textureScale;
 
@@ -199,6 +203,7 @@ layout(location = 3) in flat uint fragTileIndex;
 layout(location = 4) in flat uint fragMeshletIndex;
 layout(location = 5) in flat uint fragLODLevel;
 layout(location = 6) in vec2 fragWorldUV;
+layout(location = 7) in flat uint fragIsCave;
 
 layout(location = 0) out vec4 outColor;
 
@@ -414,6 +419,16 @@ void main() {
     float metallic = mat_metallic;
     float roughness = mat_roughness;
     float ao = mat_ao;
+
+    // Distinct cave-interior look: carved cave walls keep the surface's triplanar detail
+    // but read as darker, rougher, non-metallic rock so interiors don't share the exact
+    // surface material. (fragIsCave is set per cave meshlet by the mesh stage.)
+    if (fragIsCave != 0u) {
+        albedo = mix(albedo, albedo * vec3(0.45, 0.42, 0.40), 0.75);
+        roughness = clamp(max(roughness, 0.9), 0.0, 1.0);
+        metallic = 0.0;
+        ao = min(ao, 0.85);
+    }
 
 #ifdef CAUSTICS_ENABLED
     // Shoreline wetness: darken and roughen terrain near and above waterline

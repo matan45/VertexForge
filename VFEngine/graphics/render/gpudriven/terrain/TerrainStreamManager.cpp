@@ -188,8 +188,29 @@ namespace render::gpudriven
         {
             if (!tile || !tile->caveGPUDirty) continue;
             if (tile->hasCaveData() && tile->caveData->hasCaveGeometry() && tile->caveLOD.isEmpty())
-                terrain::CaveMeshGenerator::generate(*tile);
-            if (!tile->hasCaveGeometry() || tile->caveLOD.isEmpty()) { tile->caveGPUDirty = false; continue; }
+            {
+                // Apron-stitch to resident neighbours so reloaded/streamed caves stay
+                // crack-free at tile boundaries (matches the editing-path remesh).
+                terrain::NeighborCaves nc;
+                if (auto it = tileMap_.find({tile->coord.x + 1, tile->coord.z});
+                    it != tileMap_.end() && it->second && it->second->hasCaveData())
+                    nc.plusX = it->second->caveData.get();
+                if (auto it = tileMap_.find({tile->coord.x, tile->coord.z + 1});
+                    it != tileMap_.end() && it->second && it->second->hasCaveData())
+                    nc.plusZ = it->second->caveData.get();
+                if (auto it = tileMap_.find({tile->coord.x + 1, tile->coord.z + 1});
+                    it != tileMap_.end() && it->second && it->second->hasCaveData())
+                    nc.plusXZ = it->second->caveData.get();
+                terrain::CaveMeshGenerator::generate(*tile, nc);
+            }
+            if (!tile->hasCaveGeometry() || tile->caveLOD.isEmpty())
+            {
+                // Cave was filled/undone away — free its GPU allocation so it stops
+                // rendering (otherwise the stale mesh lingers).
+                adapter.releaseCaveMesh(*tile);
+                tile->caveGPUDirty = false;
+                continue;
+            }
             if (adapter.uploadCaveMesh(*tile))
                 tile->caveGPUDirty = false;
         }

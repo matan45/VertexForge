@@ -460,6 +460,7 @@ namespace services
         glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
         asset::AssetRef fontRef;
         float fontSize = 14.0f;
+        float letterSpacing = 0.0f;
         glm::vec4 padding{8.0f, 8.0f, 6.0f, 6.0f}; // left, right, top, bottom
         bool enabled = true;
         std::string panelChildName;

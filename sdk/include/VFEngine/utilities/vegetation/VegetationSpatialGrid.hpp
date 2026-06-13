@@ -13,6 +13,7 @@ namespace vegetation
     {
         uint32_t instanceIndex = 0;
         glm::vec3 position;
+        uint32_t paletteEntryIndex = 0; // Layer this instance belongs to (for layer-aware avoidance)
     };
 
     class VegetationSpatialGrid
@@ -49,14 +50,14 @@ namespace vegetation
             cells.clear();
             for (uint32_t i = 0; i < static_cast<uint32_t>(instances.size()); ++i)
             {
-                insert(i, instances[i].position);
+                insert(i, instances[i].position, instances[i].paletteEntryIndex);
             }
         }
 
-        void insert(uint32_t index, const glm::vec3& position)
+        void insert(uint32_t index, const glm::vec3& position, uint32_t paletteEntryIndex = 0)
         {
             glm::ivec2 cell = toCell(position);
-            cells[cell].push_back({index, position});
+            cells[cell].push_back({index, position, paletteEntryIndex});
         }
 
         std::vector<VegSpatialEntry> queryRadius(const glm::vec3& center, float radius) const
@@ -90,6 +91,45 @@ namespace vegetation
 
         bool hasNeighborWithin(const glm::vec3& position, float minDist) const
         {
+            return hasNeighborMatching(position, minDist,
+                [](const VegSpatialEntry&) { return true; });
+        }
+
+        // True if any neighbor within minDist belongs to a layer other than 'layer'.
+        bool hasNeighborOfOtherLayer(const glm::vec3& position, float minDist, uint32_t layer) const
+        {
+            return hasNeighborMatching(position, minDist,
+                [layer](const VegSpatialEntry& e) { return e.paletteEntryIndex != layer; });
+        }
+
+        // Count neighbors within radius (for density-target painting).
+        uint32_t countWithin(const glm::vec3& position, float radius) const
+        {
+            uint32_t count = 0;
+            float radiusSq = radius * radius;
+            int minX = static_cast<int>(std::floor((position.x - radius) / cellSize));
+            int maxX = static_cast<int>(std::floor((position.x + radius) / cellSize));
+            int minZ = static_cast<int>(std::floor((position.z - radius) / cellSize));
+            int maxZ = static_cast<int>(std::floor((position.z + radius) / cellSize));
+            for (int z = minZ; z <= maxZ; ++z)
+                for (int x = minX; x <= maxX; ++x)
+                {
+                    auto it = cells.find({x, z});
+                    if (it == cells.end()) continue;
+                    for (const auto& entry : it->second)
+                    {
+                        float dx = entry.position.x - position.x;
+                        float dz = entry.position.z - position.z;
+                        if (dx * dx + dz * dz <= radiusSq) ++count;
+                    }
+                }
+            return count;
+        }
+
+    private:
+        template <typename Pred>
+        bool hasNeighborMatching(const glm::vec3& position, float minDist, Pred pred) const
+        {
             float minDistSq = minDist * minDist;
             int minX = static_cast<int>(std::floor((position.x - minDist) / cellSize));
             int maxX = static_cast<int>(std::floor((position.x + minDist) / cellSize));
@@ -106,7 +146,7 @@ namespace vegetation
                     {
                         float dx = entry.position.x - position.x;
                         float dz = entry.position.z - position.z;
-                        if (dx * dx + dz * dz <= minDistSq)
+                        if (dx * dx + dz * dz <= minDistSq && pred(entry))
                             return true;
                     }
                 }
@@ -114,7 +154,6 @@ namespace vegetation
             return false;
         }
 
-    private:
         glm::ivec2 toCell(const glm::vec3& pos) const
         {
             return {static_cast<int>(std::floor(pos.x / cellSize)),

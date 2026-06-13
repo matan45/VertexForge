@@ -5,6 +5,12 @@
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <filesystem>
+#include <cmath>
+
+namespace
+{
+    constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
+}
 
 namespace windows
 {
@@ -74,23 +80,112 @@ namespace windows
         }
 
         bool paramsChanged = false;
-        paramsChanged |= ImGui::SliderFloat("Radius", &brushRadius, 0.1f, 100.0f);
-        paramsChanged |= ImGui::SliderFloat("Spacing", &brushSpacing, 0.1f, 5.0f);
-        paramsChanged |= ImGui::SliderFloat("Density", &brushDensity, 0.1f, 10.0f);
-        paramsChanged |= ImGui::SliderFloat("Jitter", &brushJitter, 0.0f, 1.0f);
+        paramsChanged |= ImGui::SliderFloat("Radius", &brushParams.radius, 0.1f, 100.0f);
+        paramsChanged |= ImGui::SliderFloat("Spacing", &brushParams.spacing, 0.1f, 5.0f);
+        paramsChanged |= ImGui::SliderFloat("Density", &brushParams.density, 0.1f, 10.0f);
+        paramsChanged |= ImGui::SliderFloat("Jitter", &brushParams.positionJitter, 0.0f, 1.0f);
+
+        int falloffIdx = static_cast<int>(brushParams.falloff);
+        const char* falloffNames[] = {"Constant", "Linear", "Smooth", "Sharp"};
+        if (ImGui::Combo("Falloff", &falloffIdx, falloffNames, IM_ARRAYSIZE(falloffNames)))
+        {
+            brushParams.falloff = static_cast<terrain::BrushFalloff>(falloffIdx);
+            paramsChanged = true;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Density falloff toward the brush edge");
+
+        int modeIdx = static_cast<int>(brushParams.placementMode);
+        const char* modeNames[] = {"Spray", "Single"};
+        if (ImGui::Combo("Placement", &modeIdx, modeNames, IM_ARRAYSIZE(modeNames)))
+        {
+            brushParams.placementMode = static_cast<vegetation::VegetationPlacementMode>(modeIdx);
+            paramsChanged = true;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Spray = scatter many; Single = one hero instance per click");
+
+        if (brushParams.placementMode == vegetation::VegetationPlacementMode::Spray)
+        {
+            paramsChanged |= ImGui::SliderFloat("Flow (sprays/s)", &brushParams.flowRate, 0.0f, 30.0f);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("0 = paint on cursor movement; >0 = airbrush (paints while held)");
+        }
+
+        drawPlacementMaskControls(paramsChanged);
 
         if (paramsChanged)
-        {
-            vegetation::VegetationBrushParams params;
-            params.radius = brushRadius;
-            params.spacing = brushSpacing;
-            params.density = brushDensity;
-            params.positionJitter = brushJitter;
+            pushBrushParams();
+    }
 
-            events::vegetationBrush::SetVegetationBrushParamsCommand cmd;
-            cmd.params = params;
-            events::EventDispatcher::instance().execute(cmd);
+    void GrassDensityPanel::drawPlacementMaskControls(bool& paramsChanged)
+    {
+        if (!ImGui::CollapsingHeader("Placement Mask"))
+            return;
+
+        // Slope mask
+        if (ImGui::Checkbox("Slope Mask", &brushParams.useSlopeMask))
+            paramsChanged = true;
+        if (brushParams.useSlopeMask)
+        {
+            bool slopeChanged = false;
+            slopeChanged |= ImGui::SliderFloat("Min Slope (deg)", &slopeMinDeg, 0.0f, 90.0f);
+            slopeChanged |= ImGui::SliderFloat("Max Slope (deg)", &slopeMaxDeg, 0.0f, 90.0f);
+            if (slopeChanged)
+            {
+                if (slopeMaxDeg < slopeMinDeg) slopeMaxDeg = slopeMinDeg;
+                // Steeper slope -> smaller normal.y. Reject outside [cos(max), cos(min)].
+                brushParams.slopeMinCos = std::cos(slopeMaxDeg * kDegToRad);
+                brushParams.slopeMaxCos = std::cos(slopeMinDeg * kDegToRad);
+                paramsChanged = true;
+            }
         }
+
+        if (ImGui::Checkbox("Align To Normal", &brushParams.alignToNormal))
+            paramsChanged = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Tilt instances to follow the terrain surface normal");
+
+        // Height mask
+        if (ImGui::Checkbox("Height Mask", &brushParams.useHeightMask))
+            paramsChanged = true;
+        if (brushParams.useHeightMask)
+        {
+            paramsChanged |= ImGui::DragFloat("Min Height", &brushParams.heightMin, 0.5f);
+            paramsChanged |= ImGui::DragFloat("Max Height", &brushParams.heightMax, 0.5f);
+        }
+
+        // Noise / scatter mask
+        if (ImGui::Checkbox("Noise Mask", &brushParams.useNoiseMask))
+            paramsChanged = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Clump placement using world-space noise");
+        if (brushParams.useNoiseMask)
+        {
+            paramsChanged |= ImGui::SliderFloat("Noise Freq", &brushParams.noiseFrequency, 0.01f, 1.0f, "%.3f");
+            paramsChanged |= ImGui::SliderFloat("Noise Threshold", &brushParams.noiseThreshold, 0.0f, 1.0f);
+            int seed = static_cast<int>(brushParams.noiseSeed);
+            if (ImGui::DragInt("Noise Seed", &seed, 1.0f, 0, 1000000))
+            {
+                brushParams.noiseSeed = static_cast<uint32_t>(seed < 0 ? 0 : seed);
+                paramsChanged = true;
+            }
+        }
+
+        // Layer-aware avoidance
+        if (ImGui::Checkbox("Avoid Other Layers", &brushParams.avoidOtherLayers))
+            paramsChanged = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Keep this layer away from other palette layers");
+        if (brushParams.avoidOtherLayers)
+            paramsChanged |= ImGui::SliderFloat("Avoid Radius", &brushParams.layerAvoidRadius, 0.1f, 5.0f);
+    }
+
+    void GrassDensityPanel::pushBrushParams()
+    {
+        events::vegetationBrush::SetVegetationBrushParamsCommand cmd;
+        cmd.params = brushParams;
+        events::EventDispatcher::instance().execute(cmd);
     }
 
     void GrassDensityPanel::drawWindControls()
@@ -245,6 +340,14 @@ namespace windows
                 pushBillboardPalette();
             if (ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.1f, 10.0f))
                 pushBillboardPalette();
+            if (ImGui::DragFloat2("Height Range", &entry.heightRange.x, 0.01f, 0.1f, 5.0f))
+                pushBillboardPalette();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Per-instance random height multiplier (min/max)");
+            if (ImGui::SliderFloat("Tint Jitter", &entry.tintJitter, 0.0f, 1.0f))
+                pushBillboardPalette();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Per-instance brightness variation");
             if (ImGui::Button("Remove"))
                 removeIndex = index;
 

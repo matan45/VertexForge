@@ -290,7 +290,17 @@ namespace services
                 }
             });
 
-        // Vegetation brush params change subscription removed - params now handled by VegetationBrushServiceImpl
+        vegBrushParamsToken = dispatcher.subscribe<events::vegetationBrush::VegetationBrushParamsChangedNotification>(
+            [this](const events::vegetationBrush::VegetationBrushParamsChangedNotification& n)
+            {
+                if (vegBrushModeActive && provider)
+                {
+                    provider->setBrushOverlayParams(
+                        n.params.radius,
+                        static_cast<float>(n.params.falloff),
+                        0.0f);
+                }
+            });
 
         meshBrushModeToken = dispatcher.subscribe<events::meshBrush::MeshBrushModeChangedNotification>(
             [this](const events::meshBrush::MeshBrushModeChangedNotification& n)

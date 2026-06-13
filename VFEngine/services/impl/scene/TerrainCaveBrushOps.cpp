@@ -11,11 +11,29 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/terrain/CaveModeEvents.hpp"
+#include "../../events/editor/UndoRedoEvents.hpp"
+#include "../../data/CaveUndoCommands.hpp"
 #include <cmath>
+#include <memory>
+#include <unordered_set>
 
 namespace services
 {
     static constexpr float CAVE_HOLE_PUNCH_THRESHOLD = 0.1f;
+
+    // Gather the +X / +Z / +X+Z neighbour SDF grids so the mesher can extend a one-cell
+    // apron across the shared boundary and produce crack-free seams.
+    static terrain::NeighborCaves buildNeighborCaves(terrain::TerrainGrid* grid, const terrain::TileCoord& coord)
+    {
+        terrain::NeighborCaves nc;
+        if (auto* px = grid->getTile({coord.x + 1, coord.z}); px && px->hasCaveData())
+            nc.plusX = px->caveData.get();
+        if (auto* pz = grid->getTile({coord.x, coord.z + 1}); pz && pz->hasCaveData())
+            nc.plusZ = pz->caveData.get();
+        if (auto* pxz = grid->getTile({coord.x + 1, coord.z + 1}); pxz && pxz->hasCaveData())
+            nc.plusXZ = pxz->caveData.get();
+        return nc;
+    }
 
     void TerrainService::applyCaveBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
     {
@@ -33,6 +51,13 @@ namespace services
             return;
 
         terrain::TerrainGrid* grid = gridIt->second.get();
+
+        // Start of a new stroke: drop any stale before-snapshots and remember the target.
+        if (isFirstApplication)
+        {
+            caveStrokeBefore.clear();
+            caveStrokeEntityId = targetEntity->id;
+        }
 
         auto brushType = dispatcher.query(events::caveBrush::GetCaveBrushTypeQuery{});
         auto brushParams = dispatcher.query(events::caveBrush::GetCaveBrushParamsQuery{});
@@ -81,6 +106,11 @@ namespace services
             if (!tile->hasCaveData())
                 continue;
 
+            // Capture the tile's pre-stroke state once, before its first modification,
+            // so the whole stroke can be undone/redone.
+            if (caveStrokeBefore.find(coord) == caveStrokeBefore.end())
+                caveStrokeBefore[coord] = {tile->caveData->sdfGrid, tile->holeMask};
+
             // Apply 3D SDF carve — works in all directions (down, horizontal, up)
             terrain::CaveBrushApplicator::ApplyParams applyParams;
             applyParams.brushCenter = worldPosition;
@@ -95,8 +125,8 @@ namespace services
             if (!terrain::CaveBrushApplicator::apply(*tile->caveData, applyParams))
                 continue;
 
-            // Regenerate cave mesh (Marching Cubes on modified region only)
-            terrain::CaveMeshGenerator::generate(*tile);
+            // Regenerate cave mesh (Surface Nets on modified region, apron-stitched to neighbours)
+            terrain::CaveMeshGenerator::generate(*tile, buildNeighborCaves(grid, coord));
 
             tile->caveDirty = true;
             tile->caveGPUDirty = true;
@@ -248,6 +278,102 @@ namespace services
                 registry.get<components::TerrainComponent>(ent).saveDirty = true;
             }
         }
+
+        // Build one undo entry for the whole stroke from the captured before-states.
+        if (!caveStrokeBefore.empty())
+        {
+            auto undoCmd = std::make_shared<CaveStrokeUndoCommand>(caveStrokeEntityId, "Cave Brush");
+            for (auto& [coord, before] : caveStrokeBefore)
+            {
+                terrain::TerrainTile* tile = grid->getTile(coord);
+                std::vector<float> afterSdf = (tile && tile->hasCaveData())
+                    ? tile->caveData->sdfGrid : std::vector<float>{};
+                std::vector<uint8_t> afterHole = tile ? tile->holeMask : std::vector<uint8_t>{};
+                undoCmd->addTile(coord.x, coord.z,
+                                 std::move(before.sdf), std::move(afterSdf),
+                                 std::move(before.holeMask), std::move(afterHole));
+            }
+            if (undoCmd->hasChanges())
+            {
+                events::undoredo::PushUndoableCommand pushCmd;
+                pushCmd.command = undoCmd;
+                dispatcher.execute(pushCmd);
+            }
+            caveStrokeBefore.clear();
+        }
+    }
+
+    void TerrainService::restoreCaveState(uint64_t entityId,
+                                          const std::vector<::events::caveBrush::CaveTileState>& tiles)
+    {
+        auto gridIt = terrainGrids.find(entityId);
+        if (gridIt == terrainGrids.end())
+            return;
+        terrain::TerrainGrid* grid = gridIt->second.get();
+
+        std::vector<terrain::TileCoord> coords;
+        coords.reserve(tiles.size());
+        for (const auto& st : tiles)
+        {
+            terrain::TileCoord coord{st.tileX, st.tileZ};
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile)
+                continue;
+
+            if (!st.sdf.empty())
+            {
+                if (!tile->hasCaveData())
+                    tile->initializeCaveSDFFromHeights();
+                if (tile->hasCaveData() && tile->caveData->sdfGrid.size() == st.sdf.size())
+                {
+                    tile->caveData->sdfGrid = st.sdf;
+                    tile->caveData->isDirty = true;
+                    tile->caveData->clearDirtyRegion(); // full re-mesh, not incremental
+                }
+            }
+
+            // Restored to pristine (no carve left): drop the stale cave mesh on the CPU.
+            if (tile->hasCaveData() && !tile->caveData->hasCaveGeometry())
+                tile->caveLOD.clear();
+
+            tile->holeMask = st.holeMask;
+            tile->caveDirty = true;
+            tile->caveGPUDirty = true;
+            tile->topologyDirty = true;
+            tile->setAllLODsDirty();
+            tile->isDirty = true;
+            coords.push_back(coord);
+        }
+
+        if (coords.empty())
+            return;
+
+        // Remesh restored tiles + their seam neighbours with apron stitching.
+        std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> toRemesh;
+        for (const auto& coord : coords)
+            for (int dz = -1; dz <= 1; ++dz)
+                for (int dx = -1; dx <= 1; ++dx)
+                    toRemesh.insert({coord.x + dx, coord.z + dz});
+        for (const auto& coord : toRemesh)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile || !tile->hasCaveData() || !tile->caveData->hasCaveGeometry())
+                continue;
+            terrain::CaveMeshGenerator::generate(*tile, buildNeighborCaves(grid, coord));
+            tile->caveDirty = true;
+            tile->caveGPUDirty = true;
+        }
+
+        EntityHandle entity{entityId};
+        rebuildModifiedColliders(entity, grid, coords);
+        rebuildCaveColliders(entity, grid, coords);
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+        {
+            registry.get<components::TerrainComponent>(ent).saveDirty = true;
+        }
     }
 
     void TerrainService::syncCaveNeighborEdge(
@@ -255,76 +381,79 @@ namespace services
         terrain::TerrainTile& neighbor,
         int axis)
     {
+        // Deterministic weld (replaces the old order-dependent averaging): the lower-
+        // coordinate tile (`sdf`) is authoritative, so copy its shared boundary column
+        // into the higher-coordinate neighbour's duplicated column. The apron mesher then
+        // reads identical data from both sides, so the seam meshes coincide.
         auto& nSdf = *neighbor.caveData;
         bool changed = false;
 
-        if (axis == 0) // X axis
+        if (axis == 0) // +X neighbour: my last X column -> neighbour's column 0
         {
             uint32_t lastX = sdf.config.resX - 1;
             for (uint32_t y = 0; y < sdf.config.resY; ++y)
-            {
                 for (uint32_t z = 0; z < sdf.config.resZ; ++z)
                 {
-                    float myVal = sdf.getSDF(lastX, y, z);
-                    float nVal = nSdf.getSDF(0, y, z);
-                    float avg = (myVal + nVal) * 0.5f;
-                    if (std::abs(avg - myVal) > 1e-6f || std::abs(avg - nVal) > 1e-6f)
+                    float v = sdf.getSDF(lastX, y, z);
+                    if (nSdf.getSDF(0, y, z) != v)
                     {
-                        sdf.setSDF(lastX, y, z, avg);
-                        nSdf.setSDF(0, y, z, avg);
+                        nSdf.setSDF(0, y, z, v);
                         changed = true;
                     }
                 }
-            }
         }
-        else // Z axis
+        else // +Z neighbour: my last Z row -> neighbour's row 0
         {
             uint32_t lastZ = sdf.config.resZ - 1;
             for (uint32_t y = 0; y < sdf.config.resY; ++y)
-            {
                 for (uint32_t x = 0; x < sdf.config.resX; ++x)
                 {
-                    float myVal = sdf.getSDF(x, y, lastZ);
-                    float nVal = nSdf.getSDF(x, y, 0);
-                    float avg = (myVal + nVal) * 0.5f;
-                    if (std::abs(avg - myVal) > 1e-6f || std::abs(avg - nVal) > 1e-6f)
+                    float v = sdf.getSDF(x, y, lastZ);
+                    if (nSdf.getSDF(x, y, 0) != v)
                     {
-                        sdf.setSDF(x, y, lastZ, avg);
-                        nSdf.setSDF(x, y, 0, avg);
+                        nSdf.setSDF(x, y, 0, v);
                         changed = true;
                     }
                 }
-            }
         }
 
         if (changed)
-        {
             nSdf.isDirty = true;
-            terrain::CaveMeshGenerator::generate(neighbor);
-            neighbor.caveDirty = true;
-            neighbor.caveGPUDirty = true;
-        }
     }
 
     void TerrainService::syncCaveBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles)
     {
+        // 1. Weld shared boundary columns (lower-coord tile authoritative).
         for (const auto& coord : modifiedTiles)
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
             if (!tile || !tile->hasCaveData())
                 continue;
 
-            auto& sdf = *tile->caveData;
+            if (auto* px = grid->getTile({coord.x + 1, coord.z}); px && px->hasCaveData())
+                syncCaveNeighborEdge(*tile->caveData, *px, 0);
+            if (auto* pz = grid->getTile({coord.x, coord.z + 1}); pz && pz->hasCaveData())
+                syncCaveNeighborEdge(*tile->caveData, *pz, 1);
+        }
 
-            // Sync +X neighbor
-            terrain::TerrainTile* neighborPX = grid->getTile({coord.x + 1, coord.z});
-            if (neighborPX && neighborPX->hasCaveData())
-                syncCaveNeighborEdge(sdf, *neighborPX, 0);
+        // 2. Remesh every tile whose mesh could be affected — the modified tiles and all
+        //    neighbours touching their seams — each with its own apron so adjacent meshes
+        //    coincide along the (now welded) boundaries.
+        std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> toRemesh;
+        for (const auto& coord : modifiedTiles)
+            for (int dz = -1; dz <= 1; ++dz)
+                for (int dx = -1; dx <= 1; ++dx)
+                    toRemesh.insert({coord.x + dx, coord.z + dz});
 
-            // Sync +Z neighbor
-            terrain::TerrainTile* neighborPZ = grid->getTile({coord.x, coord.z + 1});
-            if (neighborPZ && neighborPZ->hasCaveData())
-                syncCaveNeighborEdge(sdf, *neighborPZ, 1);
+        for (const auto& coord : toRemesh)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile || !tile->hasCaveData() || !tile->caveData->hasCaveGeometry())
+                continue;
+
+            terrain::CaveMeshGenerator::generate(*tile, buildNeighborCaves(grid, coord));
+            tile->caveDirty = true;
+            tile->caveGPUDirty = true;
         }
     }
 

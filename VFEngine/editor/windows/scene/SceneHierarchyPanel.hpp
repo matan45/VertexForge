@@ -26,13 +26,16 @@ namespace windows
         int entityTypeFilter = 0;
         char nameSearchBuffer[128] = {};
 
-        // Inline rename
-        uint64_t renamingHandle = 0;
+        // Inline rename. Sentinel must be INVALID_ID, not 0: entt uses 0 as a valid
+        // entity id (the scene Root), so a 0 sentinel would make isRenaming true for
+        // the Root every frame and pin the rename box open on its row.
+        uint64_t renamingHandle = services::EntityHandle::INVALID_ID;
         char renameBuffer[256] = {};
         bool renameFocusPending = false;
 
-        // Shift-range selection over last frame's visible draw order
-        uint64_t rangeAnchorHandle = 0;
+        // Shift-range selection over last frame's visible draw order. INVALID_ID
+        // sentinel for the same reason as renamingHandle (Root entity id == 0).
+        uint64_t rangeAnchorHandle = services::EntityHandle::INVALID_ID;
         std::vector<services::EntityHandle> visibleOrder;
         std::vector<services::EntityHandle> lastVisibleOrder;
 
@@ -58,6 +61,9 @@ namespace windows
         bool isSelected(services::EntityHandle handle) const;
         bool isEntityDragActive() const;
 
+        // False for structural / engine-generated entities (scene Root, Terrain
+        // node, terrain tiles) that should not be user-renamed.
+        bool canRename(services::EntityHandle handle) const;
         void beginRename(services::EntityHandle handle);
         void drawRenameInput(services::EntityHandle handle);
 

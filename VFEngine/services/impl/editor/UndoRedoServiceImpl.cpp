@@ -35,6 +35,13 @@ namespace services
             {
                 endBatch();
             });
+
+        dispatcher.registerCommandHandler<events::undoredo::PushUndoableCommand>(
+            [this](const events::undoredo::PushUndoableCommand& cmd)
+            {
+                if (cmd.command)
+                    pushCommand(std::make_unique<SharedUndoCommand>(cmd.command));
+            });
     }
 
     void UndoRedoServiceImpl::pushCommand(std::unique_ptr<IUndoableCommand> command)

@@ -171,5 +171,8 @@ namespace windows
         ImGui::Separator();
         ImGui::TextDisabled("Left-click to carve/fill");
         ImGui::TextDisabled("Hold Shift to invert");
+        ImGui::TextDisabled("Carving auto-opens the surface");
+        ImGui::TextDisabled("(the Hole brush is the 2.5D version)");
+        ImGui::TextDisabled("Ctrl+Z / Ctrl+Y to undo / redo a stroke");
     }
 }

@@ -31,6 +31,9 @@ namespace vegetation
             file.write(reinterpret_cast<const char*>(&inst.rotation), sizeof(float));
             file.write(reinterpret_cast<const char*>(&inst.scale), sizeof(float));
             file.write(reinterpret_cast<const char*>(&inst.paletteEntryIndex), sizeof(uint32_t));
+            file.write(reinterpret_cast<const char*>(&inst.heightScale), sizeof(float));
+            file.write(reinterpret_cast<const char*>(&inst.tint), sizeof(float));
+            file.write(reinterpret_cast<const char*>(&inst.normal), sizeof(glm::vec3));
         }
 
         return file.good();
@@ -78,6 +81,9 @@ namespace vegetation
             file.read(reinterpret_cast<char*>(&inst.rotation), sizeof(float));
             file.read(reinterpret_cast<char*>(&inst.scale), sizeof(float));
             file.read(reinterpret_cast<char*>(&inst.paletteEntryIndex), sizeof(uint32_t));
+            file.read(reinterpret_cast<char*>(&inst.heightScale), sizeof(float));
+            file.read(reinterpret_cast<char*>(&inst.tint), sizeof(float));
+            file.read(reinterpret_cast<char*>(&inst.normal), sizeof(glm::vec3));
             inst.windPhase = windDist(rng);
         }
 
@@ -100,6 +106,9 @@ namespace vegetation
             e["weight"] = entry.weight;
             e["scaleMin"] = entry.scaleRange.x;
             e["scaleMax"] = entry.scaleRange.y;
+            e["heightMin"] = entry.heightRange.x;
+            e["heightMax"] = entry.heightRange.y;
+            e["tintJitter"] = entry.tintJitter;
             e["mode"] = static_cast<int>(entry.mode);
             e["visible"] = entry.visible;
             e["paintEnabled"] = entry.paintEnabled;
@@ -126,6 +135,9 @@ namespace vegetation
                 if (e.contains("weight")) entry.weight = e["weight"].get<float>();
                 if (e.contains("scaleMin")) entry.scaleRange.x = e["scaleMin"].get<float>();
                 if (e.contains("scaleMax")) entry.scaleRange.y = e["scaleMax"].get<float>();
+                if (e.contains("heightMin")) entry.heightRange.x = e["heightMin"].get<float>();
+                if (e.contains("heightMax")) entry.heightRange.y = e["heightMax"].get<float>();
+                if (e.contains("tintJitter")) entry.tintJitter = e["tintJitter"].get<float>();
                 if (e.contains("mode")) entry.mode = static_cast<BillboardMode>(e["mode"].get<int>());
                 if (e.contains("visible")) entry.visible = e["visible"].get<bool>();
                 if (e.contains("paintEnabled")) entry.paintEnabled = e["paintEnabled"].get<bool>();

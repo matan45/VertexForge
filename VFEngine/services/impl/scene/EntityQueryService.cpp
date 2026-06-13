@@ -202,6 +202,8 @@ namespace services
             HAS_CASE(UIListView, UIListViewComponent);
             HAS_CASE(RenderTexture, RenderTextureComponent);
             HAS_CASE(Decal, DecalComponent);
+            HAS_CASE(Terrain, TerrainComponent);
+            HAS_CASE(TerrainTile, TerrainTileComponent);
         default:
             return false;
         }
@@ -260,6 +262,8 @@ namespace services
         CHECK_COMP(UIListView, UIListViewComponent);
         CHECK_COMP(RenderTexture, RenderTextureComponent);
         CHECK_COMP(Decal, DecalComponent);
+        CHECK_COMP(Terrain, TerrainComponent);
+        CHECK_COMP(TerrainTile, TerrainTileComponent);
 
 #undef CHECK_COMP
 

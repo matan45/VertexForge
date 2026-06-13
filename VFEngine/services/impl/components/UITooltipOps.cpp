@@ -52,6 +52,7 @@ namespace services {
         data.textColor = comp.textColor;
         data.fontRef = comp.fontRef;
         data.fontSize = comp.fontSize;
+        data.letterSpacing = comp.letterSpacing;
         data.padding = comp.padding;
         data.enabled = comp.enabled;
         data.panelChildName = comp.panelChildName;
@@ -74,6 +75,7 @@ namespace services {
         comp.textColor = data.textColor;
         comp.fontRef = data.fontRef;
         comp.fontSize = data.fontSize;
+        comp.letterSpacing = data.letterSpacing;
         comp.padding = data.padding;
         comp.enabled = data.enabled;
         comp.panelChildName = data.panelChildName;

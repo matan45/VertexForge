@@ -37,6 +37,11 @@ namespace components
     struct TerrainComponent;
 }
 
+namespace events::caveBrush
+{
+    struct CaveTileState;
+}
+
 namespace services
 {
     class TerrainService : public ITerrainService
@@ -63,6 +68,16 @@ namespace services
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
+
+        // Cave brush undo: per-tile SDF + hole-mask captured before the current stroke
+        // first modifies that tile; drained into an undo command when the stroke finalizes.
+        struct CaveStrokeTileBefore
+        {
+            std::vector<float> sdf;
+            std::vector<uint8_t> holeMask;
+        };
+        std::unordered_map<terrain::TileCoord, CaveStrokeTileBefore, terrain::TileCoordHash> caveStrokeBefore;
+        uint64_t caveStrokeEntityId = 0;
         std::vector<terrain::StreamingAction> streamingActions; // persistent scratch buffer
         std::vector<std::pair<uint64_t, terrain::TileCoord>> pendingPhysicsTiles;
 
@@ -226,6 +241,7 @@ namespace services
         void registerCaveBrushHandlers(::events::EventDispatcher& dispatcher);
         void syncCaveBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncCaveNeighborEdge(terrain::CaveSDFData& sdf, terrain::TerrainTile& neighbor, int axis);
+        void restoreCaveState(uint64_t entityId, const std::vector<::events::caveBrush::CaveTileState>& tiles);
         void punchCaveHolesForTile(terrain::TerrainTile& tile);
         void rebuildCaveColliders(EntityHandle entity, terrain::TerrainGrid* grid,
                                   const std::vector<terrain::TileCoord>& caveTiles);
