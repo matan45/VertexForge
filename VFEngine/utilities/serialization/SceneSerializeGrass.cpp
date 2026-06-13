@@ -43,6 +43,12 @@ namespace {
                     entry.scaleRange.x = e["scaleMin"].get<float>();
                 if (e.contains("scaleMax") && e["scaleMax"].is_number())
                     entry.scaleRange.y = e["scaleMax"].get<float>();
+                if (e.contains("heightMin") && e["heightMin"].is_number())
+                    entry.heightRange.x = e["heightMin"].get<float>();
+                if (e.contains("heightMax") && e["heightMax"].is_number())
+                    entry.heightRange.y = e["heightMax"].get<float>();
+                if (e.contains("tintJitter") && e["tintJitter"].is_number())
+                    entry.tintJitter = e["tintJitter"].get<float>();
                 if (e.contains("mode") && e["mode"].is_number())
                     entry.mode = static_cast<vegetation::BillboardMode>(e["mode"].get<int>());
                 if (e.contains("visible") && e["visible"].is_boolean())
@@ -110,6 +116,9 @@ namespace serialization
             e["weight"] = entry.weight;
             e["scaleMin"] = entry.scaleRange.x;
             e["scaleMax"] = entry.scaleRange.y;
+            e["heightMin"] = entry.heightRange.x;
+            e["heightMax"] = entry.heightRange.y;
+            e["tintJitter"] = entry.tintJitter;
             e["mode"] = static_cast<int>(entry.mode);
             e["visible"] = entry.visible;
             e["paintEnabled"] = entry.paintEnabled;

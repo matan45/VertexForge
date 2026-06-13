@@ -11,10 +11,10 @@ namespace windows
     private:
         bool visible = false;
         int selectedBrushType = 0;
-        float brushRadius = 5.0f;
-        float brushSpacing = 0.5f;
-        float brushDensity = 1.0f;
-        float brushJitter = 0.5f;
+        vegetation::VegetationBrushParams brushParams;
+        // UI-only slope mask values (converted to/from brushParams cos limits)
+        float slopeMinDeg = 0.0f;
+        float slopeMaxDeg = 90.0f;
 
         // Billboard palette
         std::vector<vegetation::BillboardPaletteEntry> billboardEntries;
@@ -39,6 +39,8 @@ namespace windows
         void drawBillboardPalette();
         void drawBillboardEntry(int index, int& removeIndex);
         void drawBrushControls();
+        void drawPlacementMaskControls(bool& paramsChanged);
+        void pushBrushParams();
         void drawWindControls();
         void drawSSSControls();
         void pushGrassConfig();

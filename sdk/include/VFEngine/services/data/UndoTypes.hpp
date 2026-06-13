@@ -85,6 +85,29 @@ namespace services
     };
 
 
+    // Adapts a shared_ptr<IUndoableCommand> so it can be stored in the
+    // unique_ptr-based undo stacks (used by the PushUndoableCommand event,
+    // which lets services that don't hold the undo service push commands).
+    class SharedUndoCommand : public IUndoableCommand
+    {
+    private:
+        std::shared_ptr<IUndoableCommand> inner;
+
+    public:
+        explicit SharedUndoCommand(std::shared_ptr<IUndoableCommand> c)
+            : inner(std::move(c))
+        {
+        }
+
+        void execute() override { if (inner) inner->execute(); }
+        void undo() override { if (inner) inner->undo(); }
+        std::string getDescription() const override
+        {
+            return inner ? inner->getDescription() : std::string();
+        }
+    };
+
+
     class BatchUndoCommand : public IUndoableCommand
     {
     private:

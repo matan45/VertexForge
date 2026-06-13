@@ -23,6 +23,13 @@ namespace vegetation
         Erase = 1
     };
 
+    // How the paint brush scatters instances
+    enum class VegetationPlacementMode : uint8_t
+    {
+        Spray = 0,  // Scatter many instances across the brush disk (grass/foliage)
+        Single = 1  // Place a single instance at the cursor (hero props)
+    };
+
     // A single placed billboard instance
     struct BillboardInstance
     {
@@ -31,6 +38,9 @@ namespace vegetation
         float scale = 1.0f;          // Uniform scale factor
         uint32_t paletteEntryIndex = 0; // Index into billboard palette
         float windPhase = 0.0f;      // Random wind phase [0,1]
+        float heightScale = 1.0f;    // Per-instance height multiplier (variation)
+        float tint = 1.0f;           // Per-instance brightness/tint multiplier [~0.5,1.5]
+        glm::vec3 normal{0.0f, 1.0f, 0.0f}; // Terrain surface normal (for align-to-normal)
     };
 
     // Billboard palette entry (texture + settings)
@@ -39,6 +49,8 @@ namespace vegetation
         std::string texturePath;                     // Path to .vfImage file
         float weight = 1.0f;                         // For weighted random selection
         glm::vec2 scaleRange{0.2f, 0.4f};           // Min/max random scale
+        glm::vec2 heightRange{1.0f, 1.0f};          // Min/max random height multiplier
+        float tintJitter = 0.0f;                     // Per-instance brightness jitter amount [0,1]
         BillboardMode mode = BillboardMode::Cross;   // Cross or camera-facing
         bool visible = true;                         // Toggle rendering on/off
         bool paintEnabled = false;                   // Include in paint brush
@@ -53,6 +65,29 @@ namespace vegetation
         float density = 1.0f;         // Instances per brush application
         float positionJitter = 0.5f;  // Random offset within spacing
         terrain::BrushFalloff falloff = terrain::BrushFalloff::Smooth;
+
+        // Placement masks (reject candidates failing these)
+        bool useSlopeMask = false;    // Limit placement by terrain slope
+        float slopeMinCos = 0.0f;     // Min surface normal.y (1=flat, 0=vertical)
+        float slopeMaxCos = 1.0f;     // Max surface normal.y
+        bool alignToNormal = false;   // Tilt instances to the terrain normal
+        bool useHeightMask = false;   // Limit placement by terrain height
+        float heightMin = 0.0f;
+        float heightMax = 100.0f;
+
+        // Noise/scatter mask (clumping)
+        bool useNoiseMask = false;
+        float noiseFrequency = 0.1f;  // World-space noise frequency
+        float noiseThreshold = 0.5f;  // Reject below this noise value [0,1]
+        uint32_t noiseSeed = 1337;
+
+        // Flow / placement mode
+        VegetationPlacementMode placementMode = VegetationPlacementMode::Spray;
+        float flowRate = 0.0f;        // 0=throttle by spacing; >0 = instances/sec while held (airbrush)
+
+        // Layer-aware avoidance
+        bool avoidOtherLayers = false; // Reject candidates near a different palette layer
+        float layerAvoidRadius = 0.5f; // Min distance to a different layer
     };
 
     // Max billboard palette entries

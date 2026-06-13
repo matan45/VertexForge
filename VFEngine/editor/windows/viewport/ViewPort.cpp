@@ -703,6 +703,10 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         if (!dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
+            if (vegetationDragging) {
+                events::vegetationBrush::FinalizeVegetationBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
             vegetationDragging = false;
             return;
         }
@@ -718,6 +722,11 @@ namespace windows
                 vegetationDragging = true;
             }
         } else {
+            if (vegetationDragging) {
+                // Mouse released — record one undo entry for the whole stroke
+                events::vegetationBrush::FinalizeVegetationBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
             vegetationDragging = false;
         }
     }

@@ -88,4 +88,14 @@ namespace events::vegetation
 
         std::string_view getName() const override { return "RemoveBillboardInstancesFromTile"; }
     };
+
+    // Replace a tile's entire billboard instance set (used by undo/redo snapshots)
+    struct SetTileBillboardInstancesCommand : ICommand<void>
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        std::vector<::vegetation::BillboardInstance> instances;
+
+        std::string_view getName() const override { return "SetTileBillboardInstances"; }
+    };
 }

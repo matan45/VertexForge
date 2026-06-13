@@ -36,11 +36,17 @@ namespace services
         };
         std::unordered_map<terrain::TileCoord, vegetation::VegetationSpatialGrid, TileCoordHash, TileCoordEqual> spatialGrids;
 
+        // Per-stroke "before" snapshots of touched tiles, for one undo entry per stroke.
+        using TileSnapshotMap = std::unordered_map<terrain::TileCoord,
+            std::vector<vegetation::BillboardInstance>, TileCoordHash, TileCoordEqual>;
+        TileSnapshotMap strokeBeforeSnapshots;
+
         // Placement state
         std::mt19937 rng{std::random_device{}()};
         glm::vec3 lastPlacementPos{0.0f};
         bool hasLastPlacement = false;
         float worldTileSize = 32.0f;
+        float flowAccumulator = 0.0f; // Airbrush flow timing (instances accumulate over time)
 
         BillboardPaletteCallback billboardPaletteCb;
         ::events::SubscriptionToken vegetationModeToken;
@@ -58,7 +64,25 @@ namespace services
         void applyBrush(const glm::vec3& worldPos, float deltaTime, bool isFirstApplication);
         void placeBillboards(const glm::vec3& worldPos,
                              const std::vector<vegetation::BillboardPaletteEntry>& palette);
+        void placeSingle(const glm::vec3& worldPos,
+                         const std::vector<vegetation::BillboardPaletteEntry>& palette);
         void eraseBillboards(const glm::vec3& worldPos);
+
+        // Undo support: capture a tile's instances before the stroke mutates it,
+        // then build+push one undo command when the stroke finalizes.
+        void snapshotTileBefore(const terrain::TileCoord& coord);
+        void finalizeStroke();
+
+        // Estimate the terrain surface normal at (worldX, worldZ) via finite
+        // differences over the existing GetTerrainHeightAtQuery.
+        glm::vec3 sampleTerrainNormal(float worldX, float worldZ) const;
+        // Reject candidates failing the active slope/height/noise masks.
+        bool passesMasks(float candY, const glm::vec3& normal, float candX, float candZ) const;
+        // Build a billboard instance with randomized rotation/scale/height/tint/normal.
+        vegetation::BillboardInstance buildInstance(
+            const glm::vec3& position, const glm::vec3& normal, uint32_t paletteIdx,
+            const vegetation::BillboardPaletteEntry& entry,
+            std::uniform_real_distribution<float>& unitDist);
 
         terrain::TileCoord worldToTileCoord(float worldX, float worldZ) const;
         vegetation::VegetationSpatialGrid& ensureSpatialGrid(const terrain::TileCoord& coord);

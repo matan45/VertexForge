@@ -305,11 +305,13 @@ namespace render::gpudriven
 
                 vegetation::GrassInstanceGPU gpu;
                 gpu.positionAndRotation = glm::vec4(inst.position, inst.rotation);
-                gpu.scaleAndDensity = glm::vec4(inst.scale, inst.scale * 0.5f, 1.0f, inst.windPhase);
+                gpu.scaleAndDensity = glm::vec4(inst.scale * inst.heightScale,
+                                                inst.scale * 0.5f, 1.0f, inst.windPhase);
                 gpu.color = glm::vec4(
                     glm::uintBitsToFloat(texIdx),
                     glm::uintBitsToFloat(bbMode),
-                    1.0f, 0.0f);
+                    inst.tint, 0.0f);
+                gpu.normalAndPad = glm::vec4(inst.normal, 0.0f);
                 result.push_back(gpu);
             }
 

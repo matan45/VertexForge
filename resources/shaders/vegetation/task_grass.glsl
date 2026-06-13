@@ -10,7 +10,7 @@
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 layout(std430, set = 0, binding = 0) readonly buffer GrassInstanceBuffer {
-    vec4 grassInstances[];  // 3 vec4s per instance
+    vec4 grassInstances[];  // 4 vec4s per instance
 };
 
 layout(std430, set = 0, binding = 1) readonly buffer GrassCountBuffer {
@@ -48,9 +48,9 @@ void main() {
     float dist = 0.0;
 
     if (instanceIdx < totalInstances) {
-        vec4 posAndRot = grassInstances[instanceIdx * 3];
+        vec4 posAndRot = grassInstances[instanceIdx * 4];
         vec3 worldPos = posAndRot.xyz;
-        vec4 scaleAndDensity = grassInstances[instanceIdx * 3 + 1];
+        vec4 scaleAndDensity = grassInstances[instanceIdx * 4 + 1];
         float grassHeight = scaleAndDensity.x;
 
         dist = distance(worldPos, camera.cameraPosition.xyz);

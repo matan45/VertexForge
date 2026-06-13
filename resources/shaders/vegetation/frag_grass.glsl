@@ -11,6 +11,7 @@ layout(location = 2) in vec2 inUV;
 layout(location = 3) in float inAlpha;
 layout(location = 4) flat in uint inVegType;
 layout(location = 5) flat in uint inTexIndex;
+layout(location = 6) flat in float inTint;
 
 layout(location = 0) out vec4 outColor;
 
@@ -99,6 +100,9 @@ void main() {
         // No texture assigned - discard
         discard;
     }
+
+    // Per-instance tint (brightness variation)
+    albedo *= inTint;
 
     // Ambient term
     float ambient = 0.15;

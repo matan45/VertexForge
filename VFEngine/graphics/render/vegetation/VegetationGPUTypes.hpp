@@ -5,12 +5,14 @@
 
 namespace render::vegetation
 {
-    // Per vegetation billboard instance (uploaded from CPU)
+    // Per vegetation billboard instance (uploaded from CPU). 4 vec4s; the mesh/task
+    // shaders index instances at stride 4 (instanceIdx * 4u).
     struct GrassInstanceGPU
     {
         glm::vec4 positionAndRotation;  // xyz=world position, w=Y rotation
         glm::vec4 scaleAndDensity;      // x=height, y=width, z=density, w=windPhase
-        glm::vec4 color;                // xyz=color tint, w=vegetationType (0=Grass,1=Flower,2=Bush,3=Rock)
+        glm::vec4 color;                // x=texIndex(bits), y=billboardMode(bits), z=tint, w=vegetationType
+        glm::vec4 normalAndPad;         // xyz=terrain normal (align-to-normal), w=pad
     };
 
     // Per-tile vegetation metadata for GPU
