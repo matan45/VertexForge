@@ -72,6 +72,7 @@ namespace services {
         data.clearColor = comp.clearColor;
         data.priority = comp.priority;
         data.enabled = comp.enabled;
+        data.renderShadows = comp.renderShadows;
         return data;
     }
 
@@ -95,6 +96,7 @@ namespace services {
         comp.clearColor = renderTextureData.clearColor;
         comp.priority = renderTextureData.priority;
         comp.enabled = renderTextureData.enabled;
+        comp.renderShadows = renderTextureData.renderShadows;
         return true;
     }
 

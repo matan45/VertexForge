@@ -14,7 +14,8 @@ namespace render::common
         float time;
         float snowAccumulation;
         float wetness;
-        float _pad[2];
+        float disableShadows; // 1.0 = skip shadow sampling for this pass (e.g. RTT/minimap)
+        float _pad;
         alignas(16) glm::vec4 frustumPlanes[6];
     };
 

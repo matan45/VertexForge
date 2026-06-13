@@ -22,5 +22,6 @@ namespace rendertexture
         float fixedIntervalSeconds = 1.0f / 30.0f;
         glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
         uint32_t priority = 0;
+        bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
     };
 }

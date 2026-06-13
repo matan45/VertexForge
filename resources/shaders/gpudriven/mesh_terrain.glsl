@@ -538,7 +538,9 @@ void main() {
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
 
-        float shadow = sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
+        float shadow = (camera.disableShadows > 0.5)
+            ? 1.0
+            : sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
         minShadow = min(minShadow, shadow);
 
         vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;

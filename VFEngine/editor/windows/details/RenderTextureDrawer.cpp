@@ -121,6 +121,17 @@ namespace windows::details
             changed = true;
         }
 
+        if (ImGui::Checkbox("Render Shadows##RT", &data.renderShadows))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Sample the scene's shadow map in this render texture.\n"
+                              "Off (default) = flat-lit. Useful for minimaps/tactical maps,\n"
+                              "whose top-down view doesn't match the primary camera's shadow clipmap.");
+        }
+
         const char* updateModes[] = {"Every Frame", "On Demand", "Fixed Interval"};
         int currentMode = static_cast<int>(data.updateMode);
         if (ImGui::Combo("Update Mode##RT", &currentMode, updateModes, IM_ARRAYSIZE(updateModes)))
