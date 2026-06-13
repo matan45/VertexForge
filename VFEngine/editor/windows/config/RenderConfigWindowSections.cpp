@@ -24,6 +24,7 @@ namespace windows
                 drawShadowQualitySettings();
                 drawShadowBiasSettings();
                 drawShadowFilterSettings();
+                drawDirectionalClipmapSettings();
             }
 
             drawRTShadowSection();
@@ -104,6 +105,37 @@ namespace windows
                               "0.0 = Lighter shadows (ambient light in shadows)\n"
                               "1.0 = Darker shadows (no ambient in shadows)");
         }
+    }
+
+    void RenderConfigWindow::drawDirectionalClipmapSettings()
+    {
+        ImGui::Separator();
+        ImGui::Text("Directional Clipmap (Sun)");
+        ImGui::Spacing();
+
+        int levels = static_cast<int>(settings.shadows.clipmapLevelCount);
+        if (ImGui::SliderInt("Clipmap Levels", &levels, 2, 8))
+        {
+            settings.shadows.clipmapLevelCount = static_cast<uint32_t>(levels);
+            markDirty();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Concentric, camera-centered shadow shells for the directional light.\n"
+                              "Each level covers 2x the area of the previous. More levels = farther\n"
+                              "shadow reach. Takes effect on scene reload (resizes the page block).");
+
+        if (ImGui::DragFloat("Base Extent (m)", &settings.shadows.clipmapBaseExtent, 1.0f, 4.0f, 256.0f, "%.0f"))
+            markDirty();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Half-size of the finest (level 0) shell in world units.\n"
+                              "Smaller = sharper near shadows but more levels needed to reach the horizon.\n"
+                              "Applies live on Apply.");
+
+        if (ImGui::DragFloat("Depth Range (m)", &settings.shadows.clipmapDepthRange, 50.0f, 100.0f, 20000.0f, "%.0f"))
+            markDirty();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("How far each shell spans along the sun direction.\n"
+                              "Must cover scene height + view distance. Applies live on Apply.");
     }
 
     void RenderConfigWindow::drawShadowDebugSection()

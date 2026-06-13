@@ -36,19 +36,19 @@ namespace core
                 return;
             }
 
-            // Allocate secondary command buffers (one per frame-in-flight)
+            // Allocate secondary command buffers (one per frame-in-flight per slot)
             vk::CommandBufferAllocateInfo allocInfo{};
             allocInfo.commandPool = threadPools[t].commandPool.get();
             allocInfo.level = vk::CommandBufferLevel::eSecondary;
-            allocInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
+            allocInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT * SECONDARY_SLOTS_PER_FRAME;
 
             try
             {
                 auto buffers = device->getLogicalDevice().allocateCommandBuffersUnique(allocInfo);
                 for (uint32_t f = 0; f < MAX_FRAMES_IN_FLIGHT; f++)
-                {
-                    threadPools[t].secondaryBuffers[f] = std::move(buffers[f]);
-                }
+                    for (uint32_t s = 0; s < SECONDARY_SLOTS_PER_FRAME; s++)
+                        threadPools[t].secondaryBuffers[f][s] =
+                            std::move(buffers[f * SECONDARY_SLOTS_PER_FRAME + s]);
             }
             catch (const vk::SystemError& err)
             {
@@ -64,10 +64,9 @@ namespace core
     {
         for (auto& pool : threadPools)
         {
-            for (auto& buf : pool.secondaryBuffers)
-            {
-                buf.reset();
-            }
+            for (auto& frameSlots : pool.secondaryBuffers)
+                for (auto& buf : frameSlots)
+                    buf.reset();
             pool.commandPool.reset();
         }
         threadPools.clear();
@@ -80,14 +79,16 @@ namespace core
 
         for (uint32_t t = 0; t < threadCount; t++)
         {
-            // Reset individual secondary buffers for this frame
-            threadPools[t].secondaryBuffers[fi]->reset(vk::CommandBufferResetFlagBits::eReleaseResources);
+            // Reset every slot's secondary buffer for this frame
+            for (uint32_t s = 0; s < SECONDARY_SLOTS_PER_FRAME; s++)
+                threadPools[t].secondaryBuffers[fi][s]->reset(vk::CommandBufferResetFlagBits::eReleaseResources);
         }
     }
 
-    vk::CommandBuffer ThreadCommandPoolManager::getSecondary(uint32_t threadNum, uint32_t frameIndex)
+    vk::CommandBuffer ThreadCommandPoolManager::getSecondary(uint32_t threadNum, uint32_t frameIndex, uint32_t slot)
     {
         uint32_t fi = frameIndex % MAX_FRAMES_IN_FLIGHT;
-        return threadPools[threadNum].secondaryBuffers[fi].get();
+        uint32_t sl = slot % SECONDARY_SLOTS_PER_FRAME;
+        return threadPools[threadNum].secondaryBuffers[fi][sl].get();
     }
 }

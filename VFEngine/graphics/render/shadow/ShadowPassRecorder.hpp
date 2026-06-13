@@ -173,13 +173,15 @@ namespace render::shadow
             const ParallelDispatchArgs& args,
             const std::vector<PageRenderEntry>& pages,
             bool clearTiles,
+            uint32_t slot,
             std::vector<vk::CommandBuffer>& secondaryBuffers,
             std::vector<bool>& threadUsed);
 
         void dispatchPagesParallel(
             const ParallelDispatchArgs& args,
             const std::vector<PageRenderEntry>& pages,
-            bool clearTiles);
+            bool clearTiles,
+            uint32_t slot);
 
         void recordStaticPhaseParallel(
             const ParallelDispatchArgs& args,

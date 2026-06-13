@@ -14,6 +14,7 @@ namespace render::shadow
         const ParallelDispatchArgs& args,
         const std::vector<PageRenderEntry>& pages,
         bool clearTiles,
+        uint32_t slot,
         std::vector<vk::CommandBuffer>& secondaryBuffers,
         std::vector<bool>& threadUsed)
     {
@@ -25,8 +26,11 @@ namespace render::shadow
 
         threading::JobSystem::instance().parallelFor(tileCount,
             [&](uint32_t begin, uint32_t end, uint32_t threadNum) {
+                // Distinct slot per phase: the static and dynamic phases both execute their
+                // secondaries into the same primary, so they must NOT share buffers (re-
+                // recording an already-executed secondary invalidates the primary).
                 vk::CommandBuffer secondary =
-                    args.threadPoolManager->getSecondary(threadNum, args.frameIndex);
+                    args.threadPoolManager->getSecondary(threadNum, args.frameIndex, slot);
 
                 // Dynamic rendering inheritance for secondary command buffers
                 vk::CommandBufferInheritanceRenderingInfo inheritanceRendering{};
@@ -57,13 +61,14 @@ namespace render::shadow
     void ShadowPassRecorder::dispatchPagesParallel(
         const ParallelDispatchArgs& args,
         const std::vector<PageRenderEntry>& pages,
-        bool clearTiles)
+        bool clearTiles,
+        uint32_t slot)
     {
         uint32_t threadCount = args.threadPoolManager->getThreadCount();
         std::vector<vk::CommandBuffer> secondaryBuffers(threadCount, nullptr);
         std::vector<bool> threadUsed(threadCount, false);
 
-        recordSecondaryTileCommands(args, pages, clearTiles, secondaryBuffers, threadUsed);
+        recordSecondaryTileCommands(args, pages, clearTiles, slot, secondaryBuffers, threadUsed);
 
         std::vector<vk::CommandBuffer> validSecondaries;
         for (uint32_t t = 0; t < threadCount; t++)
@@ -113,7 +118,7 @@ namespace render::shadow
 
         args.primaryCmd.beginRendering(renderingInfo);
         bool loadPass = !clearDepth;
-        dispatchPagesParallel(args, combinedPhaseA, loadPass);
+        dispatchPagesParallel(args, combinedPhaseA, loadPass, /*slot=*/0);
         args.primaryCmd.endRendering();
     }
 
@@ -139,7 +144,7 @@ namespace render::shadow
         renderingInfo.flags = vk::RenderingFlagBits::eContentsSecondaryCommandBuffers;
 
         args.primaryCmd.beginRendering(renderingInfo);
-        dispatchPagesParallel(args, ctx.dynamicPageRenderList, true);
+        dispatchPagesParallel(args, ctx.dynamicPageRenderList, true, /*slot=*/1);
         args.primaryCmd.endRendering();
     }
 
