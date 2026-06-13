@@ -10,8 +10,7 @@
 --
 -- Bundle layout (the bin/ tree is preserved so existing relative paths resolve):
 --   dist/VertexForge/
---     VertexForge.bat                 entry point (sets VERTEXFORGE_EDITOR_PATH, runs launcher)
---     VertexForge Launcher/           jpackage APP_IMAGE (bundled JRE; sibling of bin/)
+--     VertexForge Launcher/           jpackage APP_IMAGE (bundled JRE; sibling of bin/) — entry point
 --     bin/Editor/Release/x64/         Editor.exe + all DLLs
 --     bin/Editor/resources/           editor/, shaders/, ibl/   (../../resources/ target for Editor.exe)
 --     bin/Runtime/Release/x64/        Runtime.exe + all DLLs
@@ -98,13 +97,8 @@ function vfPackageRelease()
       print("           Native bundle is complete; re-run after building " .. appImage .. "/.")
    end
 
-   -- 7. Entry-point launcher script (cwd-proof: sets the highest-priority editor lookup).
-   io.writefile(dist .. "/VertexForge.bat",
-      "@echo off\r\n" ..
-      "set \"VERTEXFORGE_EDITOR_PATH=%~dp0bin\\Editor\\Release\\x64\\Editor.exe\"\r\n" ..
-      "start \"\" \"%~dp0VertexForge Launcher\\VertexForge Launcher.exe\"\r\n")
-
    print("Done. Release package at " .. path.getabsolute(dist))
+   print("Run: \"" .. dist .. "/VertexForge Launcher/VertexForge Launcher.exe\"")
 end
 
 newaction {

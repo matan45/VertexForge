@@ -1164,14 +1164,12 @@ project "Tests"
 
    vfStandardConfigs({ "JPH_ENABLE_ASSERTS" })
 
-   -- Streamline interposer: development build for Debug/Development, production for Release
-   filter "configurations:Debug or Development"
+   -- Streamline interposer: use the development build in every config (the
+   -- production DLLs require an NVIDIA App ID and are not shipped in the
+   -- Streamline release zip). Matches the Editor/Runtime Release filters.
+   filter "configurations:Debug or Development or Release"
       postbuildcommands {
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
-      }
-   filter "configurations:Release"
-      postbuildcommands {
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
       }
 
    -- Import.dll runtime dependency: assimp CMake build (Debug uses /MDd variant)

@@ -88,8 +88,7 @@ This writes everything under `dist/VertexForge/`:
 
 ```
 dist/VertexForge/
-├── VertexForge.bat                 # entry point — sets VERTEXFORGE_EDITOR_PATH and runs the launcher
-├── VertexForge Launcher/           # self-contained Java launcher app-image (bundled JRE)
+├── VertexForge Launcher/           # self-contained Java launcher app-image (bundled JRE) — entry point
 ├── bin/
 │   ├── Editor/Release/x64/         # Editor.exe + all DLLs
 │   ├── Editor/resources/           # editor/, shaders/, ibl/  (resolved as ../../resources/ by Editor.exe)
@@ -99,7 +98,7 @@ dist/VertexForge/
 └── sdk/                            # plugin headers, deps, lib/Release/imgui.lib, project template
 ```
 
-Run `dist/VertexForge/VertexForge.bat` to start the launcher, which in turn launches the bundled Editor. End users of the distribution do **not** need Java installed.
+Run `dist/VertexForge/VertexForge Launcher/VertexForge Launcher.exe` to start the launcher, which in turn launches the bundled Editor. End users of the distribution do **not** need Java installed.
 
 ## Features
 - **Modular Engine Architecture**: Split into `Core`, `Graphics`, `Runtime`, and `Utilities` projects for flexible development.
