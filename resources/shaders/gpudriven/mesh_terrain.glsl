@@ -230,7 +230,7 @@ layout(set = 11, binding = 4) uniform WorldMaskUBO {
     vec4 worldMinMax;          // minX, minZ, maxX, maxZ
     float terrainDimMin;
     float entityDiscardBelow;
-    uint flags;                // bit0 enabled, bit1 affectsTerrain, bit2 affectsEntities
+    uint flags;                // bit0 enabled, bit1 affectsTerrain, bit2 affectsEntities, bit3 affectsShadows
     float _padWM;
 } worldMask;
 #endif
@@ -458,15 +458,23 @@ void main() {
     applyWetness(camera.wetness, albedo, roughness, metallic, N);
     applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
 
+    // Fog-of-war visibility for this terrain fragment (1.0 = fully visible). Stays 1.0 unless
+    // the bound mask opts in to affecting shadows (bit3), so shadow fading is configurable.
+    float worldMaskVisibility = 1.0;
 #ifdef WORLD_MASK_ENABLED
-    // Plugin world mask: dim albedo where the XZ-projected mask is low (e.g. fog of war).
-    // Fragments outside the mask bounds are unaffected (mask = 1.0).
-    if ((worldMask.flags & 3u) == 3u) {   // enabled & affectsTerrain
-        vec2 maskUV = (fragWorldPos.xz - worldMask.worldMinMax.xy)
-                    / (worldMask.worldMinMax.zw - worldMask.worldMinMax.xy);
-        if (all(greaterThanEqual(maskUV, vec2(0.0))) && all(lessThanEqual(maskUV, vec2(1.0)))) {
-            float maskValue = texture(worldMaskTexture, maskUV).r;
-            albedo *= mix(worldMask.terrainDimMin, 1.0, maskValue);
+    // Plugin world mask: dim albedo where the XZ-projected mask is low (e.g. fog of war), and/or
+    // fade cast shadows there. Fragments outside the mask bounds are unaffected (mask = 1.0).
+    if ((worldMask.flags & 1u) != 0u) {   // enabled
+        bool affectsTerrain = (worldMask.flags & 2u) != 0u;
+        bool affectsShadows = (worldMask.flags & 8u) != 0u;
+        if (affectsTerrain || affectsShadows) {
+            vec2 maskUV = (fragWorldPos.xz - worldMask.worldMinMax.xy)
+                        / (worldMask.worldMinMax.zw - worldMask.worldMinMax.xy);
+            if (all(greaterThanEqual(maskUV, vec2(0.0))) && all(lessThanEqual(maskUV, vec2(1.0)))) {
+                float maskValue = texture(worldMaskTexture, maskUV).r;
+                if (affectsTerrain) albedo *= mix(worldMask.terrainDimMin, 1.0, maskValue);
+                if (affectsShadows) worldMaskVisibility = maskValue;
+            }
         }
     }
 #endif
@@ -541,6 +549,9 @@ void main() {
         float shadow = (camera.disableShadows > 0.5)
             ? 1.0
             : sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
+        // Fog of war hides the casters (entities are discarded in fog), so fade their ground
+        // shadows out by the same mask -> no ghost shadows sitting on top of the fog.
+        shadow = mix(1.0, shadow, worldMaskVisibility);
         minShadow = min(minShadow, shadow);
 
         vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;

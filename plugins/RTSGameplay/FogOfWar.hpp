@@ -17,6 +17,8 @@ struct FogSettings
     bool enabled = true;               // runtime gate (F10 / UI checkbox)
     float terrainDimMin = 0.35f;       // unexplored terrain albedo multiplier
     float entityDiscardBelow = 0.5f;   // hide entities where mask < threshold
+    bool hideShadows = true;           // fade terrain cast-shadows in fog (hide ghost shadows
+                                       // of fog-hidden buildings)
     bool paramsDirty = false;          // UI/F10 changed something -> re-push params
 
     // Explored-but-not-visible mask value (classic RTS three-state fog):

@@ -502,6 +502,11 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::initAccelerationStructures()
     {
+        // Only RT shadows drive this lazy-init path. GI creates the acceleration structure
+        // through its own init (ensureAccelerationStructureManager in initGI). Without this
+        // gate the BLAS/TLAS (incl. a BLAS per terrain tile + a per-frame TLAS rebuild) were
+        // built on any ray-query-capable GPU with a sun, even with RT shadows AND GI off.
+        if (!rtShadowEnabled) return;
         if (accelStructManager || !device.isRayQuerySupported()) return;
         if (!depthPrepass || !depthPrepass->isInitialized()) return;
         if (!lightBufferManager || lightBufferManager->getDirectionalLightCount() == 0) return;
