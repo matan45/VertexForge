@@ -270,14 +270,30 @@ namespace render::shadow
         if (pagesPerLevel == 0)
             return;
 
-        // The clipmap re-centers (and its VP changes) whenever the camera crosses a texel
-        // boundary or the light rotates — mark everything dirty so stale pages re-render.
-        bool lightMoved = matrixChanged(data.views[0].viewProjectionMatrix, data.lastViewProjection);
-        if (lightMoved)
+        // The clipmap re-centers (and a level's VP changes) whenever the camera crosses that
+        // level's texel boundary or the light rotates. Each level snaps to its OWN texel grid:
+        // level 0 has the smallest texels and scrolls almost every frame while panning, but the
+        // coarse levels (2x the extent each, so far larger texels) move rarely. Invalidate ONLY
+        // the levels whose VP actually changed — invalidating all levels on any level-0 move
+        // re-rendered the 5 coarse levels (the bulk of the ~pagesPerLevel^2 * levelCount pages)
+        // every frame for nothing (the directional-shadow draw-call blow-up).
+        if (data.lastViewProjectionPerLevel.size() != levelCount)
+            data.lastViewProjectionPerLevel.assign(levelCount, glm::mat4(0.0f));
+
+        const uint32_t pagesPerLevelSq = pagesPerLevel * pagesPerLevel;
+        std::vector<bool> levelMoved(levelCount, false);
+        for (uint32_t level = 0; level < levelCount; ++level)
         {
-            data.lastViewProjection = data.views[0].viewProjectionMatrix;
-            for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
-                data.vsmPageDirty[i] = true;
+            if (matrixChanged(data.views[level].viewProjectionMatrix, data.lastViewProjectionPerLevel[level]))
+            {
+                data.lastViewProjectionPerLevel[level] = data.views[level].viewProjectionMatrix;
+                levelMoved[level] = true;
+                uint32_t base = level * pagesPerLevelSq;
+                uint32_t end = std::min<uint32_t>(base + pagesPerLevelSq,
+                                                  static_cast<uint32_t>(data.vsmPageDirty.size()));
+                for (uint32_t p = base; p < end; ++p)
+                    data.vsmPageDirty[p] = true;
+            }
         }
 
         for (uint32_t level = 0; level < levelCount; ++level)
@@ -293,7 +309,7 @@ namespace render::shadow
                         continue;
 
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(fx, fy, pagesPerLevel, pagesPerLevel);
-                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, lightMoved);
+                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, levelMoved[level]);
                 }
             }
         }

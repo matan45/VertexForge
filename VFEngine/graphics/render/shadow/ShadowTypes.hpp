@@ -186,6 +186,10 @@ namespace render::shadow
 
         // Light movement tracking: detect when VP matrix changes to invalidate cached pages
         glm::mat4 lastViewProjection{0.0f}; // initialized to zero so first frame always dirty
+        // Directional clipmap: per-level last VP. Each level texel-snaps independently, so a
+        // small camera pan that re-centers level 0 must NOT invalidate the (much larger, rarely
+        // moving) coarse levels — they hold the bulk of the pages. Empty until first clipmap build.
+        std::vector<glm::mat4> lastViewProjectionPerLevel;
 
         void invalidate()
         {

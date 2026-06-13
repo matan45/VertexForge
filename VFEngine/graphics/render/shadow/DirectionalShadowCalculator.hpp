@@ -102,15 +102,20 @@ namespace render::shadow
                 lvl.extent = levelExtent(baseExtent, i);
                 float texel = levelTexelSize(baseExtent, i, pagesPerLevel, pageSize);
 
-                // Texel-snap the camera position in the light's right/up basis. The depth
-                // axis is left unsnapped (it only affects which slice of depth is centered,
-                // not lateral texel alignment).
+                // Texel-snap the camera position in all three light-space axes. Snapping the
+                // right/up axes kills lateral shimmer; snapping the depth axis is what makes the
+                // per-level VP STABLE between texel-boundary crossings. Left unsnapped, the depth
+                // offset drifts every frame under any camera pan with an angled sun, so the VP
+                // changed every frame and invalidated every cached clipmap page (the directional
+                // shadow draw-call blow-up). depthRange is huge (~4000) so a sub-texel snap of the
+                // depth centre is negligible for coverage.
                 float cRight = glm::dot(cameraPosition, right);
                 float cUp = glm::dot(cameraPosition, up);
                 float cDir = glm::dot(cameraPosition, dir);
                 float snappedRight = snapToTexel(cRight, texel);
                 float snappedUp = snapToTexel(cUp, texel);
-                glm::vec3 snappedCenter = right * snappedRight + up * snappedUp + dir * cDir;
+                float snappedDir = snapToTexel(cDir, texel);
+                glm::vec3 snappedCenter = right * snappedRight + up * snappedUp + dir * snappedDir;
 
                 glm::vec3 eye = snappedCenter - dir * (depthRange * 0.5f);
                 lvl.viewMatrix = glm::lookAt(eye, eye + dir, up);
