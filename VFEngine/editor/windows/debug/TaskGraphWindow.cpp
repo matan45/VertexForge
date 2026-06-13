@@ -248,7 +248,7 @@ namespace windows
 		float frameDurationMs = static_cast<float>(latestFrame.frameDurationNs) / 1e6f;
 		ImGui::Text("Frame duration: %.3f ms", frameDurationMs);
 
-		drawFrameHistoryPlot("CPU##history", cpuHistoryMs);
+		drawFrameHistoryPlot("##cpuhistory", cpuHistoryMs);
 		ImGui::Separator();
 
 		// Timeline area
@@ -781,7 +781,7 @@ namespace windows
 		ImGui::Text("GPU frame: %.3f ms (EMA %.3f ms)  |  Barriers: %u (%u flushes)",
 			gpuStats.totalMs, gpuStats.emaTotalMs, gpuStats.barrierCount, gpuStats.barrierFlushCount);
 
-		drawFrameHistoryPlot("GPU##history", gpuHistoryMs);
+		drawFrameHistoryPlot("##gpuhistory", gpuHistoryMs);
 		ImGui::Separator();
 
 		// Passes sorted by EMA cost, descending
