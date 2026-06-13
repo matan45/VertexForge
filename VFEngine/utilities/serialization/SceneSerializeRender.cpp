@@ -41,7 +41,10 @@ namespace serialization
                 {"softShadows", s.softShadows},
                 {"shadowIntensity", s.shadowIntensity},
                 {"spotResolution", s.spotResolution},
-                {"pointResolution", s.pointResolution}
+                {"pointResolution", s.pointResolution},
+                {"clipmapLevelCount", s.clipmapLevelCount},
+                {"clipmapBaseExtent", s.clipmapBaseExtent},
+                {"clipmapDepthRange", s.clipmapDepthRange}
             };
         }
 
@@ -68,6 +71,13 @@ namespace serialization
                 settings.spotResolution = shadows["spotResolution"].get<uint32_t>();
             if (shadows.contains("pointResolution") && shadows["pointResolution"].is_number_unsigned())
                 settings.pointResolution = shadows["pointResolution"].get<uint32_t>();
+            // Directional clipmap (absent in older scenes -> struct defaults retained)
+            if (shadows.contains("clipmapLevelCount") && shadows["clipmapLevelCount"].is_number_unsigned())
+                settings.clipmapLevelCount = shadows["clipmapLevelCount"].get<uint32_t>();
+            if (shadows.contains("clipmapBaseExtent") && shadows["clipmapBaseExtent"].is_number())
+                settings.clipmapBaseExtent = shadows["clipmapBaseExtent"].get<float>();
+            if (shadows.contains("clipmapDepthRange") && shadows["clipmapDepthRange"].is_number())
+                settings.clipmapDepthRange = shadows["clipmapDepthRange"].get<float>();
         }
 
         json serializeRTShadowSettings(const types::RTShadowSettings& s)
