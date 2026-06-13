@@ -313,6 +313,17 @@ namespace render::shadow
         void packRangeParams(vsm::GPUVSMLight& gpu, const ShadowView& view,
                              const LightShadowData* ld, ViewType viewType)
         {
+            if (viewType == ViewType::Directional && ld)
+            {
+                // Directional clipmap packing (matches the sampling shader + viewmode 14):
+                //   x = level-0 base half-extent, z = clipmap level COUNT, w = level index.
+                // sampleVSMShadow does not read .x/.z for ortho lights, so this is safe.
+                gpu.rangeParams = glm::vec4(ld->settings.clipmapBaseExtent, view.farPlane,
+                                             static_cast<float>(ld->views.size()),
+                                             static_cast<float>(view.cascadeIndex));
+                return;
+            }
+
             float range = view.farPlane - view.nearPlane;
             float invRange = (range > 0.0001f) ? (1.0f / range) : 0.0f;
             gpu.rangeParams = glm::vec4(view.nearPlane, view.farPlane,
@@ -352,6 +363,15 @@ namespace render::shadow
                 pagesY = pagesPerFace;
                 ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * pagesPerFace * pagesPerFace;
             }
+            else if (ld->type == ShadowMapType::Directional)
+            {
+                // Each clipmap level gets pagesPerLevel x pagesPerLevel pages in the tall
+                // block; cascadeIndex selects the level (mirrors the point-light layout).
+                uint32_t pagesPerLevel = ld->vsmPagesX;
+                pagesX = pagesPerLevel;
+                pagesY = pagesPerLevel;
+                ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * pagesPerLevel * pagesPerLevel;
+            }
 
             gpu.pageTableInfo = glm::ivec4(
                 static_cast<int>(pagesX), static_cast<int>(pagesY),
@@ -360,6 +380,7 @@ namespace render::shadow
     }
 
     void ShadowGPUDataManager::buildGPUShadowData(
+        const std::vector<ShadowView>& directionalViews,
         const std::vector<ShadowView>& pointViews,
         const std::vector<ShadowView>& spotViews,
         const std::unordered_map<uint32_t, LightShadowData>& lightShadowData)
@@ -385,6 +406,8 @@ namespace render::shadow
             }
         };
 
+        // Order MUST match collectShadowViewsForGPU's index assignment: directional, point, spot.
+        addViews(directionalViews, ViewType::Directional);
         addViews(pointViews, ViewType::Point);
         addViews(spotViews, ViewType::Spot);
     }

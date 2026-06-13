@@ -236,4 +236,45 @@ float samplePointShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, ve
     return sampleVSMShadow(shadowIndex, worldPos, worldNormal);
 }
 
+// ============================================================
+// Directional Light Shadow (VSM clipmap)
+// ============================================================
+// baseShadowIndex points at clipmap level 0; consecutive entries are the coarser levels
+// (each covers 2x the world area at the same page resolution). rangeParams.z holds the
+// level count. We pick the finest level whose orthographic frustum contains the point —
+// the same per-level NDC test the feedback pass uses, so the chosen level's page is
+// guaranteed to have been marked (and thus allocated) this frame.
+float sampleDirectionalVSM(int baseShadowIndex, vec3 worldPos, vec3 worldNormal) {
+    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    int levelCount = int(SHADOW_BUFFER[baseShadowIndex].rangeParams.z);
+    if (levelCount <= 0) levelCount = 1;
+
+    const float BLEND_START = 0.85;
+
+    for (int lvl = 0; lvl < levelCount; ++lvl) {
+        int idx = baseShadowIndex + lvl;
+        if (idx >= MAX_SHADOW_VIEWS) break;
+
+        vec4 lsPos = SHADOW_BUFFER[idx].viewProjection * vec4(worldPos, 1.0);
+        vec3 ndc = lsPos.xyz / lsPos.w; // orthographic: w == 1
+        vec2 uv = ndc.xy * 0.5 + 0.5;
+        if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0))))
+            continue; // not covered by this level — try the next (coarser) one
+
+        float shadow = sampleVSMShadow(idx, worldPos, worldNormal);
+
+        // Blend into the next coarser level near this level's edge to hide the transition.
+        // Both levels share page resolution, so the cross-fade is smooth (no CSM-style seam).
+        float maxEdge = max(abs(ndc.x), abs(ndc.y));
+        if (maxEdge > BLEND_START && (lvl + 1) < levelCount && (idx + 1) < MAX_SHADOW_VIEWS) {
+            float coarse = sampleVSMShadow(idx + 1, worldPos, worldNormal);
+            float t = clamp((maxEdge - BLEND_START) / (1.0 - BLEND_START), 0.0, 1.0);
+            shadow = mix(shadow, coarse, t);
+        }
+        return shadow;
+    }
+    return 1.0; // beyond the coarsest level — treat as lit
+}
+
 #endif // SHADOW_SAMPLING_GLSL

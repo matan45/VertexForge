@@ -352,12 +352,16 @@ layout(set = WORLD_MASK_SET, binding = 1) uniform WorldMaskUBO {
 float sampleDirectionalShadowHybrid(int shadowIndex, int shadowMode,
                                      vec3 worldPos, vec3 N, float viewZ, vec3 cameraPos) {
 #ifdef RT_SHADOW_ENABLED
+    // Optional RT override (off by default): when active, the ray-traced mask wins full-screen.
     if (lightCounts.rtShadowActive != 0u) {
         vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
         return texture(rtShadowMask, screenUV).r;
     }
 #endif
-    return 1.0; // No VSM fallback for directional lights — RT only
+    if (shadowIndex < 0) return 1.0;
+    // shadowMode 1 = VSM clipmap (the unified default directional shadow on all GPUs).
+    if (shadowMode == 1) return sampleDirectionalVSM(shadowIndex, worldPos, N);
+    return 1.0;
 }
 
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;

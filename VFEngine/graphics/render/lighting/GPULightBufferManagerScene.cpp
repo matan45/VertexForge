@@ -97,12 +97,31 @@ namespace render::lighting
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
             glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
+            uint32_t entityId = static_cast<uint32_t>(entity);
+
+            // Register a directional Virtual Shadow Map clipmap. This is the unified default
+            // directional shadow (works on all GPUs, covers the full streamed range); the RT
+            // path, when enabled, overrides it full-screen via lightCounts.rtShadowActive.
+            if (shadowSystem)
+            {
+                shadow::ShadowSettings settings{};
+                settings.depthBias = shadowSystem->getGlobalDepthBias();
+                settings.normalBias = shadowSystem->getGlobalNormalBias();
+                settings.lightSize = light.lightSize;
+                settings.clipmapLevelCount = shadowSystem->getClipmapLevelCount();
+                settings.clipmapBaseExtent = shadowSystem->getClipmapBaseExtent();
+                settings.clipmapDepthRange = shadowSystem->getClipmapDepthRange();
+                settings.enabled = true;
+                settings.castShadows = true;
+                pendingShadow.push_back({entityId, shadow::ShadowMapType::Directional, settings});
+            }
+
             GPUDirectionalLight& gpuLight = cpuDirectionalLights[directionalCount];
             gpuLight.direction = direction;
             gpuLight.intensity = light.intensity;
             gpuLight.color = light.color;
-            gpuLight.shadowIndex = -1; // Directional lights use RT shadows, not VSM
-            gpuLight.shadowMode = 0;
+            gpuLight.shadowIndex = shadowSystem ? shadowSystem->getShadowViewIndex(entityId) : -1;
+            gpuLight.shadowMode = 1; // 1 = VSM clipmap
 
             ++directionalCount;
         }
@@ -320,7 +339,8 @@ namespace render::lighting
                     shouldKeep = registry.get<components::PointLightComponent>(entity).castsShadow;
                 else if (registry.all_of<components::SpotLightComponent>(entity))
                     shouldKeep = registry.get<components::SpotLightComponent>(entity).castsShadow;
-                // Directional lights use RT shadows, not VSM — unregister from shadow system
+                else if (registry.all_of<components::DirectionalLightComponent>(entity))
+                    shouldKeep = scene::Entity::isEffectivelyActive(registry, entity); // sun always casts via VSM clipmap
             }
 
             if (!shouldKeep)

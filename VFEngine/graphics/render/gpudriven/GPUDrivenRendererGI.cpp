@@ -910,6 +910,11 @@ namespace render::gpudriven
     void GPUDrivenRenderer::applyRTShadowSettings(const types::RTShadowSettings& settings)
     {
         rtShadowEnabled = settings.enabled;
+        // When RT is disabled, clear the runtime flag so the fragment shaders fall back to
+        // the directional VSM clipmap instead of sampling a stale RT mask. (dispatchRTShadow
+        // only ever sets it true, so nothing else would clear it on toggle-off.)
+        if (!rtShadowEnabled && lightBufferManager)
+            lightBufferManager->setRTShadowActive(false);
         if (rtShadowPipeline)
         {
             rtShadowPipeline->setMaxRayDistance(settings.maxRayDistance);

@@ -67,6 +67,8 @@ namespace render::shadow
 
             if (data.type == ShadowMapType::PointCube)
                 buildPointPageRenderList(data);
+            else if (data.type == ShadowMapType::Directional)
+                buildClipmapPageRenderList(data);
             else
                 buildSingleViewPageRenderList(data);
         }
@@ -254,6 +256,49 @@ namespace render::shadow
         }
     }
 
+    void ShadowSystem::buildClipmapPageRenderList(LightShadowData& data)
+    {
+        // A directional clipmap is laid out like point-light cube faces, one "face" per
+        // clipmap level: a tall block of pagesPerLevel x (pagesPerLevel * levelCount). The
+        // linear page index level*pagesPerLevel^2 + fy*pagesPerLevel + fx matches both the
+        // per-level GPU page-table offsets and the feedback indexing.
+        uint32_t levelCount = static_cast<uint32_t>(data.views.size());
+        if (levelCount == 0)
+            return;
+
+        uint32_t pagesPerLevel = data.vsmPagesX;
+        if (pagesPerLevel == 0)
+            return;
+
+        // The clipmap re-centers (and its VP changes) whenever the camera crosses a texel
+        // boundary or the light rotates — mark everything dirty so stale pages re-render.
+        bool lightMoved = matrixChanged(data.views[0].viewProjectionMatrix, data.lastViewProjection);
+        if (lightMoved)
+        {
+            data.lastViewProjection = data.views[0].viewProjectionMatrix;
+            for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
+                data.vsmPageDirty[i] = true;
+        }
+
+        for (uint32_t level = 0; level < levelCount; ++level)
+        {
+            const auto& view = data.views[level];
+
+            for (uint32_t fy = 0; fy < pagesPerLevel; ++fy)
+            {
+                for (uint32_t fx = 0; fx < pagesPerLevel; ++fx)
+                {
+                    uint32_t pageIdx = (level * pagesPerLevel + fy) * pagesPerLevel + fx;
+                    if (pageIdx >= data.vsmPhysicalTiles.size())
+                        continue;
+
+                    glm::mat4 cropMatrix = vsm::computePageCropMatrix(fx, fy, pagesPerLevel, pagesPerLevel);
+                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, lightMoved);
+                }
+            }
+        }
+    }
+
     void ShadowSystem::applyRenderSettings(const types::RenderSettings& settings)
     {
         if (!initialized)
@@ -267,6 +312,11 @@ namespace render::shadow
         globalDepthBias = shadowSettings.shadowBias;
         globalSlopeBias = shadowSettings.slopeBias;
         globalNormalBias = shadowSettings.normalBias;
+
+        // Directional clipmap tuning (read before the early-out so it always tracks settings).
+        clipmapLevelCount = std::max(1u, shadowSettings.clipmapLevelCount);
+        clipmapBaseExtent = shadowSettings.clipmapBaseExtent;
+        clipmapDepthRange = shadowSettings.clipmapDepthRange;
 
         if (!shadowSettings.enabled || shadowSettings.quality == types::ShadowQuality::Off)
             return;
@@ -307,7 +357,7 @@ namespace render::shadow
 
         feedbackPipeline->clearFeedbackBuffer(cmd);
         uint32_t totalViews = static_cast<uint32_t>(
-            pointShadowViews.size() + spotShadowViews.size());
+            directionalShadowViews.size() + pointShadowViews.size() + spotShadowViews.size());
         if (totalViews == 0) return;
         vk::DeviceSize shadowDataSize = sizeof(vsm::GPUVSMLight) * totalViews;
         feedbackPipeline->dispatch(cmd, depthView,
@@ -415,8 +465,10 @@ namespace render::shadow
         // Non-static lights allocate ALL pages eagerly (bypasses feedback).
         // This ensures tiles are ready on the first frame after scene load,
         // before feedback results are available (feedback has 1-frame latency).
+        // Directional clipmaps are the exception: too large to allocate eagerly, so they
+        // go through the feedback path below (level-0 pages were seeded at registration).
         for (auto& [entityId, data] : lightShadowData)
-            if (data.usesVSM() && !data.isStatic)
+            if (data.usesVSM() && !data.isStatic && !data.feedbackDriven)
                 allocateNonStaticLightPages(data);
 
         if (!feedbackEnabled || !feedbackHasResults || prevFrameFeedback.empty())
@@ -425,7 +477,7 @@ namespace render::shadow
         static constexpr uint32_t WARMUP_FRAMES = 120;
         bool allowEviction = frameCounter > WARMUP_FRAMES;
         for (auto& [entityId, data] : lightShadowData)
-            if (data.usesVSM() && data.isStatic)
+            if (data.usesVSM() && (data.isStatic || data.feedbackDriven))
                 allocateStaticLightPages(data, allowEviction);
     }
 
@@ -433,7 +485,7 @@ namespace render::shadow
     {
         if (!initialized || !shadowsEnabled || !gpuDataManager) return;
 
-        gpuDataManager->buildGPUShadowData(pointShadowViews, spotShadowViews,
+        gpuDataManager->buildGPUShadowData(directionalShadowViews, pointShadowViews, spotShadowViews,
                                             lightShadowData);
         gpuDataManager->uploadToGPU(cmd);
         if (pageTable) pageTable->uploadToGPU(cmd);

@@ -382,11 +382,18 @@ float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNorma
 
 float sampleTerrainDirectionalShadow(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ, vec3 cameraPos) {
 #ifdef RT_SHADOW_ENABLED
+    // Optional RT override (off by default).
     if (lightCounts.rtShadowActive != 0u) {
         vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
         return texture(rtShadowMask, screenUV).r;
     }
 #endif
+    if (baseShadowIndex < 0) return 1.0;
+    // shadowMode 1 = VSM clipmap. Apply terrain-specific normal-bias scaling first.
+    if (shadowMode == 1) {
+        vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+        return sampleDirectionalVSM(baseShadowIndex, worldPos, biasedNormal);
+    }
     return 1.0;
 }
 
