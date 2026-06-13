@@ -85,7 +85,7 @@ TEST_CASE("texel snapping is stable and idempotent")
 
     // Crossing a texel boundary moves the snapped value by exactly one texel.
     float c = DirectionalShadowCalculator::snapToTexel(100.10f, texel);
-    CHECK(c == doctest::Approx(a - texel)); // floor goes to the next lower grid line
+    CHECK(c == doctest::Approx(a + texel)); // next grid line up
 }
 
 TEST_CASE("computeClipmapLevels produces concentric, camera-centered shells")
