@@ -21,40 +21,61 @@ namespace render::shadow
         const auto& ctx = *args.ctx;
         const auto& prereq = *args.prereq;
         uint32_t tileCount = static_cast<uint32_t>(pages.size());
+        if (tileCount == 0)
+            return;
 
         vk::Format poolDepthFormat = ctx.tilePool->getDepthFormat();
 
-        threading::JobSystem::instance().parallelFor(tileCount,
-            [&](uint32_t begin, uint32_t end, uint32_t threadNum) {
-                // Distinct slot per phase: the static and dynamic phases both execute their
-                // secondaries into the same primary, so they must NOT share buffers (re-
-                // recording an already-executed secondary invalidates the primary).
-                vk::CommandBuffer secondary =
-                    args.threadPoolManager->getSecondary(threadNum, args.frameIndex, slot);
+        // Partition the pages into a fixed set of contiguous chunks and key each chunk's
+        // secondary buffer by CHUNK INDEX, not by enkiTS threadNum. JobSystem::parallelFor
+        // (enkiTS TaskSet with m_MinRange=1) can split the work into more partitions than
+        // worker threads, so a single thread may run several partitions; keying the buffer by
+        // threadNum would re-record (begin/end) the same secondary and silently drop the
+        // earlier partition's tiles. Each chunk owns threadPools[chunk]'s buffer instead, so it
+        // is recorded exactly once. chunkCount <= threadCount keeps getSecondary() in bounds,
+        // and each pool has a single consumer (no concurrent recording of one pool).
+        uint32_t chunkCount = std::min(args.threadPoolManager->getThreadCount(), tileCount);
+        uint32_t chunkSize = (tileCount + chunkCount - 1) / chunkCount;
 
-                // Dynamic rendering inheritance for secondary command buffers
-                vk::CommandBufferInheritanceRenderingInfo inheritanceRendering{};
-                inheritanceRendering.depthAttachmentFormat = poolDepthFormat;
-                inheritanceRendering.rasterizationSamples = vk::SampleCountFlagBits::e1;
+        threading::JobSystem::instance().parallelFor(chunkCount,
+            [&](uint32_t begin, uint32_t end, uint32_t /*threadNum*/) {
+                for (uint32_t c = begin; c < end; ++c)
+                {
+                    uint32_t tileBegin = c * chunkSize;
+                    uint32_t tileEnd = std::min(tileBegin + chunkSize, tileCount);
+                    if (tileBegin >= tileEnd)
+                        continue;
 
-                vk::CommandBufferInheritanceInfo inheritance{};
-                inheritance.pNext = &inheritanceRendering;
+                    // Distinct slot per phase: the static and dynamic phases both execute their
+                    // secondaries into the same primary, so they must NOT share buffers (re-
+                    // recording an already-executed secondary invalidates the primary).
+                    vk::CommandBuffer secondary =
+                        args.threadPoolManager->getSecondary(c, args.frameIndex, slot);
 
-                vk::CommandBufferBeginInfo beginInfo{};
-                beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit |
-                                 vk::CommandBufferUsageFlagBits::eRenderPassContinue;
-                beginInfo.pInheritanceInfo = &inheritance;
-                secondary.begin(beginInfo);
+                    // Dynamic rendering inheritance for secondary command buffers
+                    vk::CommandBufferInheritanceRenderingInfo inheritanceRendering{};
+                    inheritanceRendering.depthAttachmentFormat = poolDepthFormat;
+                    inheritanceRendering.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-                if (prereq.hasMeshBatches)
-                    bindShadowPipelineAndSets(secondary, ctx);
+                    vk::CommandBufferInheritanceInfo inheritance{};
+                    inheritance.pNext = &inheritanceRendering;
 
-                for (uint32_t i = begin; i < end; ++i)
-                    recordTileCommands(secondary, pages[i], ctx, clearTiles);
+                    vk::CommandBufferBeginInfo beginInfo{};
+                    beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit |
+                                     vk::CommandBufferUsageFlagBits::eRenderPassContinue;
+                    beginInfo.pInheritanceInfo = &inheritance;
+                    secondary.begin(beginInfo);
 
-                secondary.end();
-                secondaryBuffers[threadNum] = secondary;
-                threadUsed[threadNum] = true;
+                    if (prereq.hasMeshBatches)
+                        bindShadowPipelineAndSets(secondary, ctx);
+
+                    for (uint32_t i = tileBegin; i < tileEnd; ++i)
+                        recordTileCommands(secondary, pages[i], ctx, clearTiles);
+
+                    secondary.end();
+                    secondaryBuffers[c] = secondary;
+                    threadUsed[c] = true;
+                }
             }, 1);
     }
 

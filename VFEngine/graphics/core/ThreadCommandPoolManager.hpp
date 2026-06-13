@@ -47,10 +47,12 @@ namespace core
         // Reset all command pools for the given frame (call at frame start)
         void resetFrame(uint32_t frameIndex);
 
-        // Get a secondary command buffer for the given thread, frame, and slot.
-        // Different slots return distinct buffers so multiple secondary-execution passes
-        // can coexist on the same primary within a frame without invalidating it.
-        vk::CommandBuffer getSecondary(uint32_t threadNum, uint32_t frameIndex, uint32_t slot = 0);
+        // Get a secondary command buffer for the given pool, frame, and slot. poolIndex
+        // selects which thread pool's buffer to use (callers key this by work-chunk index, not
+        // by the executing worker thread, so one pool has a single recorder). Different slots
+        // return distinct buffers so multiple secondary-execution passes can coexist on the
+        // same primary within a frame without invalidating it.
+        vk::CommandBuffer getSecondary(uint32_t poolIndex, uint32_t frameIndex, uint32_t slot = 0);
 
         uint32_t getThreadCount() const { return threadCount; }
     };

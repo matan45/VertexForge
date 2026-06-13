@@ -87,10 +87,10 @@ namespace core
         }
     }
 
-    vk::CommandBuffer ThreadCommandPoolManager::getSecondary(uint32_t threadNum, uint32_t frameIndex, uint32_t slot)
+    vk::CommandBuffer ThreadCommandPoolManager::getSecondary(uint32_t poolIndex, uint32_t frameIndex, uint32_t slot)
     {
         uint32_t fi = frameIndex % MAX_SWAPCHAIN_IMAGES;
         uint32_t sl = slot % SECONDARY_SLOTS_PER_FRAME;
-        return threadPools[threadNum].secondaryBuffers[fi][sl].get();
+        return threadPools[poolIndex].secondaryBuffers[fi][sl].get();
     }
 }
