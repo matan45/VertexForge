@@ -366,8 +366,13 @@ namespace render::gpudriven
         cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader,
                             vk::DependencyFlags{}, 1, &memBarrier, 0, nullptr, 0, nullptr);
 
-        // Build/update acceleration structures for RT shadows and GI
-        if (accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
+        // Build/update acceleration structures for RT shadows and GI. Only do the (expensive)
+        // BLAS/per-frame-TLAS work when something actually consumes the structure: RT shadows
+        // enabled, or GI (radiance cascades) active. Otherwise skip it entirely even if a
+        // manager object lingers (e.g. created during the pre-settings window where
+        // rtShadowEnabled defaults true, or left over after RT was toggled off).
+        bool accelStructNeeded = rtShadowEnabled || (giCascadeManager != nullptr);
+        if (accelStructNeeded && accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
         {
             bool hasPendingBLAS = accelStructManager->hasPendingBLASBuilds();
             bool hasPendingTerrainBLAS = accelStructManager->hasPendingTerrainBLASBuilds() && terrain.meshBuffer;
