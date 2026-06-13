@@ -24,8 +24,11 @@ namespace core
         struct ThreadPool
         {
             vk::UniqueCommandPool commandPool;
+            // Indexed [swapchain image index][slot]. Sized by image count (not frames in
+            // flight) because the shadow pass records/resets these by acquired image index,
+            // guarded by the engine's per-image fence (RenderManager::imagesInFlight).
             std::array<std::array<vk::UniqueCommandBuffer, SECONDARY_SLOTS_PER_FRAME>,
-                       MAX_FRAMES_IN_FLIGHT> secondaryBuffers;
+                       MAX_SWAPCHAIN_IMAGES> secondaryBuffers;
         };
 
         std::vector<ThreadPool> threadPools;
