@@ -61,6 +61,9 @@ namespace windows
         bool isSelected(services::EntityHandle handle) const;
         bool isEntityDragActive() const;
 
+        // False for structural / engine-generated entities (scene Root, Terrain
+        // node, terrain tiles) that should not be user-renamed.
+        bool canRename(services::EntityHandle handle) const;
         void beginRename(services::EntityHandle handle);
         void drawRenameInput(services::EntityHandle handle);
 

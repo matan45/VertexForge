@@ -313,25 +313,35 @@ namespace windows
         rangeAnchorHandle = handle.id;
     }
 
-    void SceneHierarchyPanel::beginRename(services::EntityHandle handle)
+    bool SceneHierarchyPanel::canRename(services::EntityHandle handle) const
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-
         events::scene::GetEntityQuery entityQuery;
         entityQuery.entity = handle;
-        auto entityDataOpt = dispatcher.query(entityQuery);
+        auto entityDataOpt = events::EventDispatcher::instance().query(entityQuery);
         if (!entityDataOpt.has_value())
+        {
+            return false;
+        }
+
+        // Structural / engine-generated entities aren't user-named: the scene Root
+        // (no parent), and the Terrain node plus its auto-generated tile sub-entities.
+        using CT = services::ComponentTypeId;
+        return entityDataOpt->parent.has_value()
+            && !entityDataOpt->hasComponent(CT::Terrain)
+            && !entityDataOpt->hasComponent(CT::TerrainTile);
+    }
+
+    void SceneHierarchyPanel::beginRename(services::EntityHandle handle)
+    {
+        if (!canRename(handle))
         {
             return;
         }
 
-        // Structural / engine-generated entities aren't user-named — block inline
-        // rename on them: the scene Root (no parent), and the Terrain node plus its
-        // auto-generated tile sub-entities.
-        using CT = services::ComponentTypeId;
-        if (!entityDataOpt->parent.has_value()
-            || entityDataOpt->hasComponent(CT::Terrain)
-            || entityDataOpt->hasComponent(CT::TerrainTile))
+        events::scene::GetEntityQuery entityQuery;
+        entityQuery.entity = handle;
+        auto entityDataOpt = events::EventDispatcher::instance().query(entityQuery);
+        if (!entityDataOpt.has_value())
         {
             return;
         }
@@ -620,9 +630,13 @@ namespace windows
 
             ImGui::Separator();
 
-            if (count == 1 && ImGui::MenuItem("Rename", "F2"))
+            if (count == 1)
             {
-                beginRename(topLevelSelection.front());
+                bool renamable = canRename(topLevelSelection.front());
+                if (ImGui::MenuItem("Rename", "F2", false, renamable))
+                {
+                    beginRename(topLevelSelection.front());
+                }
             }
 
             snprintf(menuLabel, sizeof(menuLabel), count > 1 ? "Duplicate (%d)" : "Duplicate", count);
