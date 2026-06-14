@@ -71,6 +71,19 @@ namespace windows
             else
                 handleAssetClick(clickResult);
 
+            // Click empty space in the grid to cancel the current selection.
+            if (!clickResult.wasClicked
+                && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
+                && ImGui::IsWindowHovered()
+                && !ImGui::IsAnyItemHovered())
+            {
+                selectedFile.clear();
+                selectedType = AssetType::Other;
+                clearSelection();
+                for (auto& asset : visibleAssets)
+                    asset.isSelected = false;
+            }
+
             const std::string selectedPath = StringUtil::wstringToUtf8(selectedFile.wstring());
             const Asset* selectedAsset = nullptr;
             for (const auto& asset : visibleAssets)
