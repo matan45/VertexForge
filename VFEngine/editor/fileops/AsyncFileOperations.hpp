@@ -17,6 +17,7 @@ namespace windows
                               const std::string& targetFolder);
 
         static void deleteAsync(const std::string& path);
+        static void deleteAsync(const std::vector<std::string>& paths);
 
         static bool isBusy();
 

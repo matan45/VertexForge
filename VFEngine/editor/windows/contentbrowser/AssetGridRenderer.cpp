@@ -197,18 +197,6 @@ namespace windows
         // Apply dimming for cut items
         float alphaMultiplier = asset.isCut ? DragDropColors::CUT_ITEM_ALPHA : 1.0f;
 
-        if (isSelected)
-        {
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            ImU32 highlightColor = IM_COL32(70, 130, 180, static_cast<int>(100 * alphaMultiplier));
-            drawList->AddRectFilled(
-                cursorPos,
-                ImVec2(cursorPos.x + itemWidth, cursorPos.y + itemHeight),
-                highlightColor,
-                4.0f
-            );
-        }
-
         if (!iconAtlas.isValid())
         {
             ImGui::PopID();
@@ -236,6 +224,14 @@ namespace windows
         }
 
         auto [uv0, uv1] = getAtlasUV(icon);
+
+        // Draw the selection highlight behind the item on a separate draw
+        // channel: we only know the real group bounds (icon + every wrapped
+        // text line) after EndGroup, so the highlight is computed last but
+        // rendered first.
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->ChannelsSplit(2);
+        drawList->ChannelsSetCurrent(1);
 
         if (isFolder)
         {
@@ -313,6 +309,19 @@ namespace windows
             ImGui::TextWrapped("%s", asset.name.c_str());
             ImGui::EndGroup();
         }
+
+        if (isSelected)
+        {
+            drawList->ChannelsSetCurrent(0);
+            const ImVec2 pad(4.0f, 3.0f);
+            const ImVec2 rmin(ImGui::GetItemRectMin().x - pad.x, ImGui::GetItemRectMin().y - pad.y);
+            const ImVec2 rmax(ImGui::GetItemRectMax().x + pad.x, ImGui::GetItemRectMax().y + pad.y);
+            const ImU32 fill   = IM_COL32(70, 130, 180, static_cast<int>(60 * alphaMultiplier));
+            const ImU32 border = IM_COL32(110, 175, 230, static_cast<int>(230 * alphaMultiplier));
+            drawList->AddRectFilled(rmin, rmax, fill, 6.0f);
+            drawList->AddRect(rmin, rmax, border, 6.0f, 0, 1.5f);
+        }
+        drawList->ChannelsMerge();
 
         // Pop alpha style for cut items
         if (asset.isCut)

@@ -38,6 +38,8 @@ namespace windows
             []() { return ClipboardManager::instance().hasItems(); }
         );
 
+        modals->setSelectionProvider([this]() { return getSelectedPaths(); });
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         // Register default editor keybindings

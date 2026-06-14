@@ -45,6 +45,7 @@ namespace windows
         bool showDeleteConfirmModal = false;
         bool deleteDependentsChecked = false;
         std::vector<asset::AssetGUID> deleteDependents;
+        std::vector<std::string> deleteTargets;
 
         bool showReferencesModal = false;
         asset::AssetGUID referencesGuid;
@@ -70,6 +71,10 @@ namespace windows
         void setClipboardCallbacks(ClipboardCallback onCut, ClipboardCallback onCopy,
                                    PasteCallback onPaste, std::function<bool()> hasClipboardItems);
 
+        // Supplies the full current selection so Delete operates on every
+        // selected item, not just the focused one.
+        void setSelectionProvider(std::function<std::vector<std::string>()> provider);
+
         void processModals(const fs::path& currentPath, const fs::path& selectedFile);
         void drawContextMenu(const Asset* selectedAsset);
         void triggerSavePrefabModal(const services::EntityHandle& entity);
@@ -88,7 +93,7 @@ namespace windows
         void drawCreateThemeModal(const fs::path& currentPath);
         void drawSavePrefabModal(const fs::path& currentPath);
         void drawRenameModal(const fs::path& selectedFile);
-        void drawDeleteModal(const fs::path& selectedFile);
+        void drawDeleteModal();
         void drawReferencesModal();
         void drawDependenciesModal();
         void drawErrorModal();
@@ -105,5 +110,6 @@ namespace windows
         ClipboardCallback copyCallback;
         PasteCallback pasteCallback;
         std::function<bool()> hasClipboardItemsCallback;
+        std::function<std::vector<std::string>()> selectionProvider;
     };
 }
