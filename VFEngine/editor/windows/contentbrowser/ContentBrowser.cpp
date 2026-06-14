@@ -38,6 +38,8 @@ namespace windows
             []() { return ClipboardManager::instance().hasItems(); }
         );
 
+        modals->setSelectionProvider([this]() { return getSelectedPaths(); });
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         // Register default editor keybindings
@@ -81,6 +83,7 @@ namespace windows
             [this](const events::project::ProjectLoadedNotification& notification)
             {
                 typeCache.clear();
+                thumbnailCache.invalidateAll();
                 if (!notification.project.workingDirectory.empty())
                 {
                     navigateTo(notification.project.workingDirectory);
@@ -96,17 +99,19 @@ namespace windows
             });
 
         assetSavedToken = dispatcher.subscribe<events::resource::AssetSavedNotification>(
-            [this](const events::resource::AssetSavedNotification&)
+            [this](const events::resource::AssetSavedNotification& notification)
             {
                 projectResultsStale.store(true);
+                thumbnailCache.invalidate(notification.filePath);
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
                     loadDirectory(currentPath);
             });
 
         fileMovedToken = dispatcher.subscribe<events::fileops::FileMovedNotification>(
-            [this](const events::fileops::FileMovedNotification&)
+            [this](const events::fileops::FileMovedNotification& notification)
             {
                 projectResultsStale.store(true);
+                thumbnailCache.invalidate(notification.oldPath);
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
                 {
                     loadDirectory(currentPath);
@@ -115,9 +120,10 @@ namespace windows
             });
 
         fileDeletedToken = dispatcher.subscribe<events::fileops::FileDeletedNotification>(
-            [this](const events::fileops::FileDeletedNotification&)
+            [this](const events::fileops::FileDeletedNotification& notification)
             {
                 projectResultsStale.store(true);
+                thumbnailCache.invalidate(notification.path);
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
                 {
                     loadDirectory(currentPath);
@@ -141,6 +147,8 @@ namespace windows
 
     ContentBrowser::~ContentBrowser()
     {
+        thumbnailCache.shutdown();
+
         auto& dispatcher = events::EventDispatcher::instance();
         if (projectLoadedToken.isValid()) dispatcher.unsubscribe(projectLoadedToken);
         if (importCompletedToken.isValid()) dispatcher.unsubscribe(importCompletedToken);
@@ -157,10 +165,18 @@ namespace windows
         {
             if (fs::exists(currentPath) && fs::is_directory(currentPath))
             {
+                // Batch file ops (mass move/delete) arrive coarse, so drop every
+                // cached thumbnail; the freshness check repopulates what's still
+                // on disk on the next draw.
+                thumbnailCache.invalidateAll();
                 loadDirectory(currentPath);
                 clearSelection();
             }
         }
+
+        // Drive the cache once per frame here (not in drawContentPanel) so it
+        // ticks exactly once regardless of which panels render.
+        thumbnailCache.update();
 
         gridRenderer->ensureIconsLoaded();
 

@@ -1,4 +1,5 @@
 #include "AssetGridRenderer.hpp"
+#include "AssetThumbnailCache.hpp"
 #include "AssetQueryParser.hpp"
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
@@ -91,7 +92,8 @@ namespace windows
     AssetClickResult AssetGridRenderer::draw(
         const std::vector<Asset>& assets,
         const AssetFilter& filter,
-        const ResolvedAssetFilter& resolved)
+        const ResolvedAssetFilter& resolved,
+        AssetThumbnailCache& thumbnails)
     {
         AssetClickResult result;
 
@@ -153,7 +155,7 @@ namespace windows
 
         for (const auto* asset : filtered)
         {
-            drawAssetItem(*asset, asset->isSelected, selectedPaths, result);
+            drawAssetItem(*asset, asset->isSelected, selectedPaths, result, thumbnails);
 
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
             {
@@ -180,7 +182,7 @@ namespace windows
         return result;
     }
 
-    void AssetGridRenderer::drawAssetItem(const Asset& asset, bool isSelected, const std::vector<std::string>& selectedPaths, AssetClickResult& result)
+    void AssetGridRenderer::drawAssetItem(const Asset& asset, bool isSelected, const std::vector<std::string>& selectedPaths, AssetClickResult& result, AssetThumbnailCache& thumbnails)
     {
         // Determine which paths to drag: all selected if this item is selected, otherwise just this item
         std::vector<std::string> singlePath = {asset.path};
@@ -194,18 +196,6 @@ namespace windows
 
         // Apply dimming for cut items
         float alphaMultiplier = asset.isCut ? DragDropColors::CUT_ITEM_ALPHA : 1.0f;
-
-        if (isSelected)
-        {
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            ImU32 highlightColor = IM_COL32(70, 130, 180, static_cast<int>(100 * alphaMultiplier));
-            drawList->AddRectFilled(
-                cursorPos,
-                ImVec2(cursorPos.x + itemWidth, cursorPos.y + itemHeight),
-                highlightColor,
-                4.0f
-            );
-        }
 
         if (!iconAtlas.isValid())
         {
@@ -234,6 +224,14 @@ namespace windows
         }
 
         auto [uv0, uv1] = getAtlasUV(icon);
+
+        // Draw the selection highlight behind the item on a separate draw
+        // channel: we only know the real group bounds (icon + every wrapped
+        // text line) after EndGroup, so the highlight is computed last but
+        // rendered first.
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->ChannelsSplit(2);
+        drawList->ChannelsSetCurrent(1);
 
         if (isFolder)
         {
@@ -279,7 +277,24 @@ namespace windows
         else
         {
             ImGui::BeginGroup();
-            ImGui::Image(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
+
+            // Only on-screen items request real thumbnails, so a huge folder
+            // never queues thousands of loads. A one-row vertical margin lets
+            // thumbnails warm up just before they scroll into view.
+            ImVec2 itemMin = cursorPos;
+            ImVec2 itemMax = ImVec2(cursorPos.x + itemWidth, cursorPos.y + itemHeight);
+            bool itemVisible = ImGui::IsRectVisible(
+                ImVec2(itemMin.x, itemMin.y - itemHeight),
+                ImVec2(itemMax.x, itemMax.y + itemHeight));
+
+            void* thumb = nullptr;
+            if (itemVisible && AssetThumbnailCache::isThumbnailable(asset.type))
+                thumb = thumbnails.requestThumbnail(asset);
+
+            if (thumb)
+                ImGui::Image(thumb, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+            else
+                ImGui::Image(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
 
             // Unified drag source for files (for content browser operations)
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
@@ -294,6 +309,19 @@ namespace windows
             ImGui::TextWrapped("%s", asset.name.c_str());
             ImGui::EndGroup();
         }
+
+        if (isSelected)
+        {
+            drawList->ChannelsSetCurrent(0);
+            const ImVec2 pad(4.0f, 3.0f);
+            const ImVec2 rmin(ImGui::GetItemRectMin().x - pad.x, ImGui::GetItemRectMin().y - pad.y);
+            const ImVec2 rmax(ImGui::GetItemRectMax().x + pad.x, ImGui::GetItemRectMax().y + pad.y);
+            const ImU32 fill   = IM_COL32(70, 130, 180, static_cast<int>(60 * alphaMultiplier));
+            const ImU32 border = IM_COL32(110, 175, 230, static_cast<int>(230 * alphaMultiplier));
+            drawList->AddRectFilled(rmin, rmax, fill, 6.0f);
+            drawList->AddRect(rmin, rmax, border, 6.0f, 0, 1.5f);
+        }
+        drawList->ChannelsMerge();
 
         // Pop alpha style for cut items
         if (asset.isCut)

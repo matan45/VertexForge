@@ -144,6 +144,12 @@ namespace render::mesh
                 .depthTestEnable = true,
                 .depthWriteEnable = true,
                 .depthCompareOp = vk::CompareOp::eLess,
+                // Custom material pipelines render in both the dynamic-MSAA scene pass
+                // and the single-sample preview/thumbnail pass, so they must carry
+                // VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT. Without it the static
+                // sample count mismatches the MSAA target and binding the pipeline
+                // invalidates the pass's setRasterizationSamplesEXT for later draws.
+                .dynamicSampleCount = true,
             };
 
             auto opaqueResult = core::PipelineUtilities::createGraphicsPipeline(config);

@@ -65,11 +65,22 @@ namespace windows
             if (projectMode)
                 effectiveFilter.sortBy = SortField::Name;
 
-            AssetClickResult clickResult = gridRenderer->draw(visibleAssets, effectiveFilter, resolvedFilter);
+            AssetClickResult clickResult = gridRenderer->draw(visibleAssets, effectiveFilter, resolvedFilter, thumbnailCache);
             if (projectMode)
                 handleProjectResultClick(clickResult);
             else
                 handleAssetClick(clickResult);
+
+            // Click empty space in the grid to cancel the current selection.
+            if (!clickResult.wasClicked
+                && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
+                && ImGui::IsWindowHovered()
+                && !ImGui::IsAnyItemHovered())
+            {
+                selectedFile.clear();
+                selectedType = AssetType::Other;
+                clearSelection(); // isSelected is rebuilt from selectedPaths each frame
+            }
 
             const std::string selectedPath = StringUtil::wstringToUtf8(selectedFile.wstring());
             const Asset* selectedAsset = nullptr;

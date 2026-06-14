@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "ContentBrowserTypes.hpp"
 #include "AssetGridRenderer.hpp"
+#include "AssetThumbnailCache.hpp"
 #include "ContentBrowserModals.hpp"
 #include "PreviewWindowManager.hpp"
 #include "BookmarkManager.hpp"
@@ -66,6 +67,7 @@ namespace windows
         events::SubscriptionToken batchCompletedToken;
         std::atomic<bool> pendingRefresh{false};
 
+        AssetThumbnailCache thumbnailCache;
         std::unique_ptr<AssetGridRenderer> gridRenderer;
         std::unique_ptr<ContentBrowserModals> modals;
         std::unique_ptr<PreviewWindowManager> previewManager;

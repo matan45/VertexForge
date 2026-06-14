@@ -168,4 +168,70 @@ namespace windows
             threading::JobPriority::LOW
         );
     }
+
+    void AsyncFileOperations::deleteAsync(const std::vector<std::string>& paths)
+    {
+        if (paths.empty())
+            return;
+
+        if (paths.size() == 1)
+        {
+            deleteAsync(paths.front());
+            return;
+        }
+
+        if (busy.exchange(true))
+        {
+            vfLogWarning("File operation already in progress");
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::fileops::FileOpBatchStartedNotification startNotif;
+        startNotif.totalOperations = static_cast<uint32_t>(paths.size());
+        startNotif.operationType = "Deleting";
+        dispatcher.publish(startNotif);
+
+        threading::JobSystem::instance().submit(
+            [paths]()
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+
+                bool allSucceeded = true;
+                std::string lastError;
+                std::vector<std::string> conflicts;
+                const uint32_t total = static_cast<uint32_t>(paths.size());
+
+                for (uint32_t i = 0; i < total; ++i)
+                {
+                    events::fileops::DeleteFileCommand cmd;
+                    cmd.path = paths[i];
+                    auto opResult = dispatcher.execute(cmd);
+
+                    if (!opResult.success)
+                    {
+                        allSucceeded = false;
+                        lastError = opResult.errorMessage;
+                    }
+                    conflicts.insert(conflicts.end(), opResult.conflicts.begin(), opResult.conflicts.end());
+
+                    events::fileops::FileOpBatchProgressNotification progressNotif;
+                    progressNotif.currentFile = fs::path(paths[i]).filename().string();
+                    progressNotif.completed = i + 1;
+                    progressNotif.total = total;
+                    dispatcher.publish(progressNotif);
+                }
+
+                events::fileops::FileOpBatchCompletedNotification completeNotif;
+                completeNotif.success = allSucceeded;
+                completeNotif.errorMessage = lastError;
+                completeNotif.conflicts = conflicts;
+                dispatcher.publish(completeNotif);
+
+                busy.store(false);
+            },
+            threading::JobPriority::LOW
+        );
+    }
 }

@@ -10,6 +10,8 @@ namespace fs = std::filesystem;
 
 namespace windows
 {
+    class AssetThumbnailCache;
+
     struct AssetClickResult
     {
         bool wasClicked = false;
@@ -39,13 +41,14 @@ namespace windows
         AssetClickResult draw(
             const std::vector<Asset>& assets,
             const AssetFilter& filter,
-            const ResolvedAssetFilter& resolved
+            const ResolvedAssetFilter& resolved,
+            AssetThumbnailCache& thumbnails
         );
 
     private:
         void loadIconAtlas();
         static std::pair<ImVec2, ImVec2> getAtlasUV(AtlasIcon icon);
-        void drawAssetItem(const Asset& asset, bool isSelected, const std::vector<std::string>& selectedPaths, AssetClickResult& result);
+        void drawAssetItem(const Asset& asset, bool isSelected, const std::vector<std::string>& selectedPaths, AssetClickResult& result, AssetThumbnailCache& thumbnails);
         static bool matchesFilter(const Asset& asset, const AssetFilter& filter, const ResolvedAssetFilter& resolved);
     };
 }

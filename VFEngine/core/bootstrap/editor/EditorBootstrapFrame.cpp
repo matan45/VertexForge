@@ -4,6 +4,7 @@
 #include "../../adapters/audio/AudioAdapter.hpp"
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
 #include "../../adapters/render/EditorTextureAdapter.hpp"
+#include "../../adapters/render/ThumbnailRenderAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/scripting/NativeAPIRegistry.hpp"
 
@@ -32,6 +33,11 @@ namespace core
                 if (textureAdapter)
                 {
                     textureAdapter->processAsyncLoading();
+                }
+
+                if (thumbnailRenderAdapter)
+                {
+                    thumbnailRenderAdapter->process();
                 }
                 if (cb)
                 {

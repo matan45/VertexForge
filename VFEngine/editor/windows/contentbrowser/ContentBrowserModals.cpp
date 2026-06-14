@@ -8,6 +8,7 @@
 #include "events/asset/AssetDatabaseEvents.hpp"
 #include "../scene/FolderStructureWindow.hpp"
 #include "../../fileops/AsyncFileOperations.hpp"
+#include <algorithm>
 
 namespace
 {
@@ -43,6 +44,11 @@ namespace windows
         hasClipboardItemsCallback = std::move(hasClipboardItems);
     }
 
+    void ContentBrowserModals::setSelectionProvider(std::function<std::vector<std::string>()> provider)
+    {
+        selectionProvider = std::move(provider);
+    }
+
     void ContentBrowserModals::triggerSavePrefabModal(const services::EntityHandle& entity)
     {
         pendingSavePrefabEntity = entity;
@@ -51,6 +57,7 @@ namespace windows
 
     void ContentBrowserModals::triggerDeleteModal()
     {
+        deleteTargets = selectionProvider ? selectionProvider() : std::vector<std::string>{};
         showDeleteConfirmModal = true;
         deleteDependentsChecked = false;
         deleteDependents.clear();
@@ -105,7 +112,7 @@ namespace windows
 
         if (showDeleteConfirmModal)
             ImGui::OpenPopup("Delete File?");
-        drawDeleteModal(selectedFile);
+        drawDeleteModal();
 
         if (showReferencesModal)
             ImGui::OpenPopup("Asset References");
@@ -329,43 +336,75 @@ namespace windows
         }
     }
 
-    void ContentBrowserModals::drawDeleteModal(const fs::path& selectedFile)
+    void ContentBrowserModals::drawDeleteModal()
     {
         if (showDeleteConfirmModal &&
             ImGui::BeginPopupModal("Delete File?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
+            const size_t targetCount = deleteTargets.size();
+
             if (!deleteDependentsChecked)
             {
                 deleteDependentsChecked = true;
                 deleteDependents.clear();
 
-                // Read-only GUID lookup (AssetRef::fromPath would register
-                // the file we are about to delete)
                 auto& dispatcher = events::EventDispatcher::instance();
-                events::assetdb::GetAssetGUIDQuery guidQuery;
-                guidQuery.path = StringUtil::wstringToUtf8(selectedFile.wstring());
-                if (auto guidOpt = dispatcher.query(guidQuery))
+
+                // GUIDs of the files we're about to delete, so we can exclude
+                // references between them (deleting them together is fine).
+                std::vector<asset::AssetGUID> targetGuids;
+                for (const auto& target : deleteTargets)
+                {
+                    events::assetdb::GetAssetGUIDQuery guidQuery;
+                    guidQuery.path = target;
+                    if (auto guidOpt = dispatcher.query(guidQuery))
+                        targetGuids.push_back(*guidOpt);
+                }
+
+                // Aggregate, de-duplicated dependents across every target,
+                // skipping any dependent that is itself being deleted.
+                for (const auto& guid : targetGuids)
                 {
                     events::assetdb::GetAssetDependentsQuery depsQuery;
-                    depsQuery.guid = *guidOpt;
-                    deleteDependents = dispatcher.query(depsQuery);
+                    depsQuery.guid = guid;
+                    for (const auto& dep : dispatcher.query(depsQuery))
+                    {
+                        bool isTarget = std::find(targetGuids.begin(), targetGuids.end(), dep) != targetGuids.end();
+                        bool alreadyListed = std::find(deleteDependents.begin(), deleteDependents.end(), dep) != deleteDependents.end();
+                        if (!isTarget && !alreadyListed)
+                            deleteDependents.push_back(dep);
+                    }
                 }
             }
 
-            ImGui::Text("Are you sure you want to delete:");
-            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "%s",
-                               StringUtil::wstringToUtf8(selectedFile.filename().wstring()).c_str());
+            if (targetCount == 1)
+            {
+                ImGui::Text("Are you sure you want to delete:");
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "%s",
+                                   fs::path(deleteTargets.front()).filename().string().c_str());
+            }
+            else
+            {
+                ImGui::Text("Are you sure you want to delete %zu items?", targetCount);
+                ImGui::BeginChild("DeleteTargetsList", ImVec2(500, 120), true);
+                for (const auto& target : deleteTargets)
+                {
+                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "%s",
+                                       fs::path(target).filename().string().c_str());
+                }
+                ImGui::EndChild();
+            }
 
             if (!deleteDependents.empty())
             {
                 ImGui::Separator();
                 ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f),
-                                   "Warning: %zu asset(s) reference this file:", deleteDependents.size());
+                                   "Warning: %zu asset(s) reference these file(s):", deleteDependents.size());
                 ImGui::BeginChild("DeleteDependentsList", ImVec2(500, 150), true);
                 bool navigated = drawAssetGuidList(deleteDependents);
                 ImGui::EndChild();
                 ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f),
-                                   "Deleting it will leave those references broken.");
+                                   "Deleting will leave those references broken.");
                 if (navigated)
                 {
                     ImGui::CloseCurrentPopup();
@@ -382,10 +421,9 @@ namespace windows
 
             if (ImGui::Button("Delete", ImVec2(120, 0)))
             {
-                if (!selectedFile.empty() && !AsyncFileOperations::isBusy())
+                if (!deleteTargets.empty() && !AsyncFileOperations::isBusy())
                 {
-                    std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
-                    AsyncFileOperations::deleteAsync(path);
+                    AsyncFileOperations::deleteAsync(deleteTargets);
                 }
                 ImGui::CloseCurrentPopup();
                 showDeleteConfirmModal = false;

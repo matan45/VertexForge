@@ -78,9 +78,112 @@ namespace render::preview
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
 
+    void* PreviewViewPort::snapshot(uint32_t size)
+    {
+        if (offscreenResources.colorImages.empty() || size == 0)
+        {
+            return nullptr;
+        }
+
+        uint32_t imageIndex = core::RenderManager::getImageIndex();
+
+        // The render submitted in render() for this image index finishes when
+        // its fence signals; wait so the blit reads completed pixels.
+        vk::Result waitResult = device.getLogicalDevice().waitForFences(
+            1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+        (void)waitResult;
+
+        const core::ColorImage& src = offscreenResources.colorImages[imageIndex];
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::Extent2D srcExtent = swapChain.getSwapchainExtent();
+
+        SnapshotImage snap{};
+
+        core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+        imageInfo.width = size;
+        imageInfo.height = size;
+        imageInfo.format = colorFormat;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
+        imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+        imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        core::ImageUtilities::createImage(imageInfo, snap.image, snap.allocation, device.getMemoryManager());
+
+        vk::UniqueCommandBuffer cmd = core::Utilities::beginSingleTimeCommands(
+            device.getLogicalDevice(), commandPool->getCommandPool());
+
+        core::ImageUtilities::transitionImageLayout(cmd.get(), snap.image,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+            vk::ImageAspectFlagBits::eColor);
+        core::ImageUtilities::transitionImageLayout(cmd.get(), src.colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        vk::ImageBlit blit{};
+        blit.srcSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+        blit.srcOffsets[0] = vk::Offset3D{0, 0, 0};
+        blit.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(srcExtent.width), static_cast<int32_t>(srcExtent.height), 1};
+        blit.dstSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+        blit.dstOffsets[0] = vk::Offset3D{0, 0, 0};
+        blit.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(size), static_cast<int32_t>(size), 1};
+        cmd->blitImage(src.colorImage, vk::ImageLayout::eTransferSrcOptimal,
+            snap.image, vk::ImageLayout::eTransferDstOptimal, blit, vk::Filter::eLinear);
+
+        core::ImageUtilities::transitionImageLayout(cmd.get(), snap.image,
+            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+        core::ImageUtilities::transitionImageLayout(cmd.get(), src.colorImage,
+            vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        core::Utilities::endSingleTimeCommands(device, cmd);
+
+        core::ImageViewInfoRequest viewInfo(device.getLogicalDevice(), snap.image);
+        viewInfo.format = colorFormat;
+        core::ImageUtilities::createImageView(viewInfo, snap.view);
+
+        snap.descriptor = ImGui_ImplVulkan_AddTexture(sampler, snap.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        snapshots.push_back(snap);
+
+        return static_cast<void*>(snap.descriptor);
+    }
+
+    void PreviewViewPort::releaseSnapshot(void* descriptor)
+    {
+        for (auto it = snapshots.begin(); it != snapshots.end(); ++it)
+        {
+            if (static_cast<void*>(it->descriptor) == descriptor)
+            {
+                device.getLogicalDevice().waitIdle();
+                ImGui_ImplVulkan_RemoveTexture(it->descriptor);
+                device.getLogicalDevice().destroyImageView(it->view);
+                device.getLogicalDevice().destroyImage(it->image);
+                device.getMemoryManager().free(it->allocation);
+                snapshots.erase(it);
+                return;
+            }
+        }
+    }
+
+    void PreviewViewPort::cleanupSnapshots()
+    {
+        for (auto& snap : snapshots)
+        {
+            if (snap.descriptor)
+            {
+                ImGui_ImplVulkan_RemoveTexture(snap.descriptor);
+            }
+            device.getLogicalDevice().destroyImageView(snap.view);
+            device.getLogicalDevice().destroyImage(snap.image);
+            device.getMemoryManager().free(snap.allocation);
+        }
+        snapshots.clear();
+    }
+
     void PreviewViewPort::cleanUp()
     {
         device.getLogicalDevice().waitIdle();
+
+        cleanupSnapshots();
 
         renderHandler->cleanUp();
         commandPool->cleanUp();
@@ -167,7 +270,7 @@ namespace render::preview
         imageColorInfo.height = swapChain.getSwapchainExtent().height;
         imageColorInfo.format = colorFormat;
         imageColorInfo.tiling = vk::ImageTiling::eOptimal;
-        imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
         imageColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::ImageInfoRequest imageDepthInfo(device.getLogicalDevice(), device.getPhysicalDevice());

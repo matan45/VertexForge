@@ -594,6 +594,23 @@ namespace controllers
         currentFrustum.extractFromMatrix(projection * view);
     }
 
+    void* MaterialPreviewController::snapshot(uint32_t size)
+    {
+        if (!initialized || !sphereLoaded || !offScreen)
+        {
+            return nullptr;
+        }
+        return offScreen->snapshot(size);
+    }
+
+    void MaterialPreviewController::releaseSnapshot(void* handle)
+    {
+        if (offScreen)
+        {
+            offScreen->releaseSnapshot(handle);
+        }
+    }
+
     void* MaterialPreviewController::render()
     {
         if (!initialized || !sphereLoaded)

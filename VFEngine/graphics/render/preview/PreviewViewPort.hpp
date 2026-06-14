@@ -39,13 +39,30 @@ namespace render::preview
         vk::DescriptorSet render(const PreRenderCallback& preRenderCallback = nullptr);
         void cleanUp();
 
+        // Copy the just-rendered offscreen color image into a freshly allocated
+        // square image of `size` px and return a persistent ImGui descriptor for
+        // it (VK-1379 thumbnails). Unlike render(), the returned texture is owned
+        // and is NOT overwritten by subsequent renders. Release with releaseSnapshot().
+        void* snapshot(uint32_t size);
+        void releaseSnapshot(void* descriptor);
+
         PreviewRenderHandler* getRenderHandler() const { return renderHandler.get(); }
         uint32_t getImageCount() const { return static_cast<uint32_t>(offscreenResources.colorImages.size()); }
 
     private:
+        struct SnapshotImage
+        {
+            vk::Image image;
+            core::VulkanAllocation allocation;
+            vk::ImageView view;
+            vk::DescriptorSet descriptor;
+        };
+        std::vector<SnapshotImage> snapshots;
+
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void createOffscreenResources();
         void cleanupOffscreenResources();
+        void cleanupSnapshots();
         void updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;
         void createSampler();
     };
