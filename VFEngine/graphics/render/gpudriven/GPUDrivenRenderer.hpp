@@ -513,6 +513,9 @@ namespace render::gpudriven
         void generatePrepassHiZ(vk::CommandBuffer cmd);
         void initAccelerationStructures();
         void ensureAccelerationStructureManager();
+        // True if the device's maxBoundDescriptorSets can fit the requested set count.
+        // Warns once if not; gates RT spot/point shadows on low-spec GPUs (sets 15/16).
+        bool hasBoundDescriptorSetCapacity(uint32_t requiredSetCount) const;
         void dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex);
         bool isRTShadowReady() const;
         void dispatchRTSpotShadow(vk::CommandBuffer cmd, uint32_t imageIndex);

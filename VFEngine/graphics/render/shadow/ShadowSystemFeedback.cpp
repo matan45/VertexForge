@@ -337,12 +337,28 @@ namespace render::shadow
         if (!shadowSettings.enabled || shadowSettings.quality == types::ShadowQuality::Off)
             return;
         globalQuality = static_cast<ShadowQuality>(shadowSettings.quality);
+
+        // A quality change alters clipmapPagesPerLevel(), which the directional crop
+        // matrices read live every frame. The directional page-table block, however, was
+        // laid out with the registration-time pagesPerLevel (data.vsmPagesX). If they no
+        // longer agree the crop matrices no longer match the page grid -> garbled shadows.
+        // Re-lay-out any directional block whose width drifted from the new quality.
+        const uint32_t newPagesPerLevel = clipmapPagesPerLevel();
         for (auto& [entityId, data] : lightShadowData)
         {
             data.settings.depthBias = shadowSettings.shadowBias;
             data.settings.slopeBias = shadowSettings.slopeBias;
             data.settings.normalBias = shadowSettings.normalBias;
             data.settingsDirty = true;
+
+            if (data.type == ShadowMapType::Directional && data.vsmPagesX != newPagesPerLevel)
+            {
+                freeVSMPages(data);
+                allocateDirectionalBlock(data);
+                data.matricesDirty = true;
+                for (auto& view : data.views)
+                    view.cached = false;
+            }
         }
 
         poolFirstUse = true;

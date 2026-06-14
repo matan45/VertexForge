@@ -47,6 +47,11 @@ namespace memory {
 			managedPeakBytes.store(managed, std::memory_order_relaxed);
 		}
 
+		// True while the Memory Diagnostics editor window is visible. Lets the renderer
+		// skip the per-16-frame allocator-mutex snapshot + driver VRAM query when nothing
+		// consumes them (the window is closed ~always).
+		static inline std::atomic<bool> diagnosticsActive{false};
+
 		// Staging ring buffer stats
 		static inline std::atomic<uint64_t> stagingRingSize{0};
 		static inline std::atomic<uint64_t> stagingRingUsed{0};

@@ -11,7 +11,7 @@
 //     sampler2D        physicalPoolDepth     (binding 1)
 // ============================================================
 
-const int MAX_SHADOW_VIEWS = 272;
+const int MAX_SHADOW_VIEWS = 320; // must match ShadowConstants::MAX_TOTAL_SHADOW_VIEWS
 
 // VSM Constants
 const uint PAGE_SIZE = 128u;

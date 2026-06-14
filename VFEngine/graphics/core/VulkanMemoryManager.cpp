@@ -430,6 +430,11 @@ namespace core
 			memoryBudgetChecked = true;
 		}
 
+		// Throttle the driver round-trip: it enumerates heaps and is comparatively
+		// expensive. The already-published vram* atomics stay valid between queries.
+		if (vramBudgetQueryCounter++ % kVramBudgetQueryInterval != 0)
+			return;
+
 		if (memoryBudgetSupported) {
 			// Real driver budget/usage (accounts for other processes + driver reserve).
 			auto chain = physicalDevice.getMemoryProperties2<

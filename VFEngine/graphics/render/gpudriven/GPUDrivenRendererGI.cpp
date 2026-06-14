@@ -525,10 +525,29 @@ namespace render::gpudriven
             : rtSpotShadowPipeline->getShadowMaskSamplerDescriptorSet();
     }
 
+    bool GPUDrivenRenderer::hasBoundDescriptorSetCapacity(uint32_t requiredSetCount) const
+    {
+        // The device limit is fixed for the process lifetime; query + warn once.
+        static const uint32_t maxBoundSets =
+            device.getPhysicalDevice().getProperties().limits.maxBoundDescriptorSets;
+        if (maxBoundSets >= requiredSetCount)
+            return true;
+        static bool warned = false;
+        if (!warned)
+        {
+            warned = true;
+            vfLogWarning("RT shadows need {} bound descriptor sets but this device supports only "
+                         "{} (maxBoundDescriptorSets); RT spot/point shadows disabled on this GPU.",
+                         requiredSetCount, maxBoundSets);
+        }
+        return false;
+    }
+
     bool GPUDrivenRenderer::isRTSpotShadowReady() const
     {
         return rtSpotShadowEnabled &&
                device.isRayQuerySupported() &&
+               hasBoundDescriptorSetCapacity(16) && // spot RT mask binds set 15
                accelStructManager && accelStructManager->isTLASReady() &&
                depthPrepass && depthPrepass->isInitialized() &&
                lightBufferManager && lightBufferManager->getSpotLightCount() > 0;
@@ -554,6 +573,7 @@ namespace render::gpudriven
     {
         return rtPointShadowEnabled &&
                device.isRayQuerySupported() &&
+               hasBoundDescriptorSetCapacity(17) && // point RT mask binds set 16
                accelStructManager && accelStructManager->isTLASReady() &&
                depthPrepass && depthPrepass->isInitialized() &&
                lightBufferManager && lightBufferManager->getPointLightCount() > 0;

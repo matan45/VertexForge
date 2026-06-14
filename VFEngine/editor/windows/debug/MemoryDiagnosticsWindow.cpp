@@ -33,6 +33,11 @@ namespace windows
 {
     void MemoryDiagnosticsWindow::draw()
     {
+        // Publish visibility every frame so the renderer only refreshes diagnostics while
+        // this window is open. draw() is called each frame even when hidden, so this also
+        // clears the flag the frame the window closes.
+        memory::GpuAllocationStats::diagnosticsActive.store(visible, std::memory_order_relaxed);
+
         if (!visible) return;
 
         // Sample on a fixed cadence regardless of frame rate.

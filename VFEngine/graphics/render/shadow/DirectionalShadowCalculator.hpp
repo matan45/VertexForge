@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cmath>
 
+#include "ShadowTypes.hpp" // LightSpaceAxes::fromDirection
+
 namespace render::shadow
 {
     // One concentric, camera-centered orthographic "shell" of a directional-light
@@ -88,13 +90,12 @@ namespace render::shadow
             std::vector<ClipmapLevel> levels;
             levels.reserve(levelCount);
 
-            glm::vec3 dir = glm::normalize(lightDirection);
-            // Robust pole handling (matches LightSpaceAxes::fromDirection in ShadowTypes.hpp).
-            glm::vec3 worldUp = (std::abs(glm::dot(dir, glm::vec3(0.0f, 1.0f, 0.0f))) < 0.999f)
-                ? glm::vec3(0.0f, 1.0f, 0.0f)
-                : glm::vec3(1.0f, 0.0f, 0.0f);
-            glm::vec3 right = glm::normalize(glm::cross(worldUp, dir));
-            glm::vec3 up = glm::normalize(glm::cross(dir, right));
+            // Single source of truth for the light-space basis (incl. robust pole handling),
+            // shared with every other shadow light type.
+            const LightSpaceAxes axes = LightSpaceAxes::fromDirection(lightDirection);
+            const glm::vec3 dir = axes.lightDir;
+            const glm::vec3 right = axes.lightRight;
+            const glm::vec3 up = axes.lightUp;
 
             for (uint32_t i = 0; i < levelCount; ++i)
             {

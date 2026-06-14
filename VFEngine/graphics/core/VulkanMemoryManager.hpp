@@ -136,9 +136,12 @@ namespace core
 		std::unordered_map<VkDeviceMemory, DedicatedAllocation> dedicatedAllocations;
 
 		// VK_EXT_memory_budget query throttle (refreshDiagnostics runs often; the
-		// syscall need not).
+		// syscall need not). The driver query runs once every kVramBudgetQueryInterval
+		// calls; the published vram* atomics are reused in between.
 		mutable bool memoryBudgetSupported = false;
 		mutable bool memoryBudgetChecked = false;
+		mutable uint32_t vramBudgetQueryCounter = 0;
+		static constexpr uint32_t kVramBudgetQueryInterval = 4;
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
 		bool isHostVisible(uint32_t memoryTypeIndex) const;
