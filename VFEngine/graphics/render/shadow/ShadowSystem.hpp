@@ -60,6 +60,7 @@ namespace render
 
             std::unordered_map<uint32_t, LightShadowData> lightShadowData;
 
+            std::vector<ShadowView> directionalShadowViews;
             std::vector<ShadowView> pointShadowViews;
             std::vector<ShadowView> spotShadowViews;
 
@@ -74,6 +75,11 @@ namespace render
             bool shadowsEnabled = true;
             ShadowQuality globalQuality = ShadowQuality::High;
             bool globalSoftShadows = true;
+
+            // Directional clipmap settings (applied at directional-light registration).
+            uint32_t clipmapLevelCount = ShadowConstants::DEFAULT_CLIPMAP_LEVELS;
+            float clipmapBaseExtent = ShadowConstants::DEFAULT_CLIPMAP_BASE_EXTENT;
+            float clipmapDepthRange = ShadowConstants::DEFAULT_CLIPMAP_DEPTH_RANGE;
             float globalDepthBias = 0.005f;
             float globalSlopeBias = 1.5f;
             float globalNormalBias = 0.02f;
@@ -160,6 +166,9 @@ namespace render
 
             [[nodiscard]] float getGlobalDepthBias() const { return globalDepthBias; }
             [[nodiscard]] float getGlobalNormalBias() const { return globalNormalBias; }
+            [[nodiscard]] uint32_t getClipmapLevelCount() const { return clipmapLevelCount; }
+            [[nodiscard]] float getClipmapBaseExtent() const { return clipmapBaseExtent; }
+            [[nodiscard]] float getClipmapDepthRange() const { return clipmapDepthRange; }
             void applyRenderSettings(const types::RenderSettings& settings);
 
             // Shadow caching for static lights
@@ -182,6 +191,7 @@ namespace render
             void setLightBufferManager(lighting::GPULightBufferManager* manager) { lightBufferManager = manager; }
             void setDeletionQueue(core::DeferredDeletionQueue* queue);
 
+            [[nodiscard]] const std::vector<ShadowView>& getDirectionalShadowViews() const { return directionalShadowViews; }
             [[nodiscard]] const std::vector<ShadowView>& getPointShadowViews() const { return pointShadowViews; }
             [[nodiscard]] const std::vector<ShadowView>& getSpotShadowViews() const { return spotShadowViews; }
 
@@ -240,6 +250,10 @@ namespace render
             PageDimensions allocateSpotPages(LightShadowData& data, uint32_t maxPages);
             PageDimensions allocatePointPages(LightShadowData& data, uint32_t maxPages);
             bool allocatePhysicalTiles(LightShadowData& data, uint32_t pagesX, uint32_t pagesY);
+            // Directional clipmap reserves a page-table block but defers physical tiles to
+            // feedback (a full clipmap is too large to allocate eagerly).
+            bool allocateDirectionalBlock(LightShadowData& data);
+            [[nodiscard]] uint32_t clipmapPagesPerLevel() const;
 
             // Debug info helpers
             void addSingleViewDebugInfo(std::vector<ShadowDebugInfo>& infos, ShadowMapType type) const;
@@ -247,10 +261,12 @@ namespace render
             // beginFrame helpers
             struct PointLightRef { LightShadowData* data; glm::mat4 worldMatrix; float radius; };
             struct SpotLightRef { LightShadowData* data; glm::mat4 worldMatrix; float outerAngle; float range; };
+            struct DirectionalLightRef { LightShadowData* data; glm::vec3 direction; };
 
             void classifyLightsForUpdate(
                 std::vector<PointLightRef>& pointLights,
-                std::vector<SpotLightRef>& spotLights);
+                std::vector<SpotLightRef>& spotLights,
+                std::vector<DirectionalLightRef>& directionalLights);
             void updateShadowCacheAfterRender();
 
             void updatePointCubeShadowMatrices(LightShadowData& data, uint32_t entityId);
@@ -260,11 +276,14 @@ namespace render
             void updateSpotShadowMatricesFromData(LightShadowData& data,
                                                     const glm::mat4& worldMatrix,
                                                     float outerAngle, float range);
+            void updateDirectionalShadowMatricesFromData(LightShadowData& data,
+                                                         const glm::vec3& lightDirection);
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
             void buildPageRenderList();
             void determineDynamicPages();
             void buildSingleViewPageRenderList(LightShadowData& data);
             void buildPointPageRenderList(LightShadowData& data);
+            void buildClipmapPageRenderList(LightShadowData& data);
             void addPageToRenderLists(LightShadowData& data, uint32_t pageIdx,
                                       const glm::mat4& cropViewProjection,
                                       const ShadowView& view, bool isDirty);

@@ -42,6 +42,10 @@ public:
         if (ImGui::SliderFloat("Entity Hide Threshold", &settings->entityDiscardBelow, 0.0f, 1.0f, "%.2f"))
             settings->paramsDirty = true;
         ImGui::SetItemTooltip("Entities are hidden where the visibility mask is below this value");
+        if (ImGui::Checkbox("Hide Shadows in Fog", &settings->hideShadows))
+            settings->paramsDirty = true;
+        ImGui::SetItemTooltip("Fade terrain cast-shadows in fogged areas so hidden buildings\n"
+                              "don't leave ghost shadows sitting on top of the fog.");
         if (ImGui::Button("Reset Explored"))
             settings->resetExploredRequested = true;
         ImGui::SetItemTooltip("Forget all explored areas (back to unexplored black)");

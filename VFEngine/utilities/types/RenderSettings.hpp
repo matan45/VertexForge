@@ -60,7 +60,10 @@ namespace types
 
     struct RTShadowSettings
     {
-        bool enabled = true;
+        // Off by default: the directional Virtual Shadow Map clipmap is the unified base
+        // shadow technique (works on all GPUs, covers the full streamed range). RT is an
+        // optional near-field sharpness boost layered on top via the rtShadowActive flag.
+        bool enabled = false;
 
         // Ray parameters
         float maxRayDistance = 500.0f;
@@ -81,6 +84,18 @@ namespace types
         bool adaptiveBudgetEnabled = true;
         float budgetMs = 2.0f;
         float asMemoryBudgetMB = 256.0f;
+
+        // VK-1175: optional RT override for spot lights, layered on the spot VSM base. OFF by
+        // default; reuses the ray/denoiser tunables above. spotBudget caps how many of the
+        // closest/brightest shadow-casting spot lights get RT (the rest stay on VSM).
+        bool spotEnabled = false;
+        uint32_t spotBudget = 8;
+
+        // VK-1176: optional RT override for point lights, layered on the point VSM base. OFF by
+        // default; reuses the ray/denoiser tunables above. pointBudget caps how many of the
+        // closest/brightest shadow-casting point lights get RT (the rest stay on VSM).
+        bool pointEnabled = false;
+        uint32_t pointBudget = 8;
     };
 
     struct RTShadowStats
@@ -130,6 +145,15 @@ namespace types
         // VSM resolution (spot/point virtual map pages)
         uint32_t spotResolution = 1024;
         uint32_t pointResolution = 512;
+
+        // Directional Virtual Shadow Map clipmap
+        // levelCount: number of concentric camera-centered shells (each 2x the extent).
+        // baseExtent: half-size of the finest (level 0) shell in world units — smaller =
+        //   sharper near shadows but more levels needed to reach the horizon.
+        // depthRange: light-direction span each shell covers (scene height + view distance).
+        uint32_t clipmapLevelCount = 6;
+        float clipmapBaseExtent = 32.0f;
+        float clipmapDepthRange = 4000.0f;
 
         // Debug visualization
         ShadowDebugMode debugMode = ShadowDebugMode::None;

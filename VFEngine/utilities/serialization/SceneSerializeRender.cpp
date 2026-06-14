@@ -41,7 +41,10 @@ namespace serialization
                 {"softShadows", s.softShadows},
                 {"shadowIntensity", s.shadowIntensity},
                 {"spotResolution", s.spotResolution},
-                {"pointResolution", s.pointResolution}
+                {"pointResolution", s.pointResolution},
+                {"clipmapLevelCount", s.clipmapLevelCount},
+                {"clipmapBaseExtent", s.clipmapBaseExtent},
+                {"clipmapDepthRange", s.clipmapDepthRange}
             };
         }
 
@@ -68,6 +71,13 @@ namespace serialization
                 settings.spotResolution = shadows["spotResolution"].get<uint32_t>();
             if (shadows.contains("pointResolution") && shadows["pointResolution"].is_number_unsigned())
                 settings.pointResolution = shadows["pointResolution"].get<uint32_t>();
+            // Directional clipmap (absent in older scenes -> struct defaults retained)
+            if (shadows.contains("clipmapLevelCount") && shadows["clipmapLevelCount"].is_number_unsigned())
+                settings.clipmapLevelCount = shadows["clipmapLevelCount"].get<uint32_t>();
+            if (shadows.contains("clipmapBaseExtent") && shadows["clipmapBaseExtent"].is_number())
+                settings.clipmapBaseExtent = shadows["clipmapBaseExtent"].get<float>();
+            if (shadows.contains("clipmapDepthRange") && shadows["clipmapDepthRange"].is_number())
+                settings.clipmapDepthRange = shadows["clipmapDepthRange"].get<float>();
         }
 
         json serializeRTShadowSettings(const types::RTShadowSettings& s)
@@ -82,7 +92,11 @@ namespace serialization
                 {"normalThreshold", s.normalThreshold},
                 {"spatialPhiDepth", s.spatialPhiDepth},
                 {"spatialPhiNormal", s.spatialPhiNormal},
-                {"spatialPasses", s.spatialPasses}
+                {"spatialPasses", s.spatialPasses},
+                {"spotEnabled", s.spotEnabled},
+                {"spotBudget", s.spotBudget},
+                {"pointEnabled", s.pointEnabled},
+                {"pointBudget", s.pointBudget}
             };
         }
 
@@ -111,6 +125,14 @@ namespace serialization
                 settings.spatialPhiNormal = rt["spatialPhiNormal"].get<float>();
             if (rt.contains("spatialPasses") && rt["spatialPasses"].is_number_integer())
                 settings.spatialPasses = std::clamp(rt["spatialPasses"].get<int>(), 1, 5);
+            if (rt.contains("spotEnabled") && rt["spotEnabled"].is_boolean())
+                settings.spotEnabled = rt["spotEnabled"].get<bool>();
+            if (rt.contains("spotBudget") && rt["spotBudget"].is_number_integer())
+                settings.spotBudget = std::clamp(rt["spotBudget"].get<uint32_t>(), 1u, 8u);
+            if (rt.contains("pointEnabled") && rt["pointEnabled"].is_boolean())
+                settings.pointEnabled = rt["pointEnabled"].get<bool>();
+            if (rt.contains("pointBudget") && rt["pointBudget"].is_number_integer())
+                settings.pointBudget = std::clamp(rt["pointBudget"].get<uint32_t>(), 1u, 8u);
         }
 
         json serializeCullingSettings(const types::CullingSettings& s)

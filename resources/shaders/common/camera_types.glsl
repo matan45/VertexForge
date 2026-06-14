@@ -9,7 +9,8 @@ struct CameraData {
     float time;
     float snowAccumulation;
     float wetness;
-    float _pad1, _pad2;
+    float disableShadows; // 1.0 = skip shadow sampling for this pass (e.g. RTT/minimap)
+    float _pad2;
     vec4 frustumPlanes[6];
 };
 

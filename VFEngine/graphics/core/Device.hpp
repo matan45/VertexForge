@@ -114,6 +114,10 @@ namespace core
             VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME
         };
 
+        // Optional (not in the required list above): enabled only when the physical
+        // device advertises it. Gates the real-VRAM-budget query.
+        bool memoryBudgetSupported = false;
+
         // Private functions for setup and initialization
         void createInstance();
         std::vector<const char*> getRequiredExtensions() const;
@@ -188,6 +192,11 @@ namespace core
         DeviceMemoryInfo getDeviceMemoryInfo() const;
         VulkanMemoryManager& getMemoryManager() { return *memoryManager; }
         const VulkanMemoryManager& getMemoryManager() const { return *memoryManager; }
+
+        // True when VK_EXT_memory_budget was enabled, so vkGetPhysicalDeviceMemoryProperties2
+        // returns a real driver budget/usage. Optional extension — false on hardware
+        // that doesn't advertise it.
+        bool isMemoryBudgetSupported() const { return memoryBudgetSupported; }
 
         bool isMeshShaderSupported() const { return meshShaderCapabilities.meshShaderSupported; }
         bool isTaskShaderSupported() const { return meshShaderCapabilities.taskShaderSupported; }

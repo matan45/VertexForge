@@ -69,20 +69,26 @@ namespace render::raytracing
     }
 
     bool GPUTimestampQueryPool::readResults(const vk::Device& logicalDevice, uint32_t frameIndex,
-                                            std::vector<uint64_t>& outTimestamps) const
+                                            std::vector<uint64_t>& outTimestamps, uint32_t count) const
     {
         if (!valid) return false;
         uint32_t fi = frameIndex % core::MAX_FRAMES_IN_FLIGHT;
 
-        outTimestamps.resize(queryCount);
+        // Read only the queries the caller actually wrote this frame. Reading the
+        // full pool when only a prefix was written leaves unwritten (unavailable)
+        // queries in range, which makes the non-blocking read return VK_NOT_READY
+        // every frame.
+        uint32_t n = (count == 0 || count > queryCount) ? queryCount : count;
+
+        outTimestamps.resize(n);
 
         // Non-blocking read — some queries may not have been written this frame
         // (e.g., BLAS/TLAS build timestamps are conditional). Using eWait would
         // deadlock on unwritten queries after resize or frames without builds.
         auto result = logicalDevice.getQueryPoolResults(
             pools[fi],
-            0, queryCount,
-            queryCount * sizeof(uint64_t),
+            0, n,
+            n * sizeof(uint64_t),
             outTimestamps.data(),
             sizeof(uint64_t),
             vk::QueryResultFlagBits::e64);

@@ -58,14 +58,22 @@ namespace render::shadow
         inline constexpr float DEFAULT_SLOPE_BIAS = 1.5f;
         inline constexpr float DEFAULT_NORMAL_BIAS = 0.02f;
 
-        inline constexpr uint32_t MAX_TOTAL_SHADOW_VIEWS = 272;
+        // 272 for point(32*6=192)+spot, plus headroom for directional clipmap levels
+        // (one VSM view per level, see DirectionalShadowCalculator).
+        inline constexpr uint32_t MAX_TOTAL_SHADOW_VIEWS = 320;
+
+        // Directional clipmap defaults (see DirectionalShadowCalculator).
+        inline constexpr uint32_t DEFAULT_CLIPMAP_LEVELS = 6;
+        inline constexpr float DEFAULT_CLIPMAP_BASE_EXTENT = 32.0f; // half-size of level 0 in world units
+        inline constexpr float DEFAULT_CLIPMAP_DEPTH_RANGE = 4000.0f;
     }
 
     enum class ShadowMapType : uint8_t
     {
         None = 0,
         PointCube,
-        Spot2D
+        Spot2D,
+        Directional
     };
 
     enum class ShadowQuality : uint8_t
@@ -91,6 +99,11 @@ namespace render::shadow
 
         float lightSize = 1.0f;
         float maxShadowDistance = 200.0f;
+
+        // Directional clipmap (ShadowMapType::Directional only)
+        uint32_t clipmapLevelCount = ShadowConstants::DEFAULT_CLIPMAP_LEVELS;
+        float clipmapBaseExtent = ShadowConstants::DEFAULT_CLIPMAP_BASE_EXTENT;
+        float clipmapDepthRange = ShadowConstants::DEFAULT_CLIPMAP_DEPTH_RANGE;
 
         bool enabled = true;
         bool castShadows = true;
@@ -141,6 +154,11 @@ namespace render::shadow
         uint32_t lightEntityId = 0;
 
         bool isStatic = false;
+        // Directional clipmaps move with the camera every frame (never "static"), but must
+        // allocate physical tiles on demand from screen-space feedback rather than eagerly
+        // (a full clipmap is thousands of virtual pages). This flag routes them through the
+        // feedback allocation path instead of the eager non-static path.
+        bool feedbackDriven = false;
         bool shadowCached = false;
         uint32_t lastRenderedFrame = 0;
         uint32_t renderedFrameCount = 0;
@@ -168,6 +186,10 @@ namespace render::shadow
 
         // Light movement tracking: detect when VP matrix changes to invalidate cached pages
         glm::mat4 lastViewProjection{0.0f}; // initialized to zero so first frame always dirty
+        // Directional clipmap: per-level last VP. Each level texel-snaps independently, so a
+        // small camera pan that re-centers level 0 must NOT invalidate the (much larger, rarely
+        // moving) coarse levels — they hold the bulk of the pages. Empty until first clipmap build.
+        std::vector<glm::mat4> lastViewProjectionPerLevel;
 
         void invalidate()
         {
@@ -196,7 +218,9 @@ namespace render::shadow
 
         [[nodiscard]] bool usesVSM() const
         {
-            return type == ShadowMapType::Spot2D || type == ShadowMapType::PointCube;
+            return type == ShadowMapType::Spot2D ||
+                   type == ShadowMapType::PointCube ||
+                   type == ShadowMapType::Directional;
         }
     };
 

@@ -241,7 +241,7 @@ namespace services
         void registerCaveBrushHandlers(::events::EventDispatcher& dispatcher);
         void syncCaveBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncCaveNeighborEdge(terrain::CaveSDFData& sdf, terrain::TerrainTile& neighbor, int axis);
-        void restoreCaveState(uint64_t entityId, const std::vector<events::caveBrush::CaveTileState>& tiles);
+        void restoreCaveState(uint64_t entityId, const std::vector<::events::caveBrush::CaveTileState>& tiles);
         void punchCaveHolesForTile(terrain::TerrainTile& tile);
         void rebuildCaveColliders(EntityHandle entity, terrain::TerrainGrid* grid,
                                   const std::vector<terrain::TileCoord>& caveTiles);

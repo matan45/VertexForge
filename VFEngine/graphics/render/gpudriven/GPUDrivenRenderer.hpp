@@ -47,6 +47,10 @@
 #include "../raytracing/RTShadowPipeline.hpp"
 #include "../raytracing/RTShadowDenoiser.hpp"
 #include "../raytracing/RTShadowProfiler.hpp"
+#include "../raytracing/RTSpotShadowPipeline.hpp"
+#include "../raytracing/RTSpotShadowDenoiser.hpp"
+#include "../raytracing/RTPointShadowPipeline.hpp"
+#include "../raytracing/RTPointShadowDenoiser.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
@@ -342,6 +346,16 @@ namespace render::gpudriven
         std::unique_ptr<raytracing::RTShadowDenoiser> rtShadowDenoiser;
         std::unique_ptr<raytracing::RTShadowProfiler> rtShadowProfiler;
         bool rtShadowEnabled = true;
+        // Optional RT override for spot lights (VK-1175). Mirrors the directional pipeline but
+        // writes one mask slice per budgeted spot light; OFF by default.
+        std::unique_ptr<raytracing::RTSpotShadowPipeline> rtSpotShadowPipeline;
+        std::unique_ptr<raytracing::RTSpotShadowDenoiser> rtSpotShadowDenoiser;
+        bool rtSpotShadowEnabled = false;
+        uint32_t rtSpotShadowBudget = 8;
+        std::unique_ptr<raytracing::RTPointShadowPipeline> rtPointShadowPipeline;
+        std::unique_ptr<raytracing::RTPointShadowDenoiser> rtPointShadowDenoiser;
+        bool rtPointShadowEnabled = false;
+        uint32_t rtPointShadowBudget = 8;
         gi::GISettings cachedGISettings;
         bool giProbeBuffersNeedInit = true;
 
@@ -499,8 +513,23 @@ namespace render::gpudriven
         void generatePrepassHiZ(vk::CommandBuffer cmd);
         void initAccelerationStructures();
         void ensureAccelerationStructureManager();
+        // True if the device's maxBoundDescriptorSets can fit the requested set count.
+        // Warns once if not; gates RT spot/point shadows on low-spec GPUs (sets 15/16).
+        bool hasBoundDescriptorSetCapacity(uint32_t requiredSetCount) const;
         void dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex);
         bool isRTShadowReady() const;
+        void dispatchRTSpotShadow(vk::CommandBuffer cmd, uint32_t imageIndex);
+        bool isRTSpotShadowReady() const;
+        // Active spot RT mask (set 15) layout/descriptor — denoised variant when up, else raw,
+        // else null. Used to preserve set 15 across unrelated pipeline recreates.
+        vk::DescriptorSetLayout getActiveRTSpotShadowMaskLayout() const;
+        vk::DescriptorSet getActiveRTSpotShadowMaskDescriptorSet() const;
+        void dispatchRTPointShadow(vk::CommandBuffer cmd, uint32_t imageIndex);
+        bool isRTPointShadowReady() const;
+        // Active point RT mask (set 16) layout/descriptor — denoised variant when up, else raw,
+        // else null. Used to preserve set 16 across unrelated pipeline recreates.
+        vk::DescriptorSetLayout getActiveRTPointShadowMaskLayout() const;
+        vk::DescriptorSet getActiveRTPointShadowMaskDescriptorSet() const;
 
         // Plugin world-space mask: lazily recreates the scene + terrain pipelines with
         // WORLD_MASK_ENABLED on the first bind, then keeps descriptors in sync.

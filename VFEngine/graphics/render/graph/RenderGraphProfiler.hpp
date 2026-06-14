@@ -88,6 +88,11 @@ namespace render::graph
         // Track which frame slots have been reset
         bool frameSlotReady[core::MAX_FRAMES_IN_FLIGHT]{};
 
+        // Number of passes profiled into each frame slot (set at endFrame). The
+        // readback reads exactly slotPassCount*2 queries — the dense written range
+        // — so unwritten tail/gap queries never force a VK_NOT_READY.
+        uint32_t slotPassCount[core::MAX_FRAMES_IN_FLIGHT]{};
+
         static constexpr float EMA_ALPHA = 0.1f;
     };
 }

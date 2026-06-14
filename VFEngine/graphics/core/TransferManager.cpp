@@ -1,6 +1,7 @@
 #include "TransferManager.hpp"
 #include "Device.hpp"
 #include "BufferUtilities.hpp"
+#include "memory/GpuAllocationStats.hpp"
 #include <cstring>
 
 namespace core {
@@ -78,6 +79,8 @@ namespace core {
 		}
 
 		pendingTransfers.push_back(op);
+		memory::GpuAllocationStats::stagingPendingTransfers.store(
+			static_cast<uint32_t>(pendingTransfers.size()), std::memory_order_relaxed);
 	}
 
 	void TransferManager::pollTransfers()
@@ -96,6 +99,9 @@ namespace core {
 				++it;
 			}
 		}
+
+		memory::GpuAllocationStats::stagingPendingTransfers.store(
+			static_cast<uint32_t>(pendingTransfers.size()), std::memory_order_relaxed);
 	}
 
 	void TransferManager::waitAll()
@@ -105,6 +111,7 @@ namespace core {
 			std::lock_guard lock(transferMutex);
 			localPending = std::move(pendingTransfers);
 			pendingTransfers.clear();
+			memory::GpuAllocationStats::stagingPendingTransfers.store(0, std::memory_order_relaxed);
 		}
 
 		if (localPending.empty()) return;

@@ -414,6 +414,15 @@ namespace render::gpudriven
         {
             terrainShader->addMacroDefinition("WORLD_MASK_ENABLED");
         }
+        // Independent of the set-12/13 RT/caustics region — the spot mask array lives at set 15.
+        if (rtSpotShadowEnabled && rtSpotShadowMaskLayout)
+        {
+            terrainShader->addMacroDefinition("RT_SPOT_SHADOW_ENABLED");
+        }
+        if (rtPointShadowEnabled && rtPointShadowMaskLayout)
+        {
+            terrainShader->addMacroDefinition("RT_POINT_SHADOW_ENABLED");
+        }
         terrainShader->readShader("../../resources/shaders/gpudriven/task_terrain.glsl");
         terrainShader->readShader("../../resources/shaders/gpudriven/mesh_terrain.glsl");
 
@@ -477,6 +486,22 @@ namespace render::gpudriven
         {
             setLayouts.push_back(cachedCausticLayout); // Set 12
             pipelineHasSet12 = true;
+        }
+
+        // Set 15: per-spot-light RT shadow mask array (VK-1175). Pad past the set-12/13 region.
+        if (rtSpotShadowEnabled && rtSpotShadowMaskLayout)
+        {
+            while (setLayouts.size() < 15)
+                setLayouts.push_back(emptyLayout);
+            setLayouts.push_back(rtSpotShadowMaskLayout); // Set 15
+        }
+
+        // Set 16: per-point-light RT shadow mask array (VK-1176). Pad past the spot mask's set 15.
+        if (rtPointShadowEnabled && rtPointShadowMaskLayout)
+        {
+            while (setLayouts.size() < 16)
+                setLayouts.push_back(emptyLayout);
+            setLayouts.push_back(rtPointShadowMaskLayout); // Set 16
         }
 
         vk::PushConstantRange pushConstantRange{};

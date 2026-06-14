@@ -1,7 +1,6 @@
 #include "CullingStatsWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
-#include "threading/TaskProfiler.hpp"
 #include <imgui.h>
 #include <string>
 
@@ -18,16 +17,6 @@ namespace windows
             auto stats = events::EventDispatcher::instance().query(query);
 
             ImGui::Text("Active Camera: %u", stats.activeCameraId);
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
-                               "Total Draw Calls (runtime passes): %u", stats.totalDrawCalls);
-            ImGui::Separator();
-
-            if (ImGui::CollapsingHeader("Render Thread", ImGuiTreeNodeFlags_DefaultOpen))
-            {
-                ImGui::Indent();
-                drawRenderThreadStats();
-                ImGui::Unindent();
-            }
             ImGui::Separator();
 
             if (ImGui::CollapsingHeader("GPU Pipeline Status", ImGuiTreeNodeFlags_DefaultOpen))
@@ -466,39 +455,5 @@ namespace windows
         }
         ImGui::Separator();
         ImGui::Text("Worker Threads: %u", p.workerThreadCount);
-    }
-
-    void CullingStatsWindow::drawRenderThreadStats()
-    {
-        auto latestFrame = threading::TaskProfiler::instance().getLatestFrame();
-        float offscreenMs = 0.0f, presentMs = 0.0f;
-        for (const auto& entry : latestFrame.entries)
-        {
-            float ms = static_cast<float>(entry.endTimeNs - entry.startTimeNs) / 1e6f;
-            if (entry.name == "OffScreenRender") offscreenMs = ms;
-            else if (entry.name == "SwapchainPresent") presentMs = ms;
-        }
-        ImGui::Text("  OffScreen Render:   %.2f ms", offscreenMs);
-        ImGui::Text("  Swapchain Present:  %.2f ms", presentMs);
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
-                           "  Total Render Thread: %.2f ms", offscreenMs + presentMs);
-
-        float mainThreadMs = 0.0f;
-        uint64_t mainStart = UINT64_MAX, mainEnd = 0;
-        for (const auto& entry : latestFrame.entries)
-        {
-            if (entry.name != "OffScreenRender" && entry.name != "SwapchainPresent" && entry.endTimeNs > 0)
-            {
-                mainStart = std::min(mainStart, entry.startTimeNs);
-                mainEnd = std::max(mainEnd, entry.endTimeNs);
-            }
-        }
-        if (mainEnd > mainStart)
-            mainThreadMs = static_cast<float>(mainEnd - mainStart) / 1e6f;
-        ImGui::Text("  Main Thread:         %.2f ms", mainThreadMs);
-        ImGui::Text("  Frame Total (viewport): %.2f ms",
-                    static_cast<float>(threading::viewportFrameDurationNs(latestFrame)) / 1e6f);
-        ImGui::TextDisabled("  Editor/ImGui overhead:  %.2f ms",
-                    static_cast<float>(threading::taskDurationNs(latestFrame, "ImGuiDraw")) / 1e6f);
     }
 }

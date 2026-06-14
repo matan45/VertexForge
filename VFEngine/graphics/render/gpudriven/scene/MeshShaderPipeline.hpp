@@ -33,6 +33,10 @@ namespace render::gpudriven
         vk::DescriptorSetLayout rtShadowMaskLayout;
         // Plugin world-space mask (set 11, or set 14 when GI occupies 11)
         vk::DescriptorSetLayout worldMaskLayout;
+        // Optional per-spot-light RT shadow mask array (set 15, VK-1175)
+        vk::DescriptorSetLayout rtSpotShadowMaskLayout;
+        // Optional per-point-light RT shadow mask array (set 16, VK-1176)
+        vk::DescriptorSetLayout rtPointShadowMaskLayout;
         // Dynamic rendering formats (Vulkan 1.3)
         std::vector<vk::Format> colorAttachmentFormats;
         vk::Format depthAttachmentFormat = vk::Format::eUndefined;
@@ -104,6 +108,8 @@ namespace render::gpudriven
         vk::DescriptorSet causticDescriptorSet;
         vk::DescriptorSet rtShadowMaskDescriptorSet;
         vk::DescriptorSet worldMaskDescriptorSet;
+        vk::DescriptorSet rtSpotShadowMaskDescriptorSet;
+        vk::DescriptorSet rtPointShadowMaskDescriptorSet;
 
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
@@ -119,6 +125,8 @@ namespace render::gpudriven
         bool isTransparentMode = false;
         bool rtShadowLayoutBound = false;
         bool worldMaskLayoutBound = false;
+        bool rtSpotShadowLayoutBound = false;
+        bool rtPointShadowLayoutBound = false;
         uint32_t worldMaskSetIndex = 0;   // 11, or 14 when GI occupies set 11
         bool isWBOITMode = false;
         bool isWireframeMode = false;
@@ -153,6 +161,8 @@ namespace render::gpudriven
         void updateCausticDescriptor(vk::DescriptorSet causticDescSet);
         void updateRTShadowMaskDescriptor(vk::DescriptorSet rtShadowMaskDescSet);
         void updateWorldMaskDescriptor(vk::DescriptorSet worldMaskDescSet);
+        void updateRTSpotShadowMaskDescriptor(vk::DescriptorSet rtSpotShadowMaskDescSet);
+        void updateRTPointShadowMaskDescriptor(vk::DescriptorSet rtPointShadowMaskDescSet);
 
         vk::Pipeline getPipeline() const { return graphicsPipeline; }
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }
@@ -171,6 +181,10 @@ namespace render::gpudriven
         vk::DescriptorSet getWorldMaskDescriptorSet() const { return worldMaskDescriptorSet; }
         bool hasWorldMaskLayout() const { return worldMaskLayoutBound; }
         uint32_t getWorldMaskSetIndex() const { return worldMaskSetIndex; }
+        vk::DescriptorSet getRTSpotShadowMaskDescriptorSet() const { return rtSpotShadowMaskDescriptorSet; }
+        bool hasRTSpotShadowLayout() const { return rtSpotShadowLayoutBound; }
+        vk::DescriptorSet getRTPointShadowMaskDescriptorSet() const { return rtPointShadowMaskDescriptorSet; }
+        bool hasRTPointShadowLayout() const { return rtPointShadowLayoutBound; }
 
         vk::DescriptorSetLayout getPerDrawDataLayout() const { return perDrawDataLayout; }
         vk::DescriptorSetLayout getMeshletDataLayout() const { return meshletDataLayout; }

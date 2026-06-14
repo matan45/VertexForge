@@ -50,6 +50,7 @@ namespace serialization
         j["clearColor"] = writeVec4(rtt.clearColor);
         j["priority"] = rtt.priority;
         j["enabled"] = rtt.enabled;
+        j["renderShadows"] = rtt.renderShadows;
         return j;
     }
 
@@ -62,6 +63,7 @@ namespace serialization
         readVec4(j, "clearColor", rtt.clearColor);
         rtt.priority = j.value("priority", 0u);
         rtt.enabled = j.value("enabled", true);
+        rtt.renderShadows = j.value("renderShadows", false);
         // textureId is runtime-only, not serialized
         rtt.textureId = rendertexture::INVALID_RENDER_TEXTURE_ID;
     }

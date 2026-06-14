@@ -1,6 +1,7 @@
 #include "ShadowSystem.hpp"
 #include "PointShadowCalculator.hpp"
 #include "SpotShadowCalculator.hpp"
+#include "DirectionalShadowCalculator.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "print/Log.hpp"
@@ -105,9 +106,45 @@ namespace render::shadow
         }
     }
 
+    void ShadowSystem::updateDirectionalShadowMatricesFromData(LightShadowData& data,
+                                                               const glm::vec3& lightDirection)
+    {
+        uint32_t levelCount = static_cast<uint32_t>(data.views.size());
+        if (levelCount == 0)
+            return;
+
+        uint32_t pagesPerLevel = clipmapPagesPerLevel();
+        auto levels = DirectionalShadowCalculator::computeClipmapLevels(
+            lightDirection, lastCameraPosition,
+            data.settings.clipmapBaseExtent, levelCount,
+            pagesPerLevel, vsm::PAGE_SIZE,
+            data.settings.clipmapDepthRange);
+
+        float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
+        for (uint32_t i = 0; i < levelCount && i < levels.size(); ++i)
+        {
+            auto& view = data.views[i];
+            const auto& lvl = levels[i];
+            view.viewMatrix = lvl.viewMatrix;
+            view.projectionMatrix = lvl.projMatrix;
+            view.viewProjectionMatrix = lvl.viewProjMatrix;
+            view.nearPlane = lvl.nearPlane;
+            view.farPlane = lvl.farPlane;
+            view.lightDirection = glm::vec4(lightDirection, 0.0f);
+            view.cascadeIndex = static_cast<uint16_t>(i);
+            view.texelSize = texelSize;
+            view.depthBias = data.settings.depthBias;
+            view.slopeBias = data.settings.slopeBias;
+            view.normalBias = data.settings.normalBias;
+        }
+    }
+
     void ShadowSystem::collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds)
     {
-        std::unordered_map<uint32_t, int32_t> ptIdx, spotIdx;
+        // Ordering MUST stay directional -> point -> spot, matched by buildGPUShadowData's
+        // add-order. The directional clipmap occupies the first views so its base shadow
+        // index (set on the GPU light) points at clipmap level 0.
+        std::unordered_map<uint32_t, int32_t> dirIdx, ptIdx, spotIdx;
 
         for (auto& [entityId, data] : lightShadowData)
         {
@@ -140,18 +177,23 @@ namespace render::shadow
             case ShadowMapType::Spot2D:             addViews(spotShadowViews, spotIdx); break;
             case ShadowMapType::PointCube:
                 if (!data.views.empty()) addViews(pointShadowViews, ptIdx); break;
+            case ShadowMapType::Directional:
+                if (!data.views.empty()) addViews(directionalShadowViews, dirIdx); break;
             default: break;
             }
         }
 
-        int32_t spOff = static_cast<int32_t>(pointShadowViews.size());
-        for (const auto& [id, i] : ptIdx)   entityToShadowIndex[id] = i;
+        int32_t ptOff = static_cast<int32_t>(directionalShadowViews.size());
+        int32_t spOff = ptOff + static_cast<int32_t>(pointShadowViews.size());
+        for (const auto& [id, i] : dirIdx)  entityToShadowIndex[id] = i;
+        for (const auto& [id, i] : ptIdx)   entityToShadowIndex[id] = ptOff + i;
         for (const auto& [id, i] : spotIdx) entityToShadowIndex[id] = spOff + i;
     }
 
     void ShadowSystem::classifyLightsForUpdate(
         std::vector<PointLightRef>& pointLights,
-        std::vector<SpotLightRef>& spotLights)
+        std::vector<SpotLightRef>& spotLights,
+        std::vector<DirectionalLightRef>& directionalLights)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         for (auto& [entityId, data] : lightShadowData)
@@ -165,6 +207,29 @@ namespace render::shadow
                 ++lastCacheStats.totalStaticLights;
             const auto& wm = registry.get<components::WorldTransformComponent>(entity).worldMatrix;
 
+            auto applyOverrides = [&]() {
+                if (registry.all_of<components::ShadowOverrideComponent>(entity))
+                {
+                    const auto& ovr = registry.get<components::ShadowOverrideComponent>(entity);
+                    if (ovr.depthBias >= 0.0f) data.settings.depthBias = ovr.depthBias;
+                    if (ovr.slopeBias >= 0.0f) data.settings.slopeBias = ovr.slopeBias;
+                    if (ovr.normalBias >= 0.0f) data.settings.normalBias = ovr.normalBias;
+                }
+            };
+
+            // Directional: camera-centered clipmap, no distance culling (sun is at infinity),
+            // scene-wide so it gets the highest streaming priority.
+            if (data.type == ShadowMapType::Directional)
+            {
+                glm::vec3 dir = glm::normalize(glm::vec3(wm * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+                data.shadowPriority = 2.0f;
+                applyOverrides();
+                directionalLights.push_back({&data, dir});
+                for (auto& view : data.views) view.cached = false;
+                ++lastCacheStats.renderedThisFrame;
+                continue;
+            }
+
             // Compute distance-based shadow priority for streaming
             float dist = glm::length(glm::vec3(wm[3]) - lastCameraPosition);
 
@@ -175,14 +240,7 @@ namespace render::shadow
             data.shadowPriority = 1.0f / (1.0f + dist * 0.01f);
             if (data.isStatic) data.shadowPriority += 0.3f;
 
-            // Apply per-light shadow overrides each frame
-            if (registry.all_of<components::ShadowOverrideComponent>(entity))
-            {
-                const auto& ovr = registry.get<components::ShadowOverrideComponent>(entity);
-                if (ovr.depthBias >= 0.0f) data.settings.depthBias = ovr.depthBias;
-                if (ovr.slopeBias >= 0.0f) data.settings.slopeBias = ovr.slopeBias;
-                if (ovr.normalBias >= 0.0f) data.settings.normalBias = ovr.normalBias;
-            }
+            applyOverrides();
 
             if (data.type == ShadowMapType::PointCube)
             {
@@ -228,6 +286,7 @@ namespace render::shadow
         glm::vec3 camPos = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
         lastCameraPosition = camPos;
 
+        directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
         entityToShadowIndex.clear();
@@ -237,7 +296,8 @@ namespace render::shadow
 
         std::vector<PointLightRef> ptLights;
         std::vector<SpotLightRef> spLights;
-        classifyLightsForUpdate(ptLights, spLights);
+        std::vector<DirectionalLightRef> dirLights;
+        classifyLightsForUpdate(ptLights, spLights, dirLights);
 
         auto& jobs = threading::JobSystem::instance();
         auto f1 = jobs.submit([this, &ptLights]() {
@@ -248,6 +308,10 @@ namespace render::shadow
             for (auto& r : spLights)
                 updateSpotShadowMatricesFromData(*r.data, r.worldMatrix, r.outerAngle, r.range);
         }, threading::JobPriority::HIGH);
+        // Directional clipmap matrices depend on lastCameraPosition (set above), recomputed
+        // every frame since the clipmap follows the camera.
+        for (auto& r : dirLights)
+            updateDirectionalShadowMatricesFromData(*r.data, r.direction);
         f1.get(); f2.get();
 
         updateShadowCacheAfterRender();

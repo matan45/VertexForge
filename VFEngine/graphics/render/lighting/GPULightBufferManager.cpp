@@ -27,6 +27,8 @@ namespace render::lighting
         cpuDirectionalLights.resize(LightConstants::MAX_DIRECTIONAL_LIGHTS);
         cpuPointLights.resize(LightConstants::MAX_POINT_LIGHTS);
         cpuSpotLights.resize(LightConstants::MAX_SPOT_LIGHTS);
+        cpuSpotLightEntityIds.resize(LightConstants::MAX_SPOT_LIGHTS);
+        cpuPointLightEntityIds.resize(LightConstants::MAX_POINT_LIGHTS);
 
         vfLogInfo("GPULightBufferManager: Initializing with max {} directional, {} point, {} spot lights",
                    LightConstants::MAX_DIRECTIONAL_LIGHTS,

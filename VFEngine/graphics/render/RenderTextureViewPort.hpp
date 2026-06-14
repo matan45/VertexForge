@@ -39,6 +39,7 @@ namespace render
         uint32_t width = 512;
         uint32_t height = 512;
         glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
+        bool renderShadows = false; // false = skip shadow sampling (flat-lit, e.g. minimap)
         uint32_t lastRenderedImageIndex = 0;
         vk::Semaphore lastRenderCompleteSemaphore{};
         bool lastRenderSubmitted = false;
@@ -83,6 +84,7 @@ namespace render
         void cleanUp();
 
         void setClearColor(const glm::vec4& color) { clearColor = color; }
+        void setRenderShadows(bool value) { renderShadows = value; }
 
         // Render scene from RTT camera perspective using the shared main renderer
         vk::DescriptorSet render(

@@ -29,6 +29,29 @@ namespace memory {
 		// Block reclamation
 		static inline std::atomic<uint64_t> blocksReclaimed{0};
 
+		// Peak watermarks (high-water marks since the last reset; reset from UI)
+		static inline std::atomic<uint64_t> deviceLocalPeakUsedBytes{0};
+		static inline std::atomic<uint64_t> hostVisiblePeakUsedBytes{0};
+		static inline std::atomic<uint64_t> managedPeakBytes{0};
+
+		// Real driver VRAM budget/usage for the device-local heap(s).
+		// From VK_EXT_memory_budget when available, else the device-local heap
+		// size with our own tracked usage as a fallback.
+		static inline std::atomic<uint64_t> vramBudgetBytes{0};
+		static inline std::atomic<uint64_t> vramUsageBytes{0};
+
+		// Resets the peak watermarks to the supplied current values.
+		static void resetPeaks(uint64_t deviceLocalUsed, uint64_t hostVisibleUsed, uint64_t managed) {
+			deviceLocalPeakUsedBytes.store(deviceLocalUsed, std::memory_order_relaxed);
+			hostVisiblePeakUsedBytes.store(hostVisibleUsed, std::memory_order_relaxed);
+			managedPeakBytes.store(managed, std::memory_order_relaxed);
+		}
+
+		// True while the Memory Diagnostics editor window is visible. Lets the renderer
+		// skip the per-16-frame allocator-mutex snapshot + driver VRAM query when nothing
+		// consumes them (the window is closed ~always).
+		static inline std::atomic<bool> diagnosticsActive{false};
+
 		// Staging ring buffer stats
 		static inline std::atomic<uint64_t> stagingRingSize{0};
 		static inline std::atomic<uint64_t> stagingRingUsed{0};

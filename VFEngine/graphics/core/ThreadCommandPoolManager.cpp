@@ -36,19 +36,19 @@ namespace core
                 return;
             }
 
-            // Allocate secondary command buffers (one per frame-in-flight)
+            // Allocate secondary command buffers (one per swapchain image per slot)
             vk::CommandBufferAllocateInfo allocInfo{};
             allocInfo.commandPool = threadPools[t].commandPool.get();
             allocInfo.level = vk::CommandBufferLevel::eSecondary;
-            allocInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
+            allocInfo.commandBufferCount = MAX_SWAPCHAIN_IMAGES * SECONDARY_SLOTS_PER_FRAME;
 
             try
             {
                 auto buffers = device->getLogicalDevice().allocateCommandBuffersUnique(allocInfo);
-                for (uint32_t f = 0; f < MAX_FRAMES_IN_FLIGHT; f++)
-                {
-                    threadPools[t].secondaryBuffers[f] = std::move(buffers[f]);
-                }
+                for (uint32_t f = 0; f < MAX_SWAPCHAIN_IMAGES; f++)
+                    for (uint32_t s = 0; s < SECONDARY_SLOTS_PER_FRAME; s++)
+                        threadPools[t].secondaryBuffers[f][s] =
+                            std::move(buffers[f * SECONDARY_SLOTS_PER_FRAME + s]);
             }
             catch (const vk::SystemError& err)
             {
@@ -57,17 +57,16 @@ namespace core
             }
         }
 
-        vfLogInfo("ThreadCommandPoolManager initialized: {} threads, {} frames", threadCount, MAX_FRAMES_IN_FLIGHT);
+        vfLogInfo("ThreadCommandPoolManager initialized: {} threads, {} image slots", threadCount, MAX_SWAPCHAIN_IMAGES);
     }
 
     void ThreadCommandPoolManager::cleanUp()
     {
         for (auto& pool : threadPools)
         {
-            for (auto& buf : pool.secondaryBuffers)
-            {
-                buf.reset();
-            }
+            for (auto& frameSlots : pool.secondaryBuffers)
+                for (auto& buf : frameSlots)
+                    buf.reset();
             pool.commandPool.reset();
         }
         threadPools.clear();
@@ -76,18 +75,22 @@ namespace core
 
     void ThreadCommandPoolManager::resetFrame(uint32_t frameIndex)
     {
-        uint32_t fi = frameIndex % MAX_FRAMES_IN_FLIGHT;
+        // frameIndex is the acquired swapchain image index; the engine has already waited
+        // this image's per-image fence before recording, so its secondaries are free.
+        uint32_t fi = frameIndex % MAX_SWAPCHAIN_IMAGES;
 
         for (uint32_t t = 0; t < threadCount; t++)
         {
-            // Reset individual secondary buffers for this frame
-            threadPools[t].secondaryBuffers[fi]->reset(vk::CommandBufferResetFlagBits::eReleaseResources);
+            // Reset every slot's secondary buffer for this image
+            for (uint32_t s = 0; s < SECONDARY_SLOTS_PER_FRAME; s++)
+                threadPools[t].secondaryBuffers[fi][s]->reset(vk::CommandBufferResetFlagBits::eReleaseResources);
         }
     }
 
-    vk::CommandBuffer ThreadCommandPoolManager::getSecondary(uint32_t threadNum, uint32_t frameIndex)
+    vk::CommandBuffer ThreadCommandPoolManager::getSecondary(uint32_t poolIndex, uint32_t frameIndex, uint32_t slot)
     {
-        uint32_t fi = frameIndex % MAX_FRAMES_IN_FLIGHT;
-        return threadPools[threadNum].secondaryBuffers[fi].get();
+        uint32_t fi = frameIndex % MAX_SWAPCHAIN_IMAGES;
+        uint32_t sl = slot % SECONDARY_SLOTS_PER_FRAME;
+        return threadPools[poolIndex].secondaryBuffers[fi][sl].get();
     }
 }

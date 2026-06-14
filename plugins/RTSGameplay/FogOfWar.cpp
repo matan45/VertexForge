@@ -56,6 +56,7 @@ void FogOfWarSystem::loadSettings()
     settings->terrainDimMin = fog.value("terrainDimMin", settings->terrainDimMin);
     settings->exploredBrightness = fog.value("exploredBrightness", settings->exploredBrightness);
     settings->entityDiscardBelow = fog.value("entityDiscardBelow", settings->entityDiscardBelow);
+    settings->hideShadows = fog.value("hideShadows", settings->hideShadows);
     settings->paramsDirty = true;
     ctx->logInfo("RTSGameplay: fog settings loaded from config");
 }
@@ -68,7 +69,8 @@ void FogOfWarSystem::saveSettings()
         {"enabled", settings->enabled},
         {"terrainDimMin", settings->terrainDimMin},
         {"exploredBrightness", settings->exploredBrightness},
-        {"entityDiscardBelow", settings->entityDiscardBelow}
+        {"entityDiscardBelow", settings->entityDiscardBelow},
+        {"hideShadows", settings->hideShadows}
     };
     ctx->saveConfig(config);
 }
@@ -98,6 +100,7 @@ plugin::WorldMaskParams FogOfWarSystem::makeFogParams(bool enabled) const
     params.terrainDimMin = settings->terrainDimMin;
     params.affectsEntities = true;
     params.entityDiscardBelow = settings->entityDiscardBelow;
+    params.affectsShadows = settings->hideShadows;
     return params;
 }
 

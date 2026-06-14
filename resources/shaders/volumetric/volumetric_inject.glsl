@@ -279,7 +279,7 @@ const float POOL_DIM_F = float(PHYSICAL_POOL_DIM);
 const float PAGE_SIZE_F = float(PAGE_SIZE);
 
 // Shadow constants (must match ShadowTypes.hpp)
-const int MAX_SHADOW_VIEWS = 272;
+const int MAX_SHADOW_VIEWS = 320;
 
 const float VOL_PI = 3.14159265359;
 const float LIGHT_INTENSITY_SCALE = 100.0;

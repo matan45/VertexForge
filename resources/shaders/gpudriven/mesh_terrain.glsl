@@ -230,7 +230,7 @@ layout(set = 11, binding = 4) uniform WorldMaskUBO {
     vec4 worldMinMax;          // minX, minZ, maxX, maxZ
     float terrainDimMin;
     float entityDiscardBelow;
-    uint flags;                // bit0 enabled, bit1 affectsTerrain, bit2 affectsEntities
+    uint flags;                // bit0 enabled, bit1 affectsTerrain, bit2 affectsEntities, bit3 affectsShadows
     float _padWM;
 } worldMask;
 #endif
@@ -344,6 +344,16 @@ layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
 layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
 #endif
 
+#ifdef RT_SPOT_SHADOW_ENABLED
+// Per-spot-light RT shadow masks (VK-1175); see mesh_shader_gpudriven.glsl for the layout rationale.
+layout(set = 15, binding = 0) uniform sampler2DArray rtSpotShadowMaskArray;
+#endif
+
+#ifdef RT_POINT_SHADOW_ENABLED
+// Per-point-light RT shadow masks (VK-1176); see mesh_shader_gpudriven.glsl for the layout rationale.
+layout(set = 16, binding = 0) uniform sampler2DArray rtPointShadowMaskArray;
+#endif
+
 #ifdef CAUSTICS_ENABLED
 layout(set = CAUSTIC_SET, binding = 0) uniform sampler2D causticMap;
 layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
@@ -375,6 +385,18 @@ float sampleTerrainSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) 
     return sampleVSMShadow(shadowIndex, worldPos, biasedNormal);
 }
 
+float sampleTerrainSpotShadowHybrid(int shadowIndex, int rtMaskSlice, vec3 worldPos, vec3 worldNormal) {
+#ifdef RT_SPOT_SHADOW_ENABLED
+    // Optional RT override (off by default): keep terrain in lockstep with meshes so a budgeted
+    // spot light's RT shadow lands on both surfaces (no RT-on-mesh / VSM-on-terrain mismatch).
+    if (lightCounts.rtSpotShadowActive != 0u && rtMaskSlice >= 0) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
+        return texture(rtSpotShadowMaskArray, vec3(screenUV, float(rtMaskSlice))).r;
+    }
+#endif
+    return sampleTerrainSpotShadow(shadowIndex, worldPos, worldNormal);
+}
+
 float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
     return sampleVSMShadow(shadowIndex, worldPos, biasedNormal);
@@ -382,11 +404,18 @@ float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNorma
 
 float sampleTerrainDirectionalShadow(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ, vec3 cameraPos) {
 #ifdef RT_SHADOW_ENABLED
+    // Optional RT override (off by default).
     if (lightCounts.rtShadowActive != 0u) {
         vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
         return texture(rtShadowMask, screenUV).r;
     }
 #endif
+    if (baseShadowIndex < 0) return 1.0;
+    // shadowMode 1 = VSM clipmap. Apply terrain-specific normal-bias scaling first.
+    if (shadowMode == 1) {
+        vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+        return sampleDirectionalVSM(baseShadowIndex, worldPos, biasedNormal);
+    }
     return 1.0;
 }
 
@@ -395,6 +424,19 @@ float sampleTerrainPointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
     // Apply terrain-specific normal bias scaling before delegating to VSM sampling
     vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
     return samplePointShadow(shadowIndex, worldPos, biasedNormal, lightPos, lightRadius);
+}
+
+float sampleTerrainPointShadowHybrid(int shadowIndex, int rtMaskSlice, vec3 worldPos, vec3 worldNormal,
+                                     vec3 lightPos, float lightRadius) {
+#ifdef RT_POINT_SHADOW_ENABLED
+    // Optional RT override (off by default): keep terrain in lockstep with meshes so a budgeted
+    // point light's RT shadow lands on both surfaces (no RT-on-mesh / VSM-on-terrain mismatch).
+    if (lightCounts.rtPointShadowActive != 0u && rtMaskSlice >= 0) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
+        return texture(rtPointShadowMaskArray, vec3(screenUV, float(rtMaskSlice))).r;
+    }
+#endif
+    return sampleTerrainPointShadow(shadowIndex, worldPos, worldNormal, lightPos, lightRadius);
 }
 
 void main() {
@@ -451,15 +493,23 @@ void main() {
     applyWetness(camera.wetness, albedo, roughness, metallic, N);
     applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
 
+    // Fog-of-war visibility for this terrain fragment (1.0 = fully visible). Stays 1.0 unless
+    // the bound mask opts in to affecting shadows (bit3), so shadow fading is configurable.
+    float worldMaskVisibility = 1.0;
 #ifdef WORLD_MASK_ENABLED
-    // Plugin world mask: dim albedo where the XZ-projected mask is low (e.g. fog of war).
-    // Fragments outside the mask bounds are unaffected (mask = 1.0).
-    if ((worldMask.flags & 3u) == 3u) {   // enabled & affectsTerrain
-        vec2 maskUV = (fragWorldPos.xz - worldMask.worldMinMax.xy)
-                    / (worldMask.worldMinMax.zw - worldMask.worldMinMax.xy);
-        if (all(greaterThanEqual(maskUV, vec2(0.0))) && all(lessThanEqual(maskUV, vec2(1.0)))) {
-            float maskValue = texture(worldMaskTexture, maskUV).r;
-            albedo *= mix(worldMask.terrainDimMin, 1.0, maskValue);
+    // Plugin world mask: dim albedo where the XZ-projected mask is low (e.g. fog of war), and/or
+    // fade cast shadows there. Fragments outside the mask bounds are unaffected (mask = 1.0).
+    if ((worldMask.flags & 1u) != 0u) {   // enabled
+        bool affectsTerrain = (worldMask.flags & 2u) != 0u;
+        bool affectsShadows = (worldMask.flags & 8u) != 0u;
+        if (affectsTerrain || affectsShadows) {
+            vec2 maskUV = (fragWorldPos.xz - worldMask.worldMinMax.xy)
+                        / (worldMask.worldMinMax.zw - worldMask.worldMinMax.xy);
+            if (all(greaterThanEqual(maskUV, vec2(0.0))) && all(lessThanEqual(maskUV, vec2(1.0)))) {
+                float maskValue = texture(worldMaskTexture, maskUV).r;
+                if (affectsTerrain) albedo *= mix(worldMask.terrainDimMin, 1.0, maskValue);
+                if (affectsShadows) worldMaskVisibility = maskValue;
+            }
         }
     }
 #endif
@@ -497,8 +547,8 @@ void main() {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
 
-            float shadow = sampleTerrainPointShadow(light.shadowIndex, fragWorldPos, N,
-                                                    light.position, light.radius);
+            float shadow = sampleTerrainPointShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, N,
+                                                          light.position, light.radius);
 
             // Weight shadow contribution to ambient by attenuation
             // so edge-of-radius precision artifacts don't darken ambient
@@ -516,7 +566,7 @@ void main() {
             uint lightIdx = extractLightIndex(packedIdx);
             SpotLight light = spotLights[lightIdx];
 
-            float shadow = sampleTerrainSpotShadow(light.shadowIndex, fragWorldPos, N);
+            float shadow = sampleTerrainSpotShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, N);
 
             float spotDist = length(light.position - fragWorldPos);
             float spotAtten = physicalAttenuation(spotDist, light.range);
@@ -531,7 +581,12 @@ void main() {
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
 
-        float shadow = sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
+        float shadow = (camera.disableShadows > 0.5)
+            ? 1.0
+            : sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
+        // Fog of war hides the casters (entities are discarded in fog), so fade their ground
+        // shadows out by the same mask -> no ghost shadows sitting on top of the fog.
+        shadow = mix(1.0, shadow, worldMaskVisibility);
         minShadow = min(minShadow, shadow);
 
         vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;

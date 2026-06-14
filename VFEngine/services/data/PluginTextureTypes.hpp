@@ -31,6 +31,8 @@ namespace plugin {
         float terrainDimMin      = 0.25f;  // albedo multiplier where mask == 0
         bool  affectsEntities    = false;  // entities discard where mask < entityDiscardBelow
         float entityDiscardBelow = 0.5f;   // discard threshold [0,1]
+        bool  affectsShadows     = false;  // fade terrain cast-shadows by the mask (hide ghost
+                                           // shadows of fog-hidden casters); shadow=mix(1,shadow,mask)
     };
 
 }

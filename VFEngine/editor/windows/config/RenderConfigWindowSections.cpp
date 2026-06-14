@@ -24,6 +24,7 @@ namespace windows
                 drawShadowQualitySettings();
                 drawShadowBiasSettings();
                 drawShadowFilterSettings();
+                drawDirectionalClipmapSettings();
             }
 
             drawRTShadowSection();
@@ -104,6 +105,37 @@ namespace windows
                               "0.0 = Lighter shadows (ambient light in shadows)\n"
                               "1.0 = Darker shadows (no ambient in shadows)");
         }
+    }
+
+    void RenderConfigWindow::drawDirectionalClipmapSettings()
+    {
+        ImGui::Separator();
+        ImGui::Text("Directional Clipmap (Sun)");
+        ImGui::Spacing();
+
+        int levels = static_cast<int>(settings.shadows.clipmapLevelCount);
+        if (ImGui::SliderInt("Clipmap Levels", &levels, 2, 8))
+        {
+            settings.shadows.clipmapLevelCount = static_cast<uint32_t>(levels);
+            markDirty();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Concentric, camera-centered shadow shells for the directional light.\n"
+                              "Each level covers 2x the area of the previous. More levels = farther\n"
+                              "shadow reach. Takes effect on scene reload (resizes the page block).");
+
+        if (ImGui::DragFloat("Base Extent (m)", &settings.shadows.clipmapBaseExtent, 1.0f, 4.0f, 256.0f, "%.0f"))
+            markDirty();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Half-size of the finest (level 0) shell in world units.\n"
+                              "Smaller = sharper near shadows but more levels needed to reach the horizon.\n"
+                              "Applies live on Apply.");
+
+        if (ImGui::DragFloat("Depth Range (m)", &settings.shadows.clipmapDepthRange, 50.0f, 100.0f, 20000.0f, "%.0f"))
+            markDirty();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("How far each shell spans along the sun direction.\n"
+                              "Must cover scene height + view distance. Applies live on Apply.");
     }
 
     void RenderConfigWindow::drawShadowDebugSection()
@@ -483,6 +515,40 @@ namespace windows
                 ImGui::Text("Scratch peak: %.1f MB", scratchMB);
                 ImGui::Text("BLAS build: %.2f ms | TLAS build: %.2f ms",
                             rtStats.blasBuildMs, rtStats.tlasBuildMs);
+            }
+
+            // Spot lights (VK-1175): independent opt-in RT override layered on the spot VSM base.
+            // Reuses the ray/denoiser tunables above; the closest/brightest spotBudget spots get RT.
+            ImGui::Spacing();
+            ImGui::SeparatorText("Spot Lights");
+            if (ImGui::Checkbox("RT Spot Shadows", &settings.rtShadows.spotEnabled))
+                markDirty();
+            if (settings.rtShadows.spotEnabled)
+            {
+                int budget = static_cast<int>(settings.rtShadows.spotBudget);
+                if (ImGui::SliderInt("RT Spot Budget", &budget, 1, 8))
+                {
+                    settings.rtShadows.spotBudget = static_cast<uint32_t>(budget);
+                    markDirty();
+                }
+                ImGui::TextDisabled("Closest/brightest spots get RT; the rest stay on VSM.");
+            }
+
+            // Point lights (VK-1176): independent opt-in RT override layered on the point VSM base.
+            // Reuses the ray/denoiser tunables above; the closest/brightest pointBudget points get RT.
+            ImGui::Spacing();
+            ImGui::SeparatorText("Point Lights");
+            if (ImGui::Checkbox("RT Point Shadows", &settings.rtShadows.pointEnabled))
+                markDirty();
+            if (settings.rtShadows.pointEnabled)
+            {
+                int budget = static_cast<int>(settings.rtShadows.pointBudget);
+                if (ImGui::SliderInt("RT Point Budget", &budget, 1, 8))
+                {
+                    settings.rtShadows.pointBudget = static_cast<uint32_t>(budget);
+                    markDirty();
+                }
+                ImGui::TextDisabled("Closest/brightest points get RT; the rest stay on VSM.");
             }
 
             ImGui::Unindent(10.0f);

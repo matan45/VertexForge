@@ -151,6 +151,7 @@ namespace core::api
                 desc.height = height > 0 ? height : 512;
                 desc.updateMode = static_cast<rendertexture::UpdateMode>(mode);
                 desc.priority = rttComp.priority;
+                desc.renderShadows = rttComp.renderShadows;
 
                 services::events::rendertexture::CreateRenderTextureCommand cmd;
                 cmd.desc = desc;

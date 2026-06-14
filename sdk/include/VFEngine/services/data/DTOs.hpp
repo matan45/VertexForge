@@ -285,6 +285,7 @@ namespace services
         glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
         uint32_t priority = 0;
         bool enabled = true;
+        bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
     };
 
     struct BillboardData
@@ -460,6 +461,7 @@ namespace services
         glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
         asset::AssetRef fontRef;
         float fontSize = 14.0f;
+        float letterSpacing = 0.0f;
         glm::vec4 padding{8.0f, 8.0f, 6.0f, 6.0f}; // left, right, top, bottom
         bool enabled = true;
         std::string panelChildName;

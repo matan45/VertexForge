@@ -85,6 +85,7 @@ namespace services
             desc.fixedIntervalSeconds = rtComp.fixedIntervalSeconds;
             desc.clearColor = rtComp.clearColor;
             desc.priority = rtComp.priority;
+            desc.renderShadows = rtComp.renderShadows;
 
             rendertexture::RenderTextureId textureId = provider->createRenderTexture(desc);
 

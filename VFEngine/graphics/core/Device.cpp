@@ -449,6 +449,21 @@ namespace core
         activeDeviceExtensions.insert(activeDeviceExtensions.end(),
                                       slDeviceExtensions.begin(), slDeviceExtensions.end());
 
+        // Optionally enable VK_EXT_memory_budget for the real-VRAM-budget readout in
+        // the memory diagnostics window. Not required — skip silently if unsupported.
+        {
+            auto available = physicalDevice.enumerateDeviceExtensionProperties();
+            for (const auto& ext : available)
+            {
+                if (strcmp(ext.extensionName.data(), VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0)
+                {
+                    activeDeviceExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+                    memoryBudgetSupported = true;
+                    break;
+                }
+            }
+        }
+
         vk::DeviceCreateInfo createInfo{};
         createInfo.pNext = &meshShaderFeatures;
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());

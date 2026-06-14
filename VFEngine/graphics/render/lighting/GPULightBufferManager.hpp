@@ -89,7 +89,21 @@ namespace render::lighting
         shadow::ShadowSystem* shadowSystem = nullptr;
         float shadowIntensity = 0.5f;
         bool rtShadowActive = false;
+        bool rtSpotShadowActive = false;
+        bool rtPointShadowActive = false;
         std::unordered_set<uint32_t> registeredShadowLights;
+
+        // Per-index entity id mirror of cpuSpotLights (for stable RT-slice assignment across frames).
+        std::vector<uint32_t> cpuSpotLightEntityIds;
+        // Which spot-light entity currently owns each RT mask slice, and whether that slot is live.
+        std::array<uint32_t, LightConstants::MAX_RT_SPOT_LIGHTS> rtSpotSliceLights{};
+        std::array<bool, LightConstants::MAX_RT_SPOT_LIGHTS> rtSpotSliceValid{};
+
+        // Per-index entity id mirror of cpuPointLights (for stable RT-slice assignment across frames).
+        std::vector<uint32_t> cpuPointLightEntityIds;
+        // Which point-light entity currently owns each RT mask slice, and whether that slot is live.
+        std::array<uint32_t, LightConstants::MAX_RT_POINT_LIGHTS> rtPointSliceLights{};
+        std::array<bool, LightConstants::MAX_RT_POINT_LIGHTS> rtPointSliceValid{};
 
         struct PendingShadowReg
         {
@@ -152,6 +166,46 @@ namespace render::lighting
         void setShadowIntensity(float intensity);
         float getShadowIntensity() const { return shadowIntensity; }
         void setRTShadowActive(bool active);
+        void setRTSpotShadowActive(bool active);
+        void setRTPointShadowActive(bool active);
+
+        // Selects the closest/brightest shadow-casting spot lights (up to budget, capped at
+        // MAX_RT_SPOT_LIGHTS), assigns each an RT mask slice (writes rtMaskSlice into the GPU
+        // spot buffer), and returns the slices whose owning light changed this frame (their
+        // denoiser history must be reset). Lights outside the budget keep rtMaskSlice = -1 (VSM).
+        std::vector<uint32_t> assignRTSpotSlices(const glm::vec3& cameraPos, uint32_t budget);
+        // Spot lights currently promoted to an RT slice (rtMaskSlice >= 0), in slice order.
+        const std::array<uint32_t, LightConstants::MAX_RT_SPOT_LIGHTS>& getRTSpotSliceLights() const { return rtSpotSliceLights; }
+        const std::array<bool, LightConstants::MAX_RT_SPOT_LIGHTS>& getRTSpotSliceValid() const { return rtSpotSliceValid; }
+        // Returns the GPU spot-light record for an index < getSpotLightCount() (RT dispatch needs
+        // position/direction/cone to drive the per-light ray + cone cull).
+        const GPUSpotLight& getSpotLight(uint32_t index) const { return cpuSpotLights[index]; }
+        // Maps a spot entity id to its current cpuSpotLights index this frame, or -1 if absent.
+        int getSpotIndexForEntity(uint32_t entityId) const
+        {
+            for (uint32_t i = 0; i < spotCount; ++i)
+                if (cpuSpotLightEntityIds[i] == entityId) return static_cast<int>(i);
+            return -1;
+        }
+
+        // Selects the closest/brightest shadow-casting point lights (up to budget, capped at
+        // MAX_RT_POINT_LIGHTS), assigns each an RT mask slice (writes rtMaskSlice into the GPU
+        // point buffer), and returns the slices whose owning light changed this frame (their
+        // denoiser history must be reset). Lights outside the budget keep rtMaskSlice = -1 (VSM).
+        std::vector<uint32_t> assignRTPointSlices(const glm::vec3& cameraPos, uint32_t budget);
+        // Point lights currently promoted to an RT slice (rtMaskSlice >= 0), in slice order.
+        const std::array<uint32_t, LightConstants::MAX_RT_POINT_LIGHTS>& getRTPointSliceLights() const { return rtPointSliceLights; }
+        const std::array<bool, LightConstants::MAX_RT_POINT_LIGHTS>& getRTPointSliceValid() const { return rtPointSliceValid; }
+        // Returns the GPU point-light record for an index < getPointLightCount() (RT dispatch needs
+        // position/radius to drive the per-light ray + radius cull).
+        const GPUPointLight& getPointLight(uint32_t index) const { return cpuPointLights[index]; }
+        // Maps a point entity id to its current cpuPointLights index this frame, or -1 if absent.
+        int getPointIndexForEntity(uint32_t entityId) const
+        {
+            for (uint32_t i = 0; i < pointCount && i < cpuPointLightEntityIds.size(); ++i)
+                if (cpuPointLightEntityIds[i] == entityId) return static_cast<int>(i);
+            return -1;
+        }
 
     private:
         void createBuffers();

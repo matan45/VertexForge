@@ -36,13 +36,14 @@ namespace render::custom
             glm::vec4 worldMinMax{0.0f};      // minX, minZ, maxX, maxZ
             float terrainDimMin = 1.0f;
             float entityDiscardBelow = 0.0f;
-            uint32_t flags = 0;               // bit0 enabled, bit1 affectsTerrain, bit2 affectsEntities
+            uint32_t flags = 0;               // bit0 enabled, bit1 affectsTerrain, bit2 affectsEntities, bit3 affectsShadows
             float pad = 0.0f;
         };
 
         static constexpr uint32_t MASK_FLAG_ENABLED          = 1u << 0;
         static constexpr uint32_t MASK_FLAG_AFFECTS_TERRAIN  = 1u << 1;
         static constexpr uint32_t MASK_FLAG_AFFECTS_ENTITIES = 1u << 2;
+        static constexpr uint32_t MASK_FLAG_AFFECTS_SHADOWS  = 1u << 3;
 
         static uint32_t packMaskFlags(const plugin::WorldMaskParams& params, bool debugForceDisabled)
         {
@@ -50,6 +51,7 @@ namespace render::custom
             if (params.enabled && !debugForceDisabled) flags |= MASK_FLAG_ENABLED;
             if (params.affectsTerrain) flags |= MASK_FLAG_AFFECTS_TERRAIN;
             if (params.affectsEntities) flags |= MASK_FLAG_AFFECTS_ENTITIES;
+            if (params.affectsShadows) flags |= MASK_FLAG_AFFECTS_SHADOWS;
             return flags;
         }
 

@@ -135,6 +135,11 @@ namespace render
             ubo.projection = projection;
             ubo.cameraPos = cameraPosition;
             ubo.time = 0.0f;
+            // RTT passes (e.g. the top-down minimap) sample the primary camera's VSM clipmap,
+            // which is centered/oriented for the main view and looks wrong projected onto a
+            // tactical map. Default to skipping shadow sampling (flat-lit); the per-RTT
+            // "Render Shadows" toggle re-enables it for RTTs whose projection wants shadows.
+            ubo.disableShadows = renderShadows ? 0.0f : 1.0f;
             math::extractFrustumPlanes(projection * view, ubo.frustumPlanes);
 
             void* mapped = rttMeshCameraUBOAllocs[imageIndex].mappedPtr;

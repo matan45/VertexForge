@@ -97,6 +97,7 @@ namespace render::shadow
         }
 
         lightShadowData.clear();
+        directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
         pageRenderList.clear();
@@ -222,6 +223,10 @@ namespace render::shadow
         case ShadowMapType::Spot2D:
             viewCount = 1;
             break;
+        case ShadowMapType::Directional:
+            // One VSM view per clipmap level (see DirectionalShadowCalculator).
+            viewCount = std::max(1u, data.settings.clipmapLevelCount);
+            break;
         default:
             break;
         }
@@ -235,12 +240,15 @@ namespace render::shadow
             return false;
         }
 
-        if (type == ShadowMapType::PointCube)
+        if (type == ShadowMapType::PointCube || type == ShadowMapType::Directional)
         {
+            // Both lay out their views as a tall page block: cascadeIndex selects the
+            // sub-block (cube face for point, clipmap level for directional).
             for (size_t i = 0; i < data.views.size(); ++i)
             {
                 auto& view = data.views[i];
-                view.type = ShadowMapType::PointCube;
+                view.type = type;
+                view.cascadeIndex = static_cast<uint16_t>(i);
                 view.layer = static_cast<uint32_t>(i);
             }
         }
@@ -387,6 +395,63 @@ namespace render::shadow
         return vsm::INVALID_TILE;
     }
 
+    uint32_t ShadowSystem::clipmapPagesPerLevel() const
+    {
+        switch (globalQuality)
+        {
+        case ShadowQuality::Low:    return 2;
+        case ShadowQuality::Medium: return 4;
+        case ShadowQuality::High:
+        case ShadowQuality::Ultra:  return 8;
+        default:                    return 4;
+        }
+    }
+
+    bool ShadowSystem::allocateDirectionalBlock(LightShadowData& data)
+    {
+        // A directional clipmap is laid out exactly like a point light's 6 cube faces, but
+        // with one "face" per clipmap level: a tall block of pagesPerLevel x (pagesPerLevel
+        // * levelCount) pages in the virtual page table. The linear page index across the
+        // whole block equals (level * pagesPerLevel^2 + localIndex), which matches both the
+        // per-level GPU page-table offsets and the feedback buffer indexing.
+        uint32_t levelCount = std::max(1u, static_cast<uint32_t>(data.views.size()));
+        uint32_t pagesPerLevel = clipmapPagesPerLevel();
+        data.settings.resolution = pagesPerLevel * vsm::PAGE_SIZE;
+
+        uint32_t pagesX = pagesPerLevel;
+        uint32_t pagesY = pagesPerLevel * levelCount;
+
+        uint32_t offset = pageTable->allocateBlock(pagesX, pagesY);
+        if (offset == vsm::INVALID_TILE)
+            return false;
+
+        uint32_t totalPages = pagesX * pagesY;
+
+        // Reserve tracking arrays. Physical tiles for the coarser levels are filled in on
+        // demand by screen-space feedback (allocateStaticLightPages path).
+        data.vsmPagesX = pagesX;
+        data.vsmPagesY = pagesY;
+        data.vsmPageTableOffset = offset;
+        data.vsmLightIndex = nextVSMLightIndex++;
+        data.vsmPhysicalTiles.assign(totalPages, vsm::INVALID_TILE);
+        data.vsmPageLastUsedFrame.assign(totalPages, 0);
+        data.vsmPageDirty.assign(totalPages, true);
+        data.feedbackDriven = true;
+
+        // Seed level 0 (the finest, always near-camera shell) eagerly so directional
+        // shadows are present on the very first frame, before feedback has any results.
+        uint32_t level0Pages = pagesPerLevel * pagesPerLevel;
+        for (uint32_t i = 0; i < level0Pages && i < totalPages; ++i)
+        {
+            uint32_t tile = tilePool->allocateTile();
+            if (tile == vsm::INVALID_TILE)
+                break; // best-effort; feedback will retry
+            data.vsmPhysicalTiles[i] = tile;
+            pageTable->mapPage(offset, i % pagesPerLevel, i / pagesPerLevel, pagesPerLevel, tile);
+        }
+        return true;
+    }
+
     bool ShadowSystem::allocateVSMPages(LightShadowData& data)
     {
         if (!tilePool || !pageTable)
@@ -400,6 +465,9 @@ namespace render::shadow
         case ShadowQuality::Ultra:  maxSpotPages = 4; break;
         default: break;
         }
+
+        if (data.type == ShadowMapType::Directional)
+            return allocateDirectionalBlock(data);
 
         PageDimensions dims;
         switch (data.type)
@@ -484,10 +552,13 @@ namespace render::shadow
             bool wasStatic = data.isStatic;
             if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity))
             {
-                // Point lights always non-static in shadow system — their 6-face VSM
-                // layout doesn't work with the static page rendering path
+                // Point lights and directional clipmaps are always non-static in the shadow
+                // system: point lights use a 6-face layout incompatible with the static page
+                // path, and the directional clipmap re-centers on the (moving) camera every
+                // frame and must capture dynamic casters via the dual-layer path.
                 bool entityStatic = registry.get<components::TransformComponent>(entity).isStatic;
-                data.isStatic = (data.type != ShadowMapType::PointCube) && entityStatic;
+                data.isStatic = (data.type != ShadowMapType::PointCube &&
+                                 data.type != ShadowMapType::Directional) && entityStatic;
             }
             else
             {
@@ -523,6 +594,9 @@ namespace render::shadow
                 break;
             case ShadowMapType::PointCube:
                 info.type = 2;
+                break;
+            case ShadowMapType::Directional:
+                info.type = 0;
                 break;
             default:
                 info.type = 3;
@@ -592,6 +666,7 @@ namespace render::shadow
     uint32_t ShadowSystem::getActiveShadowViewCount() const
     {
         return static_cast<uint32_t>(
+            directionalShadowViews.size() +
             pointShadowViews.size() +
             spotShadowViews.size()
         );
@@ -634,10 +709,12 @@ namespace render::shadow
             return debugInfos;
 
         debugInfos.reserve(
+            directionalShadowViews.size() +
             pointShadowViews.size() +
             spotShadowViews.size()
         );
 
+        addSingleViewDebugInfo(debugInfos, ShadowMapType::Directional);
         addSingleViewDebugInfo(debugInfos, ShadowMapType::PointCube);
         addSingleViewDebugInfo(debugInfos, ShadowMapType::Spot2D);
         return debugInfos;

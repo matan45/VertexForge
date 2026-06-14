@@ -186,6 +186,11 @@ namespace render::graph
             profiler->beginFrame(cmd, imageIndex);
         }
 
+        // Dense index over only the profiled (non-culled) passes, so timestamp
+        // query indices stay contiguous (0..2N-1) even when passes are culled —
+        // a sparse index would leave unwritten gap queries in the readback range.
+        uint32_t profiledIdx = 0;
+
         for (uint32_t i = 0; i < sortedOrder.size(); ++i)
         {
             uint32_t passIdx = sortedOrder[i];
@@ -200,7 +205,7 @@ namespace render::graph
             // Profiling
             if (profiler && profiler->isEnabled())
             {
-                profiler->beginPass(cmd, imageIndex, i, pass.name);
+                profiler->beginPass(cmd, imageIndex, profiledIdx, pass.name);
             }
 
             // Execute the pass callback
@@ -208,12 +213,16 @@ namespace render::graph
 
             if (profiler && profiler->isEnabled())
             {
-                profiler->endPass(cmd, imageIndex, i);
+                profiler->endPass(cmd, imageIndex, profiledIdx);
             }
+
+            ++profiledIdx;
         }
 
         if (profiler && profiler->isEnabled())
         {
+            profiler->setBarrierStats(barrierBatcher->getTotalBarrierCount(),
+                                      barrierBatcher->getTotalFlushCount());
             profiler->endFrame(cmd, imageIndex);
         }
     }

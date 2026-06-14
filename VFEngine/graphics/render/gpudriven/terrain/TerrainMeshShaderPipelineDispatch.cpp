@@ -259,6 +259,23 @@ namespace render::gpudriven
             }
         }
 
+        // Set 15: per-spot-light RT shadow mask array (VK-1175). Pad intervening sets with the
+        // empty placeholder so the contiguous bind matches the pipeline layout's set-15 slot.
+        if (rtSpotShadowEnabled && rtSpotShadowMaskDescriptorSet)
+        {
+            while (currentSets.size() < 15)
+                currentSets.push_back(emptyDescriptorSet5);
+            currentSets.push_back(rtSpotShadowMaskDescriptorSet); // Set 15
+        }
+
+        // Set 16: per-point-light RT shadow mask array (VK-1176). Pad past the spot mask's set 15.
+        if (rtPointShadowEnabled && rtPointShadowMaskDescriptorSet)
+        {
+            while (currentSets.size() < 16)
+                currentSets.push_back(emptyDescriptorSet5);
+            currentSets.push_back(rtPointShadowMaskDescriptorSet); // Set 16
+        }
+
         bindDescriptorSetsInBatches(cmd, currentSets.data(), static_cast<uint32_t>(currentSets.size()));
 
         TerrainPushConstants pushConstants = buildTerrainPushConstants(

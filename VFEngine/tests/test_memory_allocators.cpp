@@ -307,6 +307,113 @@ TEST_CASE("FreeListHeapAllocator: concurrent alloc/free") {
     CHECK(successCount == threadCount * opsPerThread);
 }
 
+TEST_CASE("FreeListHeapAllocator: getFreeBytes tracks live usage") {
+    memory::FreeListHeapAllocator heap(1024, "TestHeap");
+    CHECK(heap.getFreeBytes() == 1024);
+    auto h1 = heap.allocate(256);
+    CHECK(heap.getFreeBytes() == 768);
+    auto h2 = heap.allocate(256);
+    CHECK(heap.getFreeBytes() == 512);
+    heap.free(h1);
+    CHECK(heap.getFreeBytes() == 768);
+    heap.free(h2);
+    CHECK(heap.getFreeBytes() == 1024);
+}
+
+TEST_CASE("FreeListHeapAllocator: getFreeSpans is sorted and coalesced") {
+    memory::FreeListHeapAllocator heap(1024, "TestHeap");
+
+    // Carve into four equal allocations.
+    std::vector<memory::AllocationHandle> handles;
+    for (int i = 0; i < 4; ++i) handles.push_back(heap.allocate(256));
+
+    // Free non-adjacent (0 and 2) — should yield two separate, non-contiguous spans.
+    heap.free(handles[0]);
+    heap.free(handles[2]);
+
+    auto spans = heap.getFreeSpans();
+    // Address-ordered invariant.
+    for (size_t i = 1; i < spans.size(); ++i) {
+        CHECK(spans[i - 1].offset < spans[i].offset);
+        // Fully coalesced: no two spans are address-contiguous.
+        CHECK(spans[i - 1].offset + spans[i - 1].size < spans[i].offset);
+    }
+
+    // Now free the gap between them (block 1) — 0,1,2 should merge into one span.
+    heap.free(handles[1]);
+    spans = heap.getFreeSpans();
+    // The merged free region [0,768) plus whatever block 3 leaves; block 3 is still
+    // allocated so exactly one free span of 768 starting at 0.
+    bool foundMerged = false;
+    for (const auto& s : spans) {
+        if (s.offset == 0 && s.size == 768) foundMerged = true;
+    }
+    CHECK(foundMerged);
+}
+
+TEST_CASE("FreeListHeapAllocator: full coalesce after shuffled frees") {
+    constexpr uint64_t capacity = 4096;
+    constexpr uint64_t blockSize = 256; // 16 blocks fill the heap exactly
+    memory::FreeListHeapAllocator heap(capacity, "TestHeap");
+
+    std::vector<memory::AllocationHandle> handles;
+    for (uint64_t i = 0; i < capacity / blockSize; ++i) {
+        auto h = heap.allocate(blockSize);
+        REQUIRE(h.isValid());
+        handles.push_back(h);
+    }
+    // Heap is full.
+    CHECK_FALSE(heap.allocate(1).isValid());
+
+    // Free in an interleaved (non-sequential) order.
+    for (size_t i = 0; i < handles.size(); i += 2) heap.free(handles[i]);
+    for (size_t i = 1; i < handles.size(); i += 2) heap.free(handles[i]);
+
+    // If the free list fully coalesced, a single capacity-sized allocation fits.
+    auto big = heap.allocate(capacity);
+    CHECK(big.isValid());
+    CHECK(big.offset == 0);
+}
+
+TEST_CASE("FreeListHeapAllocator: allocations never overlap") {
+    memory::FreeListHeapAllocator heap(8192, "TestHeap");
+    std::vector<memory::AllocationHandle> live;
+    // Mix sizes/alignments and a few frees to exercise the split/merge paths.
+    const uint64_t sizes[] = {64, 128, 32, 256, 96, 512, 48};
+    for (int round = 0; round < 3; ++round) {
+        for (uint64_t s : sizes) {
+            auto h = heap.allocate(s, 16);
+            if (h.isValid()) live.push_back(h);
+        }
+        if (live.size() > 4) {
+            heap.free(live.front());
+            live.erase(live.begin());
+        }
+    }
+
+    for (size_t i = 0; i < live.size(); ++i) {
+        for (size_t j = i + 1; j < live.size(); ++j) {
+            uint64_t aStart = live[i].offset, aEnd = aStart + live[i].size;
+            uint64_t bStart = live[j].offset, bEnd = bStart + live[j].size;
+            CHECK((aEnd <= bStart || bEnd <= aStart)); // disjoint
+        }
+    }
+}
+
+TEST_CASE("FreeListHeapAllocator: alignment gap is reusable") {
+    memory::FreeListHeapAllocator heap(1024, "TestHeap");
+    // Force an alignment gap: allocate 1 byte, then a 256-aligned block leaves a gap.
+    auto h1 = heap.allocate(1, 1);
+    auto h2 = heap.allocate(64, 256);
+    CHECK(h2.isValid());
+    CHECK((h2.offset % 256) == 0);
+    // The gap between h1 and h2 should be back on the free list and reusable.
+    heap.free(h1);
+    heap.free(h2);
+    auto big = heap.allocate(1024);
+    CHECK(big.isValid());
+}
+
 // ---- FrameAllocator ----
 
 TEST_CASE("FrameAllocator: allocate in frame 0") {

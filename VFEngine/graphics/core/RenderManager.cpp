@@ -5,6 +5,7 @@
 #include "CommandPool.hpp"
 #include "DeferredDeletionQueue.hpp"
 #include "DynamicRenderingHelpers.hpp"
+#include "memory/GpuAllocationStats.hpp"
 #include "print/Log.hpp"
 #include "../window/Window.hpp"
 #include "../imguiPass/ImguiRender.hpp"
@@ -170,6 +171,17 @@ namespace core {
 		if ((globalFrameCounter % 64) == 0)
 		{
 			device.getMemoryManager().reclaimEmptyBlocks();
+		}
+
+		// Refresh the memory-diagnostics snapshot + real VRAM budget a few times a
+		// second so the editor window stays live without touching the alloc hot path.
+		// Gated on the diagnostics window being open: the snapshot copy takes the
+		// allocator mutex and the VRAM query hits the driver, both pure waste when the
+		// window (the only consumer) is closed.
+		if ((globalFrameCounter % 16) == 0 &&
+		    memory::GpuAllocationStats::diagnosticsActive.load(std::memory_order_relaxed))
+		{
+			device.getMemoryManager().refreshDiagnostics();
 		}
 
 		// Advance to next frame

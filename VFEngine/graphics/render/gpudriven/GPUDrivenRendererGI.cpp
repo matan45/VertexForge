@@ -230,6 +230,10 @@ namespace render::gpudriven
         if (rtShadowProfiler) { rtShadowProfiler->cleanup(device.getLogicalDevice()); rtShadowProfiler.reset(); }
         if (rtShadowDenoiser) { rtShadowDenoiser->cleanup(); rtShadowDenoiser.reset(); }
         if (rtShadowPipeline) { rtShadowPipeline->cleanup(); rtShadowPipeline.reset(); }
+        if (rtSpotShadowDenoiser) { rtSpotShadowDenoiser->cleanup(); rtSpotShadowDenoiser.reset(); }
+        if (rtSpotShadowPipeline) { rtSpotShadowPipeline->cleanup(); rtSpotShadowPipeline.reset(); }
+        if (rtPointShadowDenoiser) { rtPointShadowDenoiser->cleanup(); rtPointShadowDenoiser.reset(); }
+        if (rtPointShadowPipeline) { rtPointShadowPipeline->cleanup(); rtPointShadowPipeline.reset(); }
         if (accelStructManager) { accelStructManager->cleanup(); accelStructManager.reset(); }
         if (giCascadeManager) { giCascadeManager->cleanup(); giCascadeManager.reset(); }
         giProbeBuffersNeedInit = true;
@@ -366,8 +370,13 @@ namespace render::gpudriven
         cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader,
                             vk::DependencyFlags{}, 1, &memBarrier, 0, nullptr, 0, nullptr);
 
-        // Build/update acceleration structures for RT shadows and GI
-        if (accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
+        // Build/update acceleration structures for RT shadows and GI. Only do the (expensive)
+        // BLAS/per-frame-TLAS work when something actually consumes the structure: RT shadows
+        // enabled, or GI (radiance cascades) active. Otherwise skip it entirely even if a
+        // manager object lingers (e.g. created during the pre-settings window where
+        // rtShadowEnabled defaults true, or left over after RT was toggled off).
+        bool accelStructNeeded = rtShadowEnabled || rtSpotShadowEnabled || rtPointShadowEnabled || (giCascadeManager != nullptr);
+        if (accelStructNeeded && accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
         {
             bool hasPendingBLAS = accelStructManager->hasPendingBLASBuilds();
             bool hasPendingTerrainBLAS = accelStructManager->hasPendingTerrainBLASBuilds() && terrain.meshBuffer;
@@ -500,11 +509,97 @@ namespace render::gpudriven
             : rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
     }
 
+    vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTSpotShadowMaskLayout() const
+    {
+        if (!rtSpotShadowPipeline || !rtSpotShadowPipeline->isInitialized()) return nullptr;
+        return (rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized())
+            ? rtSpotShadowDenoiser->getDenoisedMaskSamplerLayout()
+            : rtSpotShadowPipeline->getShadowMaskSamplerLayout();
+    }
+
+    vk::DescriptorSet GPUDrivenRenderer::getActiveRTSpotShadowMaskDescriptorSet() const
+    {
+        if (!rtSpotShadowPipeline || !rtSpotShadowPipeline->isInitialized()) return nullptr;
+        return (rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized())
+            ? rtSpotShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
+            : rtSpotShadowPipeline->getShadowMaskSamplerDescriptorSet();
+    }
+
+    bool GPUDrivenRenderer::hasBoundDescriptorSetCapacity(uint32_t requiredSetCount) const
+    {
+        // The device limit is fixed for the process lifetime; query + warn once.
+        static const uint32_t maxBoundSets =
+            device.getPhysicalDevice().getProperties().limits.maxBoundDescriptorSets;
+        if (maxBoundSets >= requiredSetCount)
+            return true;
+        static bool warned = false;
+        if (!warned)
+        {
+            warned = true;
+            vfLogWarning("RT shadows need {} bound descriptor sets but this device supports only "
+                         "{} (maxBoundDescriptorSets); RT spot/point shadows disabled on this GPU.",
+                         requiredSetCount, maxBoundSets);
+        }
+        return false;
+    }
+
+    bool GPUDrivenRenderer::isRTSpotShadowReady() const
+    {
+        return rtSpotShadowEnabled &&
+               device.isRayQuerySupported() &&
+               hasBoundDescriptorSetCapacity(16) && // spot RT mask binds set 15
+               accelStructManager && accelStructManager->isTLASReady() &&
+               depthPrepass && depthPrepass->isInitialized() &&
+               lightBufferManager && lightBufferManager->getSpotLightCount() > 0;
+    }
+
+    vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTPointShadowMaskLayout() const
+    {
+        if (!rtPointShadowPipeline || !rtPointShadowPipeline->isInitialized()) return nullptr;
+        return (rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized())
+            ? rtPointShadowDenoiser->getDenoisedMaskSamplerLayout()
+            : rtPointShadowPipeline->getShadowMaskSamplerLayout();
+    }
+
+    vk::DescriptorSet GPUDrivenRenderer::getActiveRTPointShadowMaskDescriptorSet() const
+    {
+        if (!rtPointShadowPipeline || !rtPointShadowPipeline->isInitialized()) return nullptr;
+        return (rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized())
+            ? rtPointShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
+            : rtPointShadowPipeline->getShadowMaskSamplerDescriptorSet();
+    }
+
+    bool GPUDrivenRenderer::isRTPointShadowReady() const
+    {
+        return rtPointShadowEnabled &&
+               device.isRayQuerySupported() &&
+               hasBoundDescriptorSetCapacity(17) && // point RT mask binds set 16
+               accelStructManager && accelStructManager->isTLASReady() &&
+               depthPrepass && depthPrepass->isInitialized() &&
+               lightBufferManager && lightBufferManager->getPointLightCount() > 0;
+    }
+
     void GPUDrivenRenderer::initAccelerationStructures()
     {
+        // Only RT shadows drive this lazy-init path. GI creates the acceleration structure
+        // through its own init (ensureAccelerationStructureManager in initGI). Without this
+        // gate the BLAS/TLAS (incl. a BLAS per terrain tile + a per-frame TLAS rebuild) were
+        // built on any ray-query-capable GPU with a sun, even with RT shadows AND GI off.
+        // RT directional needs a sun; RT spot needs at least one spot light. Either drives the build.
+        const bool directionalWantsRT = rtShadowEnabled;
+        const bool spotWantsRT = rtSpotShadowEnabled && lightBufferManager &&
+                                 lightBufferManager->getSpotLightCount() > 0;
+        const bool pointWantsRT = rtPointShadowEnabled && lightBufferManager &&
+                                  lightBufferManager->getPointLightCount() > 0;
+        if (!directionalWantsRT && !spotWantsRT && !pointWantsRT) return;
         if (accelStructManager || !device.isRayQuerySupported()) return;
         if (!depthPrepass || !depthPrepass->isInitialized()) return;
-        if (!lightBufferManager || lightBufferManager->getDirectionalLightCount() == 0) return;
+        if (!lightBufferManager) return;
+        const bool hasDirectional = lightBufferManager->getDirectionalLightCount() > 0;
+        const bool hasSpot = lightBufferManager->getSpotLightCount() > 0;
+        const bool hasPoint = lightBufferManager->getPointLightCount() > 0;
+        if (!(directionalWantsRT && hasDirectional) && !(spotWantsRT && hasSpot) &&
+            !(pointWantsRT && hasPoint)) return;
 
         ensureAccelerationStructureManager();
     }
@@ -634,13 +729,20 @@ namespace render::gpudriven
             .causticLayout = causticLayout,
             .rtShadowMaskLayout = rtMaskLayout,
             .worldMaskLayout = pluginTextureManager->getEntityMaskLayout(),
+            .rtSpotShadowMaskLayout = getActiveRTSpotShadowMaskLayout(),
+            .rtPointShadowMaskLayout = getActiveRTPointShadowMaskLayout(),
             .colorAttachmentFormats = cachedColorFormats,
             .depthAttachmentFormat = cachedDepthFormat
         };
 
+        vk::DescriptorSet spotMaskDescSet = getActiveRTSpotShadowMaskDescriptorSet();
+        vk::DescriptorSet pointMaskDescSet = getActiveRTPointShadowMaskDescriptorSet();
+
         auto restoreDescriptors = [&](MeshShaderPipeline& pipeline)
         {
             if (rtMaskDescSet) pipeline.updateRTShadowMaskDescriptor(rtMaskDescSet);
+            if (spotMaskDescSet) pipeline.updateRTSpotShadowMaskDescriptor(spotMaskDescSet);
+            if (pointMaskDescSet) pipeline.updateRTPointShadowMaskDescriptor(pointMaskDescSet);
             if (giLayout && giCascadeManager)
                 pipeline.updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
             if (causticLayout)
@@ -738,12 +840,19 @@ namespace render::gpudriven
                     .causticLayout = causticLayout,
                     .rtShadowMaskLayout = rtMaskLayout,
                     .worldMaskLayout = currentWorldMaskLayout(),
+                    .rtSpotShadowMaskLayout = getActiveRTSpotShadowMaskLayout(),
+                    .rtPointShadowMaskLayout = getActiveRTPointShadowMaskLayout(),
                     .colorAttachmentFormats = cachedColorFormats,
                     .depthAttachmentFormat = cachedDepthFormat
                 };
 
+                vk::DescriptorSet spotMaskDescSet = getActiveRTSpotShadowMaskDescriptorSet();
+                vk::DescriptorSet pointMaskDescSet = getActiveRTPointShadowMaskDescriptorSet();
+
                 meshShaderPipeline->recreate(pipelineInfo);
                 meshShaderPipeline->updateRTShadowMaskDescriptor(rtMaskDescSet);
+                if (spotMaskDescSet) meshShaderPipeline->updateRTSpotShadowMaskDescriptor(spotMaskDescSet);
+                if (pointMaskDescSet) meshShaderPipeline->updateRTPointShadowMaskDescriptor(pointMaskDescSet);
                 if (giLayout && giCascadeManager)
                     meshShaderPipeline->updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
                 if (causticLayout)
@@ -754,6 +863,8 @@ namespace render::gpudriven
                     pipelineInfo.transparentMode = true;
                     transparentMeshShaderPipeline->recreate(pipelineInfo);
                     transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rtMaskDescSet);
+                    if (spotMaskDescSet) transparentMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(spotMaskDescSet);
+                    if (pointMaskDescSet) transparentMeshShaderPipeline->updateRTPointShadowMaskDescriptor(pointMaskDescSet);
                     if (giLayout && giCascadeManager)
                         transparentMeshShaderPipeline->updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
                     if (causticLayout)
@@ -768,6 +879,8 @@ namespace render::gpudriven
                     pipelineInfo.wboitMode = true;
                     wboitMeshShaderPipeline->recreate(pipelineInfo);
                     wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rtMaskDescSet);
+                    if (spotMaskDescSet) wboitMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(spotMaskDescSet);
+                    if (pointMaskDescSet) wboitMeshShaderPipeline->updateRTPointShadowMaskDescriptor(pointMaskDescSet);
                     if (giLayout && giCascadeManager)
                         wboitMeshShaderPipeline->updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
                     if (causticLayout)
@@ -779,6 +892,16 @@ namespace render::gpudriven
                 {
                     terrain.pipeline->setRTShadowMaskLayout(rtMaskLayout);
                     terrain.pipeline->updateRTShadowMaskDescriptor(rtMaskDescSet);
+                    if (getActiveRTSpotShadowMaskLayout())
+                    {
+                        terrain.pipeline->setRTSpotShadowMaskLayout(getActiveRTSpotShadowMaskLayout());
+                        terrain.pipeline->updateRTSpotShadowMaskDescriptor(getActiveRTSpotShadowMaskDescriptorSet());
+                    }
+                    if (getActiveRTPointShadowMaskLayout())
+                    {
+                        terrain.pipeline->setRTPointShadowMaskLayout(getActiveRTPointShadowMaskLayout());
+                        terrain.pipeline->updateRTPointShadowMaskDescriptor(getActiveRTPointShadowMaskDescriptorSet());
+                    }
                     terrain.pipeline->recreate(
                         cachedIBLLayout,
                         bindlessTextures->getDescriptorSetLayout(),
@@ -907,9 +1030,421 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::dispatchRTSpotShadow(vk::CommandBuffer cmd, uint32_t imageIndex)
+    {
+        if (!isRTSpotShadowReady()) return;
+
+        // Lazy init — create the spot RT pipeline + denoiser and recreate the scene/terrain
+        // pipelines with the set-15 spot mask array (preserving the directional set-13 mask).
+        if (!rtSpotShadowPipeline)
+        {
+            auto pipeline = std::make_unique<raytracing::RTSpotShadowPipeline>(device);
+            pipeline->init(depthPrepass->getWidth(), depthPrepass->getHeight(),
+                           accelStructManager->getTLASDescriptorLayout());
+            if (!pipeline->isInitialized())
+                return; // retry next frame
+            rtSpotShadowPipeline = std::move(pipeline);
+
+            if (meshShaderPipeline && shadowSystem)
+            {
+                rtSpotShadowDenoiser = std::make_unique<raytracing::RTSpotShadowDenoiser>(device);
+                rtSpotShadowDenoiser->init(depthPrepass->getWidth(), depthPrepass->getHeight());
+
+                const bool denoised = rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized();
+                vk::DescriptorSetLayout spotMaskLayout = denoised
+                    ? rtSpotShadowDenoiser->getDenoisedMaskSamplerLayout()
+                    : rtSpotShadowPipeline->getShadowMaskSamplerLayout();
+                vk::DescriptorSet spotMaskDescSet = denoised
+                    ? rtSpotShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
+                    : rtSpotShadowPipeline->getShadowMaskSamplerDescriptorSet();
+
+                vk::DescriptorSetLayout giLayout = (giCascadeManager && giCascadeManager->getProbeStorage())
+                    ? giCascadeManager->getProbeStorage()->getSamplingLayout() : nullptr;
+                vk::DescriptorSetLayout causticLayout = (water.causticsResources && water.causticsResources->isInitialized())
+                    ? water.causticsResources->getDescriptorSetLayout() : nullptr;
+                // Preserve the directional RT mask (set 13) if it is already online.
+                vk::DescriptorSetLayout rtMaskLayout = getActiveRTShadowMaskLayout();
+                vk::DescriptorSet rtMaskDescSet = getActiveRTShadowMaskDescriptorSet();
+                // Preserve the point RT mask (set 16) if it is already online.
+                vk::DescriptorSetLayout pointMaskLayout = getActiveRTPointShadowMaskLayout();
+                vk::DescriptorSet pointMaskDescSet = getActiveRTPointShadowMaskDescriptorSet();
+
+                MeshPipelineInitInfo pipelineInfo{
+                    .iblLayout = cachedIBLLayout,
+                    .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                    .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                    .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                    .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                    .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                    .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                    .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                    .giProbeDataLayout = giLayout,
+                    .causticLayout = causticLayout,
+                    .rtShadowMaskLayout = rtMaskLayout,
+                    .worldMaskLayout = currentWorldMaskLayout(),
+                    .rtSpotShadowMaskLayout = spotMaskLayout,
+                    .rtPointShadowMaskLayout = pointMaskLayout,
+                    .colorAttachmentFormats = cachedColorFormats,
+                    .depthAttachmentFormat = cachedDepthFormat
+                };
+
+                auto restore = [&](MeshShaderPipeline& p)
+                {
+                    if (rtMaskDescSet) p.updateRTShadowMaskDescriptor(rtMaskDescSet);
+                    p.updateRTSpotShadowMaskDescriptor(spotMaskDescSet);
+                    if (pointMaskDescSet) p.updateRTPointShadowMaskDescriptor(pointMaskDescSet);
+                    if (giLayout && giCascadeManager)
+                        p.updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
+                    if (causticLayout)
+                        p.updateCausticDescriptor(water.causticsResources->getDescriptorSet());
+                    if (currentWorldMaskLayout() && pluginTextureManager)
+                        p.updateWorldMaskDescriptor(pluginTextureManager->getEntityMaskDescriptorSet());
+                };
+
+                meshShaderPipeline->recreate(pipelineInfo);
+                restore(*meshShaderPipeline);
+
+                if (transparentMeshShaderPipeline)
+                {
+                    pipelineInfo.transparentMode = true;
+                    transparentMeshShaderPipeline->recreate(pipelineInfo);
+                    restore(*transparentMeshShaderPipeline);
+                    pipelineInfo.transparentMode = false;
+                }
+
+                if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
+                {
+                    pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+                    pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
+                    pipelineInfo.wboitMode = true;
+                    wboitMeshShaderPipeline->recreate(pipelineInfo);
+                    restore(*wboitMeshShaderPipeline);
+                }
+
+                if (terrain.pipeline)
+                {
+                    terrain.pipeline->setRTSpotShadowMaskLayout(spotMaskLayout);
+                    terrain.pipeline->updateRTSpotShadowMaskDescriptor(spotMaskDescSet);
+                    if (pointMaskLayout)
+                    {
+                        terrain.pipeline->setRTPointShadowMaskLayout(pointMaskLayout);
+                        terrain.pipeline->updateRTPointShadowMaskDescriptor(pointMaskDescSet);
+                    }
+                    terrain.pipeline->recreate(
+                        cachedIBLLayout,
+                        bindlessTextures->getDescriptorSetLayout(),
+                        terrain.pipeline->getCachedMeshletLayout(),
+                        terrain.pipeline->getCachedVertexLayout(),
+                        lightBufferManager->getDescriptorSetLayout(),
+                        clusterGridManager->getDescriptorSetLayout(),
+                        lightCullingPipeline->getDescriptorSetLayout(),
+                        shadowSystem->getShadowDataLayout(),
+                        shadowSystem->getShadowTextureLayout(),
+                        cachedColorFormats, cachedDepthFormat);
+                }
+            }
+        }
+
+        if (!rtSpotShadowPipeline->isInitialized()) return;
+
+        uint32_t w = depthPrepass->getWidth();
+        uint32_t h = depthPrepass->getHeight();
+        if (w != 0 && h != 0)
+        {
+            const bool pipeResized = rtSpotShadowPipeline->resize(w, h);
+            if (rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized())
+            {
+                rtSpotShadowDenoiser->resize(w, h);
+                vk::DescriptorSet ds = rtSpotShadowDenoiser->getDenoisedMaskSamplerDescriptorSet();
+                if (meshShaderPipeline) meshShaderPipeline->updateRTSpotShadowMaskDescriptor(ds);
+                if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(ds);
+                if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(ds);
+                if (terrain.pipeline) terrain.pipeline->updateRTSpotShadowMaskDescriptor(ds);
+            }
+            else if (pipeResized)
+            {
+                vk::DescriptorSet raw = rtSpotShadowPipeline->getShadowMaskSamplerDescriptorSet();
+                if (meshShaderPipeline) meshShaderPipeline->updateRTSpotShadowMaskDescriptor(raw);
+                if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(raw);
+                if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(raw);
+                if (terrain.pipeline) terrain.pipeline->updateRTSpotShadowMaskDescriptor(raw);
+            }
+        }
+
+        if (!accelStructManager || !accelStructManager->isTLASReady()) return;
+
+        const auto& camData = cameraBuffer->getData();
+        glm::vec3 camPos = glm::vec3(camData.cameraPosition);
+
+        // Pick the closest/brightest spot lights, assign mask slices; reassigned slices reset history.
+        std::vector<uint32_t> reassigned = lightBufferManager->assignRTSpotSlices(camPos, rtSpotShadowBudget);
+
+        const auto& sliceLights = lightBufferManager->getRTSpotSliceLights();
+        const auto& sliceValid = lightBufferManager->getRTSpotSliceValid();
+
+        std::vector<raytracing::RTSpotDispatchInfo> dispatchList;
+        for (uint32_t s = 0; s < raytracing::RTSpotShadowPipeline::MAX_SLICES; ++s)
+        {
+            if (!sliceValid[s]) continue;
+            int idx = lightBufferManager->getSpotIndexForEntity(sliceLights[s]);
+            if (idx < 0) continue;
+            const auto& sl = lightBufferManager->getSpotLight(static_cast<uint32_t>(idx));
+            raytracing::RTSpotDispatchInfo info{};
+            info.slice = s;
+            info.position = sl.position;
+            info.range = sl.range;
+            info.direction = sl.direction;
+            info.cosInnerAngle = sl.cosInnerAngle;
+            info.cosOuterAngle = sl.cosOuterAngle;
+            dispatchList.push_back(info);
+        }
+
+        if (dispatchList.empty())
+        {
+            lightBufferManager->setRTSpotShadowActive(false);
+            return;
+        }
+
+        const bool useDenoiser = rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized();
+        lightBufferManager->setRTSpotShadowActive(true);
+
+        uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+
+        rtSpotShadowPipeline->dispatch(cmd,
+            depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
+            depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
+            accelStructManager->getTLASDescriptorSet(),
+            camData.invViewProjection, camPos, camData.farPlane,
+            w, h, dispatchList,
+            useDenoiser, // skip final transitions when the denoiser consumes the raw mask
+            fi);
+
+        if (useDenoiser)
+        {
+            std::vector<raytracing::RTSpotDenoiseInfo> denoiseList;
+            for (const auto& d : dispatchList)
+            {
+                raytracing::RTSpotDenoiseInfo di{};
+                di.slice = d.slice;
+                di.rawLayerView = rtSpotShadowPipeline->getShadowMaskLayerView(d.slice);
+                di.resetHistory = std::find(reassigned.begin(), reassigned.end(), d.slice) != reassigned.end();
+                denoiseList.push_back(di);
+            }
+            rtSpotShadowDenoiser->dispatch(cmd, denoiseList,
+                depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
+                depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
+                camData.invViewProjection, camData.viewProjection,
+                w, h, camData.frameIndex, fi);
+        }
+    }
+
+    void GPUDrivenRenderer::dispatchRTPointShadow(vk::CommandBuffer cmd, uint32_t imageIndex)
+    {
+        if (!isRTPointShadowReady()) return;
+
+        // Lazy init — create the point RT pipeline + denoiser and recreate the scene/terrain
+        // pipelines with the set-16 point mask array (preserving directional set 13 + spot set 15).
+        if (!rtPointShadowPipeline)
+        {
+            auto pipeline = std::make_unique<raytracing::RTPointShadowPipeline>(device);
+            pipeline->init(depthPrepass->getWidth(), depthPrepass->getHeight(),
+                           accelStructManager->getTLASDescriptorLayout());
+            if (!pipeline->isInitialized())
+                return; // retry next frame
+            rtPointShadowPipeline = std::move(pipeline);
+
+            if (meshShaderPipeline && shadowSystem)
+            {
+                rtPointShadowDenoiser = std::make_unique<raytracing::RTPointShadowDenoiser>(device);
+                rtPointShadowDenoiser->init(depthPrepass->getWidth(), depthPrepass->getHeight());
+
+                const bool denoised = rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized();
+                vk::DescriptorSetLayout pointMaskLayout = denoised
+                    ? rtPointShadowDenoiser->getDenoisedMaskSamplerLayout()
+                    : rtPointShadowPipeline->getShadowMaskSamplerLayout();
+                vk::DescriptorSet pointMaskDescSet = denoised
+                    ? rtPointShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
+                    : rtPointShadowPipeline->getShadowMaskSamplerDescriptorSet();
+
+                vk::DescriptorSetLayout giLayout = (giCascadeManager && giCascadeManager->getProbeStorage())
+                    ? giCascadeManager->getProbeStorage()->getSamplingLayout() : nullptr;
+                vk::DescriptorSetLayout causticLayout = (water.causticsResources && water.causticsResources->isInitialized())
+                    ? water.causticsResources->getDescriptorSetLayout() : nullptr;
+                // Preserve the directional RT mask (set 13) and spot RT mask (set 15) if already online.
+                vk::DescriptorSetLayout rtMaskLayout = getActiveRTShadowMaskLayout();
+                vk::DescriptorSet rtMaskDescSet = getActiveRTShadowMaskDescriptorSet();
+                vk::DescriptorSetLayout spotMaskLayout = getActiveRTSpotShadowMaskLayout();
+                vk::DescriptorSet spotMaskDescSet = getActiveRTSpotShadowMaskDescriptorSet();
+
+                MeshPipelineInitInfo pipelineInfo{
+                    .iblLayout = cachedIBLLayout,
+                    .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                    .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                    .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                    .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                    .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                    .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                    .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                    .giProbeDataLayout = giLayout,
+                    .causticLayout = causticLayout,
+                    .rtShadowMaskLayout = rtMaskLayout,
+                    .worldMaskLayout = currentWorldMaskLayout(),
+                    .rtSpotShadowMaskLayout = spotMaskLayout,
+                    .rtPointShadowMaskLayout = pointMaskLayout,
+                    .colorAttachmentFormats = cachedColorFormats,
+                    .depthAttachmentFormat = cachedDepthFormat
+                };
+
+                auto restore = [&](MeshShaderPipeline& p)
+                {
+                    if (rtMaskDescSet) p.updateRTShadowMaskDescriptor(rtMaskDescSet);
+                    if (spotMaskDescSet) p.updateRTSpotShadowMaskDescriptor(spotMaskDescSet);
+                    p.updateRTPointShadowMaskDescriptor(pointMaskDescSet);
+                    if (giLayout && giCascadeManager)
+                        p.updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
+                    if (causticLayout)
+                        p.updateCausticDescriptor(water.causticsResources->getDescriptorSet());
+                    if (currentWorldMaskLayout() && pluginTextureManager)
+                        p.updateWorldMaskDescriptor(pluginTextureManager->getEntityMaskDescriptorSet());
+                };
+
+                meshShaderPipeline->recreate(pipelineInfo);
+                restore(*meshShaderPipeline);
+
+                if (transparentMeshShaderPipeline)
+                {
+                    pipelineInfo.transparentMode = true;
+                    transparentMeshShaderPipeline->recreate(pipelineInfo);
+                    restore(*transparentMeshShaderPipeline);
+                    pipelineInfo.transparentMode = false;
+                }
+
+                if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
+                {
+                    pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+                    pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
+                    pipelineInfo.wboitMode = true;
+                    wboitMeshShaderPipeline->recreate(pipelineInfo);
+                    restore(*wboitMeshShaderPipeline);
+                }
+
+                if (terrain.pipeline)
+                {
+                    terrain.pipeline->setRTPointShadowMaskLayout(pointMaskLayout);
+                    terrain.pipeline->updateRTPointShadowMaskDescriptor(pointMaskDescSet);
+                    terrain.pipeline->recreate(
+                        cachedIBLLayout,
+                        bindlessTextures->getDescriptorSetLayout(),
+                        terrain.pipeline->getCachedMeshletLayout(),
+                        terrain.pipeline->getCachedVertexLayout(),
+                        lightBufferManager->getDescriptorSetLayout(),
+                        clusterGridManager->getDescriptorSetLayout(),
+                        lightCullingPipeline->getDescriptorSetLayout(),
+                        shadowSystem->getShadowDataLayout(),
+                        shadowSystem->getShadowTextureLayout(),
+                        cachedColorFormats, cachedDepthFormat);
+                }
+            }
+        }
+
+        if (!rtPointShadowPipeline->isInitialized()) return;
+
+        uint32_t w = depthPrepass->getWidth();
+        uint32_t h = depthPrepass->getHeight();
+        if (w != 0 && h != 0)
+        {
+            const bool pipeResized = rtPointShadowPipeline->resize(w, h);
+            if (rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized())
+            {
+                rtPointShadowDenoiser->resize(w, h);
+                vk::DescriptorSet ds = rtPointShadowDenoiser->getDenoisedMaskSamplerDescriptorSet();
+                if (meshShaderPipeline) meshShaderPipeline->updateRTPointShadowMaskDescriptor(ds);
+                if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateRTPointShadowMaskDescriptor(ds);
+                if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateRTPointShadowMaskDescriptor(ds);
+                if (terrain.pipeline) terrain.pipeline->updateRTPointShadowMaskDescriptor(ds);
+            }
+            else if (pipeResized)
+            {
+                vk::DescriptorSet raw = rtPointShadowPipeline->getShadowMaskSamplerDescriptorSet();
+                if (meshShaderPipeline) meshShaderPipeline->updateRTPointShadowMaskDescriptor(raw);
+                if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateRTPointShadowMaskDescriptor(raw);
+                if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateRTPointShadowMaskDescriptor(raw);
+                if (terrain.pipeline) terrain.pipeline->updateRTPointShadowMaskDescriptor(raw);
+            }
+        }
+
+        if (!accelStructManager || !accelStructManager->isTLASReady()) return;
+
+        const auto& camData = cameraBuffer->getData();
+        glm::vec3 camPos = glm::vec3(camData.cameraPosition);
+
+        // Pick the closest/brightest point lights, assign mask slices; reassigned slices reset history.
+        std::vector<uint32_t> reassigned = lightBufferManager->assignRTPointSlices(camPos, rtPointShadowBudget);
+
+        const auto& sliceLights = lightBufferManager->getRTPointSliceLights();
+        const auto& sliceValid = lightBufferManager->getRTPointSliceValid();
+
+        std::vector<raytracing::RTPointDispatchInfo> dispatchList;
+        for (uint32_t s = 0; s < raytracing::RTPointShadowPipeline::MAX_SLICES; ++s)
+        {
+            if (!sliceValid[s]) continue;
+            int idx = lightBufferManager->getPointIndexForEntity(sliceLights[s]);
+            if (idx < 0) continue;
+            const auto& pl = lightBufferManager->getPointLight(static_cast<uint32_t>(idx));
+            raytracing::RTPointDispatchInfo info{};
+            info.slice = s;
+            info.position = pl.position;
+            info.radius = pl.radius;
+            dispatchList.push_back(info);
+        }
+
+        if (dispatchList.empty())
+        {
+            lightBufferManager->setRTPointShadowActive(false);
+            return;
+        }
+
+        const bool useDenoiser = rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized();
+        lightBufferManager->setRTPointShadowActive(true);
+
+        uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+
+        rtPointShadowPipeline->dispatch(cmd,
+            depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
+            depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
+            accelStructManager->getTLASDescriptorSet(),
+            camData.invViewProjection, camPos, camData.farPlane,
+            w, h, dispatchList,
+            useDenoiser, // skip final transitions when the denoiser consumes the raw mask
+            fi);
+
+        if (useDenoiser)
+        {
+            std::vector<raytracing::RTPointDenoiseInfo> denoiseList;
+            for (const auto& d : dispatchList)
+            {
+                raytracing::RTPointDenoiseInfo di{};
+                di.slice = d.slice;
+                di.rawLayerView = rtPointShadowPipeline->getShadowMaskLayerView(d.slice);
+                di.resetHistory = std::find(reassigned.begin(), reassigned.end(), d.slice) != reassigned.end();
+                denoiseList.push_back(di);
+            }
+            rtPointShadowDenoiser->dispatch(cmd, denoiseList,
+                depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
+                depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
+                camData.invViewProjection, camData.viewProjection,
+                w, h, camData.frameIndex, fi);
+        }
+    }
+
     void GPUDrivenRenderer::applyRTShadowSettings(const types::RTShadowSettings& settings)
     {
         rtShadowEnabled = settings.enabled;
+        // When RT is disabled, clear the runtime flag so the fragment shaders fall back to
+        // the directional VSM clipmap instead of sampling a stale RT mask. (dispatchRTShadow
+        // only ever sets it true, so nothing else would clear it on toggle-off.)
+        if (!rtShadowEnabled && lightBufferManager)
+            lightBufferManager->setRTShadowActive(false);
         if (rtShadowPipeline)
         {
             rtShadowPipeline->setMaxRayDistance(settings.maxRayDistance);
@@ -929,6 +1464,52 @@ namespace render::gpudriven
         {
             rtShadowProfiler->setBaseSettings(settings.maxRayDistance, settings.spatialPasses);
             rtShadowProfiler->applyBudgetSettings(settings);
+        }
+
+        // VK-1175: optional RT override for spot lights. Shares the directional ray/denoiser
+        // tunables; gated by its own enable flag and budget, OFF by default.
+        rtSpotShadowEnabled = settings.spotEnabled;
+        rtSpotShadowBudget = settings.spotBudget;
+        // Clear the runtime flag on toggle-off so the fragment shaders resume VSM with no stale mask.
+        if (!rtSpotShadowEnabled && lightBufferManager)
+            lightBufferManager->setRTSpotShadowActive(false);
+        if (rtSpotShadowPipeline)
+        {
+            rtSpotShadowPipeline->setMaxRayDistance(settings.maxRayDistance);
+            rtSpotShadowPipeline->setNormalBias(settings.normalBias);
+            rtSpotShadowPipeline->setRayTMin(settings.rayTMin);
+        }
+        if (rtSpotShadowDenoiser)
+        {
+            rtSpotShadowDenoiser->setTemporalBlend(settings.temporalBlend);
+            rtSpotShadowDenoiser->setDepthThreshold(settings.depthThreshold);
+            rtSpotShadowDenoiser->setNormalThreshold(settings.normalThreshold);
+            rtSpotShadowDenoiser->setSpatialPhiDepth(settings.spatialPhiDepth);
+            rtSpotShadowDenoiser->setSpatialPhiNormal(settings.spatialPhiNormal);
+            rtSpotShadowDenoiser->setSpatialPasses(settings.spatialPasses);
+        }
+
+        // VK-1176: optional RT override for point lights. Shares the directional ray/denoiser
+        // tunables; gated by its own enable flag and budget, OFF by default.
+        rtPointShadowEnabled = settings.pointEnabled;
+        rtPointShadowBudget = settings.pointBudget;
+        // Clear the runtime flag on toggle-off so the fragment shaders resume VSM with no stale mask.
+        if (!rtPointShadowEnabled && lightBufferManager)
+            lightBufferManager->setRTPointShadowActive(false);
+        if (rtPointShadowPipeline)
+        {
+            rtPointShadowPipeline->setMaxRayDistance(settings.maxRayDistance);
+            rtPointShadowPipeline->setNormalBias(settings.normalBias);
+            rtPointShadowPipeline->setRayTMin(settings.rayTMin);
+        }
+        if (rtPointShadowDenoiser)
+        {
+            rtPointShadowDenoiser->setTemporalBlend(settings.temporalBlend);
+            rtPointShadowDenoiser->setDepthThreshold(settings.depthThreshold);
+            rtPointShadowDenoiser->setNormalThreshold(settings.normalThreshold);
+            rtPointShadowDenoiser->setSpatialPhiDepth(settings.spatialPhiDepth);
+            rtPointShadowDenoiser->setSpatialPhiNormal(settings.spatialPhiNormal);
+            rtPointShadowDenoiser->setSpatialPasses(settings.spatialPasses);
         }
     }
 

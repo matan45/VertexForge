@@ -28,6 +28,7 @@ namespace controllers
 
         viewport = std::make_unique<render::RenderTextureViewPort>(device, swapChain);
         viewport->setClearColor(desc.clearColor);
+        viewport->setRenderShadows(desc.renderShadows);
         viewport->init(desc.width, desc.height);
     }
 

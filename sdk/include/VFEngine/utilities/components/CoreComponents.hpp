@@ -208,6 +208,7 @@ namespace components
         glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
         uint32_t priority = 0;
         bool enabled = true;
+        bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
         bool needsRender = true;
         float timeSinceLastRender = 0.0f;
     };

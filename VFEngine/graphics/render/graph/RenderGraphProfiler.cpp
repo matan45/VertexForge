@@ -54,7 +54,11 @@ namespace render::graph
 
     void RenderGraphProfiler::endFrame(vk::CommandBuffer cmd, uint32_t frameIndex)
     {
-        // Nothing needed at end of frame; readback happens at start of next frame
+        if (!enabled || !queryPool.isValid()) return;
+
+        // Record how many passes were profiled into this slot so the readback (a
+        // frame or two later) reads exactly the written, dense query range.
+        slotPassCount[frameIndex % core::MAX_FRAMES_IN_FLIGHT] = currentPassCount;
     }
 
     void RenderGraphProfiler::readbackAndUpdate(const vk::Device& logicalDevice, uint32_t frameIndex)
@@ -64,17 +68,21 @@ namespace render::graph
         uint32_t prevFI = (frameIndex + core::MAX_FRAMES_IN_FLIGHT - 1) % core::MAX_FRAMES_IN_FLIGHT;
         if (!frameSlotReady[prevFI]) return;
 
+        // Read exactly the dense, written range for that slot (2 queries per pass).
+        uint32_t n = slotPassCount[prevFI];
+        if (n == 0) return;
+
         std::vector<uint64_t> timestamps;
-        if (!queryPool.readResults(logicalDevice, prevFI, timestamps)) return;
+        if (!queryPool.readResults(logicalDevice, prevFI, timestamps, n * 2)) return;
 
         float totalMs = 0.0f;
 
         // Resize EMA array if needed
-        if (emaTimes.size() < currentPassCount)
-            emaTimes.resize(currentPassCount, 0.0f);
-        lastTimes.assign(currentPassCount, 0.0f);
+        if (emaTimes.size() < n)
+            emaTimes.resize(n, 0.0f);
+        lastTimes.assign(n, 0.0f);
 
-        for (uint32_t i = 0; i < currentPassCount && (i * 2 + 1) < timestamps.size(); ++i)
+        for (uint32_t i = 0; i < n && (i * 2 + 1) < timestamps.size(); ++i)
         {
             float ms = queryPool.toMilliseconds(timestamps[i * 2], timestamps[i * 2 + 1]);
             updateEMA(ms, emaTimes[i]);
