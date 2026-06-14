@@ -44,7 +44,7 @@ struct SpotLight {
     float cosInnerAngle;
     float cosOuterAngle;
     int shadowIndex;
-    uint padding0;
+    int rtMaskSlice;   // -1 = use VSM; >=0 = RT spot-shadow mask array slice
     uint padding1;
 };
 
@@ -54,7 +54,7 @@ struct LightCounts {
     uint spotCount;
     float shadowIntensity;
     uint rtShadowActive;
-    uint _lcpad1;
+    uint rtSpotShadowActive;
     uint _lcpad2;
     uint _lcpad3;
 };

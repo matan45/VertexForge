@@ -344,6 +344,11 @@ layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
 layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
 #endif
 
+#ifdef RT_SPOT_SHADOW_ENABLED
+// Per-spot-light RT shadow masks (VK-1175); see mesh_shader_gpudriven.glsl for the layout rationale.
+layout(set = 15, binding = 0) uniform sampler2DArray rtSpotShadowMaskArray;
+#endif
+
 #ifdef CAUSTICS_ENABLED
 layout(set = CAUSTIC_SET, binding = 0) uniform sampler2D causticMap;
 layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
@@ -373,6 +378,18 @@ float sampleTerrainSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) 
     // Apply terrain-specific normal bias scaling before delegating to VSM sampling
     vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
     return sampleVSMShadow(shadowIndex, worldPos, biasedNormal);
+}
+
+float sampleTerrainSpotShadowHybrid(int shadowIndex, int rtMaskSlice, vec3 worldPos, vec3 worldNormal) {
+#ifdef RT_SPOT_SHADOW_ENABLED
+    // Optional RT override (off by default): keep terrain in lockstep with meshes so a budgeted
+    // spot light's RT shadow lands on both surfaces (no RT-on-mesh / VSM-on-terrain mismatch).
+    if (lightCounts.rtSpotShadowActive != 0u && rtMaskSlice >= 0) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
+        return texture(rtSpotShadowMaskArray, vec3(screenUV, float(rtMaskSlice))).r;
+    }
+#endif
+    return sampleTerrainSpotShadow(shadowIndex, worldPos, worldNormal);
 }
 
 float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
@@ -531,7 +548,7 @@ void main() {
             uint lightIdx = extractLightIndex(packedIdx);
             SpotLight light = spotLights[lightIdx];
 
-            float shadow = sampleTerrainSpotShadow(light.shadowIndex, fragWorldPos, N);
+            float shadow = sampleTerrainSpotShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, N);
 
             float spotDist = length(light.position - fragWorldPos);
             float spotAtten = physicalAttenuation(spotDist, light.range);

@@ -317,6 +317,11 @@ namespace render::gpudriven
         worldMaskDescriptorSet = worldMaskDescSet;
     }
 
+    void MeshShaderPipeline::updateRTSpotShadowMaskDescriptor(vk::DescriptorSet rtSpotShadowMaskDescSet)
+    {
+        rtSpotShadowMaskDescriptorSet = rtSpotShadowMaskDescSet;
+    }
+
     void MeshShaderPipeline::createPerDrawDataDescriptor()
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -485,6 +490,10 @@ namespace render::gpudriven
         {
             meshShader->addMacroDefinition("RT_SHADOW_ENABLED");
         }
+        if (info.rtSpotShadowMaskLayout)
+        {
+            meshShader->addMacroDefinition("RT_SPOT_SHADOW_ENABLED");
+        }
         if (info.worldMaskLayout)
         {
             meshShader->addMacroDefinition("WORLD_MASK_ENABLED");
@@ -591,6 +600,21 @@ namespace render::gpudriven
         }
         worldMaskLayoutBound = info.worldMaskLayout != nullptr;
         worldMaskSetIndex = worldMaskLayoutBound ? (worldMaskAtSet11 ? 11u : 14u) : 0u;
+
+        // Set 15: per-spot-light RT shadow mask array (VK-1175). Padded past the world mask's
+        // possible set 14 so it never collides with WORLD_MASK_SET.
+        if (info.rtSpotShadowMaskLayout)
+        {
+            ensureEmptyPlaceholder();
+            while (setLayouts.size() < 15)
+                setLayouts.push_back(emptyPlaceholderLayout);
+            setLayouts.push_back(info.rtSpotShadowMaskLayout); // Set 15
+            rtSpotShadowLayoutBound = true;
+        }
+        else
+        {
+            rtSpotShadowLayoutBound = false;
+        }
 
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |

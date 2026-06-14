@@ -92,7 +92,9 @@ namespace serialization
                 {"normalThreshold", s.normalThreshold},
                 {"spatialPhiDepth", s.spatialPhiDepth},
                 {"spatialPhiNormal", s.spatialPhiNormal},
-                {"spatialPasses", s.spatialPasses}
+                {"spatialPasses", s.spatialPasses},
+                {"spotEnabled", s.spotEnabled},
+                {"spotBudget", s.spotBudget}
             };
         }
 
@@ -121,6 +123,10 @@ namespace serialization
                 settings.spatialPhiNormal = rt["spatialPhiNormal"].get<float>();
             if (rt.contains("spatialPasses") && rt["spatialPasses"].is_number_integer())
                 settings.spatialPasses = std::clamp(rt["spatialPasses"].get<int>(), 1, 5);
+            if (rt.contains("spotEnabled") && rt["spotEnabled"].is_boolean())
+                settings.spotEnabled = rt["spotEnabled"].get<bool>();
+            if (rt.contains("spotBudget") && rt["spotBudget"].is_number_integer())
+                settings.spotBudget = std::clamp(rt["spotBudget"].get<uint32_t>(), 1u, 8u);
         }
 
         json serializeCullingSettings(const types::CullingSettings& s)

@@ -84,6 +84,12 @@ namespace types
         bool adaptiveBudgetEnabled = true;
         float budgetMs = 2.0f;
         float asMemoryBudgetMB = 256.0f;
+
+        // VK-1175: optional RT override for spot lights, layered on the spot VSM base. OFF by
+        // default; reuses the ray/denoiser tunables above. spotBudget caps how many of the
+        // closest/brightest shadow-casting spot lights get RT (the rest stay on VSM).
+        bool spotEnabled = false;
+        uint32_t spotBudget = 8;
     };
 
     struct RTShadowStats

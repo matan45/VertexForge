@@ -336,6 +336,13 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
 layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
 #endif
 
+#ifdef RT_SPOT_SHADOW_ENABLED
+// Optional per-spot-light RT shadow masks (VK-1175). One array slice per budgeted spot light;
+// a light's GPUSpotLight.rtMaskSlice indexes the slice (-1 = stays on VSM). Set 15 avoids the
+// directional RT mask (set 13) and the world mask (set 11/14).
+layout(set = 15, binding = 0) uniform sampler2DArray rtSpotShadowMaskArray;
+#endif
+
 #ifdef WORLD_MASK_ENABLED
 // Plugin world-space mask (VK-1359): XZ-projected over worldMinMax bounds.
 // WORLD_MASK_SET is 11, or 14 when GI probes occupy set 11.
@@ -362,6 +369,18 @@ float sampleDirectionalShadowHybrid(int shadowIndex, int shadowMode,
     // shadowMode 1 = VSM clipmap (the unified default directional shadow on all GPUs).
     if (shadowMode == 1) return sampleDirectionalVSM(shadowIndex, worldPos, N);
     return 1.0;
+}
+
+float sampleSpotShadowHybrid(int shadowIndex, int rtMaskSlice, vec3 worldPos, vec3 N) {
+#ifdef RT_SPOT_SHADOW_ENABLED
+    // Optional RT override (off by default): when active and this light owns a mask slice,
+    // the ray-traced mask wins; otherwise fall through to the always-available VSM base.
+    if (lightCounts.rtSpotShadowActive != 0u && rtMaskSlice >= 0) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
+        return texture(rtSpotShadowMaskArray, vec3(screenUV, float(rtMaskSlice))).r;
+    }
+#endif
+    return sampleSpotShadow(shadowIndex, worldPos, N);
 }
 
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;
@@ -567,7 +586,7 @@ void main() {
             uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
             uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
             SpotLight light = spotLights[lightIdx];
-            float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
+            float shadow = sampleSpotShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, N);
             minShadow = min(minShadow, shadow);
             directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
         }

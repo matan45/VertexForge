@@ -510,6 +510,9 @@ namespace render
         if (gpuDrivenRenderer->isRTShadowReady())
             gpuDrivenRenderer->dispatchRTShadow(commandBuffer, imageIndex);
 
+        if (gpuDrivenRenderer->isRTSpotShadowReady())
+            gpuDrivenRenderer->dispatchRTSpotShadow(commandBuffer, imageIndex);
+
         if (oceanFFTInitialized)
         {
             gpuDrivenRenderer->readbackOceanDisplacement();

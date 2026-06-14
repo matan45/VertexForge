@@ -69,6 +69,19 @@ namespace render::gpudriven
         }
     }
 
+    static void bindRTSpotShadowMaskDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
+                                                  MeshShaderPipeline& pipeline)
+    {
+        if (!pipeline.hasRTSpotShadowLayout())
+            return;
+
+        vk::DescriptorSet spotMaskSet = pipeline.getRTSpotShadowMaskDescriptorSet();
+        if (spotMaskSet)
+        {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 15, 1, &spotMaskSet, 0, nullptr);
+        }
+    }
+
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                        uint32_t screenWidth, uint32_t screenHeight)
     {
@@ -99,6 +112,7 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *meshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
         bindWorldMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
+        bindRTSpotShadowMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -188,6 +202,7 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindWorldMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+        bindRTSpotShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -271,6 +286,7 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
         bindWorldMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
+        bindRTSpotShadowMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -354,6 +370,7 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindWorldMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+        bindRTSpotShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)

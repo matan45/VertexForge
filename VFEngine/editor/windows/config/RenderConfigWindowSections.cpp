@@ -517,6 +517,23 @@ namespace windows
                             rtStats.blasBuildMs, rtStats.tlasBuildMs);
             }
 
+            // Spot lights (VK-1175): independent opt-in RT override layered on the spot VSM base.
+            // Reuses the ray/denoiser tunables above; the closest/brightest spotBudget spots get RT.
+            ImGui::Spacing();
+            ImGui::SeparatorText("Spot Lights");
+            if (ImGui::Checkbox("RT Spot Shadows", &settings.rtShadows.spotEnabled))
+                markDirty();
+            if (settings.rtShadows.spotEnabled)
+            {
+                int budget = static_cast<int>(settings.rtShadows.spotBudget);
+                if (ImGui::SliderInt("RT Spot Budget", &budget, 1, 8))
+                {
+                    settings.rtShadows.spotBudget = static_cast<uint32_t>(budget);
+                    markDirty();
+                }
+                ImGui::TextDisabled("Closest/brightest spots get RT; the rest stay on VSM.");
+            }
+
             ImGui::Unindent(10.0f);
         }
     }

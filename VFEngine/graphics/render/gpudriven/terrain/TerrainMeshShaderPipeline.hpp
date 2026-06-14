@@ -98,6 +98,11 @@ namespace render::gpudriven
         bool rtShadowEnabled = false;
         bool pipelineHasSet12 = false;  // True when the active pipeline layout includes set 12
 
+        // Per-spot-light RT shadow mask array (Set 15, VK-1175)
+        vk::DescriptorSetLayout rtSpotShadowMaskLayout;
+        vk::DescriptorSet rtSpotShadowMaskDescriptorSet;
+        bool rtSpotShadowEnabled = false;
+
         // Plugin world-space mask (Set 11 bindings 3/4 — sampler + params UBO).
         // The bindings always exist in terrainDataLayout; the WORLD_MASK_ENABLED macro
         // (and thus the shader cost) is only compiled in once a mask is bound.
@@ -198,6 +203,9 @@ namespace render::gpudriven
 
         void setRTShadowMaskLayout(vk::DescriptorSetLayout layout) { rtShadowMaskLayout = layout; rtShadowEnabled = true; }
         void updateRTShadowMaskDescriptor(vk::DescriptorSet descSet) { rtShadowMaskDescriptorSet = descSet; }
+
+        void setRTSpotShadowMaskLayout(vk::DescriptorSetLayout layout) { rtSpotShadowMaskLayout = layout; rtSpotShadowEnabled = true; }
+        void updateRTSpotShadowMaskDescriptor(vk::DescriptorSet descSet) { rtSpotShadowMaskDescriptorSet = descSet; }
 
         // Plugin world mask: enables the WORLD_MASK_ENABLED macro on the next (re)create
         // and writes the sampler + params UBO into set 11 bindings 3/4.

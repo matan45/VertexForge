@@ -9,6 +9,9 @@ namespace render::lighting
         inline constexpr uint32_t MAX_DIRECTIONAL_LIGHTS = 64;
         inline constexpr uint32_t MAX_POINT_LIGHTS = 1024;
         inline constexpr uint32_t MAX_SPOT_LIGHTS = 512;
+        // Budget cap on spot lights that get an optional ray-traced shadow override
+        // (the closest/brightest get RT, the rest stay on VSM). Fixed-size mask array.
+        inline constexpr uint32_t MAX_RT_SPOT_LIGHTS = 8;
     }
 
     struct alignas(16) GPUDirectionalLight
@@ -43,7 +46,8 @@ namespace render::lighting
         float cosInnerAngle;
         float cosOuterAngle;
         int32_t shadowIndex;  // -1 = no shadow
-        uint32_t padding[2];
+        int32_t rtMaskSlice;  // -1 = use VSM; >=0 = sample RT spot-shadow mask array slice K
+        uint32_t padding;
     };
     static_assert(sizeof(GPUSpotLight) == 64);
 
@@ -53,8 +57,9 @@ namespace render::lighting
         uint32_t pointCount;
         uint32_t spotCount;
         float shadowIntensity;
-        uint32_t rtShadowActive;  // 1 = use RT for directional shadows, 0 = use VSM
-        uint32_t pad[3];
+        uint32_t rtShadowActive;      // 1 = use RT for directional shadows, 0 = use VSM
+        uint32_t rtSpotShadowActive;  // 1 = use RT override for budgeted spot lights, 0 = use VSM
+        uint32_t pad[2];
     };
     static_assert(sizeof(GPULightCounts) == 32);
 }

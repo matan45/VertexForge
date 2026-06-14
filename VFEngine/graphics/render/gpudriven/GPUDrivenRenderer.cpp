@@ -274,6 +274,8 @@ namespace render::gpudriven
         if (rtShadowProfiler) { rtShadowProfiler->cleanup(vkDevice); rtShadowProfiler.reset(); }
         if (rtShadowDenoiser) { rtShadowDenoiser->cleanup(); rtShadowDenoiser.reset(); }
         if (rtShadowPipeline) { rtShadowPipeline->cleanup(); rtShadowPipeline.reset(); }
+        if (rtSpotShadowDenoiser) { rtSpotShadowDenoiser->cleanup(); rtSpotShadowDenoiser.reset(); }
+        if (rtSpotShadowPipeline) { rtSpotShadowPipeline->cleanup(); rtSpotShadowPipeline.reset(); }
         if (accelStructManager) { accelStructManager->cleanup(); accelStructManager.reset(); }
         if (textureStreamManager) textureStreamManager->cleanup();
         if (objectStreamManager) objectStreamManager->cleanup();
