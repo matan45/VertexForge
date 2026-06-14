@@ -226,8 +226,17 @@ namespace windows
             --inFlight;
         }
         else if (progress.state == services::LoadingState::Error
-                 || progress.state == services::LoadingState::Cancelled)
+                 || progress.state == services::LoadingState::Cancelled
+                 || progress.state == services::LoadingState::Idle)
         {
+            // Idle means the async job no longer exists. This happens when the
+            // render adapter's frame-budgeted GC reclaims a finished job before
+            // this cache observed completion (e.g. the Content Browser was hidden,
+            // so update() — and thus pollLoad — stopped running while the adapter
+            // kept ticking). Treat it as terminal so the entry leaves Loading and
+            // frees its in-flight slot; otherwise the slot leaks permanently and
+            // thumbnail loading eventually stalls once all MAX_IN_FLIGHT slots are
+            // stuck.
             it->state = State::Failed;
             --inFlight;
         }

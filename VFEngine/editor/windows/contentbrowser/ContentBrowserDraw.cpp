@@ -79,9 +79,7 @@ namespace windows
             {
                 selectedFile.clear();
                 selectedType = AssetType::Other;
-                clearSelection();
-                for (auto& asset : visibleAssets)
-                    asset.isSelected = false;
+                clearSelection(); // isSelected is rebuilt from selectedPaths each frame
             }
 
             const std::string selectedPath = StringUtil::wstringToUtf8(selectedFile.wstring());
