@@ -9,6 +9,7 @@
 #include "../render/gi/GITypes.hpp"
 #include "atmosphere/AtmosphereSettings.hpp"
 #include "cloud/CloudSettings.hpp"
+#include "types/RenderSettings.hpp"
 #include "../render/lighting/LightStreamManager.hpp"
 #include "../render/gpudriven/scene/GPUObjectStreamTypes.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
@@ -107,6 +108,13 @@ namespace controllers
         render::atmosphere::AtmosphereSettings currentAtmosphereSettings;
         render::cloud::CloudSettings currentCloudSettings;
 
+        // Scene-load fires ApplyShadowSettingsCommand before the GPU-driven renderer / shadow
+        // system finish initializing, which would silently drop shadow quality + culling (the
+        // renderer comes up on defaults). Cache the latest settings and re-apply once per frame
+        // until the shadow system is initialized, then stop.
+        types::RenderSettings pendingRenderSettings;
+        bool hasPendingRenderSettings = false;
+
     public:
         explicit OffScreenController();
         ~OffScreenController();
@@ -160,6 +168,11 @@ namespace controllers
         services::CullingDebugStats getCullingStats() const;
 
         void applyShadowSettings(const types::RenderSettings& settings);
+        // Applies whatever it can right now; returns true only once the shadow system is
+        // initialized (i.e. shadow quality/pages actually took effect). Drives the retry.
+        bool applyRenderSettingsInternal(const types::RenderSettings& settings);
+        // Re-applies cached settings each frame until they fully land. Called from render().
+        void retryPendingRenderSettings();
         services::ShadowStats getShadowStats() const;
         types::RTShadowStats getRTShadowStats() const;
         services::GPUPipelineStatus getGPUPipelineStatus() const;

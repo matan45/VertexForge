@@ -27,13 +27,32 @@ namespace controllers
 
     void OffScreenController::applyShadowSettings(const types::RenderSettings& settings)
     {
+        // Cache so the settings re-apply once the renderer/shadow system finishes initializing.
+        // Scene load fires this before init; without the retry, shadow quality + culling are
+        // silently dropped and the renderer runs on defaults until the user hits Apply manually.
+        pendingRenderSettings = settings;
+        hasPendingRenderSettings = !applyRenderSettingsInternal(settings);
+    }
+
+    void OffScreenController::retryPendingRenderSettings()
+    {
+        if (!hasPendingRenderSettings) return;
+        if (applyRenderSettingsInternal(pendingRenderSettings))
+            hasPendingRenderSettings = false;
+    }
+
+    bool OffScreenController::applyRenderSettingsInternal(const types::RenderSettings& settings)
+    {
         auto* renderHandler = offScreen->getRenderPassHandler();
-        if (!renderHandler) return;
+        if (!renderHandler) return false;
 
         auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
-        if (!gpuDriven) return;
+        if (!gpuDriven) return false;
 
         auto* shadowSystem = gpuDriven->getShadowSystem();
+        // Shadow quality/pages only take effect once the system is initialized; otherwise
+        // ShadowSystem::applyRenderSettings early-outs and we must retry next frame.
+        const bool shadowReady = shadowSystem && shadowSystem->isInitialized();
         if (shadowSystem)
             shadowSystem->applyRenderSettings(settings);
 
@@ -78,6 +97,8 @@ namespace controllers
         gpuDriven->setTerrainLODBias(settings.terrain.lodBias);
         gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);
         gpuDriven->setTerrainTextureScale(settings.terrain.textureScale);
+
+        return shadowReady;
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const
