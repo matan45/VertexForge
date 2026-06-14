@@ -349,6 +349,11 @@ layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
 layout(set = 15, binding = 0) uniform sampler2DArray rtSpotShadowMaskArray;
 #endif
 
+#ifdef RT_POINT_SHADOW_ENABLED
+// Per-point-light RT shadow masks (VK-1176); see mesh_shader_gpudriven.glsl for the layout rationale.
+layout(set = 16, binding = 0) uniform sampler2DArray rtPointShadowMaskArray;
+#endif
+
 #ifdef CAUSTICS_ENABLED
 layout(set = CAUSTIC_SET, binding = 0) uniform sampler2D causticMap;
 layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
@@ -419,6 +424,19 @@ float sampleTerrainPointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
     // Apply terrain-specific normal bias scaling before delegating to VSM sampling
     vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
     return samplePointShadow(shadowIndex, worldPos, biasedNormal, lightPos, lightRadius);
+}
+
+float sampleTerrainPointShadowHybrid(int shadowIndex, int rtMaskSlice, vec3 worldPos, vec3 worldNormal,
+                                     vec3 lightPos, float lightRadius) {
+#ifdef RT_POINT_SHADOW_ENABLED
+    // Optional RT override (off by default): keep terrain in lockstep with meshes so a budgeted
+    // point light's RT shadow lands on both surfaces (no RT-on-mesh / VSM-on-terrain mismatch).
+    if (lightCounts.rtPointShadowActive != 0u && rtMaskSlice >= 0) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
+        return texture(rtPointShadowMaskArray, vec3(screenUV, float(rtMaskSlice))).r;
+    }
+#endif
+    return sampleTerrainPointShadow(shadowIndex, worldPos, worldNormal, lightPos, lightRadius);
 }
 
 void main() {
@@ -529,8 +547,8 @@ void main() {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
 
-            float shadow = sampleTerrainPointShadow(light.shadowIndex, fragWorldPos, N,
-                                                    light.position, light.radius);
+            float shadow = sampleTerrainPointShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, N,
+                                                          light.position, light.radius);
 
             // Weight shadow contribution to ambient by attenuation
             // so edge-of-radius precision artifacts don't darken ambient

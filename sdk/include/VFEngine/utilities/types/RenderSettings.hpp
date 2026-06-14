@@ -90,6 +90,12 @@ namespace types
         // closest/brightest shadow-casting spot lights get RT (the rest stay on VSM).
         bool spotEnabled = false;
         uint32_t spotBudget = 8;
+
+        // VK-1176: optional RT override for point lights, layered on the point VSM base. OFF by
+        // default; reuses the ray/denoiser tunables above. pointBudget caps how many of the
+        // closest/brightest shadow-casting point lights get RT (the rest stay on VSM).
+        bool pointEnabled = false;
+        uint32_t pointBudget = 8;
     };
 
     struct RTShadowStats

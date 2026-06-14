@@ -322,6 +322,11 @@ namespace render::gpudriven
         rtSpotShadowMaskDescriptorSet = rtSpotShadowMaskDescSet;
     }
 
+    void MeshShaderPipeline::updateRTPointShadowMaskDescriptor(vk::DescriptorSet rtPointShadowMaskDescSet)
+    {
+        rtPointShadowMaskDescriptorSet = rtPointShadowMaskDescSet;
+    }
+
     void MeshShaderPipeline::createPerDrawDataDescriptor()
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -494,6 +499,10 @@ namespace render::gpudriven
         {
             meshShader->addMacroDefinition("RT_SPOT_SHADOW_ENABLED");
         }
+        if (info.rtPointShadowMaskLayout)
+        {
+            meshShader->addMacroDefinition("RT_POINT_SHADOW_ENABLED");
+        }
         if (info.worldMaskLayout)
         {
             meshShader->addMacroDefinition("WORLD_MASK_ENABLED");
@@ -614,6 +623,21 @@ namespace render::gpudriven
         else
         {
             rtSpotShadowLayoutBound = false;
+        }
+
+        // Set 16: per-point-light RT shadow mask array (VK-1176). Padded past the spot mask's
+        // set 15 so the three RT mask paths (directional 13, spot 15, point 16) coexist.
+        if (info.rtPointShadowMaskLayout)
+        {
+            ensureEmptyPlaceholder();
+            while (setLayouts.size() < 16)
+                setLayouts.push_back(emptyPlaceholderLayout);
+            setLayouts.push_back(info.rtPointShadowMaskLayout); // Set 16
+            rtPointShadowLayoutBound = true;
+        }
+        else
+        {
+            rtPointShadowLayoutBound = false;
         }
 
         vk::PushConstantRange pushConstantRange{};

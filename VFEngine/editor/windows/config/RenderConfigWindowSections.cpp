@@ -534,6 +534,23 @@ namespace windows
                 ImGui::TextDisabled("Closest/brightest spots get RT; the rest stay on VSM.");
             }
 
+            // Point lights (VK-1176): independent opt-in RT override layered on the point VSM base.
+            // Reuses the ray/denoiser tunables above; the closest/brightest pointBudget points get RT.
+            ImGui::Spacing();
+            ImGui::SeparatorText("Point Lights");
+            if (ImGui::Checkbox("RT Point Shadows", &settings.rtShadows.pointEnabled))
+                markDirty();
+            if (settings.rtShadows.pointEnabled)
+            {
+                int budget = static_cast<int>(settings.rtShadows.pointBudget);
+                if (ImGui::SliderInt("RT Point Budget", &budget, 1, 8))
+                {
+                    settings.rtShadows.pointBudget = static_cast<uint32_t>(budget);
+                    markDirty();
+                }
+                ImGui::TextDisabled("Closest/brightest points get RT; the rest stay on VSM.");
+            }
+
             ImGui::Unindent(10.0f);
         }
     }

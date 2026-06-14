@@ -419,6 +419,10 @@ namespace render::gpudriven
         {
             terrainShader->addMacroDefinition("RT_SPOT_SHADOW_ENABLED");
         }
+        if (rtPointShadowEnabled && rtPointShadowMaskLayout)
+        {
+            terrainShader->addMacroDefinition("RT_POINT_SHADOW_ENABLED");
+        }
         terrainShader->readShader("../../resources/shaders/gpudriven/task_terrain.glsl");
         terrainShader->readShader("../../resources/shaders/gpudriven/mesh_terrain.glsl");
 
@@ -490,6 +494,14 @@ namespace render::gpudriven
             while (setLayouts.size() < 15)
                 setLayouts.push_back(emptyLayout);
             setLayouts.push_back(rtSpotShadowMaskLayout); // Set 15
+        }
+
+        // Set 16: per-point-light RT shadow mask array (VK-1176). Pad past the spot mask's set 15.
+        if (rtPointShadowEnabled && rtPointShadowMaskLayout)
+        {
+            while (setLayouts.size() < 16)
+                setLayouts.push_back(emptyLayout);
+            setLayouts.push_back(rtPointShadowMaskLayout); // Set 16
         }
 
         vk::PushConstantRange pushConstantRange{};
