@@ -36,8 +36,11 @@ namespace render::raytracing
 
         /// Read results from a completed frame.
         /// Returns true if results are available, fills outTimestamps.
+        /// count limits the read to the first `count` queries (0 ⇒ full queryCount);
+        /// reading only the queries actually written this frame avoids a permanent
+        /// VK_NOT_READY when the pool is larger than the written range.
         bool readResults(const vk::Device& logicalDevice, uint32_t frameIndex,
-                         std::vector<uint64_t>& outTimestamps) const;
+                         std::vector<uint64_t>& outTimestamps, uint32_t count = 0) const;
 
         /// Convert a timestamp delta to milliseconds.
         float toMilliseconds(uint64_t startTimestamp, uint64_t endTimestamp) const;
