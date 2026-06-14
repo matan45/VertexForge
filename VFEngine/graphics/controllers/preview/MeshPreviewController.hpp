@@ -85,6 +85,10 @@ namespace controllers
         
         void* render();
 
+        // VK-1379: copy the last rendered frame into an owned `size` px thumbnail.
+        void* snapshot(uint32_t size);
+        void releaseSnapshot(void* handle);
+
         const math::AABB& getMeshBounds() const { return meshBounds; }
         bool isMeshLoaded() const { return !loadedMeshPath.empty(); }
     };

@@ -9,6 +9,7 @@
 #include "../../adapters/render/EditorTextureAdapter.hpp"
 #include "../../adapters/render/MaterialPreviewAdapter.hpp"
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
+#include "../../adapters/render/ThumbnailRenderAdapter.hpp"
 #include "../../adapters/animation/AnimationPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
@@ -59,6 +60,7 @@ namespace core
         vfxRuntimeAdapter.reset();
         vfxPreviewAdapter.reset();
         animationPreviewAdapter.reset();
+        thumbnailRenderAdapter.reset();
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
         textureAdapter.reset();

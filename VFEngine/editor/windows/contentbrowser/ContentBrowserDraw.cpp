@@ -65,7 +65,7 @@ namespace windows
             if (projectMode)
                 effectiveFilter.sortBy = SortField::Name;
 
-            AssetClickResult clickResult = gridRenderer->draw(visibleAssets, effectiveFilter, resolvedFilter);
+            AssetClickResult clickResult = gridRenderer->draw(visibleAssets, effectiveFilter, resolvedFilter, thumbnailCache);
             if (projectMode)
                 handleProjectResultClick(clickResult);
             else

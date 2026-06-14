@@ -6,6 +6,7 @@
 #include "../../adapters/render/EditorTextureAdapter.hpp"
 #include "../../adapters/render/MaterialPreviewAdapter.hpp"
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
+#include "../../adapters/render/ThumbnailRenderAdapter.hpp"
 #include "../../adapters/animation/AnimationPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
@@ -55,6 +56,7 @@ namespace core
         textureAdapter = std::make_unique<EditorTextureAdapter>();
         materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
+        thumbnailRenderAdapter = std::make_unique<ThumbnailRenderAdapter>();
         animationPreviewAdapter = std::make_unique<AnimationPreviewAdapter>();
         vfxPreviewAdapter = std::make_unique<VFXPreviewAdapter>();
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
@@ -96,6 +98,7 @@ namespace core
         scriptingAdapter->init();
         physicsAdapter->init();
         navmeshAdapter->init();
+        thumbnailRenderAdapter->init(); // registers Content Browser thumbnail render handlers
 
         // Wire VFX runtime provider to offscreen renderer
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());

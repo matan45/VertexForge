@@ -1,4 +1,5 @@
 #include "AssetGridRenderer.hpp"
+#include "AssetThumbnailCache.hpp"
 #include "AssetQueryParser.hpp"
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
@@ -91,7 +92,8 @@ namespace windows
     AssetClickResult AssetGridRenderer::draw(
         const std::vector<Asset>& assets,
         const AssetFilter& filter,
-        const ResolvedAssetFilter& resolved)
+        const ResolvedAssetFilter& resolved,
+        AssetThumbnailCache& thumbnails)
     {
         AssetClickResult result;
 
@@ -153,7 +155,7 @@ namespace windows
 
         for (const auto* asset : filtered)
         {
-            drawAssetItem(*asset, asset->isSelected, selectedPaths, result);
+            drawAssetItem(*asset, asset->isSelected, selectedPaths, result, thumbnails);
 
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
             {
@@ -180,7 +182,7 @@ namespace windows
         return result;
     }
 
-    void AssetGridRenderer::drawAssetItem(const Asset& asset, bool isSelected, const std::vector<std::string>& selectedPaths, AssetClickResult& result)
+    void AssetGridRenderer::drawAssetItem(const Asset& asset, bool isSelected, const std::vector<std::string>& selectedPaths, AssetClickResult& result, AssetThumbnailCache& thumbnails)
     {
         // Determine which paths to drag: all selected if this item is selected, otherwise just this item
         std::vector<std::string> singlePath = {asset.path};
@@ -279,7 +281,24 @@ namespace windows
         else
         {
             ImGui::BeginGroup();
-            ImGui::Image(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
+
+            // Only on-screen items request real thumbnails, so a huge folder
+            // never queues thousands of loads. A one-row vertical margin lets
+            // thumbnails warm up just before they scroll into view.
+            ImVec2 itemMin = cursorPos;
+            ImVec2 itemMax = ImVec2(cursorPos.x + itemWidth, cursorPos.y + itemHeight);
+            bool itemVisible = ImGui::IsRectVisible(
+                ImVec2(itemMin.x, itemMin.y - itemHeight),
+                ImVec2(itemMax.x, itemMax.y + itemHeight));
+
+            void* thumb = nullptr;
+            if (itemVisible && AssetThumbnailCache::isThumbnailable(asset.type))
+                thumb = thumbnails.requestThumbnail(asset);
+
+            if (thumb)
+                ImGui::Image(thumb, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+            else
+                ImGui::Image(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
 
             // Unified drag source for files (for content browser operations)
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))

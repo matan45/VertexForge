@@ -120,6 +120,10 @@ namespace controllers
         
         void* render();
 
+        // VK-1379: copy the last rendered frame into an owned `size` px thumbnail.
+        void* snapshot(uint32_t size);
+        void releaseSnapshot(void* handle);
+
         // Get last shader compilation error (for UI display)
         std::string getLastShaderCompilationError() const;
 

@@ -66,6 +66,7 @@ namespace core
     class EditorTextureAdapter;
     class MaterialPreviewAdapter;
     class MeshPreviewAdapter;
+    class ThumbnailRenderAdapter;
     class AnimationPreviewAdapter;
     class VFXPreviewAdapter;
     class VFXRuntimeAdapter;
@@ -109,6 +110,7 @@ namespace core
         std::unique_ptr<EditorTextureAdapter> textureAdapter;
         std::unique_ptr<MaterialPreviewAdapter> materialPreviewAdapter;
         std::unique_ptr<MeshPreviewAdapter> meshPreviewAdapter;
+        std::unique_ptr<ThumbnailRenderAdapter> thumbnailRenderAdapter;
         std::unique_ptr<AnimationPreviewAdapter> animationPreviewAdapter;
         std::unique_ptr<VFXPreviewAdapter> vfxPreviewAdapter;
         std::unique_ptr<VFXRuntimeAdapter> vfxRuntimeAdapter;

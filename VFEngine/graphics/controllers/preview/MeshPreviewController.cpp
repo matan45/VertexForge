@@ -256,6 +256,23 @@ namespace controllers
         currentFrustum.extractFromMatrix(projection * view);
     }
 
+    void* MeshPreviewController::snapshot(uint32_t size)
+    {
+        if (!initialized || loadedMeshPath.empty() || !offScreen)
+        {
+            return nullptr;
+        }
+        return offScreen->snapshot(size);
+    }
+
+    void MeshPreviewController::releaseSnapshot(void* handle)
+    {
+        if (offScreen)
+        {
+            offScreen->releaseSnapshot(handle);
+        }
+    }
+
     void* MeshPreviewController::render()
     {
         if (!initialized || loadedMeshPath.empty())
