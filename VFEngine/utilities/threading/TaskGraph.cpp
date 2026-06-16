@@ -1,6 +1,8 @@
 #include "../print/Log.hpp"
 #include "TaskGraphImpl.hpp"
 
+#include <cassert>
+
 namespace threading {
 
 	TaskGraph::TaskGraph() : pImpl(std::make_unique<Impl>()) {}
@@ -26,57 +28,26 @@ namespace threading {
 			}
 		}
 
-		auto* baseTimePtr = &pImpl->baseTime;
+		// The previous frame's WaitforTask below fully drained the graph, so the terminal
+		// (and every node) is complete on entry. Catches a not-drained / re-entrant misuse;
+		// execute() is contractually main-thread-only.
+		assert(pImpl->terminal.GetIsComplete());
 
-		// Runs a node's function inline on the calling (main) thread, with optional timing.
-		auto runInline = [&](uint32_t idx) {
-			auto& node = pImpl->nodes[idx];
-			if (profilingEnabled) {
-				auto* entryPtr = &pImpl->profileData[idx];
-				auto start = std::chrono::high_resolution_clock::now();
-				node.fn();
-				auto end = std::chrono::high_resolution_clock::now();
-				entryPtr->startTimeNs = static_cast<uint64_t>(
-					std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-				entryPtr->endTimeNs = static_cast<uint64_t>(
-					std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-				entryPtr->threadId = 0;
+		// Kick the roots (in-degree 0). enkiTS arms the whole reachable graph and auto-launches
+		// each downstream node the moment all its predecessors finish (native dependencies), so
+		// there is no per-layer barrier and independent work overlaps freely across layers.
+		for (uint32_t idx : pImpl->rootIndices) {
+			if (pImpl->nodes[idx].pinned) {
+				pImpl->scheduler->AddPinnedTask(pImpl->cachedPinnedTasks[idx].get());
 			}
 			else {
-				node.fn();
-			}
-		};
-
-		// Execute cached layers (computed once at build time)
-		for (auto& layer : pImpl->layers) {
-			if (layer.size() == 1) {
-				// Single task - execute directly on this thread (pinned or not).
-				runInline(layer[0]);
-				continue;
-			}
-
-			// Multiple tasks in this layer. Non-pinned tasks go to enkiTS worker
-			// threads via their pre-built (cached) TaskSet; pinned tasks run on the
-			// calling thread. Dispatch the workers first so they run in parallel
-			// with the pinned-task work, then wait for them.
-			auto& dispatched = pImpl->dispatchScratch;
-			dispatched.clear();
-			for (uint32_t idx : layer) {
-				if (pImpl->nodes[idx].pinned) continue;
-				enki::TaskSet* task = pImpl->cachedTaskSets[idx].get();
-				pImpl->scheduler->AddTaskSetToPipe(task);
-				dispatched.push_back(task);
-			}
-
-			// Run pinned tasks on the calling thread while workers execute.
-			for (uint32_t idx : layer) {
-				if (pImpl->nodes[idx].pinned) runInline(idx);
-			}
-
-			for (enki::TaskSet* task : dispatched) {
-				pImpl->scheduler->WaitforTask(task);
+				pImpl->scheduler->AddTaskSetToPipe(pImpl->cachedTaskSets[idx].get());
 			}
 		}
+
+		// Block until the terminal sentinel (depends on every leaf) completes. While waiting,
+		// this (main) thread runs its own thread-0 pinned tasks and helps run worker tasks.
+		pImpl->scheduler->WaitforTask(&pImpl->terminal);
 	}
 
 	const std::vector<TaskProfileEntry>& TaskGraph::getProfileData() const

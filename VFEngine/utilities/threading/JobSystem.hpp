@@ -62,12 +62,24 @@ namespace threading {
 		// pooled task path as submit(); runs inline if the system is not initialized.
 		void enqueue(std::function<void()> fn, JobPriority priority = JobPriority::NORMAL);
 
+		// Synchronous fork/join: splits [0,count) across workers and blocks until done. The
+		// calling thread participates while it waits, so parallelFor is safe to call from
+		// inside another task/parallelFor (nested fork/join) - the calling worker keeps
+		// running tasks during WaitforTask, no deadlock. Priority defaults to HIGH because the
+		// caller is blocked on the result (the latency-critical path); fire-and-forget/async
+		// APIs default to NORMAL instead.
 		void parallelFor(uint32_t count, const std::function<void(uint32_t begin, uint32_t end)>& body,
-			uint32_t minBatchSize = 64);
+			uint32_t minBatchSize = 64, JobPriority priority = JobPriority::HIGH);
 
 		// Overload that exposes the enkiTS thread index for per-thread local storage
 		void parallelFor(uint32_t count, const std::function<void(uint32_t begin, uint32_t end, uint32_t threadNum)>& body,
-			uint32_t minBatchSize = 64);
+			uint32_t minBatchSize = 64, JobPriority priority = JobPriority::HIGH);
+
+		// Asynchronous fork/join: dispatches the parallelFor onto a worker and returns a handle
+		// immediately (no inline wait). Use with then()/whenAll()/wait() to fork-join without
+		// blocking the caller - e.g. to overlap a parallel loop with other TaskGraph work.
+		JobHandle parallelForAsync(uint32_t count, std::function<void(uint32_t begin, uint32_t end)> body,
+			uint32_t minBatchSize = 64, JobPriority priority = JobPriority::HIGH);
 
 		// Fire-and-forget submit returning a std::future for the callable's result.
 		// Hot path: dispatches through a lock-light pooled task (no per-call heap TaskSet).

@@ -179,7 +179,7 @@ namespace threading {
 
 	void JobSystem::parallelFor(uint32_t count,
 		const std::function<void(uint32_t, uint32_t)>& body,
-		uint32_t minBatchSize)
+		uint32_t minBatchSize, JobPriority priority)
 	{
 		if (count == 0) return;
 
@@ -195,13 +195,14 @@ namespace threading {
 			}
 		);
 		task.m_MinRange = minBatchSize;
+		task.m_Priority = static_cast<enki::TaskPriority>(static_cast<uint32_t>(priority));
 		pImpl->scheduler.AddTaskSetToPipe(&task);
 		pImpl->scheduler.WaitforTask(&task);
 	}
 
 	void JobSystem::parallelFor(uint32_t count,
 		const std::function<void(uint32_t, uint32_t, uint32_t)>& body,
-		uint32_t minBatchSize)
+		uint32_t minBatchSize, JobPriority priority)
 	{
 		if (count == 0) return;
 
@@ -217,8 +218,23 @@ namespace threading {
 			}
 		);
 		task.m_MinRange = minBatchSize;
+		task.m_Priority = static_cast<enki::TaskPriority>(static_cast<uint32_t>(priority));
 		pImpl->scheduler.AddTaskSetToPipe(&task);
 		pImpl->scheduler.WaitforTask(&task);
+	}
+
+	JobHandle JobSystem::parallelForAsync(uint32_t count,
+		std::function<void(uint32_t, uint32_t)> body,
+		uint32_t minBatchSize, JobPriority priority)
+	{
+		// Run the (blocking) parallelFor on a worker job and hand back its handle. The worker
+		// participates in its own WaitforTask, so this never deadlocks even under load. A zero
+		// count is handled inside parallelFor (returns immediately); the handle still completes.
+		return submitJob(
+			[this, count, body = std::move(body), minBatchSize, priority]() {
+				parallelFor(count, body, minBatchSize, priority);
+			},
+			priority);
 	}
 
 	void JobSystem::submitTask(std::function<void()> func, JobPriority priority)

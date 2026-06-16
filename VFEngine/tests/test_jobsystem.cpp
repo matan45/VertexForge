@@ -7,9 +7,14 @@
 #include <threading/TaskGraphBuilder.hpp>
 #include <threading/TaskGraph.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <array>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <mutex>
+#include <numeric>
 #include <thread>
 #include <vector>
 
@@ -292,6 +297,232 @@ TEST_SUITE("TaskGraph") {
 		for (const auto& entry : profile) {
 			CHECK(entry.endTimeNs >= entry.startTimeNs);
 		}
+	}
+
+	TEST_CASE("execute: diamond respects both join edges") {
+		JobScope jobScope;
+
+		// A -> {B, C} -> D. Native dependencies must keep A first, D last, and B/C after A.
+		std::atomic<int> ticket{0};
+		std::atomic<int> orderA{-1}, orderB{-1}, orderC{-1}, orderD{-1};
+
+		threading::TaskGraphBuilder builder;
+		auto a = builder.task("A", [&]() { orderA = ticket.fetch_add(1); });
+		auto b = builder.task("B", [&]() { orderB = ticket.fetch_add(1); });
+		auto c = builder.task("C", [&]() { orderC = ticket.fetch_add(1); });
+		auto d = builder.task("D", [&]() { orderD = ticket.fetch_add(1); });
+		builder.depends(b, a);
+		builder.depends(c, a);
+		builder.depends(d, b);
+		builder.depends(d, c);
+
+		auto graph = builder.build();
+		REQUIRE(graph != nullptr);
+		graph->execute(false);
+
+		CHECK(orderA.load() == 0);
+		CHECK(orderB.load() > orderA.load());
+		CHECK(orderC.load() > orderA.load());
+		CHECK(orderD.load() == 3);
+	}
+
+	TEST_CASE("execute: independent branches overlap (no per-layer barrier)") {
+		JobScope jobScope;
+
+		// KEY regression for VK-1385 3.A. Chain A1->A2->A3 sets a flag that an INDEPENDENT
+		// task B (no shared edge) is waiting on. The old layer-barrier grouped A1 and B in
+		// layer 0 and blocked there until BOTH finished, so B waiting on A3 (a later layer)
+		// would deadlock. Native dependencies let the A-chain run while B waits -> B unblocks.
+		// Needs >=2 task-running threads (one parks in B's wait while another runs the chain).
+		if (threading::JobSystem::instance().getWorkerThreadCount() < 2) {
+			WARN("skipped: needs >= 2 worker threads to observe cross-branch overlap");
+			return;
+		}
+
+		std::mutex m;
+		std::condition_variable cv;
+		bool flag = false;
+		std::atomic<bool> bSawFlag{false};
+
+		threading::TaskGraphBuilder builder;
+		auto a1 = builder.task("A1", []() {});
+		auto a2 = builder.task("A2", []() {});
+		auto a3 = builder.task("A3", [&]() {
+			{
+				std::lock_guard<std::mutex> lk(m);
+				flag = true;
+			}
+			cv.notify_all();
+		});
+		builder.task("B", [&]() {
+			std::unique_lock<std::mutex> lk(m);
+			bSawFlag = cv.wait_for(lk, std::chrono::seconds(5), [&]() { return flag; });
+		});
+		builder.depends(a2, a1);
+		builder.depends(a3, a2);
+
+		auto graph = builder.build();
+		REQUIRE(graph != nullptr);
+		graph->execute(false); // must return; would hang under the old barrier
+
+		CHECK(bSawFlag.load());
+	}
+
+	TEST_CASE("execute: isolated node (root and leaf) still runs and is waited on") {
+		JobScope jobScope;
+
+		std::atomic<int> ticket{0};
+		std::atomic<int> orderX{-1}, orderY{-1};
+		std::atomic<bool> ranZ{false};
+
+		threading::TaskGraphBuilder builder;
+		auto x = builder.task("X", [&]() { orderX = ticket.fetch_add(1); });
+		auto y = builder.task("Y", [&]() { orderY = ticket.fetch_add(1); });
+		builder.task("Z", [&]() { ranZ = true; }); // isolated: no edges
+		builder.depends(y, x);
+
+		auto graph = builder.build();
+		REQUIRE(graph != nullptr);
+		graph->execute(false);
+
+		CHECK(ranZ.load());
+		CHECK(orderX.load() >= 0);
+		CHECK(orderY.load() > orderX.load());
+	}
+
+	TEST_CASE("execute: single node runs once per frame") {
+		JobScope jobScope;
+
+		std::atomic<int> runs{0};
+		threading::TaskGraphBuilder builder;
+		builder.task("Solo", [&]() { runs.fetch_add(1); });
+
+		auto graph = builder.build();
+		REQUIRE(graph != nullptr);
+		graph->execute(false);
+		graph->execute(false);
+
+		CHECK(runs.load() == 2);
+	}
+
+	TEST_CASE("execute: pinned task runs on the main thread before its dependent") {
+		JobScope jobScope;
+
+		std::atomic<int> ticket{0};
+		std::atomic<int> orderP{-1}, orderD{-1};
+
+		threading::TaskGraphBuilder builder;
+		auto p = builder.pinnedTask("P", [&]() { orderP = ticket.fetch_add(1); });
+		auto d = builder.task("D", [&]() { orderD = ticket.fetch_add(1); });
+		builder.depends(d, p); // D after P
+
+		auto graph = builder.build();
+		REQUIRE(graph != nullptr);
+		graph->execute(true);
+
+		CHECK(orderP.load() == 0);
+		CHECK(orderD.load() == 1);
+
+		const auto& profile = graph->getProfileData();
+		REQUIRE(profile.size() == 2);
+		CHECK(profile[p].threadId == 0); // pinned tasks always record thread 0 (main)
+	}
+
+	TEST_CASE("execute: multi-leaf terminal waits for every leaf each frame") {
+		JobScope jobScope;
+
+		// R -> L1, R -> L2. The terminal sentinel depends on both leaves; each frame must run
+		// all three exactly once, so over 5 frames each leaf runs 5 times.
+		std::atomic<int> runsL1{0}, runsL2{0};
+		threading::TaskGraphBuilder builder;
+		auto r = builder.task("R", []() {});
+		auto l1 = builder.task("L1", [&]() { runsL1.fetch_add(1); });
+		auto l2 = builder.task("L2", [&]() { runsL2.fetch_add(1); });
+		builder.depends(l1, r);
+		builder.depends(l2, r);
+
+		auto graph = builder.build();
+		REQUIRE(graph != nullptr);
+		for (int frame = 0; frame < 5; ++frame) {
+			graph->execute(false);
+		}
+
+		CHECK(runsL1.load() == 5);
+		CHECK(runsL2.load() == 5);
+	}
+}
+
+TEST_SUITE("ParallelFor") {
+
+	TEST_CASE("parallelFor: explicit priority still covers the full range") {
+		JobScope jobScope;
+
+		const uint32_t count = 100000;
+		std::vector<uint32_t> touched(count, 0);
+
+		threading::JobSystem::instance().parallelFor(count,
+			[&touched](uint32_t begin, uint32_t end) {
+				for (uint32_t i = begin; i < end; ++i) touched[i] += 1;
+			},
+			64, threading::JobPriority::LOW);
+
+		uint64_t total = std::accumulate(touched.begin(), touched.end(), uint64_t{0});
+		CHECK(total == count);
+		CHECK(std::all_of(touched.begin(), touched.end(), [](uint32_t v) { return v == 1; }));
+	}
+
+	TEST_CASE("parallelForAsync: handle completes and covers the range exactly once") {
+		JobScope jobScope;
+		auto& js = threading::JobSystem::instance();
+
+		const uint32_t count = 100000;
+		std::vector<uint32_t> touched(count, 0);
+
+		auto handle = js.parallelForAsync(count,
+			[&touched](uint32_t begin, uint32_t end) {
+				for (uint32_t i = begin; i < end; ++i) touched[i] += 1;
+			});
+		CHECK(handle.valid());
+		js.wait(handle);
+
+		CHECK(handle.isComplete());
+		uint64_t total = std::accumulate(touched.begin(), touched.end(), uint64_t{0});
+		CHECK(total == count);
+		CHECK(std::all_of(touched.begin(), touched.end(), [](uint32_t v) { return v == 1; }));
+	}
+
+	TEST_CASE("parallelForAsync: zero count completes without invoking the body") {
+		JobScope jobScope;
+		auto& js = threading::JobSystem::instance();
+
+		std::atomic<bool> ran{false};
+		auto handle = js.parallelForAsync(0, [&ran](uint32_t, uint32_t) { ran.store(true); });
+		js.wait(handle);
+
+		CHECK(handle.isComplete());
+		CHECK_FALSE(ran.load());
+	}
+
+	TEST_CASE("parallelFor: nested inside a job does not deadlock") {
+		JobScope jobScope;
+		auto& js = threading::JobSystem::instance();
+
+		const uint32_t count = 50000;
+		std::atomic<uint64_t> sum{0};
+
+		// A worker job that itself forks a parallelFor: the calling worker participates in the
+		// inner WaitforTask, so this must complete rather than deadlock.
+		auto handle = js.submitJob([&]() {
+			js.parallelFor(count, [&sum](uint32_t begin, uint32_t end) {
+				uint64_t local = 0;
+				for (uint32_t i = begin; i < end; ++i) local += i;
+				sum.fetch_add(local, std::memory_order_relaxed);
+			});
+		});
+		js.wait(handle);
+
+		uint64_t expected = static_cast<uint64_t>(count - 1) * count / 2;
+		CHECK(sum.load() == expected);
 	}
 }
 

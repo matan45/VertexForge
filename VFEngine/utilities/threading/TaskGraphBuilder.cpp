@@ -154,10 +154,17 @@ namespace threading {
 			impl.profileData[i].priority = impl.nodes[i].priority;
 		}
 
-		// Identify root tasks (in-degree 0)
-		for (uint32_t i = 0; i < nodeCount; ++i) {
-			if (inDegree[i] == 0) {
-				impl.rootIndices.push_back(i);
+		// Identify root tasks (in-degree 0). NOTE: topologicalSort() consumed (zeroed) the
+		// inDegree vector via Kahn's algorithm, so recompute a fresh count from the edges.
+		{
+			std::vector<uint32_t> rootInDegree(nodeCount, 0);
+			for (auto& e : impl.edges) {
+				rootInDegree[e.to]++;
+			}
+			for (uint32_t i = 0; i < nodeCount; ++i) {
+				if (rootInDegree[i] == 0) {
+					impl.rootIndices.push_back(i);
+				}
 			}
 		}
 
@@ -168,38 +175,10 @@ namespace threading {
 			}
 		}
 
-		// Pre-compute topological layers (cached for every frame's execute())
-		// Note: inDegree was zeroed by topologicalSort(), so recompute from edges
-		size_t maxLayerSize = 0;
-		{
-			std::vector<uint32_t> layerInDegree(nodeCount, 0);
-			for (auto& e : pImpl->edges) {
-				layerInDegree[e.to]++;
-			}
-			std::vector<uint32_t> currentLayer;
-			for (uint32_t i = 0; i < nodeCount; ++i) {
-				if (layerInDegree[i] == 0) currentLayer.push_back(i);
-			}
-
-			while (!currentLayer.empty()) {
-				maxLayerSize = std::max(maxLayerSize, currentLayer.size());
-				impl.layers.push_back(currentLayer);
-				std::vector<uint32_t> nextLayer;
-				for (uint32_t node : currentLayer) {
-					for (uint32_t dep : adjacency[node]) {
-						if (--layerInDegree[dep] == 0) {
-							nextLayer.push_back(dep);
-						}
-					}
-				}
-				currentLayer = std::move(nextLayer);
-			}
-		}
-
 		// Build one persistent enkiTS TaskSet per non-pinned node. Each captures stable
 		// pointers into impl (nodes/profileData never move after build, and impl itself is
 		// owned by a stable unique_ptr), so re-adding the same object every frame needs no
-		// allocation. Pinned nodes keep a null slot - they run inline on the main thread.
+		// allocation. Pinned nodes keep a null slot here (built below as pinned tasks).
 		impl.cachedTaskSets.resize(nodeCount);
 		for (uint32_t i = 0; i < nodeCount; ++i) {
 			if (impl.nodes[i].pinned) {
@@ -230,7 +209,76 @@ namespace threading {
 				static_cast<uint32_t>(impl.nodes[i].priority));
 			impl.cachedTaskSets[i] = std::move(taskSet);
 		}
-		impl.dispatchScratch.reserve(maxLayerSize);
+
+		// Build one persistent pinned task (thread 0) per pinned node, mirroring the
+		// non-pinned timing capture but always recording threadId 0 (the main thread runs
+		// pinned tasks while it waits on the terminal in execute()).
+		impl.cachedPinnedTasks.resize(nodeCount);
+		for (uint32_t i = 0; i < nodeCount; ++i) {
+			if (!impl.nodes[i].pinned) {
+				continue;
+			}
+			const TaskNodeInfo* node = &impl.nodes[i];
+			TaskProfileEntry* entry = &impl.profileData[i];
+			const auto* baseTimePtr = &impl.baseTime;
+			const bool* profilingFlag = &impl.profilingEnabled;
+
+			auto pinned = std::make_unique<enki::LambdaPinnedTask>(0u,
+				[node, entry, baseTimePtr, profilingFlag]() {
+					if (*profilingFlag) {
+						auto start = std::chrono::high_resolution_clock::now();
+						node->fn();
+						auto end = std::chrono::high_resolution_clock::now();
+						entry->startTimeNs = static_cast<uint64_t>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+						entry->endTimeNs = static_cast<uint64_t>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+						entry->threadId = 0;
+					}
+					else {
+						node->fn();
+					}
+				});
+			pinned->m_Priority = static_cast<enki::TaskPriority>(
+				static_cast<uint32_t>(impl.nodes[i].priority));
+			impl.cachedPinnedTasks[i] = std::move(pinned);
+		}
+
+		// Resolve a node index to its persistent completable (whichever kind it is).
+		auto completableOf = [&impl](uint32_t idx) -> enki::ICompletable* {
+			if (impl.nodes[idx].pinned) {
+				return impl.cachedPinnedTasks[idx].get();
+			}
+			return impl.cachedTaskSets[idx].get();
+		};
+
+		// Wire native enkiTS dependencies once: each node depends on its predecessors, so the
+		// scheduler auto-launches a node the moment all its predecessors complete (no manual
+		// per-layer barrier, full cross-layer overlap). Completion counts auto-reset, so the
+		// graph is reused every frame by re-adding only the roots in execute().
+		std::vector<std::vector<uint32_t>> predecessors(nodeCount);
+		for (auto& e : impl.edges) {
+			predecessors[e.to].push_back(e.from);
+		}
+
+		impl.nodeDeps.resize(nodeCount); // outer sized ONCE - inner buffers must stay address-stable
+		for (uint32_t i = 0; i < nodeCount; ++i) {
+			auto& preds = predecessors[i];
+			if (preds.empty()) {
+				continue;
+			}
+			impl.nodeDeps[i].resize(preds.size());
+			for (size_t k = 0; k < preds.size(); ++k) {
+				completableOf(i)->SetDependency(impl.nodeDeps[i][k], completableOf(preds[k]));
+			}
+		}
+
+		// Terminal sentinel depends on every leaf (out-degree 0, including isolated nodes),
+		// giving execute() a single wait target that completes only when the whole graph does.
+		impl.terminalDeps.resize(impl.leafIndices.size());
+		for (size_t k = 0; k < impl.leafIndices.size(); ++k) {
+			impl.terminal.SetDependency(impl.terminalDeps[k], completableOf(impl.leafIndices[k]));
+		}
 
 		return graph;
 	}
