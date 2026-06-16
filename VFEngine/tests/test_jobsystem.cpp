@@ -201,6 +201,28 @@ TEST_SUITE("JobSystem") {
 		CHECK(ran.load());
 	}
 
+	TEST_CASE("submitJob: a throwing body is contained and the handle still completes") {
+		JobScope jobScope;
+		auto& js = threading::JobSystem::instance();
+
+		// enkiTS has no exception handling, so an unguarded throw out of the job body
+		// would std::terminate the whole test process. The body must be caught/logged
+		// and control->complete() must still run so wait() unblocks and isComplete()==true.
+		auto handle = js.submitJob([]() { throw std::runtime_error("boom"); });
+		js.wait(handle); // must not terminate; must return
+		CHECK(handle.isComplete());
+	}
+
+	TEST_CASE("then: a throwing continuation still completes its handle") {
+		JobScope jobScope;
+		auto& js = threading::JobSystem::instance();
+
+		auto a = js.submitJob([]() {});
+		auto b = js.then(a, []() { throw std::runtime_error("boom in continuation"); });
+		js.wait(b); // throwing continuation must not hang the waiter or terminate
+		CHECK(b.isComplete());
+	}
+
 	TEST_CASE("parallelReduce: matches the sequential fold") {
 		JobScope jobScope;
 
