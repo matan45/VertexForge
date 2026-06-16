@@ -86,6 +86,7 @@ namespace threading {
 	struct JobSystem::Impl {
 		enki::TaskScheduler scheduler;
 		std::atomic<bool> initialized{false};
+		uint32_t workerThreadCount = 1; // created task threads + 1 (calling thread)
 
 		// Fixed pool of recyclable tasks (allocated once at init).
 		std::vector<std::unique_ptr<PooledJobTask>> pool;
@@ -139,6 +140,7 @@ namespace threading {
 		config.numTaskThreadsToCreate = threadCount;
 		config.numExternalTaskThreads = maxExternalThreads;
 		pImpl->scheduler.Initialize(config);
+		pImpl->workerThreadCount = threadCount + 1;
 
 		pImpl->pool.clear();
 		pImpl->pool.reserve(kPoolSize);
@@ -154,6 +156,11 @@ namespace threading {
 	uint32_t JobSystem::getThreadCount() const
 	{
 		return pImpl->scheduler.GetNumTaskThreads();
+	}
+
+	uint32_t JobSystem::getWorkerThreadCount() const
+	{
+		return pImpl->workerThreadCount;
 	}
 
 	enki::TaskScheduler* JobSystem::getScheduler()
@@ -252,6 +259,11 @@ namespace threading {
 		task->claimed.store(false, std::memory_order_release);
 	}
 
+	void JobSystem::enqueue(std::function<void()> fn, JobPriority priority)
+	{
+		submitTask(std::move(fn), priority);
+	}
+
 	JobHandle JobSystem::submitJob(std::function<void()> fn, JobPriority priority)
 	{
 		auto control = std::make_shared<JobControl>();
@@ -261,6 +273,28 @@ namespace threading {
 		submitTask(
 			[control, fn = std::move(fn)]() {
 				fn();
+				control->complete();
+			},
+			priority);
+
+		return handle;
+	}
+
+	JobHandle JobSystem::submitJob(std::function<void()> fn, CancellationToken::Ptr token, JobPriority priority)
+	{
+		if (!token) {
+			return submitJob(std::move(fn), priority);
+		}
+
+		auto control = std::make_shared<JobControl>();
+		JobHandle handle;
+		handle.control = control;
+
+		submitTask(
+			[control, fn = std::move(fn), token = std::move(token)]() {
+				if (!token->isCancelled()) {
+					fn();
+				}
 				control->complete();
 			},
 			priority);

@@ -51,9 +51,10 @@ namespace core::physics
 
         tempAllocator = std::make_unique<JPH::TempAllocatorImpl>(10 * 1024 * 1024);
 
-        int numThreads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) - 1);
-        jobSystem = std::make_unique<JPH::JobSystemThreadPool>(
-            JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, numThreads);
+        // Run Jolt's internal jobs on the engine's shared enkiTS pool rather than a
+        // second dedicated thread pool (avoids core oversubscription during the step).
+        jobSystem = std::make_unique<JoltEnkiJobSystem>(
+            JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers);
 
         broadPhaseLayerInterface = std::make_unique<BroadPhaseLayerInterfaceImpl>();
         objectVsBroadPhaseFilter = std::make_unique<ObjectVsBroadPhaseLayerFilterImpl>();
@@ -80,7 +81,8 @@ namespace core::physics
         characterManager.init(&context);
 
         initialized = true;
-        vfLogInfo("Physics system initialized with {} threads", numThreads);
+        vfLogInfo("Physics system initialized (Jolt jobs on shared enkiTS pool, max concurrency {})",
+                  jobSystem->GetMaxConcurrency());
         return true;
     }
 

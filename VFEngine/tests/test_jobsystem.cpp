@@ -1,6 +1,7 @@
 #include <doctest.h>
 
 #include <threading/JobSystem.hpp>
+#include <threading/CancellationToken.hpp>
 #include <threading/ParallelReduce.hpp>
 #include <threading/TaskGraphBuilder.hpp>
 #include <threading/TaskGraph.hpp>
@@ -163,6 +164,33 @@ TEST_SUITE("JobSystem") {
 		std::array<threading::JobHandle, 0> none{};
 		auto h = threading::JobSystem::instance().whenAll(none, [&]() { ran.store(true); });
 		threading::JobSystem::instance().wait(h);
+		CHECK(ran.load());
+	}
+
+	TEST_CASE("submitJob: a token cancelled before start skips the work but still completes") {
+		ensureJobSystem();
+		auto& js = threading::JobSystem::instance();
+
+		auto token = threading::CancellationToken::create();
+		token->cancel(); // cancelled before the job is even scheduled
+
+		std::atomic<bool> ran{false};
+		auto handle = js.submitJob([&ran]() { ran.store(true); }, token);
+		js.wait(handle); // must still unblock
+
+		CHECK_FALSE(ran.load());
+		CHECK(handle.isComplete());
+	}
+
+	TEST_CASE("submitJob: a live token runs the work normally") {
+		ensureJobSystem();
+		auto& js = threading::JobSystem::instance();
+
+		auto token = threading::CancellationToken::create();
+		std::atomic<bool> ran{false};
+		auto handle = js.submitJob([&ran]() { ran.store(true); }, token);
+		js.wait(handle);
+
 		CHECK(ran.load());
 	}
 

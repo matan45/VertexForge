@@ -1,4 +1,6 @@
 #pragma once
+#include "CancellationToken.hpp"
+
 #include <future>
 #include <functional>
 #include <memory>
@@ -45,10 +47,20 @@ namespace threading {
 		void init(uint32_t threadCount = 0, uint32_t maxExternalThreads = 8);
 		void shutdown();
 
+		// Total threads registered with the scheduler (task threads + external slots + 1).
 		uint32_t getThreadCount() const;
+
+		// Compute-worker concurrency: created task threads + 1 (the calling/main thread).
+		// Excludes the external-thread slots, so suitable as a max-parallelism estimate
+		// for fork/join work (e.g. the Jolt physics adapter's GetMaxConcurrency).
+		uint32_t getWorkerThreadCount() const;
 
 		// Access the underlying enkiTS scheduler (used by TaskGraph for dependency-based execution)
 		enki::TaskScheduler* getScheduler();
+
+		// Lean fire-and-forget dispatch (no future, no handle). Routes through the same
+		// pooled task path as submit(); runs inline if the system is not initialized.
+		void enqueue(std::function<void()> fn, JobPriority priority = JobPriority::NORMAL);
 
 		void parallelFor(uint32_t count, const std::function<void(uint32_t begin, uint32_t end)>& body,
 			uint32_t minBatchSize = 64);
@@ -93,6 +105,11 @@ namespace threading {
 
 		// Submit a void job and return a handle usable with then()/whenAll()/wait().
 		JobHandle submitJob(std::function<void()> fn, JobPriority priority = JobPriority::NORMAL);
+
+		// As submitJob, but skips fn if the token is already cancelled when the job starts
+		// (the handle still completes so waiters unblock). fn may also poll the token.
+		JobHandle submitJob(std::function<void()> fn, CancellationToken::Ptr token,
+			JobPriority priority = JobPriority::NORMAL);
 
 		// Run fn after dep completes. If dep is already complete (or invalid) fn is scheduled immediately.
 		JobHandle then(const JobHandle& dep, std::function<void()> fn, JobPriority priority = JobPriority::NORMAL);
