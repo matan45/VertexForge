@@ -3,6 +3,7 @@
 #include <threading/JobSystem.hpp>
 #include <threading/CancellationToken.hpp>
 #include <threading/ParallelReduce.hpp>
+#include <threading/ParallelView.hpp>
 #include <threading/TaskGraphBuilder.hpp>
 #include <threading/TaskGraph.hpp>
 
@@ -291,5 +292,129 @@ TEST_SUITE("TaskGraph") {
 		for (const auto& entry : profile) {
 			CHECK(entry.endTimeNs >= entry.startTimeNs);
 		}
+	}
+}
+
+// Validates the concurrency contract VK-1386 WS1 (animation eval gather) relies on:
+// a serial loop that produces an ORDERED output list plus order-independent counters can be
+// parallelized via parallelFor(threadNum) using a per-index result buffer (deterministic order)
+// and per-thread-local accumulators (histogram / culled count), then merged on one thread, with
+// output byte-identical to the serial baseline. The production code (RuntimeAnimatorSystemEval.cpp)
+// uses exactly this shape; this test locks the shape under contention without needing animation assets.
+TEST_SUITE("ParallelGather") {
+
+	namespace {
+		enum class Kind : uint8_t { None, Eval, Interp };
+
+		struct Decision {
+			bool culled = false;   // culled entities produce no output and no histogram bump
+			uint8_t lod = 0;       // LOD bucket [0,4) for non-culled entities
+			Kind kind = Kind::None;
+		};
+
+		// Pure function of the index, so serial and parallel MUST agree exactly.
+		Decision classify(uint32_t i) {
+			Decision d;
+			if (i % 7u == 0u) { d.culled = true; return d; }
+			d.lod = static_cast<uint8_t>((i / 3u) % 4u);
+			if (i % 5u == 0u && d.lod == 1u)      d.kind = Kind::Interp;
+			else if (i % 2u == 0u)                d.kind = Kind::Eval;
+			else                                  d.kind = Kind::None; // counted, no output
+			return d;
+		}
+
+		struct GatherResult {
+			std::vector<std::pair<uint32_t, uint8_t>> evalOut;   // (index, lod) in canonical order
+			std::vector<uint32_t> interpOut;                     // index in canonical order
+			uint32_t culled = 0;
+			std::array<uint32_t, 4> histogram{};
+		};
+
+		bool equal(const GatherResult& a, const GatherResult& b) {
+			return a.evalOut == b.evalOut && a.interpOut == b.interpOut &&
+			       a.culled == b.culled && a.histogram == b.histogram;
+		}
+
+		GatherResult runSerial(uint32_t count) {
+			GatherResult r;
+			for (uint32_t i = 0; i < count; ++i) {
+				Decision d = classify(i);
+				if (d.culled) { ++r.culled; continue; }
+				++r.histogram[d.lod];
+				if (d.kind == Kind::Eval)        r.evalOut.push_back({i, d.lod});
+				else if (d.kind == Kind::Interp) r.interpOut.push_back(i);
+			}
+			return r;
+		}
+
+		// Mirrors the production merge: per-index slot buffer + thread-local accumulators.
+		GatherResult runParallel(uint32_t count) {
+			struct Slot { Kind kind = Kind::None; uint8_t lod = 0; };
+			std::vector<Slot> perIndex(count);
+
+			const uint32_t slotCount = threading::JobSystem::instance().getThreadCount() + 1;
+			std::vector<uint32_t> tlCulled(slotCount, 0);
+			std::vector<std::array<uint32_t, 4>> tlHist(slotCount, std::array<uint32_t, 4>{});
+
+			threading::JobSystem::instance().parallelFor(count,
+				[&](uint32_t begin, uint32_t end, uint32_t threadNum) {
+					uint32_t slot = threadNum < slotCount ? threadNum : 0;
+					for (uint32_t i = begin; i < end; ++i) {
+						Decision d = classify(i);
+						if (d.culled) { ++tlCulled[slot]; continue; }
+						++tlHist[slot][d.lod];
+						perIndex[i] = { d.kind, d.lod };
+					}
+				}, 64);
+
+			GatherResult r;
+			for (uint32_t s = 0; s < slotCount; ++s) {
+				r.culled += tlCulled[s];
+				for (uint8_t l = 0; l < 4; ++l) r.histogram[l] += tlHist[s][l];
+			}
+			for (uint32_t i = 0; i < count; ++i) {
+				if (perIndex[i].kind == Kind::Eval)        r.evalOut.push_back({i, perIndex[i].lod});
+				else if (perIndex[i].kind == Kind::Interp) r.interpOut.push_back(i);
+			}
+			return r;
+		}
+	}
+
+	TEST_CASE("parallel gather merge byte-matches the serial baseline (large, contended)") {
+		JobScope jobScope;
+
+		// Run several times: a data race or non-deterministic merge would surface as a mismatch
+		// on at least one iteration.
+		const uint32_t count = 50000;
+		GatherResult serial = runSerial(count);
+		for (int iter = 0; iter < 8; ++iter) {
+			CHECK(equal(runParallel(count), serial));
+		}
+	}
+
+	TEST_CASE("parallel gather merge matches serial below the parallel threshold") {
+		JobScope jobScope;
+
+		// Sizes around the production fallback boundary (PARALLEL_VIEW_THRESHOLD = 256).
+		for (uint32_t count : { 0u, 1u, 7u, 64u, 255u, 256u, 257u }) {
+			CHECK(equal(runParallel(count), runSerial(count)));
+		}
+	}
+
+	TEST_CASE("parallelFor threadNum stays within getThreadCount()+1 (slot-buffer bound)") {
+		JobScope jobScope;
+
+		// WS1 sizes its per-thread slot arrays as getThreadCount()+1 and indexes by threadNum.
+		// Verify no threadNum ever exceeds that bound, which would be an out-of-bounds write.
+		const uint32_t slotCount = threading::JobSystem::instance().getThreadCount() + 1;
+		std::atomic<uint32_t> maxThreadNum{0};
+		threading::JobSystem::instance().parallelFor(200000,
+			[&](uint32_t, uint32_t, uint32_t threadNum) {
+				uint32_t prev = maxThreadNum.load(std::memory_order_relaxed);
+				while (threadNum > prev &&
+				       !maxThreadNum.compare_exchange_weak(prev, threadNum, std::memory_order_relaxed)) {}
+			}, 64);
+
+		CHECK(maxThreadNum.load() < slotCount);
 	}
 }

@@ -369,6 +369,37 @@ namespace services
         streamer.setTileCache(tileCache.get());
     }
 
+    void NavmeshTileManager::submitTileBake(const navigation::NavmeshTileCoord& coord,
+                                            navigation::NavmeshInputGeometry geometry,
+                                            navigation::NavmeshOffMeshConnections offMeshLinks,
+                                            std::vector<navigation::NavmeshAreaModifier> areaModifiers,
+                                            bool saveToCache, threading::JobPriority priority)
+    {
+        // Bake off the main thread; deliver the result to completedBakes so the main thread
+        // applies it (navmesh structure + event dispatch are main-thread-only). No future polling.
+        auto handle = threading::JobSystem::instance().submitJob(
+            [this, coord, saveToCache, geom = std::move(geometry), settings = bakeSettings,
+             links = std::move(offMeshLinks), mods = std::move(areaModifiers)]()
+            {
+                // Must not let an exception escape onto the worker thread (submitJob does not
+                // guard fn, and an unfinished handle would hang clear()). On failure deliver
+                // nothing, matching the old "empty tile -> skipped" outcome.
+                try
+                {
+                    navigation::NavmeshTileData data =
+                        navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings, links, mods);
+                    std::lock_guard<std::mutex> lock(completedBakesMutex);
+                    completedBakes.push_back({coord, saveToCache, std::move(data)});
+                }
+                catch (const std::exception& e)
+                {
+                    vfLogError("NavmeshTileManager: tile bake ({}, {}) failed: {}", coord.x, coord.z, e.what());
+                }
+            }, priority);
+
+        pendingTileBakes.push_back({coord, std::move(handle)});
+    }
+
     bool NavmeshTileManager::submitWorldBakeTile(const navigation::NavmeshTileCoord& coord)
     {
         if (!collectTileGeometry)
@@ -389,13 +420,8 @@ namespace services
         if (collectAreaModifiers)
             areaModifiers = collectAreaModifiers(bounds);
 
-        auto future = threading::JobSystem::instance().submit(
-            [this, coord, geom = std::move(geometry), settings = bakeSettings, links = std::move(offMeshLinks), mods = std::move(areaModifiers)]()
-            {
-                return navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings, links, mods);
-            }, threading::JobPriority::LOW);
-
-        pendingTileBakes.push_back({coord, true, std::move(future)});
+        submitTileBake(coord, std::move(geometry), std::move(offMeshLinks), std::move(areaModifiers),
+                       true, threading::JobPriority::LOW);
         return true;
     }
 
@@ -543,13 +569,8 @@ namespace services
             if (collectAreaModifiers)
                 areaModifiers = collectAreaModifiers(bounds);
 
-            auto future = threading::JobSystem::instance().submit(
-                [this, coord, geom = std::move(geometry), settings = bakeSettings, links = std::move(offMeshLinks), mods = std::move(areaModifiers)]()
-                {
-                    return navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings, links, mods);
-                }, threading::JobPriority::LOW);
-
-            pendingTileBakes.push_back({coord, saveOnDemandToCache, std::move(future)});
+            submitTileBake(coord, std::move(geometry), std::move(offMeshLinks), std::move(areaModifiers),
+                           saveOnDemandToCache, threading::JobPriority::LOW);
             submitted++;
         }
     }
@@ -590,61 +611,57 @@ namespace services
             if (collectAreaModifiers)
                 areaModifiers = collectAreaModifiers(bounds);
 
-            auto future = threading::JobSystem::instance().submit(
-                [this, coord, geom = std::move(geometry), settings = bakeSettings, links = std::move(offMeshLinks), mods = std::move(areaModifiers)]()
-                {
-                    return navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings, links, mods);
-                }, threading::JobPriority::NORMAL);
-
-            pendingTileBakes.push_back({coord, true, std::move(future)});
+            submitTileBake(coord, std::move(geometry), std::move(offMeshLinks), std::move(areaModifiers),
+                           true, threading::JobPriority::NORMAL);
             submitted++;
         }
     }
 
     void NavmeshTileManager::pollTileBakeCompletions()
     {
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        auto it = pendingTileBakes.begin();
-        while (it != pendingTileBakes.end())
+        // Drain results produced by bake worker threads and apply them on the main thread
+        // (addNavmeshTile / tile cache / event dispatch are all main-thread-only).
+        std::vector<CompletedTileBake> drained;
         {
-            if (it->future.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+            std::lock_guard<std::mutex> lock(completedBakesMutex);
+            drained.swap(completedBakes);
+        }
+
+        if (!drained.empty())
+        {
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            for (auto& cb : drained)
             {
-                auto tileData = it->future.get();
-                if (!tileData.data.empty())
-                {
-                    navmeshProvider->addNavmeshTile(tileData);
+                if (cb.tileData.data.empty())
+                    continue;
 
-                    // Mark as loaded in streamer (for on-demand generated tiles)
-                    if (!streamer.isTileLoaded(it->coord))
-                        streamer.markTileGenerated(it->coord);
+                navmeshProvider->addNavmeshTile(cb.tileData);
 
-                    if (tileCache && it->saveToCache)
-                    {
-                        tileCache->saveTile(it->coord, tileData);
-                    }
+                // Mark as loaded in streamer (for on-demand generated tiles)
+                if (!streamer.isTileLoaded(cb.coord))
+                    streamer.markTileGenerated(cb.coord);
 
-                    events::navmesh::NavmeshTileUpdatedNotification notif;
-                    notif.tileX = it->coord.x;
-                    notif.tileZ = it->coord.z;
-                    dispatcher.publish(notif);
-                }
+                if (tileCache && cb.saveToCache)
+                    tileCache->saveTile(cb.coord, cb.tileData);
 
-                it = pendingTileBakes.erase(it);
-            }
-            else
-            {
-                ++it;
+                events::navmesh::NavmeshTileUpdatedNotification notif;
+                notif.tileX = cb.coord.x;
+                notif.tileZ = cb.coord.z;
+                dispatcher.publish(notif);
             }
         }
+
+        // Reap finished jobs so pendingTileBakes reflects only in-flight bakes (drives throttling).
+        std::erase_if(pendingTileBakes, [](const PendingTileBake& p) { return p.handle.isComplete(); });
     }
 
     void NavmeshTileManager::clear()
     {
         for (auto& pending : pendingTileBakes)
+            pending.handle.wait();
         {
-            if (pending.future.valid())
-                pending.future.wait();
+            std::lock_guard<std::mutex> lock(completedBakesMutex);
+            completedBakes.clear();
         }
         dirtyTiles.clear();
         pendingGenerationTiles.clear();
