@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../core/VulkanMemoryManager.hpp"
+#include "../../raytracing/RTShadowMaskSet.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -106,10 +107,16 @@ namespace render::gpudriven
         vk::DescriptorSet shadowTextureDescriptorSet;
         vk::DescriptorSet giProbeDataDescriptorSet;
         vk::DescriptorSet causticDescriptorSet;
-        vk::DescriptorSet rtShadowMaskDescriptorSet;
         vk::DescriptorSet worldMaskDescriptorSet;
-        vk::DescriptorSet rtSpotShadowMaskDescriptorSet;
-        vk::DescriptorSet rtPointShadowMaskDescriptorSet;
+        // All three optional RT shadow masks (directional/spot/point) share one set at set 13
+        // (bindings 0/1/2), freeing sets 15/16 so the layout needs at most 14 bound sets.
+        std::unique_ptr<raytracing::RTShadowMaskSet> rtMaskSet;
+        // Last producer descriptor handed to each updateRT*ShadowMaskDescriptor. Retained so a
+        // pipeline rebuild can re-copy them into a freshly (re)created rtMaskSet without depending
+        // on the renderer re-issuing the updates afterward (TerrainMeshShaderPipeline does the same).
+        vk::DescriptorSet rtDirectionalMaskProducer;
+        vk::DescriptorSet rtSpotMaskProducer;
+        vk::DescriptorSet rtPointMaskProducer;
 
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
@@ -123,10 +130,8 @@ namespace render::gpudriven
         vk::DescriptorSetLayout emptyPlaceholderLayout;
 
         bool isTransparentMode = false;
-        bool rtShadowLayoutBound = false;
+        bool rtMaskBound = false;         // set 13 (shared directional/spot/point mask) present
         bool worldMaskLayoutBound = false;
-        bool rtSpotShadowLayoutBound = false;
-        bool rtPointShadowLayoutBound = false;
         uint32_t worldMaskSetIndex = 0;   // 11, or 14 when GI occupies set 11
         bool isWBOITMode = false;
         bool isWireframeMode = false;
@@ -176,15 +181,12 @@ namespace render::gpudriven
         vk::DescriptorSet getShadowTextureDescriptorSet() const { return shadowTextureDescriptorSet; }
         vk::DescriptorSet getGIProbeDataDescriptorSet() const { return giProbeDataDescriptorSet; }
         vk::DescriptorSet getCausticDescriptorSet() const { return causticDescriptorSet; }
-        vk::DescriptorSet getRTShadowMaskDescriptorSet() const { return rtShadowMaskDescriptorSet; }
-        bool hasRTShadowLayout() const { return rtShadowLayoutBound; }
+        // Shared RT shadow mask set (set 13): directional binding 0, spot binding 1, point binding 2.
+        vk::DescriptorSet getRTMaskDescriptorSet() const { return rtMaskSet ? rtMaskSet->getDescriptorSet() : nullptr; }
+        bool hasRTMask() const { return rtMaskBound; }
         vk::DescriptorSet getWorldMaskDescriptorSet() const { return worldMaskDescriptorSet; }
         bool hasWorldMaskLayout() const { return worldMaskLayoutBound; }
         uint32_t getWorldMaskSetIndex() const { return worldMaskSetIndex; }
-        vk::DescriptorSet getRTSpotShadowMaskDescriptorSet() const { return rtSpotShadowMaskDescriptorSet; }
-        bool hasRTSpotShadowLayout() const { return rtSpotShadowLayoutBound; }
-        vk::DescriptorSet getRTPointShadowMaskDescriptorSet() const { return rtPointShadowMaskDescriptorSet; }
-        bool hasRTPointShadowLayout() const { return rtPointShadowLayoutBound; }
 
         vk::DescriptorSetLayout getPerDrawDataLayout() const { return perDrawDataLayout; }
         vk::DescriptorSetLayout getMeshletDataLayout() const { return meshletDataLayout; }

@@ -118,6 +118,9 @@ namespace render::gpudriven
             vkDevice.destroyDescriptorSetLayout(emptyPlaceholderLayout);
             emptyPlaceholderLayout = nullptr;
         }
+        // Shared RT mask set (set 13): destroyed here and lazily rebuilt on the next pipeline build,
+        // which re-copies the cached producer descriptors (rt*MaskProducer) into the fresh set.
+        rtMaskSet.reset();
     }
 
     void MeshShaderPipeline::recreate(const MeshPipelineInitInfo& info)
@@ -309,7 +312,10 @@ namespace render::gpudriven
 
     void MeshShaderPipeline::updateRTShadowMaskDescriptor(vk::DescriptorSet rtShadowMaskDescSet)
     {
-        rtShadowMaskDescriptorSet = rtShadowMaskDescSet;
+        // Copy the directional RT producer's mask into the shared set's binding 0 (set 13).
+        rtDirectionalMaskProducer = rtShadowMaskDescSet;
+        if (rtMaskSet && rtShadowMaskDescSet)
+            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtShadowMaskDescSet);
     }
 
     void MeshShaderPipeline::updateWorldMaskDescriptor(vk::DescriptorSet worldMaskDescSet)
@@ -319,12 +325,18 @@ namespace render::gpudriven
 
     void MeshShaderPipeline::updateRTSpotShadowMaskDescriptor(vk::DescriptorSet rtSpotShadowMaskDescSet)
     {
-        rtSpotShadowMaskDescriptorSet = rtSpotShadowMaskDescSet;
+        // Copy the spot RT producer's mask array into the shared set's binding 1 (set 13).
+        rtSpotMaskProducer = rtSpotShadowMaskDescSet;
+        if (rtMaskSet && rtSpotShadowMaskDescSet)
+            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotShadowMaskDescSet);
     }
 
     void MeshShaderPipeline::updateRTPointShadowMaskDescriptor(vk::DescriptorSet rtPointShadowMaskDescSet)
     {
-        rtPointShadowMaskDescriptorSet = rtPointShadowMaskDescSet;
+        // Copy the point RT producer's mask array into the shared set's binding 2 (set 13).
+        rtPointMaskProducer = rtPointShadowMaskDescSet;
+        if (rtMaskSet && rtPointShadowMaskDescSet)
+            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointShadowMaskDescSet);
     }
 
     void MeshShaderPipeline::createPerDrawDataDescriptor()
@@ -585,23 +597,45 @@ namespace render::gpudriven
             setLayouts.push_back(info.causticLayout); // Set 12
         }
 
-        if (info.rtShadowMaskLayout)
+        // Set 13: shared RT shadow mask set. Directional (binding 0), spot (binding 1) and point
+        // (binding 2) RT masks are collapsed into one set so sets 15/16 are free — the layout now
+        // needs at most 14 bound sets, or 15 when the plugin world mask also sits at set 14 (GI on),
+        // down from 17 — so spot/point RT work on 16-bound-set GPUs.
+        // Present when any RT shadow type is online; the shader declares a binding only under its
+        // RT_*_ENABLED macro (each binding is PARTIALLY_BOUND, so inactive ones may stay unwritten).
+        const bool anyRTMask = info.rtShadowMaskLayout || info.rtSpotShadowMaskLayout ||
+                               info.rtPointShadowMaskLayout;
+        if (anyRTMask)
         {
-            // Pad with empty placeholders up to set 13
+            if (!rtMaskSet)
+            {
+                rtMaskSet = std::make_unique<raytracing::RTShadowMaskSet>(device);
+                rtMaskSet->init();
+            }
+            // Re-copy any producer descriptors already handed to us so a rebuilt (or freshly created)
+            // shared set is repopulated immediately, without relying on the renderer re-issuing
+            // updateRT*ShadowMaskDescriptor after this build. A bound-but-unwritten binding whose
+            // RT_*_ENABLED macro is active would otherwise be sampled as undefined.
+            if (rtDirectionalMaskProducer)
+                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtDirectionalMaskProducer);
+            if (rtSpotMaskProducer)
+                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotMaskProducer);
+            if (rtPointMaskProducer)
+                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointMaskProducer);
             ensureEmptyPlaceholder();
             while (setLayouts.size() < 13)
                 setLayouts.push_back(emptyPlaceholderLayout);
-            setLayouts.push_back(info.rtShadowMaskLayout); // Set 13
-            rtShadowLayoutBound = true;
+            setLayouts.push_back(rtMaskSet->getLayout()); // Set 13
+            rtMaskBound = true;
         }
         else
         {
-            rtShadowLayoutBound = false;
+            rtMaskBound = false;
         }
 
         if (info.worldMaskLayout && !worldMaskAtSet11)
         {
-            // GI occupies set 11 — world mask goes to set 14 (after RT shadow's 13)
+            // GI occupies set 11 — world mask goes to set 14 (after the RT mask set's 13)
             ensureEmptyPlaceholder();
             while (setLayouts.size() < 14)
                 setLayouts.push_back(emptyPlaceholderLayout);
@@ -609,36 +643,6 @@ namespace render::gpudriven
         }
         worldMaskLayoutBound = info.worldMaskLayout != nullptr;
         worldMaskSetIndex = worldMaskLayoutBound ? (worldMaskAtSet11 ? 11u : 14u) : 0u;
-
-        // Set 15: per-spot-light RT shadow mask array (VK-1175). Padded past the world mask's
-        // possible set 14 so it never collides with WORLD_MASK_SET.
-        if (info.rtSpotShadowMaskLayout)
-        {
-            ensureEmptyPlaceholder();
-            while (setLayouts.size() < 15)
-                setLayouts.push_back(emptyPlaceholderLayout);
-            setLayouts.push_back(info.rtSpotShadowMaskLayout); // Set 15
-            rtSpotShadowLayoutBound = true;
-        }
-        else
-        {
-            rtSpotShadowLayoutBound = false;
-        }
-
-        // Set 16: per-point-light RT shadow mask array (VK-1176). Padded past the spot mask's
-        // set 15 so the three RT mask paths (directional 13, spot 15, point 16) coexist.
-        if (info.rtPointShadowMaskLayout)
-        {
-            ensureEmptyPlaceholder();
-            while (setLayouts.size() < 16)
-                setLayouts.push_back(emptyPlaceholderLayout);
-            setLayouts.push_back(info.rtPointShadowMaskLayout); // Set 16
-            rtPointShadowLayoutBound = true;
-        }
-        else
-        {
-            rtPointShadowLayoutBound = false;
-        }
 
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |

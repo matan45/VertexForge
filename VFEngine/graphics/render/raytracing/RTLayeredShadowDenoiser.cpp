@@ -1,4 +1,4 @@
-#include "RTPointShadowDenoiser.hpp"
+#include "RTLayeredShadowDenoiser.hpp"
 #include "RTShadowDenoiser.hpp" // ShadowDenoiserUBO + ShadowSpatialPushConstants (shared layouts)
 #include <algorithm>
 #include "../../core/Device.hpp"
@@ -13,17 +13,17 @@
 
 namespace render::raytracing
 {
-    RTPointShadowDenoiser::RTPointShadowDenoiser(core::Device& device)
+    RTLayeredShadowDenoiser::RTLayeredShadowDenoiser(core::Device& device)
         : device(device)
     {
     }
 
-    RTPointShadowDenoiser::~RTPointShadowDenoiser()
+    RTLayeredShadowDenoiser::~RTLayeredShadowDenoiser()
     {
         cleanup();
     }
 
-    void RTPointShadowDenoiser::init(uint32_t width, uint32_t height)
+    void RTLayeredShadowDenoiser::init(uint32_t width, uint32_t height)
     {
         if (initialized) return;
 
@@ -44,10 +44,10 @@ namespace render::raytracing
         historyImagesInGeneral = false;
         spatialImagesReady = false;
         for (uint32_t s = 0; s < MAX_SLICES; ++s) sliceHistoryValid[s] = false;
-        vfLogInfo("RTPointShadowDenoiser: Initialized {}x{} x{} slices", width, height, MAX_SLICES);
+        vfLogInfo("RTLayeredShadowDenoiser: Initialized {}x{} x{} slices", width, height, MAX_SLICES);
     }
 
-    void RTPointShadowDenoiser::cleanup()
+    void RTLayeredShadowDenoiser::cleanup()
     {
         if (!initialized) return;
         vk::Device vkDevice = device.getLogicalDevice();
@@ -77,7 +77,7 @@ namespace render::raytracing
         initialized = false;
     }
 
-    void RTPointShadowDenoiser::resize(uint32_t width, uint32_t height)
+    void RTLayeredShadowDenoiser::resize(uint32_t width, uint32_t height)
     {
         if (!initialized) return;
         if (width == maskWidth && height == maskHeight) return;
@@ -92,10 +92,10 @@ namespace render::raytracing
         historyImagesInGeneral = false;
         spatialImagesReady = false;
         for (uint32_t s = 0; s < MAX_SLICES; ++s) sliceHistoryValid[s] = false;
-        vfLogInfo("RTPointShadowDenoiser: Resized to {}x{}", width, height);
+        vfLogInfo("RTLayeredShadowDenoiser: Resized to {}x{}", width, height);
     }
 
-    vk::ImageView RTPointShadowDenoiser::makeLayerView(vk::Image image, vk::Format format, uint32_t layer)
+    vk::ImageView RTLayeredShadowDenoiser::makeLayerView(vk::Image image, vk::Format format, uint32_t layer)
     {
         vk::ImageViewCreateInfo viewInfo{};
         viewInfo.image = image;
@@ -109,7 +109,7 @@ namespace render::raytracing
         return device.getLogicalDevice().createImageView(viewInfo);
     }
 
-    void RTPointShadowDenoiser::createImages(uint32_t w, uint32_t h)
+    void RTLayeredShadowDenoiser::createImages(uint32_t w, uint32_t h)
     {
         maskWidth = w;
         maskHeight = h;
@@ -174,7 +174,7 @@ namespace render::raytracing
         }
     }
 
-    void RTPointShadowDenoiser::destroyImages()
+    void RTLayeredShadowDenoiser::destroyImages()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -203,7 +203,7 @@ namespace render::raytracing
         denoisedOutputAllocation = {};
     }
 
-    void RTPointShadowDenoiser::createSamplers()
+    void RTLayeredShadowDenoiser::createSamplers()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -221,13 +221,13 @@ namespace render::raytracing
         denoisedMaskSampler = vkDevice.createSampler(linearInfo);
     }
 
-    void RTPointShadowDenoiser::createParamsBuffer()
+    void RTLayeredShadowDenoiser::createParamsBuffer()
     {
         paramsBuffer.create(device.getLogicalDevice(), device.getPhysicalDevice(),
                             sizeof(ShadowDenoiserUBO), device.getMemoryManager());
     }
 
-    void RTPointShadowDenoiser::createDescriptorLayouts()
+    void RTLayeredShadowDenoiser::createDescriptorLayouts()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -263,7 +263,7 @@ namespace render::raytracing
         denoisedMaskSamplerLayout = vkDevice.createDescriptorSetLayout(maskLayoutInfo);
     }
 
-    void RTPointShadowDenoiser::createDescriptorPools()
+    void RTLayeredShadowDenoiser::createDescriptorPools()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -300,7 +300,7 @@ namespace render::raytracing
         denoisedMaskSamplerPool = vkDevice.createDescriptorPool(maskPoolInfo);
     }
 
-    void RTPointShadowDenoiser::allocateDescriptorSets()
+    void RTLayeredShadowDenoiser::allocateDescriptorSets()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -339,7 +339,7 @@ namespace render::raytracing
         denoisedMaskSamplerDescSet = vkDevice.allocateDescriptorSets(maskAllocInfo)[0];
     }
 
-    void RTPointShadowDenoiser::createTemporalPipeline()
+    void RTLayeredShadowDenoiser::createTemporalPipeline()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -347,7 +347,7 @@ namespace render::raytracing
         temporalShader->readShader("../../resources/shaders/shadow/rt_shadow_temporal.glsl");
         if (temporalShader->getShaderStages().empty())
         {
-            vfLogError("RTPointShadowDenoiser: Failed to compile temporal shader: {}", temporalShader->getLastCompilationError());
+            vfLogError("RTLayeredShadowDenoiser: Failed to compile temporal shader: {}", temporalShader->getLastCompilationError());
             return;
         }
 
@@ -362,7 +362,7 @@ namespace render::raytracing
         temporalPipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
     }
 
-    void RTPointShadowDenoiser::createSpatialPipeline()
+    void RTLayeredShadowDenoiser::createSpatialPipeline()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -370,7 +370,7 @@ namespace render::raytracing
         spatialShader->readShader("../../resources/shaders/shadow/rt_shadow_spatial.glsl");
         if (spatialShader->getShaderStages().empty())
         {
-            vfLogError("RTPointShadowDenoiser: Failed to compile spatial shader: {}", spatialShader->getLastCompilationError());
+            vfLogError("RTLayeredShadowDenoiser: Failed to compile spatial shader: {}", spatialShader->getLastCompilationError());
             return;
         }
 
@@ -392,7 +392,7 @@ namespace render::raytracing
         spatialPipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
     }
 
-    void RTPointShadowDenoiser::createDenoisedMaskSamplerDescriptor()
+    void RTLayeredShadowDenoiser::createDenoisedMaskSamplerDescriptor()
     {
         vk::DescriptorImageInfo maskInfo{};
         maskInfo.sampler = denoisedMaskSampler;
@@ -409,18 +409,18 @@ namespace render::raytracing
         device.getLogicalDevice().updateDescriptorSets(1, &write, 0, nullptr);
     }
 
-    void RTPointShadowDenoiser::dispatch(vk::CommandBuffer cmd,
-                                          const std::vector<RTPointDenoiseInfo>& slices,
-                                          vk::ImageView depthView,
-                                          vk::Image depthImage,
-                                          vk::ImageView normalView,
-                                          vk::Image normalImage,
-                                          const glm::mat4& invViewProjection,
-                                          const glm::mat4& viewProjection,
-                                          uint32_t screenWidth,
-                                          uint32_t screenHeight,
-                                          uint32_t frameIndex,
-                                          uint32_t resourceFrameIndex)
+    void RTLayeredShadowDenoiser::dispatch(vk::CommandBuffer cmd,
+                                           const std::vector<RTLayeredDenoiseInfo>& slices,
+                                           vk::ImageView depthView,
+                                           vk::Image depthImage,
+                                           vk::ImageView normalView,
+                                           vk::Image normalImage,
+                                           const glm::mat4& invViewProjection,
+                                           const glm::mat4& viewProjection,
+                                           uint32_t screenWidth,
+                                           uint32_t screenHeight,
+                                           uint32_t frameIndex,
+                                           uint32_t resourceFrameIndex)
     {
         if (!initialized || !temporalPipeline || !spatialPipeline || slices.empty()) return;
 
@@ -474,7 +474,7 @@ namespace render::raytracing
         // Reset history for freshly (re)assigned slices: clear their read+write layers to 0 so the
         // previous owner's shadow doesn't bleed in via reprojection. Batched before the slice loop.
         bool anyReset = false;
-        for (const RTPointDenoiseInfo& s : slices)
+        for (const RTLayeredDenoiseInfo& s : slices)
             if (s.resetHistory && s.slice < MAX_SLICES) { anyReset = true; break; }
 
         if (anyReset)
@@ -495,7 +495,7 @@ namespace render::raytracing
 
             vk::ClearColorValue clearColor{};
             clearColor.setFloat32({0.0f, 0.0f, 0.0f, 0.0f});
-            for (const RTPointDenoiseInfo& s : slices)
+            for (const RTLayeredDenoiseInfo& s : slices)
             {
                 if (!s.resetHistory || s.slice >= MAX_SLICES) continue;
                 vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, s.slice, 1};
@@ -540,7 +540,7 @@ namespace render::raytracing
         const int stepSizes[MAX_SPATIAL_PASSES] = {1, 2, 4, 8, 16};
         const int numPasses = std::clamp(spatialPassCount, 1, MAX_SPATIAL_PASSES);
 
-        for (const RTPointDenoiseInfo& info : slices)
+        for (const RTLayeredDenoiseInfo& info : slices)
         {
             const uint32_t slice = info.slice;
             if (slice >= MAX_SLICES) continue;

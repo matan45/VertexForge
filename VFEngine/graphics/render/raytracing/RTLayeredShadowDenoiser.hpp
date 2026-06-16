@@ -16,30 +16,35 @@ namespace core
 
 namespace render::raytracing
 {
-    // One point mask slice scheduled for denoising this frame.
-    struct RTPointDenoiseInfo
+    // One mask slice scheduled for denoising this frame.
+    struct RTLayeredDenoiseInfo
     {
         uint32_t slice;                 // RT mask array layer (matches the pipeline's layer)
         vk::ImageView rawLayerView;     // pipeline's raw R8 layer view for this slice (eGeneral)
         bool resetHistory;              // true when this slice was just (re)assigned to a new light
     };
 
-    // Per-slice temporal + spatial à-trous denoiser for RT point shadows (VK-1176). Mirrors
-    // RTSpotShadowDenoiser but every internal buffer is array-layered: each point mask slice carries
-    // its own temporal history layer so reprojection is correct per light. Reuses the directional
-    // temporal/spatial compute shaders unchanged via per-layer (e2D) views. Spatial ping-pong
-    // buffers are shared 2D scratch (each slice fully completes before the next).
-    class RTPointShadowDenoiser
+    // Per-slice temporal + spatial à-trous denoiser for the per-light RT shadow masks shared by
+    // both spot lights (VK-1175) and point lights (VK-1176). Every internal buffer is array-layered:
+    // each mask slice carries its own temporal history layer so reprojection is correct per light.
+    // Reuses the directional temporal/spatial compute shaders unchanged via per-layer (e2D) views.
+    // Spatial ping-pong buffers are shared 2D scratch (each slice fully completes before the next).
+    // The renderer owns one instance per light type, each with its own independent slice set 0..N-1.
+    class RTLayeredShadowDenoiser
     {
     public:
-        static constexpr uint32_t MAX_SLICES = render::lighting::LightConstants::MAX_RT_POINT_LIGHTS;
+        // Spot and point RT budgets share the same fixed slice count; one denoiser class serves both.
+        static_assert(render::lighting::LightConstants::MAX_RT_SPOT_LIGHTS ==
+                          render::lighting::LightConstants::MAX_RT_POINT_LIGHTS,
+                      "RTLayeredShadowDenoiser assumes spot and point RT budgets share the slice count");
+        static constexpr uint32_t MAX_SLICES = render::lighting::LightConstants::MAX_RT_SPOT_LIGHTS;
         static constexpr int MAX_SPATIAL_PASSES = 5;
 
-        explicit RTPointShadowDenoiser(core::Device& device);
-        ~RTPointShadowDenoiser();
+        explicit RTLayeredShadowDenoiser(core::Device& device);
+        ~RTLayeredShadowDenoiser();
 
-        RTPointShadowDenoiser(const RTPointShadowDenoiser&) = delete;
-        RTPointShadowDenoiser& operator=(const RTPointShadowDenoiser&) = delete;
+        RTLayeredShadowDenoiser(const RTLayeredShadowDenoiser&) = delete;
+        RTLayeredShadowDenoiser& operator=(const RTLayeredShadowDenoiser&) = delete;
 
         void init(uint32_t width, uint32_t height);
         void cleanup();
@@ -49,7 +54,7 @@ namespace render::raytracing
         // directional denoiser: depth/normal arrive in eShaderReadOnlyOptimal and are transitioned
         // back to attachment at the end; the raw mask array stays in eGeneral (the pipeline owns it).
         void dispatch(vk::CommandBuffer cmd,
-                      const std::vector<RTPointDenoiseInfo>& slices,
+                      const std::vector<RTLayeredDenoiseInfo>& slices,
                       vk::ImageView depthView,
                       vk::Image depthImage,
                       vk::ImageView normalView,
@@ -63,7 +68,7 @@ namespace render::raytracing
 
         bool isInitialized() const { return initialized; }
 
-        // Fragment shader consumption (set 16): denoised mask array.
+        // Fragment shader consumption: denoised mask array.
         vk::DescriptorSetLayout getDenoisedMaskSamplerLayout() const { return denoisedMaskSamplerLayout; }
         vk::DescriptorSet getDenoisedMaskSamplerDescriptorSet() const { return denoisedMaskSamplerDescSet; }
 

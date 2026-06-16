@@ -248,32 +248,16 @@ namespace render::gpudriven
 
         if (pipelineHasSet12)
         {
-            if (rtShadowEnabled && rtShadowMaskDescriptorSet)
+            if (rtMaskBound && rtMaskSet)
             {
-                currentSets.push_back(emptyDescriptorSet5); // Set 12 (placeholder)
-                currentSets.push_back(rtShadowMaskDescriptorSet); // Set 13
+                // Shared RT shadow mask set at set 13 (directional/spot/point in bindings 0/1/2).
+                currentSets.push_back(emptyDescriptorSet5);           // Set 12 (placeholder)
+                currentSets.push_back(rtMaskSet->getDescriptorSet()); // Set 13 (shared mask)
             }
             else if (causticEnabled && causticDescriptorSet)
             {
                 currentSets.push_back(causticDescriptorSet); // Set 12
             }
-        }
-
-        // Set 15: per-spot-light RT shadow mask array (VK-1175). Pad intervening sets with the
-        // empty placeholder so the contiguous bind matches the pipeline layout's set-15 slot.
-        if (rtSpotShadowEnabled && rtSpotShadowMaskDescriptorSet)
-        {
-            while (currentSets.size() < 15)
-                currentSets.push_back(emptyDescriptorSet5);
-            currentSets.push_back(rtSpotShadowMaskDescriptorSet); // Set 15
-        }
-
-        // Set 16: per-point-light RT shadow mask array (VK-1176). Pad past the spot mask's set 15.
-        if (rtPointShadowEnabled && rtPointShadowMaskDescriptorSet)
-        {
-            while (currentSets.size() < 16)
-                currentSets.push_back(emptyDescriptorSet5);
-            currentSets.push_back(rtPointShadowMaskDescriptorSet); // Set 16
         }
 
         bindDescriptorSetsInBatches(cmd, currentSets.data(), static_cast<uint32_t>(currentSets.size()));

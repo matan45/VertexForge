@@ -1,4 +1,4 @@
-#include "RTPointShadowPipeline.hpp"
+#include "RTLayeredShadowPipeline.hpp"
 #include "RTShadowPipeline.hpp" // RTShadowParams (shared input UBO layout)
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
@@ -12,22 +12,22 @@
 
 namespace render::raytracing
 {
-    RTPointShadowPipeline::RTPointShadowPipeline(core::Device& device)
+    RTLayeredShadowPipeline::RTLayeredShadowPipeline(core::Device& device)
         : device(device)
     {
     }
 
-    RTPointShadowPipeline::~RTPointShadowPipeline()
+    RTLayeredShadowPipeline::~RTLayeredShadowPipeline()
     {
         cleanup();
     }
 
-    void RTPointShadowPipeline::init(uint32_t width, uint32_t height, vk::DescriptorSetLayout tlasLayout)
+    void RTLayeredShadowPipeline::init(uint32_t width, uint32_t height, vk::DescriptorSetLayout tlasLayout)
     {
         if (initialized) return;
         if (!device.isRayQuerySupported())
         {
-            vfLogWarning("RTPointShadowPipeline: Ray query not supported");
+            vfLogWarning("RTLayeredShadowPipeline: Ray query not supported");
             return;
         }
 
@@ -47,10 +47,10 @@ namespace render::raytracing
 
         initialized = true;
         firstFrame = true;
-        vfLogInfo("RTPointShadowPipeline: Initialized {}x{} x{} slices", width, height, MAX_SLICES);
+        vfLogInfo("RTLayeredShadowPipeline: Initialized {}x{} x{} slices", width, height, MAX_SLICES);
     }
 
-    void RTPointShadowPipeline::cleanup()
+    void RTLayeredShadowPipeline::cleanup()
     {
         if (!initialized) return;
         vk::Device vkDevice = device.getLogicalDevice();
@@ -77,7 +77,7 @@ namespace render::raytracing
         initialized = false;
     }
 
-    bool RTPointShadowPipeline::resize(uint32_t width, uint32_t height)
+    bool RTLayeredShadowPipeline::resize(uint32_t width, uint32_t height)
     {
         if (!initialized) return false;
         if (width == maskWidth && height == maskHeight) return false;
@@ -91,11 +91,11 @@ namespace render::raytracing
         createShadowMaskSamplerDescriptor();
         firstFrame = true;
 
-        vfLogInfo("RTPointShadowPipeline: Resized to {}x{}", width, height);
+        vfLogInfo("RTLayeredShadowPipeline: Resized to {}x{}", width, height);
         return true;
     }
 
-    void RTPointShadowPipeline::createShadowMaskImage(uint32_t w, uint32_t h)
+    void RTLayeredShadowPipeline::createShadowMaskImage(uint32_t w, uint32_t h)
     {
         maskWidth = w;
         maskHeight = h;
@@ -138,7 +138,7 @@ namespace render::raytracing
         core::ImageUtilities::createImageView(arrayViewReq, shadowMaskArraySampledView);
     }
 
-    void RTPointShadowPipeline::destroyShadowMaskImage()
+    void RTLayeredShadowPipeline::destroyShadowMaskImage()
     {
         vk::Device vkDevice = device.getLogicalDevice();
         for (uint32_t k = 0; k < MAX_SLICES; ++k)
@@ -152,7 +152,7 @@ namespace render::raytracing
         shadowMaskAllocation = {};
     }
 
-    void RTPointShadowPipeline::createSamplers()
+    void RTLayeredShadowPipeline::createSamplers()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -172,13 +172,13 @@ namespace render::raytracing
         shadowMaskSampler = vkDevice.createSampler(maskSamplerInfo);
     }
 
-    void RTPointShadowPipeline::createParamsBuffer()
+    void RTLayeredShadowPipeline::createParamsBuffer()
     {
         paramsBuffer.create(device.getLogicalDevice(), device.getPhysicalDevice(),
                             sizeof(RTShadowParams), device.getMemoryManager());
     }
 
-    void RTPointShadowPipeline::createDescriptorLayouts(vk::DescriptorSetLayout tlasLayout)
+    void RTLayeredShadowPipeline::createDescriptorLayouts(vk::DescriptorSetLayout tlasLayout)
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -201,7 +201,7 @@ namespace render::raytracing
         outputLayoutInfo.pBindings = &outputBinding;
         outputLayout = vkDevice.createDescriptorSetLayout(outputLayoutInfo);
 
-        // Fragment sampler layout (set 16): sampler2DArray
+        // Fragment sampler layout: sampler2DArray
         vk::DescriptorSetLayoutBinding maskBinding{0, vk::DescriptorType::eCombinedImageSampler, 1,
                                                     vk::ShaderStageFlagBits::eFragment};
         vk::DescriptorSetLayoutCreateInfo maskLayoutInfo{};
@@ -210,7 +210,7 @@ namespace render::raytracing
         shadowMaskSamplerLayout = vkDevice.createDescriptorSetLayout(maskLayoutInfo);
     }
 
-    void RTPointShadowPipeline::createDescriptorPool()
+    void RTLayeredShadowPipeline::createDescriptorPool()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -233,7 +233,7 @@ namespace render::raytracing
         shadowMaskSamplerPool = vkDevice.createDescriptorPool(maskPoolInfo);
     }
 
-    void RTPointShadowPipeline::allocateDescriptorSets()
+    void RTLayeredShadowPipeline::allocateDescriptorSets()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -262,16 +262,16 @@ namespace render::raytracing
         shadowMaskSamplerDescSet = vkDevice.allocateDescriptorSets(maskAllocInfo)[0];
     }
 
-    void RTPointShadowPipeline::createComputePipeline()
+    void RTLayeredShadowPipeline::createComputePipeline()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
         shader = std::make_unique<core::Shader>(device);
-        shader->readShader("../../resources/shaders/shadow/rt_shadow_point.glsl");
+        shader->readShader("../../resources/shaders/shadow/rt_shadow_layered.glsl");
 
         if (shader->getShaderStages().empty())
         {
-            vfLogError("RTPointShadowPipeline: Failed to compile shader: {}", shader->getLastCompilationError());
+            vfLogError("RTLayeredShadowPipeline: Failed to compile shader: {}", shader->getLastCompilationError());
             return;
         }
 
@@ -280,7 +280,7 @@ namespace render::raytracing
         vk::PushConstantRange pushRange{};
         pushRange.stageFlags = vk::ShaderStageFlagBits::eCompute;
         pushRange.offset = 0;
-        pushRange.size = sizeof(RTPointShadowPushConstants);
+        pushRange.size = sizeof(RTLayeredShadowPushConstants);
 
         vk::PipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
@@ -295,7 +295,7 @@ namespace render::raytracing
         computePipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
     }
 
-    void RTPointShadowPipeline::updateOutputDescriptors()
+    void RTLayeredShadowPipeline::updateOutputDescriptors()
     {
         for (uint32_t k = 0; k < MAX_SLICES; ++k)
         {
@@ -314,7 +314,7 @@ namespace render::raytracing
         }
     }
 
-    void RTPointShadowPipeline::createShadowMaskSamplerDescriptor()
+    void RTLayeredShadowPipeline::createShadowMaskSamplerDescriptor()
     {
         vk::DescriptorImageInfo maskInfo{};
         maskInfo.sampler = shadowMaskSampler;
@@ -331,19 +331,19 @@ namespace render::raytracing
         device.getLogicalDevice().updateDescriptorSets(1, &write, 0, nullptr);
     }
 
-    void RTPointShadowPipeline::dispatch(vk::CommandBuffer cmd,
-                                          vk::ImageView depthView,
-                                          vk::Image depthImage,
-                                          vk::ImageView normalView,
-                                          vk::Image normalImage,
-                                          vk::DescriptorSet tlasDescriptorSet,
-                                          const glm::mat4& invViewProjection,
-                                          const glm::vec3& cameraPos,
-                                          float farPlane,
-                                          uint32_t screenWidth, uint32_t screenHeight,
-                                          const std::vector<RTPointDispatchInfo>& lights,
-                                          bool skipFinalTransitions,
-                                          uint32_t frameIndex)
+    void RTLayeredShadowPipeline::dispatch(vk::CommandBuffer cmd,
+                                           vk::ImageView depthView,
+                                           vk::Image depthImage,
+                                           vk::ImageView normalView,
+                                           vk::Image normalImage,
+                                           vk::DescriptorSet tlasDescriptorSet,
+                                           const glm::mat4& invViewProjection,
+                                           const glm::vec3& cameraPos,
+                                           float farPlane,
+                                           uint32_t screenWidth, uint32_t screenHeight,
+                                           const std::vector<RTLayeredDispatchInfo>& lights,
+                                           bool skipFinalTransitions,
+                                           uint32_t frameIndex)
     {
         if (!initialized || !computePipeline || lights.empty()) return;
 
@@ -437,7 +437,7 @@ namespace render::raytracing
         uint32_t groupsX = (screenWidth + 7) / 8;
         uint32_t groupsY = (screenHeight + 7) / 8;
 
-        for (const RTPointDispatchInfo& light : lights)
+        for (const RTLayeredDispatchInfo& light : lights)
         {
             uint32_t slice = light.slice;
             if (slice >= MAX_SLICES) continue;
@@ -446,11 +446,12 @@ namespace render::raytracing
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout,
                                    0, static_cast<uint32_t>(descSets.size()), descSets.data(), 0, nullptr);
 
-            RTPointShadowPushConstants pc{};
-            pc.lightPosition = glm::vec4(light.position, light.radius);
-            pc.biasParams = glm::vec4(this->normalBias, this->rayTMin, 0.0f, 0.0f);
+            RTLayeredShadowPushConstants pc{};
+            pc.lightPosition = glm::vec4(light.position, light.range);
+            pc.lightDirection = glm::vec4(glm::normalize(light.direction), light.cosOuterAngle);
+            pc.biasParams = glm::vec4(this->normalBias, this->rayTMin, light.cosInnerAngle, 0.0f);
             cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0,
-                              sizeof(RTPointShadowPushConstants), &pc);
+                              sizeof(RTLayeredShadowPushConstants), &pc);
 
             cmd.dispatch(groupsX, groupsY, 1);
         }

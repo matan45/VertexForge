@@ -21,10 +21,13 @@ layout(std140, set = 1, binding = 2) uniform RTShadowParams {
 // so the shader writes a plain image2D and never needs the slice index for addressing.
 layout(set = 2, binding = 0, r8) uniform image2D shadowMaskSlice;
 
-// Push constants: the point light this dispatch traces toward.
+// Push constants: the light this dispatch traces toward. Shared by spot (VK-1175) and point
+// (VK-1176) lights — a point light is a spot light with the cone disabled via the sentinel
+// cosOuterAngle = -2.0 (any value < -1, since the cone cosine can never go below -1).
 layout(push_constant) uniform PushConstants {
-    vec4 lightPosition;     // xyz = world position, w = radius (ray tMax cap)
-    vec4 biasParams;        // x = normal bias, y = ray t_min, zw = unused
+    vec4 lightPosition;     // xyz = world position, w = range/radius (ray tMax cap)
+    vec4 lightDirection;    // xyz = spot axis (normalized), w = cosOuterAngle (-2.0 => point, no cone)
+    vec4 biasParams;        // x = normal bias, y = ray t_min, z = cosInnerAngle, w = unused
 };
 
 vec3 reconstructWorldPos(vec2 uv, float depth) {
@@ -54,10 +57,25 @@ void main() {
     float dist = length(toLight);
     vec3 rayDir = toLight / max(dist, 1e-4);
 
-    // Radius early-out: pixels beyond the light's reach are unshadowed by this light.
+    // Range/radius early-out: pixels beyond the light's reach are unshadowed by this light.
     if (dist > lightPosition.w) {
         imageStore(shadowMaskSlice, pixel, vec4(1.0));
         return;
+    }
+
+    // Cone test (spot lights only). Point lights pass cosOuterAngle = -2.0, which disables the cone
+    // path entirely; coneT stays 1.0 so the final mix is a no-op and the result matches a bare ray.
+    float coneT = 1.0;
+    if (lightDirection.w > -1.5) {
+        // Cone early-out: angle between the spot axis and the (light -> fragment) direction.
+        // -rayDir points from the light toward the fragment; compare its cosine to cosOuterAngle.
+        float cosAngle = dot(normalize(-rayDir), normalize(lightDirection.xyz));
+        if (cosAngle < lightDirection.w) {
+            imageStore(shadowMaskSlice, pixel, vec4(1.0));
+            return;
+        }
+        // Smooth cone falloff (outer -> inner): computed here, applied after the ray trace below.
+        coneT = smoothstep(lightDirection.w, biasParams.z, cosAngle); // 0 at outer, 1 at inner
     }
 
     vec3 N = normalize(texture(normalBuffer, uv).xyz);
@@ -82,6 +100,10 @@ void main() {
     if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
         shadow = 0.0; // occluded
     }
+
+    // Fade the shadow back to "lit" at the cone edge so the RT result transitions seamlessly into the
+    // VSM/unlit region just outside the cone. coneT == 1.0 for point lights, so this is a no-op there.
+    shadow = mix(1.0, shadow, coneT);
 
     imageStore(shadowMaskSlice, pixel, vec4(shadow));
 }

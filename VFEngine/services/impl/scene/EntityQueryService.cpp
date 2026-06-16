@@ -204,6 +204,7 @@ namespace services
             HAS_CASE(Decal, DecalComponent);
             HAS_CASE(Terrain, TerrainComponent);
             HAS_CASE(TerrainTile, TerrainTileComponent);
+            HAS_CASE(NavmeshAgent, NavmeshAgentComponent);
         default:
             return false;
         }
@@ -264,6 +265,7 @@ namespace services
         CHECK_COMP(Decal, DecalComponent);
         CHECK_COMP(Terrain, TerrainComponent);
         CHECK_COMP(TerrainTile, TerrainTileComponent);
+        CHECK_COMP(NavmeshAgent, NavmeshAgentComponent);
 
 #undef CHECK_COMP
 

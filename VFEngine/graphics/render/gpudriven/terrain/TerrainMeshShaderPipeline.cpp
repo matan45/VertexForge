@@ -270,6 +270,10 @@ namespace render::gpudriven
 
         cleanupDescriptorResources();
 
+        // Shared RT mask set (set 13): destroy its layout/pool/set; rebuilt + re-copied on next build.
+        rtMaskSet.reset();
+        rtMaskBound = false;
+
         initialized = false;
     }
 
@@ -401,11 +405,15 @@ namespace render::gpudriven
     bool TerrainMeshShaderPipeline::loadTerrainShaders()
     {
         terrainShader = std::make_unique<core::Shader>(device);
+        // All RT shadow masks share set 13 (directional binding 0, spot 1, point 2). Caustics keep
+        // set 12 but, as before, are mutually exclusive with the RT-mask region: set 12 becomes a
+        // placeholder when any RT type is on, so the caustic macro is suppressed in that case.
+        const bool anyRT = anyRTMaskActive();
         if (rtShadowEnabled && rtShadowMaskLayout)
         {
             terrainShader->addMacroDefinition("RT_SHADOW_ENABLED");
         }
-        else if (causticEnabled && cachedCausticLayout)
+        else if (causticEnabled && cachedCausticLayout && !anyRT)
         {
             terrainShader->addMacroDefinition("CAUSTICS_ENABLED");
             terrainShader->addMacroDefinition("CAUSTIC_SET", "12");
@@ -414,7 +422,6 @@ namespace render::gpudriven
         {
             terrainShader->addMacroDefinition("WORLD_MASK_ENABLED");
         }
-        // Independent of the set-12/13 RT/caustics region — the spot mask array lives at set 15.
         if (rtSpotShadowEnabled && rtSpotShadowMaskLayout)
         {
             terrainShader->addMacroDefinition("RT_SPOT_SHADOW_ENABLED");
@@ -475,33 +482,35 @@ namespace render::gpudriven
         };
 
         pipelineHasSet12 = false;
-        if (rtShadowEnabled && rtShadowMaskLayout)
+        rtMaskBound = false;
+        const bool anyRT = anyRTMaskActive();
+        if (anyRT)
         {
-            // RT shadow mask is at set 13 in the shader; insert empty placeholder at set 12
-            setLayouts.push_back(emptyLayout);         // Set 12 (placeholder)
-            setLayouts.push_back(rtShadowMaskLayout);  // Set 13
+            // All RT shadow masks share set 13; set 12 is a placeholder (caustics and the RT-mask
+            // region remain mutually exclusive on terrain, as before). The three producer descriptor
+            // sets are copied into the shared set here so they survive this rebuild regardless of the
+            // setRT*/updateRT*/recreate call order (the renderer updates them before recreate).
+            if (!rtMaskSet)
+            {
+                rtMaskSet = std::make_unique<raytracing::RTShadowMaskSet>(device);
+                rtMaskSet->init();
+            }
+            if (rtShadowMaskDescriptorSet)
+                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtShadowMaskDescriptorSet);
+            if (rtSpotShadowMaskDescriptorSet)
+                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotShadowMaskDescriptorSet);
+            if (rtPointShadowMaskDescriptorSet)
+                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointShadowMaskDescriptorSet);
+
+            setLayouts.push_back(emptyLayout);            // Set 12 (placeholder)
+            setLayouts.push_back(rtMaskSet->getLayout()); // Set 13 (shared mask)
             pipelineHasSet12 = true;
+            rtMaskBound = true;
         }
         else if (causticEnabled && cachedCausticLayout)
         {
             setLayouts.push_back(cachedCausticLayout); // Set 12
             pipelineHasSet12 = true;
-        }
-
-        // Set 15: per-spot-light RT shadow mask array (VK-1175). Pad past the set-12/13 region.
-        if (rtSpotShadowEnabled && rtSpotShadowMaskLayout)
-        {
-            while (setLayouts.size() < 15)
-                setLayouts.push_back(emptyLayout);
-            setLayouts.push_back(rtSpotShadowMaskLayout); // Set 15
-        }
-
-        // Set 16: per-point-light RT shadow mask array (VK-1176). Pad past the spot mask's set 15.
-        if (rtPointShadowEnabled && rtPointShadowMaskLayout)
-        {
-            while (setLayouts.size() < 16)
-                setLayouts.push_back(emptyLayout);
-            setLayouts.push_back(rtPointShadowMaskLayout); // Set 16
         }
 
         vk::PushConstantRange pushConstantRange{};

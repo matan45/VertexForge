@@ -114,7 +114,12 @@ namespace core
             return nullptr;
         }
 
-        if (!rcBuildRegions(&ctx, *chf, 0, cfg.minRegionArea, cfg.mergeRegionArea))
+        // borderSize MUST match the expanded rasterization border (cfg.borderSize):
+        // rcBuildRegions stores it into chf.borderSize, which rcBuildContours uses to
+        // crop the tile to its real bounds and mark the boundary/portal vertices.
+        // Passing 0 here leaves tiles un-stitched, so crowd agents can never path
+        // across a tile boundary (VK-1382).
+        if (!rcBuildRegions(&ctx, *chf, cfg.borderSize, cfg.minRegionArea, cfg.mergeRegionArea))
         {
             vfLogError("NavmeshAdapter: Failed to build regions");
             rcFreeCompactHeightfield(chf);
