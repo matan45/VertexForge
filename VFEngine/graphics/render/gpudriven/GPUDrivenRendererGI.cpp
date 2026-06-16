@@ -547,7 +547,7 @@ namespace render::gpudriven
     {
         return rtSpotShadowEnabled &&
                device.isRayQuerySupported() &&
-               hasBoundDescriptorSetCapacity(16) && // spot RT mask binds set 15
+               hasBoundDescriptorSetCapacity(14) && // spot RT mask shares set 13 (highest set 13)
                accelStructManager && accelStructManager->isTLASReady() &&
                depthPrepass && depthPrepass->isInitialized() &&
                lightBufferManager && lightBufferManager->getSpotLightCount() > 0;
@@ -573,7 +573,7 @@ namespace render::gpudriven
     {
         return rtPointShadowEnabled &&
                device.isRayQuerySupported() &&
-               hasBoundDescriptorSetCapacity(17) && // point RT mask binds set 16
+               hasBoundDescriptorSetCapacity(14) && // point RT mask shares set 13 (highest set 13)
                accelStructManager && accelStructManager->isTLASReady() &&
                depthPrepass && depthPrepass->isInitialized() &&
                lightBufferManager && lightBufferManager->getPointLightCount() > 0;
@@ -1038,7 +1038,7 @@ namespace render::gpudriven
         // pipelines with the set-15 spot mask array (preserving the directional set-13 mask).
         if (!rtSpotShadowPipeline)
         {
-            auto pipeline = std::make_unique<raytracing::RTSpotShadowPipeline>(device);
+            auto pipeline = std::make_unique<raytracing::RTLayeredShadowPipeline>(device);
             pipeline->init(depthPrepass->getWidth(), depthPrepass->getHeight(),
                            accelStructManager->getTLASDescriptorLayout());
             if (!pipeline->isInitialized())
@@ -1047,7 +1047,7 @@ namespace render::gpudriven
 
             if (meshShaderPipeline && shadowSystem)
             {
-                rtSpotShadowDenoiser = std::make_unique<raytracing::RTSpotShadowDenoiser>(device);
+                rtSpotShadowDenoiser = std::make_unique<raytracing::RTLayeredShadowDenoiser>(device);
                 rtSpotShadowDenoiser->init(depthPrepass->getWidth(), depthPrepass->getHeight());
 
                 const bool denoised = rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized();
@@ -1182,14 +1182,14 @@ namespace render::gpudriven
         const auto& sliceLights = lightBufferManager->getRTSpotSliceLights();
         const auto& sliceValid = lightBufferManager->getRTSpotSliceValid();
 
-        std::vector<raytracing::RTSpotDispatchInfo> dispatchList;
-        for (uint32_t s = 0; s < raytracing::RTSpotShadowPipeline::MAX_SLICES; ++s)
+        std::vector<raytracing::RTLayeredDispatchInfo> dispatchList;
+        for (uint32_t s = 0; s < raytracing::RTLayeredShadowPipeline::MAX_SLICES; ++s)
         {
             if (!sliceValid[s]) continue;
             int idx = lightBufferManager->getSpotIndexForEntity(sliceLights[s]);
             if (idx < 0) continue;
             const auto& sl = lightBufferManager->getSpotLight(static_cast<uint32_t>(idx));
-            raytracing::RTSpotDispatchInfo info{};
+            raytracing::RTLayeredDispatchInfo info{};
             info.slice = s;
             info.position = sl.position;
             info.range = sl.range;
@@ -1221,10 +1221,10 @@ namespace render::gpudriven
 
         if (useDenoiser)
         {
-            std::vector<raytracing::RTSpotDenoiseInfo> denoiseList;
+            std::vector<raytracing::RTLayeredDenoiseInfo> denoiseList;
             for (const auto& d : dispatchList)
             {
-                raytracing::RTSpotDenoiseInfo di{};
+                raytracing::RTLayeredDenoiseInfo di{};
                 di.slice = d.slice;
                 di.rawLayerView = rtSpotShadowPipeline->getShadowMaskLayerView(d.slice);
                 di.resetHistory = std::find(reassigned.begin(), reassigned.end(), d.slice) != reassigned.end();
@@ -1246,7 +1246,7 @@ namespace render::gpudriven
         // pipelines with the set-16 point mask array (preserving directional set 13 + spot set 15).
         if (!rtPointShadowPipeline)
         {
-            auto pipeline = std::make_unique<raytracing::RTPointShadowPipeline>(device);
+            auto pipeline = std::make_unique<raytracing::RTLayeredShadowPipeline>(device);
             pipeline->init(depthPrepass->getWidth(), depthPrepass->getHeight(),
                            accelStructManager->getTLASDescriptorLayout());
             if (!pipeline->isInitialized())
@@ -1255,7 +1255,7 @@ namespace render::gpudriven
 
             if (meshShaderPipeline && shadowSystem)
             {
-                rtPointShadowDenoiser = std::make_unique<raytracing::RTPointShadowDenoiser>(device);
+                rtPointShadowDenoiser = std::make_unique<raytracing::RTLayeredShadowDenoiser>(device);
                 rtPointShadowDenoiser->init(depthPrepass->getWidth(), depthPrepass->getHeight());
 
                 const bool denoised = rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized();
@@ -1384,17 +1384,21 @@ namespace render::gpudriven
         const auto& sliceLights = lightBufferManager->getRTPointSliceLights();
         const auto& sliceValid = lightBufferManager->getRTPointSliceValid();
 
-        std::vector<raytracing::RTPointDispatchInfo> dispatchList;
-        for (uint32_t s = 0; s < raytracing::RTPointShadowPipeline::MAX_SLICES; ++s)
+        std::vector<raytracing::RTLayeredDispatchInfo> dispatchList;
+        for (uint32_t s = 0; s < raytracing::RTLayeredShadowPipeline::MAX_SLICES; ++s)
         {
             if (!sliceValid[s]) continue;
             int idx = lightBufferManager->getPointIndexForEntity(sliceLights[s]);
             if (idx < 0) continue;
             const auto& pl = lightBufferManager->getPointLight(static_cast<uint32_t>(idx));
-            raytracing::RTPointDispatchInfo info{};
+            raytracing::RTLayeredDispatchInfo info{};
             info.slice = s;
             info.position = pl.position;
-            info.radius = pl.radius;
+            info.range = pl.radius;
+            // Point light = spot light with the cone disabled (cosOuterAngle = -2.0 sentinel).
+            info.direction = glm::vec3(0.0f, 0.0f, 1.0f); // ignored when the cone is disabled
+            info.cosInnerAngle = -2.0f;
+            info.cosOuterAngle = -2.0f;
             dispatchList.push_back(info);
         }
 
@@ -1420,10 +1424,10 @@ namespace render::gpudriven
 
         if (useDenoiser)
         {
-            std::vector<raytracing::RTPointDenoiseInfo> denoiseList;
+            std::vector<raytracing::RTLayeredDenoiseInfo> denoiseList;
             for (const auto& d : dispatchList)
             {
-                raytracing::RTPointDenoiseInfo di{};
+                raytracing::RTLayeredDenoiseInfo di{};
                 di.slice = d.slice;
                 di.rawLayerView = rtPointShadowPipeline->getShadowMaskLayerView(d.slice);
                 di.resetHistory = std::find(reassigned.begin(), reassigned.end(), d.slice) != reassigned.end();

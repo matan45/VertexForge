@@ -16,41 +16,55 @@ namespace core
 
 namespace render::raytracing
 {
-    // One point light scheduled for an RT shadow dispatch this frame (drives the per-pixel ray).
-    struct RTPointDispatchInfo
+    // One light scheduled for an RT shadow dispatch this frame (drives the per-pixel ray). Shared by
+    // spot lights (VK-1175) and point lights (VK-1176): a point light is a spot light with the cone
+    // disabled. Point callers pass cosOuterAngle = cosInnerAngle = -2.0 (a sentinel < -1 that the
+    // shader reads as "no cone") and any unit direction (ignored). 'range' is the spot range or the
+    // point radius — both cap the ray tMax.
+    struct RTLayeredDispatchInfo
     {
         uint32_t slice;        // RT mask array layer to write
         glm::vec3 position;    // world position
-        float radius;          // ray tMax cap (light reach)
+        float range;           // ray tMax cap (spot range / point radius)
+        glm::vec3 direction;   // spot axis (normalized); point lights pass {0,0,1} (ignored)
+        float cosInnerAngle;   // smooth cone falloff start; ignored for point (sentinel)
+        float cosOuterAngle;   // hard cone boundary; point lights pass -2.0 to disable the cone
     };
 
-    struct RTPointShadowPushConstants
+    struct RTLayeredShadowPushConstants
     {
-        glm::vec4 lightPosition;    // xyz = world pos, w = radius
-        glm::vec4 biasParams;       // x = normal bias, y = t_min, zw = unused
+        glm::vec4 lightPosition;    // xyz = world pos, w = range/radius
+        glm::vec4 lightDirection;   // xyz = spot axis, w = cosOuterAngle (-2.0 = point, no cone)
+        glm::vec4 biasParams;       // x = normal bias, y = t_min, z = cosInnerAngle, w = unused
     };
-    static_assert(sizeof(RTPointShadowPushConstants) == 32);
+    static_assert(sizeof(RTLayeredShadowPushConstants) == 48);
 
-    // Ray-traced shadow override for a budgeted set of point lights (VK-1176). Mirrors
-    // RTSpotShadowPipeline but is simpler — one ray per pixel toward the light position with a
-    // radius early-out (no cone). Writes into one slice of an R8 sampler2DArray per light, so the
-    // fragment shader can pick a light's mask by its rtMaskSlice. Reuses the shared TLAS.
-    class RTPointShadowPipeline
+    // Ray-traced shadow override for a budgeted set of spot or point lights. Writes into one slice of
+    // an R8 sampler2DArray per light, so the fragment shader can pick a light's mask by its
+    // rtMaskSlice. Reuses the shared TLAS. The renderer owns one instance per light type (spot/point),
+    // each with its own mask array and per-instance ray bias settings. The cone test in the shader is
+    // skipped for point lights via the -2.0 cosOuterAngle sentinel, so one pipeline + one shader serve
+    // both — the only per-type difference is the push-constant the dispatch fills.
+    class RTLayeredShadowPipeline
     {
     public:
-        static constexpr uint32_t MAX_SLICES = render::lighting::LightConstants::MAX_RT_POINT_LIGHTS;
+        // Spot and point RT budgets share the same fixed slice count; one pipeline class serves both.
+        static_assert(render::lighting::LightConstants::MAX_RT_SPOT_LIGHTS ==
+                          render::lighting::LightConstants::MAX_RT_POINT_LIGHTS,
+                      "RTLayeredShadowPipeline assumes spot and point RT budgets share the slice count");
+        static constexpr uint32_t MAX_SLICES = render::lighting::LightConstants::MAX_RT_SPOT_LIGHTS;
 
-        explicit RTPointShadowPipeline(core::Device& device);
-        ~RTPointShadowPipeline();
+        explicit RTLayeredShadowPipeline(core::Device& device);
+        ~RTLayeredShadowPipeline();
 
-        RTPointShadowPipeline(const RTPointShadowPipeline&) = delete;
-        RTPointShadowPipeline& operator=(const RTPointShadowPipeline&) = delete;
+        RTLayeredShadowPipeline(const RTLayeredShadowPipeline&) = delete;
+        RTLayeredShadowPipeline& operator=(const RTLayeredShadowPipeline&) = delete;
 
         void init(uint32_t width, uint32_t height, vk::DescriptorSetLayout tlasLayout);
         void cleanup();
         bool resize(uint32_t width, uint32_t height);
 
-        // Traces one shadow ray per pixel toward each scheduled point light, writing its mask slice.
+        // Traces one shadow ray per pixel toward each scheduled light, writing its mask slice.
         // skipFinalTransitions leaves the mask array in eGeneral so the denoiser can read it.
         void dispatch(vk::CommandBuffer cmd,
                       vk::ImageView depthView,
@@ -62,13 +76,13 @@ namespace render::raytracing
                       const glm::vec3& cameraPos,
                       float farPlane,
                       uint32_t screenWidth, uint32_t screenHeight,
-                      const std::vector<RTPointDispatchInfo>& lights,
+                      const std::vector<RTLayeredDispatchInfo>& lights,
                       bool skipFinalTransitions = false,
                       uint32_t frameIndex = 0);
 
         bool isInitialized() const { return initialized; }
 
-        // For fragment shader consumption (set 16): raw (un-denoised) mask array.
+        // For fragment shader consumption: raw (un-denoised) mask array.
         vk::DescriptorSetLayout getShadowMaskSamplerLayout() const { return shadowMaskSamplerLayout; }
         vk::DescriptorSet getShadowMaskSamplerDescriptorSet() const { return shadowMaskSamplerDescSet; }
 

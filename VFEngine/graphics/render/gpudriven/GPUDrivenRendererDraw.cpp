@@ -42,16 +42,17 @@ namespace render::gpudriven
         }
     }
 
+    // Binds the shared RT shadow mask set at set 13 (directional/spot/point in bindings 0/1/2).
     static void bindRTShadowMaskDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
                                                MeshShaderPipeline& pipeline)
     {
-        if (!pipeline.hasRTShadowLayout())
+        if (!pipeline.hasRTMask())
             return;
 
-        vk::DescriptorSet rtShadowSet = pipeline.getRTShadowMaskDescriptorSet();
-        if (rtShadowSet)
+        vk::DescriptorSet rtMaskSet = pipeline.getRTMaskDescriptorSet();
+        if (rtMaskSet)
         {
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 13, 1, &rtShadowSet, 0, nullptr);
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 13, 1, &rtMaskSet, 0, nullptr);
         }
     }
 
@@ -69,31 +70,9 @@ namespace render::gpudriven
         }
     }
 
-    static void bindRTSpotShadowMaskDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
-                                                  MeshShaderPipeline& pipeline)
-    {
-        if (!pipeline.hasRTSpotShadowLayout())
-            return;
-
-        vk::DescriptorSet spotMaskSet = pipeline.getRTSpotShadowMaskDescriptorSet();
-        if (spotMaskSet)
-        {
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 15, 1, &spotMaskSet, 0, nullptr);
-        }
-    }
-
-    static void bindRTPointShadowMaskDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
-                                                   MeshShaderPipeline& pipeline)
-    {
-        if (!pipeline.hasRTPointShadowLayout())
-            return;
-
-        vk::DescriptorSet pointMaskSet = pipeline.getRTPointShadowMaskDescriptorSet();
-        if (pointMaskSet)
-        {
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 16, 1, &pointMaskSet, 0, nullptr);
-        }
-    }
+    // Spot (VK-1175) and point (VK-1176) RT masks now ride in the shared set 13 alongside the
+    // directional mask, so they no longer need their own bind at sets 15/16 (see
+    // bindRTShadowMaskDescriptorSet).
 
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                        uint32_t screenWidth, uint32_t screenHeight)
@@ -125,8 +104,6 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *meshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
         bindWorldMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
-        bindRTSpotShadowMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
-        bindRTPointShadowMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -216,8 +193,6 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindWorldMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
-        bindRTSpotShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
-        bindRTPointShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -301,8 +276,6 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
         bindWorldMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
-        bindRTSpotShadowMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
-        bindRTPointShadowMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -386,8 +359,6 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindWorldMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
-        bindRTSpotShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
-        bindRTPointShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)

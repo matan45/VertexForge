@@ -340,18 +340,19 @@ layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
 layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
 layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
 
+// All three RT shadow masks share one set (set 13); see mesh_shader_gpudriven.glsl for the rationale.
 #ifdef RT_SHADOW_ENABLED
-layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
+layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;                 // directional (VK-1150)
 #endif
 
 #ifdef RT_SPOT_SHADOW_ENABLED
-// Per-spot-light RT shadow masks (VK-1175); see mesh_shader_gpudriven.glsl for the layout rationale.
-layout(set = 15, binding = 0) uniform sampler2DArray rtSpotShadowMaskArray;
+// Per-spot-light RT shadow masks (VK-1175).
+layout(set = 13, binding = 1) uniform sampler2DArray rtSpotShadowMaskArray;
 #endif
 
 #ifdef RT_POINT_SHADOW_ENABLED
-// Per-point-light RT shadow masks (VK-1176); see mesh_shader_gpudriven.glsl for the layout rationale.
-layout(set = 16, binding = 0) uniform sampler2DArray rtPointShadowMaskArray;
+// Per-point-light RT shadow masks (VK-1176).
+layout(set = 13, binding = 2) uniform sampler2DArray rtPointShadowMaskArray;
 #endif
 
 #ifdef CAUSTICS_ENABLED

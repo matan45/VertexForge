@@ -47,10 +47,8 @@
 #include "../raytracing/RTShadowPipeline.hpp"
 #include "../raytracing/RTShadowDenoiser.hpp"
 #include "../raytracing/RTShadowProfiler.hpp"
-#include "../raytracing/RTSpotShadowPipeline.hpp"
-#include "../raytracing/RTSpotShadowDenoiser.hpp"
-#include "../raytracing/RTPointShadowPipeline.hpp"
-#include "../raytracing/RTPointShadowDenoiser.hpp"
+#include "../raytracing/RTLayeredShadowPipeline.hpp"
+#include "../raytracing/RTLayeredShadowDenoiser.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
@@ -348,12 +346,12 @@ namespace render::gpudriven
         bool rtShadowEnabled = true;
         // Optional RT override for spot lights (VK-1175). Mirrors the directional pipeline but
         // writes one mask slice per budgeted spot light; OFF by default.
-        std::unique_ptr<raytracing::RTSpotShadowPipeline> rtSpotShadowPipeline;
-        std::unique_ptr<raytracing::RTSpotShadowDenoiser> rtSpotShadowDenoiser;
+        std::unique_ptr<raytracing::RTLayeredShadowPipeline> rtSpotShadowPipeline;
+        std::unique_ptr<raytracing::RTLayeredShadowDenoiser> rtSpotShadowDenoiser;
         bool rtSpotShadowEnabled = false;
         uint32_t rtSpotShadowBudget = 8;
-        std::unique_ptr<raytracing::RTPointShadowPipeline> rtPointShadowPipeline;
-        std::unique_ptr<raytracing::RTPointShadowDenoiser> rtPointShadowDenoiser;
+        std::unique_ptr<raytracing::RTLayeredShadowPipeline> rtPointShadowPipeline;
+        std::unique_ptr<raytracing::RTLayeredShadowDenoiser> rtPointShadowDenoiser;
         bool rtPointShadowEnabled = false;
         uint32_t rtPointShadowBudget = 8;
         gi::GISettings cachedGISettings;

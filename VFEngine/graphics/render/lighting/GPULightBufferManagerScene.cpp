@@ -14,6 +14,127 @@
 
 namespace render::lighting
 {
+    namespace
+    {
+        // Shared RT-slice assignment for both spot and point lights: the two GPU light structs
+        // expose .position/.intensity/.shadowIndex/.rtMaskSlice identically, and the budget array
+        // size N is the same (MAX_RT_SPOT_LIGHTS == MAX_RT_POINT_LIGHTS == 8). Selects the
+        // closest/brightest shadow-casting lights (up to budget, capped at N), assigns each a stable
+        // RT mask slice (keeping a light on its prior slice to avoid invalidating denoiser history),
+        // and returns the slices whose owner changed this frame (history must be reset for those).
+        // needsUpload is set only on the main assignment path, matching the original behaviour.
+        template <typename LightT, size_t N>
+        std::vector<uint32_t> assignRTSlicesGeneric(
+            std::vector<LightT>& cpuLights,
+            const std::vector<uint32_t>& cpuEntityIds,
+            uint32_t count,
+            std::array<uint32_t, N>& sliceLightsState,
+            std::array<bool, N>& sliceValidState,
+            uint32_t budget,
+            const glm::vec3& cameraPos,
+            bool& needsUpload)
+        {
+            // Clear any prior assignment so a light that drops out of the budget this frame
+            // falls straight back to VSM (no stale mask slice).
+            for (uint32_t i = 0; i < count; ++i)
+                cpuLights[i].rtMaskSlice = -1;
+
+            const uint32_t cap = std::min(budget, static_cast<uint32_t>(N));
+            if (cap == 0)
+            {
+                sliceLightsState = {};
+                return {};
+            }
+
+            // Score shadow-casting lights by brightness / distance² (closest + brightest win).
+            struct Candidate
+            {
+                uint32_t index;
+                uint32_t entityId;
+                float score;
+            };
+            std::vector<Candidate> candidates;
+            candidates.reserve(count);
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                const LightT& l = cpuLights[i];
+                if (l.shadowIndex < 0)
+                    continue; // only lights that already have a VSM shadow view are RT-eligible
+                const float distSq = std::max(glm::dot(l.position - cameraPos, l.position - cameraPos), 1e-4f);
+                candidates.push_back({i, cpuEntityIds[i], l.intensity / distSq});
+            }
+
+            if (candidates.empty())
+            {
+                sliceLightsState = {};
+                return {};
+            }
+
+            const uint32_t take = std::min(cap, static_cast<uint32_t>(candidates.size()));
+            std::partial_sort(candidates.begin(), candidates.begin() + take, candidates.end(),
+                              [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+
+            // Slice stability: keep a light on its previous slice when it stays in the budget, so the
+            // per-slice denoiser history isn't invalidated by churn. New winners fill the freed slots.
+            std::array<uint32_t, N> sliceLights{};
+            std::array<bool, N> sliceUsed{};
+            sliceLights.fill(0);
+            sliceUsed.fill(false);
+
+            std::vector<Candidate> pendingNew;
+            for (uint32_t k = 0; k < take; ++k)
+            {
+                const Candidate& c = candidates[k];
+                int prevSlice = -1;
+                for (uint32_t s = 0; s < cap; ++s)
+                {
+                    if (sliceLightsState[s] == c.entityId && sliceValidState[s])
+                    {
+                        prevSlice = static_cast<int>(s);
+                        break;
+                    }
+                }
+                if (prevSlice >= 0 && !sliceUsed[prevSlice])
+                {
+                    sliceUsed[prevSlice] = true;
+                    sliceLights[prevSlice] = c.entityId;
+                    cpuLights[c.index].rtMaskSlice = prevSlice;
+                }
+                else
+                {
+                    pendingNew.push_back(c);
+                }
+            }
+
+            std::vector<uint32_t> reassignedSlices;
+            for (const Candidate& c : pendingNew)
+            {
+                for (uint32_t s = 0; s < cap; ++s)
+                {
+                    if (!sliceUsed[s])
+                    {
+                        sliceUsed[s] = true;
+                        sliceLights[s] = c.entityId;
+                        cpuLights[c.index].rtMaskSlice = static_cast<int>(s);
+                        reassignedSlices.push_back(s); // history for this slice must be reset
+                        break;
+                    }
+                }
+            }
+
+            for (uint32_t s = 0; s < cap; ++s)
+            {
+                sliceLightsState[s] = sliceLights[s];
+                sliceValidState[s] = sliceUsed[s];
+            }
+            for (uint32_t s = cap; s < static_cast<uint32_t>(N); ++s)
+                sliceValidState[s] = false;
+
+            needsUpload = true;
+            return reassignedSlices;
+        }
+    }
+
     void GPULightBufferManager::updateFromScene()
     {
         updateFromScene(std::unordered_set<uint32_t>{});
@@ -425,206 +546,14 @@ namespace render::lighting
 
     std::vector<uint32_t> GPULightBufferManager::assignRTSpotSlices(const glm::vec3& cameraPos, uint32_t budget)
     {
-        // Clear any prior assignment so a light that drops out of the budget this frame
-        // falls straight back to VSM (no stale mask slice).
-        for (uint32_t i = 0; i < spotCount; ++i)
-            cpuSpotLights[i].rtMaskSlice = -1;
-
-        const uint32_t cap = std::min(budget, LightConstants::MAX_RT_SPOT_LIGHTS);
-        if (cap == 0)
-        {
-            rtSpotSliceLights = {};
-            return {};
-        }
-
-        // Score shadow-casting spot lights by brightness / distance² (closest + brightest win).
-        struct Candidate
-        {
-            uint32_t index;
-            uint32_t entityId;
-            float score;
-        };
-        std::vector<Candidate> candidates;
-        candidates.reserve(spotCount);
-        for (uint32_t i = 0; i < spotCount; ++i)
-        {
-            const GPUSpotLight& s = cpuSpotLights[i];
-            if (s.shadowIndex < 0)
-                continue; // only lights that already have a VSM shadow view are RT-eligible
-            const float distSq = std::max(glm::dot(s.position - cameraPos, s.position - cameraPos), 1e-4f);
-            candidates.push_back({i, cpuSpotLightEntityIds[i], s.intensity / distSq});
-        }
-
-        if (candidates.empty())
-        {
-            rtSpotSliceLights = {};
-            return {};
-        }
-
-        const uint32_t take = std::min(cap, static_cast<uint32_t>(candidates.size()));
-        std::partial_sort(candidates.begin(), candidates.begin() + take, candidates.end(),
-                          [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
-
-        // Slice stability: keep a light on its previous slice when it stays in the budget, so the
-        // per-slice denoiser history isn't invalidated by churn. New winners fill the freed slots.
-        std::array<uint32_t, LightConstants::MAX_RT_SPOT_LIGHTS> sliceLights{};
-        std::array<bool, LightConstants::MAX_RT_SPOT_LIGHTS> sliceUsed{};
-        sliceLights.fill(0);
-        sliceUsed.fill(false);
-
-        std::vector<Candidate> pendingNew;
-        for (uint32_t k = 0; k < take; ++k)
-        {
-            const Candidate& c = candidates[k];
-            int prevSlice = -1;
-            for (uint32_t s = 0; s < cap; ++s)
-            {
-                if (rtSpotSliceLights[s] == c.entityId && rtSpotSliceValid[s])
-                {
-                    prevSlice = static_cast<int>(s);
-                    break;
-                }
-            }
-            if (prevSlice >= 0 && !sliceUsed[prevSlice])
-            {
-                sliceUsed[prevSlice] = true;
-                sliceLights[prevSlice] = c.entityId;
-                cpuSpotLights[c.index].rtMaskSlice = prevSlice;
-            }
-            else
-            {
-                pendingNew.push_back(c);
-            }
-        }
-
-        std::vector<uint32_t> reassignedSlices;
-        for (const Candidate& c : pendingNew)
-        {
-            for (uint32_t s = 0; s < cap; ++s)
-            {
-                if (!sliceUsed[s])
-                {
-                    sliceUsed[s] = true;
-                    sliceLights[s] = c.entityId;
-                    cpuSpotLights[c.index].rtMaskSlice = static_cast<int>(s);
-                    reassignedSlices.push_back(s); // history for this slice must be reset
-                    break;
-                }
-            }
-        }
-
-        for (uint32_t s = 0; s < cap; ++s)
-        {
-            rtSpotSliceLights[s] = sliceLights[s];
-            rtSpotSliceValid[s] = sliceUsed[s];
-        }
-        for (uint32_t s = cap; s < LightConstants::MAX_RT_SPOT_LIGHTS; ++s)
-            rtSpotSliceValid[s] = false;
-
-        needsUpload = true;
-        return reassignedSlices;
+        return assignRTSlicesGeneric(cpuSpotLights, cpuSpotLightEntityIds, spotCount,
+                                     rtSpotSliceLights, rtSpotSliceValid, budget, cameraPos, needsUpload);
     }
 
     std::vector<uint32_t> GPULightBufferManager::assignRTPointSlices(const glm::vec3& cameraPos, uint32_t budget)
     {
-        // Clear any prior assignment so a light that drops out of the budget this frame
-        // falls straight back to VSM (no stale mask slice).
-        for (uint32_t i = 0; i < pointCount; ++i)
-            cpuPointLights[i].rtMaskSlice = -1;
-
-        const uint32_t cap = std::min(budget, LightConstants::MAX_RT_POINT_LIGHTS);
-        if (cap == 0)
-        {
-            rtPointSliceLights = {};
-            return {};
-        }
-
-        // Score shadow-casting point lights by brightness / distance² (closest + brightest win).
-        struct Candidate
-        {
-            uint32_t index;
-            uint32_t entityId;
-            float score;
-        };
-        std::vector<Candidate> candidates;
-        candidates.reserve(pointCount);
-        for (uint32_t i = 0; i < pointCount; ++i)
-        {
-            const GPUPointLight& p = cpuPointLights[i];
-            if (p.shadowIndex < 0)
-                continue; // only lights that already have a VSM shadow view are RT-eligible
-            const float distSq = std::max(glm::dot(p.position - cameraPos, p.position - cameraPos), 1e-4f);
-            candidates.push_back({i, cpuPointLightEntityIds[i], p.intensity / distSq});
-        }
-
-        if (candidates.empty())
-        {
-            rtPointSliceLights = {};
-            return {};
-        }
-
-        const uint32_t take = std::min(cap, static_cast<uint32_t>(candidates.size()));
-        std::partial_sort(candidates.begin(), candidates.begin() + take, candidates.end(),
-                          [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
-
-        // Slice stability: keep a light on its previous slice when it stays in the budget, so the
-        // per-slice denoiser history isn't invalidated by churn. New winners fill the freed slots.
-        std::array<uint32_t, LightConstants::MAX_RT_POINT_LIGHTS> sliceLights{};
-        std::array<bool, LightConstants::MAX_RT_POINT_LIGHTS> sliceUsed{};
-        sliceLights.fill(0);
-        sliceUsed.fill(false);
-
-        std::vector<Candidate> pendingNew;
-        for (uint32_t k = 0; k < take; ++k)
-        {
-            const Candidate& c = candidates[k];
-            int prevSlice = -1;
-            for (uint32_t s = 0; s < cap; ++s)
-            {
-                if (rtPointSliceLights[s] == c.entityId && rtPointSliceValid[s])
-                {
-                    prevSlice = static_cast<int>(s);
-                    break;
-                }
-            }
-            if (prevSlice >= 0 && !sliceUsed[prevSlice])
-            {
-                sliceUsed[prevSlice] = true;
-                sliceLights[prevSlice] = c.entityId;
-                cpuPointLights[c.index].rtMaskSlice = prevSlice;
-            }
-            else
-            {
-                pendingNew.push_back(c);
-            }
-        }
-
-        std::vector<uint32_t> reassignedSlices;
-        for (const Candidate& c : pendingNew)
-        {
-            for (uint32_t s = 0; s < cap; ++s)
-            {
-                if (!sliceUsed[s])
-                {
-                    sliceUsed[s] = true;
-                    sliceLights[s] = c.entityId;
-                    cpuPointLights[c.index].rtMaskSlice = static_cast<int>(s);
-                    reassignedSlices.push_back(s); // history for this slice must be reset
-                    break;
-                }
-            }
-        }
-
-        for (uint32_t s = 0; s < cap; ++s)
-        {
-            rtPointSliceLights[s] = sliceLights[s];
-            rtPointSliceValid[s] = sliceUsed[s];
-        }
-        for (uint32_t s = cap; s < LightConstants::MAX_RT_POINT_LIGHTS; ++s)
-            rtPointSliceValid[s] = false;
-
-        needsUpload = true;
-        return reassignedSlices;
+        return assignRTSlicesGeneric(cpuPointLights, cpuPointLightEntityIds, pointCount,
+                                     rtPointSliceLights, rtPointSliceValid, budget, cameraPos, needsUpload);
     }
 
     void GPULightBufferManager::uploadToGPU(vk::CommandBuffer cmd)

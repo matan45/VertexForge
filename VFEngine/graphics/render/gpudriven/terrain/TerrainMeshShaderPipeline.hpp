@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../core/VulkanMemoryManager.hpp"
+#include "../../raytracing/RTShadowMaskSet.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -98,15 +99,21 @@ namespace render::gpudriven
         bool rtShadowEnabled = false;
         bool pipelineHasSet12 = false;  // True when the active pipeline layout includes set 12
 
-        // Per-spot-light RT shadow mask array (Set 15, VK-1175)
+        // Per-spot-light RT shadow mask array (VK-1175). The producer descriptor set is copied into
+        // the shared RT mask set (set 13, binding 1) — see rtMaskSet below.
         vk::DescriptorSetLayout rtSpotShadowMaskLayout;
         vk::DescriptorSet rtSpotShadowMaskDescriptorSet;
         bool rtSpotShadowEnabled = false;
 
-        // Per-point-light RT shadow mask array (Set 16, VK-1176)
+        // Per-point-light RT shadow mask array (VK-1176). Copied into the shared set (binding 2).
         vk::DescriptorSetLayout rtPointShadowMaskLayout;
         vk::DescriptorSet rtPointShadowMaskDescriptorSet;
         bool rtPointShadowEnabled = false;
+
+        // Shared RT shadow mask set bound at set 13 (directional binding 0, spot 1, point 2). The
+        // three producer descriptor sets above are copied into it, freeing sets 15/16 (<=14 sets).
+        std::unique_ptr<raytracing::RTShadowMaskSet> rtMaskSet;
+        bool rtMaskBound = false;
 
         // Plugin world-space mask (Set 11 bindings 3/4 — sampler + params UBO).
         // The bindings always exist in terrainDataLayout; the WORLD_MASK_ENABLED macro
@@ -207,12 +214,24 @@ namespace render::gpudriven
                                      vk::DescriptorSet shadowTextureDescSet);
 
         void setRTShadowMaskLayout(vk::DescriptorSetLayout layout) { rtShadowMaskLayout = layout; rtShadowEnabled = true; }
-        void updateRTShadowMaskDescriptor(vk::DescriptorSet descSet) { rtShadowMaskDescriptorSet = descSet; }
+        void updateRTShadowMaskDescriptor(vk::DescriptorSet descSet)
+        {
+            rtShadowMaskDescriptorSet = descSet;
+            if (rtMaskSet && descSet) rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, descSet);
+        }
 
         void setRTSpotShadowMaskLayout(vk::DescriptorSetLayout layout) { rtSpotShadowMaskLayout = layout; rtSpotShadowEnabled = true; }
-        void updateRTSpotShadowMaskDescriptor(vk::DescriptorSet descSet) { rtSpotShadowMaskDescriptorSet = descSet; }
+        void updateRTSpotShadowMaskDescriptor(vk::DescriptorSet descSet)
+        {
+            rtSpotShadowMaskDescriptorSet = descSet;
+            if (rtMaskSet && descSet) rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, descSet);
+        }
         void setRTPointShadowMaskLayout(vk::DescriptorSetLayout layout) { rtPointShadowMaskLayout = layout; rtPointShadowEnabled = true; }
-        void updateRTPointShadowMaskDescriptor(vk::DescriptorSet descSet) { rtPointShadowMaskDescriptorSet = descSet; }
+        void updateRTPointShadowMaskDescriptor(vk::DescriptorSet descSet)
+        {
+            rtPointShadowMaskDescriptorSet = descSet;
+            if (rtMaskSet && descSet) rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, descSet);
+        }
 
         // Plugin world mask: enables the WORLD_MASK_ENABLED macro on the next (re)create
         // and writes the sampler + params UBO into set 11 bindings 3/4.

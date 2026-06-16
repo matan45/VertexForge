@@ -332,22 +332,23 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
 #include "../common/caustic_sampling.glsl"
 #endif
 
+// All three optional RT shadow masks share one descriptor set (set 13) so sets 15/16 stay free,
+// keeping the fragment layout within 14 bound sets. Each binding is declared only under its macro;
+// the matching binding in the shared set is written when that RT type is online (PARTIALLY_BOUND).
 #ifdef RT_SHADOW_ENABLED
-layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
+layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;                 // directional (VK-1150)
 #endif
 
 #ifdef RT_SPOT_SHADOW_ENABLED
-// Optional per-spot-light RT shadow masks (VK-1175). One array slice per budgeted spot light;
-// a light's GPUSpotLight.rtMaskSlice indexes the slice (-1 = stays on VSM). Set 15 avoids the
-// directional RT mask (set 13) and the world mask (set 11/14).
-layout(set = 15, binding = 0) uniform sampler2DArray rtSpotShadowMaskArray;
+// Per-spot-light RT shadow masks (VK-1175). One array slice per budgeted spot light; a light's
+// GPUSpotLight.rtMaskSlice indexes the slice (-1 = stays on VSM).
+layout(set = 13, binding = 1) uniform sampler2DArray rtSpotShadowMaskArray;
 #endif
 
 #ifdef RT_POINT_SHADOW_ENABLED
-// Optional per-point-light RT shadow masks (VK-1176). One array slice per budgeted point light;
-// a light's GPUPointLight.rtMaskSlice indexes the slice (-1 = stays on VSM). Set 16 avoids the
-// directional RT mask (set 13), the world mask (set 11/14) and the spot RT mask (set 15).
-layout(set = 16, binding = 0) uniform sampler2DArray rtPointShadowMaskArray;
+// Per-point-light RT shadow masks (VK-1176). One array slice per budgeted point light; a light's
+// GPUPointLight.rtMaskSlice indexes the slice (-1 = stays on VSM).
+layout(set = 13, binding = 2) uniform sampler2DArray rtPointShadowMaskArray;
 #endif
 
 #ifdef WORLD_MASK_ENABLED
