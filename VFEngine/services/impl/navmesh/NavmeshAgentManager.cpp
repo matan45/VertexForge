@@ -85,12 +85,30 @@ namespace services
     void NavmeshAgentManager::setAgentDestination(EntityHandle entity, const glm::vec3& target)
     {
         auto it = entityToAgentIndex.find(entity.id);
-        if (it != entityToAgentIndex.end())
+        if (it == entityToAgentIndex.end())
         {
-            navmeshProvider->setCrowdAgentTarget(it->second, target);
-            entityToTarget[entity.id] = target;
-            entityStuckTimer.erase(entity.id);
+            // Nothing in the engine publishes AddAgentCommand, so an entity that
+            // gained a NavmeshAgentComponent (at scene load, via a prefab, or via
+            // a runtime addComponent) is not yet in the crowd. Register it lazily
+            // on its first destination request -- by now the navmesh is loaded and
+            // the entity is positioned, which is exactly when addCrowdAgent works.
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto enttEntity = internal::fromHandle(entity);
+            if (!registry.valid(enttEntity) ||
+                !registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+            {
+                return;
+            }
+            addAgent(entity);
+            it = entityToAgentIndex.find(entity.id);
+            if (it == entityToAgentIndex.end())
+            {
+                return;  // off-navmesh / crowd full: addCrowdAgent failed
+            }
         }
+        navmeshProvider->setCrowdAgentTarget(it->second, target);
+        entityToTarget[entity.id] = target;
+        entityStuckTimer.erase(entity.id);
     }
 
     void NavmeshAgentManager::stopAgent(EntityHandle entity)
@@ -107,11 +125,9 @@ namespace services
 
     void NavmeshAgentManager::updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration)
     {
-        auto it = entityToAgentIndex.find(entity.id);
-        if (it == entityToAgentIndex.end()) return;
-
-        navmeshProvider->updateCrowdAgentParams(it->second, maxSpeed, maxAcceleration);
-
+        // Persist onto the component first, so values set before the agent joins
+        // the crowd (lazy registration happens on the first setAgentDestination)
+        // survive and are read by addAgent when it finally registers.
         auto& registry = scene::EntityRegistry::getRegistry();
         auto enttEntity = internal::fromHandle(entity);
         if (registry.valid(enttEntity) && registry.all_of<components::NavmeshAgentComponent>(enttEntity))
@@ -120,6 +136,11 @@ namespace services
             if (maxSpeed >= 0.0f) agent.maxSpeed = maxSpeed;
             if (maxAcceleration >= 0.0f) agent.maxAcceleration = maxAcceleration;
         }
+
+        auto it = entityToAgentIndex.find(entity.id);
+        if (it == entityToAgentIndex.end()) return;
+
+        navmeshProvider->updateCrowdAgentParams(it->second, maxSpeed, maxAcceleration);
     }
 
     glm::vec3 NavmeshAgentManager::getAgentVelocity(EntityHandle entity) const
@@ -182,6 +203,16 @@ namespace services
             glm::vec3 agentPos = navmeshProvider->getCrowdAgentPosition(agentIdx);
             auto& transform = registry.get<components::TransformComponent>(enttEntity);
             transform.position = agentPos;
+
+            // Face the travel direction (yaw about Y) when actually moving, so the
+            // mesh turns toward its path instead of sliding sideways. rotation is
+            // euler degrees; forward is +Z (flip +180 in content if a mesh faces -Z).
+            glm::vec3 agentVel = navmeshProvider->getCrowdAgentVelocity(agentIdx);
+            if (agentVel.x * agentVel.x + agentVel.z * agentVel.z > 1e-4f)
+            {
+                transform.rotation.y = glm::degrees(glm::atan(agentVel.x, agentVel.z));
+            }
+
             transform.isDirty = true;
 
             // Check arrival and blocked state

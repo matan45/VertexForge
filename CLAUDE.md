@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working Precision (make no mistakes)
+
+Default to maximum precision and self-verification on every task:
+- Verify facts, file contents, symbols, and API signatures against the source before acting — don't rely on memory or assumption.
+- Mentally test code and re-derive any calculation before committing to it.
+- State uncertainty explicitly rather than guessing; prefer accuracy over speed.
+- Preserve behavior exactly when refactoring unless a change is the explicit goal.
+
 ## Build Commands
 
 ```bash
