@@ -111,6 +111,12 @@ namespace render::gpudriven
         // All three optional RT shadow masks (directional/spot/point) share one set at set 13
         // (bindings 0/1/2), freeing sets 15/16 so the layout needs at most 14 bound sets.
         std::unique_ptr<raytracing::RTShadowMaskSet> rtMaskSet;
+        // Last producer descriptor handed to each updateRT*ShadowMaskDescriptor. Retained so a
+        // pipeline rebuild can re-copy them into a freshly (re)created rtMaskSet without depending
+        // on the renderer re-issuing the updates afterward (TerrainMeshShaderPipeline does the same).
+        vk::DescriptorSet rtDirectionalMaskProducer;
+        vk::DescriptorSet rtSpotMaskProducer;
+        vk::DescriptorSet rtPointMaskProducer;
 
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;

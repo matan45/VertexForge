@@ -408,9 +408,7 @@ namespace render::gpudriven
         // All RT shadow masks share set 13 (directional binding 0, spot 1, point 2). Caustics keep
         // set 12 but, as before, are mutually exclusive with the RT-mask region: set 12 becomes a
         // placeholder when any RT type is on, so the caustic macro is suppressed in that case.
-        const bool anyRT = (rtShadowEnabled && rtShadowMaskLayout) ||
-                           (rtSpotShadowEnabled && rtSpotShadowMaskLayout) ||
-                           (rtPointShadowEnabled && rtPointShadowMaskLayout);
+        const bool anyRT = anyRTMaskActive();
         if (rtShadowEnabled && rtShadowMaskLayout)
         {
             terrainShader->addMacroDefinition("RT_SHADOW_ENABLED");
@@ -485,9 +483,7 @@ namespace render::gpudriven
 
         pipelineHasSet12 = false;
         rtMaskBound = false;
-        const bool anyRT = (rtShadowEnabled && rtShadowMaskLayout) ||
-                           (rtSpotShadowEnabled && rtSpotShadowMaskLayout) ||
-                           (rtPointShadowEnabled && rtPointShadowMaskLayout);
+        const bool anyRT = anyRTMaskActive();
         if (anyRT)
         {
             // All RT shadow masks share set 13; set 12 is a placeholder (caustics and the RT-mask

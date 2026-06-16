@@ -118,8 +118,8 @@ namespace render::gpudriven
             vkDevice.destroyDescriptorSetLayout(emptyPlaceholderLayout);
             emptyPlaceholderLayout = nullptr;
         }
-        // Shared RT mask set (set 13): destroyed here and lazily rebuilt on the next pipeline build;
-        // the renderer re-copies the producer masks via updateRT*ShadowMaskDescriptor afterwards.
+        // Shared RT mask set (set 13): destroyed here and lazily rebuilt on the next pipeline build,
+        // which re-copies the cached producer descriptors (rt*MaskProducer) into the fresh set.
         rtMaskSet.reset();
     }
 
@@ -313,6 +313,7 @@ namespace render::gpudriven
     void MeshShaderPipeline::updateRTShadowMaskDescriptor(vk::DescriptorSet rtShadowMaskDescSet)
     {
         // Copy the directional RT producer's mask into the shared set's binding 0 (set 13).
+        rtDirectionalMaskProducer = rtShadowMaskDescSet;
         if (rtMaskSet && rtShadowMaskDescSet)
             rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtShadowMaskDescSet);
     }
@@ -325,6 +326,7 @@ namespace render::gpudriven
     void MeshShaderPipeline::updateRTSpotShadowMaskDescriptor(vk::DescriptorSet rtSpotShadowMaskDescSet)
     {
         // Copy the spot RT producer's mask array into the shared set's binding 1 (set 13).
+        rtSpotMaskProducer = rtSpotShadowMaskDescSet;
         if (rtMaskSet && rtSpotShadowMaskDescSet)
             rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotShadowMaskDescSet);
     }
@@ -332,6 +334,7 @@ namespace render::gpudriven
     void MeshShaderPipeline::updateRTPointShadowMaskDescriptor(vk::DescriptorSet rtPointShadowMaskDescSet)
     {
         // Copy the point RT producer's mask array into the shared set's binding 2 (set 13).
+        rtPointMaskProducer = rtPointShadowMaskDescSet;
         if (rtMaskSet && rtPointShadowMaskDescSet)
             rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointShadowMaskDescSet);
     }
@@ -596,7 +599,8 @@ namespace render::gpudriven
 
         // Set 13: shared RT shadow mask set. Directional (binding 0), spot (binding 1) and point
         // (binding 2) RT masks are collapsed into one set so sets 15/16 are free — the layout now
-        // needs at most 14 bound sets (down from 17), so spot/point RT work on 16-bound-set GPUs.
+        // needs at most 14 bound sets, or 15 when the plugin world mask also sits at set 14 (GI on),
+        // down from 17 — so spot/point RT work on 16-bound-set GPUs.
         // Present when any RT shadow type is online; the shader declares a binding only under its
         // RT_*_ENABLED macro (each binding is PARTIALLY_BOUND, so inactive ones may stay unwritten).
         const bool anyRTMask = info.rtShadowMaskLayout || info.rtSpotShadowMaskLayout ||
@@ -608,6 +612,16 @@ namespace render::gpudriven
                 rtMaskSet = std::make_unique<raytracing::RTShadowMaskSet>(device);
                 rtMaskSet->init();
             }
+            // Re-copy any producer descriptors already handed to us so a rebuilt (or freshly created)
+            // shared set is repopulated immediately, without relying on the renderer re-issuing
+            // updateRT*ShadowMaskDescriptor after this build. A bound-but-unwritten binding whose
+            // RT_*_ENABLED macro is active would otherwise be sampled as undefined.
+            if (rtDirectionalMaskProducer)
+                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtDirectionalMaskProducer);
+            if (rtSpotMaskProducer)
+                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotMaskProducer);
+            if (rtPointMaskProducer)
+                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointMaskProducer);
             ensureEmptyPlaceholder();
             while (setLayouts.size() < 13)
                 setLayouts.push_back(emptyPlaceholderLayout);

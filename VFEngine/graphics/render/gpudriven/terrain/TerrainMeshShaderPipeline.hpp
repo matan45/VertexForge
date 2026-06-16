@@ -340,6 +340,14 @@ namespace render::gpudriven
                                            vk::DescriptorSetLayout shadowTextureLayout,
                                            const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
         bool loadTerrainShaders();
+        // True when any RT shadow type is online and bound to the shared set 13. Kept in one place so
+        // the shader-macro path (loadTerrainShaders) and the pipeline-layout path stay in lockstep.
+        bool anyRTMaskActive() const
+        {
+            return (rtShadowEnabled && rtShadowMaskLayout) ||
+                   (rtSpotShadowEnabled && rtSpotShadowMaskLayout) ||
+                   (rtPointShadowEnabled && rtPointShadowMaskLayout);
+        }
         void cleanupDescriptorResources();
         bool validateDescriptorsForDispatch() const;
         void bindDescriptorSetsInBatches(vk::CommandBuffer cmd,

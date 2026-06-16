@@ -547,7 +547,7 @@ namespace render::gpudriven
     {
         return rtSpotShadowEnabled &&
                device.isRayQuerySupported() &&
-               hasBoundDescriptorSetCapacity(14) && // spot RT mask shares set 13 (highest set 13)
+               hasBoundDescriptorSetCapacity(15) && // RT mask is set 13, but world mask may occupy set 14 (GI on) -> need 15 sets
                accelStructManager && accelStructManager->isTLASReady() &&
                depthPrepass && depthPrepass->isInitialized() &&
                lightBufferManager && lightBufferManager->getSpotLightCount() > 0;
@@ -573,7 +573,7 @@ namespace render::gpudriven
     {
         return rtPointShadowEnabled &&
                device.isRayQuerySupported() &&
-               hasBoundDescriptorSetCapacity(14) && // point RT mask shares set 13 (highest set 13)
+               hasBoundDescriptorSetCapacity(15) && // RT mask is set 13, but world mask may occupy set 14 (GI on) -> need 15 sets
                accelStructManager && accelStructManager->isTLASReady() &&
                depthPrepass && depthPrepass->isInitialized() &&
                lightBufferManager && lightBufferManager->getPointLightCount() > 0;

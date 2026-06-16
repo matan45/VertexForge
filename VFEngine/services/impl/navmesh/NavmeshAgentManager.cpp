@@ -4,6 +4,8 @@
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "print/Log.hpp"
+#include <iterator>
 #include <unordered_set>
 
 namespace services
@@ -105,8 +107,13 @@ namespace services
             }
             if (!resolved)
             {
-                // Genuinely unreachable: clear any prior target so the agent idles
-                // cleanly instead of accumulating a false "blocked" stuck timer.
+                // No navmesh poly within the widest search radius (or the navmesh isn't loaded
+                // yet): clear any prior target so the agent idles cleanly instead of accumulating
+                // a false "blocked" stuck timer. Logged so a dropped move order is diagnosable
+                // rather than a silent freeze.
+                vfLogWarning("NavmeshAgentManager: destination ({:.1f}, {:.1f}, {:.1f}) is more than "
+                             "{:.0f} units off the navmesh (or navmesh not loaded) - move order dropped",
+                             target.x, target.y, target.z, SNAP_SEARCH_RADII[std::size(SNAP_SEARCH_RADII) - 1]);
                 stopAgent(entity);
                 return;
             }
