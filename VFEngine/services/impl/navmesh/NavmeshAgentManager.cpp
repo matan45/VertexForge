@@ -84,6 +84,34 @@ namespace services
 
     void NavmeshAgentManager::setAgentDestination(EntityHandle entity, const glm::vec3& target)
     {
+        // Snap the requested destination onto the navmesh. A raw off-mesh point would
+        // otherwise leave the crowd agent with no valid target (setCrowdAgentTarget's
+        // findNearestPoly finds nothing) and trip false stuck-detection in updatePositions.
+        // getClosestPoint returns the input unchanged when nothing is found, so each
+        // candidate is validated with isPointOnNavmesh and the search widens on failure.
+        glm::vec3 snapped = target;
+        if (!navmeshProvider->isPointOnNavmesh(target, SNAP_ON_MESH_TOLERANCE))
+        {
+            bool resolved = false;
+            for (float r : SNAP_SEARCH_RADII)
+            {
+                glm::vec3 candidate = navmeshProvider->getClosestPoint(target, r);
+                if (navmeshProvider->isPointOnNavmesh(candidate, SNAP_ON_MESH_TOLERANCE))
+                {
+                    snapped = candidate;
+                    resolved = true;
+                    break;
+                }
+            }
+            if (!resolved)
+            {
+                // Genuinely unreachable: clear any prior target so the agent idles
+                // cleanly instead of accumulating a false "blocked" stuck timer.
+                stopAgent(entity);
+                return;
+            }
+        }
+
         auto it = entityToAgentIndex.find(entity.id);
         if (it == entityToAgentIndex.end())
         {
@@ -106,8 +134,8 @@ namespace services
                 return;  // off-navmesh / crowd full: addCrowdAgent failed
             }
         }
-        navmeshProvider->setCrowdAgentTarget(it->second, target);
-        entityToTarget[entity.id] = target;
+        navmeshProvider->setCrowdAgentTarget(it->second, snapped);
+        entityToTarget[entity.id] = snapped;
         entityStuckTimer.erase(entity.id);
     }
 
