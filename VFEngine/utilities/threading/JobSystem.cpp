@@ -15,6 +15,23 @@ namespace threading {
 		// simultaneously in-flight fire-and-forget jobs so the pool effectively
 		// never saturates; if it ever does, submitTask degrades to inline execution.
 		constexpr size_t kPoolSize = 2048;
+
+		// Run a job body, swallowing + logging any exception. Used on the handle-bearing
+		// paths (submitJob/then/whenAll) so the surrounding control->complete() ALWAYS
+		// runs and waiters never hang on a throw. (enkiTS itself has no exception
+		// handling, so an unguarded throw would otherwise std::terminate the process.)
+		void runJobBodyGuarded(const std::function<void()>& body)
+		{
+			try {
+				body();
+			}
+			catch (const std::exception& e) {
+				vfLogError("JobSystem: job threw: {}", e.what());
+			}
+			catch (...) {
+				vfLogError("JobSystem: job threw a non-std exception");
+			}
+		}
 	}
 
 	// Recyclable, self-contained task. enkiTS accesses the object AFTER ExecuteRange
@@ -27,7 +44,20 @@ namespace threading {
 		void ExecuteRange(enki::TaskSetPartition, uint32_t) override
 		{
 			if (fn) {
-				fn();
+				// Backstop: enkiTS has no exception handling, so an exception escaping
+				// fn() here would propagate into the worker loop and std::terminate the
+				// process. submit() routes its own exceptions into the promise and never
+				// throws out; submitJob() guards fn internally so its control->complete()
+				// still runs. This catch covers enqueue()/raw submitTask() callers.
+				try {
+					fn();
+				}
+				catch (const std::exception& e) {
+					vfLogError("JobSystem: task threw: {}", e.what());
+				}
+				catch (...) {
+					vfLogError("JobSystem: task threw a non-std exception");
+				}
 				fn = nullptr; // release captured promise/resources promptly
 			}
 		}
@@ -288,7 +318,7 @@ namespace threading {
 
 		submitTask(
 			[control, fn = std::move(fn)]() {
-				fn();
+				runJobBodyGuarded(fn);
 				control->complete();
 			},
 			priority);
@@ -309,7 +339,7 @@ namespace threading {
 		submitTask(
 			[control, fn = std::move(fn), token = std::move(token)]() {
 				if (!token->isCancelled()) {
-					fn();
+					runJobBodyGuarded(fn);
 				}
 				control->complete();
 			},
@@ -333,7 +363,7 @@ namespace threading {
 			[this, control, fnShared, priority]() {
 				submitTask(
 					[control, fnShared]() {
-						(*fnShared)();
+						runJobBodyGuarded(*fnShared);
 						control->complete();
 					},
 					priority);
@@ -352,7 +382,7 @@ namespace threading {
 		auto fire = [this, control, fnShared, priority]() {
 			submitTask(
 				[control, fnShared]() {
-					(*fnShared)();
+					runJobBodyGuarded(*fnShared);
 					control->complete();
 				},
 				priority);

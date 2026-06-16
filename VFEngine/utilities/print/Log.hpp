@@ -83,15 +83,22 @@ namespace util {
 	}
 
 	// Registers a rotating on-disk log file (logs/<appName>.log) as spdlog's
-	// default logger, so every spdlog::* call in the log functions below is
-	// mirrored to disk with zero changes to those functions. flush_on(err)
-	// guarantees errors hit the file before any subsequent crash, so the log
-	// survives a hard fault. Call once at startup, right after
-	// util::installCrashHandler().
+	// default logger, so spdlog::* calls in the log functions below are mirrored
+	// to disk with zero changes to those functions. flush_on(err) guarantees
+	// errors hit the file before any subsequent crash, so the log survives a hard
+	// fault. Call once at startup, right after util::installCrashHandler().
+	//
+	// Scope caveat: spdlog is statically linked into each module, so this only
+	// redirects the default logger of the module that calls it (the Editor/Runtime
+	// EXE). vfLog* calls executed inside subsystem DLLs (Audio, Terrain, World,
+	// Serialization, Animation, ...) hit that DLL's own default logger and are NOT
+	// mirrored to this file. To capture a DLL's logs, that DLL must call initLogFile
+	// too. EXE-side errors + the script channel are sufficient for the common
+	// crash-forensics case.
 	//
 	// Note: the vfLog* engine functions early-return on !engineLogsEnabled
 	// before reaching spdlog, so in Release only errors and the script channel
-	// (vfLogScript*) reach this file. That is sufficient for crash forensics.
+	// (vfLogScript*) reach this file.
 	inline void initLogFile(const std::string& appName) {
 		try {
 			std::error_code ec;

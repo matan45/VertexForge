@@ -20,12 +20,16 @@ namespace threading {
 
 		if (profilingEnabled) {
 			pImpl->baseTime = std::chrono::high_resolution_clock::now();
+		}
 
-			for (auto& entry : pImpl->profileData) {
-				entry.startTimeNs = 0;
-				entry.endTimeNs = 0;
-				entry.threadId = 0;
-			}
+		// Zero the timing fields every frame regardless of profiling state. Otherwise a
+		// profiled frame followed by an unprofiled one would leave getProfileData()
+		// returning last-profiled-frame timings as if they were current (the cached
+		// lambdas skip the capture branch when profiling is off and never overwrite them).
+		for (auto& entry : pImpl->profileData) {
+			entry.startTimeNs = 0;
+			entry.endTimeNs = 0;
+			entry.threadId = 0;
 		}
 
 		// The previous frame's WaitforTask below fully drained the graph, so the terminal

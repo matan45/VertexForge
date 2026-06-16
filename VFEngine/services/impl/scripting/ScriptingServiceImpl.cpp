@@ -547,7 +547,12 @@ namespace services
             }
         }
 
+        // Re-point the breadcrumb away from the last script: a native fault in
+        // tickCoroutines (a likely JIT-fault site) or in later frame work must not
+        // be misattributed in the crash report to the last onUpdate that ran.
+        util::setCrashLogContext("script coroutines tick");
         scriptingProvider->tickCoroutines(deltaTime);
+        util::setCrashLogContext("");
     }
 
     void ScriptingServiceImpl::fixedUpdateScripts(float fixedDeltaTime)

@@ -214,6 +214,15 @@ namespace util
             return;
 
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+
+        // Reserve a stack guard region so that on EXCEPTION_STACK_OVERFLOW the filter
+        // still has room to run. vfCrashFilter does real work (dump/symbolize/format),
+        // which needs more than the few bytes left at the point of a stack overflow;
+        // without this reservation that exact case — one of the crashes we most want to
+        // capture — would re-fault before writing anything.
+        ULONG stackGuaranteeBytes = 64 * 1024;
+        SetThreadStackGuarantee(&stackGuaranteeBytes);
+
         previousFilter = SetUnhandledExceptionFilter(&vfCrashFilter);
     }
 
