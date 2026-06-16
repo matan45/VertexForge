@@ -92,6 +92,12 @@ namespace serialization
                 entity.getComponent<components::PhysicsAnimationComponent>());
         }
 
+        if (entity.hasComponent<components::NavmeshAgentComponent>())
+        {
+            out["navmeshAgent"] = SceneSerialization::serializeNavmeshAgent(
+                entity.getComponent<components::NavmeshAgentComponent>());
+        }
+
         if (entity.hasComponent<components::VFXComponent>())
         {
             out["vfx"] = SceneSerialization::serializeVFX(
@@ -404,6 +410,12 @@ namespace serialization
         {
             auto& physAnimComp = entity.addOrReplaceComponent<components::PhysicsAnimationComponent>();
             SceneSerialization::deserializePhysicsAnimation(componentsJson["physicsAnimation"], physAnimComp);
+        }
+
+        if (componentsJson.contains("navmeshAgent"))
+        {
+            auto& navAgentComp = entity.addOrReplaceComponent<components::NavmeshAgentComponent>();
+            SceneSerialization::deserializeNavmeshAgent(componentsJson["navmeshAgent"], navAgentComp);
         }
 
         if (componentsJson.contains("socketAttachment"))
