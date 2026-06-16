@@ -36,6 +36,18 @@ namespace threading {
 		// Cached topological layers (computed once at build, reused every frame)
 		std::vector<std::vector<uint32_t>> layers;
 
+		// Persistent enkiTS task object per non-pinned node, built once and re-added
+		// to the pipe every frame (pinned-node slots stay null - they run inline on
+		// the main thread). Avoids per-frame TaskSet/vector heap allocation.
+		std::vector<std::unique_ptr<enki::TaskSet>> cachedTaskSets;
+
+		// Scratch list of the worker tasks dispatched in the current layer. Reused
+		// every frame (cleared, capacity retained); execute() is single-threaded.
+		std::vector<enki::TaskSet*> dispatchScratch;
+
+		// Read per-frame by the cached task lambdas to toggle timing capture.
+		bool profilingEnabled = false;
+
 		// Profiling data - one entry per task (reused across frames)
 		std::vector<TaskProfileEntry> profileData;
 		std::chrono::high_resolution_clock::time_point baseTime;

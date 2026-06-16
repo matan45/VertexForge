@@ -2,6 +2,7 @@
 #include "TaskGraphBuilder.hpp"
 #include "TaskGraphImpl.hpp"
 
+#include <algorithm>
 #include <queue>
 #include <unordered_set>
 
@@ -169,6 +170,7 @@ namespace threading {
 
 		// Pre-compute topological layers (cached for every frame's execute())
 		// Note: inDegree was zeroed by topologicalSort(), so recompute from edges
+		size_t maxLayerSize = 0;
 		{
 			std::vector<uint32_t> layerInDegree(nodeCount, 0);
 			for (auto& e : pImpl->edges) {
@@ -180,6 +182,7 @@ namespace threading {
 			}
 
 			while (!currentLayer.empty()) {
+				maxLayerSize = std::max(maxLayerSize, currentLayer.size());
 				impl.layers.push_back(currentLayer);
 				std::vector<uint32_t> nextLayer;
 				for (uint32_t node : currentLayer) {
@@ -192,6 +195,42 @@ namespace threading {
 				currentLayer = std::move(nextLayer);
 			}
 		}
+
+		// Build one persistent enkiTS TaskSet per non-pinned node. Each captures stable
+		// pointers into impl (nodes/profileData never move after build, and impl itself is
+		// owned by a stable unique_ptr), so re-adding the same object every frame needs no
+		// allocation. Pinned nodes keep a null slot - they run inline on the main thread.
+		impl.cachedTaskSets.resize(nodeCount);
+		for (uint32_t i = 0; i < nodeCount; ++i) {
+			if (impl.nodes[i].pinned) {
+				continue;
+			}
+			const TaskNodeInfo* node = &impl.nodes[i];
+			TaskProfileEntry* entry = &impl.profileData[i];
+			const auto* baseTimePtr = &impl.baseTime;
+			const bool* profilingFlag = &impl.profilingEnabled;
+
+			auto taskSet = std::make_unique<enki::TaskSet>(1u,
+				[node, entry, baseTimePtr, profilingFlag](enki::TaskSetPartition, uint32_t threadNum) {
+					if (*profilingFlag) {
+						auto start = std::chrono::high_resolution_clock::now();
+						node->fn();
+						auto end = std::chrono::high_resolution_clock::now();
+						entry->startTimeNs = static_cast<uint64_t>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+						entry->endTimeNs = static_cast<uint64_t>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+						entry->threadId = threadNum;
+					}
+					else {
+						node->fn();
+					}
+				});
+			taskSet->m_Priority = static_cast<enki::TaskPriority>(
+				static_cast<uint32_t>(impl.nodes[i].priority));
+			impl.cachedTaskSets[i] = std::move(taskSet);
+		}
+		impl.dispatchScratch.reserve(maxLayerSize);
 
 		return graph;
 	}

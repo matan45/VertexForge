@@ -12,6 +12,10 @@ namespace threading {
 	{
 		if (!pImpl->scheduler || pImpl->nodes.empty()) return;
 
+		// Published to the cached task lambdas (read on worker threads). Set before any
+		// AddTaskSetToPipe so the scheduler's pipe atomics establish the happens-before.
+		pImpl->profilingEnabled = profilingEnabled;
+
 		if (profilingEnabled) {
 			pImpl->baseTime = std::chrono::high_resolution_clock::now();
 
@@ -24,104 +28,53 @@ namespace threading {
 
 		auto* baseTimePtr = &pImpl->baseTime;
 
-		// Execute cached layers (computed once at build time)
-		for (size_t layerIdx = 0; layerIdx < pImpl->layers.size(); ++layerIdx) {
-			auto& layer = pImpl->layers[layerIdx];
-
-			if (layer.size() == 1) {
-				// Single task - execute directly on this thread
-				uint32_t idx = layer[0];
-				auto& node = pImpl->nodes[idx];
-
-				if (profilingEnabled) {
-					auto* entryPtr = &pImpl->profileData[idx];
-					auto start = std::chrono::high_resolution_clock::now();
-					node.fn();
-					auto end = std::chrono::high_resolution_clock::now();
-
-					entryPtr->startTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-					entryPtr->endTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-					entryPtr->threadId = 0;
-				}
-				else {
-					node.fn();
-				}
+		// Runs a node's function inline on the calling (main) thread, with optional timing.
+		auto runInline = [&](uint32_t idx) {
+			auto& node = pImpl->nodes[idx];
+			if (profilingEnabled) {
+				auto* entryPtr = &pImpl->profileData[idx];
+				auto start = std::chrono::high_resolution_clock::now();
+				node.fn();
+				auto end = std::chrono::high_resolution_clock::now();
+				entryPtr->startTimeNs = static_cast<uint64_t>(
+					std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+				entryPtr->endTimeNs = static_cast<uint64_t>(
+					std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+				entryPtr->threadId = 0;
 			}
 			else {
-				// Multiple tasks in this layer. Honor the `pinned` flag:
-				// non-pinned tasks go to enkiTS worker threads; pinned tasks
-				// run on the calling (main) thread sequentially. We dispatch
-				// the worker tasks first so they execute in parallel with
-				// the pinned-task work, then wait for them.
-				std::vector<uint32_t> workerIndices;
-				std::vector<uint32_t> pinnedIndices;
-				workerIndices.reserve(layer.size());
-				pinnedIndices.reserve(layer.size());
-				for (uint32_t idx : layer) {
-					if (pImpl->nodes[idx].pinned) pinnedIndices.push_back(idx);
-					else workerIndices.push_back(idx);
-				}
+				node.fn();
+			}
+		};
 
-				std::vector<std::unique_ptr<enki::TaskSet>> taskSets(workerIndices.size());
-				for (size_t t = 0; t < workerIndices.size(); ++t) {
-					uint32_t idx = workerIndices[t];
-					auto& node = pImpl->nodes[idx];
+		// Execute cached layers (computed once at build time)
+		for (auto& layer : pImpl->layers) {
+			if (layer.size() == 1) {
+				// Single task - execute directly on this thread (pinned or not).
+				runInline(layer[0]);
+				continue;
+			}
 
-					if (profilingEnabled) {
-						auto* entryPtr = &pImpl->profileData[idx];
-						taskSets[t] = std::make_unique<enki::TaskSet>(1,
-							[&fn = node.fn, entryPtr, baseTimePtr](
-								enki::TaskSetPartition, uint32_t threadNum) {
-								auto start = std::chrono::high_resolution_clock::now();
-								fn();
-								auto end = std::chrono::high_resolution_clock::now();
-								entryPtr->startTimeNs = static_cast<uint64_t>(
-									std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-								entryPtr->endTimeNs = static_cast<uint64_t>(
-									std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-								entryPtr->threadId = threadNum;
-							}
-						);
-					}
-					else {
-						taskSets[t] = std::make_unique<enki::TaskSet>(1,
-							[&fn = node.fn](enki::TaskSetPartition, uint32_t) {
-							fn();
-							}
-						);
-					}
-					taskSets[t]->m_Priority = static_cast<enki::TaskPriority>(
-						static_cast<uint32_t>(node.priority));
-				}
+			// Multiple tasks in this layer. Non-pinned tasks go to enkiTS worker
+			// threads via their pre-built (cached) TaskSet; pinned tasks run on the
+			// calling thread. Dispatch the workers first so they run in parallel
+			// with the pinned-task work, then wait for them.
+			auto& dispatched = pImpl->dispatchScratch;
+			dispatched.clear();
+			for (uint32_t idx : layer) {
+				if (pImpl->nodes[idx].pinned) continue;
+				enki::TaskSet* task = pImpl->cachedTaskSets[idx].get();
+				pImpl->scheduler->AddTaskSetToPipe(task);
+				dispatched.push_back(task);
+			}
 
-				for (auto& task : taskSets) {
-					pImpl->scheduler->AddTaskSetToPipe(task.get());
-				}
+			// Run pinned tasks on the calling thread while workers execute.
+			for (uint32_t idx : layer) {
+				if (pImpl->nodes[idx].pinned) runInline(idx);
+			}
 
-				// Run pinned tasks on the calling thread while workers execute.
-				for (uint32_t idx : pinnedIndices) {
-					auto& node = pImpl->nodes[idx];
-					if (profilingEnabled) {
-						auto* entryPtr = &pImpl->profileData[idx];
-						auto start = std::chrono::high_resolution_clock::now();
-						node.fn();
-						auto end = std::chrono::high_resolution_clock::now();
-						entryPtr->startTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-						entryPtr->endTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-						entryPtr->threadId = 0;
-					}
-					else {
-						node.fn();
-					}
-				}
-
-				for (auto& task : taskSets) {
-					pImpl->scheduler->WaitforTask(task.get());
-				}
+			for (enki::TaskSet* task : dispatched) {
+				pImpl->scheduler->WaitforTask(task);
 			}
 		}
 	}
