@@ -16,21 +16,22 @@
 // JobHandle continuations, cached-TaskSet TaskGraph, parallelReduce).
 
 namespace {
-	// Initialize the process-wide JobSystem exactly once for the whole test run.
-	void ensureJobSystem()
-	{
-		static const bool initialized = []() {
-			threading::JobSystem::instance().init();
-			return true;
-		}();
-		(void)initialized;
-	}
+	// RAII scope that brings the process-wide JobSystem up for the duration of a single
+	// test case and tears it down again. This keeps the singleton initialized ONLY while
+	// these tests run: other test files (which expect submit() to execute inline because
+	// the JobSystem is uninitialized) must not inherit a live worker pool from us, or
+	// their non-thread-safe code paths would suddenly run concurrently. init()/shutdown()
+	// are re-entrant on the underlying enkiTS scheduler, so per-case cycling is safe.
+	struct JobScope {
+		JobScope() { threading::JobSystem::instance().init(); }
+		~JobScope() { threading::JobSystem::instance().shutdown(); }
+	};
 }
 
 TEST_SUITE("JobSystem") {
 
 	TEST_CASE("parallelFor: covers the full range exactly once") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		const uint32_t count = 100000;
 		std::vector<uint32_t> touched(count, 0);
@@ -53,14 +54,14 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("submit: returns a future carrying the result") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		auto future = threading::JobSystem::instance().submit([]() { return 7 * 6; });
 		CHECK(future.get() == 42);
 	}
 
 	TEST_CASE("submit: propagates exceptions through the future") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		auto future = threading::JobSystem::instance().submit([]() -> int {
 			throw std::runtime_error("boom");
@@ -69,7 +70,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("submit: pooled tasks survive heavy concurrent submission") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		// Several external threads each fire many fire-and-forget jobs. Exercises the
 		// lock-light slot pool acquire/recycle path and external-thread registration.
@@ -96,7 +97,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("submitJob + wait: job runs and handle reports completion") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		std::atomic<bool> ran{false};
 		auto handle = threading::JobSystem::instance().submitJob([&ran]() {
@@ -109,7 +110,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("then: continuation runs strictly after its dependency") {
-		ensureJobSystem();
+		JobScope jobScope;
 		auto& js = threading::JobSystem::instance();
 
 		std::atomic<int> ticket{0};
@@ -125,7 +126,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("then: on an invalid handle still schedules the work") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		std::atomic<bool> ran{false};
 		threading::JobHandle invalid;
@@ -135,7 +136,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("whenAll: fires only after every dependency completes") {
-		ensureJobSystem();
+		JobScope jobScope;
 		auto& js = threading::JobSystem::instance();
 
 		std::atomic<int> finished{0};
@@ -158,7 +159,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("whenAll: with no dependencies runs immediately") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		std::atomic<bool> ran{false};
 		std::array<threading::JobHandle, 0> none{};
@@ -168,7 +169,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("submitJob: a token cancelled before start skips the work but still completes") {
-		ensureJobSystem();
+		JobScope jobScope;
 		auto& js = threading::JobSystem::instance();
 
 		auto token = threading::CancellationToken::create();
@@ -183,7 +184,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("submitJob: a live token runs the work normally") {
-		ensureJobSystem();
+		JobScope jobScope;
 		auto& js = threading::JobSystem::instance();
 
 		auto token = threading::CancellationToken::create();
@@ -195,7 +196,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("parallelReduce: matches the sequential fold") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		const uint32_t count = 200000;
 		int64_t serial = 0;
@@ -211,7 +212,7 @@ TEST_SUITE("JobSystem") {
 	}
 
 	TEST_CASE("parallelReduce: empty range returns the identity") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		int64_t result = threading::parallelReduce<int64_t>(0, 123,
 			[](uint32_t, uint32_t, int64_t&) {},
@@ -223,7 +224,7 @@ TEST_SUITE("JobSystem") {
 TEST_SUITE("TaskGraph") {
 
 	TEST_CASE("execute: honors a linear dependency chain") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		std::atomic<int> ticket{0};
 		int orderA = -1, orderB = -1, orderC = -1;
@@ -245,7 +246,7 @@ TEST_SUITE("TaskGraph") {
 	}
 
 	TEST_CASE("execute: cached task sets are reusable across frames") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		std::atomic<int> runs{0};
 		threading::TaskGraphBuilder builder;
@@ -263,7 +264,7 @@ TEST_SUITE("TaskGraph") {
 	}
 
 	TEST_CASE("build: rejects a cyclic graph") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		threading::TaskGraphBuilder builder;
 		auto x = builder.task("X", []() {});
@@ -276,7 +277,7 @@ TEST_SUITE("TaskGraph") {
 	}
 
 	TEST_CASE("execute: profiling populates per-task timing") {
-		ensureJobSystem();
+		JobScope jobScope;
 
 		threading::TaskGraphBuilder builder;
 		builder.task("P0", []() {});
