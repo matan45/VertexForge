@@ -461,7 +461,11 @@ namespace handlers {
         frameTaskGraph->addTask("Scripts", [this]() {
             if (scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                scriptingService->updateScripts(dt);
+                // Safety net: a catchable mType (interpreter) error in any script
+                // is logged and the game continues. Native JIT faults still go to
+                // the crash handler (see CrashHandler).
+                try { scriptingService->updateScripts(dt); }
+                catch (const std::exception& e) { vfLogError("[Script] updateScripts threw: {}", e.what()); }
             }
         });
 
@@ -548,7 +552,8 @@ namespace handlers {
             // Late scripts
             if (scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                scriptingService->lateUpdateScripts(dt);
+                try { scriptingService->lateUpdateScripts(dt); }
+                catch (const std::exception& e) { vfLogError("[Script] lateUpdateScripts threw: {}", e.what()); }
             }
 
             // Camera preparation

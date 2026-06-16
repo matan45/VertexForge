@@ -101,9 +101,10 @@ project "Editor"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   -- Windows-specific libraries for splash screen and mType net/plugin
+   -- Windows-specific libraries for splash screen and mType net/plugin.
+   -- dbghelp: crash handler minidump + symbolized stack walk (CrashHandler.cpp).
    filter "system:windows"
-      links { "gdiplus", "winhttp", "ws2_32" }
+      links { "gdiplus", "winhttp", "ws2_32", "dbghelp" }
       linkoptions { "/ignore:4006" }
    filter {}
 
@@ -365,7 +366,7 @@ project "Runtime"
    links { "delayimp" }
 
    filter "system:windows"
-      links { "winhttp", "ws2_32" }
+      links { "winhttp", "ws2_32", "dbghelp" }  -- dbghelp: crash handler (CrashHandler.cpp)
       linkoptions { "/ignore:4006" }
    filter {}
 

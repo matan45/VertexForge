@@ -7,6 +7,7 @@
 #include "core/PluginManager.hpp"
 #include "../../core/audio/AudioSceneUpdater.hpp"
 #include "time/Timer.hpp"
+#include "print/Log.hpp"
 #include "threading/EditorTaskStats.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/weather/WeatherEvents.hpp"
@@ -56,7 +57,11 @@ namespace handlers
         frameTaskGraph->addTask("Scripts", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                scriptingService->updateScripts(dt);
+                // Safety net: a catchable mType (interpreter) error in any script
+                // is logged and play mode continues, instead of killing the editor.
+                // Native JIT faults still go to the crash handler (see CrashHandler).
+                try { scriptingService->updateScripts(dt); }
+                catch (const std::exception& e) { vfLogError("[Script] updateScripts threw: {}", e.what()); }
             }
         });
 
@@ -159,7 +164,8 @@ namespace handlers
         frameTaskGraph->addTask("LateScripts", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                scriptingService->lateUpdateScripts(dt);
+                try { scriptingService->lateUpdateScripts(dt); }
+                catch (const std::exception& e) { vfLogError("[Script] lateUpdateScripts threw: {}", e.what()); }
             }
         });
 

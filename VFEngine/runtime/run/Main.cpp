@@ -1,10 +1,17 @@
 #include "../handlers/RuntimeHandler.hpp"
+#include "crash/CrashHandler.hpp"
+#include "print/Log.hpp"
 #include <iostream>
 #include <filesystem>
 
 
 int main(int argc, char* argv[])
 {
+    // Install the crash handler first (so even a fault during log init is
+    // dumped), then mirror the log to disk.
+    util::installCrashHandler();
+    util::initLogFile("Runtime");
+
     handlers::RuntimeHandler runtime;
 
     try
