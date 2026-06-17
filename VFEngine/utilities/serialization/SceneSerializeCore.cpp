@@ -50,11 +50,13 @@ namespace serialization
             {
                 j["applyRootMotion"] = true;
             }
+        }
 
-            if (mesh.retargetRef.isValid())
-            {
-                writeAssetRef(j, "retargetRef", mesh.retargetRef);
-            }
+        // Persisted independently of the animator: deserializeMesh reads it
+        // unconditionally, and the retarget refcount is acquired on its own (VK-910).
+        if (mesh.retargetRef.isValid())
+        {
+            writeAssetRef(j, "retargetRef", mesh.retargetRef);
         }
 
         if (mesh.maxDrawDistance > 0.0f)

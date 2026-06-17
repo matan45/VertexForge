@@ -22,11 +22,15 @@ namespace animation
         // C_t = q_t_ref * inverse(q_s_ref); maps source-rest-relative local
         // rotation into the target bone's local frame.
         glm::quat correction{1.0f, 0.0f, 0.0f, 0.0f};
-        glm::quat targetRefRotation{1.0f, 0.0f, 0.0f, 0.0f}; // rest fallback when no rotation keys
 
-        bool isRoot = false;                       // Hips: retarget translation + drive root motion
-        glm::vec3 srcHipBindLocal{0.0f};
-        glm::vec3 tgtHipBindLocal{0.0f};
+        bool isRoot = false;                       // Hips: drives root-motion extraction
+        // Retarget this bone's local translation (scaled by legLengthRatio). Always
+        // true for Hips; enabled for other roles by HumanoidBoneBinding::retargetTranslation
+        // or RetargetRoleOverride::overrideTranslation. When false the bone keeps its
+        // own bind translation (rotation-only), preserving target proportions.
+        bool retargetTranslation = false;
+        glm::vec3 srcBindLocal{0.0f};              // source bone local bind translation
+        glm::vec3 tgtBindLocal{0.0f};              // target bone local bind translation
     };
 
 #pragma warning(push)

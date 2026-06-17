@@ -208,10 +208,6 @@ namespace components
     {
         void* stateMachine = nullptr;
         asset::AssetRef animatorRef;
-        // Optional .vfretarget binding (VK-910). When valid, the animator's clips were
-        // authored for a different (source) skeleton and are retargeted onto this
-        // entity's skeleton at runtime. Invalid = no retargeting (native skeleton).
-        asset::AssetRef retargetRef;
         bool isInitialized = false;
         bool applyRootMotion = false;
     };

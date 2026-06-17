@@ -14,4 +14,9 @@ namespace retargeting
     // referenceLocalRotation is captured from the skeleton's local bind pose, and
     // Hips defaults to retargetTranslation = true.
     std::vector<HumanoidBoneBinding> autoMapHumanoidBones(const resource::SkeletonData& skeleton);
+
+    // Extract a normalized rotation quaternion from a bone's local bind (offset)
+    // matrix, dropping per-axis scale. Shared by the auto-mapper and the editor's
+    // manual role assignment so both author identical referenceLocalRotation values.
+    glm::quat localBindRotation(const glm::mat4& offsetMatrix);
 }

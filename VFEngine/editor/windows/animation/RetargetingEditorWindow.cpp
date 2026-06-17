@@ -25,17 +25,6 @@ namespace windows
 {
     namespace
     {
-        glm::quat localBindRotation(const glm::mat4& offset)
-        {
-            glm::mat3 m(offset);
-            for (int c = 0; c < 3; ++c)
-            {
-                float len = glm::length(m[c]);
-                if (len > 1e-6f) m[c] /= len;
-            }
-            return glm::normalize(glm::quat_cast(m));
-        }
-
         void setRoleBone(retargeting::HumanoidRigData& rig, const resource::SkeletonData& skel,
                          HumanoidBoneRole role, const std::string& boneName)
         {
@@ -47,7 +36,7 @@ namespace windows
             b.boneName = boneName;
             const int idx = skel.getBoneIndex(boneName);
             if (idx >= 0)
-                b.referenceLocalRotation = localBindRotation(skel.bones[static_cast<size_t>(idx)].offsetMatrix);
+                b.referenceLocalRotation = retargeting::localBindRotation(skel.bones[static_cast<size_t>(idx)].offsetMatrix);
             b.retargetTranslation = (role == HumanoidBoneRole::Hips);
             rig.bindings.push_back(std::move(b));
         }

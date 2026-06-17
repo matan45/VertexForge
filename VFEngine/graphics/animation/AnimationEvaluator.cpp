@@ -41,6 +41,21 @@ namespace animation
         {
             computedLocalBindPoses[i] = skeletonData->bones[i].offsetMatrix;
         }
+
+        // Resolve each retargeted target bone's source channel once here, rather than
+        // hashing the source bone name per bone per frame in sampleRetargetedLocal.
+        if (retarget)
+        {
+            retargetChannelIndex.assign(boneCount, -1);
+            for (size_t i = 0; i < boneCount; ++i)
+            {
+                const auto& rb = retarget->perTargetBone[i];
+                if (!rb.mapped) continue;
+                auto it = boneNameToChannelIndex.find(rb.sourceBoneName);
+                if (it != boneNameToChannelIndex.end())
+                    retargetChannelIndex[i] = static_cast<int>(it->second);
+            }
+        }
     }
 
     void AnimationEvaluator::clear()
@@ -49,6 +64,7 @@ namespace animation
         skeletonData = nullptr;
         retarget = nullptr;
         boneNameToChannelIndex.clear();
+        retargetChannelIndex.clear();
         evaluatedBones.clear();
         computedLocalBindPoses.clear();
         positionKeyHints.clear();
@@ -74,30 +90,30 @@ namespace animation
         outScale = glm::vec3(1.0f); // retargeting ignores source scale; target keeps its proportions
 
         const RetargetBone& rb = retarget->perTargetBone[i];
-        if (rb.mapped)
+        const int ci = retargetChannelIndex[i]; // source channel resolved once at load (-1 = absent)
+        if (rb.mapped && ci >= 0)
         {
-            auto it = boneNameToChannelIndex.find(rb.sourceBoneName);
-            if (it != boneNameToChannelIndex.end())
+            const size_t cidx = static_cast<size_t>(ci);
+            const auto& ch = animationData->channels[cidx];
+
+            // Empty rotation keys -> hold the target bind rotation, exactly as the
+            // native path does, so an identity retarget reproduces the bind pose.
+            outRot = ch.rotationKeys.empty()
+                         ? glm::quat_cast(glm::mat3(computedLocalBindPoses[i]))
+                         : glm::normalize(rb.correction * interpolateRotation(ch, timeInTicks, cidx));
+
+            if (rb.retargetTranslation)
             {
-                const auto& ch = animationData->channels[it->second];
-
-                outRot = ch.rotationKeys.empty()
-                             ? rb.targetRefRotation
-                             : glm::normalize(rb.correction * interpolateRotation(ch, timeInTicks, it->second));
-
-                if (rb.isRoot)
-                {
-                    glm::vec3 srcPos = ch.positionKeys.empty()
-                                           ? rb.srcHipBindLocal
-                                           : interpolatePosition(ch, timeInTicks, it->second);
-                    outPos = rb.tgtHipBindLocal + retarget->legLengthRatio * (srcPos - rb.srcHipBindLocal);
-                }
-                else
-                {
-                    outPos = glm::vec3(computedLocalBindPoses[i][3]); // keep target bone length
-                }
-                return;
+                glm::vec3 srcPos = ch.positionKeys.empty()
+                                       ? rb.srcBindLocal
+                                       : interpolatePosition(ch, timeInTicks, cidx);
+                outPos = rb.tgtBindLocal + retarget->legLengthRatio * (srcPos - rb.srcBindLocal);
             }
+            else
+            {
+                outPos = glm::vec3(computedLocalBindPoses[i][3]); // keep target bone length
+            }
+            return;
         }
 
         // Unmapped target bone, or source bone absent from this clip -> hold target bind pose.
@@ -258,8 +274,8 @@ namespace animation
                 const RetargetBone& rb = retarget->perTargetBone[i];
                 if (rb.isRoot)
                 {
-                    outRootPosition = rPos - rb.tgtHipBindLocal;
-                    rPos = rb.tgtHipBindLocal;
+                    outRootPosition = rPos - rb.tgtBindLocal;
+                    rPos = rb.tgtBindLocal;
                 }
 
                 evaluatedBones[i].position = rPos;

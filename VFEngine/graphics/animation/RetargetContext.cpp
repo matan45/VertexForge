@@ -30,12 +30,22 @@ namespace animation
                 if (!b) return std::nullopt;
                 return modelBindPos(skel, skel.getBoneIndex(b->boneName));
             };
-            const auto up = pos(HumanoidBoneRole::LeftUpperLeg);
-            const auto lo = pos(HumanoidBoneRole::LeftLowerLeg);
-            const auto ft = pos(HumanoidBoneRole::LeftFoot);
-            if (up && lo && ft)
-                return glm::length(*lo - *up) + glm::length(*ft - *lo);
-            return 0.0f;
+            auto sideLength = [&](HumanoidBoneRole up, HumanoidBoneRole lo, HumanoidBoneRole ft) -> float {
+                const auto u = pos(up);
+                const auto l = pos(lo);
+                const auto f = pos(ft);
+                if (u && l && f)
+                    return glm::length(*l - *u) + glm::length(*f - *l);
+                return 0.0f;
+            };
+            // Prefer the left leg; fall back to the right so an asymmetric mapping
+            // (only one leg resolved) still yields a real hip-height scale.
+            float len = sideLength(HumanoidBoneRole::LeftUpperLeg, HumanoidBoneRole::LeftLowerLeg,
+                                   HumanoidBoneRole::LeftFoot);
+            if (len <= 0.0f)
+                len = sideLength(HumanoidBoneRole::RightUpperLeg, HumanoidBoneRole::RightLowerLeg,
+                                 HumanoidBoneRole::RightFoot);
+            return len;
         }
     }
 
@@ -88,18 +98,24 @@ namespace animation
             rb.mapped = true;
             rb.sourceBoneName = srcBinding->boneName;
             rb.correction = glm::normalize(qt * glm::inverse(qs));
-            rb.targetRefRotation = qt;
             rb.isRoot = (role == HumanoidBoneRole::Hips);
 
-            if (rb.isRoot)
+            // Hips always retarget translation; other roles opt in via the binding
+            // flag or a per-role override (VK-910).
+            bool wantsTranslation = rb.isRoot || itT->second->retargetTranslation;
+            if (const auto* ov = map.findOverride(role); ov && ov->overrideTranslation)
+                wantsTranslation = true;
+            rb.retargetTranslation = wantsTranslation;
+
+            if (rb.retargetTranslation)
             {
-                rb.tgtHipBindLocal = glm::vec3(targetSkeleton.bones[t].offsetMatrix[3]);
-                rb.srcHipBindLocal = rb.tgtHipBindLocal; // fallback if source skeleton absent
+                rb.tgtBindLocal = glm::vec3(targetSkeleton.bones[t].offsetMatrix[3]);
+                rb.srcBindLocal = rb.tgtBindLocal; // fallback if source skeleton absent
                 if (sourceSkeleton)
                 {
                     const int si = sourceSkeleton->getBoneIndex(srcBinding->boneName);
                     if (si >= 0)
-                        rb.srcHipBindLocal = glm::vec3(sourceSkeleton->bones[static_cast<size_t>(si)].offsetMatrix[3]);
+                        rb.srcBindLocal = glm::vec3(sourceSkeleton->bones[static_cast<size_t>(si)].offsetMatrix[3]);
                 }
             }
 

@@ -35,6 +35,9 @@ namespace animation
         // Null = native (no retargeting), behaves byte-for-byte as before.
         const RetargetContext* retarget = nullptr;
         std::unordered_map<std::string, size_t> boneNameToChannelIndex;
+        // Per target bone, the source channel index resolved once at loadAnimation
+        // (-1 = unmapped or source bone absent from this clip). Only used when retarget != null.
+        std::vector<int> retargetChannelIndex;
         mutable std::vector<EvaluatedBone> evaluatedBones;
         std::vector<glm::mat4> computedLocalBindPoses;
 

@@ -73,7 +73,18 @@ namespace retargeting
             if (side != Side::None) return side;
 
             // Trailing-char fallback ("UpperArmL"/"UpperArmR") on the normalized core.
-            if (!norm.empty())
+            // Skip centerline bones that legitimately end in l/r ("Spine_Roll" ->
+            // "spineroll", "pelvis" ... ): they are never sided, and mis-siding them
+            // drops them from the centerline (spine) resolution pass and leaves a
+            // required role unmapped.
+            auto isCenterlineCore = [](const std::string& c) {
+                static constexpr std::array<const char*, 9> mid{
+                    "spine", "chest", "torso", "neck", "head", "hip", "pelvis", "jaw", "root"};
+                for (const char* m : mid)
+                    if (contains(c, m)) return true;
+                return false;
+            };
+            if (!norm.empty() && !isCenterlineCore(norm))
             {
                 if (norm.back() == 'l') return Side::Left;
                 if (norm.back() == 'r') return Side::Right;
@@ -145,17 +156,6 @@ namespace retargeting
             return leftBase;
         }
 
-        glm::quat localBindRotation(const glm::mat4& offsetMatrix)
-        {
-            glm::mat3 m(offsetMatrix);
-            for (int c = 0; c < 3; ++c)
-            {
-                float len = glm::length(m[c]);
-                if (len > 1e-6f) m[c] /= len;
-            }
-            return glm::normalize(glm::quat_cast(m));
-        }
-
         int boneDepth(const resource::SkeletonData& skel, int index)
         {
             int depth = 0;
@@ -167,6 +167,17 @@ namespace retargeting
             }
             return depth;
         }
+    }
+
+    glm::quat localBindRotation(const glm::mat4& offsetMatrix)
+    {
+        glm::mat3 m(offsetMatrix);
+        for (int c = 0; c < 3; ++c)
+        {
+            float len = glm::length(m[c]);
+            if (len > 1e-6f) m[c] /= len;
+        }
+        return glm::normalize(glm::quat_cast(m));
     }
 
     std::vector<HumanoidBoneBinding> autoMapHumanoidBones(const resource::SkeletonData& skeleton)
