@@ -139,9 +139,9 @@ namespace terrain
         // Uncompressed vfImage is BGRA, BC7-decoded is RGBA
         bool isBGRA = (compressionFormat == 0);
 
-        // 16-bit heightmaps imported from RAW16/PNG16 pack the height as
-        // RGB = high byte, A = low byte. A plain image has a constant 255
-        // alpha plane, so a varying alpha selects the 16-bit decode.
+        // 16-bit heightmap .vfImages pack the height as RGB = high byte,
+        // A = low byte. A plain image has a constant 255 alpha plane, so a
+        // varying alpha selects the 16-bit decode.
         bool use16Bit = false;
         if (isBGRA)
         {
