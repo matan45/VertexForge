@@ -271,8 +271,7 @@ namespace windows
             const bool missing = retargeting::isRequiredRole(role) && binding == nullptr;
             if (missing)
                 ImGui::TextColored(ImVec4(0.95f, 0.4f, 0.4f, 1.0f), "%s *", retargeting::humanoidBoneRoleName(role));
-            else if (ImGui::Selectable(retargeting::humanoidBoneRoleName(role), side.selectedRole == r,
-                                       ImGuiSelectableFlags_SpanAllColumns))
+            else if (ImGui::Selectable(retargeting::humanoidBoneRoleName(role), side.selectedRole == r))
                 side.selectedRole = r;
             if (missing && ImGui::IsItemClicked())
                 side.selectedRole = r;
