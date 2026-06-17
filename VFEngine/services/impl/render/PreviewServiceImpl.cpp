@@ -173,6 +173,16 @@ namespace services
                 return loadAnimationPreviewAnimation(cmd.instanceId, cmd.animationPath);
             });
 
+        dispatcher.registerCommandHandler<events::animpreview::LoadRetargetedAnimationPreviewCommand>(
+            [this](const events::animpreview::LoadRetargetedAnimationPreviewCommand& cmd) -> bool
+            {
+                return animationProvider
+                           ? animationProvider->loadRetargetedAnimationPreview(
+                                 cmd.instanceId, cmd.sourceAnimationPath, cmd.sourceMeshPath,
+                                 cmd.sourceRig, cmd.targetRig, cmd.map)
+                           : false;
+            });
+
         dispatcher.registerCommandHandler<events::animpreview::PlayAnimationCommand>(
             [this](const events::animpreview::PlayAnimationCommand& cmd)
             {

@@ -23,6 +23,12 @@ namespace core
                                       const std::string& meshPath) override;
         bool loadAnimationPreviewAnimation(services::PreviewInstanceId instanceId,
                                            const std::string& animPath) override;
+        bool loadRetargetedAnimationPreview(services::PreviewInstanceId instanceId,
+                                            const std::string& sourceAnimPath,
+                                            const std::string& sourceMeshPath,
+                                            const retargeting::HumanoidRigData& sourceRig,
+                                            const retargeting::HumanoidRigData& targetRig,
+                                            const retargeting::RetargetMapData& map) override;
 
         void playAnimation(services::PreviewInstanceId instanceId) override;
         void pauseAnimation(services::PreviewInstanceId instanceId) override;

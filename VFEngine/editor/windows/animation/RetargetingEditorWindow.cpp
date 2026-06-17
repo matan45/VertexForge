@@ -1,4 +1,5 @@
 #include "RetargetingEditorWindow.hpp"
+#include "../../camera/OrbitCamera.hpp"
 
 #include "imgui.h"
 #include "resource/MeshStreamHandle.hpp"
@@ -10,6 +11,7 @@
 #include "nfd/FileDialog.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
+#include "events/animation/AnimationPreviewEvents.hpp"
 
 #include <glm/gtc/quaternion.hpp>
 #include <filesystem>
@@ -82,11 +84,41 @@ namespace windows
 
     RetargetingEditorWindow::RetargetingEditorWindow(const std::string& filePath)
         : retargetPath(filePath)
+        , camera(std::make_unique<editor::OrbitCamera>())
     {
         if (retargetPath.empty())
             windowTitle = "Animation Retargeting (new)";
         else
             windowTitle = "Animation Retargeting: " + fs::path(retargetPath).filename().string();
+    }
+
+    RetargetingEditorWindow::~RetargetingEditorWindow()
+    {
+        cleanUpPreview();
+    }
+
+    void RetargetingEditorWindow::initPreview()
+    {
+        services::events::animpreview::InitAnimationPreviewCommand cmd;
+        cmd.instanceId = previewInstanceId();
+        events::EventDispatcher::instance().execute(cmd);
+        previewInitialized = true;
+    }
+
+    void RetargetingEditorWindow::cleanUpPreview()
+    {
+        if (previewCleanedUp || !previewInitialized) return;
+        services::events::animpreview::CleanUpAnimationPreviewCommand cmd;
+        cmd.instanceId = previewInstanceId();
+        events::EventDispatcher::instance().execute(cmd);
+        previewCleanedUp = true;
+    }
+
+    void RetargetingEditorWindow::updateBonesFromService()
+    {
+        services::events::animpreview::GetAnimationPreviewEvaluatedBonesQuery query;
+        query.instanceId = previewInstanceId();
+        evaluatedBones = events::EventDispatcher::instance().query(query);
     }
 
     bool RetargetingEditorWindow::loadMesh(Side& side, const std::string& meshPath)
@@ -369,10 +401,98 @@ namespace windows
         ImGui::PopID();
     }
 
+    void RetargetingEditorWindow::drawPreview()
+    {
+        ImGui::TextUnformatted("Retarget Preview");
+        ImGui::TextDisabled("Target plays the Source clip, retargeted live.");
+        ImGui::Separator();
+
+        if (ImGui::Button("Source Anim..."))
+        {
+            nfd::FileDialog dialog;
+            const std::vector<std::pair<std::wstring, std::wstring>> types = {
+                {L"VF Animation (*.vfAnim)", L"*.vfAnim"}};
+            const std::string path = dialog.openFileDialog(types);
+            if (!path.empty())
+                sourceAnimPath = path;
+        }
+        ImGui::SameLine();
+        ImGui::TextWrapped("%s", sourceAnimPath.empty()
+                                     ? "(no clip)"
+                                     : fs::path(sourceAnimPath).filename().string().c_str());
+
+        const bool canPreview = source.loaded && target.loaded && !sourceAnimPath.empty();
+        if (!canPreview) ImGui::BeginDisabled();
+        if (ImGui::Button("Apply Retarget Preview"))
+        {
+            const auto iid = previewInstanceId();
+            if (loadedPreviewMeshPath != target.meshPath)
+            {
+                services::events::animpreview::LoadAnimationPreviewMeshCommand mc;
+                mc.instanceId = iid;
+                mc.meshPath = target.meshPath;
+                meshInPreview = events::EventDispatcher::instance().execute(mc);
+                loadedPreviewMeshPath = target.meshPath;
+            }
+            if (meshInPreview)
+            {
+                services::events::animpreview::LoadRetargetedAnimationPreviewCommand rc;
+                rc.instanceId = iid;
+                rc.sourceAnimationPath = sourceAnimPath;
+                rc.sourceMeshPath = source.meshPath;
+                rc.sourceRig = source.rig;
+                rc.targetRig = target.rig;
+                rc.map = mapData;
+                animInPreview = events::EventDispatcher::instance().execute(rc);
+                if (animInPreview)
+                {
+                    services::events::animpreview::PlayAnimationCommand pc;
+                    pc.instanceId = iid;
+                    events::EventDispatcher::instance().execute(pc);
+                    statusMessage = "Previewing retargeted clip.";
+                }
+                else
+                {
+                    statusMessage = "Retarget preview failed (check role mapping).";
+                }
+            }
+        }
+        if (!canPreview) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Play"))
+        {
+            services::events::animpreview::PlayAnimationCommand pc;
+            pc.instanceId = previewInstanceId();
+            events::EventDispatcher::instance().execute(pc);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Pause"))
+        {
+            services::events::animpreview::PauseAnimationCommand pc;
+            pc.instanceId = previewInstanceId();
+            events::EventDispatcher::instance().execute(pc);
+        }
+
+        services::events::animpreview::IsAnimationPlayingQuery playingQ;
+        playingQ.instanceId = previewInstanceId();
+        const bool playing = events::EventDispatcher::instance().query(playingQ);
+
+        const auto iid = previewInstanceId();
+        const ImVec2 size = ImGui::GetContentRegionAvail();
+        windows::animation::ViewportDrawContext ctx{
+            size.x, size.y, meshInPreview, animInPreview, playing, camera.get(),
+            evaluatedBones, selectedChannel, true, iid, isDraggingPreview, isDraggingPan, environment};
+        viewport.draw(ctx);
+        updateBonesFromService();
+    }
+
     void RetargetingEditorWindow::draw()
     {
         if (!isOpen)
+        {
+            cleanUpPreview();
             return;
+        }
 
         if (!triedLoadExisting)
         {
@@ -381,7 +501,10 @@ namespace windows
             triedLoadExisting = true;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(900, 600), ImGuiCond_FirstUseEver);
+        if (!previewInitialized)
+            initPreview();
+
+        ImGui::SetNextWindowSize(ImVec2(1100, 640), ImGuiCond_FirstUseEver);
         if (ImGui::Begin(windowTitle.c_str(), &isOpen))
         {
             const bool canSave = source.loaded && target.loaded;
@@ -390,7 +513,7 @@ namespace windows
                 save();
             if (!canSave) ImGui::EndDisabled();
             ImGui::SameLine();
-            ImGui::TextDisabled("Source clips authored for 'Source' will retarget onto 'Target'.");
+            ImGui::TextDisabled("Source clips retarget onto Target.");
             if (!statusMessage.empty())
             {
                 ImGui::SameLine();
@@ -398,13 +521,23 @@ namespace windows
             }
             ImGui::Separator();
 
-            const float colW = (ImGui::GetContentRegionAvail().x - 8.0f) * 0.5f;
-            ImGui::BeginChild("SourceCol", ImVec2(colW, 0), true);
-            drawSide("Source", source);
+            const float mapW = ImGui::GetContentRegionAvail().x * 0.5f;
+            ImGui::BeginChild("Mapping", ImVec2(mapW, 0), false);
+            {
+                const float colW = (mapW - 8.0f) * 0.5f;
+                ImGui::BeginChild("SourceCol", ImVec2(colW, 0), true);
+                drawSide("Source", source);
+                ImGui::EndChild();
+                ImGui::SameLine();
+                ImGui::BeginChild("TargetCol", ImVec2(0, 0), true);
+                drawSide("Target", target);
+                ImGui::EndChild();
+            }
             ImGui::EndChild();
+
             ImGui::SameLine();
-            ImGui::BeginChild("TargetCol", ImVec2(0, 0), true);
-            drawSide("Target", target);
+            ImGui::BeginChild("PreviewCol", ImVec2(0, 0), true);
+            drawPreview();
             ImGui::EndChild();
         }
         ImGui::End();

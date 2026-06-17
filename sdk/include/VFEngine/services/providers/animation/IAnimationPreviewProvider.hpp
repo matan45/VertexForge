@@ -4,6 +4,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include "../PreviewInstanceId.hpp"
 #include "../render/IMeshPreviewProvider.hpp"
+#include "retargeting/RetargetTypes.hpp"
 #include <string>
 #include <vector>
 
@@ -40,6 +41,13 @@ namespace services
         virtual void cleanUpAnimationPreview(PreviewInstanceId instanceId) = 0;
         virtual bool loadAnimationPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath) = 0;
         virtual bool loadAnimationPreviewAnimation(PreviewInstanceId instanceId, const std::string& animPath) = 0;
+        // VK-910: play a source clip retargeted onto the loaded (target) mesh's skeleton.
+        virtual bool loadRetargetedAnimationPreview(PreviewInstanceId instanceId,
+                                                    const std::string& sourceAnimPath,
+                                                    const std::string& sourceMeshPath,
+                                                    const retargeting::HumanoidRigData& sourceRig,
+                                                    const retargeting::HumanoidRigData& targetRig,
+                                                    const retargeting::RetargetMapData& map) = 0;
 
         virtual void playAnimation(PreviewInstanceId instanceId) = 0;
         virtual void pauseAnimation(PreviewInstanceId instanceId) = 0;
