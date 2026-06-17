@@ -6,6 +6,7 @@
 #include <sl.h>
 #include <sl_dlss.h>
 #include <sl_dlss_g.h>
+#include <sl_dlss_d.h>
 #include <sl_reflex.h>
 #include <sl_consts.h>
 #include <sl_helpers_vk.h>
@@ -64,6 +65,8 @@ namespace render::upscaling
         sl::Feature featuresToLoad[] = {
             sl::kFeatureDLSS,
             sl::kFeatureDLSS_G,
+            // DLSS-D (Ray Reconstruction) — AI denoiser for ray-traced effects (VK-1245).
+            sl::kFeatureDLSS_RR,
             sl::kFeatureReflex,
             // PCL provides slPCLSetMarker; without it every latency marker fails to resolve.
             sl::kFeaturePCL
@@ -76,6 +79,12 @@ namespace render::upscaling
         prefs.numFeaturesToLoad = static_cast<uint32_t>(std::size(featuresToLoad));
         prefs.engine = sl::EngineType::eCustom;
         prefs.engineVersion = "1.0.0";
+        // NGX requires application identity. We have no NVIDIA-issued applicationId, so we
+        // supply a stable projectId GUID + engine + engineVersion instead (the supported path
+        // for custom engines — see sl::Preferences::projectId). DLSS SR / Frame Gen tolerate a
+        // missing identity, but DLSS-D (Ray Reconstruction) does NOT fall back and reports
+        // ErrorFeatureNotSupported without it (VK-1245).
+        prefs.projectId = "f8bb46ef-d68c-4dad-9705-f637a60da285";
         prefs.renderAPI = sl::RenderAPI::eVulkan;
         // Vulkan calls are routed through sl.interposer.dll's vkGetInstanceProcAddr
         // (set up in Device::createInstance), so Streamline automatically tracks
@@ -221,6 +230,21 @@ namespace render::upscaling
         reflexSupported = (reflexResult == sl::Result::eOk);
         vfLogInfo("Streamline Reflex support query: {} ({})",
                   slResultToString(reflexResult), static_cast<int>(reflexResult));
+
+        // DLSS-D (Ray Reconstruction). Unlike DLSS SR / Frame Gen this does NOT fall back when
+        // NGX lacks a valid application identity — the projectId set in initStreamline() is what
+        // lets this return eOk. This query is the VK-1245 Phase 0 GO/NO-GO gate (VK-1245).
+        sl::Result dlssRRResult = slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo);
+        dlssRRSupported = (dlssRRResult == sl::Result::eOk);
+        vfLogInfo("Streamline DLSS-D (Ray Reconstruction) support query: {} ({})",
+                  slResultToString(dlssRRResult), static_cast<int>(dlssRRResult));
+        if (dlssRRSupported)
+        {
+            bool rrLoaded = false;
+            sl::Result rrLoadResult = slIsFeatureLoaded(sl::kFeatureDLSS_RR, rrLoaded);
+            vfLogInfo("Streamline DLSS-D loaded: {} (query result: {})",
+                      rrLoaded ? "yes" : "no", slResultToString(rrLoadResult));
+        }
 
         // Check if DLSS feature actually loaded
         if (dlssSupported)

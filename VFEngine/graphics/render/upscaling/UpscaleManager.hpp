@@ -82,6 +82,8 @@ namespace render::upscaling
         /// Check feature availability (call after setVulkanDevice).
         bool isDLSSSupported() const { return dlssSupported; }
         bool isDLSSGSupported() const { return dlssGSupported; }
+        /// DLSS-D (Ray Reconstruction). Requires a valid NGX app identity (VK-1245).
+        bool isDLSSRRSupported() const { return dlssRRSupported; }
 
         /// Frame Generation (DLSS 3.x)
         void applyFrameGenSettings(const ::postprocess::FrameGenSettings& settings,
@@ -169,6 +171,7 @@ namespace render::upscaling
         ::postprocess::UpscaleMode activeMode = ::postprocess::UpscaleMode::Off;
         bool dlssSupported = false;
         bool dlssGSupported = false;
+        bool dlssRRSupported = false;
         bool deviceSet = false;
         bool frameGenActive = false;
 
