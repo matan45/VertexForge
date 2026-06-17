@@ -58,6 +58,10 @@ namespace render::preview
         renderingInfo.depthAttachment = core::depthLoad(depthView);
 
         core::beginDynamicRendering(commandBuffer, renderingInfo);
+        // The grid pipeline enables VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT, so the
+        // sample count must be set to match this (single-sample) preview target before
+        // drawing. The main viewport inherits it from the scene pass; previews don't.
+        commandBuffer.setRasterizationSamplesEXT(offscreenResources.sampleCount);
         gridRenderer->render(commandBuffer, view, projection);
         core::endDynamicRendering(commandBuffer);
 
