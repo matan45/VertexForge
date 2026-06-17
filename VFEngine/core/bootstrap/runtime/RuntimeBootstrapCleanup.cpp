@@ -62,6 +62,12 @@ namespace core
         animatorAdapter.reset();
         ikAdapter.reset();
 
+        // Destroy the offscreen render chain (holds a Device&) before the Device
+        // itself is torn down in coreInterface->cleanUp(). Otherwise the chain
+        // lingers as a member until ~RuntimeBootstrap and its destructors re-run
+        // cleanup() against an already-destroyed Device (intermittent crash on close).
+        offScreen.reset();
+
         if (coreInterface)
         {
             coreInterface->cleanUp();
