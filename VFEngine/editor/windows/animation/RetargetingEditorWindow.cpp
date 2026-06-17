@@ -504,7 +504,9 @@ namespace windows
         if (!previewInitialized)
             initPreview();
 
-        ImGui::SetNextWindowSize(ImVec2(1100, 640), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(editor::preview::initialWindowSize("Retargeting", ImVec2(1100, 640)),
+                                 ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
         if (ImGui::Begin(windowTitle.c_str(), &isOpen))
         {
             const bool canSave = source.loaded && target.loaded;
@@ -519,6 +521,8 @@ namespace windows
                 ImGui::SameLine();
                 ImGui::TextUnformatted(statusMessage.c_str());
             }
+            ImGui::SameLine();
+            maximizer.drawButton();
             ImGui::Separator();
 
             const float mapW = ImGui::GetContentRegionAvail().x * 0.5f;
@@ -541,5 +545,11 @@ namespace windows
             ImGui::EndChild();
         }
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            editor::preview::rememberWindowSize("Retargeting", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
     }
 }

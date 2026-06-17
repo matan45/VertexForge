@@ -3,6 +3,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "AnimationViewport.hpp"
 #include "../preview/PreviewEnvironment.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 #include "resource/Types.hpp"
 #include "retargeting/RetargetTypes.hpp"
 #include "providers/PreviewInstanceId.hpp"
@@ -83,5 +84,8 @@ namespace windows
         bool isDraggingPreview = false;
         bool isDraggingPan = false;
         int selectedChannel = -1;
+
+        editor::preview::WindowMaximizer maximizer;
+        bool sizeSaved = false;
     };
 }
