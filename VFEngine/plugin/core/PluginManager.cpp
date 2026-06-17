@@ -866,6 +866,12 @@ namespace plugin {
             }
         }
 
+        // Drop the engine-side script-binding cache before plugins.clear() unloads the DLLs.
+        // PluginComponentAPI::storedBridges holds a copy of the MetaComponentBridges whose
+        // std::functions were instantiated in the plugin DLLs; destroying them after the DLLs
+        // are freed calls std::function managers in unmapped code (shutdown ACCESS_VIOLATION).
+        PluginContextImpl::clearScriptBindings();
+
         plugins.clear();
 
         serialization::SceneSerialization::setPluginSerializationHooks(nullptr, nullptr);

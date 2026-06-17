@@ -36,6 +36,7 @@ namespace plugin {
     // Static member definitions
     std::vector<MetaComponentBridge> PluginContextImpl::allBridges{};
     PluginContextImpl::ScriptBindingRegistrar PluginContextImpl::scriptBindingRegistrar{};
+    PluginContextImpl::ScriptBindingClearer PluginContextImpl::scriptBindingClearer{};
     const MTypePluginHost* PluginContextImpl::scriptHostVTable = nullptr;
 
 
