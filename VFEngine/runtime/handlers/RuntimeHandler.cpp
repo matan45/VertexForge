@@ -490,11 +490,15 @@ namespace handlers {
             }
         });
 
+        // Pinned to the main thread: updateListenerFromPrimaryCamera() dispatches
+        // SetListenerPositionCommand into the audio command queue, which is not safe to
+        // invoke from an enkiTS worker (see the editor's note in EditorFrameTaskGraph).
+        // With per-layer barriers removed (VK-1385) a worker would otherwise run this.
         frameTaskGraph->addTask("AudioListener", [this]() {
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
             }
-        });
+        }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
         frameTaskGraph->addTask("Weather", [this]() {
             float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
@@ -548,6 +552,10 @@ namespace handlers {
             if (sceneGraphFn) sceneGraphFn();
         });
 
+        // Pinned to the main thread: prepares cameras and dispatches render commands
+        // (offScreen->prepareCameras, UpdateMeshCamera/IBL, getViewportTexture) - the
+        // runtime equivalent of the editor's main-thread ViewPort camera prep. With
+        // per-layer barriers removed (VK-1385) this would otherwise run on a worker.
         frameTaskGraph->addTask("PostUpdate", [this]() {
             // Late scripts
             if (scriptingService) {
@@ -612,7 +620,7 @@ namespace handlers {
             if (renderService) {
                 renderService->getViewportTexture();
             }
-        });
+        }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
         auto renderFn = bootstrap->getRenderFn();
         frameTaskGraph->addTask("Render", [renderFn]() {

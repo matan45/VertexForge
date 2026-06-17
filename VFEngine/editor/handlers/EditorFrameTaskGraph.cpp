@@ -170,6 +170,15 @@ namespace handlers
         });
 
         auto imguiDrawFn = bootstrap->getImguiDrawFn();
+        // MUST run on the main thread. imguiDrawFn() calls MainLoop::newFrame() ->
+        // ImGui_ImplGlfw_NewFrame() -> GLFW window functions (e.g.
+        // _glfwSetWindowMousePassthroughWin32), which Windows marshals via SendMessage
+        // to the thread that owns the window (the main thread). It also dispatches the
+        // audio listener command (ViewPort::updateRendererCameras), unsafe off-thread.
+        // Pre-VK-1385 this ran on the main thread only because it was the lone task in
+        // its barrier layer; with native dependencies (no layers) a worker would pick it
+        // up and deadlock against the main thread parked in TaskGraph::execute(). Pinning
+        // to thread 0 makes the main thread run it itself while it waits on the terminal.
         frameTaskGraph->addTask("ImGuiDraw", [imguiDrawFn]() {
             if (!imguiDrawFn) {
                 threading::EditorTaskStats::imguiDrawDurationNs.store(0, std::memory_order_relaxed);
@@ -181,7 +190,7 @@ namespace handlers
             threading::EditorTaskStats::imguiDrawDurationNs.store(
                 static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()),
                 std::memory_order_relaxed);
-        });
+        }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
         auto renderFn = bootstrap->getRenderFn();
         frameTaskGraph->addTask("Render", [renderFn]() {
