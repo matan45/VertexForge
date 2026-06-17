@@ -58,7 +58,7 @@ namespace animation
         AnimationLayerStack& operator=(const AnimationLayerStack&) = delete;
 
         void initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton,
-                         AnimationLoadCallback loadCallback);
+                         AnimationLoadCallback loadCallback, const RetargetContext* retarget = nullptr);
 
         void update(float deltaTime);
 
@@ -130,6 +130,7 @@ namespace animation
         std::vector<glm::mat4> finalBoneMatrices;
         const animator::AnimatorData* animatorData = nullptr;
         const resource::SkeletonData* skeletonData = nullptr;
+        const RetargetContext* retargetContext = nullptr; // null = native skeleton (VK-910)
         AnimationLoadCallback animationLoadCallback;
         animator::AnimatorRuntimeParameters sharedParameters;
         bool initialized = false;

@@ -37,6 +37,17 @@ namespace services::events::animpreview
         std::string_view getName() const override { return "LoadAnimationPreviewAnimation"; }
     };
 
+    struct LoadRetargetedAnimationPreviewCommand : ::events::ICommand<bool>
+    {
+        PreviewInstanceId instanceId;          // target preview instance
+        std::string sourceAnimationPath;       // .vfAnim authored for the source skeleton
+        std::string sourceMeshPath;            // source .vfMesh (for its skeleton)
+        retargeting::HumanoidRigData sourceRig;
+        retargeting::HumanoidRigData targetRig;
+        retargeting::RetargetMapData map;
+        std::string_view getName() const override { return "LoadRetargetedAnimationPreview"; }
+    };
+
     struct PlayAnimationCommand : ::events::ICommand<void>
     {
         PreviewInstanceId instanceId;

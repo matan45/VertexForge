@@ -75,6 +75,62 @@ namespace windows::details
 
             ImGui::Spacing();
 
+            // Retarget binding (VK-910): plays this animator's clips through a
+            // source->target skeleton retarget at runtime. Drag a .vfretarget here.
+            {
+                const std::string retargetPath = meshOpt->retargetRef.resolve();
+                if (!retargetPath.empty())
+                {
+                    std::string filename = retargetPath;
+                    auto lastSlash = filename.find_last_of("/\\");
+                    if (lastSlash != std::string::npos)
+                        filename = filename.substr(lastSlash + 1);
+                    ImGui::Text("Retarget: %s", filename.c_str());
+                }
+                else
+                {
+                    ImGui::TextDisabled("No retarget (native skeleton)");
+                }
+
+                if (auto dropped = acceptAssetDropOnLastItem("RetargetSlotDrop", {".vfretarget"}))
+                {
+                    events::scene::SetMeshDataCommand cmd;
+                    cmd.entity = handle;
+                    cmd.meshData = *meshOpt;
+                    cmd.meshData.retargetRef = asset::AssetRef::fromPath(*dropped);
+                    dispatcher.execute(cmd);
+                }
+
+                if (ImGui::Button("Select Retarget"))
+                {
+                    nfd::FileDialog fileDialog;
+                    std::string path = fileDialog.openFileDialog(
+                        {{L"VF Retarget Files (*.vfretarget)", L"*.vfretarget"}});
+                    if (!path.empty())
+                    {
+                        events::scene::SetMeshDataCommand cmd;
+                        cmd.entity = handle;
+                        cmd.meshData = *meshOpt;
+                        cmd.meshData.retargetRef = asset::AssetRef::fromPath(path);
+                        dispatcher.execute(cmd);
+                    }
+                }
+                if (meshOpt->retargetRef.isValid())
+                {
+                    ImGui::SameLine();
+                    if (ImGui::Button("Clear##Retarget"))
+                    {
+                        events::scene::SetMeshDataCommand cmd;
+                        cmd.entity = handle;
+                        cmd.meshData = *meshOpt;
+                        cmd.meshData.retargetRef = asset::AssetRef::invalid();
+                        dispatcher.execute(cmd);
+                    }
+                }
+            }
+
+            ImGui::Spacing();
+
             drawBoundingBoxCheckbox(handle, *meshOpt);
             drawMaxDrawDistance(handle, *meshOpt);
             drawSubmeshIndex(handle, *meshOpt);
@@ -155,12 +211,8 @@ namespace windows::details
             auto& dispatcher = events::EventDispatcher::instance();
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
+            cmd.meshData = currentData;
             cmd.meshData.meshRef = asset::AssetRef::fromPath(path);
-            cmd.meshData.animatorRef = currentData.animatorRef;
-            cmd.meshData.showBoundingBox = currentData.showBoundingBox;
-            cmd.meshData.applyRootMotion = currentData.applyRootMotion;
-            cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
-            cmd.meshData.submeshIndex = currentData.submeshIndex;
             dispatcher.execute(cmd);
         }
         else
@@ -204,12 +256,8 @@ namespace windows::details
                     auto& dispatcher = events::EventDispatcher::instance();
                     events::scene::SetMeshDataCommand cmd;
                     cmd.entity = handle;
-                    cmd.meshData.meshRef = currentData.meshRef;
+                    cmd.meshData = currentData;
                     cmd.meshData.animatorRef = asset::AssetRef::fromPath(path);
-                    cmd.meshData.showBoundingBox = currentData.showBoundingBox;
-                    cmd.meshData.applyRootMotion = currentData.applyRootMotion;
-                    cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
-                    cmd.meshData.submeshIndex = currentData.submeshIndex;
                     dispatcher.execute(cmd);
                 }
                 else
@@ -227,12 +275,9 @@ namespace windows::details
                 auto& dispatcher = events::EventDispatcher::instance();
                 events::scene::SetMeshDataCommand cmd;
                 cmd.entity = handle;
-                cmd.meshData.meshRef = currentData.meshRef;
+                cmd.meshData = currentData;
                 cmd.meshData.animatorRef = asset::AssetRef::invalid();  // Clear animator
-                cmd.meshData.showBoundingBox = currentData.showBoundingBox;
                 cmd.meshData.applyRootMotion = false;  // Reset when clearing animator
-                cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
-                cmd.meshData.submeshIndex = currentData.submeshIndex;
                 dispatcher.execute(cmd);
             }
         }
@@ -246,12 +291,8 @@ namespace windows::details
             auto& dispatcher = events::EventDispatcher::instance();
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
-            cmd.meshData.meshRef = currentData.meshRef;
-            cmd.meshData.animatorRef = currentData.animatorRef;
-            cmd.meshData.showBoundingBox = currentData.showBoundingBox;
+            cmd.meshData = currentData;
             cmd.meshData.applyRootMotion = applyRootMotion;
-            cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
-            cmd.meshData.submeshIndex = currentData.submeshIndex;
             dispatcher.execute(cmd);
         }
     }
@@ -264,12 +305,8 @@ namespace windows::details
             auto& dispatcher = events::EventDispatcher::instance();
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
-            cmd.meshData.meshRef = currentData.meshRef;
-            cmd.meshData.animatorRef = currentData.animatorRef;
+            cmd.meshData = currentData;
             cmd.meshData.showBoundingBox = showBoundingBox;
-            cmd.meshData.applyRootMotion = currentData.applyRootMotion;
-            cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
-            cmd.meshData.submeshIndex = currentData.submeshIndex;
             dispatcher.execute(cmd);
         }
     }
@@ -282,12 +319,8 @@ namespace windows::details
             auto& dispatcher = events::EventDispatcher::instance();
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
-            cmd.meshData.meshRef = currentData.meshRef;
-            cmd.meshData.animatorRef = currentData.animatorRef;
-            cmd.meshData.showBoundingBox = currentData.showBoundingBox;
-            cmd.meshData.applyRootMotion = currentData.applyRootMotion;
+            cmd.meshData = currentData;
             cmd.meshData.maxDrawDistance = maxDrawDist;
-            cmd.meshData.submeshIndex = currentData.submeshIndex;
             dispatcher.execute(cmd);
         }
         if (ImGui::IsItemHovered())

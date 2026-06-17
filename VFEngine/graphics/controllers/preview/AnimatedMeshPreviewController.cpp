@@ -276,6 +276,7 @@ namespace controllers
 
         meshLoaded = false;
         skeletonData = resource::SkeletonData{};
+        retargetActive = false; // target skeleton changed; any retarget context is stale
 
         if (skinnedPipeline)
         {
@@ -332,6 +333,7 @@ namespace controllers
         if (!initialized) init();
 
         animationLoaded = false;
+        retargetActive = false; // native clip plays on the mesh's own skeleton
         animEvaluator.clear();
 
         animationData = resource::AnimationResource::loadAnimation(animationPath);
@@ -366,8 +368,63 @@ namespace controllers
         return true;
     }
 
+    bool AnimatedMeshPreviewController::loadRetargetedAnimation(
+        const std::string& sourceAnimPath,
+        const resource::SkeletonData& sourceSkeleton,
+        const retargeting::HumanoidRigData& sourceRig,
+        const retargeting::HumanoidRigData& targetRig,
+        const retargeting::RetargetMapData& map)
+    {
+        if (!initialized) init();
+
+        if (!meshLoaded || skeletonData.bones.empty())
+        {
+            vfLogError("Cannot retarget: no target mesh/skeleton loaded");
+            return false;
+        }
+
+        animationLoaded = false;
+        retargetActive = false;
+        animEvaluator.clear();
+
+        animationData = resource::AnimationResource::loadAnimation(sourceAnimPath);
+        if (animationData.channels.empty())
+        {
+            vfLogError("Failed to load source animation: {}", sourceAnimPath);
+            return false;
+        }
+
+        sourceSkeletonData = sourceSkeleton;
+        retargetContext = animation::RetargetContext::build(skeletonData, &sourceSkeletonData,
+                                                            sourceRig, targetRig, map);
+        retargetActive = !retargetContext.empty();
+        if (!retargetActive)
+        {
+            vfLogError("Retarget context is empty (no role overlap) for: {}", sourceAnimPath);
+            return false;
+        }
+
+        loadedAnimationPath = sourceAnimPath;
+        animationLoaded = true;
+
+        float ticksPerSec = animationData.ticksPerSecond > 0.0f ? animationData.ticksPerSecond : 24.0f;
+        playbackState.duration = animationData.duration / ticksPerSec;
+        playbackState.currentTime = 0.0f;
+
+        animEvaluator.loadAnimation(animationData, skeletonData, &retargetContext);
+        auto initialBoneMatrices = animEvaluator.evaluatePose(0.0f);
+        if (!initialBoneMatrices.empty() && skinnedPipeline)
+        {
+            skinnedPipeline->updateBoneMatrices(initialBoneMatrices);
+        }
+        return true;
+    }
+
     void AnimatedMeshPreviewController::unload()
     {
+        retargetActive = false;
+        sourceSkeletonData = resource::SkeletonData{};
+
         if (skinnedPipeline)
         {
             skinnedPipeline->unloadMesh();

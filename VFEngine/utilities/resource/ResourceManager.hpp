@@ -16,6 +16,7 @@ namespace fs = std::filesystem;
 #include "../material/MaterialInstanceTypes.hpp"
 #include "../animator/AnimatorTypes.hpp"
 #include "../terrain/TerrainMaterialTypes.hpp"
+#include "../retargeting/RetargetTypes.hpp"
 #include "Types.hpp"
 #include "ShaderResource.hpp"
 #include "MeshStreamHandle.hpp"
@@ -42,6 +43,8 @@ namespace resource {
 		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<AnimationData>, asset::AssetGUID::Hash> animationCache;
 		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<animator::AnimatorData>, asset::AssetGUID::Hash> animatorCache;
 		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<terrain::TerrainMaterialData>, asset::AssetGUID::Hash> terrainMaterialCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<retargeting::HumanoidRigData>, asset::AssetGUID::Hash> humanoidRigCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<retargeting::RetargetMapData>, asset::AssetGUID::Hash> retargetMapCache;
 
 		// In-flight async loads — second caller for the same resource subscribes
 		// to the existing shared_future instead of launching a duplicate load.
@@ -79,6 +82,8 @@ namespace resource {
 		static std::shared_ptr<material::MaterialInstanceData> loadMaterialInstance(const asset::AssetRef& ref);
 		static std::shared_ptr<animator::AnimatorData> loadAnimator(const asset::AssetRef& ref);
 		static std::shared_ptr<terrain::TerrainMaterialData> loadTerrainMaterial(const asset::AssetRef& ref);
+		static std::shared_ptr<retargeting::HumanoidRigData> loadHumanoidRig(const asset::AssetRef& ref);
+		static std::shared_ptr<retargeting::RetargetMapData> loadRetargetMap(const asset::AssetRef& ref);
 
 		// Invalidate cache entries (for reload support)
 		static void invalidateMaterialCache(const asset::AssetRef& ref);

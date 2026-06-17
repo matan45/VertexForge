@@ -217,6 +217,9 @@ namespace components
     {
         asset::AssetRef meshRef;
         asset::AssetRef animatorRef;
+        // Optional .vfretarget binding (VK-910). When valid, the animator's clips are
+        // retargeted from their authored (source) skeleton onto this mesh's skeleton.
+        asset::AssetRef retargetRef;
         bool showBoundingBox = false;
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config

@@ -229,6 +229,7 @@ namespace animation
         {
             animators.erase(it);
         }
+        retargetContexts.erase(entity); // free after the layer stack (its evaluators) is gone
         entityLODStates.erase(entity);
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -315,6 +316,7 @@ namespace animation
         for (auto entity : toRemove)
         {
             animators.erase(entity);
+            retargetContexts.erase(entity);
         }
 
         if (pendingCacheCleanup)
@@ -338,6 +340,7 @@ namespace animation
         }
 
         animators.clear();
+        retargetContexts.clear();
         entityLODStates.clear();
         pendingRestores.clear();
         dataCache.clearAll();
@@ -357,6 +360,7 @@ namespace animation
         }
 
         animators.clear();
+        retargetContexts.clear();
         entityLODStates.clear();
     }
 

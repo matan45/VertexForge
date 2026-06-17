@@ -56,6 +56,7 @@ namespace services
     {
         asset::AssetRef meshRef;
         asset::AssetRef animatorRef; // .vfAnimator asset (optional)
+        asset::AssetRef retargetRef; // .vfretarget binding (optional, VK-910)
         bool showBoundingBox = false;
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config

@@ -7,11 +7,13 @@ namespace animation
     AnimatorStateMachine::AnimatorStateMachine() = default;
     AnimatorStateMachine::~AnimatorStateMachine() = default;
 
-    void AnimatorStateMachine::initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback)
+    void AnimatorStateMachine::initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback,
+                                          const RetargetContext* retarget)
     {
         animatorData = &data;
         activeGraph = &data.graph;
         skeletonData = skeleton;
+        retargetContext = retarget;
         animationLoadCallback = std::move(loadCallback);
 
         ownedParameters.initializeFromGraph(data.graph);
@@ -32,11 +34,13 @@ namespace animation
     }
 
     void AnimatorStateMachine::initializeFromGraph(const animator::AnimatorGraph& graph, const resource::SkeletonData* skeleton,
-                                                    AnimationLoadCallback loadCallback, animator::AnimatorRuntimeParameters* externalParams)
+                                                    AnimationLoadCallback loadCallback, animator::AnimatorRuntimeParameters* externalParams,
+                                                    const RetargetContext* retarget)
     {
         animatorData = nullptr;
         activeGraph = &graph;
         skeletonData = skeleton;
+        retargetContext = retarget;
         animationLoadCallback = std::move(loadCallback);
 
         if (externalParams)
@@ -338,7 +342,7 @@ namespace animation
         if (it == loadedAnimations.end() || !it->second)
             return {};
 
-        evaluator.loadAnimation(*it->second, *skeletonData);
+        evaluator.loadAnimation(*it->second, *skeletonData, retargetContext);
         float timeInTicks = evaluator.secondsToTicks(time);
 
         if (outRootPos)

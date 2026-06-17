@@ -14,6 +14,8 @@ namespace animation
 {
     using AnimationLoadCallback = std::function<const resource::AnimationData*(const std::string& path)>;
 
+    struct RetargetContext;
+
     class VF_ANIMATION_API BlendTreeEvaluator
     {
     public:
@@ -22,7 +24,8 @@ namespace animation
             const animator::AnimatorRuntimeParameters& params,
             const resource::SkeletonData& skeleton,
             float stateTime,
-            const AnimationLoadCallback& loadCallback) const;
+            const AnimationLoadCallback& loadCallback,
+            const RetargetContext* retarget = nullptr) const;
 
         std::vector<glm::mat4> evaluate(
             const animator::BlendTreeData& blendTree,
@@ -30,7 +33,8 @@ namespace animation
             const resource::SkeletonData& skeleton,
             float stateTime,
             const AnimationLoadCallback& loadCallback,
-            glm::vec3& outRootPosition) const;
+            glm::vec3& outRootPosition,
+            const RetargetContext* retarget = nullptr) const;
 
     private:
         std::vector<float> compute1DWeights(
@@ -48,6 +52,7 @@ namespace animation
             float stateTime,
             const AnimationLoadCallback& loadCallback,
             bool trackRootMotion,
-            glm::vec3& outRootPosition) const;
+            glm::vec3& outRootPosition,
+            const RetargetContext* retarget) const;
     };
 }

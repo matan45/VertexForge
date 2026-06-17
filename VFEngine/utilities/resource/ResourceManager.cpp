@@ -10,6 +10,7 @@
 #include "../material/MaterialInstanceAsset.hpp"
 #include "../animator/AnimatorAsset.hpp"
 #include "../terrain/TerrainMaterialAsset.hpp"
+#include "../retargeting/RetargetAsset.hpp"
 #include "VFSHelpers.hpp"
 #include <algorithm>
 #include <cctype>
@@ -53,6 +54,8 @@ namespace resource
         cleanExpired(materialCache);
         cleanExpired(materialInstanceCache);
         cleanExpired(terrainMaterialCache);
+        cleanExpired(humanoidRigCache);
+        cleanExpired(retargetMapCache);
         std::erase_if(shaderCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
@@ -396,6 +399,8 @@ namespace resource
         animationCache.clear();
         animatorCache.clear();
         terrainMaterialCache.clear();
+        humanoidRigCache.clear();
+        retargetMapCache.clear();
 
         pendingTextureLoads.clear();
         pendingHDRLoads.clear();
@@ -483,5 +488,19 @@ namespace resource
     {
         return loadSyncCached<animator::AnimatorData>(ref, animatorCache, cacheMutex,
             [](const std::string& p) { return animator::AnimatorAsset::load(p); }, "animator");
+    }
+
+    std::shared_ptr<retargeting::HumanoidRigData> ResourceManager::loadHumanoidRig(const asset::AssetRef& ref)
+    {
+        if (!ref.isValid()) return nullptr;
+        return loadSyncCached<retargeting::HumanoidRigData>(ref, humanoidRigCache, cacheMutex,
+            [](const std::string& p) { return retargeting::HumanoidRigAsset::load(p); }, "humanoid rig");
+    }
+
+    std::shared_ptr<retargeting::RetargetMapData> ResourceManager::loadRetargetMap(const asset::AssetRef& ref)
+    {
+        if (!ref.isValid()) return nullptr;
+        return loadSyncCached<retargeting::RetargetMapData>(ref, retargetMapCache, cacheMutex,
+            [](const std::string& p) { return retargeting::RetargetMapAsset::load(p); }, "retarget map");
     }
 }

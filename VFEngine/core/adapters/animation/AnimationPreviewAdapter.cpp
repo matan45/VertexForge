@@ -1,5 +1,7 @@
 #include "AnimationPreviewAdapter.hpp"
 #include "../../graphics/controllers/preview/AnimatedMeshPreviewController.hpp"
+#include "resource/MeshStreamHandle.hpp"
+#include "print/Log.hpp"
 
 namespace core
 {
@@ -53,6 +55,31 @@ namespace core
             return controller->loadAnimation(animPath);
         }
         return false;
+    }
+
+    bool AnimationPreviewAdapter::loadRetargetedAnimationPreview(
+        services::PreviewInstanceId instanceId,
+        const std::string& sourceAnimPath,
+        const std::string& sourceMeshPath,
+        const retargeting::HumanoidRigData& sourceRig,
+        const retargeting::HumanoidRigData& targetRig,
+        const retargeting::RetargetMapData& map)
+    {
+        auto* controller = getController(instanceId);
+        if (!controller)
+            return false;
+
+        // Read the source skeleton from its mesh (the clips were authored against it).
+        resource::SkeletonData sourceSkeleton;
+        resource::MeshStreamHandle handle;
+        if (!handle.openStream(sourceMeshPath) || !handle.hasSkeletonData() ||
+            !handle.readSkeleton(sourceSkeleton))
+        {
+            vfLogError("Retarget preview: failed to read source skeleton from {}", sourceMeshPath);
+            return false;
+        }
+
+        return controller->loadRetargetedAnimation(sourceAnimPath, sourceSkeleton, sourceRig, targetRig, map);
     }
 
     void AnimationPreviewAdapter::playAnimation(services::PreviewInstanceId instanceId)

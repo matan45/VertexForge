@@ -41,6 +41,7 @@ namespace animation
         const animator::AnimatorData* animatorData = nullptr;
         const animator::AnimatorGraph* activeGraph = nullptr;
         const resource::SkeletonData* skeletonData = nullptr;
+        const RetargetContext* retargetContext = nullptr; // null = native skeleton (VK-910)
         AnimationLoadCallback animationLoadCallback;
         animator::AnimatorRuntimeParameters ownedParameters;
         animator::AnimatorRuntimeParameters* parameters = nullptr;
@@ -68,9 +69,11 @@ namespace animation
        explicit AnimatorStateMachine();
         ~AnimatorStateMachine();
 
-        void initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback);
+        void initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback,
+                        const RetargetContext* retarget = nullptr);
         void initializeFromGraph(const animator::AnimatorGraph& graph, const resource::SkeletonData* skeleton,
-                                 AnimationLoadCallback loadCallback, animator::AnimatorRuntimeParameters* externalParams = nullptr);
+                                 AnimationLoadCallback loadCallback, animator::AnimatorRuntimeParameters* externalParams = nullptr,
+                                 const RetargetContext* retarget = nullptr);
 
         void update(float deltaTime);
 

@@ -38,7 +38,7 @@ namespace animation
             if (layerData.sourceMode == animator::LayerSourceMode::StateMachine)
             {
                 runtime.stateMachine = std::make_unique<AnimatorStateMachine>();
-                runtime.stateMachine->initializeFromGraph(layerData.graph, skeletonData, animationLoadCallback, &sharedParameters);
+                runtime.stateMachine->initializeFromGraph(layerData.graph, skeletonData, animationLoadCallback, &sharedParameters, retargetContext);
             }
             else
             {
@@ -51,7 +51,7 @@ namespace animation
                     runtime.directClipData = animationLoadCallback(layerData.directClipRef.resolve());
                     if (runtime.directClipData && skeletonData)
                     {
-                        runtime.directClipEvaluator.loadAnimation(*runtime.directClipData, *skeletonData);
+                        runtime.directClipEvaluator.loadAnimation(*runtime.directClipData, *skeletonData, retargetContext);
                     }
                 }
             }
@@ -71,16 +71,17 @@ namespace animation
         baseLayer.sourceMode = animator::LayerSourceMode::StateMachine;
 
         baseLayer.stateMachine = std::make_unique<AnimatorStateMachine>();
-        baseLayer.stateMachine->initializeFromGraph(data.graph, skeletonData, animationLoadCallback, &sharedParameters);
+        baseLayer.stateMachine->initializeFromGraph(data.graph, skeletonData, animationLoadCallback, &sharedParameters, retargetContext);
 
         layers.push_back(std::move(baseLayer));
     }
 
     void AnimationLayerStack::initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton,
-                                          AnimationLoadCallback loadCallback)
+                                          AnimationLoadCallback loadCallback, const RetargetContext* retarget)
     {
         animatorData = &data;
         skeletonData = skeleton;
+        retargetContext = retarget;
         animationLoadCallback = loadCallback;
 
         layers.clear();
@@ -223,7 +224,7 @@ namespace animation
         if (clipData && skeletonData)
         {
             AnimationEvaluator refEvaluator;
-            refEvaluator.loadAnimation(*clipData, *skeletonData);
+            refEvaluator.loadAnimation(*clipData, *skeletonData, retargetContext);
             float timeInTicks = refEvaluator.secondsToTicks(refTimeSec);
             layer.referencePose = refEvaluator.evaluatePose(timeInTicks);
         }

@@ -30,6 +30,8 @@ namespace resource {
 		Scene = 19,
 		Theme = 20,
 		Prefab = 21,
+		HumanoidRig = 22,
+		RetargetMap = 23,
 		COUNT
 	};
 
@@ -57,6 +59,8 @@ namespace resource {
 		case AssetType::Scene:            return "Scene";
 		case AssetType::Theme:            return "Theme";
 		case AssetType::Prefab:           return "Prefab";
+		case AssetType::HumanoidRig:      return "HumanoidRig";
+		case AssetType::RetargetMap:      return "RetargetMap";
 		default:                          return "Unknown";
 		}
 	}

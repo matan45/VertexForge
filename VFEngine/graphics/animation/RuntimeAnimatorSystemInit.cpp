@@ -8,9 +8,62 @@
 #include "../../services/events/world/WorldSectorEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include "asset/AssetRef.hpp"
+#include "resource/ResourceManager.hpp"
 
 namespace animation
 {
+    const RetargetContext* RuntimeAnimatorSystem::buildEntityRetargetContext(
+        entt::entity entity, const resource::SkeletonData* targetSkeleton)
+    {
+        retargetContexts.erase(entity);
+        if (!targetSkeleton)
+            return nullptr;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::MeshComponent>(entity))
+            return nullptr;
+
+        const auto& meshComp = registry.get<components::MeshComponent>(entity);
+        if (!meshComp.retargetRef.isValid())
+            return nullptr;
+
+        auto map = resource::ResourceManager::loadRetargetMap(meshComp.retargetRef);
+        if (!map)
+        {
+            vfLogWarning("[RuntimeAnimatorSystem] Entity {} retarget map failed to load",
+                         static_cast<uint32_t>(entity));
+            return nullptr;
+        }
+
+        auto sourceRig = resource::ResourceManager::loadHumanoidRig(asset::AssetRef::fromHexString(map->sourceRigAssetGuid));
+        auto targetRig = resource::ResourceManager::loadHumanoidRig(asset::AssetRef::fromHexString(map->targetRigAssetGuid));
+        if (!sourceRig || !targetRig)
+        {
+            vfLogWarning("[RuntimeAnimatorSystem] Entity {} retarget rig(s) failed to load",
+                         static_cast<uint32_t>(entity));
+            return nullptr;
+        }
+
+        // Source skeleton (the mesh the clips were authored for) — optional; the
+        // context degrades gracefully (ratio 1, unscaled hips) when unavailable.
+        const resource::SkeletonData* sourceSkeleton = nullptr;
+        if (!sourceRig->sourceSkeletonAssetGuid.empty())
+        {
+            const std::string sourceMeshPath = asset::AssetRef::fromHexString(sourceRig->sourceSkeletonAssetGuid).resolve();
+            if (!sourceMeshPath.empty())
+                sourceSkeleton = dataCache.loadSkeleton(sourceMeshPath);
+        }
+
+        auto ctx = std::make_unique<RetargetContext>(
+            RetargetContext::build(*targetSkeleton, sourceSkeleton, *sourceRig, *targetRig, *map));
+        if (ctx->empty())
+            return nullptr;
+
+        const RetargetContext* raw = ctx.get();
+        retargetContexts[entity] = std::move(ctx);
+        return raw;
+    }
+
     void RuntimeAnimatorSystem::initialize()
     {
         if (initialized)
@@ -299,11 +352,13 @@ namespace animation
             return;
         }
 
+        const RetargetContext* retarget = buildEntityRetargetContext(entity, skeleton);
+
         auto layerStack = std::make_unique<AnimationLayerStack>();
         layerStack->initialize(*animatorData, skeleton, [this](const std::string& path) -> const resource::AnimationData*
         {
             return dataCache.loadAnimation(path);
-        });
+        }, retarget);
 
         AnimationLayerStack* rawPtr = layerStack.get();
         animators[entity] = std::move(layerStack);

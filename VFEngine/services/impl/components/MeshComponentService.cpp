@@ -28,6 +28,7 @@ namespace services {
         MeshData data;
         data.meshRef = comp.meshRef;
         data.animatorRef = comp.animatorRef;
+        data.retargetRef = comp.retargetRef;
         data.showBoundingBox = comp.showBoundingBox;
         data.applyRootMotion = comp.applyRootMotion;
         data.maxDrawDistance = comp.maxDrawDistance;
@@ -55,9 +56,13 @@ namespace services {
             if (comp.animatorRef.isValid() && comp.animatorRef != mesh.animatorRef) {
                 lifecycle.release(comp.animatorRef.getGUID());
             }
+            if (comp.retargetRef.isValid() && comp.retargetRef != mesh.retargetRef) {
+                lifecycle.release(comp.retargetRef.getGUID());
+            }
 
             comp.meshRef = mesh.meshRef;
             comp.animatorRef = mesh.animatorRef;
+            comp.retargetRef = mesh.retargetRef;
             comp.showBoundingBox = mesh.showBoundingBox;
             comp.applyRootMotion = mesh.applyRootMotion;
             comp.maxDrawDistance = mesh.maxDrawDistance;
@@ -67,6 +72,7 @@ namespace services {
             auto& comp = sceneEntity.addComponent<components::MeshComponent>();
             comp.meshRef = mesh.meshRef;
             comp.animatorRef = mesh.animatorRef;
+            comp.retargetRef = mesh.retargetRef;
             comp.showBoundingBox = mesh.showBoundingBox;
             comp.applyRootMotion = mesh.applyRootMotion;
             comp.maxDrawDistance = mesh.maxDrawDistance;
@@ -85,6 +91,9 @@ namespace services {
         }
         if (mesh.animatorRef.isValid()) {
             lifecycle.acquire(mesh.animatorRef.getGUID(), resource::AssetType::Animator);
+        }
+        if (mesh.retargetRef.isValid()) {
+            lifecycle.acquire(mesh.retargetRef.getGUID(), resource::AssetType::RetargetMap);
         }
 
         // Publish notification to allow preloading of mesh assets and animator cleanup
@@ -127,6 +136,9 @@ namespace services {
             }
             if (comp.animatorRef.isValid()) {
                 lifecycle.release(comp.animatorRef.getGUID());
+            }
+            if (comp.retargetRef.isValid()) {
+                lifecycle.release(comp.retargetRef.getGUID());
             }
 
             sceneEntity.removeComponent<components::MeshComponent>();

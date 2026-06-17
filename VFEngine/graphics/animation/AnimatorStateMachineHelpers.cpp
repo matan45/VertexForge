@@ -103,7 +103,7 @@ namespace animation
             return {};
 
         return blendTreeEvaluator.evaluate(
-            animState.blendTree.value(), *parameters, *skeletonData, time, animationLoadCallback);
+            animState.blendTree.value(), *parameters, *skeletonData, time, animationLoadCallback, retargetContext);
     }
 
     std::vector<glm::mat4> AnimatorStateMachine::evaluateBlendTreePose(
@@ -113,6 +113,6 @@ namespace animation
             return {};
 
         return blendTreeEvaluator.evaluate(
-            animState.blendTree.value(), *parameters, *skeletonData, time, animationLoadCallback, outRootPosition);
+            animState.blendTree.value(), *parameters, *skeletonData, time, animationLoadCallback, outRootPosition, retargetContext);
     }
 }

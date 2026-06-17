@@ -260,6 +260,8 @@ namespace windows
         if (extension == ".mt") return Script;
         if (extension == ".vfplugin") return Plugin;
         if (extension == ".vfInputMapping") return InputMapping;
+        if (extension == ".vfrig") return Retarget;
+        if (extension == ".vfretarget") return Retarget;
 
         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||
             extension == ".vfMesh" || extension == ".vfAudio" ||

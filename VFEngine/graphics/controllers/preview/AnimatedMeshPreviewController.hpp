@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 #include <math/Frustum.hpp>
 #include "../../animation/AnimationEvaluator.hpp"
+#include "../../animation/RetargetContext.hpp"
+#include "retargeting/RetargetTypes.hpp"
 #include "../../render/mesh/SkinnedMeshTypes.hpp"
 #include "../../../services/providers/render/IMeshPreviewProvider.hpp"
 #include "resource/Types.hpp"
@@ -58,6 +60,12 @@ namespace controllers
         bool animationLoaded = false;
         bool meshLoaded = false;
 
+        // VK-910 live retarget preview: when active, animationData is a SOURCE clip
+        // retargeted onto skeletonData (the loaded mesh's target skeleton).
+        animation::RetargetContext retargetContext;
+        resource::SkeletonData sourceSkeletonData;
+        bool retargetActive = false;
+
         render::mesh::SkinnedMeshRenderData renderData;
         render::mesh::AnimationPlaybackState playbackState;
 
@@ -82,6 +90,12 @@ namespace controllers
 
         bool loadMesh(const std::string& meshPath);
         bool loadAnimation(const std::string& animationPath);
+        // Load a source clip retargeted onto the currently-loaded mesh's skeleton.
+        bool loadRetargetedAnimation(const std::string& sourceAnimPath,
+                                     const resource::SkeletonData& sourceSkeleton,
+                                     const retargeting::HumanoidRigData& sourceRig,
+                                     const retargeting::HumanoidRigData& targetRig,
+                                     const retargeting::RetargetMapData& map);
         void unload();
 
         void play() { playbackState.play(); }

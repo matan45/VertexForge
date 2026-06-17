@@ -26,6 +26,10 @@ namespace plugin {
     public:
         // VK-1290: Callback type for Core to register mType script bindings (avoids mType dep in Plugin)
         using ScriptBindingRegistrar = std::function<void(const std::vector<MetaComponentBridge>&)>;
+        // Callback for Core to drop its cached script bindings. The engine caches a copy of the
+        // MetaComponentBridges (PluginComponentAPI::storedBridges) whose std::functions are
+        // instantiated in the plugin DLLs; that cache MUST be cleared before the DLLs unload.
+        using ScriptBindingClearer = std::function<void()>;
 
     private:
         std::string pluginName;
@@ -51,6 +55,7 @@ namespace plugin {
         std::vector<services::VFXInstanceId> managedVFXInstances;
         static std::vector<MetaComponentBridge> allBridges;
         static ScriptBindingRegistrar scriptBindingRegistrar;
+        static ScriptBindingClearer scriptBindingClearer;
         // API v10: mType's process-stable plugin host vtable, installed by Core
         // at ScriptingAdapter::init (the Plugin module never links mType.lib —
         // it only forwards the pointer to plugins via getScriptHost()).
@@ -180,6 +185,11 @@ namespace plugin {
 
         static void setScriptBindingRegistrar(ScriptBindingRegistrar registrar) { scriptBindingRegistrar = std::move(registrar); }
         static ScriptBindingRegistrar getScriptBindingRegistrar() { return scriptBindingRegistrar; }
+
+        static void setScriptBindingClearer(ScriptBindingClearer clearer) { scriptBindingClearer = std::move(clearer); }
+        // Invoked by PluginManager during teardown, before the plugin DLLs unload, so the
+        // engine drops its cached plugin-DLL-backed bridges while their code is still mapped.
+        static void clearScriptBindings() { if (scriptBindingClearer) scriptBindingClearer(); }
 
         static void setScriptHostVTable(const MTypePluginHost* table) { scriptHostVTable = table; }
 
