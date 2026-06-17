@@ -5,6 +5,7 @@
 #include "AnimationLayerStack.hpp"
 #include "AnimationLOD.hpp"
 #include "AnimationDataCache.hpp"
+#include "RetargetContext.hpp"
 #include "SocketAttachmentUpdater.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/animation/AnimationSnapshotEvents.hpp"
@@ -33,6 +34,9 @@ namespace animation
         AnimationDataCache dataCache;
 
         std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>> animators;
+        // Owned retarget contexts, parallel to animators (VK-910). Referenced by raw
+        // pointer inside each layer stack's evaluators, so must outlive them.
+        std::unordered_map<entt::entity, std::unique_ptr<RetargetContext>> retargetContexts;
 
         events::SubscriptionToken meshDataChangedToken;
         events::SubscriptionToken editorModeChangedToken;
@@ -156,6 +160,9 @@ namespace animation
         void subscribeToWorldEvents();
         const resource::SkeletonData* resolveEntitySkeleton(entt::entity entity, std::string& outMeshPath);
         void setupEntityAnimatorComponent(entt::entity entity, AnimationLayerStack* layerStack, const std::string& animatorPath);
+        // Build (and own) the retarget context for an entity from its mesh's retargetRef.
+        // Returns nullptr (and stores nothing) when no/invalid retarget binding.
+        const RetargetContext* buildEntityRetargetContext(entt::entity entity, const resource::SkeletonData* targetSkeleton);
 
         uint64_t computeInstanceGroupKey(const std::string& animatorPath, uint32_t stateId,
                                           uint8_t lodLevel, float normalizedTime) const;

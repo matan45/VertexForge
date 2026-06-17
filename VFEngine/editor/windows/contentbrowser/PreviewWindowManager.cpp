@@ -11,6 +11,7 @@
 #include "../vfx/VFXEditorWindow.hpp"
 #include "../terrain/TerrainMaterialEditorWindow.hpp"
 #include "../ai/BehaviorTreeEditorWindow.hpp"
+#include "../animation/RetargetingEditorWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "string/StringUtil.hpp"
 
@@ -30,6 +31,7 @@ namespace windows
         eraseExpired(openVFXEditors);
         eraseExpired(openTerrainMaterialEditors);
         eraseExpired(openBehaviorTreeEditors);
+        eraseExpired(openRetargetEditors);
     }
 
     bool PreviewWindowManager::openPreview(const fs::path& filePath, AssetType type)
@@ -78,6 +80,9 @@ namespace windows
             return true;
         case AssetType::BehaviorTree:
             openBehaviorTreeEditor(path);
+            return true;
+        case AssetType::Retarget:
+            openRetargetEditor(path);
             return true;
         default:
             return false;
@@ -255,6 +260,17 @@ namespace windows
             auto editorWindow = std::make_shared<TerrainMaterialEditorWindow>(path);
             controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
             openTerrainMaterialEditors[path] = editorWindow;
+        }
+    }
+
+    void PreviewWindowManager::openRetargetEditor(const std::string& path)
+    {
+        auto it = openRetargetEditors.find(path);
+        if (it == openRetargetEditors.end() || it->second.expired())
+        {
+            auto editorWindow = std::make_shared<RetargetingEditorWindow>(path);
+            controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
+            openRetargetEditors[path] = editorWindow;
         }
     }
 

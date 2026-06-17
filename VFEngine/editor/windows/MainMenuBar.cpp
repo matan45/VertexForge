@@ -30,6 +30,8 @@
 #include "animation/AnimationDebugWindow.hpp"
 #include "procedural/HeightmapGeneratorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
+#include "animation/RetargetingEditorWindow.hpp"
+#include "imguiHandler/ImguiWindowHandler.hpp"
 #include "theme/ThemeEditorWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
@@ -218,6 +220,8 @@ namespace windows
         if (!ImGui::BeginMenu("Tools")) return;
         if (ImGui::MenuItem("Generate Heightmap") && heightmapGeneratorWindow) heightmapGeneratorWindow->show();
         if (ImGui::MenuItem("Remove Background") && backgroundRemovalWindow) backgroundRemovalWindow->show();
+        if (ImGui::MenuItem("Animation Retargeting"))
+            controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<RetargetingEditorWindow>(""));
         if (ImGui::MenuItem("UI Theme Editor") && themeEditorWindow) themeEditorWindow->show();
         ImGui::EndMenu();
     }

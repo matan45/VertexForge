@@ -34,6 +34,7 @@ namespace windows
         BehaviorTree,
         Plugin,
         InputMapping,
+        Retarget,
         Other
     };
 
@@ -60,7 +61,8 @@ namespace windows
         Water = 18,
         BehaviorTree = 19,
         Plugin = 20,
-        InputMapping = 21
+        InputMapping = 21,
+        Retarget = 22 // shared by .vfrig and .vfretarget (VK-910)
     };
 
     // Canonical per-type display data. Single source of truth for the filter
@@ -74,10 +76,10 @@ namespace windows
         uint32_t badgeColor; // IM_COL32 layout (0xAABBGGRR)
     };
 
-    inline const std::array<AssetTypeInfo, 23>& assetTypeTable()
+    inline const std::array<AssetTypeInfo, 24>& assetTypeTable()
     {
         using enum AssetType;
-        static const std::array<AssetTypeInfo, 23> table = {{
+        static const std::array<AssetTypeInfo, 24> table = {{
             {Texture,          "Texture",           AtlasIcon::Texture,      0xFFF7C34F},
             {HDR,              "HDR",               AtlasIcon::Hdr,          0xFFF7E04F},
             {Model,            "Model",             AtlasIcon::Mesh,         0xFF4FC3F7},
@@ -100,6 +102,7 @@ namespace windows
             {BehaviorTree,     "Behavior Tree",     AtlasIcon::BehaviorTree, 0xFF4FF74F},
             {Plugin,           "Plugin",            AtlasIcon::Plugin,       0xFFF74F4F},
             {InputMapping,     "Input Mapping",     AtlasIcon::InputMapping, 0xFFAAAAF7},
+            {Retarget,         "Retarget",          AtlasIcon::Retarget,     0xFFD08AF7},
             {Other,            "Other",             AtlasIcon::File,         0xFF909090}
         }};
         return table;
@@ -161,6 +164,8 @@ namespace windows
         case resource::AssetType::BehaviorTree:     return AssetType::BehaviorTree;
         case resource::AssetType::Scene:            return AssetType::Scene;
         case resource::AssetType::Prefab:           return AssetType::Prefab;
+        case resource::AssetType::HumanoidRig:      return AssetType::Retarget;
+        case resource::AssetType::RetargetMap:      return AssetType::Retarget;
         case resource::AssetType::Skeleton:
         case resource::AssetType::World:
         case resource::AssetType::Theme:

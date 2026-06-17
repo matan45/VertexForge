@@ -38,6 +38,8 @@ namespace asset
             if (ext == ".vfsettings")     return resource::AssetType::Scene;
             if (ext == ".vftheme")        return resource::AssetType::Theme;
             if (ext == ".vfprefab")       return resource::AssetType::Prefab;
+            if (ext == ".vfrig")          return resource::AssetType::HumanoidRig;
+            if (ext == ".vfretarget")     return resource::AssetType::RetargetMap;
             if (ext == ".mt")             return resource::AssetType::Script;
             return resource::AssetType::COUNT;
         }
@@ -53,7 +55,7 @@ namespace asset
                 ".vffont", ".vfscene", ".vfsettings", ".vfprefab", ".vftheme",
                 ".vfterrain", ".vfterrainmat", ".vfwater", ".vfnavmesh",
                 ".vfnavindex", ".vfimposter", ".vfinputmapping",
-                ".vfbehaviortree", ".vfphysanim", ".mt"
+                ".vfbehaviortree", ".vfphysanim", ".vfrig", ".vfretarget", ".mt"
             };
             return set;
         }
@@ -66,7 +68,8 @@ namespace asset
             static const std::unordered_set<std::string> set = {
                 ".vfscene", ".vfsettings", ".vfprefab", ".vfmat",
                 ".vfmatinstance", ".vfanimator", ".vfvfx", ".vfterrainmat",
-                ".vftheme", ".vfbehaviortree", ".vfinputmapping"
+                ".vftheme", ".vfbehaviortree", ".vfinputmapping",
+                ".vfrig", ".vfretarget"
             };
             return set;
         }

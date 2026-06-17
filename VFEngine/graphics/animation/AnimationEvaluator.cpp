@@ -1,16 +1,23 @@
 #include "AnimationEvaluator.hpp"
+#include "RetargetContext.hpp"
 #include "print/Log.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace animation
 {
     void AnimationEvaluator::loadAnimation(const resource::AnimationData& animation,
-                                           const resource::SkeletonData& skeleton)
+                                           const resource::SkeletonData& skeleton,
+                                           const RetargetContext* retargetContext)
     {
         clear();
 
         animationData = &animation;
         skeletonData = &skeleton;
+        // Only honor a non-empty context; an empty/zero-bone context falls back to native.
+        retarget = (retargetContext && !retargetContext->empty() &&
+                    retargetContext->perTargetBone.size() == skeleton.bones.size())
+                       ? retargetContext
+                       : nullptr;
 
         if (skeletonData->bones.empty() || skeletonData->inverseBindPoses.empty())
         {
@@ -40,6 +47,7 @@ namespace animation
     {
         animationData = nullptr;
         skeletonData = nullptr;
+        retarget = nullptr;
         boneNameToChannelIndex.clear();
         evaluatedBones.clear();
         computedLocalBindPoses.clear();
@@ -58,6 +66,43 @@ namespace animation
         {
             boneNameToChannelIndex[animationData->channels[i].boneName] = i;
         }
+    }
+
+    void AnimationEvaluator::sampleRetargetedLocal(size_t i, float timeInTicks,
+                                                   glm::vec3& outPos, glm::quat& outRot, glm::vec3& outScale) const
+    {
+        outScale = glm::vec3(1.0f); // retargeting ignores source scale; target keeps its proportions
+
+        const RetargetBone& rb = retarget->perTargetBone[i];
+        if (rb.mapped)
+        {
+            auto it = boneNameToChannelIndex.find(rb.sourceBoneName);
+            if (it != boneNameToChannelIndex.end())
+            {
+                const auto& ch = animationData->channels[it->second];
+
+                outRot = ch.rotationKeys.empty()
+                             ? rb.targetRefRotation
+                             : glm::normalize(rb.correction * interpolateRotation(ch, timeInTicks, it->second));
+
+                if (rb.isRoot)
+                {
+                    glm::vec3 srcPos = ch.positionKeys.empty()
+                                           ? rb.srcHipBindLocal
+                                           : interpolatePosition(ch, timeInTicks, it->second);
+                    outPos = rb.tgtHipBindLocal + retarget->legLengthRatio * (srcPos - rb.srcHipBindLocal);
+                }
+                else
+                {
+                    outPos = glm::vec3(computedLocalBindPoses[i][3]); // keep target bone length
+                }
+                return;
+            }
+        }
+
+        // Unmapped target bone, or source bone absent from this clip -> hold target bind pose.
+        outPos = glm::vec3(computedLocalBindPoses[i][3]);
+        outRot = glm::quat_cast(glm::mat3(computedLocalBindPoses[i]));
     }
 
     float AnimationEvaluator::secondsToTicks(float seconds) const
@@ -80,9 +125,23 @@ namespace animation
         for (size_t i = 0; i < boneCount; ++i)
         {
             const auto& bone = skeletonData->bones[i];
-            auto it = boneNameToChannelIndex.find(bone.name);
 
             glm::mat4 animatedTransform;
+
+            if (retarget)
+            {
+                glm::vec3 rPos; glm::quat rRot; glm::vec3 rScl;
+                sampleRetargetedLocal(i, timeInTicks, rPos, rRot, rScl);
+                evaluatedBones[i].position = rPos;
+                evaluatedBones[i].rotation = rRot;
+                evaluatedBones[i].scale = rScl;
+                animatedTransform = glm::translate(glm::mat4(1.0f), rPos) * glm::mat4_cast(rRot) *
+                                    glm::scale(glm::mat4(1.0f), rScl);
+                evaluatedBones[i].localTransform = bone.preTransform * animatedTransform;
+                continue;
+            }
+
+            auto it = boneNameToChannelIndex.find(bone.name);
 
             if (it != boneNameToChannelIndex.end())
             {
@@ -188,9 +247,31 @@ namespace animation
         for (size_t i = 0; i < boneCount; ++i)
         {
             const auto& bone = skeletonData->bones[i];
-            auto it = boneNameToChannelIndex.find(bone.name);
 
             glm::mat4 animatedTransform;
+
+            if (retarget)
+            {
+                glm::vec3 rPos; glm::quat rRot; glm::vec3 rScl;
+                sampleRetargetedLocal(i, timeInTicks, rPos, rRot, rScl);
+
+                const RetargetBone& rb = retarget->perTargetBone[i];
+                if (rb.isRoot)
+                {
+                    outRootPosition = rPos - rb.tgtHipBindLocal;
+                    rPos = rb.tgtHipBindLocal;
+                }
+
+                evaluatedBones[i].position = rPos;
+                evaluatedBones[i].rotation = rRot;
+                evaluatedBones[i].scale = rScl;
+                animatedTransform = glm::translate(glm::mat4(1.0f), rPos) * glm::mat4_cast(rRot) *
+                                    glm::scale(glm::mat4(1.0f), rScl);
+                evaluatedBones[i].localTransform = bone.preTransform * animatedTransform;
+                continue;
+            }
+
+            auto it = boneNameToChannelIndex.find(bone.name);
 
             if (it != boneNameToChannelIndex.end())
             {
@@ -360,8 +441,22 @@ namespace animation
 
             if (i < MAX_SKELETON_BONES && activeBones.test(i))
             {
-                auto it = boneNameToChannelIndex.find(bone.name);
                 glm::mat4 animatedTransform;
+
+                if (retarget)
+                {
+                    glm::vec3 rPos; glm::quat rRot; glm::vec3 rScl;
+                    sampleRetargetedLocal(i, timeInTicks, rPos, rRot, rScl);
+                    evaluatedBones[i].position = rPos;
+                    evaluatedBones[i].rotation = rRot;
+                    evaluatedBones[i].scale = rScl;
+                    animatedTransform = glm::translate(glm::mat4(1.0f), rPos) * glm::mat4_cast(rRot) *
+                                        glm::scale(glm::mat4(1.0f), rScl);
+                    evaluatedBones[i].localTransform = bone.preTransform * animatedTransform;
+                    continue;
+                }
+
+                auto it = boneNameToChannelIndex.find(bone.name);
 
                 if (it != boneNameToChannelIndex.end())
                 {

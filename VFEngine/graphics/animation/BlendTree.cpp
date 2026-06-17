@@ -1,4 +1,5 @@
 #include "BlendTree.hpp"
+#include "RetargetContext.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -9,7 +10,8 @@ namespace animation
         const animator::AnimatorRuntimeParameters& params,
         const resource::SkeletonData& skeleton,
         float stateTime,
-        const AnimationLoadCallback& loadCallback) const
+        const AnimationLoadCallback& loadCallback,
+        const RetargetContext* retarget) const
     {
         std::vector<float> weights;
 
@@ -26,7 +28,7 @@ namespace animation
         }
 
         glm::vec3 unused;
-        return evaluateAndBlend(blendTree, weights, skeleton, stateTime, loadCallback, false, unused);
+        return evaluateAndBlend(blendTree, weights, skeleton, stateTime, loadCallback, false, unused, retarget);
     }
 
     std::vector<glm::mat4> BlendTreeEvaluator::evaluate(
@@ -35,7 +37,8 @@ namespace animation
         const resource::SkeletonData& skeleton,
         float stateTime,
         const AnimationLoadCallback& loadCallback,
-        glm::vec3& outRootPosition) const
+        glm::vec3& outRootPosition,
+        const RetargetContext* retarget) const
     {
         std::vector<float> weights;
 
@@ -51,7 +54,7 @@ namespace animation
             weights = compute2DWeights(blendTree, paramX, paramY);
         }
 
-        return evaluateAndBlend(blendTree, weights, skeleton, stateTime, loadCallback, true, outRootPosition);
+        return evaluateAndBlend(blendTree, weights, skeleton, stateTime, loadCallback, true, outRootPosition, retarget);
     }
 
     std::vector<float> BlendTreeEvaluator::compute1DWeights(
@@ -199,7 +202,8 @@ namespace animation
         float stateTime,
         const AnimationLoadCallback& loadCallback,
         bool trackRootMotion,
-        glm::vec3& outRootPosition) const
+        glm::vec3& outRootPosition,
+        const RetargetContext* retarget) const
     {
         const auto& entries = blendTree.entries;
         size_t n = entries.size();
@@ -230,7 +234,7 @@ namespace animation
             if (!animData)
                 continue;
 
-            evaluator.loadAnimation(*animData, skeleton);
+            evaluator.loadAnimation(*animData, skeleton, retarget);
             float timeInTicks = evaluator.secondsToTicks(stateTime);
 
             if (trackRootMotion)

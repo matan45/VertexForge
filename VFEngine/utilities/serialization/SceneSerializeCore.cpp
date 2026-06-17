@@ -50,6 +50,11 @@ namespace serialization
             {
                 j["applyRootMotion"] = true;
             }
+
+            if (mesh.retargetRef.isValid())
+            {
+                writeAssetRef(j, "retargetRef", mesh.retargetRef);
+            }
         }
 
         if (mesh.maxDrawDistance > 0.0f)
@@ -121,6 +126,7 @@ namespace serialization
         {
             mesh.applyRootMotion = it->get<bool>();
         }
+        mesh.retargetRef = readAssetRef(j, "retargetRef");
         if (auto it = j.find("maxDrawDistance"); it != j.end() && it->is_number())
         {
             mesh.maxDrawDistance = it->get<float>();

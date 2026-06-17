@@ -177,6 +177,14 @@ namespace animation
                 continue;
             }
 
+            // Retargeted entities produce target-skeleton-specific poses, so the same
+            // animator path can yield different poses per entity — never instance-share them.
+            if (retargetContexts.find(candidate.entity) != retargetContexts.end())
+            {
+                leadersToEvaluate.push_back({candidate.entity, candidate.anim});
+                continue;
+            }
+
             float normalizedTime = candidate.anim->getNormalizedTime();
             uint64_t groupKey = computeInstanceGroupKey(animatorPath, currentState->id,
                                                          candidate.lodLevel, normalizedTime);

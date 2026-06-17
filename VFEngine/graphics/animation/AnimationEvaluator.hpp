@@ -11,6 +11,8 @@
 
 namespace animation
 {
+    struct RetargetContext;
+
     struct EvaluatedBone
     {
         glm::vec3 position{0.0f};
@@ -28,6 +30,10 @@ namespace animation
     private:
         const resource::AnimationData* animationData = nullptr;
         const resource::SkeletonData* skeletonData = nullptr;
+        // When set, animationData is the SOURCE clip and skeletonData is the TARGET
+        // skeleton; per-bone sampling is remapped source -> target (VK-910).
+        // Null = native (no retargeting), behaves byte-for-byte as before.
+        const RetargetContext* retarget = nullptr;
         std::unordered_map<std::string, size_t> boneNameToChannelIndex;
         mutable std::vector<EvaluatedBone> evaluatedBones;
         std::vector<glm::mat4> computedLocalBindPoses;
@@ -40,7 +46,8 @@ namespace animation
         AnimationEvaluator() = default;
         ~AnimationEvaluator() = default;
 
-        void loadAnimation(const resource::AnimationData& animation, const resource::SkeletonData& skeleton);
+        void loadAnimation(const resource::AnimationData& animation, const resource::SkeletonData& skeleton,
+                           const RetargetContext* retargetContext = nullptr);
         void clear();
 
         std::vector<glm::mat4> evaluatePose(float timeInTicks) const;
@@ -62,6 +69,10 @@ namespace animation
         size_t findKeyframeIndex(const std::vector<KeyType>& keys, float time, size_t& hint) const;
 
         void buildBoneToChannelMap();
+
+        // Retarget sampling for target bone i -> local TRS (used only when retarget != null).
+        void sampleRetargetedLocal(size_t i, float timeInTicks,
+                                   glm::vec3& outPos, glm::quat& outRot, glm::vec3& outScale) const;
     };
 #pragma warning(pop)
 }
