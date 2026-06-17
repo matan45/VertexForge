@@ -75,6 +75,12 @@ namespace core
                     api::PluginComponentAPI::registerAPI(interp, bridges);
                 });
 
+            // PluginManager invokes this during teardown, before unloading the plugin DLLs, so the
+            // engine drops its cached bridges (whose std::functions live in the DLLs) while their
+            // code is still mapped — otherwise destroying them post-unload faults (shutdown crash).
+            plugin::PluginContextImpl::setScriptBindingClearer(
+                []() { api::PluginComponentAPI::cleanup(); });
+
             // API v10: hand engine plugins mType's plugin host vtable so their
             // registered natives can build/inspect script values through the
             // standard C ABI (all execution stays engine-side in mType.lib).

@@ -42,6 +42,12 @@ namespace services
         static constexpr float STUCK_VELOCITY_THRESHOLD = 0.1f;
         static constexpr float STUCK_TIME_THRESHOLD = 0.5f;
 
+        // Off-mesh destinations (e.g. an RTS click beyond the baked mesh edge) are
+        // snapped onto the navmesh, trying progressively wider radii. The 5u default
+        // (GetClosestPointQuery) is too small for clicks well past the edge.
+        static constexpr float SNAP_SEARCH_RADII[] = {5.0f, 25.0f, 100.0f};
+        static constexpr float SNAP_ON_MESH_TOLERANCE = 1.0f;
+
         struct SuspendedAgent
         {
             uint64_t entityId;

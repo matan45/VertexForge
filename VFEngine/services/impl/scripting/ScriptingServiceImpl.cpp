@@ -1,4 +1,5 @@
 #include "print/Log.hpp"
+#include "crash/CrashHandler.hpp"
 #include "ScriptingServiceImpl.hpp"
 #include "../../events/scripting/ScriptingEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
@@ -451,10 +452,12 @@ namespace services
                 continue;
             }
 
+            std::string entityName;
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
                 if (!nameComp.isActive) continue;
+                entityName = nameComp.name;
             }
 
             auto& scriptComp = registry.get<components::ScriptComponent>(entity);
@@ -523,10 +526,33 @@ namespace services
                 }
             }
 
-            scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
+            // Breadcrumb so that an *uncatchable* native fault (e.g. an mType JIT
+            // access violation) inside this script is still attributed by name in
+            // the crash report written by util::installCrashHandler().
+            util::setCrashLogContext("script onUpdate: " + entry.scriptPath + " @ '" + entityName + "'");
+            try
+            {
+                scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
+            }
+            catch (const std::exception& e)
+            {
+                // Catches only mType *interpreter* errors (surfaced as C++
+                // exceptions). mType *JIT* faults are SEH access violations that
+                // bypass this catch entirely — those are captured by the crash
+                // handler, or avoided by running with JIT off (the editor "Debug"
+                // script button forces the VM into interpreter mode).
+                vfLogScriptError("[Script] '{}' on '{}' threw in onUpdate: {}",
+                                 entry.scriptPath, entityName, e.what());
+                continue;
+            }
         }
 
+        // Re-point the breadcrumb away from the last script: a native fault in
+        // tickCoroutines (a likely JIT-fault site) or in later frame work must not
+        // be misattributed in the crash report to the last onUpdate that ran.
+        util::setCrashLogContext("script coroutines tick");
         scriptingProvider->tickCoroutines(deltaTime);
+        util::setCrashLogContext("");
     }
 
     void ScriptingServiceImpl::fixedUpdateScripts(float fixedDeltaTime)

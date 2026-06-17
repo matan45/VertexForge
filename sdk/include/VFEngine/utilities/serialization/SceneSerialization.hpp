@@ -83,6 +83,10 @@ namespace serialization
 
     private:
         static json serializeRootEntity(scene::Entity& root);
+        // Shared serializer for serializeEntity (serial children) and serializeRootEntity
+        // (parallelChildren=true: each top-level subtree serialized concurrently, collected
+        // in child order for deterministic output).
+        static json serializeEntityImpl(scene::Entity& entity, bool parallelChildren);
         static json serializeEntityComponents(scene::Entity& entity);
         static void deserializeEntityComponents(const json& componentsJson, scene::Entity& entity);
 

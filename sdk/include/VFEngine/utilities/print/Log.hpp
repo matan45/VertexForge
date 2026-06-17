@@ -5,6 +5,7 @@
 
 #include "spdlog/spdlog.h"
 #include "spdlog/fmt/bundled/core.h"
+#include "spdlog/sinks/rotating_file_sink.h"
 #include "LogEntry.hpp"
 
 #include <chrono>
@@ -14,6 +15,8 @@
 #include <vector>
 #include <mutex>
 #include <atomic>
+#include <memory>
+#include <filesystem>
 
 
 #define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
@@ -77,6 +80,44 @@ namespace util {
 
 	inline void resetConsoleColor() {
 		SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 0x0F);
+	}
+
+	// Registers a rotating on-disk log file (logs/<appName>.log) as spdlog's
+	// default logger, so spdlog::* calls in the log functions below are mirrored
+	// to disk with zero changes to those functions. flush_on(err) guarantees
+	// errors hit the file before any subsequent crash, so the log survives a hard
+	// fault. Call once at startup, right after util::installCrashHandler().
+	//
+	// Scope caveat: spdlog is statically linked into each module, so this only
+	// redirects the default logger of the module that calls it (the Editor/Runtime
+	// EXE). vfLog* calls executed inside subsystem DLLs (Audio, Terrain, World,
+	// Serialization, Animation, ...) hit that DLL's own default logger and are NOT
+	// mirrored to this file. To capture a DLL's logs, that DLL must call initLogFile
+	// too. EXE-side errors + the script channel are sufficient for the common
+	// crash-forensics case.
+	//
+	// Note: the vfLog* engine functions early-return on !engineLogsEnabled
+	// before reaching spdlog, so in Release only errors and the script channel
+	// (vfLogScript*) reach this file.
+	inline void initLogFile(const std::string& appName) {
+		try {
+			std::error_code ec;
+			std::filesystem::create_directories("logs", ec);
+
+			constexpr std::size_t maxSize = 5 * 1024 * 1024;  // 5 MB per file
+			constexpr std::size_t maxFiles = 3;
+			auto sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+				"logs/" + appName + ".log", maxSize, maxFiles);
+
+			auto logger = std::make_shared<spdlog::logger>(appName, sink);
+			logger->set_level(spdlog::level::trace);
+			logger->flush_on(spdlog::level::err);
+			logger->set_pattern("%Y-%m-%d %H:%M:%S.%e [%l] %v");
+
+			spdlog::set_default_logger(logger);
+		} catch (const std::exception& e) {
+			printf("Failed to initialize log file: %s\n", e.what());
+		}
 	}
 
 	template<typename... Args>

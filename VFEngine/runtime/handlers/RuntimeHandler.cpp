@@ -461,7 +461,11 @@ namespace handlers {
         frameTaskGraph->addTask("Scripts", [this]() {
             if (scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                scriptingService->updateScripts(dt);
+                // Safety net: a catchable mType (interpreter) error in any script
+                // is logged and the game continues. Native JIT faults still go to
+                // the crash handler (see CrashHandler).
+                try { scriptingService->updateScripts(dt); }
+                catch (const std::exception& e) { vfLogError("[Script] updateScripts threw: {}", e.what()); }
             }
         });
 
@@ -486,11 +490,15 @@ namespace handlers {
             }
         });
 
+        // Pinned to the main thread: updateListenerFromPrimaryCamera() dispatches
+        // SetListenerPositionCommand into the audio command queue, which is not safe to
+        // invoke from an enkiTS worker (see the editor's note in EditorFrameTaskGraph).
+        // With per-layer barriers removed (VK-1385) a worker would otherwise run this.
         frameTaskGraph->addTask("AudioListener", [this]() {
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
             }
-        });
+        }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
         frameTaskGraph->addTask("Weather", [this]() {
             float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
@@ -544,11 +552,16 @@ namespace handlers {
             if (sceneGraphFn) sceneGraphFn();
         });
 
+        // Pinned to the main thread: prepares cameras and dispatches render commands
+        // (offScreen->prepareCameras, UpdateMeshCamera/IBL, getViewportTexture) - the
+        // runtime equivalent of the editor's main-thread ViewPort camera prep. With
+        // per-layer barriers removed (VK-1385) this would otherwise run on a worker.
         frameTaskGraph->addTask("PostUpdate", [this]() {
             // Late scripts
             if (scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                scriptingService->lateUpdateScripts(dt);
+                try { scriptingService->lateUpdateScripts(dt); }
+                catch (const std::exception& e) { vfLogError("[Script] lateUpdateScripts threw: {}", e.what()); }
             }
 
             // Camera preparation
@@ -607,7 +620,7 @@ namespace handlers {
             if (renderService) {
                 renderService->getViewportTexture();
             }
-        });
+        }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
         auto renderFn = bootstrap->getRenderFn();
         frameTaskGraph->addTask("Render", [renderFn]() {

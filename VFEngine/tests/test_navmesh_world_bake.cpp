@@ -4,10 +4,12 @@
 #include <providers/navmesh/INavmeshProvider.hpp>
 #include <types/NavmeshTypes.hpp>
 #include <world/WorldTypes.hpp>
+#include <threading/JobSystem.hpp>
 
 #include <algorithm>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <unordered_set>
 #include <vector>
 
@@ -25,7 +27,12 @@ namespace
     class BakeStubProvider : public services::INavmeshProvider
     {
     public:
+        // buildSingleTile may run concurrently on JobSystem workers (the world baker
+        // submits up to MAX_BAKE_SUBMITS_PER_FRAME tiles per frame), so the record of
+        // baked tiles must be guarded. When the JobSystem is uninitialized (the default
+        // in most tests) bakes run inline and the lock is uncontended.
         std::vector<navigation::NavmeshTileCoord> bakedTiles;
+        std::mutex bakedMutex;
         bool navmeshExists = false;
 
         bool init() override { return true; }
@@ -51,7 +58,10 @@ namespace
                                                     const std::vector<navigation::NavmeshAreaModifier>&,
                                                     uint8_t) override
         {
-            bakedTiles.push_back({tx, tz});
+            {
+                std::lock_guard<std::mutex> lock(bakedMutex);
+                bakedTiles.push_back({tx, tz});
+            }
             navigation::NavmeshTileData tile;
             tile.x = tx;
             tile.y = tz;
@@ -98,6 +108,14 @@ namespace
         return std::any_of(coords.begin(), coords.end(),
                            [&](const ::world::SectorCoord& c) { return c.x == x && c.z == z; });
     }
+
+    // Brings the JobSystem up for one test case and tears it down again, so async
+    // execution is opt-in per case and never leaks into the inline-expecting tests.
+    struct JobSystemScope
+    {
+        JobSystemScope() { threading::JobSystem::instance().init(); }
+        ~JobSystemScope() { threading::JobSystem::instance().shutdown(); }
+    };
 
     struct BakeFixture
     {
@@ -306,5 +324,38 @@ TEST_SUITE("NavmeshWorldBake")
         REQUIRE(f.runToCompletion());
         CHECK(f.baker->getProgress().state == events::navmesh::WorldNavmeshBakeState::Complete);
         CHECK(f.provider.bakedTiles.size() == 4);
+    }
+
+    TEST_CASE("bakes correctly with the JobSystem live (tiles built concurrently)")
+    {
+        // Regression guard: with the JobSystem initialized, submitWorldBakeTile runs
+        // tiles on worker threads (up to MAX_BAKE_SUBMITS_PER_FRAME concurrently). The
+        // bake must still produce every tile exactly once with no data race - futures
+        // are collected on the polling thread and each job only returns its own tile.
+        JobSystemScope jobSystem;
+
+        BakeFixture f;
+        // 2x2 block of 64-unit sectors -> 16 distinct 32-unit tiles, plenty to force
+        // multiple concurrent buildSingleTile calls.
+        f.allSectors = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
+
+        REQUIRE(f.baker->start(f.outputDir.string()));
+        REQUIRE(f.runToCompletion());
+
+        CHECK(f.baker->getProgress().state == events::navmesh::WorldNavmeshBakeState::Complete);
+
+        // Every tile baked exactly once despite concurrent execution.
+        CHECK(f.provider.bakedTiles.size() == 16);
+        std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> unique(
+            f.provider.bakedTiles.begin(), f.provider.bakedTiles.end());
+        CHECK(unique.size() == 16);
+
+        navigation::NavmeshTileCache cache(f.outputDir.string());
+        navigation::NavmeshTileIndex index;
+        REQUIRE(cache.loadIndex(index));
+        CHECK(index.tileCoords.size() == 16);
+
+        CHECK(f.loadedSectors.empty());
+        CHECK(f.loadCalls.size() == f.unloadCalls.size());
     }
 }

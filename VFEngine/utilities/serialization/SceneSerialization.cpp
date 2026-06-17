@@ -13,6 +13,11 @@ namespace serialization
 {
     json SceneSerialization::serializeEntity(scene::Entity& entity)
     {
+        return serializeEntityImpl(entity, false);
+    }
+
+    json SceneSerialization::serializeEntityImpl(scene::Entity& entity, bool parallelChildren)
+    {
         json entityJson;
 
         entityJson["uuid"] = entity.getUUID().getValue();
@@ -30,17 +35,40 @@ namespace serialization
 
         entityJson["components"] = serializeEntityComponents(entity);
 
+        auto children = entity.getChildren();
         json childrenJson = json::array();
-        for (auto& child : entity.getChildren())
+
+        // List-view item instances are engine-managed (rebuilt from the item template on
+        // load) — baking them would duplicate items, so they are skipped at every level.
+        if (parallelChildren && children.size() > 1)
         {
-            // List-view item instances are engine-managed (rebuilt from the
-            // item template on load) — baking them would duplicate items.
-            if (child.hasComponent<components::UIListItemComponent>())
+            // Each child subtree is disjoint and serialization is read-only (no structural
+            // registry mutation). Serialize subtrees concurrently and collect in child order
+            // so the result is byte-identical to the serial path. Subtrees are serialized
+            // serially inside each job (no nested submission -> no worker-thread deadlock).
+            std::vector<std::future<json>> futures;
+            futures.reserve(children.size());
+            for (auto& child : children)
             {
-                continue;
+                if (child.hasComponent<components::UIListItemComponent>())
+                    continue;
+                futures.push_back(threading::JobSystem::instance().submit(
+                    [child]() mutable -> json { return serializeEntity(child); },
+                    threading::JobPriority::NORMAL));
             }
-            childrenJson.push_back(serializeEntity(child));
+            for (auto& f : futures)
+                childrenJson.push_back(f.get());
         }
+        else
+        {
+            for (auto& child : children)
+            {
+                if (child.hasComponent<components::UIListItemComponent>())
+                    continue;
+                childrenJson.push_back(serializeEntity(child));
+            }
+        }
+
         entityJson["children"] = childrenJson;
 
         return entityJson;
@@ -338,48 +366,8 @@ namespace serialization
 
     json SceneSerialization::serializeRootEntity(scene::Entity& root)
     {
-        auto children = root.getChildren();
-        if (children.size() > 1)
-        {
-            json rootJson;
-            rootJson["uuid"] = root.getUUID().getValue();
-            rootJson["name"] = root.getName();
-
-            if (root.hasComponent<components::NameComponent>())
-            {
-                rootJson["isActive"] = root.getComponent<components::NameComponent>().isActive;
-            }
-            if (root.hasComponent<components::TransformComponent>())
-            {
-                rootJson["transform"] = serializeTransform(root.getComponent<components::TransformComponent>());
-            }
-            rootJson["components"] = serializeEntityComponents(root);
-
-            // Safe to parallelize: each child subtree is disjoint and serialization
-            // is read-only (no structural registry mutations). Each thread reads only
-            // its own subtree's components via entity handles.
-            std::vector<std::future<json>> futures;
-            futures.reserve(children.size());
-            for (auto& child : children)
-            {
-                futures.push_back(threading::JobSystem::instance().submit(
-                    [child]() mutable -> json
-                    {
-                        return serializeEntity(child);
-                    }, threading::JobPriority::NORMAL
-                ));
-            }
-
-            json childrenJson = json::array();
-            for (auto& f : futures)
-            {
-                childrenJson.push_back(f.get());
-            }
-            rootJson["children"] = childrenJson;
-            return rootJson;
-        }
-
-        return serializeEntity(root);
+        // Parallelize across the root's direct children (the top-level scene entities).
+        return serializeEntityImpl(root, true);
     }
 
     bool SceneSerialization::saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename)

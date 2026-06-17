@@ -1,6 +1,8 @@
 #include "../print/Log.hpp"
 #include "TaskGraphImpl.hpp"
 
+#include <cassert>
+
 namespace threading {
 
 	TaskGraph::TaskGraph() : pImpl(std::make_unique<Impl>()) {}
@@ -12,118 +14,44 @@ namespace threading {
 	{
 		if (!pImpl->scheduler || pImpl->nodes.empty()) return;
 
+		// Published to the cached task lambdas (read on worker threads). Set before any
+		// AddTaskSetToPipe so the scheduler's pipe atomics establish the happens-before.
+		pImpl->profilingEnabled = profilingEnabled;
+
 		if (profilingEnabled) {
 			pImpl->baseTime = std::chrono::high_resolution_clock::now();
-
-			for (auto& entry : pImpl->profileData) {
-				entry.startTimeNs = 0;
-				entry.endTimeNs = 0;
-				entry.threadId = 0;
-			}
 		}
 
-		auto* baseTimePtr = &pImpl->baseTime;
+		// Zero the timing fields every frame regardless of profiling state. Otherwise a
+		// profiled frame followed by an unprofiled one would leave getProfileData()
+		// returning last-profiled-frame timings as if they were current (the cached
+		// lambdas skip the capture branch when profiling is off and never overwrite them).
+		for (auto& entry : pImpl->profileData) {
+			entry.startTimeNs = 0;
+			entry.endTimeNs = 0;
+			entry.threadId = 0;
+		}
 
-		// Execute cached layers (computed once at build time)
-		for (size_t layerIdx = 0; layerIdx < pImpl->layers.size(); ++layerIdx) {
-			auto& layer = pImpl->layers[layerIdx];
+		// The previous frame's WaitforTask below fully drained the graph, so the terminal
+		// (and every node) is complete on entry. Catches a not-drained / re-entrant misuse;
+		// execute() is contractually main-thread-only.
+		assert(pImpl->terminal.GetIsComplete());
 
-			if (layer.size() == 1) {
-				// Single task - execute directly on this thread
-				uint32_t idx = layer[0];
-				auto& node = pImpl->nodes[idx];
-
-				if (profilingEnabled) {
-					auto* entryPtr = &pImpl->profileData[idx];
-					auto start = std::chrono::high_resolution_clock::now();
-					node.fn();
-					auto end = std::chrono::high_resolution_clock::now();
-
-					entryPtr->startTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-					entryPtr->endTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-					entryPtr->threadId = 0;
-				}
-				else {
-					node.fn();
-				}
+		// Kick the roots (in-degree 0). enkiTS arms the whole reachable graph and auto-launches
+		// each downstream node the moment all its predecessors finish (native dependencies), so
+		// there is no per-layer barrier and independent work overlaps freely across layers.
+		for (uint32_t idx : pImpl->rootIndices) {
+			if (pImpl->nodes[idx].pinned) {
+				pImpl->scheduler->AddPinnedTask(pImpl->cachedPinnedTasks[idx].get());
 			}
 			else {
-				// Multiple tasks in this layer. Honor the `pinned` flag:
-				// non-pinned tasks go to enkiTS worker threads; pinned tasks
-				// run on the calling (main) thread sequentially. We dispatch
-				// the worker tasks first so they execute in parallel with
-				// the pinned-task work, then wait for them.
-				std::vector<uint32_t> workerIndices;
-				std::vector<uint32_t> pinnedIndices;
-				workerIndices.reserve(layer.size());
-				pinnedIndices.reserve(layer.size());
-				for (uint32_t idx : layer) {
-					if (pImpl->nodes[idx].pinned) pinnedIndices.push_back(idx);
-					else workerIndices.push_back(idx);
-				}
-
-				std::vector<std::unique_ptr<enki::TaskSet>> taskSets(workerIndices.size());
-				for (size_t t = 0; t < workerIndices.size(); ++t) {
-					uint32_t idx = workerIndices[t];
-					auto& node = pImpl->nodes[idx];
-
-					if (profilingEnabled) {
-						auto* entryPtr = &pImpl->profileData[idx];
-						taskSets[t] = std::make_unique<enki::TaskSet>(1,
-							[&fn = node.fn, entryPtr, baseTimePtr](
-								enki::TaskSetPartition, uint32_t threadNum) {
-								auto start = std::chrono::high_resolution_clock::now();
-								fn();
-								auto end = std::chrono::high_resolution_clock::now();
-								entryPtr->startTimeNs = static_cast<uint64_t>(
-									std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-								entryPtr->endTimeNs = static_cast<uint64_t>(
-									std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-								entryPtr->threadId = threadNum;
-							}
-						);
-					}
-					else {
-						taskSets[t] = std::make_unique<enki::TaskSet>(1,
-							[&fn = node.fn](enki::TaskSetPartition, uint32_t) {
-							fn();
-							}
-						);
-					}
-					taskSets[t]->m_Priority = static_cast<enki::TaskPriority>(
-						static_cast<uint32_t>(node.priority));
-				}
-
-				for (auto& task : taskSets) {
-					pImpl->scheduler->AddTaskSetToPipe(task.get());
-				}
-
-				// Run pinned tasks on the calling thread while workers execute.
-				for (uint32_t idx : pinnedIndices) {
-					auto& node = pImpl->nodes[idx];
-					if (profilingEnabled) {
-						auto* entryPtr = &pImpl->profileData[idx];
-						auto start = std::chrono::high_resolution_clock::now();
-						node.fn();
-						auto end = std::chrono::high_resolution_clock::now();
-						entryPtr->startTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-						entryPtr->endTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-						entryPtr->threadId = 0;
-					}
-					else {
-						node.fn();
-					}
-				}
-
-				for (auto& task : taskSets) {
-					pImpl->scheduler->WaitforTask(task.get());
-				}
+				pImpl->scheduler->AddTaskSetToPipe(pImpl->cachedTaskSets[idx].get());
 			}
 		}
+
+		// Block until the terminal sentinel (depends on every leaf) completes. While waiting,
+		// this (main) thread runs its own thread-0 pinned tasks and helps run worker tasks.
+		pImpl->scheduler->WaitforTask(&pImpl->terminal);
 	}
 
 	const std::vector<TaskProfileEntry>& TaskGraph::getProfileData() const

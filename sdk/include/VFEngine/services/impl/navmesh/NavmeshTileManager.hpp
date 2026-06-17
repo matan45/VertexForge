@@ -8,10 +8,11 @@
 #include "navigation/NavmeshTileCache.hpp"
 #include "world/WorldTypes.hpp"
 #include <glm/glm.hpp>
+#include "threading/JobSystem.hpp"
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
-#include <future>
+#include <mutex>
 #include <memory>
 #include <functional>
 
@@ -113,14 +114,33 @@ namespace services
         bool tiledNavmeshInitialized = false;
         bool saveOnDemandToCache = true;
 
+        // In-flight bake jobs. The handle is used only for throttling (count) and for
+        // draining on clear(); the baked result is delivered out-of-band via completedBakes
+        // so completion runs on the main thread without per-future polling.
         struct PendingTileBake
         {
             navigation::NavmeshTileCoord coord;
-            bool saveToCache = true;
-            std::future<navigation::NavmeshTileData> future;
+            threading::JobHandle handle;
         };
         std::vector<PendingTileBake> pendingTileBakes;
         static constexpr int MAX_TILE_BAKES_PER_FRAME = 2;
+
+        // Results pushed by bake worker threads, drained + applied on the main thread in
+        // pollTileBakeCompletions(). Replaces the old wait_for(0) polling loop.
+        struct CompletedTileBake
+        {
+            navigation::NavmeshTileCoord coord;
+            bool saveToCache = true;
+            navigation::NavmeshTileData tileData;
+        };
+        std::mutex completedBakesMutex;
+        std::vector<CompletedTileBake> completedBakes;
+
+        void submitTileBake(const navigation::NavmeshTileCoord& coord,
+                            navigation::NavmeshInputGeometry geometry,
+                            navigation::NavmeshOffMeshConnections offMeshLinks,
+                            std::vector<navigation::NavmeshAreaModifier> areaModifiers,
+                            bool saveToCache, threading::JobPriority priority);
 
         int initialLoadBurst = 0;
         static constexpr int INITIAL_STREAM_LOAD_BURST = 64;

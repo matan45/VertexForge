@@ -2,8 +2,9 @@
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/PhysicsSystem.h>
-#include <Jolt/Core/JobSystemThreadPool.h>
+#include <Jolt/Core/JobSystem.h>
 #include <Jolt/Core/TempAllocator.h>
+#include "JoltEnkiJobSystem.hpp"
 #include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Skeleton/SkeletonPose.h>
 #include "PhysicsContext.hpp"
@@ -28,7 +29,7 @@ namespace core::physics
     class PhysicsWorld
     {
     private:
-        std::unique_ptr<JPH::JobSystemThreadPool> jobSystem;
+        std::unique_ptr<JoltEnkiJobSystem> jobSystem;
         std::unique_ptr<JPH::TempAllocatorImpl> tempAllocator;
         std::unique_ptr<JPH::PhysicsSystem> physicsSystem;
 

@@ -60,6 +60,8 @@ namespace animation
         uint32_t getLODCount(AnimationLODLevel level) const { return lodCounts[static_cast<uint8_t>(level)]; }
         void resetLODCounts() { for (auto& c : lodCounts) c = 0; }
         void incrementLODCount(AnimationLODLevel level) { ++lodCounts[static_cast<uint8_t>(level)]; }
+        // Add a batch of counts at once (used to merge per-thread histograms after a parallel gather).
+        void addLODCount(AnimationLODLevel level, uint32_t n) { lodCounts[static_cast<uint8_t>(level)] += n; }
 
     private:
         AnimationLODConfig config;

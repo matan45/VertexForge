@@ -2,6 +2,7 @@
 #include "TerrainGrid.hpp"
 #include "../threading/JobSystem.hpp"
 #include <algorithm>
+#include <chrono>
 
 namespace terrain
 {
@@ -396,18 +397,30 @@ namespace terrain
             return getTile(coord);
         };
 
-        currentTile = 0;
-        for (auto& [coord, tile] : tiles)
+        if (progress)
         {
-            if (progress)
-            {
-                progress(static_cast<float>(currentTile) / static_cast<float>(totalTiles),
-                         "Syncing boundaries (" + std::to_string(coord.x) + ", " + std::to_string(coord.z) + ")");
-            }
-
-            generator->generateAllLODs(*tile, nullptr, lookup);
-            ++currentTile;
+            progress(static_cast<float>(currentTile) / static_cast<float>(totalTiles), "Syncing boundaries...");
         }
+
+        // Phase 3 runs in parallel: the tile map is structurally frozen (no insert/erase past Phase 2),
+        // generateAllLODs writes only its own tile, the lookup reads neighbors read-only, the generator
+        // is fully const (no shared scratch state), and GPU upload is decoupled to TerrainStreamManager.
+        // Per-tile progress is dropped (string churn + ordering) — one message brackets the whole phase.
+        std::vector<TerrainTile*> tilePtrs;
+        tilePtrs.reserve(tiles.size());
+        for (auto& [coord, tile] : tiles)
+            tilePtrs.push_back(tile.get());
+
+        const auto lodStart = std::chrono::high_resolution_clock::now();
+        threading::JobSystem::instance().parallelFor(static_cast<uint32_t>(tilePtrs.size()),
+            [this, &tilePtrs, &lookup](uint32_t begin, uint32_t end)
+            {
+                for (uint32_t i = begin; i < end; ++i)
+                    generator->generateAllLODs(*tilePtrs[i], nullptr, lookup);
+            }, 1);
+        const auto lodMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - lodStart).count();
+        vfLogInfo("TerrainGrid: Regenerated LODs for {} tiles in {} ms (parallel)", tilePtrs.size(), lodMs);
 
         quadtree.rebuild(tiles);
 
