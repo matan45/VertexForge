@@ -45,7 +45,9 @@ namespace serialization
             return {
                 {"enabled", s.enabled},
                 {"mode", static_cast<int>(s.mode)},
-                {"quality", static_cast<int>(s.quality)}
+                {"quality", static_cast<int>(s.quality)},
+                {"rayReconstruction", s.rayReconstruction},
+                {"forceTraditionalDenoiser", s.forceTraditionalDenoiser}
             };
         }
 
@@ -271,6 +273,10 @@ namespace serialization
             if (u.contains("quality") && u["quality"].is_number_integer())
                 s.quality = static_cast<postprocess::UpscaleQuality>(
                     std::clamp(u["quality"].get<int>(), 0, 4));
+            if (u.contains("rayReconstruction") && u["rayReconstruction"].is_boolean())
+                s.rayReconstruction = u["rayReconstruction"].get<bool>();
+            if (u.contains("forceTraditionalDenoiser") && u["forceTraditionalDenoiser"].is_boolean())
+                s.forceTraditionalDenoiser = u["forceTraditionalDenoiser"].get<bool>();
         }
 
         void deserializeFrameGen(const json& j, postprocess::FrameGenSettings& s)

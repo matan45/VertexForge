@@ -33,6 +33,20 @@ namespace render::upscaling
         vk::ImageView exposureView;
         vk::Image output;             // Upscaled output at display resolution
         vk::ImageView outputView;
+
+        // DLSS-D (Ray Reconstruction) guide buffers (VK-1245). Only consumed when Ray
+        // Reconstruction is the active upscaler; left null otherwise. normalRoughness is the
+        // depth-prepass normal target (roughness packed in .w → DLSSDNormalRoughnessMode::ePacked).
+        // diffuseAlbedo / specularAlbedo / specularHitDistance are optional: tagged only when
+        // present, so RR degrades gracefully until those G-buffers exist.
+        vk::Image normalRoughness;
+        vk::ImageView normalRoughnessView;
+        vk::Image diffuseAlbedo;
+        vk::ImageView diffuseAlbedoView;
+        vk::Image specularAlbedo;
+        vk::ImageView specularAlbedoView;
+        vk::Image specularHitDistance;
+        vk::ImageView specularHitDistanceView;
         vk::Extent2D renderExtent;
         vk::Extent2D displayExtent;
         glm::vec2 jitterOffset{0.0f};
@@ -44,6 +58,10 @@ namespace render::upscaling
         VkFormat motionFormat = VK_FORMAT_R16G16_SFLOAT;
         VkFormat outputFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         VkFormat reactiveFormat = VK_FORMAT_R8_UNORM;
+        VkFormat normalRoughnessFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+        VkFormat diffuseAlbedoFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+        VkFormat specularAlbedoFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+        VkFormat specularHitDistanceFormat = VK_FORMAT_R16_SFLOAT;
 
         // Camera data required by Streamline common constants
         glm::mat4 viewMatrix{1.0f};
@@ -84,6 +102,15 @@ namespace render::upscaling
         bool isDLSSGSupported() const { return dlssGSupported; }
         /// DLSS-D (Ray Reconstruction). Requires a valid NGX app identity (VK-1245).
         bool isDLSSRRSupported() const { return dlssRRSupported; }
+        /// True when Ray Reconstruction is the upscaler driving this frame (set by applySettings).
+        bool isDLSSRRActive() const { return dlssRRActive; }
+        static bool isDLSSRRActiveStatic() { return instance && instance->dlssRRActive; }
+        /// True when the engine's RTShadowDenoiser should be skipped because Ray Reconstruction
+        /// will denoise the shadows instead (unless the user forces the traditional denoiser).
+        static bool shouldBypassShadowDenoiser()
+        {
+            return instance && instance->dlssRRActive && !instance->forceTraditionalDenoiser;
+        }
 
         /// Frame Generation (DLSS 3.x)
         void applyFrameGenSettings(const ::postprocess::FrameGenSettings& settings,
@@ -172,6 +199,11 @@ namespace render::upscaling
         bool dlssSupported = false;
         bool dlssGSupported = false;
         bool dlssRRSupported = false;
+        bool dlssRRActive = false;      // Ray Reconstruction selected as the active upscaler
+        bool forceTraditionalDenoiser = false; // keep RTShadowDenoiser on for A/B even under RR
+        // Quality of the active upscaler, cached so the per-frame DLSS-D options call (in
+        // evaluate, render thread) can map quality→DLSSMode without re-reading settings.
+        ::postprocess::UpscaleQuality activeQuality = ::postprocess::UpscaleQuality::Quality;
         bool deviceSet = false;
         bool frameGenActive = false;
 

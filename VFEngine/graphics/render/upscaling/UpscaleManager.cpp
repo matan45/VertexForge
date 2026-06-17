@@ -27,6 +27,19 @@ namespace render::upscaling
         return r;
     }
 
+    static sl::DLSSMode qualityToDLSSMode(::postprocess::UpscaleQuality q)
+    {
+        switch (q)
+        {
+        case ::postprocess::UpscaleQuality::Native:           return sl::DLSSMode::eDLAA;
+        case ::postprocess::UpscaleQuality::Quality:          return sl::DLSSMode::eMaxQuality;
+        case ::postprocess::UpscaleQuality::Balanced:         return sl::DLSSMode::eBalanced;
+        case ::postprocess::UpscaleQuality::Performance:      return sl::DLSSMode::eMaxPerformance;
+        case ::postprocess::UpscaleQuality::UltraPerformance: return sl::DLSSMode::eUltraPerformance;
+        }
+        return sl::DLSSMode::eMaxQuality;
+    }
+
     static const char* slResultToString(sl::Result r)
     {
         switch (r)
@@ -183,6 +196,8 @@ namespace render::upscaling
             {
                 slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
+                if (dlssRRSupported)
+                    slFreeResources(sl::kFeatureDLSS_RR, sl::ViewportHandle{0});
             }
             if (reflexActive)
                 applyReflexSettings({});
@@ -203,6 +218,8 @@ namespace render::upscaling
         {
             slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
             slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
+            if (dlssRRSupported)
+                slFreeResources(sl::kFeatureDLSS_RR, sl::ViewportHandle{0});
             frameGenActive = false;
             vfLogInfo("Streamline: freed feature resources for resolution change");
         }
@@ -304,6 +321,16 @@ namespace render::upscaling
             ? resolveActiveMode(settings.mode)
             : ::postprocess::UpscaleMode::Off;
 
+        activeQuality = settings.quality;
+
+        // Ray Reconstruction replaces the standard DLSS upscaler when the user enables it and
+        // the GPU/driver support it. The DLSS-D options themselves are issued per-frame in
+        // evaluate() (camera matrices change every frame). (VK-1245)
+        dlssRRActive = (activeMode == ::postprocess::UpscaleMode::DLSS)
+                    && dlssRRSupported
+                    && settings.rayReconstruction;
+        forceTraditionalDenoiser = settings.forceTraditionalDenoiser;
+
         resolutionManager.setDisplayResolution(outputWidth, outputHeight);
 
         if (activeMode != ::postprocess::UpscaleMode::Off)
@@ -314,7 +341,9 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return;
 
-        if (activeMode == ::postprocess::UpscaleMode::DLSS)
+        // Standard DLSS Super Resolution options. Skipped when Ray Reconstruction is active —
+        // RR drives its own DLSS-D options from evaluate() instead (VK-1245).
+        if (activeMode == ::postprocess::UpscaleMode::DLSS && !dlssRRActive)
         {
             sl::DLSSOptions dlssOptions{};
 
@@ -352,7 +381,9 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return false;
 
-        sl::Feature feature = sl::kFeatureDLSS;
+        // Ray Reconstruction (DLSS-D) replaces standard DLSS when active (VK-1245).
+        const bool useRR = dlssRRActive && dlssRRSupported;
+        sl::Feature feature = useRR ? sl::kFeatureDLSS_RR : sl::kFeatureDLSS;
 
         sl::ViewportHandle viewport{0};
 
@@ -405,8 +436,25 @@ namespace render::upscaling
 
         slSetConstants(constants, *frameToken, viewport);
 
-        // Tag resources
-        sl::ResourceTag tags[7]{};
+        // Ray Reconstruction options are issued per-frame because the world<->view matrices it
+        // needs to reproject world-space normals change every frame. normalRoughnessMode=ePacked
+        // matches the depth-prepass normal target (roughness in .w). (VK-1245)
+        if (useRR)
+        {
+            sl::DLSSDOptions rrOptions{};
+            rrOptions.mode = qualityToDLSSMode(activeQuality);
+            rrOptions.outputWidth = inputs.displayExtent.width;
+            rrOptions.outputHeight = inputs.displayExtent.height;
+            rrOptions.colorBuffersHDR = sl::Boolean::eTrue;
+            rrOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+            rrOptions.worldToCameraView = toSL(inputs.viewMatrix);
+            rrOptions.cameraViewToWorld = toSL(glm::inverse(inputs.viewMatrix));
+            slDLSSDSetOptions(viewport, rrOptions);
+        }
+
+        // Tag resources. RR adds normal-roughness + (optional) albedo / hit-distance guides on
+        // top of the standard upscaler tags, so size for the larger set.
+        sl::ResourceTag tags[12]{};
         uint32_t tagCount = 0;
 
         sl::Resource colorRes{sl::ResourceType::eTex2d, inputs.colorInput,
@@ -420,9 +468,13 @@ namespace render::upscaling
         tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeScalingInputColor,
                                             sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
-        // HUDLessColor — same as color input since UI is composited after upscaling
-        tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeHUDLessColor,
-                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+        // HUDLessColor — same as color input since UI is composited after upscaling.
+        // Standard DLSS only; Ray Reconstruction does not consume a HUD-less tag.
+        if (!useRR)
+        {
+            tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeHUDLessColor,
+                                                sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+        }
 
         sl::Resource depthRes{sl::ResourceType::eTex2d, inputs.depthInput,
                               nullptr, static_cast<VkImageView>(inputs.depthView),
@@ -484,6 +536,42 @@ namespace render::upscaling
             exposureRes.arrayLayers = 1;
             tags[tagCount++] = sl::ResourceTag{&exposureRes, sl::kBufferTypeExposure,
                                                 sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+        }
+
+        // Ray Reconstruction guide buffers. normal-roughness is the primary guide (roughness
+        // packed in .w → ePacked). Albedo / specular-albedo / specular-hit-distance are tagged
+        // only when present so RR still runs (with reduced guidance) before those G-buffers
+        // exist. These sl::Resource locals must outlive slSetTagForFrame below. (VK-1245)
+        sl::Resource normalRoughRes{};
+        sl::Resource diffuseAlbedoRes{};
+        sl::Resource specularAlbedoRes{};
+        sl::Resource specHitDistRes{};
+        if (useRR)
+        {
+            auto tagGuide = [&](vk::Image img, vk::ImageView view, VkFormat fmt,
+                                sl::Resource& res, sl::BufferType type)
+            {
+                if (!img) return;
+                res = sl::Resource{sl::ResourceType::eTex2d, img, nullptr,
+                                   static_cast<VkImageView>(view),
+                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                res.width = inputs.renderExtent.width;
+                res.height = inputs.renderExtent.height;
+                res.nativeFormat = static_cast<uint32_t>(fmt);
+                res.mipLevels = 1;
+                res.arrayLayers = 1;
+                tags[tagCount++] = sl::ResourceTag{&res, type,
+                                                   sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+            };
+
+            tagGuide(inputs.normalRoughness, inputs.normalRoughnessView,
+                     inputs.normalRoughnessFormat, normalRoughRes, sl::kBufferTypeNormalRoughness);
+            tagGuide(inputs.diffuseAlbedo, inputs.diffuseAlbedoView,
+                     inputs.diffuseAlbedoFormat, diffuseAlbedoRes, sl::kBufferTypeAlbedo);
+            tagGuide(inputs.specularAlbedo, inputs.specularAlbedoView,
+                     inputs.specularAlbedoFormat, specularAlbedoRes, sl::kBufferTypeSpecularAlbedo);
+            tagGuide(inputs.specularHitDistance, inputs.specularHitDistanceView,
+                     inputs.specularHitDistanceFormat, specHitDistRes, sl::kBufferTypeSpecularHitDistance);
         }
 
         sl::Result tagResult = slSetTagForFrame(*frameToken, viewport, tags, tagCount,

@@ -142,7 +142,12 @@ namespace loaders
             pendingLoads.erase(id);
         }
 
-        return hasGPUWork;
+        // Report whether GPU work EXISTS, not merely whether this call newly nominated
+        // it. gpuUploadReadyInstance may have been set on a previous frame's final pump
+        // turn (when the per-frame upload budget was hit before it was processed). If we
+        // returned hasGPUWork here, that pinned instance would never be pumped again and
+        // every subsequent load would deadlock in GPUUploadPending forever.
+        return gpuUploadReadyInstance != nullptr;
     }
 
     void* AsyncTextureLoader::getReadyForGPUUpload() const
@@ -158,6 +163,13 @@ namespace loaders
         auto it = pendingLoads.find(instanceId);
         if (it == pendingLoads.end())
         {
+            // The nominated instance no longer exists. Clear the ready slot so the pump
+            // doesn't keep re-selecting a stale id (update() now returns true while the
+            // slot is set).
+            if (gpuUploadReadyInstance == instanceId)
+            {
+                gpuUploadReadyInstance = nullptr;
+            }
             return false;
         }
 

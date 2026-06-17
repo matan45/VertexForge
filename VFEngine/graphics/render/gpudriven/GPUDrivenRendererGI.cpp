@@ -1,5 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../occlusion/DepthPrepass.hpp"
+#include "../upscaling/UpscaleManager.hpp"
 #include "../custom/PluginTextureManager.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
@@ -962,8 +963,33 @@ namespace render::gpudriven
 
         const auto& camData = cameraBuffer->getData();
         bool useDenoiser = rtShadowDenoiser && rtShadowDenoiser->isInitialized();
-        // Set runtime flag so fragment shader uses RT for directional shadows
-        lightBufferManager->setRTShadowActive(useDenoiser);
+        // When DLSS-D Ray Reconstruction is the active upscaler it denoises the shadows itself,
+        // so skip the engine's traditional RTShadowDenoiser and let the noisy mask flow through
+        // (the fragment shader then samples the raw RT mask). The user can force the traditional
+        // denoiser back on for A/B comparison. RT shadows still dispatch either way. (VK-1245)
+        if (render::upscaling::UpscaleManager::shouldBypassShadowDenoiser())
+            useDenoiser = false;
+
+        // The resize block above (which runs every frame) re-points the mesh pipelines to the
+        // denoised mask whenever the denoiser is initialized. When RR bypass makes useDenoiser
+        // false this frame, override that with the RAW shadow mask so the noisy shadows flow to
+        // Ray Reconstruction. No-op when RR is off (useDenoiser == denoiser-initialized). (VK-1245)
+        if (!useDenoiser && rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+        {
+            vk::DescriptorSet rawMask = rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
+            if (meshShaderPipeline)
+                meshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
+            if (transparentMeshShaderPipeline)
+                transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
+            if (wboitMeshShaderPipeline)
+                wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
+            if (terrain.pipeline)
+                terrain.pipeline->updateRTShadowMaskDescriptor(rawMask);
+        }
+
+        // Set runtime flag so fragment shader uses RT for directional shadows (whether the
+        // mask is denoised or raw — RR feeds the raw mask through).
+        lightBufferManager->setRTShadowActive(rtShadowDenoiser && rtShadowDenoiser->isInitialized());
 
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
         

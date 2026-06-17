@@ -164,7 +164,11 @@ namespace core
             }
             else
             {
+                // Don't keep looping on a non-progressing nomination: update() can now
+                // keep returning true while one instance is pinned, so a repeatedly
+                // failing upload would spin this frame. Bail and retry next frame.
                 vfLogWarning("EditorTextureAdapter: GPU upload failed for instance {:p}", readyInstance);
+                break;
             }
         }
 

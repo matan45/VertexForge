@@ -465,6 +465,15 @@ namespace render
         inputs.nearPlane = currentNearPlane;
         inputs.farPlane = currentFarPlane;
 
+        // DLSS-D Ray Reconstruction normal-roughness guide: the depth-prepass normal target
+        // already packs roughness in .w (NORMAL_FORMAT = R16G16B16A16_SFLOAT), matching
+        // DLSSDNormalRoughnessMode::ePacked. Only fed when RR is the active upscaler. (VK-1245)
+        if (upscaleManager->isDLSSRRActive() && gpuDrivenRenderer)
+        {
+            inputs.normalRoughness = gpuDrivenRenderer->getPrepassNormalImage();
+            inputs.normalRoughnessView = gpuDrivenRenderer->getPrepassNormalImageView();
+        }
+
         bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
         if (evaluateOk)
         {
