@@ -52,14 +52,34 @@ namespace render::upscaling
         case sl::Result::eErrorAdapterNotSupported: return "ErrorAdapterNotSupported";
         case sl::Result::eErrorNoPlugins: return "ErrorNoPlugins";
         case sl::Result::eErrorVulkanAPI: return "ErrorVulkanAPI";
+        case sl::Result::eErrorDXGIAPI: return "ErrorDXGIAPI";
+        case sl::Result::eErrorD3DAPI: return "ErrorD3DAPI";
+        case sl::Result::eErrorNVAPI: return "ErrorNVAPI";
+        case sl::Result::eErrorReflexAPI: return "ErrorReflexAPI";
         case sl::Result::eErrorNGXFailed: return "ErrorNGXFailed";
+        case sl::Result::eErrorJSONParsing: return "ErrorJSONParsing";
+        case sl::Result::eErrorMissingProxy: return "ErrorMissingProxy";
+        case sl::Result::eErrorMissingResourceState: return "ErrorMissingResourceState";
         case sl::Result::eErrorInvalidIntegration: return "ErrorInvalidIntegration";
+        case sl::Result::eErrorMissingInputParameter: return "ErrorMissingInputParameter";
         case sl::Result::eErrorNotInitialized: return "ErrorNotInitialized";
+        case sl::Result::eErrorComputeFailed: return "ErrorComputeFailed";
         case sl::Result::eErrorInitNotCalled: return "ErrorInitNotCalled";
+        case sl::Result::eErrorInvalidParameter: return "ErrorInvalidParameter";
+        case sl::Result::eErrorMissingConstants: return "ErrorMissingConstants";
+        case sl::Result::eErrorDuplicatedConstants: return "ErrorDuplicatedConstants";
+        case sl::Result::eErrorMissingOrInvalidAPI: return "ErrorMissingOrInvalidAPI";
+        case sl::Result::eErrorCommonConstantsMissing: return "ErrorCommonConstantsMissing";
+        case sl::Result::eErrorUnsupportedInterface: return "ErrorUnsupportedInterface";
         case sl::Result::eErrorFeatureMissing: return "ErrorFeatureMissing";
         case sl::Result::eErrorFeatureNotSupported: return "ErrorFeatureNotSupported";
+        case sl::Result::eErrorFeatureMissingHooks: return "ErrorFeatureMissingHooks";
         case sl::Result::eErrorFeatureFailedToLoad: return "ErrorFeatureFailedToLoad";
+        case sl::Result::eErrorFeatureWrongPriority: return "ErrorFeatureWrongPriority";
         case sl::Result::eErrorFeatureMissingDependency: return "ErrorFeatureMissingDependency";
+        case sl::Result::eErrorFeatureManagerInvalidState: return "ErrorFeatureManagerInvalidState";
+        case sl::Result::eErrorInvalidState: return "ErrorInvalidState";
+        case sl::Result::eWarnOutOfVRAM: return "WarnOutOfVRAM";
         default: return "Unknown";
         }
     }
@@ -330,6 +350,8 @@ namespace render::upscaling
                     && dlssRRSupported
                     && settings.rayReconstruction;
         forceTraditionalDenoiser = settings.forceTraditionalDenoiser;
+        // Re-arm RR on any settings change so toggling it off/on retries after a runtime failure.
+        dlssRREvalFailed = false;
 
         resolutionManager.setDisplayResolution(outputWidth, outputHeight);
 
@@ -341,9 +363,10 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return;
 
-        // Standard DLSS Super Resolution options. Skipped when Ray Reconstruction is active —
-        // RR drives its own DLSS-D options from evaluate() instead (VK-1245).
-        if (activeMode == ::postprocess::UpscaleMode::DLSS && !dlssRRActive)
+        // Standard DLSS Super Resolution options. Always configured (even when RR is active) so
+        // evaluate() can fall back to plain DLSS if Ray Reconstruction can't run this frame. RR
+        // additionally configures its own DLSS-D options per-frame in evaluate(). (VK-1245)
+        if (activeMode == ::postprocess::UpscaleMode::DLSS)
         {
             sl::DLSSOptions dlssOptions{};
 
@@ -381,8 +404,9 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return false;
 
-        // Ray Reconstruction (DLSS-D) replaces standard DLSS when active (VK-1245).
-        const bool useRR = dlssRRActive && dlssRRSupported;
+        // Ray Reconstruction (DLSS-D) replaces standard DLSS when active. After a runtime
+        // evaluate failure (dlssRREvalFailed) we fall back to standard DLSS. (VK-1245)
+        const bool useRR = dlssRRActive && dlssRRSupported && !dlssRREvalFailed;
         sl::Feature feature = useRR ? sl::kFeatureDLSS_RR : sl::kFeatureDLSS;
 
         sl::ViewportHandle viewport{0};
@@ -594,6 +618,18 @@ namespace render::upscaling
                           reinterpret_cast<sl::CommandBuffer*>(static_cast<VkCommandBuffer>(cmd)));
         if (evalResult != sl::Result::eOk)
         {
+            if (useRR)
+            {
+                // DLSS-D rejected this frame (typically eErrorMissingInputParameter — the engine
+                // does not yet produce the albedo / hit-distance guide buffers RR requires; see
+                // VK-1397). Disable RR and fall back to standard DLSS so the image stays correct.
+                dlssRREvalFailed = true;
+                vfLogWarning("DLSS-D Ray Reconstruction evaluate failed: {} ({}) - falling back to "
+                             "standard DLSS. RR needs G-buffer inputs the renderer doesn't produce "
+                             "yet (VK-1397).",
+                             slResultToString(evalResult), static_cast<int>(evalResult));
+                return false;
+            }
             static bool loggedOnce = false;
             if (!loggedOnce)
             {

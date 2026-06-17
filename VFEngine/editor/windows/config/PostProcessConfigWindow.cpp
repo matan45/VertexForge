@@ -317,9 +317,19 @@ namespace windows
                             "can compare it against DLSS-D denoising.");
                     }
 
-                    ImGui::Text("Ray Reconstruction: %s",
-                                status.dlssRRActive ? "Active"
-                                : (status.dlssRRSupported ? "Inactive" : "Not Supported"));
+                    if (status.dlssRRFallback)
+                    {
+                        ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                            "Ray Reconstruction: Unavailable (missing G-buffer inputs)");
+                        ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                            "Fell back to standard DLSS. Needs albedo / hit-distance buffers (VK-1397).");
+                    }
+                    else
+                    {
+                        ImGui::Text("Ray Reconstruction: %s",
+                                    status.dlssRRActive ? "Active"
+                                    : (status.dlssRRSupported ? "Inactive" : "Not Supported"));
+                    }
                 }
             }
 

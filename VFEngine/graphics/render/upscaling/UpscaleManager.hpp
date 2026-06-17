@@ -102,14 +102,19 @@ namespace render::upscaling
         bool isDLSSGSupported() const { return dlssGSupported; }
         /// DLSS-D (Ray Reconstruction). Requires a valid NGX app identity (VK-1245).
         bool isDLSSRRSupported() const { return dlssRRSupported; }
-        /// True when Ray Reconstruction is the upscaler driving this frame (set by applySettings).
-        bool isDLSSRRActive() const { return dlssRRActive; }
-        static bool isDLSSRRActiveStatic() { return instance && instance->dlssRRActive; }
+        /// True when Ray Reconstruction is the upscaler driving this frame (selected and not
+        /// disabled by a runtime evaluate failure).
+        bool isDLSSRRActive() const { return dlssRRActive && !dlssRREvalFailed; }
+        static bool isDLSSRRActiveStatic() { return instance && instance->isDLSSRRActive(); }
+        /// True when Ray Reconstruction is selected but could not run (missing required inputs).
+        bool isDLSSRREvalFailed() const { return dlssRRActive && dlssRREvalFailed; }
         /// True when the engine's RTShadowDenoiser should be skipped because Ray Reconstruction
-        /// will denoise the shadows instead (unless the user forces the traditional denoiser).
+        /// will denoise the shadows instead (unless the user forces the traditional denoiser, or
+        /// RR has fallen back after a runtime failure).
         static bool shouldBypassShadowDenoiser()
         {
-            return instance && instance->dlssRRActive && !instance->forceTraditionalDenoiser;
+            return instance && instance->dlssRRActive && !instance->dlssRREvalFailed
+                && !instance->forceTraditionalDenoiser;
         }
 
         /// Frame Generation (DLSS 3.x)
@@ -201,6 +206,11 @@ namespace render::upscaling
         bool dlssRRSupported = false;
         bool dlssRRActive = false;      // Ray Reconstruction selected as the active upscaler
         bool forceTraditionalDenoiser = false; // keep RTShadowDenoiser on for A/B even under RR
+        // Set true when a DLSS-D evaluate fails at runtime (e.g. eErrorMissingInputParameter
+        // because the engine lacks the albedo / hit-distance guide buffers — see VK-1397). Makes
+        // the upscaler fall back to standard DLSS instead of failing every frame. Re-armed by
+        // applySettings so toggling RR retries.
+        bool dlssRREvalFailed = false;
         // Quality of the active upscaler, cached so the per-frame DLSS-D options call (in
         // evaluate, render thread) can map quality→DLSSMode without re-reading settings.
         ::postprocess::UpscaleQuality activeQuality = ::postprocess::UpscaleQuality::Quality;

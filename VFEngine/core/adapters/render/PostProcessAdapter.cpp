@@ -53,6 +53,7 @@ namespace core
             status.frameGenActive = mgr->isFrameGenActive();
             status.dlssRRSupported = mgr->isDLSSRRSupported();
             status.dlssRRActive = mgr->isDLSSRRActive();
+            status.dlssRRFallback = mgr->isDLSSRREvalFailed();
 
             status.reflexSupported = mgr->isReflexSupported();
             status.reflexActive = mgr->isReflexActive();
