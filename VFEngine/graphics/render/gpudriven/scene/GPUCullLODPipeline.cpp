@@ -383,50 +383,30 @@ namespace render::gpudriven
         std::vector<vk::WriteDescriptorSet> writes;
         writes.reserve(hasHiZ ? 7 : 6);
 
-        vk::WriteDescriptorSet objectWrite{};
-        objectWrite.dstSet = dst;
-        objectWrite.dstBinding = 0;
-        objectWrite.dstArrayElement = 0;
-        objectWrite.descriptorCount = 1;
-        objectWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
-        objectWrite.pBufferInfo = &objectInfo;
-        writes.push_back(objectWrite);
+        // Skip any binding whose buffer isn't ready yet (storage descriptors must not be
+        // VK_NULL_HANDLE without nullDescriptor). External/shadow sets are allocated at init
+        // before the cull pipeline's cached scene buffers exist; the missing bindings are filled
+        // by the re-sync in writeDescriptors() once updateDescriptors() supplies real buffers,
+        // which always happens before the set is dispatched.
+        auto pushBuffer = [&](uint32_t binding, vk::DescriptorType type,
+                              const vk::DescriptorBufferInfo& info)
+        {
+            if (!info.buffer) return;
+            vk::WriteDescriptorSet w{};
+            w.dstSet = dst;
+            w.dstBinding = binding;
+            w.dstArrayElement = 0;
+            w.descriptorCount = 1;
+            w.descriptorType = type;
+            w.pBufferInfo = &info;
+            writes.push_back(w);
+        };
 
-        vk::WriteDescriptorSet cameraWrite{};
-        cameraWrite.dstSet = dst;
-        cameraWrite.dstBinding = 1;
-        cameraWrite.dstArrayElement = 0;
-        cameraWrite.descriptorCount = 1;
-        cameraWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
-        cameraWrite.pBufferInfo = &cameraInfo;
-        writes.push_back(cameraWrite);
-
-        vk::WriteDescriptorSet drawCmdWrite{};
-        drawCmdWrite.dstSet = dst;
-        drawCmdWrite.dstBinding = 2;
-        drawCmdWrite.dstArrayElement = 0;
-        drawCmdWrite.descriptorCount = 1;
-        drawCmdWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
-        drawCmdWrite.pBufferInfo = &drawCmdInfo;
-        writes.push_back(drawCmdWrite);
-
-        vk::WriteDescriptorSet perDrawWrite{};
-        perDrawWrite.dstSet = dst;
-        perDrawWrite.dstBinding = 3;
-        perDrawWrite.dstArrayElement = 0;
-        perDrawWrite.descriptorCount = 1;
-        perDrawWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
-        perDrawWrite.pBufferInfo = &perDrawInfo;
-        writes.push_back(perDrawWrite);
-
-        vk::WriteDescriptorSet drawCountWrite{};
-        drawCountWrite.dstSet = dst;
-        drawCountWrite.dstBinding = 4;
-        drawCountWrite.dstArrayElement = 0;
-        drawCountWrite.descriptorCount = 1;
-        drawCountWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
-        drawCountWrite.pBufferInfo = &drawCountInfo;
-        writes.push_back(drawCountWrite);
+        pushBuffer(0, vk::DescriptorType::eStorageBuffer, objectInfo);
+        pushBuffer(1, vk::DescriptorType::eUniformBuffer, cameraInfo);
+        pushBuffer(2, vk::DescriptorType::eStorageBuffer, drawCmdInfo);
+        pushBuffer(3, vk::DescriptorType::eStorageBuffer, perDrawInfo);
+        pushBuffer(4, vk::DescriptorType::eStorageBuffer, drawCountInfo);
 
         vk::WriteDescriptorSet hiZWrite{};
         if (hasHiZ)
