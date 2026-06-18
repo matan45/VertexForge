@@ -47,6 +47,12 @@ namespace render::upscaling
         vk::ImageView specularAlbedoView;
         vk::Image specularHitDistance;
         vk::ImageView specularHitDistanceView;
+        // Specular motion vectors satisfy RR's "specular MV OR specular hit-distance"
+        // requirement. On a raster engine with no RT reflections, specular reflections
+        // stay on the primary surface, so reusing the regular dense motion vectors here is
+        // both correct and free (NVIDIA prefers specular MV over hit distance). (VK-1397)
+        vk::Image specularMotionVectors;
+        vk::ImageView specularMotionVectorsView;
         vk::Extent2D renderExtent;
         vk::Extent2D displayExtent;
         glm::vec2 jitterOffset{0.0f};
@@ -62,6 +68,7 @@ namespace render::upscaling
         VkFormat diffuseAlbedoFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         VkFormat specularAlbedoFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         VkFormat specularHitDistanceFormat = VK_FORMAT_R16_SFLOAT;
+        VkFormat specularMotionVectorsFormat = VK_FORMAT_R16G16_SFLOAT;
 
         // Camera data required by Streamline common constants
         glm::mat4 viewMatrix{1.0f};
@@ -211,6 +218,9 @@ namespace render::upscaling
         // the upscaler fall back to standard DLSS instead of failing every frame. Re-armed by
         // applySettings so toggling RR retries.
         bool dlssRREvalFailed = false;
+        // One-shot guard so RR logs an "active (Ok)" line once per activation (mirrors the
+        // Frame Gen / Reflex status logs), instead of being silent while it succeeds. (VK-1397)
+        bool dlssRRActiveLogged = false;
         // Quality of the active upscaler, cached so the per-frame DLSS-D options call (in
         // evaluate, render thread) can map quality→DLSSMode without re-reading settings.
         ::postprocess::UpscaleQuality activeQuality = ::postprocess::UpscaleQuality::Quality;

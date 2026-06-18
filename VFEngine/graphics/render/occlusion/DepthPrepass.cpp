@@ -128,11 +128,121 @@ namespace render::occlusion
         device.getLogicalDevice().destroyCommandPool(tempPool);
     }
 
+    void DepthPrepass::createAlbedoImages()
+    {
+        auto makeTarget = [&](vk::Image& image, core::VulkanAllocation& alloc, vk::ImageView& view)
+        {
+            core::ImageInfoRequest request(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                width, height, 1, 1,
+                ALBEDO_FORMAT,
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+            );
+            core::ImageUtilities::createImage(request, image, alloc, device.getMemoryManager());
+
+            core::ImageViewInfoRequest viewRequest(
+                device.getLogicalDevice(), image,
+                ALBEDO_FORMAT, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1
+            );
+            core::ImageUtilities::createImageView(viewRequest, view);
+        };
+
+        makeTarget(diffuseAlbedoImage, diffuseAlbedoAllocation, diffuseAlbedoImageView);
+        makeTarget(specularAlbedoImage, specularAlbedoAllocation, specularAlbedoImageView);
+    }
+
+    void DepthPrepass::destroyAlbedoImages()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+        if (diffuseAlbedoImageView) { vkDevice.destroyImageView(diffuseAlbedoImageView); diffuseAlbedoImageView = nullptr; }
+        if (diffuseAlbedoImage) { vkDevice.destroyImage(diffuseAlbedoImage); diffuseAlbedoImage = nullptr; }
+        if (diffuseAlbedoAllocation) { device.getMemoryManager().free(diffuseAlbedoAllocation); diffuseAlbedoAllocation = {}; }
+
+        if (specularAlbedoImageView) { vkDevice.destroyImageView(specularAlbedoImageView); specularAlbedoImageView = nullptr; }
+        if (specularAlbedoImage) { vkDevice.destroyImage(specularAlbedoImage); specularAlbedoImage = nullptr; }
+        if (specularAlbedoAllocation) { device.getMemoryManager().free(specularAlbedoAllocation); specularAlbedoAllocation = {}; }
+    }
+
+    void DepthPrepass::setAlbedoEnabled(bool enabled)
+    {
+        if (!initialized || enabled == albedoEnabled)
+            return;
+
+        device.getLogicalDevice().waitIdle();
+
+        if (enabled)
+            createAlbedoImages();
+
+        // Settle guide-image layouts via a one-shot so the per-frame round-trip in
+        // renderDepthPrepass always has a known old layout (no WAR-hazardous eUndefined).
+        // On enable: all guides end in SHADER_READ (the consumed steady state). On disable:
+        // restore the normal target to COLOR, which the default (non-RR) prepass expects.
+        vk::CommandPoolCreateInfo poolInfo{};
+        poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
+        poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
+        vk::CommandPool tempPool = device.getLogicalDevice().createCommandPool(poolInfo);
+
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.commandPool = tempPool;
+        allocInfo.level = vk::CommandBufferLevel::ePrimary;
+        allocInfo.commandBufferCount = 1;
+        vk::CommandBuffer cmd = device.getLogicalDevice().allocateCommandBuffers(allocInfo)[0];
+
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+        cmd.begin(beginInfo);
+
+        if (enabled)
+        {
+            core::ImageUtilities::transitionImageLayout(cmd, normalImage,
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            core::ImageUtilities::transitionImageLayout(cmd, diffuseAlbedoImage,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            core::ImageUtilities::transitionImageLayout(cmd, specularAlbedoImage,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+        else
+        {
+            core::ImageUtilities::transitionImageLayout(cmd, normalImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+
+        cmd.end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+        device.submitGraphics(submitInfo);
+        device.waitGraphicsIdle();
+        device.getLogicalDevice().destroyCommandPool(tempPool);
+
+        if (!enabled)
+            destroyAlbedoImages();
+
+        albedoEnabled = enabled;
+    }
+
     void DepthPrepass::beginPass(vk::CommandBuffer cmd) const
     {
+        const vk::ClearColorValue clearColor(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f});
+
         core::DynamicRenderingInfo info{};
         info.extent = vk::Extent2D{width, height};
-        info.colorAttachments = {core::colorClear(normalImageView, vk::ClearColorValue(std::array<float,4>{0.0f, 0.0f, 0.0f, 0.0f}))};
+        info.colorAttachments = {core::colorClear(normalImageView, clearColor)};
+        // Ray Reconstruction albedo guides (VK-1397): attachments 1/2 when active.
+        if (albedoEnabled)
+        {
+            info.colorAttachments.push_back(core::colorClear(diffuseAlbedoImageView, clearColor));
+            info.colorAttachments.push_back(core::colorClear(specularAlbedoImageView, clearColor));
+        }
         info.depthAttachment = core::depthClear(depthImageView, 1.0f, 0);
 
         core::beginDynamicRendering(cmd, info);
@@ -166,6 +276,9 @@ namespace render::occlusion
         device.getLogicalDevice().destroyImage(normalImage);
         device.getMemoryManager().free(normalAllocation);
         normalAllocation = {};
+
+        destroyAlbedoImages();
+        albedoEnabled = false;
 
         initialized = false;
     }

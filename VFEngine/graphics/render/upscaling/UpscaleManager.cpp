@@ -352,6 +352,7 @@ namespace render::upscaling
         forceTraditionalDenoiser = settings.forceTraditionalDenoiser;
         // Re-arm RR on any settings change so toggling it off/on retries after a runtime failure.
         dlssRREvalFailed = false;
+        dlssRRActiveLogged = false;
 
         resolutionManager.setDisplayResolution(outputWidth, outputHeight);
 
@@ -570,6 +571,7 @@ namespace render::upscaling
         sl::Resource diffuseAlbedoRes{};
         sl::Resource specularAlbedoRes{};
         sl::Resource specHitDistRes{};
+        sl::Resource specMotionRes{};
         if (useRR)
         {
             auto tagGuide = [&](vk::Image img, vk::ImageView view, VkFormat fmt,
@@ -596,6 +598,8 @@ namespace render::upscaling
                      inputs.specularAlbedoFormat, specularAlbedoRes, sl::kBufferTypeSpecularAlbedo);
             tagGuide(inputs.specularHitDistance, inputs.specularHitDistanceView,
                      inputs.specularHitDistanceFormat, specHitDistRes, sl::kBufferTypeSpecularHitDistance);
+            tagGuide(inputs.specularMotionVectors, inputs.specularMotionVectorsView,
+                     inputs.specularMotionVectorsFormat, specMotionRes, sl::kBufferTypeSpecularMotionVectors);
         }
 
         sl::Result tagResult = slSetTagForFrame(*frameToken, viewport, tags, tagCount,
@@ -638,6 +642,18 @@ namespace render::upscaling
                 loggedOnce = true;
             }
             return false;
+        }
+
+        // One-shot confirmation that Ray Reconstruction is driving frames, alongside which
+        // demodulation guides were supplied this frame (VK-1397). Mirrors the Frame Gen /
+        // Reflex status logs so RR isn't silent while it succeeds.
+        if (useRR && !dlssRRActiveLogged)
+        {
+            dlssRRActiveLogged = true;
+            vfLogInfo("DLSS-D Ray Reconstruction: active (Ok) - guides: normal-roughness{}{}{}",
+                      inputs.diffuseAlbedo ? " diffuse-albedo" : "",
+                      inputs.specularAlbedo ? " specular-albedo" : "",
+                      inputs.specularMotionVectors ? " specular-mv" : "");
         }
         return true;
 #else

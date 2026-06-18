@@ -323,6 +323,9 @@ namespace render::gpudriven
         std::unique_ptr<occlusion::DepthPrepassPipeline> depthPrepassPipeline;
         std::unique_ptr<occlusion::HiZBuffer> prepassHiZ;
         uint32_t prepassHiZMipLevels = 0;
+        // VK-1397: tracks whether the prepass is currently producing DLSS-D Ray
+        // Reconstruction albedo guides, so a change in RR state rebuilds the prepass.
+        bool prepassAlbedoActive = false;
         std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
         std::unique_ptr<volumetric::FogVolumeBufferManager> fogVolumeBufferManager;
         ::postprocess::VolumetricFogSettings cachedVolumetricSettings;
@@ -571,6 +574,12 @@ namespace render::gpudriven
         std::pair<vk::ImageView, vk::Sampler> getPrepassHiZViewSampler() const;
         vk::ImageView getPrepassNormalImageView() const;
         vk::Image getPrepassNormalImage() const;
+        // DLSS-D Ray Reconstruction albedo guides (VK-1397). Valid only while Ray
+        // Reconstruction is active; null otherwise.
+        vk::Image getPrepassDiffuseAlbedoImage() const;
+        vk::ImageView getPrepassDiffuseAlbedoImageView() const;
+        vk::Image getPrepassSpecularAlbedoImage() const;
+        vk::ImageView getPrepassSpecularAlbedoImageView() const;
 
         void updateFormats(const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                           vk::DescriptorSetLayout newIBLLayout = nullptr);

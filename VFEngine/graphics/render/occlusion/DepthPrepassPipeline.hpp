@@ -55,6 +55,8 @@ namespace render::occlusion
         vk::Pipeline terrainPipeline;
         vk::PipelineLayout terrainPipelineLayout;
 
+        DepthPrepassInitInfo cachedInfo{};
+        bool albedoEnabled = false;   // VK-1397: scene prepass emits RR albedo guides
         bool initialized = false;
 
     public:
@@ -66,6 +68,12 @@ namespace render::occlusion
 
         void init(const DepthPrepassInitInfo& info);
         void cleanup();
+
+        // Rebuild the scene/terrain prepass pipelines with or without the Ray
+        // Reconstruction albedo MRT outputs (VK-1397). Idles the device since it
+        // recreates live pipelines; cheap and rare (only on RR toggle).
+        void setAlbedoMode(bool enabled);
+        bool isAlbedoMode() const { return albedoEnabled; }
 
         void bindScenePipeline(vk::CommandBuffer cmd) const;
         void pushSceneConstants(vk::CommandBuffer cmd, const DepthPrepassPushConstants& pc) const;
@@ -92,5 +100,9 @@ namespace render::occlusion
 
         void createScenePipeline(const DepthPrepassInitInfo& info);
         void createTerrainPipeline(const DepthPrepassInitInfo& info);
+
+        // Color attachment formats for the current mode: just the normal target by
+        // default, plus the two RR albedo targets when albedoEnabled.
+        std::vector<vk::Format> colorFormatsForMode() const;
     };
 }

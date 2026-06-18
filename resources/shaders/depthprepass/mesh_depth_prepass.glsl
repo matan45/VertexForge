@@ -58,6 +58,15 @@ const uint VERTEX_STRIDE = 16; // 64 bytes / 4 bytes per float
 // Output world-space normal and roughness to color attachment
 layout(location = 0) out vec3 outWorldNormal[];
 layout(location = 1) out float outRoughness[];
+#ifdef ALBEDO_PREPASS
+// DLSS-D Ray Reconstruction demodulation guides (VK-1397). Only emitted by the
+// albedo permutation of the scene prepass pipeline.
+layout(location = 2) out vec2 outTexCoord[];
+layout(location = 3) out float outNoV[];
+layout(location = 4) flat out uint outAlbedoIdx[];
+layout(location = 5) flat out float outMetallic[];
+layout(location = 6) flat out vec3 outBaseColor[];
+#endif
 
 void main() {
     uint meshletSlot = gl_WorkGroupID.x;
@@ -95,8 +104,20 @@ void main() {
 
         vec4 worldPos = modelMatrix * vec4(pos, 1.0);
         gl_MeshVerticesEXT[i].gl_Position = viewProjection * worldPos;
-        outWorldNormal[i] = normalize(normalMatrix * normal);
+        vec3 worldNormal = normalize(normalMatrix * normal);
+        outWorldNormal[i] = worldNormal;
         outRoughness[i] = roughness;
+#ifdef ALBEDO_PREPASS
+        outTexCoord[i] = vec2(
+            vertexData[globalVertexIndex * VERTEX_STRIDE + 6],
+            vertexData[globalVertexIndex * VERTEX_STRIDE + 7]
+        );
+        vec3 V = normalize(camera.cameraPos - worldPos.xyz);
+        outNoV[i] = max(dot(worldNormal, V), 0.0);
+        outAlbedoIdx[i] = drawData.textureIndices0.x;
+        outMetallic[i] = drawData.materialParams.x;
+        outBaseColor[i] = drawData.albedo.rgb;
+#endif
     }
 
     for (uint i = gl_LocalInvocationID.x; i < primitiveCount; i += 32) {
