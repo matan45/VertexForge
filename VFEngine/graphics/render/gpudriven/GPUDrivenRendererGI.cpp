@@ -1,5 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../occlusion/DepthPrepass.hpp"
+#include "../upscaling/UpscaleManager.hpp"
 #include "../custom/PluginTextureManager.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
@@ -310,6 +311,8 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex)
     {
+        // VK-1398: record the image index of this submission for per-image RT-mask ring binding.
+        currentImageIndex = imageIndex;
         if (!initialized || !enabled) return;
 
         // Lazy-init profiler if RT shadow pipeline exists (or will be created this frame).
@@ -954,16 +957,54 @@ namespace render::gpudriven
             }
         }
 
-        // Skip RT shadow dispatch if TLAS isn't ready
-        if (!accelStructManager || !accelStructManager->isTLASReady()) return;
+        // Skip RT shadow dispatch if TLAS isn't ready. No fresh directional mask is produced this
+        // frame, so clear the runtime flag: the directional VSM clipmap must render next frame
+        // instead of being overridden by a stale RT mask. The override is correct ONLY while RT
+        // actually produces a mask (TLAS rebuilds while geometry streams). (review fix)
+        if (!accelStructManager || !accelStructManager->isTLASReady())
+        {
+            lightBufferManager->setRTShadowActive(false);
+            return;
+        }
 
         auto lightDir = lightBufferManager->getFirstDirectionalLightDirection();
-        if (!lightDir.has_value()) return;
+        if (!lightDir.has_value())
+        {
+            // No directional light this frame → no directional RT shadows. Clear the flag so the
+            // clipmap is not skipped against a stale mask. (review fix)
+            lightBufferManager->setRTShadowActive(false);
+            return;
+        }
 
         const auto& camData = cameraBuffer->getData();
         bool useDenoiser = rtShadowDenoiser && rtShadowDenoiser->isInitialized();
-        // Set runtime flag so fragment shader uses RT for directional shadows
-        lightBufferManager->setRTShadowActive(useDenoiser);
+        // When DLSS-D Ray Reconstruction is the active upscaler it denoises the shadows itself,
+        // so skip the engine's traditional RTShadowDenoiser and let the noisy mask flow through
+        // (the fragment shader then samples the raw RT mask). The user can force the traditional
+        // denoiser back on for A/B comparison. RT shadows still dispatch either way. (VK-1245)
+        if (render::upscaling::UpscaleManager::shouldBypassShadowDenoiser())
+            useDenoiser = false;
+
+        // The resize block above (which runs every frame) re-points the mesh pipelines to the
+        // denoised mask whenever the denoiser is initialized. When RR bypass makes useDenoiser
+        // false this frame, override that with the RAW shadow mask so the noisy shadows flow to
+        // Ray Reconstruction. No-op when RR is off (useDenoiser == denoiser-initialized). (VK-1245)
+        if (!useDenoiser && rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+        {
+            vk::DescriptorSet rawMask = rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
+            if (meshShaderPipeline)
+                meshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
+            if (transparentMeshShaderPipeline)
+                transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
+            if (wboitMeshShaderPipeline)
+                wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
+            if (terrain.pipeline)
+                terrain.pipeline->updateRTShadowMaskDescriptor(rawMask);
+        }
+
+        // Set runtime flag so fragment shader uses RT for directional shadows (whether the
+        // mask is denoised or raw — RR feeds the raw mask through).
+        lightBufferManager->setRTShadowActive(rtShadowDenoiser && rtShadowDenoiser->isInitialized());
 
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
         

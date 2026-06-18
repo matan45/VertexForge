@@ -312,10 +312,13 @@ namespace render::gpudriven
 
     void MeshShaderPipeline::updateRTShadowMaskDescriptor(vk::DescriptorSet rtShadowMaskDescSet)
     {
-        // Copy the directional RT producer's mask into the shared set's binding 0 (set 13).
-        rtDirectionalMaskProducer = rtShadowMaskDescSet;
-        if (rtMaskSet && rtShadowMaskDescSet)
-            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtShadowMaskDescSet);
+        // VK-1398: cache the directional RT producer only; the copy into the ringed set (binding 0,
+        // set 13) happens lazily per image slot in ensureRTMaskSlot(). Mark all slots dirty on change.
+        if (rtDirectionalMaskProducer != rtShadowMaskDescSet)
+        {
+            rtDirectionalMaskProducer = rtShadowMaskDescSet;
+            markAllRTMaskSlotsDirty();
+        }
     }
 
     void MeshShaderPipeline::updateWorldMaskDescriptor(vk::DescriptorSet worldMaskDescSet)
@@ -325,18 +328,41 @@ namespace render::gpudriven
 
     void MeshShaderPipeline::updateRTSpotShadowMaskDescriptor(vk::DescriptorSet rtSpotShadowMaskDescSet)
     {
-        // Copy the spot RT producer's mask array into the shared set's binding 1 (set 13).
-        rtSpotMaskProducer = rtSpotShadowMaskDescSet;
-        if (rtMaskSet && rtSpotShadowMaskDescSet)
-            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotShadowMaskDescSet);
+        // Cache the spot RT producer (binding 1, set 13); see updateRTShadowMaskDescriptor.
+        if (rtSpotMaskProducer != rtSpotShadowMaskDescSet)
+        {
+            rtSpotMaskProducer = rtSpotShadowMaskDescSet;
+            markAllRTMaskSlotsDirty();
+        }
     }
 
     void MeshShaderPipeline::updateRTPointShadowMaskDescriptor(vk::DescriptorSet rtPointShadowMaskDescSet)
     {
-        // Copy the point RT producer's mask array into the shared set's binding 2 (set 13).
-        rtPointMaskProducer = rtPointShadowMaskDescSet;
-        if (rtMaskSet && rtPointShadowMaskDescSet)
-            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointShadowMaskDescSet);
+        // Cache the point RT producer (binding 2, set 13); see updateRTShadowMaskDescriptor.
+        if (rtPointMaskProducer != rtPointShadowMaskDescSet)
+        {
+            rtPointMaskProducer = rtPointShadowMaskDescSet;
+            markAllRTMaskSlotsDirty();
+        }
+    }
+
+    void MeshShaderPipeline::ensureRTMaskSlot(uint32_t imageIndex)
+    {
+        // Lazily populate the ring slot for the image currently being recorded from the cached
+        // producers. Only writes when dirty, so steady state issues zero descriptor writes (no
+        // write-after-bind hazard). The image's prior submission has retired (per-image fence), so
+        // writing this slot is safe.
+        if (!rtMaskSet || imageIndex >= core::MAX_SWAPCHAIN_IMAGES || !rtMaskSlotDirty[imageIndex])
+            return;
+
+        if (rtDirectionalMaskProducer)
+            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtDirectionalMaskProducer, imageIndex);
+        if (rtSpotMaskProducer)
+            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotMaskProducer, imageIndex);
+        if (rtPointMaskProducer)
+            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointMaskProducer, imageIndex);
+
+        rtMaskSlotDirty[imageIndex] = false;
     }
 
     void MeshShaderPipeline::createPerDrawDataDescriptor()
@@ -612,16 +638,11 @@ namespace render::gpudriven
                 rtMaskSet = std::make_unique<raytracing::RTShadowMaskSet>(device);
                 rtMaskSet->init();
             }
-            // Re-copy any producer descriptors already handed to us so a rebuilt (or freshly created)
-            // shared set is repopulated immediately, without relying on the renderer re-issuing
-            // updateRT*ShadowMaskDescriptor after this build. A bound-but-unwritten binding whose
-            // RT_*_ENABLED macro is active would otherwise be sampled as undefined.
-            if (rtDirectionalMaskProducer)
-                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtDirectionalMaskProducer);
-            if (rtSpotMaskProducer)
-                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotMaskProducer);
-            if (rtPointMaskProducer)
-                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointMaskProducer);
+            // VK-1398: the (re)created ring slots are freshly allocated (no in-flight command buffer
+            // references them yet), so mark all slots dirty and let ensureRTMaskSlot() repopulate each
+            // slot lazily from the cached producers on its first bind. A bound-but-unwritten binding
+            // whose RT_*_ENABLED macro is active would otherwise be sampled as undefined.
+            markAllRTMaskSlotsDirty();
             ensureEmptyPlaceholder();
             while (setLayouts.size() < 13)
                 setLayouts.push_back(emptyPlaceholderLayout);

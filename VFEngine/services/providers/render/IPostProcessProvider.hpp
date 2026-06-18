@@ -15,6 +15,9 @@ namespace services
         uint32_t displayHeight = 0;
         bool dlssGSupported = false;
         bool frameGenActive = false;
+        bool dlssRRSupported = false;   // DLSS-D Ray Reconstruction available (VK-1245)
+        bool dlssRRActive = false;      // Ray Reconstruction currently driving the upscaler
+        bool dlssRRFallback = false;    // RR selected but fell back (missing inputs, VK-1397)
         bool reflexSupported = false;
         bool reflexActive = false;
         postprocess::ReflexMode reflexMode = postprocess::ReflexMode::Off;

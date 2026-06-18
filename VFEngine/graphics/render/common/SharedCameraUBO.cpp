@@ -32,6 +32,10 @@ namespace render::common
     {
         mapped = nullptr;
 
+        // Already cleaned (buffer/allocation nulled by destroyBuffer) — don't
+        // dereference `device`, which may be a dangling reference during teardown.
+        if (!buffer && !allocation.isValid()) return;
+
         core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), buffer, allocation, device.getMemoryManager());
     }
 

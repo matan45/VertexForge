@@ -61,6 +61,7 @@ namespace controllers
             lightBufferManager->setShadowIntensity(settings.shadows.shadowIntensity);
 
         gpuDriven->applyRTShadowSettings(settings.rtShadows);
+        gpuDriven->setShadowCullEnabled(settings.shadows.perViewCulling);  // Tier 4
 
         gpuDriven->setFrustumCullingEnabled(settings.culling.frustumCullingEnabled);
         gpuDriven->setOcclusionCullingEnabled(settings.culling.occlusionCullingEnabled);

@@ -62,8 +62,11 @@ namespace render::shadow
         // (one VSM view per level, see DirectionalShadowCalculator).
         inline constexpr uint32_t MAX_TOTAL_SHADOW_VIEWS = 320;
 
-        // Directional clipmap defaults (see DirectionalShadowCalculator).
-        inline constexpr uint32_t DEFAULT_CLIPMAP_LEVELS = 6;
+        // Directional clipmap defaults (see DirectionalShadowCalculator). 4 levels at the default
+        // 32 m base extent covers ~512 m (half-extent 256 m) of camera-centered range — ample for
+        // the RTS/bounded-camera target while halving directional shadow draws vs. 6 levels.
+        // Per-scene overridable via .vfSettings (clipmapLevelCount, editor Rendering -> Shadows).
+        inline constexpr uint32_t DEFAULT_CLIPMAP_LEVELS = 4;
         inline constexpr float DEFAULT_CLIPMAP_BASE_EXTENT = 32.0f; // half-size of level 0 in world units
         inline constexpr float DEFAULT_CLIPMAP_DEPTH_RANGE = 4000.0f;
     }

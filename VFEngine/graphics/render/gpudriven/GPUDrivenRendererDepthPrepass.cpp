@@ -2,8 +2,10 @@
 #include "../occlusion/DepthPrepass.hpp"
 #include "../occlusion/DepthPrepassPipeline.hpp"
 #include "../occlusion/HiZBuffer.hpp"
+#include "../upscaling/UpscaleManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "print/Log.hpp"
 
 namespace render::gpudriven
@@ -73,7 +75,37 @@ namespace render::gpudriven
             !depthPrepassPipeline || !depthPrepassPipeline->isInitialized())
             return;
 
+        // VK-1397: produce DLSS-D Ray Reconstruction albedo guides from the prepass only
+        // while Ray Reconstruction is the active upscaler. A change rebuilds the small,
+        // self-contained prepass pipeline + (de)allocates the albedo targets.
+        bool wantAlbedo = false;
+        if (auto* um = device.getUpscaleManager())
+            wantAlbedo = um->isDLSSRRActive();
+        if (wantAlbedo != prepassAlbedoActive)
+        {
+            depthPrepass->setAlbedoEnabled(wantAlbedo);
+            depthPrepassPipeline->setAlbedoMode(wantAlbedo);
+            prepassAlbedoActive = wantAlbedo;
+        }
+
         auto extent = swapChain.getSwapchainExtent();
+
+        // The guide targets sit in SHADER_READ between frames (sampled by Streamline at
+        // upscale time). Bring them to COLOR_ATTACHMENT for this frame's writes; the pass
+        // clears + rewrites them. The normal target doubles as RR's normal-roughness guide.
+        if (prepassAlbedoActive)
+        {
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDiffuseAlbedoImage(),
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getSpecularAlbedoImage(),
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+
         depthPrepass->beginPass(cmd);
 
         // Render opaque scene meshes first (buildings, walls occlude terrain behind them)
@@ -173,6 +205,22 @@ namespace render::gpudriven
         }
 
         depthPrepass->endPass(cmd);
+
+        // Hand the guide targets to Streamline's expected SHADER_READ layout for the
+        // upscale evaluate later this frame (VK-1397; also closes the VK-1245 normal
+        // -roughness layout gap, since the normal target is now explicitly transitioned).
+        if (prepassAlbedoActive)
+        {
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDiffuseAlbedoImage(),
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getSpecularAlbedoImage(),
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
     }
 
     void GPUDrivenRenderer::generatePrepassHiZ(vk::CommandBuffer cmd)

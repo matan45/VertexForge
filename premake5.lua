@@ -131,6 +131,8 @@ project "Editor"
          "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_g.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssg.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_d.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssd.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
@@ -149,6 +151,8 @@ project "Editor"
          "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_g.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssg.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_d.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssd.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
@@ -396,6 +400,8 @@ project "Runtime"
          "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_g.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssg.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_d.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssd.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"

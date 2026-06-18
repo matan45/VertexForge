@@ -21,6 +21,25 @@ vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     return vec4(worldCenter, worldRadius);
 }
 
+void transformAABB(vec3 localMin, vec3 localMax, mat4 modelMatrix, out vec3 worldMin, out vec3 worldMax) {
+    vec3 corners[8];
+    corners[0] = (modelMatrix * vec4(localMin.x, localMin.y, localMin.z, 1.0)).xyz;
+    corners[1] = (modelMatrix * vec4(localMax.x, localMin.y, localMin.z, 1.0)).xyz;
+    corners[2] = (modelMatrix * vec4(localMin.x, localMax.y, localMin.z, 1.0)).xyz;
+    corners[3] = (modelMatrix * vec4(localMax.x, localMax.y, localMin.z, 1.0)).xyz;
+    corners[4] = (modelMatrix * vec4(localMin.x, localMin.y, localMax.z, 1.0)).xyz;
+    corners[5] = (modelMatrix * vec4(localMax.x, localMin.y, localMax.z, 1.0)).xyz;
+    corners[6] = (modelMatrix * vec4(localMin.x, localMax.y, localMax.z, 1.0)).xyz;
+    corners[7] = (modelMatrix * vec4(localMax.x, localMax.y, localMax.z, 1.0)).xyz;
+
+    worldMin = corners[0];
+    worldMax = corners[0];
+    for (int i = 1; i < 8; i++) {
+        worldMin = min(worldMin, corners[i]);
+        worldMax = max(worldMax, corners[i]);
+    }
+}
+
 bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
     for (int i = 0; i < 6; i++) {
         vec3 positive = vec3(

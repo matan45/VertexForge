@@ -31,6 +31,7 @@ namespace render::gpudriven
         createDescriptorSetLayout();
         createPipelineLayout();
         createComputePipeline();
+        createShadowPipeline();
         createDescriptorPool();
         allocateDescriptorSet();
 
@@ -57,6 +58,18 @@ namespace render::gpudriven
         {
             vkDevice.destroyPipeline(computePipeline);
             computePipeline = nullptr;
+        }
+
+        if (shadowComputePipeline)
+        {
+            vkDevice.destroyPipeline(shadowComputePipeline);
+            shadowComputePipeline = nullptr;
+        }
+
+        if (shadowPipelineLayout)
+        {
+            vkDevice.destroyPipelineLayout(shadowPipelineLayout);
+            shadowPipelineLayout = nullptr;
         }
 
         if (pipelineLayout)
@@ -183,6 +196,69 @@ namespace render::gpudriven
         vfLogWarning("GPUCullLODPipeline: Created compute pipeline");
     }
 
+    void GPUCullLODPipeline::createShadowPipeline()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Same descriptor-set layout as the main cull pipeline (so external shadow sets are
+        // compatible), plus a push-constant range for the per-view base/capacity/countIndex.
+        vk::PushConstantRange pcRange{};
+        pcRange.stageFlags = vk::ShaderStageFlagBits::eCompute;
+        pcRange.offset = 0;
+        pcRange.size = sizeof(ShadowCullPushConstants);
+
+        vk::PipelineLayoutCreateInfo layoutInfo{};
+        layoutInfo.setLayoutCount = 1;
+        layoutInfo.pSetLayouts = &descriptorSetLayout;
+        layoutInfo.pushConstantRangeCount = 1;
+        layoutInfo.pPushConstantRanges = &pcRange;
+        shadowPipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
+
+        auto shadowShader = std::make_unique<core::Shader>(device);
+        shadowShader->readShader("../../resources/shaders/gpudriven/gpu_cull_shadow.glsl");
+        const auto& stages = shadowShader->getShaderStages();
+        if (stages.empty())
+        {
+            vfLogError("GPUCullLODPipeline: Failed to load shadow cull shader: {}",
+                       shadowShader->getLastCompilationError());
+            return;
+        }
+
+        vk::ComputePipelineCreateInfo pipelineInfo{};
+        pipelineInfo.stage = stages[0];
+        pipelineInfo.layout = shadowPipelineLayout;
+        shadowComputePipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
+        if (!shadowComputePipeline)
+        {
+            vfLogError("GPUCullLODPipeline: Failed to create shadow cull pipeline");
+            return;
+        }
+        // Keep the shader module alive until pipeline creation completes, then release.
+        shadowShader->cleanUp();
+        vfLogInfo("GPUCullLODPipeline: Created shadow cull pipeline");
+    }
+
+    void GPUCullLODPipeline::dispatchShadowWithSet(vk::CommandBuffer cmd, uint32_t objectCount,
+                                                    vk::DescriptorSet externalSet,
+                                                    const ShadowCullPushConstants& pc)
+    {
+        if (!initialized || !shadowComputePipeline || objectCount == 0 || !externalSet)
+        {
+            return;
+        }
+
+        // External shadow sets are kept in sync inside writeDescriptors(); flush pending updates.
+        writeDescriptors();
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, shadowComputePipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, shadowPipelineLayout, 0, externalSet, {});
+        cmd.pushConstants(shadowPipelineLayout, vk::ShaderStageFlagBits::eCompute, 0,
+                          sizeof(ShadowCullPushConstants), &pc);
+
+        uint32_t groupCount = (objectCount + CULL_WORKGROUP_SIZE - 1) / CULL_WORKGROUP_SIZE;
+        cmd.dispatch(groupCount, 1, 1);
+    }
+
     void GPUCullLODPipeline::createDescriptorPool()
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -261,9 +337,10 @@ namespace render::gpudriven
         hiZDescriptorNeedsUpdate = true;
     }
 
-    void GPUCullLODPipeline::writeBindingsToSet(vk::DescriptorSet dst, vk::Buffer cameraBufferOverride)
+    void GPUCullLODPipeline::writeBindingsToSet(const ExternalDescriptorRef& ref)
     {
         vk::Device vkDevice = device.getLogicalDevice();
+        vk::DescriptorSet dst = ref.descriptorSet;
 
         vk::DescriptorBufferInfo objectInfo{};
         objectInfo.buffer = cachedObjectBuffer;
@@ -271,22 +348,23 @@ namespace render::gpudriven
         objectInfo.range = VK_WHOLE_SIZE;
 
         vk::DescriptorBufferInfo cameraInfo{};
-        cameraInfo.buffer = cameraBufferOverride;
-        cameraInfo.offset = 0;
-        cameraInfo.range = sizeof(GPUCameraData);
+        cameraInfo.buffer = ref.cameraBuffer;
+        cameraInfo.offset = ref.cameraOffset;
+        cameraInfo.range = ref.cameraRange != 0 ? ref.cameraRange : sizeof(GPUCameraData);
 
+        // Output buffers default to the cached main buffers; shadow sets override them.
         vk::DescriptorBufferInfo drawCmdInfo{};
-        drawCmdInfo.buffer = cachedDrawCommandBuffer;
+        drawCmdInfo.buffer = ref.drawCommandOverride ? ref.drawCommandOverride : cachedDrawCommandBuffer;
         drawCmdInfo.offset = 0;
         drawCmdInfo.range = VK_WHOLE_SIZE;
 
         vk::DescriptorBufferInfo perDrawInfo{};
-        perDrawInfo.buffer = cachedPerDrawDataBuffer;
+        perDrawInfo.buffer = ref.perDrawDataOverride ? ref.perDrawDataOverride : cachedPerDrawDataBuffer;
         perDrawInfo.offset = 0;
         perDrawInfo.range = VK_WHOLE_SIZE;
 
         vk::DescriptorBufferInfo drawCountInfo{};
-        drawCountInfo.buffer = cachedDrawCountBuffer;
+        drawCountInfo.buffer = ref.drawCountOverride ? ref.drawCountOverride : cachedDrawCountBuffer;
         drawCountInfo.offset = 0;
         drawCountInfo.range = VK_WHOLE_SIZE;
 
@@ -305,50 +383,30 @@ namespace render::gpudriven
         std::vector<vk::WriteDescriptorSet> writes;
         writes.reserve(hasHiZ ? 7 : 6);
 
-        vk::WriteDescriptorSet objectWrite{};
-        objectWrite.dstSet = dst;
-        objectWrite.dstBinding = 0;
-        objectWrite.dstArrayElement = 0;
-        objectWrite.descriptorCount = 1;
-        objectWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
-        objectWrite.pBufferInfo = &objectInfo;
-        writes.push_back(objectWrite);
+        // Skip any binding whose buffer isn't ready yet (storage descriptors must not be
+        // VK_NULL_HANDLE without nullDescriptor). External/shadow sets are allocated at init
+        // before the cull pipeline's cached scene buffers exist; the missing bindings are filled
+        // by the re-sync in writeDescriptors() once updateDescriptors() supplies real buffers,
+        // which always happens before the set is dispatched.
+        auto pushBuffer = [&](uint32_t binding, vk::DescriptorType type,
+                              const vk::DescriptorBufferInfo& info)
+        {
+            if (!info.buffer) return;
+            vk::WriteDescriptorSet w{};
+            w.dstSet = dst;
+            w.dstBinding = binding;
+            w.dstArrayElement = 0;
+            w.descriptorCount = 1;
+            w.descriptorType = type;
+            w.pBufferInfo = &info;
+            writes.push_back(w);
+        };
 
-        vk::WriteDescriptorSet cameraWrite{};
-        cameraWrite.dstSet = dst;
-        cameraWrite.dstBinding = 1;
-        cameraWrite.dstArrayElement = 0;
-        cameraWrite.descriptorCount = 1;
-        cameraWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
-        cameraWrite.pBufferInfo = &cameraInfo;
-        writes.push_back(cameraWrite);
-
-        vk::WriteDescriptorSet drawCmdWrite{};
-        drawCmdWrite.dstSet = dst;
-        drawCmdWrite.dstBinding = 2;
-        drawCmdWrite.dstArrayElement = 0;
-        drawCmdWrite.descriptorCount = 1;
-        drawCmdWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
-        drawCmdWrite.pBufferInfo = &drawCmdInfo;
-        writes.push_back(drawCmdWrite);
-
-        vk::WriteDescriptorSet perDrawWrite{};
-        perDrawWrite.dstSet = dst;
-        perDrawWrite.dstBinding = 3;
-        perDrawWrite.dstArrayElement = 0;
-        perDrawWrite.descriptorCount = 1;
-        perDrawWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
-        perDrawWrite.pBufferInfo = &perDrawInfo;
-        writes.push_back(perDrawWrite);
-
-        vk::WriteDescriptorSet drawCountWrite{};
-        drawCountWrite.dstSet = dst;
-        drawCountWrite.dstBinding = 4;
-        drawCountWrite.dstArrayElement = 0;
-        drawCountWrite.descriptorCount = 1;
-        drawCountWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
-        drawCountWrite.pBufferInfo = &drawCountInfo;
-        writes.push_back(drawCountWrite);
+        pushBuffer(0, vk::DescriptorType::eStorageBuffer, objectInfo);
+        pushBuffer(1, vk::DescriptorType::eUniformBuffer, cameraInfo);
+        pushBuffer(2, vk::DescriptorType::eStorageBuffer, drawCmdInfo);
+        pushBuffer(3, vk::DescriptorType::eStorageBuffer, perDrawInfo);
+        pushBuffer(4, vk::DescriptorType::eStorageBuffer, drawCountInfo);
 
         vk::WriteDescriptorSet hiZWrite{};
         if (hasHiZ)
@@ -389,9 +447,39 @@ namespace render::gpudriven
 
         vk::DescriptorSet outSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
-        writeBindingsToSet(outSet, externalCameraBuffer);
+        ExternalDescriptorRef ref{};
+        ref.descriptorSet = outSet;
+        ref.cameraBuffer = externalCameraBuffer;
+        writeBindingsToSet(ref);
 
-        externalDescriptorSets.push_back({outSet, externalCameraBuffer});
+        externalDescriptorSets.push_back(ref);
+        return outSet;
+    }
+
+    vk::DescriptorSet GPUCullLODPipeline::allocateShadowDescriptorSet(
+        vk::DescriptorPool externalPool, vk::Buffer cameraBuffer, vk::DeviceSize cameraOffset,
+        vk::Buffer drawCommandBuffer, vk::Buffer perDrawDataBuffer, vk::Buffer drawCountBuffer)
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = externalPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        vk::DescriptorSet outSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+
+        ExternalDescriptorRef ref{};
+        ref.descriptorSet = outSet;
+        ref.cameraBuffer = cameraBuffer;
+        ref.cameraOffset = cameraOffset;
+        ref.cameraRange = sizeof(GPUCameraData);
+        ref.drawCommandOverride = drawCommandBuffer;
+        ref.perDrawDataOverride = perDrawDataBuffer;
+        ref.drawCountOverride = drawCountBuffer;
+        writeBindingsToSet(ref);
+
+        externalDescriptorSets.push_back(ref);
         return outSet;
     }
 
@@ -532,7 +620,7 @@ namespace render::gpudriven
         // per-RTT buffer handle.
         for (const auto& ext : externalDescriptorSets)
         {
-            writeBindingsToSet(ext.descriptorSet, ext.cameraBuffer);
+            writeBindingsToSet(ext);
         }
     }
 

@@ -465,6 +465,29 @@ namespace render
         inputs.nearPlane = currentNearPlane;
         inputs.farPlane = currentFarPlane;
 
+        // DLSS-D Ray Reconstruction normal-roughness guide: the depth-prepass normal target
+        // already packs roughness in .w (NORMAL_FORMAT = R16G16B16A16_SFLOAT), matching
+        // DLSSDNormalRoughnessMode::ePacked. Only fed when RR is the active upscaler. (VK-1245)
+        if (upscaleManager->isDLSSRRActive() && gpuDrivenRenderer)
+        {
+            inputs.normalRoughness = gpuDrivenRenderer->getPrepassNormalImage();
+            inputs.normalRoughnessView = gpuDrivenRenderer->getPrepassNormalImageView();
+
+            // VK-1397: depth-prepass albedo demodulation guides. Null-guarded by the
+            // tagger, and produced only when the prepass runs (occlusion culling on).
+            // The prepass leaves these in SHADER_READ_ONLY_OPTIMAL ready for the tag.
+            inputs.diffuseAlbedo = gpuDrivenRenderer->getPrepassDiffuseAlbedoImage();
+            inputs.diffuseAlbedoView = gpuDrivenRenderer->getPrepassDiffuseAlbedoImageView();
+            inputs.specularAlbedo = gpuDrivenRenderer->getPrepassSpecularAlbedoImage();
+            inputs.specularAlbedoView = gpuDrivenRenderer->getPrepassSpecularAlbedoImageView();
+
+            // Satisfy RR's specular-MV / hit-distance requirement by reusing the dense
+            // motion vectors as specular MV (no RT reflections → specular tracks the
+            // surface). Already SHADER_READ for the regular motion-vector tag. (VK-1397)
+            inputs.specularMotionVectors = offscreenResources.motionVectors.image;
+            inputs.specularMotionVectorsView = offscreenResources.motionVectors.sampledView;
+        }
+
         bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
         if (evaluateOk)
         {

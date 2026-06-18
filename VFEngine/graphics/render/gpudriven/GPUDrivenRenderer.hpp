@@ -6,6 +6,7 @@
 #include "scene/IndirectBatchManager.hpp"
 #include "scene/BindlessTextureManager.hpp"
 #include "scene/GPUCullLODPipeline.hpp"
+#include "scene/ShadowCullManager.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
 #include "scene/MeshShaderPipeline.hpp"
 #include "terrain/TerrainMeshShaderPipeline.hpp"
@@ -306,7 +307,14 @@ namespace render::gpudriven
         std::unique_ptr<IndirectBatchManager> batchManager;
         std::unique_ptr<BindlessTextureManager> bindlessTextures;
         std::unique_ptr<GPUCullLODPipeline> cullPipeline;
+        std::unique_ptr<ShadowCullManager> shadowCullManager;   // Tier 4: per-shadow-view GPU culling
+        bool shadowCullEnabled = true;                          // toggled from Render settings UI
+        std::vector<glm::mat4> shadowCullViewProjScratch;       // reused each frame in recordPerViewShadowCull
         std::unique_ptr<GPUDrivenCameraBuffer> cameraBuffer;
+        // VK-1398: swapchain image index of the submission currently being recorded. Set at the top of
+        // dispatchCompute/dispatchGraphicsCompute (and by the RTT path), consumed when binding the
+        // ringed RT shadow mask set (set 13) so each submission binds/writes its own per-image slot.
+        uint32_t currentImageIndex = 0;
         std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
         std::unique_ptr<MeshShaderPipeline> transparentMeshShaderPipeline;
         std::unique_ptr<MeshShaderPipeline> wboitMeshShaderPipeline;
@@ -323,6 +331,9 @@ namespace render::gpudriven
         std::unique_ptr<occlusion::DepthPrepassPipeline> depthPrepassPipeline;
         std::unique_ptr<occlusion::HiZBuffer> prepassHiZ;
         uint32_t prepassHiZMipLevels = 0;
+        // VK-1397: tracks whether the prepass is currently producing DLSS-D Ray
+        // Reconstruction albedo guides, so a change in RR state rebuilds the prepass.
+        bool prepassAlbedoActive = false;
         std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
         std::unique_ptr<volumetric::FogVolumeBufferManager> fogVolumeBufferManager;
         ::postprocess::VolumetricFogSettings cachedVolumetricSettings;
@@ -560,6 +571,9 @@ namespace render::gpudriven
 
         const GPUDrivenStats& getStats() const { return stats; }
 
+        // Tier 4: per-shadow-view GPU culling (Settings -> Render -> Shadows).
+        void setShadowCullEnabled(bool enabled) { shadowCullEnabled = enabled; }
+
         void updateStatsFromGPU();
 
         MeshletCullingStats getMeshletCullingStats();
@@ -571,6 +585,12 @@ namespace render::gpudriven
         std::pair<vk::ImageView, vk::Sampler> getPrepassHiZViewSampler() const;
         vk::ImageView getPrepassNormalImageView() const;
         vk::Image getPrepassNormalImage() const;
+        // DLSS-D Ray Reconstruction albedo guides (VK-1397). Valid only while Ray
+        // Reconstruction is active; null otherwise.
+        vk::Image getPrepassDiffuseAlbedoImage() const;
+        vk::ImageView getPrepassDiffuseAlbedoImageView() const;
+        vk::Image getPrepassSpecularAlbedoImage() const;
+        vk::ImageView getPrepassSpecularAlbedoImageView() const;
 
         void updateFormats(const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                           vk::DescriptorSetLayout newIBLLayout = nullptr);
@@ -802,6 +822,7 @@ namespace render::gpudriven
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);
         void recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles);
+        void recordPerViewShadowCull(vk::CommandBuffer cmd);   // Tier 4
         void updateLightCullingState(vk::CommandBuffer cmd);
         void dispatchVolumetricFog(vk::CommandBuffer cmd);
         void dispatchGIProbeUpdate(vk::CommandBuffer cmd);

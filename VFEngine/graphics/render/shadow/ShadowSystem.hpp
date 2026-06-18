@@ -76,6 +76,13 @@ namespace render
             ShadowQuality globalQuality = ShadowQuality::High;
             bool globalSoftShadows = true;
 
+            // When true, RT directional shadows are overriding the directional VSM clipmap
+            // full-screen (the fragment shaders sample the RT mask and never read the clipmap),
+            // so rendering the clipmap pages is pure waste — buildPageRenderList() skips
+            // directional lights. Set per-frame by the renderer from the GPU light buffer's
+            // runtime rtShadowActive flag (true only when RT actually produced a mask).
+            bool directionalRTOverrideActive = false;
+
             // Directional clipmap settings (applied at directional-light registration).
             uint32_t clipmapLevelCount = ShadowConstants::DEFAULT_CLIPMAP_LEVELS;
             float clipmapBaseExtent = ShadowConstants::DEFAULT_CLIPMAP_BASE_EXTENT;
@@ -161,6 +168,10 @@ namespace render
             [[nodiscard]] vk::DescriptorSet getShadowTextureDescSet() const;
 
             [[nodiscard]] bool isShadowsEnabled() const { return shadowsEnabled; }
+
+            // See directionalRTOverrideActive. Call before beginFrame() each frame; when true,
+            // the directional clipmap pages are not rendered (RT overrides them full-screen).
+            void setDirectionalRTOverrideActive(bool active) { directionalRTOverrideActive = active; }
 
             [[nodiscard]] ShadowQuality getGlobalQuality() const { return globalQuality; }
 
@@ -289,10 +300,10 @@ namespace render
                                       const ShadowView& view, bool isDirty);
             void addStaticLightPage(LightShadowData& data, uint32_t pageIdx,
                                      const glm::mat4& cropVP, const ShadowView& view,
-                                     bool isDirty, bool forceRender);
+                                     bool isDirty, bool forceRender, uint32_t viewSlot);
             void addDualLayerPage(LightShadowData& data, uint32_t pageIdx,
                                    const glm::mat4& cropVP, const ShadowView& view,
-                                   bool isDirty, bool forceRender);
+                                   bool isDirty, bool forceRender, uint32_t viewSlot);
             void allocateDynamicTile(LightShadowData& data, uint32_t pageIdx);
             void freeDynamicTileIfExpired(LightShadowData& data, uint32_t pageIdx, uint32_t physTile);
             void allocateNonStaticLightPages(LightShadowData& data);

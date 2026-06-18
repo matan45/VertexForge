@@ -114,6 +114,10 @@ namespace render::gpudriven
         // three producer descriptor sets above are copied into it, freeing sets 15/16 (<=14 sets).
         std::unique_ptr<raytracing::RTShadowMaskSet> rtMaskSet;
         bool rtMaskBound = false;
+        // VK-1398: per-image-slot dirty flags. updateRT*ShadowMaskDescriptor caches the producer and
+        // marks slots dirty; ensureRTMaskSlot() copies into the slot for the image being recorded.
+        std::array<bool, core::MAX_SWAPCHAIN_IMAGES> rtMaskSlotDirty{};
+        void markAllRTMaskSlotsDirty() { rtMaskSlotDirty.fill(true); }
 
         // Plugin world-space mask (Set 11 bindings 3/4 — sampler + params UBO).
         // The bindings always exist in terrainDataLayout; the WORLD_MASK_ENABLED macro
@@ -214,24 +218,25 @@ namespace render::gpudriven
                                      vk::DescriptorSet shadowTextureDescSet);
 
         void setRTShadowMaskLayout(vk::DescriptorSetLayout layout) { rtShadowMaskLayout = layout; rtShadowEnabled = true; }
+        // VK-1398: cache producers only; copyInto the ringed set happens lazily in ensureRTMaskSlot().
         void updateRTShadowMaskDescriptor(vk::DescriptorSet descSet)
         {
-            rtShadowMaskDescriptorSet = descSet;
-            if (rtMaskSet && descSet) rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, descSet);
+            if (rtShadowMaskDescriptorSet != descSet) { rtShadowMaskDescriptorSet = descSet; markAllRTMaskSlotsDirty(); }
         }
 
         void setRTSpotShadowMaskLayout(vk::DescriptorSetLayout layout) { rtSpotShadowMaskLayout = layout; rtSpotShadowEnabled = true; }
         void updateRTSpotShadowMaskDescriptor(vk::DescriptorSet descSet)
         {
-            rtSpotShadowMaskDescriptorSet = descSet;
-            if (rtMaskSet && descSet) rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, descSet);
+            if (rtSpotShadowMaskDescriptorSet != descSet) { rtSpotShadowMaskDescriptorSet = descSet; markAllRTMaskSlotsDirty(); }
         }
         void setRTPointShadowMaskLayout(vk::DescriptorSetLayout layout) { rtPointShadowMaskLayout = layout; rtPointShadowEnabled = true; }
         void updateRTPointShadowMaskDescriptor(vk::DescriptorSet descSet)
         {
-            rtPointShadowMaskDescriptorSet = descSet;
-            if (rtMaskSet && descSet) rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, descSet);
+            if (rtPointShadowMaskDescriptorSet != descSet) { rtPointShadowMaskDescriptorSet = descSet; markAllRTMaskSlotsDirty(); }
         }
+
+        // Lazily populates the ring slot for imageIndex from the cached producers (only when dirty).
+        void ensureRTMaskSlot(uint32_t imageIndex);
 
         // Plugin world mask: enables the WORLD_MASK_ENABLED macro on the next (re)create
         // and writes the sampler + params UBO into set 11 bindings 3/4.
@@ -241,6 +246,7 @@ namespace render::gpudriven
                                       vk::Buffer paramsBuffer, vk::DeviceSize paramsSize);
 
         void dispatch(vk::CommandBuffer cmd,
+                      uint32_t imageIndex,
                       uint32_t viewMode,
                       float screenWidth,
                       float screenHeight,

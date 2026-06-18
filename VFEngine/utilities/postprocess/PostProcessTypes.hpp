@@ -256,6 +256,12 @@ namespace postprocess
         UpscaleMode mode = UpscaleMode::DLSS;
         UpscaleQuality quality = UpscaleQuality::Quality;
 
+        // DLSS 3.5 Ray Reconstruction (DLSS-D). When enabled and supported, RR replaces the
+        // standard DLSS upscaler and denoises ray-traced effects (VK-1245). forceTraditionalDenoiser
+        // keeps the engine's RTShadowDenoiser running for A/B comparison even when RR is active.
+        bool rayReconstruction = false;
+        bool forceTraditionalDenoiser = false;
+
         static float getScaleFactor(UpscaleQuality q)
         {
             switch (q)

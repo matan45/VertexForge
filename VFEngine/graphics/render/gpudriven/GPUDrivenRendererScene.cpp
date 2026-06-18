@@ -584,6 +584,34 @@ namespace render::gpudriven
         return nullptr;
     }
 
+    vk::Image GPUDrivenRenderer::getPrepassDiffuseAlbedoImage() const
+    {
+        if (depthPrepass && depthPrepass->isInitialized() && depthPrepass->isAlbedoEnabled())
+            return depthPrepass->getDiffuseAlbedoImage();
+        return nullptr;
+    }
+
+    vk::ImageView GPUDrivenRenderer::getPrepassDiffuseAlbedoImageView() const
+    {
+        if (depthPrepass && depthPrepass->isInitialized() && depthPrepass->isAlbedoEnabled())
+            return depthPrepass->getDiffuseAlbedoImageView();
+        return nullptr;
+    }
+
+    vk::Image GPUDrivenRenderer::getPrepassSpecularAlbedoImage() const
+    {
+        if (depthPrepass && depthPrepass->isInitialized() && depthPrepass->isAlbedoEnabled())
+            return depthPrepass->getSpecularAlbedoImage();
+        return nullptr;
+    }
+
+    vk::ImageView GPUDrivenRenderer::getPrepassSpecularAlbedoImageView() const
+    {
+        if (depthPrepass && depthPrepass->isInitialized() && depthPrepass->isAlbedoEnabled())
+            return depthPrepass->getSpecularAlbedoImageView();
+        return nullptr;
+    }
+
     void GPUDrivenRenderer::updatePipelineDescriptors()
     {
         if (lightCullingPipeline && clusterGridManager && lightBufferManager)
@@ -611,6 +639,12 @@ namespace render::gpudriven
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
             meshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
             meshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
+
+            // Tier 4: keep the shadow-pass perDrawData variant set's instance/object bindings
+            // in sync (its b0 stays our shadow perDrawData buffer).
+            if (shadowCullManager && shadowCullManager->isInitialized())
+                shadowCullManager->updateSceneBuffers(mergedBuffer->getInstanceTransformBuffer(),
+                                                      mergedBuffer->getObjectBuffer());
         }
 
         if (transparentMeshShaderPipeline)

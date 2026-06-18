@@ -1,6 +1,9 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include <array>
+
+#include "../../core/GraphicsConstants.hpp"
 
 namespace core
 {
@@ -23,7 +26,14 @@ namespace render::raytracing
     // declares (and statically uses) a binding when its RT_*_ENABLED macro is set, which only happens
     // once that producer is online and its binding has been copied in. Bindings are populated by
     // copying from each producer's own combined-image-sampler descriptor (vkCopyDescriptorSets), so no
-    // raw view/sampler plumbing is needed; the set handle is stable for the lifetime of the renderer.
+    // raw view/sampler plumbing is needed.
+    //
+    // VK-1398: the destination set is RINGED per swapchain image (one set per image index, sized to
+    // core::MAX_SWAPCHAIN_IMAGES). Per-frame producer re-points (resize / DLSS-D RR bypass) only ever
+    // write the slot for the image currently being recorded — an image whose prior submission has
+    // retired (per-image fence in RenderManager) — so a descriptor set is never rewritten while still
+    // bound by an in-flight command buffer. Indexing per-image (not per MAX_FRAMES_IN_FLIGHT) is
+    // required: the latter would alias distinct in-flight images (see GraphicsConstants.hpp).
     class RTShadowMaskSet
     {
     public:
@@ -42,12 +52,19 @@ namespace render::raytracing
         bool isInitialized() const { return initialized; }
 
         vk::DescriptorSetLayout getLayout() const { return layout; }
-        vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
 
-        // Copies a producer's combined-image-sampler descriptor (its binding 0) into one of this set's
-        // bindings. Safe to call at producer create/resize/online transitions (not while a frame that
-        // bound this set is in flight) — mirrors how the per-pipeline mask descriptors were updated.
-        void copyInto(uint32_t dstBinding, vk::DescriptorSet srcSet);
+        // Returns the descriptor set for the given swapchain image index (the ring slot bound by that
+        // image's command buffer).
+        vk::DescriptorSet getDescriptorSet(uint32_t imageIndex) const
+        {
+            return imageIndex < core::MAX_SWAPCHAIN_IMAGES ? descriptorSets[imageIndex] : nullptr;
+        }
+
+        // Copies a producer's combined-image-sampler descriptor (its binding 0) into the given
+        // binding of the ring slot for imageIndex. Caller must only write the slot for the image
+        // currently being recorded (its prior submission has retired), never a slot bound by an
+        // in-flight command buffer.
+        void copyInto(uint32_t dstBinding, vk::DescriptorSet srcSet, uint32_t imageIndex);
 
     private:
         core::Device& device;
@@ -55,6 +72,6 @@ namespace render::raytracing
 
         vk::DescriptorSetLayout layout;
         vk::DescriptorPool pool;
-        vk::DescriptorSet descriptorSet;
+        std::array<vk::DescriptorSet, core::MAX_SWAPCHAIN_IMAGES> descriptorSets{};
     };
 }

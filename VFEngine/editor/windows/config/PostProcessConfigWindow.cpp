@@ -239,6 +239,8 @@ namespace windows
 
                 ImGui::Text("Streamline: %s", status.streamlineAvailable ? "Available" : "Not Available");
                 ImGui::Text("DLSS: %s", status.dlssSupported ? "Supported" : "Not Supported");
+                ImGui::Text("Ray Reconstruction (DLSS 3.5): %s",
+                            status.dlssRRSupported ? "Supported" : "Not Supported");
                 ImGui::Text("Active: %s", status.activeMode == postprocess::UpscaleMode::DLSS ? "DLSS" : "Off");
 
                 if (status.renderWidth > 0 && status.displayWidth > 0)
@@ -284,6 +286,49 @@ namespace windows
 
                         ImGui::Text("DLSS-G: %s", status.dlssGSupported ? "Supported" : "Not Supported");
                         ImGui::Text("Frame Gen: %s", status.frameGenActive ? "Active" : "Off");
+                    }
+                }
+
+                // Ray Reconstruction (DLSS 3.5) — AI denoiser for ray-traced effects (VK-1245).
+                // Replaces the standard DLSS upscaler when on; auto-enabled when DLSS + RT are
+                // both active so users get the better path by default.
+                if (settings.upscale.enabled)
+                {
+                    ImGui::Spacing();
+                    ImGui::SeparatorText("Ray Reconstruction (DLSS 3.5)");
+
+                    bool canEnableRR = status.dlssRRSupported;
+                    if (!canEnableRR) ImGui::BeginDisabled();
+                    if (ImGui::Checkbox("Enable Ray Reconstruction", &settings.upscale.rayReconstruction))
+                        isDirty = true;
+                    if (!canEnableRR)
+                    {
+                        ImGui::EndDisabled();
+                        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+                            "Ray Reconstruction not supported on this GPU/driver.");
+                    }
+
+                    if (settings.upscale.rayReconstruction && canEnableRR)
+                    {
+                        if (ImGui::Checkbox("Force traditional denoiser (A/B)",
+                                            &settings.upscale.forceTraditionalDenoiser))
+                            isDirty = true;
+                        ImGui::SetItemTooltip("Keeps the engine's RT shadow denoiser running so you "
+                            "can compare it against DLSS-D denoising.");
+                    }
+
+                    if (status.dlssRRFallback)
+                    {
+                        ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                            "Ray Reconstruction: Unavailable (missing G-buffer inputs)");
+                        ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                            "Fell back to standard DLSS. Needs albedo / hit-distance buffers (VK-1397).");
+                    }
+                    else
+                    {
+                        ImGui::Text("Ray Reconstruction: %s",
+                                    status.dlssRRActive ? "Active"
+                                    : (status.dlssRRSupported ? "Inactive" : "Not Supported"));
                     }
                 }
             }

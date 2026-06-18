@@ -1,4 +1,5 @@
 #include "DepthPrepassPipeline.hpp"
+#include "DepthPrepass.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -19,10 +20,45 @@ namespace render::occlusion
 
     void DepthPrepassPipeline::init(const DepthPrepassInitInfo& info)
     {
+        cachedInfo = info;
         createScenePipeline(info);
         createTerrainPipeline(info);
         initialized = true;
         vfLogInfo("Depth prepass pipelines initialized");
+    }
+
+    std::vector<vk::Format> DepthPrepassPipeline::colorFormatsForMode() const
+    {
+        // Normal target is always present. Ray Reconstruction adds diffuse + specular
+        // albedo targets (VK-1397). Both prepass pipelines must agree on the count so
+        // they stay compatible with the shared prepass render pass.
+        std::vector<vk::Format> formats{DepthPrepass::getNormalFormat()};
+        if (albedoEnabled)
+        {
+            formats.push_back(DepthPrepass::getAlbedoFormat());
+            formats.push_back(DepthPrepass::getAlbedoFormat());
+        }
+        return formats;
+    }
+
+    void DepthPrepassPipeline::setAlbedoMode(bool enabled)
+    {
+        if (!initialized || enabled == albedoEnabled)
+            return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+        vkDevice.waitIdle();
+
+        if (scenePipeline) { vkDevice.destroyPipeline(scenePipeline); scenePipeline = nullptr; }
+        if (scenePipelineLayout) { vkDevice.destroyPipelineLayout(scenePipelineLayout); scenePipelineLayout = nullptr; }
+        if (terrainPipeline) { vkDevice.destroyPipeline(terrainPipeline); terrainPipeline = nullptr; }
+        if (terrainPipelineLayout) { vkDevice.destroyPipelineLayout(terrainPipelineLayout); terrainPipelineLayout = nullptr; }
+        if (sceneShader) { sceneShader->cleanUp(); sceneShader.reset(); }
+        if (terrainShader) { terrainShader->cleanUp(); terrainShader.reset(); }
+
+        albedoEnabled = enabled;
+        createScenePipeline(cachedInfo);
+        createTerrainPipeline(cachedInfo);
     }
 
     DepthPrepassPipeline::PipelineCreateResult DepthPrepassPipeline::createDepthOnlyPipeline(
@@ -48,11 +84,13 @@ namespace render::occlusion
 
         vk::PipelineLayout pipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
 
-        // Color blend attachment for normal output (no blending, write all channels)
-        vk::PipelineColorBlendAttachmentState normalBlend{};
-        normalBlend.blendEnable = VK_FALSE;
-        normalBlend.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                                     vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        // One no-blend, write-all attachment state per color target. The prepass writes
+        // the normal target (+ optional RR albedo targets, VK-1397); none of them blend.
+        vk::PipelineColorBlendAttachmentState noBlend{};
+        noBlend.blendEnable = VK_FALSE;
+        noBlend.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                                 vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        std::vector<vk::PipelineColorBlendAttachmentState> blendStates(colorFormats.size(), noBlend);
 
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
@@ -66,7 +104,7 @@ namespace render::occlusion
             .depthWriteEnable = true,
             .depthCompareOp = vk::CompareOp::eLess,
             .blendEnable = false,
-            .colorBlendAttachments = {normalBlend}
+            .colorBlendAttachments = blendStates
         };
         config.dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
 
@@ -77,6 +115,10 @@ namespace render::occlusion
     void DepthPrepassPipeline::createScenePipeline(const DepthPrepassInitInfo& info)
     {
         sceneShader = std::make_unique<core::Shader>(device);
+        // VK-1397: the albedo permutation emits diffuse/specular albedo guides for DLSS-D
+        // Ray Reconstruction (extra MRT outputs in mesh + fragment).
+        if (albedoEnabled)
+            sceneShader->addMacroDefinition("ALBEDO_PREPASS");
         sceneShader->readShader("../../resources/shaders/depthprepass/task_depth_prepass.glsl");
         sceneShader->readShader("../../resources/shaders/depthprepass/mesh_depth_prepass.glsl");
         sceneShader->readShader("../../resources/shaders/depthprepass/frag_depth_prepass.glsl");
@@ -93,7 +135,7 @@ namespace render::occlusion
             info.meshletDataLayout, info.vertexDataLayout, info.boneMatrixLayout
         };
 
-        auto result = createDepthOnlyPipeline(*sceneShader, info.colorFormats, info.depthFormat, layouts,
+        auto result = createDepthOnlyPipeline(*sceneShader, colorFormatsForMode(), info.depthFormat, layouts,
                                                sizeof(DepthPrepassPushConstants));
         scenePipeline = result.pipeline;
         scenePipelineLayout = result.layout;
@@ -123,7 +165,10 @@ namespace render::occlusion
         layouts[4] = info.vertexDataLayout;
         layouts[11] = info.terrainDataLayout;
 
-        auto result = createDepthOnlyPipeline(*terrainShader, info.colorFormats, info.depthFormat, layouts,
+        // Terrain reuses the normal-only fragment (no ALBEDO_PREPASS), but must match the
+        // shared prepass render pass attachment count, so it declares the same color
+        // formats; it simply leaves the albedo targets unwritten (clear value). (VK-1397)
+        auto result = createDepthOnlyPipeline(*terrainShader, colorFormatsForMode(), info.depthFormat, layouts,
                                                sizeof(TerrainDepthPrepassPushConstants));
         terrainPipeline = result.pipeline;
         terrainPipelineLayout = result.layout;

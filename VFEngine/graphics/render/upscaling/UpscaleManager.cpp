@@ -6,6 +6,7 @@
 #include <sl.h>
 #include <sl_dlss.h>
 #include <sl_dlss_g.h>
+#include <sl_dlss_d.h>
 #include <sl_reflex.h>
 #include <sl_consts.h>
 #include <sl_helpers_vk.h>
@@ -26,6 +27,19 @@ namespace render::upscaling
         return r;
     }
 
+    static sl::DLSSMode qualityToDLSSMode(::postprocess::UpscaleQuality q)
+    {
+        switch (q)
+        {
+        case ::postprocess::UpscaleQuality::Native:           return sl::DLSSMode::eDLAA;
+        case ::postprocess::UpscaleQuality::Quality:          return sl::DLSSMode::eMaxQuality;
+        case ::postprocess::UpscaleQuality::Balanced:         return sl::DLSSMode::eBalanced;
+        case ::postprocess::UpscaleQuality::Performance:      return sl::DLSSMode::eMaxPerformance;
+        case ::postprocess::UpscaleQuality::UltraPerformance: return sl::DLSSMode::eUltraPerformance;
+        }
+        return sl::DLSSMode::eMaxQuality;
+    }
+
     static const char* slResultToString(sl::Result r)
     {
         switch (r)
@@ -38,14 +52,34 @@ namespace render::upscaling
         case sl::Result::eErrorAdapterNotSupported: return "ErrorAdapterNotSupported";
         case sl::Result::eErrorNoPlugins: return "ErrorNoPlugins";
         case sl::Result::eErrorVulkanAPI: return "ErrorVulkanAPI";
+        case sl::Result::eErrorDXGIAPI: return "ErrorDXGIAPI";
+        case sl::Result::eErrorD3DAPI: return "ErrorD3DAPI";
+        case sl::Result::eErrorNVAPI: return "ErrorNVAPI";
+        case sl::Result::eErrorReflexAPI: return "ErrorReflexAPI";
         case sl::Result::eErrorNGXFailed: return "ErrorNGXFailed";
+        case sl::Result::eErrorJSONParsing: return "ErrorJSONParsing";
+        case sl::Result::eErrorMissingProxy: return "ErrorMissingProxy";
+        case sl::Result::eErrorMissingResourceState: return "ErrorMissingResourceState";
         case sl::Result::eErrorInvalidIntegration: return "ErrorInvalidIntegration";
+        case sl::Result::eErrorMissingInputParameter: return "ErrorMissingInputParameter";
         case sl::Result::eErrorNotInitialized: return "ErrorNotInitialized";
+        case sl::Result::eErrorComputeFailed: return "ErrorComputeFailed";
         case sl::Result::eErrorInitNotCalled: return "ErrorInitNotCalled";
+        case sl::Result::eErrorInvalidParameter: return "ErrorInvalidParameter";
+        case sl::Result::eErrorMissingConstants: return "ErrorMissingConstants";
+        case sl::Result::eErrorDuplicatedConstants: return "ErrorDuplicatedConstants";
+        case sl::Result::eErrorMissingOrInvalidAPI: return "ErrorMissingOrInvalidAPI";
+        case sl::Result::eErrorCommonConstantsMissing: return "ErrorCommonConstantsMissing";
+        case sl::Result::eErrorUnsupportedInterface: return "ErrorUnsupportedInterface";
         case sl::Result::eErrorFeatureMissing: return "ErrorFeatureMissing";
         case sl::Result::eErrorFeatureNotSupported: return "ErrorFeatureNotSupported";
+        case sl::Result::eErrorFeatureMissingHooks: return "ErrorFeatureMissingHooks";
         case sl::Result::eErrorFeatureFailedToLoad: return "ErrorFeatureFailedToLoad";
+        case sl::Result::eErrorFeatureWrongPriority: return "ErrorFeatureWrongPriority";
         case sl::Result::eErrorFeatureMissingDependency: return "ErrorFeatureMissingDependency";
+        case sl::Result::eErrorFeatureManagerInvalidState: return "ErrorFeatureManagerInvalidState";
+        case sl::Result::eErrorInvalidState: return "ErrorInvalidState";
+        case sl::Result::eWarnOutOfVRAM: return "WarnOutOfVRAM";
         default: return "Unknown";
         }
     }
@@ -64,6 +98,8 @@ namespace render::upscaling
         sl::Feature featuresToLoad[] = {
             sl::kFeatureDLSS,
             sl::kFeatureDLSS_G,
+            // DLSS-D (Ray Reconstruction) — AI denoiser for ray-traced effects (VK-1245).
+            sl::kFeatureDLSS_RR,
             sl::kFeatureReflex,
             // PCL provides slPCLSetMarker; without it every latency marker fails to resolve.
             sl::kFeaturePCL
@@ -76,6 +112,12 @@ namespace render::upscaling
         prefs.numFeaturesToLoad = static_cast<uint32_t>(std::size(featuresToLoad));
         prefs.engine = sl::EngineType::eCustom;
         prefs.engineVersion = "1.0.0";
+        // NGX requires application identity. We have no NVIDIA-issued applicationId, so we
+        // supply a stable projectId GUID + engine + engineVersion instead (the supported path
+        // for custom engines — see sl::Preferences::projectId). DLSS SR / Frame Gen tolerate a
+        // missing identity, but DLSS-D (Ray Reconstruction) does NOT fall back and reports
+        // ErrorFeatureNotSupported without it (VK-1245).
+        prefs.projectId = "f8bb46ef-d68c-4dad-9705-f637a60da285";
         prefs.renderAPI = sl::RenderAPI::eVulkan;
         // Vulkan calls are routed through sl.interposer.dll's vkGetInstanceProcAddr
         // (set up in Device::createInstance), so Streamline automatically tracks
@@ -174,6 +216,8 @@ namespace render::upscaling
             {
                 slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
+                if (dlssRRSupported)
+                    slFreeResources(sl::kFeatureDLSS_RR, sl::ViewportHandle{0});
             }
             if (reflexActive)
                 applyReflexSettings({});
@@ -194,6 +238,8 @@ namespace render::upscaling
         {
             slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
             slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
+            if (dlssRRSupported)
+                slFreeResources(sl::kFeatureDLSS_RR, sl::ViewportHandle{0});
             frameGenActive = false;
             vfLogInfo("Streamline: freed feature resources for resolution change");
         }
@@ -221,6 +267,21 @@ namespace render::upscaling
         reflexSupported = (reflexResult == sl::Result::eOk);
         vfLogInfo("Streamline Reflex support query: {} ({})",
                   slResultToString(reflexResult), static_cast<int>(reflexResult));
+
+        // DLSS-D (Ray Reconstruction). Unlike DLSS SR / Frame Gen this does NOT fall back when
+        // NGX lacks a valid application identity — the projectId set in initStreamline() is what
+        // lets this return eOk. This query is the VK-1245 Phase 0 GO/NO-GO gate (VK-1245).
+        sl::Result dlssRRResult = slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo);
+        dlssRRSupported = (dlssRRResult == sl::Result::eOk);
+        vfLogInfo("Streamline DLSS-D (Ray Reconstruction) support query: {} ({})",
+                  slResultToString(dlssRRResult), static_cast<int>(dlssRRResult));
+        if (dlssRRSupported)
+        {
+            bool rrLoaded = false;
+            sl::Result rrLoadResult = slIsFeatureLoaded(sl::kFeatureDLSS_RR, rrLoaded);
+            vfLogInfo("Streamline DLSS-D loaded: {} (query result: {})",
+                      rrLoaded ? "yes" : "no", slResultToString(rrLoadResult));
+        }
 
         // Check if DLSS feature actually loaded
         if (dlssSupported)
@@ -280,6 +341,19 @@ namespace render::upscaling
             ? resolveActiveMode(settings.mode)
             : ::postprocess::UpscaleMode::Off;
 
+        activeQuality = settings.quality;
+
+        // Ray Reconstruction replaces the standard DLSS upscaler when the user enables it and
+        // the GPU/driver support it. The DLSS-D options themselves are issued per-frame in
+        // evaluate() (camera matrices change every frame). (VK-1245)
+        dlssRRActive = (activeMode == ::postprocess::UpscaleMode::DLSS)
+                    && dlssRRSupported
+                    && settings.rayReconstruction;
+        forceTraditionalDenoiser = settings.forceTraditionalDenoiser;
+        // Re-arm RR on any settings change so toggling it off/on retries after a runtime failure.
+        dlssRREvalFailed = false;
+        dlssRRActiveLogged = false;
+
         resolutionManager.setDisplayResolution(outputWidth, outputHeight);
 
         if (activeMode != ::postprocess::UpscaleMode::Off)
@@ -290,6 +364,9 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return;
 
+        // Standard DLSS Super Resolution options. Always configured (even when RR is active) so
+        // evaluate() can fall back to plain DLSS if Ray Reconstruction can't run this frame. RR
+        // additionally configures its own DLSS-D options per-frame in evaluate(). (VK-1245)
         if (activeMode == ::postprocess::UpscaleMode::DLSS)
         {
             sl::DLSSOptions dlssOptions{};
@@ -328,7 +405,10 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return false;
 
-        sl::Feature feature = sl::kFeatureDLSS;
+        // Ray Reconstruction (DLSS-D) replaces standard DLSS when active. After a runtime
+        // evaluate failure (dlssRREvalFailed) we fall back to standard DLSS. (VK-1245)
+        const bool useRR = dlssRRActive && dlssRRSupported && !dlssRREvalFailed;
+        sl::Feature feature = useRR ? sl::kFeatureDLSS_RR : sl::kFeatureDLSS;
 
         sl::ViewportHandle viewport{0};
 
@@ -381,8 +461,25 @@ namespace render::upscaling
 
         slSetConstants(constants, *frameToken, viewport);
 
-        // Tag resources
-        sl::ResourceTag tags[7]{};
+        // Ray Reconstruction options are issued per-frame because the world<->view matrices it
+        // needs to reproject world-space normals change every frame. normalRoughnessMode=ePacked
+        // matches the depth-prepass normal target (roughness in .w). (VK-1245)
+        if (useRR)
+        {
+            sl::DLSSDOptions rrOptions{};
+            rrOptions.mode = qualityToDLSSMode(activeQuality);
+            rrOptions.outputWidth = inputs.displayExtent.width;
+            rrOptions.outputHeight = inputs.displayExtent.height;
+            rrOptions.colorBuffersHDR = sl::Boolean::eTrue;
+            rrOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+            rrOptions.worldToCameraView = toSL(inputs.viewMatrix);
+            rrOptions.cameraViewToWorld = toSL(glm::inverse(inputs.viewMatrix));
+            slDLSSDSetOptions(viewport, rrOptions);
+        }
+
+        // Tag resources. RR adds normal-roughness + (optional) albedo / hit-distance guides on
+        // top of the standard upscaler tags, so size for the larger set.
+        sl::ResourceTag tags[12]{};
         uint32_t tagCount = 0;
 
         sl::Resource colorRes{sl::ResourceType::eTex2d, inputs.colorInput,
@@ -396,9 +493,13 @@ namespace render::upscaling
         tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeScalingInputColor,
                                             sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
-        // HUDLessColor — same as color input since UI is composited after upscaling
-        tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeHUDLessColor,
-                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+        // HUDLessColor — same as color input since UI is composited after upscaling.
+        // Standard DLSS only; Ray Reconstruction does not consume a HUD-less tag.
+        if (!useRR)
+        {
+            tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeHUDLessColor,
+                                                sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+        }
 
         sl::Resource depthRes{sl::ResourceType::eTex2d, inputs.depthInput,
                               nullptr, static_cast<VkImageView>(inputs.depthView),
@@ -462,6 +563,45 @@ namespace render::upscaling
                                                 sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
         }
 
+        // Ray Reconstruction guide buffers. normal-roughness is the primary guide (roughness
+        // packed in .w → ePacked). Albedo / specular-albedo / specular-hit-distance are tagged
+        // only when present so RR still runs (with reduced guidance) before those G-buffers
+        // exist. These sl::Resource locals must outlive slSetTagForFrame below. (VK-1245)
+        sl::Resource normalRoughRes{};
+        sl::Resource diffuseAlbedoRes{};
+        sl::Resource specularAlbedoRes{};
+        sl::Resource specHitDistRes{};
+        sl::Resource specMotionRes{};
+        if (useRR)
+        {
+            auto tagGuide = [&](vk::Image img, vk::ImageView view, VkFormat fmt,
+                                sl::Resource& res, sl::BufferType type)
+            {
+                if (!img) return;
+                res = sl::Resource{sl::ResourceType::eTex2d, img, nullptr,
+                                   static_cast<VkImageView>(view),
+                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                res.width = inputs.renderExtent.width;
+                res.height = inputs.renderExtent.height;
+                res.nativeFormat = static_cast<uint32_t>(fmt);
+                res.mipLevels = 1;
+                res.arrayLayers = 1;
+                tags[tagCount++] = sl::ResourceTag{&res, type,
+                                                   sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+            };
+
+            tagGuide(inputs.normalRoughness, inputs.normalRoughnessView,
+                     inputs.normalRoughnessFormat, normalRoughRes, sl::kBufferTypeNormalRoughness);
+            tagGuide(inputs.diffuseAlbedo, inputs.diffuseAlbedoView,
+                     inputs.diffuseAlbedoFormat, diffuseAlbedoRes, sl::kBufferTypeAlbedo);
+            tagGuide(inputs.specularAlbedo, inputs.specularAlbedoView,
+                     inputs.specularAlbedoFormat, specularAlbedoRes, sl::kBufferTypeSpecularAlbedo);
+            tagGuide(inputs.specularHitDistance, inputs.specularHitDistanceView,
+                     inputs.specularHitDistanceFormat, specHitDistRes, sl::kBufferTypeSpecularHitDistance);
+            tagGuide(inputs.specularMotionVectors, inputs.specularMotionVectorsView,
+                     inputs.specularMotionVectorsFormat, specMotionRes, sl::kBufferTypeSpecularMotionVectors);
+        }
+
         sl::Result tagResult = slSetTagForFrame(*frameToken, viewport, tags, tagCount,
                          reinterpret_cast<sl::CommandBuffer*>(static_cast<VkCommandBuffer>(cmd)));
         if (tagResult != sl::Result::eOk)
@@ -482,6 +622,18 @@ namespace render::upscaling
                           reinterpret_cast<sl::CommandBuffer*>(static_cast<VkCommandBuffer>(cmd)));
         if (evalResult != sl::Result::eOk)
         {
+            if (useRR)
+            {
+                // DLSS-D rejected this frame (typically eErrorMissingInputParameter — the engine
+                // does not yet produce the albedo / hit-distance guide buffers RR requires; see
+                // VK-1397). Disable RR and fall back to standard DLSS so the image stays correct.
+                dlssRREvalFailed = true;
+                vfLogWarning("DLSS-D Ray Reconstruction evaluate failed: {} ({}) - falling back to "
+                             "standard DLSS. RR needs G-buffer inputs the renderer doesn't produce "
+                             "yet (VK-1397).",
+                             slResultToString(evalResult), static_cast<int>(evalResult));
+                return false;
+            }
             static bool loggedOnce = false;
             if (!loggedOnce)
             {
@@ -490,6 +642,18 @@ namespace render::upscaling
                 loggedOnce = true;
             }
             return false;
+        }
+
+        // One-shot confirmation that Ray Reconstruction is driving frames, alongside which
+        // demodulation guides were supplied this frame (VK-1397). Mirrors the Frame Gen /
+        // Reflex status logs so RR isn't silent while it succeeds.
+        if (useRR && !dlssRRActiveLogged)
+        {
+            dlssRRActiveLogged = true;
+            vfLogInfo("DLSS-D Ray Reconstruction: active (Ok) - guides: normal-roughness{}{}{}",
+                      inputs.diffuseAlbedo ? " diffuse-albedo" : "",
+                      inputs.specularAlbedo ? " specular-albedo" : "",
+                      inputs.specularMotionVectors ? " specular-mv" : "");
         }
         return true;
 #else

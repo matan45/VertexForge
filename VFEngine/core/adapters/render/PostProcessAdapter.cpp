@@ -51,6 +51,9 @@ namespace core
             status.displayHeight = res.getDisplayHeight();
             status.dlssGSupported = mgr->isDLSSGSupported();
             status.frameGenActive = mgr->isFrameGenActive();
+            status.dlssRRSupported = mgr->isDLSSRRSupported();
+            status.dlssRRActive = mgr->isDLSSRRActive();
+            status.dlssRRFallback = mgr->isDLSSRREvalFailed();
 
             status.reflexSupported = mgr->isReflexSupported();
             status.reflexActive = mgr->isReflexActive();
