@@ -6,7 +6,6 @@
 #include "scene/IndirectBatchManager.hpp"
 #include "scene/BindlessTextureManager.hpp"
 #include "scene/GPUCullLODPipeline.hpp"
-#include "scene/ShadowCullManager.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
 #include "scene/MeshShaderPipeline.hpp"
 #include "terrain/TerrainMeshShaderPipeline.hpp"
@@ -307,9 +306,6 @@ namespace render::gpudriven
         std::unique_ptr<IndirectBatchManager> batchManager;
         std::unique_ptr<BindlessTextureManager> bindlessTextures;
         std::unique_ptr<GPUCullLODPipeline> cullPipeline;
-        std::unique_ptr<ShadowCullManager> shadowCullManager;   // Tier 4: per-shadow-view GPU culling
-        bool shadowCullEnabled = true;                          // toggled from Render settings UI
-        std::vector<glm::mat4> shadowCullViewProjScratch;       // reused each frame in recordPerViewShadowCull
         std::unique_ptr<GPUDrivenCameraBuffer> cameraBuffer;
         // VK-1398: swapchain image index of the submission currently being recorded. Set at the top of
         // dispatchCompute/dispatchGraphicsCompute (and by the RTT path), consumed when binding the
@@ -571,9 +567,6 @@ namespace render::gpudriven
 
         const GPUDrivenStats& getStats() const { return stats; }
 
-        // Tier 4: per-shadow-view GPU culling (Settings -> Render -> Shadows).
-        void setShadowCullEnabled(bool enabled) { shadowCullEnabled = enabled; }
-
         void updateStatsFromGPU();
 
         MeshletCullingStats getMeshletCullingStats();
@@ -822,7 +815,6 @@ namespace render::gpudriven
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);
         void recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles);
-        void recordPerViewShadowCull(vk::CommandBuffer cmd);   // Tier 4
         void updateLightCullingState(vk::CommandBuffer cmd);
         void dispatchVolumetricFog(vk::CommandBuffer cmd);
         void dispatchGIProbeUpdate(vk::CommandBuffer cmd);

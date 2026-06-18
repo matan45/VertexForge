@@ -39,7 +39,6 @@ namespace serialization
                 {"slopeBias", s.slopeBias},
                 {"normalBias", s.normalBias},
                 {"softShadows", s.softShadows},
-                {"perViewCulling", s.perViewCulling},
                 {"shadowIntensity", s.shadowIntensity},
                 {"spotResolution", s.spotResolution},
                 {"pointResolution", s.pointResolution},
@@ -66,8 +65,6 @@ namespace serialization
                 settings.normalBias = shadows["normalBias"].get<float>();
             if (shadows.contains("softShadows") && shadows["softShadows"].is_boolean())
                 settings.softShadows = shadows["softShadows"].get<bool>();
-            if (shadows.contains("perViewCulling") && shadows["perViewCulling"].is_boolean())
-                settings.perViewCulling = shadows["perViewCulling"].get<bool>();
             if (shadows.contains("shadowIntensity") && shadows["shadowIntensity"].is_number())
                 settings.shadowIntensity = shadows["shadowIntensity"].get<float>();
             if (shadows.contains("spotResolution") && shadows["spotResolution"].is_number_unsigned())

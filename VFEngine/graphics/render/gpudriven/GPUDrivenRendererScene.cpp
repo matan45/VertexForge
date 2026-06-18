@@ -639,12 +639,6 @@ namespace render::gpudriven
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
             meshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
             meshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
-
-            // Tier 4: keep the shadow-pass perDrawData variant set's instance/object bindings
-            // in sync (its b0 stays our shadow perDrawData buffer).
-            if (shadowCullManager && shadowCullManager->isInitialized())
-                shadowCullManager->updateSceneBuffers(mergedBuffer->getInstanceTransformBuffer(),
-                                                      mergedBuffer->getObjectBuffer());
         }
 
         if (transparentMeshShaderPipeline)

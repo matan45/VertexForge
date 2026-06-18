@@ -158,15 +158,6 @@ namespace render::shadow
                             {}, 0, nullptr, 0, nullptr, 1, &barrier);
     }
 
-    void ShadowPassRecorder::bindPerDrawDataSet(
-        vk::CommandBuffer cmd, const ShadowPassContext& ctx, vk::DescriptorSet set)
-    {
-        cmd.bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics,
-            ctx.shadowPassPipeline->getPipelineLayout(),
-            0, 1, &set, 0, nullptr);
-    }
-
     void ShadowPassRecorder::dispatchLegacyMeshBatches(
         vk::CommandBuffer cmd, const ShadowPassContext& ctx, ShadowPushConstants& pc)
     {
@@ -196,57 +187,6 @@ namespace render::shadow
                     sizeof(vk::DrawMeshTasksIndirectCommandEXT));
             }
         }
-    }
-
-    void ShadowPassRecorder::dispatchMeshBatches(
-        vk::CommandBuffer cmd, const ShadowPassContext& ctx,
-        ShadowPushConstants& pc, const PageRenderEntry& page)
-    {
-        // Tier 4: per-shadow-view path — one indirect-count draw over this page's view region of
-        // the compacted shadow buffer (the shadow task shader does the per-page crop + dual-layer
-        // filtering). Collapses the legacy batch x shaderGroup section loop to a single draw.
-        if (ctx.params.usePerViewShadowCull)
-        {
-            const uint32_t slot = page.viewSlot;
-            if (slot >= ctx.params.shadowCullActiveViews)
-            {
-                // This view was not GPU-culled into the compacted shadow buffer (viewSlot unknown,
-                // or overflow beyond SHADOW_CULL_MAX_VIEWS). Fall back to the legacy main-camera
-                // buffer so its shadows are not lost: rebind set 0 to the legacy perDrawData, draw,
-                // then restore the shadow-cull set for the remaining per-view pages.
-                const bool legacyReady =
-                    ctx.params.batchCount > 0 && ctx.params.commandsPerSection > 0 &&
-                    ctx.params.drawCommandBuffer && ctx.params.drawCountBuffer &&
-                    ctx.params.legacyPerDrawDataDescSet;
-                if (legacyReady)
-                {
-                    bindPerDrawDataSet(cmd, ctx, ctx.params.legacyPerDrawDataDescSet);
-                    dispatchLegacyMeshBatches(cmd, ctx, pc);
-                    bindPerDrawDataSet(cmd, ctx, ctx.params.perDrawDataDescSet);
-                }
-                return;
-            }
-
-            pc.baseDrawIndex = slot * ctx.params.shadowCullDrawsPerView;
-            cmd.pushConstants(
-                ctx.shadowPassPipeline->getPipelineLayout(),
-                vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
-                0, sizeof(ShadowPushConstants), &pc);
-
-            const vk::DeviceSize cmdOffset = static_cast<vk::DeviceSize>(slot) *
-                ctx.params.shadowCullDrawsPerView * sizeof(vk::DrawMeshTasksIndirectCommandEXT);
-            const vk::DeviceSize cntOffset = static_cast<vk::DeviceSize>(slot) * sizeof(uint32_t);
-
-            render::FrameDrawStats::count(render::DrawCategory::Shadows);
-            cmd.drawMeshTasksIndirectCountEXT(
-                ctx.params.shadowCullDrawCommandBuffer, cmdOffset,
-                ctx.params.shadowCullDrawCountBuffer, cntOffset,
-                ctx.params.shadowCullDrawsPerView,
-                sizeof(vk::DrawMeshTasksIndirectCommandEXT));
-            return;
-        }
-
-        dispatchLegacyMeshBatches(cmd, ctx, pc);
     }
 
     void ShadowPassRecorder::dispatchTerrainShadow(
@@ -324,12 +264,10 @@ namespace render::shadow
 
         const bool legacyReady = ctx.params.batchCount > 0 && ctx.params.commandsPerSection > 0 &&
                                  ctx.params.drawCommandBuffer && ctx.params.drawCountBuffer;
-        const bool perViewReady = ctx.params.usePerViewShadowCull &&
-                                  ctx.params.shadowCullDrawCommandBuffer && ctx.params.shadowCullDrawCountBuffer;
-        if (legacyReady || perViewReady)
+        if (legacyReady)
         {
             ShadowPushConstants pc = buildTilePushConstants(page);
-            dispatchMeshBatches(cmd, ctx, pc, page);
+            dispatchLegacyMeshBatches(cmd, ctx, pc);
         }
 
         dispatchTerrainShadow(cmd, ctx, page.cropViewProjection,

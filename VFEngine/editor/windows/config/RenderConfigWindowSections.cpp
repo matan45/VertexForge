@@ -83,13 +83,6 @@ namespace windows
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Enable/disable PCSS contact-hardening soft shadows globally.\nWhen off, hard shadows are used (single tap).");
 
-        if (ImGui::Checkbox("Per-View GPU Culling", &settings.shadows.perViewCulling))
-            markDirty();
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Cull the scene against each shadow view's frustum into a compacted buffer,\n"
-                              "so each shadow page issues a single indirect draw instead of looping\n"
-                              "batch x shader-group sections. Large shadow draw-call reduction.\n"
-                              "Turn off to fall back to the legacy main-camera-culled shadow path.");
 
         if (ImGui::DragFloat("Light Size", &settings.shadows.globalLightSize, 0.01f, 0.01f, 10.0f))
             markDirty();
