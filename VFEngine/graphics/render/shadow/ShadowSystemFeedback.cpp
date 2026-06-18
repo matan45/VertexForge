@@ -50,6 +50,13 @@ namespace render::shadow
             if (data.vsmPhysicalTiles.empty())
                 continue;
 
+            // When RT directional shadows override the clipmap full-screen, nothing samples the
+            // directional clipmap this frame — skip rendering its pages entirely. Tiles stay
+            // resident (we only skip the render list, not registration/allocation), so toggling
+            // RT off resumes the clipmap within a frame. See directionalRTOverrideActive.
+            if (directionalRTOverrideActive && data.type == ShadowMapType::Directional)
+                continue;
+
             uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
             if (data.vsmPageDirty.size() != totalPages)
                 data.vsmPageDirty.resize(totalPages, true);
@@ -82,7 +89,7 @@ namespace render::shadow
 
     void ShadowSystem::addStaticLightPage(LightShadowData& data, uint32_t pageIdx,
                                             const glm::mat4& cropVP, const ShadowView& view,
-                                            bool isDirty, bool forceRender)
+                                            bool isDirty, bool forceRender, uint32_t viewSlot)
     {
         uint32_t physTile = data.vsmPhysicalTiles[pageIdx];
         if (!isDirty && !data.vsmPageDirty[pageIdx] && !forceRender)
@@ -98,6 +105,7 @@ namespace render::shadow
         entry.slopeBias = view.slopeBias;
         entry.normalBias = view.normalBias;
         entry.layer = ShadowLayer::All;
+        entry.viewSlot = viewSlot;
         pageRenderList.push_back(entry);
         ++lastCacheStats.renderedPages;
         if (!forceRender)
@@ -132,7 +140,7 @@ namespace render::shadow
 
     void ShadowSystem::addDualLayerPage(LightShadowData& data, uint32_t pageIdx,
                                           const glm::mat4& cropVP, const ShadowView& view,
-                                          bool isDirty, bool forceRender)
+                                          bool isDirty, bool forceRender, uint32_t viewSlot)
     {
         uint32_t physTile = data.vsmPhysicalTiles[pageIdx];
         if (isDirty || data.vsmPageDirty[pageIdx] || forceRender)
@@ -144,6 +152,7 @@ namespace render::shadow
             staticEntry.slopeBias = view.slopeBias;
             staticEntry.normalBias = view.normalBias;
             staticEntry.layer = ShadowLayer::Static;
+            staticEntry.viewSlot = viewSlot;
             staticPageRenderList.push_back(staticEntry);
             ++lastCacheStats.renderedPages;
             ++lastCacheStats.staticPagesRendered;
@@ -169,6 +178,7 @@ namespace render::shadow
         dynEntry.slopeBias = view.slopeBias;
         dynEntry.normalBias = view.normalBias;
         dynEntry.layer = ShadowLayer::Dynamic;
+        dynEntry.viewSlot = viewSlot;
         dynamicPageRenderList.push_back(dynEntry);
         ++lastCacheStats.dynamicPagesRendered;
         uint32_t px = pageIdx % data.vsmPagesX;
@@ -186,10 +196,20 @@ namespace render::shadow
         ++lastCacheStats.totalPages;
         bool forceRender = data.renderedFrameCount < 3;
 
+        // Tier 4: global shadow-view slot = light's base GPU view index + the per-view offset
+        // (directional clipmap level, point cube face, or 0 for spot). Matches the cull order in
+        // recordPerViewShadowCull / getShadowViewIndex. UINT32_MAX when the light isn't in the
+        // active GPU view set (e.g. shadows disabled) -> recorder routes the page to the legacy path.
+        uint32_t viewOffset = 0;
+        if (data.type == ShadowMapType::Directional)      viewOffset = view.cascadeIndex;
+        else if (data.type == ShadowMapType::PointCube)   viewOffset = view.layer;
+        int32_t baseIdx = getShadowViewIndex(data.lightEntityId);
+        uint32_t viewSlot = (baseIdx < 0) ? UINT32_MAX : static_cast<uint32_t>(baseIdx) + viewOffset;
+
         if (data.isStatic && data.type != ShadowMapType::PointCube)
-            addStaticLightPage(data, pageIdx, cropViewProjection, view, isDirty, forceRender);
+            addStaticLightPage(data, pageIdx, cropViewProjection, view, isDirty, forceRender, viewSlot);
         else
-            addDualLayerPage(data, pageIdx, cropViewProjection, view, isDirty, forceRender);
+            addDualLayerPage(data, pageIdx, cropViewProjection, view, isDirty, forceRender, viewSlot);
     }
 
     void ShadowSystem::buildSingleViewPageRenderList(LightShadowData& data)

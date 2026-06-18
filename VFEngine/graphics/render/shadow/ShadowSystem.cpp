@@ -240,6 +240,15 @@ namespace render::shadow
             return false;
         }
 
+        // Tier 1: route non-static spot lights through the feedback-driven allocation path
+        // (allocateStaticLightPages) instead of re-rendering every page eagerly each frame.
+        // Tiles were just allocated eagerly above (no first-frame gap); after WARMUP_FRAMES the
+        // feedback path evicts pages the screen never samples, so only the spot's visible
+        // footprint renders. Point lights stay eager — the VSM feedback shader skips cube faces.
+        // (Directional already sets feedbackDriven in allocateDirectionalBlock.)
+        if (type == ShadowMapType::Spot2D && !data.isStatic)
+            data.feedbackDriven = true;
+
         if (type == ShadowMapType::PointCube || type == ShadowMapType::Directional)
         {
             // Both lay out their views as a tall page block: cascadeIndex selects the
@@ -401,8 +410,8 @@ namespace render::shadow
         {
         case ShadowQuality::Low:    return 2;
         case ShadowQuality::Medium: return 4;
-        case ShadowQuality::High:
-        case ShadowQuality::Ultra:  return 8;
+        case ShadowQuality::High:   return 6;  // 6x6 pages/level (was 8x8) — ~44% fewer pages, marginal quality cost
+        case ShadowQuality::Ultra:  return 8;  // Ultra keeps the full 8x8 for users who want max resolution
         default:                    return 4;
         }
     }

@@ -169,6 +169,11 @@ namespace render::lighting
         void setRTSpotShadowActive(bool active);
         void setRTPointShadowActive(bool active);
 
+        // Runtime flag: true when RT directional shadows produced a mask last frame and the
+        // fragment shaders are overriding the directional VSM clipmap full-screen. Used to skip
+        // rendering the (then-unsampled) clipmap pages — see ShadowSystem::setDirectionalRTOverrideActive.
+        [[nodiscard]] bool getRTShadowActive() const { return rtShadowActive; }
+
         // Selects the closest/brightest shadow-casting spot lights (up to budget, capped at
         // MAX_RT_SPOT_LIGHTS), assigns each an RT mask slice (writes rtMaskSlice into the GPU
         // spot buffer), and returns the slices whose owning light changed this frame (their

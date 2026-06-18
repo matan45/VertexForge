@@ -34,6 +34,17 @@ namespace render::shadow
         uint32_t shaderGroupCount;
         uint32_t transparentGroupIndex;
         uint32_t drawCountStructSize;
+
+        // Tier 4: per-shadow-view GPU culling. When usePerViewShadowCull is set, perDrawDataDescSet
+        // is the shadow-cull variant (b0 -> compacted shadow perDrawData), and each page issues a
+        // single indirect-count draw over its view's region of shadowCullDrawCommandBuffer instead
+        // of looping batch x shaderGroup sections. Pages with viewSlot >= shadowCullActiveViews are
+        // skipped (overflow beyond SHADOW_CULL_MAX_VIEWS).
+        bool usePerViewShadowCull = false;
+        vk::Buffer shadowCullDrawCommandBuffer;
+        vk::Buffer shadowCullDrawCountBuffer;
+        uint32_t shadowCullDrawsPerView = 0;
+        uint32_t shadowCullActiveViews = 0;
     };
 
     enum class ShadowLayer : uint8_t
@@ -51,6 +62,9 @@ namespace render::shadow
         float slopeBias;
         float normalBias;
         ShadowLayer layer = ShadowLayer::All;
+        // Tier 4: global shadow-view index (directional levels, then point faces, then spot) used
+        // to select this page's region of the compacted shadow buffer. UINT32_MAX = unknown.
+        uint32_t viewSlot = UINT32_MAX;
     };
 
     struct TileCopyEntry
@@ -152,7 +166,8 @@ namespace render::shadow
 
         void dispatchMeshBatches(vk::CommandBuffer cmd,
                                  const ShadowPassContext& ctx,
-                                 ShadowPushConstants& pc);
+                                 ShadowPushConstants& pc,
+                                 const PageRenderEntry& page);
 
         void dispatchTerrainShadow(vk::CommandBuffer cmd,
                                    const ShadowPassContext& ctx,

@@ -151,9 +151,14 @@ namespace types
         // baseExtent: half-size of the finest (level 0) shell in world units — smaller =
         //   sharper near shadows but more levels needed to reach the horizon.
         // depthRange: light-direction span each shell covers (scene height + view distance).
-        uint32_t clipmapLevelCount = 6;
+        uint32_t clipmapLevelCount = 4;
         float clipmapBaseExtent = 32.0f;
         float clipmapDepthRange = 4000.0f;
+
+        // Tier 4: per-shadow-view GPU culling. Each shadow view culls the scene against its own
+        // frustum into a compacted buffer, so each page issues one indirect draw instead of
+        // looping batch x shaderGroup sections over the main-camera-culled set. Big draw-call cut.
+        bool perViewCulling = true;
 
         // Debug visualization
         ShadowDebugMode debugMode = ShadowDebugMode::None;

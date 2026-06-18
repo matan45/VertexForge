@@ -32,6 +32,23 @@ namespace render::gpudriven
     constexpr uint32_t CULL_WORKGROUP_SIZE = 64;
     using core::INVALID_TEXTURE_INDEX;
 
+    // Per-shadow-view GPU culling (Tier 4, gpu_cull_shadow.glsl). Each rendered shadow view
+    // (directional clipmap level / spot / point cube face) culls the scene against its own
+    // frustum into a per-view region of one shared shadow draw buffer. Memory at these caps:
+    // perDraw = MAX_VIEWS * DRAWS_PER_VIEW * sizeof(PerDrawData) = 24*8192*256 = 48 MB.
+    // Views beyond the cap fall back to the legacy main-camera-culled buffer (logged); a view
+    // that exceeds DRAWS_PER_VIEW drops the overflow casters (logged).
+    constexpr uint32_t SHADOW_CULL_MAX_VIEWS = 24;
+    constexpr uint32_t SHADOW_CULL_DRAWS_PER_VIEW = 8192;
+
+    struct ShadowCullPushConstants
+    {
+        uint32_t viewBase;    // first draw slot for this view (slot * SHADOW_CULL_DRAWS_PER_VIEW)
+        uint32_t capacity;    // SHADOW_CULL_DRAWS_PER_VIEW
+        uint32_t countIndex;  // this view's counter index in the shadow count buffer
+        uint32_t _pad;
+    };
+
     // enableLODSelection values — must match camera_types.glsl constants
     constexpr uint32_t LOD_SELECTION_DISABLED       = 0;
     constexpr uint32_t LOD_SELECTION_ENABLED        = 1;

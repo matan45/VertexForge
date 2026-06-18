@@ -112,6 +112,24 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::recordPerViewShadowCull(vk::CommandBuffer cmd)
+    {
+        if (!shadowCullEnabled || !shadowCullManager || !shadowCullManager->isInitialized()) return;
+        if (!shadowSystem || !shadowSystem->isShadowsEnabled()) return;
+        if (shadowSystem->getActiveShadowViewCount() == 0 || stats.totalObjects == 0) return;
+
+        // Global view order MUST match getShadowViewIndex / the page-build slot computation:
+        // directional clipmap levels, then point cube faces, then spot views.
+        std::vector<glm::mat4> viewProjections;
+        viewProjections.reserve(shadowSystem->getActiveShadowViewCount());
+        for (const auto& v : shadowSystem->getDirectionalShadowViews()) viewProjections.push_back(v.viewProjectionMatrix);
+        for (const auto& v : shadowSystem->getPointShadowViews())       viewProjections.push_back(v.viewProjectionMatrix);
+        for (const auto& v : shadowSystem->getSpotShadowViews())        viewProjections.push_back(v.viewProjectionMatrix);
+
+        if (shadowCullManager->beginFrame(viewProjections, stats.totalObjects) == 0) return;
+        shadowCullManager->recordCull(cmd, stats.totalObjects);
+    }
+
     void GPUDrivenRenderer::recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles)
     {
         if (!shadowSystem || !shadowSystem->isShadowsEnabled()) return;
@@ -124,7 +142,15 @@ namespace render::gpudriven
         shadow::ShadowPassParams shadowParams{};
         if (hasMeshObjects && meshShaderPipeline && boneMatrixManager && batchManager)
         {
-            shadowParams.perDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
+            // Tier 4: when per-view shadow culling produced lists this frame, bind the compacted
+            // shadow perDrawData set + buffers and let the recorder issue one draw per page. Else
+            // fall back to the legacy main-camera buffer + batch x shaderGroup section loop.
+            const bool perView = shadowCullEnabled && shadowCullManager &&
+                                 shadowCullManager->isInitialized() && shadowCullManager->hasActiveViews();
+
+            shadowParams.perDrawDataDescSet = perView
+                ? shadowCullManager->getPerDrawDataDescSet()
+                : meshShaderPipeline->getPerDrawDataDescriptorSet();
             shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
             shadowParams.vertexDataDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
             shadowParams.boneMatrixDescSet = boneMatrixManager->getDescriptorSet();
@@ -136,6 +162,15 @@ namespace render::gpudriven
             shadowParams.shaderGroupCount = batchManager->getShaderGroupCount();
             shadowParams.transparentGroupIndex = SHADER_GROUP_TRANSPARENT;
             shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
+
+            if (perView)
+            {
+                shadowParams.usePerViewShadowCull = true;
+                shadowParams.shadowCullDrawCommandBuffer = shadowCullManager->getDrawCommandBuffer();
+                shadowParams.shadowCullDrawCountBuffer = shadowCullManager->getDrawCountBuffer();
+                shadowParams.shadowCullDrawsPerView = ShadowCullManager::drawsPerView();
+                shadowParams.shadowCullActiveViews = shadowCullManager->getActiveViewCount();
+            }
         }
 
         shadow::TerrainShadowPassParams terrainShadowParams{};
@@ -177,6 +212,14 @@ namespace render::gpudriven
 
         if (shadowSystem && shadowSystem->isInitialized())
         {
+            // When RT directional shadows produced a mask last frame, the fragment shaders
+            // override the directional VSM clipmap full-screen — so skip rendering its
+            // (unsampled) pages this frame. Gate on the runtime flag (true only when RT
+            // actually ran), not the rtShadowEnabled setting, so we never drop shadows while
+            // RT is enabled-but-not-yet-ready.
+            shadowSystem->setDirectionalRTOverrideActive(
+                lightBufferManager && lightBufferManager->getRTShadowActive());
+
             std::unordered_set<uint32_t> shadowVisibleLights;
             bool hasShadowFilter = false;
             collectShadowVisibleLights(shadowVisibleLights, hasShadowFilter);
@@ -333,7 +376,12 @@ namespace render::gpudriven
         // the main pass already produced (a top-down minimap does not need its own shadow map).
         const bool inRTTContext = GPUDrivenRenderer::getThreadLocalCullDescriptorSet() != nullptr;
         if (!inRTTContext)
+        {
+            // Tier 4: cull the scene per shadow view into the compacted shadow buffer before the
+            // shadow pass records its draws. Same RTT guard as the shadow pass itself.
+            recordPerViewShadowCull(cmd);
             recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
+        }
 
         if (vegetation.grassInitialized && vegetation.grassRenderingEnabled)
             dispatchGrassCompute(cmd, vegetation.cachedVisibleTiles);
