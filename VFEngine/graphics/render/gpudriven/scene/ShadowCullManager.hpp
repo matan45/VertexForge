@@ -59,12 +59,6 @@ namespace render::gpudriven
         [[nodiscard]] bool hasActiveViews() const { return activeViewCount > 0; }
         [[nodiscard]] uint32_t getActiveViewCount() const { return activeViewCount; }
 
-        // Is `globalViewIndex` GPU-culled this frame (i.e. routable to the per-view shadow buffer)?
-        [[nodiscard]] bool isViewCulled(uint32_t globalViewIndex) const
-        {
-            return globalViewIndex < activeViewCount && globalViewIndex < SHADOW_CULL_MAX_VIEWS;
-        }
-
         [[nodiscard]] vk::Buffer getDrawCommandBuffer() const { return drawCommandBuffer; }
         [[nodiscard]] vk::Buffer getDrawCountBuffer() const { return drawCountBuffer; }
         [[nodiscard]] vk::DescriptorSet getPerDrawDataDescSet() const { return shadowPerDrawSet; }

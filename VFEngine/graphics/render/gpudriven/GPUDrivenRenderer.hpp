@@ -309,6 +309,7 @@ namespace render::gpudriven
         std::unique_ptr<GPUCullLODPipeline> cullPipeline;
         std::unique_ptr<ShadowCullManager> shadowCullManager;   // Tier 4: per-shadow-view GPU culling
         bool shadowCullEnabled = true;                          // toggled from Render settings UI
+        std::vector<glm::mat4> shadowCullViewProjScratch;       // reused each frame in recordPerViewShadowCull
         std::unique_ptr<GPUDrivenCameraBuffer> cameraBuffer;
         std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
         std::unique_ptr<MeshShaderPipeline> transparentMeshShaderPipeline;
@@ -568,7 +569,6 @@ namespace render::gpudriven
 
         // Tier 4: per-shadow-view GPU culling (Settings -> Render -> Shadows).
         void setShadowCullEnabled(bool enabled) { shadowCullEnabled = enabled; }
-        bool isShadowCullEnabled() const { return shadowCullEnabled; }
 
         void updateStatsFromGPU();
 

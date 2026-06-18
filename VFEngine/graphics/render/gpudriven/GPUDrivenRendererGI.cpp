@@ -955,11 +955,24 @@ namespace render::gpudriven
             }
         }
 
-        // Skip RT shadow dispatch if TLAS isn't ready
-        if (!accelStructManager || !accelStructManager->isTLASReady()) return;
+        // Skip RT shadow dispatch if TLAS isn't ready. No fresh directional mask is produced this
+        // frame, so clear the runtime flag: the directional VSM clipmap must render next frame
+        // instead of being overridden by a stale RT mask. The override is correct ONLY while RT
+        // actually produces a mask (TLAS rebuilds while geometry streams). (review fix)
+        if (!accelStructManager || !accelStructManager->isTLASReady())
+        {
+            lightBufferManager->setRTShadowActive(false);
+            return;
+        }
 
         auto lightDir = lightBufferManager->getFirstDirectionalLightDirection();
-        if (!lightDir.has_value()) return;
+        if (!lightDir.has_value())
+        {
+            // No directional light this frame → no directional RT shadows. Clear the flag so the
+            // clipmap is not skipped against a stale mask. (review fix)
+            lightBufferManager->setRTShadowActive(false);
+            return;
+        }
 
         const auto& camData = cameraBuffer->getData();
         bool useDenoiser = rtShadowDenoiser && rtShadowDenoiser->isInitialized();

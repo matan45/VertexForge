@@ -112,7 +112,6 @@ namespace render::upscaling
         /// True when Ray Reconstruction is the upscaler driving this frame (selected and not
         /// disabled by a runtime evaluate failure).
         bool isDLSSRRActive() const { return dlssRRActive && !dlssRREvalFailed; }
-        static bool isDLSSRRActiveStatic() { return instance && instance->isDLSSRRActive(); }
         /// True when Ray Reconstruction is selected but could not run (missing required inputs).
         bool isDLSSRREvalFailed() const { return dlssRRActive && dlssRREvalFailed; }
         /// True when the engine's RTShadowDenoiser should be skipped because Ray Reconstruction

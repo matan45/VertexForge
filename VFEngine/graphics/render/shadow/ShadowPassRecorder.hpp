@@ -38,13 +38,19 @@ namespace render::shadow
         // Tier 4: per-shadow-view GPU culling. When usePerViewShadowCull is set, perDrawDataDescSet
         // is the shadow-cull variant (b0 -> compacted shadow perDrawData), and each page issues a
         // single indirect-count draw over its view's region of shadowCullDrawCommandBuffer instead
-        // of looping batch x shaderGroup sections. Pages with viewSlot >= shadowCullActiveViews are
-        // skipped (overflow beyond SHADOW_CULL_MAX_VIEWS).
+        // of looping batch x shaderGroup sections. Pages with viewSlot >= shadowCullActiveViews
+        // (overflow beyond SHADOW_CULL_MAX_VIEWS, or an unmapped view) fall back to the legacy
+        // main-camera buffer + legacyPerDrawDataDescSet so their shadows are never dropped.
         bool usePerViewShadowCull = false;
         vk::Buffer shadowCullDrawCommandBuffer;
         vk::Buffer shadowCullDrawCountBuffer;
         uint32_t shadowCullDrawsPerView = 0;
         uint32_t shadowCullActiveViews = 0;
+        // Main-camera-culled perDrawData set (pairs with drawCommandBuffer/drawCountBuffer above).
+        // In per-view mode this is the set-0 the recorder rebinds for the legacy fallback of views
+        // that were not GPU-culled into the compacted buffer. In legacy mode it equals
+        // perDrawDataDescSet.
+        vk::DescriptorSet legacyPerDrawDataDescSet;
     };
 
     enum class ShadowLayer : uint8_t
@@ -168,6 +174,14 @@ namespace render::shadow
                                  const ShadowPassContext& ctx,
                                  ShadowPushConstants& pc,
                                  const PageRenderEntry& page);
+
+        void dispatchLegacyMeshBatches(vk::CommandBuffer cmd,
+                                       const ShadowPassContext& ctx,
+                                       ShadowPushConstants& pc);
+
+        void bindPerDrawDataSet(vk::CommandBuffer cmd,
+                                const ShadowPassContext& ctx,
+                                vk::DescriptorSet set);
 
         void dispatchTerrainShadow(vk::CommandBuffer cmd,
                                    const ShadowPassContext& ctx,

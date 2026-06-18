@@ -119,9 +119,10 @@ namespace render::gpudriven
         if (shadowSystem->getActiveShadowViewCount() == 0 || stats.totalObjects == 0) return;
 
         // Global view order MUST match getShadowViewIndex / the page-build slot computation:
-        // directional clipmap levels, then point cube faces, then spot views.
-        std::vector<glm::mat4> viewProjections;
-        viewProjections.reserve(shadowSystem->getActiveShadowViewCount());
+        // directional clipmap levels, then point cube faces, then spot views. Reuse a member vector
+        // so we don't heap-allocate this list every frame.
+        std::vector<glm::mat4>& viewProjections = shadowCullViewProjScratch;
+        viewProjections.clear();
         for (const auto& v : shadowSystem->getDirectionalShadowViews()) viewProjections.push_back(v.viewProjectionMatrix);
         for (const auto& v : shadowSystem->getPointShadowViews())       viewProjections.push_back(v.viewProjectionMatrix);
         for (const auto& v : shadowSystem->getSpotShadowViews())        viewProjections.push_back(v.viewProjectionMatrix);
@@ -151,6 +152,9 @@ namespace render::gpudriven
             shadowParams.perDrawDataDescSet = perView
                 ? shadowCullManager->getPerDrawDataDescSet()
                 : meshShaderPipeline->getPerDrawDataDescriptorSet();
+            // Always carry the main-camera per-draw set so the recorder can fall back to the legacy
+            // buffer for per-view pages that overflow SHADOW_CULL_MAX_VIEWS / have no GPU view slot.
+            shadowParams.legacyPerDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
             shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
             shadowParams.vertexDataDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
             shadowParams.boneMatrixDescSet = boneMatrixManager->getDescriptorSet();
