@@ -40,18 +40,23 @@ namespace render::raytracing
         layoutInfo.pNext = &flagsInfo;
         layout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler, 3};
+        // Ring one set per swapchain image (VK-1398). Pool sized for 3 bindings x image count.
+        vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler,
+                                        3 * core::MAX_SWAPCHAIN_IMAGES};
         vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
+        poolInfo.maxSets = core::MAX_SWAPCHAIN_IMAGES;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
         pool = vkDevice.createDescriptorPool(poolInfo);
 
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.descriptorPool = pool;
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &layout;
-        descriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+        for (uint32_t i = 0; i < core::MAX_SWAPCHAIN_IMAGES; ++i)
+        {
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = pool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &layout;
+            descriptorSets[i] = vkDevice.allocateDescriptorSets(allocInfo)[0];
+        }
 
         initialized = true;
     }
@@ -64,19 +69,19 @@ namespace render::raytracing
         vkDevice.destroyDescriptorSetLayout(layout);
         pool = nullptr;
         layout = nullptr;
-        descriptorSet = nullptr;
+        descriptorSets.fill(nullptr);
         initialized = false;
     }
 
-    void RTShadowMaskSet::copyInto(uint32_t dstBinding, vk::DescriptorSet srcSet)
+    void RTShadowMaskSet::copyInto(uint32_t dstBinding, vk::DescriptorSet srcSet, uint32_t imageIndex)
     {
-        if (!initialized || !srcSet) return;
+        if (!initialized || !srcSet || imageIndex >= core::MAX_SWAPCHAIN_IMAGES) return;
 
         vk::CopyDescriptorSet copy{};
         copy.srcSet = srcSet;
         copy.srcBinding = 0;
         copy.srcArrayElement = 0;
-        copy.dstSet = descriptorSet;
+        copy.dstSet = descriptorSets[imageIndex];
         copy.dstBinding = dstBinding;
         copy.dstArrayElement = 0;
         copy.descriptorCount = 1;

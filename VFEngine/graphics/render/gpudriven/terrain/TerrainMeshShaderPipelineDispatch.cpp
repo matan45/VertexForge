@@ -208,7 +208,25 @@ namespace render::gpudriven
         return pc;
     }
 
+    void TerrainMeshShaderPipeline::ensureRTMaskSlot(uint32_t imageIndex)
+    {
+        // Lazily populate the ring slot for the image being recorded from the cached producers.
+        // Only writes when dirty, so steady state issues zero descriptor writes (VK-1398).
+        if (!rtMaskSet || imageIndex >= core::MAX_SWAPCHAIN_IMAGES || !rtMaskSlotDirty[imageIndex])
+            return;
+
+        if (rtShadowMaskDescriptorSet)
+            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtShadowMaskDescriptorSet, imageIndex);
+        if (rtSpotShadowMaskDescriptorSet)
+            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotShadowMaskDescriptorSet, imageIndex);
+        if (rtPointShadowMaskDescriptorSet)
+            rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointShadowMaskDescriptorSet, imageIndex);
+
+        rtMaskSlotDirty[imageIndex] = false;
+    }
+
     void TerrainMeshShaderPipeline::dispatch(vk::CommandBuffer cmd,
+                                              uint32_t imageIndex,
                                               uint32_t viewMode,
                                               float screenWidth,
                                               float screenHeight,
@@ -251,8 +269,10 @@ namespace render::gpudriven
             if (rtMaskBound && rtMaskSet)
             {
                 // Shared RT shadow mask set at set 13 (directional/spot/point in bindings 0/1/2).
-                currentSets.push_back(emptyDescriptorSet5);           // Set 12 (placeholder)
-                currentSets.push_back(rtMaskSet->getDescriptorSet()); // Set 13 (shared mask)
+                // Ringed per swapchain image (VK-1398): sync + bind the slot for this image.
+                ensureRTMaskSlot(imageIndex);
+                currentSets.push_back(emptyDescriptorSet5);                     // Set 12 (placeholder)
+                currentSets.push_back(rtMaskSet->getDescriptorSet(imageIndex)); // Set 13 (shared mask)
             }
             else if (causticEnabled && causticDescriptorSet)
             {

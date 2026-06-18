@@ -187,7 +187,8 @@ namespace render
         commandBuffer.reset();
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
-        gpuRenderer->dispatchCompute(commandBuffer);
+        // VK-1398: pass the RTT image index so set-13 RT-mask binds use this submission's ring slot.
+        gpuRenderer->dispatchCompute(commandBuffer, imageIndex);
 
         // Transition RTT color image from the known post-pass layout
         // (eShaderReadOnlyOptimal - set by createOffscreenResources on first frame and by

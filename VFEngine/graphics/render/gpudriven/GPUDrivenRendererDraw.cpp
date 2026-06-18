@@ -43,13 +43,15 @@ namespace render::gpudriven
     }
 
     // Binds the shared RT shadow mask set at set 13 (directional/spot/point in bindings 0/1/2).
+    // The set is ringed per swapchain image (VK-1398): sync + bind the slot for imageIndex.
     static void bindRTShadowMaskDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
-                                               MeshShaderPipeline& pipeline)
+                                               MeshShaderPipeline& pipeline, uint32_t imageIndex)
     {
         if (!pipeline.hasRTMask())
             return;
 
-        vk::DescriptorSet rtMaskSet = pipeline.getRTMaskDescriptorSet();
+        pipeline.ensureRTMaskSlot(imageIndex);
+        vk::DescriptorSet rtMaskSet = pipeline.getRTMaskDescriptorSet(imageIndex);
         if (rtMaskSet)
         {
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 13, 1, &rtMaskSet, 0, nullptr);
@@ -102,7 +104,7 @@ namespace render::gpudriven
             0, nullptr);
 
         bindCausticDescriptorSet(cmd, layout, *meshShaderPipeline);
-        bindRTShadowMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
+        bindRTShadowMaskDescriptorSet(cmd, layout, *meshShaderPipeline, currentImageIndex);
         bindWorldMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
@@ -191,7 +193,7 @@ namespace render::gpudriven
             0, nullptr);
 
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
-        bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+        bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline, currentImageIndex);
         bindWorldMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
@@ -274,7 +276,7 @@ namespace render::gpudriven
             0, nullptr);
 
         bindCausticDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
-        bindRTShadowMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
+        bindRTShadowMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline, currentImageIndex);
         bindWorldMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
@@ -357,7 +359,7 @@ namespace render::gpudriven
             0, nullptr);
 
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
-        bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+        bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline, currentImageIndex);
         bindWorldMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;

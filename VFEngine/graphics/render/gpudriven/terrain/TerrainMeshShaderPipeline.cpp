@@ -487,20 +487,16 @@ namespace render::gpudriven
         if (anyRT)
         {
             // All RT shadow masks share set 13; set 12 is a placeholder (caustics and the RT-mask
-            // region remain mutually exclusive on terrain, as before). The three producer descriptor
-            // sets are copied into the shared set here so they survive this rebuild regardless of the
-            // setRT*/updateRT*/recreate call order (the renderer updates them before recreate).
+            // region remain mutually exclusive on terrain, as before). The ring slots are freshly
+            // allocated here, so mark them all dirty (VK-1398) and let ensureRTMaskSlot() repopulate
+            // each from the cached producer descriptors on its first bind — surviving this rebuild
+            // regardless of the setRT*/updateRT*/recreate call order.
             if (!rtMaskSet)
             {
                 rtMaskSet = std::make_unique<raytracing::RTShadowMaskSet>(device);
                 rtMaskSet->init();
             }
-            if (rtShadowMaskDescriptorSet)
-                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_DIRECTIONAL, rtShadowMaskDescriptorSet);
-            if (rtSpotShadowMaskDescriptorSet)
-                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_SPOT, rtSpotShadowMaskDescriptorSet);
-            if (rtPointShadowMaskDescriptorSet)
-                rtMaskSet->copyInto(raytracing::RTShadowMaskSet::BINDING_POINT, rtPointShadowMaskDescriptorSet);
+            markAllRTMaskSlotsDirty();
 
             setLayouts.push_back(emptyLayout);            // Set 12 (placeholder)
             setLayouts.push_back(rtMaskSet->getLayout()); // Set 13 (shared mask)

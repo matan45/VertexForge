@@ -311,6 +311,10 @@ namespace render::gpudriven
         bool shadowCullEnabled = true;                          // toggled from Render settings UI
         std::vector<glm::mat4> shadowCullViewProjScratch;       // reused each frame in recordPerViewShadowCull
         std::unique_ptr<GPUDrivenCameraBuffer> cameraBuffer;
+        // VK-1398: swapchain image index of the submission currently being recorded. Set at the top of
+        // dispatchCompute/dispatchGraphicsCompute (and by the RTT path), consumed when binding the
+        // ringed RT shadow mask set (set 13) so each submission binds/writes its own per-image slot.
+        uint32_t currentImageIndex = 0;
         std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
         std::unique_ptr<MeshShaderPipeline> transparentMeshShaderPipeline;
         std::unique_ptr<MeshShaderPipeline> wboitMeshShaderPipeline;

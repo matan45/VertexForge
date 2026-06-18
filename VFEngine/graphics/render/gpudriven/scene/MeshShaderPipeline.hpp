@@ -4,6 +4,7 @@
 #include "../../raytracing/RTShadowMaskSet.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -117,6 +118,12 @@ namespace render::gpudriven
         vk::DescriptorSet rtDirectionalMaskProducer;
         vk::DescriptorSet rtSpotMaskProducer;
         vk::DescriptorSet rtPointMaskProducer;
+        // VK-1398: per-image-slot dirty flags. updateRT*ShadowMaskDescriptor only caches the producer
+        // and marks all slots dirty; the actual copyInto into rtMaskSet happens lazily in
+        // ensureRTMaskSlot() at bind time, writing only the slot for the image being recorded (whose
+        // prior submission has retired) — never a slot bound by an in-flight command buffer.
+        std::array<bool, core::MAX_SWAPCHAIN_IMAGES> rtMaskSlotDirty{};
+        void markAllRTMaskSlotsDirty() { rtMaskSlotDirty.fill(true); }
 
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
@@ -182,7 +189,13 @@ namespace render::gpudriven
         vk::DescriptorSet getGIProbeDataDescriptorSet() const { return giProbeDataDescriptorSet; }
         vk::DescriptorSet getCausticDescriptorSet() const { return causticDescriptorSet; }
         // Shared RT shadow mask set (set 13): directional binding 0, spot binding 1, point binding 2.
-        vk::DescriptorSet getRTMaskDescriptorSet() const { return rtMaskSet ? rtMaskSet->getDescriptorSet() : nullptr; }
+        // Ringed per swapchain image (VK-1398) — pass the image index being recorded. Call
+        // ensureRTMaskSlot(imageIndex) first to lazily populate that slot from the cached producers.
+        void ensureRTMaskSlot(uint32_t imageIndex);
+        vk::DescriptorSet getRTMaskDescriptorSet(uint32_t imageIndex) const
+        {
+            return rtMaskSet ? rtMaskSet->getDescriptorSet(imageIndex) : nullptr;
+        }
         bool hasRTMask() const { return rtMaskBound; }
         vk::DescriptorSet getWorldMaskDescriptorSet() const { return worldMaskDescriptorSet; }
         bool hasWorldMaskLayout() const { return worldMaskLayoutBound; }

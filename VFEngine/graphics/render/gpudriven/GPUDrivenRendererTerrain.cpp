@@ -355,6 +355,7 @@ namespace render::gpudriven
 
         terrain.pipeline->dispatch(
             cmd,
+            currentImageIndex,
             viewMode,
             dispatchWidth,
             dispatchHeight,

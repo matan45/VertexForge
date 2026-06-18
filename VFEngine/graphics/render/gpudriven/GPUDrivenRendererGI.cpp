@@ -311,6 +311,8 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex)
     {
+        // VK-1398: record the image index of this submission for per-image RT-mask ring binding.
+        currentImageIndex = imageIndex;
         if (!initialized || !enabled) return;
 
         // Lazy-init profiler if RT shadow pipeline exists (or will be created this frame).
