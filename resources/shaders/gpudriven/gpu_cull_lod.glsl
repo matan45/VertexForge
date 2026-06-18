@@ -5,22 +5,10 @@
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
 #include "../common/culling_functions.glsl"
+#include "../common/gpu_draw_functions.glsl"
 #include "../common/hiz_occlusion.glsl"
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
-
-const uint TASK_WORKGROUP_SIZE = 32;
-
-const uint FLAG_ALPHA_MASK     = 1u << 4;
-const uint FLAG_TRANSLUCENT   = 1u << 5;
-const uint FLAG_NO_CULL       = 1u << 6;
-const uint FLAG_NO_OCCLUDE    = 1u << 7;
-const uint FLAG_UNIFORM_SCALE = 1u << 9;
-const uint FLAG_ADDITIVE_BLEND = 1u << 10;
-const uint FLAG_MULTIPLY_BLEND = 1u << 11;
-
-const uint CATEGORY_SHIFT = 13u;
-const uint CATEGORY_MASK  = 0xFu;
 
 layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
     GPUObjectData objects[];
@@ -55,34 +43,6 @@ layout(set = 0, binding = 5) uniform sampler2D hiZTexture;
 layout(std430, set = 0, binding = 6) readonly buffer ActiveIndexBuffer {
     uint activeIndices[];
 };
-
-uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
-    switch (level) {
-        case 0: return obj.meshletLod0;
-        case 1: return obj.meshletLod1;
-        case 2: return obj.meshletLod2;
-        default: return obj.meshletLod3;
-    }
-}
-
-void transformAABB(vec3 localMin, vec3 localMax, mat4 modelMatrix, out vec3 worldMin, out vec3 worldMax) {
-    vec3 corners[8];
-    corners[0] = (modelMatrix * vec4(localMin.x, localMin.y, localMin.z, 1.0)).xyz;
-    corners[1] = (modelMatrix * vec4(localMax.x, localMin.y, localMin.z, 1.0)).xyz;
-    corners[2] = (modelMatrix * vec4(localMin.x, localMax.y, localMin.z, 1.0)).xyz;
-    corners[3] = (modelMatrix * vec4(localMax.x, localMax.y, localMin.z, 1.0)).xyz;
-    corners[4] = (modelMatrix * vec4(localMin.x, localMin.y, localMax.z, 1.0)).xyz;
-    corners[5] = (modelMatrix * vec4(localMax.x, localMin.y, localMax.z, 1.0)).xyz;
-    corners[6] = (modelMatrix * vec4(localMin.x, localMax.y, localMax.z, 1.0)).xyz;
-    corners[7] = (modelMatrix * vec4(localMax.x, localMax.y, localMax.z, 1.0)).xyz;
-
-    worldMin = corners[0];
-    worldMax = corners[0];
-    for (int i = 1; i < 8; i++) {
-        worldMin = min(worldMin, corners[i]);
-        worldMax = max(worldMax, corners[i]);
-    }
-}
 
 float projectSphereToScreen(vec4 worldSphere, mat4 projection, vec2 screenSize) {
     vec4 clipPos = projection * vec4(worldSphere.xyz, 1.0);
@@ -130,26 +90,6 @@ uint computeCrossfadeByte(float screenPixels, vec4 thresholds, float globalBias,
         return uint(clamp(alpha, 0.0, 1.0) * 255.0);
     }
     return 0u;
-}
-
-uint findBestAvailableLOD(uint targetLOD, uint availableMask) {
-    if (availableMask == 0xFu) {
-        return targetLOD;
-    }
-    if (availableMask == 0u) {
-        return 0xFFFFFFFFu;
-    }
-    for (uint lod = targetLOD; lod < 4u; ++lod) {
-        if ((availableMask & (1u << lod)) != 0u) {
-            return lod;
-        }
-    }
-    for (uint lod = 0u; lod < 4u; ++lod) {
-        if ((availableMask & (1u << lod)) != 0u) {
-            return lod;
-        }
-    }
-    return 0xFFFFFFFFu;
 }
 
 // Wrapper for backward compatibility — delegates to shared hiz_occlusion.glsl
@@ -292,66 +232,22 @@ void main() {
 
     uint globalDrawIndex = sectionIndex * commandsPerSection + localDrawIndex;
 
-    // For instanced objects, use max meshlet count across all available LODs
-    // so each instance's task workgroup can independently select its own LOD.
-    uint maxMeshletCount = meshletCount;
-    if (isInstanced) {
-        for (uint lod = 0u; lod < 4u; ++lod) {
-            if ((obj.availableLODMask & (1u << lod)) != 0u) {
-                uvec4 ld = getMeshletLODData(obj, lod);
-                maxMeshletCount = max(maxMeshletCount, ld.y);
-            }
-        }
-    }
-    uint taskGroupCount = (maxMeshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
+    // For instanced objects, size for the largest available LOD so each instance's
+    // task workgroup can independently select its own LOD.
+    uint taskGroupCount = computeTaskGroupCount(obj, meshletCount, isInstanced);
 
     drawCommands[globalDrawIndex].groupCountX = taskGroupCount;
     drawCommands[globalDrawIndex].groupCountY = instanceCount;
     drawCommands[globalDrawIndex].groupCountZ = 1u;
 
-    perDrawData[globalDrawIndex].modelMatrix = obj.modelMatrix;
-
-    mat3 modelMat3 = mat3(obj.modelMatrix);
-    mat3 normalMat3;
-    if ((obj.flags & FLAG_UNIFORM_SCALE) != 0u) {
-        float scale = length(modelMat3[0]);
-        normalMat3 = modelMat3 * (1.0 / scale);
-    } else {
-        normalMat3 = transpose(inverse(modelMat3));
-    }
-    perDrawData[globalDrawIndex].normalMatrix = mat4(normalMat3);
-
-    perDrawData[globalDrawIndex].albedo = obj.albedo;
-    perDrawData[globalDrawIndex].materialParams = obj.materialParams;
-    perDrawData[globalDrawIndex].textureIndices0 = obj.textureIndices0;
-    perDrawData[globalDrawIndex].textureIndices1 = obj.textureIndices1;
-    perDrawData[globalDrawIndex].objectIndex = objectIndex;
-    perDrawData[globalDrawIndex].flags = obj.flags;
-    perDrawData[globalDrawIndex].iblDiffuse = obj.iblParams.x;
-    perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
     // Pack LOD level (bits 0-7) and crossfade alpha (bits 8-15)
     uint packedLodLevel = lodLevel;
     if (camera.enableLODSelection == LOD_SELECTION_WITH_CROSSFADE && !isInstanced) {
         uint crossfadeByte = computeCrossfadeByte(screenPixelsCrossfade, obj.lodThresholds, camera.globalLodBias, lodLevel);
         packedLodLevel = lodLevel | (crossfadeByte << 8u);
     }
-    perDrawData[globalDrawIndex].lodLevel = packedLodLevel;
-    perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
-    perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
-    perDrawData[globalDrawIndex].meshletCount = meshletCount;
-    perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
-    perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
-    perDrawData[globalDrawIndex].instanceCount = instanceCount;
 
-    // blendModeAndOpacity: bits 0-7 = blend mode, bits 8-15 = alpha cutoff, bits 16-31 = opacity
-    uint blendMode = 0u;
-    if ((obj.flags & FLAG_ALPHA_MASK) != 0u) blendMode = 1u;
-    if ((obj.flags & FLAG_TRANSLUCENT) != 0u) blendMode = 2u;
-    if ((obj.flags & FLAG_ADDITIVE_BLEND) != 0u) blendMode = 3u;
-    if ((obj.flags & FLAG_MULTIPLY_BLEND) != 0u) blendMode = 4u;
-    uint alphaCutoffBits = uint(clamp(obj.iblParams.z, 0.0, 1.0) * 255.0);
-    uint opacityBits = uint(clamp(obj.albedo.a, 0.0, 1.0) * 65535.0);
-    perDrawData[globalDrawIndex].blendModeAndOpacity = blendMode | (alphaCutoffBits << 8u) | (opacityBits << 16u);
-
-    perDrawData[globalDrawIndex].instanceData = obj.instanceData;  // .w = instanceOffset
+    perDrawData[globalDrawIndex] = makePerDrawData(obj, objectIndex, packedLodLevel,
+                                                   meshletOffset, meshletCount,
+                                                   baseVertexOffset, instanceCount);
 }

@@ -22,20 +22,9 @@
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
 #include "../common/culling_functions.glsl"
+#include "../common/gpu_draw_functions.glsl"
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
-
-const uint TASK_WORKGROUP_SIZE = 32;
-
-const uint FLAG_ALPHA_MASK     = 1u << 4;
-const uint FLAG_TRANSLUCENT    = 1u << 5;
-const uint FLAG_NO_CULL        = 1u << 6;
-const uint FLAG_UNIFORM_SCALE  = 1u << 9;
-const uint FLAG_ADDITIVE_BLEND = 1u << 10;
-const uint FLAG_MULTIPLY_BLEND = 1u << 11;
-
-const uint CATEGORY_SHIFT = 13u;
-const uint CATEGORY_MASK  = 0xFu;
 
 layout(push_constant) uniform ShadowCullPushConstants {
     uint viewBase;     // first draw slot for this view (slot * SHADOW_DRAWS_PER_VIEW)
@@ -71,25 +60,6 @@ layout(std430, set = 0, binding = 6) readonly buffer ActiveIndexBuffer {
     uint activeIndices[];
 };
 
-uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
-    switch (level) {
-        case 0: return obj.meshletLod0;
-        case 1: return obj.meshletLod1;
-        case 2: return obj.meshletLod2;
-        default: return obj.meshletLod3;
-    }
-}
-
-uint findBestAvailableLOD(uint targetLOD, uint availableMask) {
-    if (availableMask == 0xFu) return targetLOD;
-    if (availableMask == 0u) return 0xFFFFFFFFu;
-    for (uint lod = targetLOD; lod < 4u; ++lod)
-        if ((availableMask & (1u << lod)) != 0u) return lod;
-    for (uint lod = 0u; lod < 4u; ++lod)
-        if ((availableMask & (1u << lod)) != 0u) return lod;
-    return 0xFFFFFFFFu;
-}
-
 void main() {
     uint threadIndex = gl_GlobalInvocationID.x;
     if (threadIndex >= camera.objectCount) {
@@ -109,22 +79,7 @@ void main() {
     bool isInstanced = instanceCount > 1u;
 
     vec3 worldAabbMin, worldAabbMax;
-    {
-        vec3 lo = obj.aabbMin.xyz;
-        vec3 hi = obj.aabbMax.xyz;
-        vec3 c[8];
-        c[0] = (obj.modelMatrix * vec4(lo.x, lo.y, lo.z, 1.0)).xyz;
-        c[1] = (obj.modelMatrix * vec4(hi.x, lo.y, lo.z, 1.0)).xyz;
-        c[2] = (obj.modelMatrix * vec4(lo.x, hi.y, lo.z, 1.0)).xyz;
-        c[3] = (obj.modelMatrix * vec4(hi.x, hi.y, lo.z, 1.0)).xyz;
-        c[4] = (obj.modelMatrix * vec4(lo.x, lo.y, hi.z, 1.0)).xyz;
-        c[5] = (obj.modelMatrix * vec4(hi.x, lo.y, hi.z, 1.0)).xyz;
-        c[6] = (obj.modelMatrix * vec4(lo.x, hi.y, hi.z, 1.0)).xyz;
-        c[7] = (obj.modelMatrix * vec4(hi.x, hi.y, hi.z, 1.0)).xyz;
-        worldAabbMin = c[0];
-        worldAabbMax = c[0];
-        for (int i = 1; i < 8; ++i) { worldAabbMin = min(worldAabbMin, c[i]); worldAabbMax = max(worldAabbMax, c[i]); }
-    }
+    transformAABB(obj.aabbMin.xyz, obj.aabbMax.xyz, obj.modelMatrix, worldAabbMin, worldAabbMax);
 
     // View-frustum culling against the shadow view (skip for instanced — the shadow task
     // shader frustum-culls each instance individually against the per-page crop matrix).
@@ -168,54 +123,14 @@ void main() {
     }
     uint globalDrawIndex = pc.viewBase + localDrawIndex;
 
-    uint maxMeshletCount = meshletCount;
-    if (isInstanced) {
-        for (uint lod = 0u; lod < 4u; ++lod) {
-            if ((obj.availableLODMask & (1u << lod)) != 0u) {
-                uvec4 ld = getMeshletLODData(obj, lod);
-                maxMeshletCount = max(maxMeshletCount, ld.y);
-            }
-        }
-    }
-    uint taskGroupCount = (maxMeshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
+    uint taskGroupCount = computeTaskGroupCount(obj, meshletCount, isInstanced);
 
     drawCommands[globalDrawIndex].groupCountX = taskGroupCount;
     drawCommands[globalDrawIndex].groupCountY = instanceCount;
     drawCommands[globalDrawIndex].groupCountZ = 1u;
 
-    perDrawData[globalDrawIndex].modelMatrix = obj.modelMatrix;
-
-    mat3 modelMat3 = mat3(obj.modelMatrix);
-    mat3 normalMat3;
-    if ((obj.flags & FLAG_UNIFORM_SCALE) != 0u) {
-        float scale = length(modelMat3[0]);
-        normalMat3 = modelMat3 * (1.0 / scale);
-    } else {
-        normalMat3 = transpose(inverse(modelMat3));
-    }
-    perDrawData[globalDrawIndex].normalMatrix = mat4(normalMat3);
-
-    perDrawData[globalDrawIndex].albedo = obj.albedo;
-    perDrawData[globalDrawIndex].materialParams = obj.materialParams;
-    perDrawData[globalDrawIndex].textureIndices0 = obj.textureIndices0;
-    perDrawData[globalDrawIndex].textureIndices1 = obj.textureIndices1;
-    perDrawData[globalDrawIndex].objectIndex = objectIndex;
-    perDrawData[globalDrawIndex].flags = obj.flags;
-    perDrawData[globalDrawIndex].iblDiffuse = obj.iblParams.x;
-    perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
-    perDrawData[globalDrawIndex].lodLevel = lodLevel;
-    perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
-    perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
-    perDrawData[globalDrawIndex].meshletCount = meshletCount;
-    perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
-    perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
-    perDrawData[globalDrawIndex].instanceCount = instanceCount;
-
-    uint blendMode = 0u;
-    if ((obj.flags & FLAG_ALPHA_MASK) != 0u) blendMode = 1u;
-    uint alphaCutoffBits = uint(clamp(obj.iblParams.z, 0.0, 1.0) * 255.0);
-    uint opacityBits = uint(clamp(obj.albedo.a, 0.0, 1.0) * 65535.0);
-    perDrawData[globalDrawIndex].blendModeAndOpacity = blendMode | (alphaCutoffBits << 8u) | (opacityBits << 16u);
-
-    perDrawData[globalDrawIndex].instanceData = obj.instanceData;
+    // Shadows are depth-only and use plain LOD (no crossfade dither).
+    perDrawData[globalDrawIndex] = makePerDrawData(obj, objectIndex, lodLevel,
+                                                   meshletOffset, meshletCount,
+                                                   baseVertexOffset, instanceCount);
 }

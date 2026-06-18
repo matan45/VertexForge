@@ -25,7 +25,7 @@ struct PerDrawData {
     uint baseVertexOffset;
     uint boneMatrixOffset;
     uint instanceCount;     // Number of instances (1 = non-instanced)
-    uint blendModeAndOpacity; // low 8 bits: BlendMode enum, bits 16-31: half-float opacity
+    uint blendModeAndOpacity; // bits 0-7: BlendMode enum, bits 8-15: alpha cutoff (u8), bits 16-31: opacity (u16 fixed-point)
 
     uvec4 instanceData; // .w=instanceOffset
 };

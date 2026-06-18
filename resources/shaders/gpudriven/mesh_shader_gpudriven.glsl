@@ -510,7 +510,7 @@ void main() {
 
     // LOD crossfade dithering — skip for translucent objects (dither + alpha blend = holes)
     {
-        float crossfadeAlpha = float((fragLodLevel >> 8u) & 0xFFu) / 255.0;
+        float crossfadeAlpha = extractCrossfadeAlpha(fragLodLevel);
         if (crossfadeAlpha > 0.0 && (drawData.flags & FLAG_TRANSLUCENT) == 0u) {
             if (ditherTest(gl_FragCoord.xy, crossfadeAlpha)) {
                 discard;

@@ -68,10 +68,10 @@
 
     color = pow(color, vec3(1.0/2.2));
 
-    // LOD crossfade dithering (when crossfade alpha is packed into blendModeAndOpacity bits 24-31)
+    // LOD crossfade dithering (crossfade alpha is packed into lodLevel bits 8-15)
 #ifdef CROSSFADE_ENABLED
     {
-        float crossfadeAlpha = extractCrossfadeAlpha(drawData.blendModeAndOpacity);
+        float crossfadeAlpha = extractCrossfadeAlpha(drawData.lodLevel);
         if (crossfadeAlpha > 0.0 && ditherTest(gl_FragCoord.xy, crossfadeAlpha)) {
             discard;
         }

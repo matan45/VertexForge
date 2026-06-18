@@ -30,10 +30,12 @@ bool ditherTest(vec2 screenPos, float crossfadeAlpha) {
     return crossfadeAlpha > threshold;
 }
 
-// Extract crossfade alpha from PerDrawData blendModeAndOpacity field
-// Bits 24-31 store crossfade alpha as uint8 (0-255 mapped to 0.0-1.0)
-float extractCrossfadeAlpha(uint blendModeAndOpacity) {
-    uint crossfadeByte = (blendModeAndOpacity >> 24) & 0xFFu;
+// Extract crossfade alpha from the PerDrawData.lodLevel field.
+// Layout (see gpu_types.glsl): bits 0-7 = LOD level, bits 8-15 = crossfade alpha
+// as uint8 (0-255 mapped to 0.0-1.0). This must match where gpu_cull_lod.glsl
+// packs the crossfade byte (lodLevel | crossfadeByte << 8).
+float extractCrossfadeAlpha(uint packedLodLevel) {
+    uint crossfadeByte = (packedLodLevel >> 8u) & 0xFFu;
     return float(crossfadeByte) / 255.0;
 }
 
