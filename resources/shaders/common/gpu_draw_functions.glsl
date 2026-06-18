@@ -1,8 +1,8 @@
 #ifndef GPU_DRAW_FUNCTIONS_GLSL
 #define GPU_DRAW_FUNCTIONS_GLSL
 
-// Shared GPU-driven draw helpers for the cull compute shaders
-// (gpu_cull_lod.glsl + gpu_cull_shadow.glsl). Single source of truth for the
+// Shared GPU-driven draw helpers for the main-camera cull compute shader
+// (gpu_cull_lod.glsl). Single source of truth for the
 // material flag bits, LOD selection, task-group sizing, and PerDrawData packing
 // so the main-camera and per-shadow-view cull passes cannot silently desync.
 //

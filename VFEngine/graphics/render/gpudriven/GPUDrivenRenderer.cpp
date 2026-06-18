@@ -164,11 +164,6 @@ namespace render::gpudriven
                 boneMatrixManager->getDescriptorSetLayout()
             );
 
-            // Tier 4: per-shadow-view GPU culling. Needs the cull pipeline (created above) and
-            // the mesh pipeline's set-0 layout (for the shadow-pass perDrawData variant set).
-            shadowCullManager = std::make_unique<ShadowCullManager>(device);
-            shadowCullManager->init(cullPipeline.get(), meshShaderPipeline->getPerDrawDataLayout());
-
             if (meshStreamManager)
             {
                 meshStreamManager->setMeshletBuffer(meshletBuffer.get());

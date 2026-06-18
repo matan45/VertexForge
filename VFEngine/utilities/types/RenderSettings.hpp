@@ -155,11 +155,6 @@ namespace types
         float clipmapBaseExtent = 32.0f;
         float clipmapDepthRange = 4000.0f;
 
-        // Tier 4: per-shadow-view GPU culling. Each shadow view culls the scene against its own
-        // frustum into a compacted buffer, so each page issues one indirect draw instead of
-        // looping batch x shaderGroup sections over the main-camera-culled set. Big draw-call cut.
-        bool perViewCulling = true;
-
         // Debug visualization
         ShadowDebugMode debugMode = ShadowDebugMode::None;
     };

@@ -112,25 +112,6 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::recordPerViewShadowCull(vk::CommandBuffer cmd)
-    {
-        if (!shadowCullEnabled || !shadowCullManager || !shadowCullManager->isInitialized()) return;
-        if (!shadowSystem || !shadowSystem->isShadowsEnabled()) return;
-        if (shadowSystem->getActiveShadowViewCount() == 0 || stats.totalObjects == 0) return;
-
-        // Global view order MUST match getShadowViewIndex / the page-build slot computation:
-        // directional clipmap levels, then point cube faces, then spot views. Reuse a member vector
-        // so we don't heap-allocate this list every frame.
-        std::vector<glm::mat4>& viewProjections = shadowCullViewProjScratch;
-        viewProjections.clear();
-        for (const auto& v : shadowSystem->getDirectionalShadowViews()) viewProjections.push_back(v.viewProjectionMatrix);
-        for (const auto& v : shadowSystem->getPointShadowViews())       viewProjections.push_back(v.viewProjectionMatrix);
-        for (const auto& v : shadowSystem->getSpotShadowViews())        viewProjections.push_back(v.viewProjectionMatrix);
-
-        if (shadowCullManager->beginFrame(viewProjections, stats.totalObjects) == 0) return;
-        shadowCullManager->recordCull(cmd, stats.totalObjects);
-    }
-
     void GPUDrivenRenderer::recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles)
     {
         if (!shadowSystem || !shadowSystem->isShadowsEnabled()) return;
@@ -143,18 +124,7 @@ namespace render::gpudriven
         shadow::ShadowPassParams shadowParams{};
         if (hasMeshObjects && meshShaderPipeline && boneMatrixManager && batchManager)
         {
-            // Tier 4: when per-view shadow culling produced lists this frame, bind the compacted
-            // shadow perDrawData set + buffers and let the recorder issue one draw per page. Else
-            // fall back to the legacy main-camera buffer + batch x shaderGroup section loop.
-            const bool perView = shadowCullEnabled && shadowCullManager &&
-                                 shadowCullManager->isInitialized() && shadowCullManager->hasActiveViews();
-
-            shadowParams.perDrawDataDescSet = perView
-                ? shadowCullManager->getPerDrawDataDescSet()
-                : meshShaderPipeline->getPerDrawDataDescriptorSet();
-            // Always carry the main-camera per-draw set so the recorder can fall back to the legacy
-            // buffer for per-view pages that overflow SHADOW_CULL_MAX_VIEWS / have no GPU view slot.
-            shadowParams.legacyPerDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
+            shadowParams.perDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
             shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
             shadowParams.vertexDataDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
             shadowParams.boneMatrixDescSet = boneMatrixManager->getDescriptorSet();
@@ -166,15 +136,6 @@ namespace render::gpudriven
             shadowParams.shaderGroupCount = batchManager->getShaderGroupCount();
             shadowParams.transparentGroupIndex = SHADER_GROUP_TRANSPARENT;
             shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
-
-            if (perView)
-            {
-                shadowParams.usePerViewShadowCull = true;
-                shadowParams.shadowCullDrawCommandBuffer = shadowCullManager->getDrawCommandBuffer();
-                shadowParams.shadowCullDrawCountBuffer = shadowCullManager->getDrawCountBuffer();
-                shadowParams.shadowCullDrawsPerView = ShadowCullManager::drawsPerView();
-                shadowParams.shadowCullActiveViews = shadowCullManager->getActiveViewCount();
-            }
         }
 
         shadow::TerrainShadowPassParams terrainShadowParams{};
@@ -383,9 +344,6 @@ namespace render::gpudriven
         const bool inRTTContext = GPUDrivenRenderer::getThreadLocalCullDescriptorSet() != nullptr;
         if (!inRTTContext)
         {
-            // Tier 4: cull the scene per shadow view into the compacted shadow buffer before the
-            // shadow pass records its draws. Same RTT guard as the shadow pass itself.
-            recordPerViewShadowCull(cmd);
             recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
         }
 
