@@ -11,6 +11,7 @@
 #include "../../services/events/animation/AnimationSnapshotEvents.hpp"
 #include "math/Frustum.hpp"
 #include <entt/entt.hpp>
+#include <atomic>
 #include <unordered_map>
 #include <memory>
 #include <mutex>
@@ -63,7 +64,9 @@ namespace animation
 
         bool initialized = false;
         bool pendingCacheCleanup = false;
-        bool editPreviewDirty = true;
+        // Atomic: re-armed from sector load/unload notifications that may be published
+        // off the main thread, and read in updateEditModePreview() on the main thread.
+        std::atomic<bool> editPreviewDirty{true};
 
         // Pending animation state restores (keyed by entity UUID, consumed after animator init)
         std::unordered_map<uint64_t, events::animation::snapshot::AnimationSnapshot> pendingRestores;
