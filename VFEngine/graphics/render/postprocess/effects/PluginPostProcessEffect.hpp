@@ -49,7 +49,13 @@ namespace render::postprocess
 
         ::postprocess::EffectType getType() const override { return ::postprocess::EffectType::PluginCustom; }
         uint32_t getPriority() const override { return priority; }
-        bool isPreUpscale() const override { return true; }
+        // Post-upscale: when upscaling is active only executePostUpscale runs
+        // (executePreUpscale is currently never invoked), so a pre-upscale effect
+        // would be dropped. As a post-upscale effect we run in both paths — at
+        // render resolution in the non-upscale execute() (which ignores this flag
+        // and runs every enabled effect by priority) and at display resolution in
+        // executePostUpscale — always ordered by priority relative to the tonemap.
+        bool isPreUpscale() const override { return false; }
 
         // Render-thread-only mutators (called from PostProcessPipeline drain).
         void setParams(const std::byte* data, size_t size);
