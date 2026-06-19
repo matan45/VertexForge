@@ -17,7 +17,8 @@ namespace postprocess
         AutoExposure,
         ColorGrading,
         Underwater,
-        RainDroplets
+        RainDroplets,
+        PluginCustom   // plugin-registered full-screen effect (VK-1409); ordered by getPriority()
     };
 
     enum class VolumetricQuality : uint8_t
