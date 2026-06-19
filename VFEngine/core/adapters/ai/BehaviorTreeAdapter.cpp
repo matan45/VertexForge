@@ -416,9 +416,23 @@ namespace core
             return BTNodeStatus::Running;
         }
 
-        events::controller::HasReachedDestinationQuery reachedQuery;
-        reachedQuery.entity = entity;
-        return dispatcher.query(reachedQuery) ? BTNodeStatus::Success : BTNodeStatus::Running;
+        // Arrival check by horizontal distance to the target. MoveTo issues the
+        // destination through the navmesh agent (SetAgentDestinationCommand above), but
+        // the controller-based HasReachedDestinationQuery only works for entities that
+        // have a ControllerComponent and returns true for everything else (e.g. a
+        // NavmeshAgent-driven unit), which collapses the loop. A direct distance test
+        // works for any movement system (mirrors the legacy harvester's arrived()).
+        glm::vec3 pos = target;
+        events::scene::GetWorldTransformQuery transformQuery;
+        transformQuery.entity = entity;
+        auto transformOpt = dispatcher.query(transformQuery);
+        if (transformOpt.has_value())
+            pos = transformOpt->position;
+
+        float dx = target.x - pos.x;
+        float dz = target.z - pos.z;
+        bool reached = (dx * dx + dz * dz) <= (arrivalDistance * arrivalDistance);
+        return reached ? BTNodeStatus::Success : BTNodeStatus::Running;
     }
 
     BTNodeStatus BehaviorTreeAdapter::executePlayAnimation(services::EntityHandle entity,
