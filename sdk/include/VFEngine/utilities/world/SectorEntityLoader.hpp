@@ -23,6 +23,27 @@ namespace world
     using EntityPostLoadCallback = std::function<void(uint64_t uuid, const std::string& meshPath, const std::string& animatorPath)>;
     using EntityPreDestroyCallback = std::function<void(uint64_t entityHandleId)>;
 
+    // Aggregate sector-entity load progress, for loading-screen / streaming UI.
+    // Counts are cumulative load items: queued counts every entity ever queued via
+    // queueSectorLoadFromData; loaded counts every queued item consumed by update().
+    struct SectorLoadProgress
+    {
+        uint64_t entitiesLoaded = 0;
+        uint64_t entitiesQueued = 0;
+
+        [[nodiscard]] uint64_t pending() const
+        {
+            return entitiesQueued > entitiesLoaded ? entitiesQueued - entitiesLoaded : 0;
+        }
+        // 1.0 when idle (nothing queued) or fully drained; otherwise loaded / queued.
+        [[nodiscard]] float fraction() const
+        {
+            return entitiesQueued == 0
+                       ? 1.0f
+                       : static_cast<float>(entitiesLoaded) / static_cast<float>(entitiesQueued);
+        }
+    };
+
 #pragma warning(push)
 #pragma warning(disable: 4251)
     class VF_WORLD_API SectorEntityLoader
@@ -45,6 +66,9 @@ namespace world
         std::deque<PendingUnload> pendingUnloads;
         std::unordered_set<uint64_t> loadedThisFrame;
 
+        uint64_t totalQueuedLoads = 0;   // cumulative entities queued for load
+        uint64_t totalProcessedLoads = 0; // cumulative queued entities consumed by update()
+
         EntityLoadedCallback onEntityLoaded;
         EntityUnloadedCallback onEntityUnloaded;
         EntityPostLoadCallback onEntityPostLoad;
@@ -66,7 +90,13 @@ namespace world
 
         void cancelPendingLoads(const SectorCoord& coord);
 
-        void clear() { pendingLoads.clear(); pendingUnloads.clear(); }
+        void clear()
+        {
+            pendingLoads.clear();
+            pendingUnloads.clear();
+            totalQueuedLoads = 0;
+            totalProcessedLoads = 0;
+        }
 
         [[nodiscard]] bool hasPendingLoadsForSector(const SectorCoord& coord) const
         {
@@ -76,6 +106,13 @@ namespace world
             }
             return false;
         }
+
+        [[nodiscard]] SectorLoadProgress getLoadProgress() const
+        {
+            return {totalProcessedLoads, totalQueuedLoads};
+        }
+
+        [[nodiscard]] size_t pendingLoadCount() const { return pendingLoads.size(); }
     };
 #pragma warning(pop)
 
