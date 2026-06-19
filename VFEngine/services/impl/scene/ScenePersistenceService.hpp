@@ -21,6 +21,11 @@ namespace events
     class EventDispatcher;
 }
 
+namespace serialization
+{
+    struct IncrementalLoadState;
+}
+
 namespace services
 {
     class EntityStateService;
@@ -48,6 +53,14 @@ namespace services
         // Streaming zone manager
         std::unique_ptr<StreamingZoneManager> streamingZoneManager;
 
+        // Frame-budgeted scene load (VK-1268). budget <= 0 keeps the original
+        // single-frame (blocking) load; > 0 spreads entity spawning across frames
+        // so a loading screen can animate. Runtime opts in; the editor stays 0.
+        int incrementalLoadBudget = 0;
+        bool incrementalActive = false;
+        std::string incrementalFilePath;
+        std::unique_ptr<serialization::IncrementalLoadState> incrementalState;
+
     public:
         explicit ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
                                          EntityStateService* entityStateService);
@@ -56,6 +69,10 @@ namespace services
         void registerEventHandlers(events::EventDispatcher& dispatcher);
 
         void update();
+
+        // Entities spawned per frame during a deferred scene load. 0 (default)
+        // = original synchronous one-frame load; > 0 = incremental load.
+        void setIncrementalLoadBudget(int entitiesPerFrame);
 
         void cancelPendingLoads();
 
@@ -94,6 +111,10 @@ namespace services
 
     private:
         void performDeferredLoad(const std::string& filePath);
+        // Post-deserialization finalization (completed notification + IBL/navmesh/
+        // terrain/settings application + clears sceneTransitioning). Shared by the
+        // synchronous and incremental load paths.
+        void finishLoad(const std::string& filePath, bool success);
         void performDeferredAdditiveLoad(const PendingAdditiveLoad& load);
         void triggerResourceLoadingForEntity(scene::Entity& entity) const;
         void acquireAndNotifyResources(scene::Entity& entity) const;

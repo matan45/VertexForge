@@ -230,6 +230,10 @@ namespace handlers {
             bootstrap->getAnimatorProvider(),
             bootstrap->getSocketProvider()
         );
+        // Spread deferred scene loads across frames so a loading screen can
+        // animate during transitions instead of the game hitching for one frame
+        // (VK-1268). The render loop keeps presenting between spawn batches.
+        sceneService->setIncrementalLoadBudget(64);
         renderService = std::make_shared<services::RuntimeRenderServiceImpl>(
             bootstrap->getOffScreenProvider(),
             bootstrap->getPostProcessProvider()

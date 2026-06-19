@@ -81,6 +81,10 @@ namespace services
         void registerEventHandlers() override;
         void update() override;
 
+        // Spread deferred scene loads across frames (VK-1268). 0 = synchronous
+        // (default, editor); > 0 = incremental so a loading screen can animate.
+        void setIncrementalLoadBudget(int entitiesPerFrame);
+
         // Entity Lifecycle
         EntityHandle createEntity(const std::string& name,
                                   std::optional<EntityHandle> parent = std::nullopt) override;
