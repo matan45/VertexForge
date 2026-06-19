@@ -1,9 +1,11 @@
 #include <doctest.h>
 #include <resource/ResourceLoadScheduler.hpp>
 #include <resource/ResourceLoadTypes.hpp>
+#include <loading/LoadingProgress.hpp>
 #include <asset/AssetGUID.hpp>
 #include <algorithm>
 #include <atomic>
+#include <string>
 
 // ============================================================
 // ResourceLoadScheduler progress + timing capture. JobSystem is
@@ -178,4 +180,90 @@ TEST_CASE("findProgress sees pending loads and goes null after completion")
     CHECK(pendingProgress->stage() == LoadStage::Completed);
 }
 
+}
+
+// ============================================================
+// Aggregate loading-progress phase blend (VK-1268). Pure helper:
+// per-subsystem fractions -> single weighted 0-1 + current phase.
+// ============================================================
+TEST_SUITE("LoadingProgressAggregate")
+{
+    using loading::LoadingPhase;
+    using loading::LoadingPhaseInputs;
+
+    TEST_CASE("idle reports complete with no active phase")
+    {
+        auto p = loading::computeLoadingProgress({}, /*active=*/false);
+        CHECK(p.fraction == doctest::Approx(1.0f));
+        CHECK(p.phase == LoadingPhase::Idle);
+    }
+
+    TEST_CASE("all phases complete while active reports Complete")
+    {
+        auto p = loading::computeLoadingProgress({}, /*active=*/true);
+        CHECK(p.fraction == doctest::Approx(1.0f));
+        CHECK(p.phase == LoadingPhase::Complete);
+    }
+
+    TEST_CASE("nothing loaded yet sits at zero in the terrain phase")
+    {
+        LoadingPhaseInputs in{0.0f, 0.0f, 0.0f, 0.0f};
+        auto p = loading::computeLoadingProgress(in);
+        CHECK(p.fraction == doctest::Approx(0.0f));
+        CHECK(p.phase == LoadingPhase::Terrain);
+    }
+
+    TEST_CASE("band weights follow the 40/30/20/10 split")
+    {
+        // Half terrain, rest done: 0.4*0.5 + 0.3 + 0.2 + 0.1 = 0.80
+        auto t = loading::computeLoadingProgress({0.5f, 1.0f, 1.0f, 1.0f});
+        CHECK(t.fraction == doctest::Approx(0.80f));
+        CHECK(t.phase == LoadingPhase::Terrain);
+
+        // Terrain done, sectors half: 0.4 + 0.3*0.5 + 0.2 + 0.1 = 0.85
+        auto s = loading::computeLoadingProgress({1.0f, 0.5f, 1.0f, 1.0f});
+        CHECK(s.fraction == doctest::Approx(0.85f));
+        CHECK(s.phase == LoadingPhase::Sectors);
+
+        // Terrain+sectors done, gpu half: 0.4 + 0.3 + 0.2*0.5 + 0.1 = 0.90
+        auto g = loading::computeLoadingProgress({1.0f, 1.0f, 0.5f, 1.0f});
+        CHECK(g.fraction == doctest::Approx(0.90f));
+        CHECK(g.phase == LoadingPhase::GpuStreaming);
+
+        // Only init left, half done: 0.4 + 0.3 + 0.2 + 0.1*0.5 = 0.95
+        auto i = loading::computeLoadingProgress({1.0f, 1.0f, 1.0f, 0.5f});
+        CHECK(i.fraction == doctest::Approx(0.95f));
+        CHECK(i.phase == LoadingPhase::Initializing);
+    }
+
+    TEST_CASE("current phase is the earliest unfinished band")
+    {
+        // Later bands already at full should not pull the phase forward while
+        // an earlier band is still incomplete.
+        auto p = loading::computeLoadingProgress({0.2f, 1.0f, 1.0f, 1.0f});
+        CHECK(p.phase == LoadingPhase::Terrain);
+    }
+
+    TEST_CASE("out-of-range fractions are clamped")
+    {
+        auto hi = loading::computeLoadingProgress({2.0f, 2.0f, 2.0f, 2.0f});
+        CHECK(hi.fraction == doctest::Approx(1.0f));
+        CHECK(hi.phase == LoadingPhase::Complete);
+
+        auto lo = loading::computeLoadingProgress({-1.0f, -1.0f, -1.0f, -1.0f});
+        CHECK(lo.fraction == doctest::Approx(0.0f));
+        CHECK(lo.phase == LoadingPhase::Terrain);
+    }
+
+    TEST_CASE("phase labels match the ticket's status strings")
+    {
+        CHECK(std::string(loading::loadingPhaseLabel(LoadingPhase::Terrain)) ==
+              "Generating terrain...");
+        CHECK(std::string(loading::loadingPhaseLabel(LoadingPhase::Sectors)) ==
+              "Loading sectors...");
+        CHECK(std::string(loading::loadingPhaseLabel(LoadingPhase::GpuStreaming)) ==
+              "Streaming resources...");
+        CHECK(std::string(loading::loadingPhaseLabel(LoadingPhase::Initializing)) ==
+              "Initializing...");
+    }
 }
