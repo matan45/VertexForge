@@ -154,4 +154,16 @@ public class Animator {
     public static function getRootMotion(int entityId): bool {
         return _native_animator_getRootMotion(entityId);
     }
+
+    // ============================================
+    // Animation Events
+    // ============================================
+
+    // Poll the next not-yet-consumed animation event fired for an entity.
+    // Returns the event name (FIFO order), or "" when no events remain.
+    // Each fired event is returned exactly once; call repeatedly each frame
+    // until it returns "" to drain all pending events.
+    public static function pollEvent(int entityId): string {
+        return _native_animator_pollEvent(entityId);
+    }
 }

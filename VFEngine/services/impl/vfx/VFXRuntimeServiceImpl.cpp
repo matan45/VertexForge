@@ -5,6 +5,7 @@
 #include "../../events/vfx/VFXSnapshotEvents.hpp"
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
+#include "../../events/physics/SocketEvents.hpp"
 #include <algorithm>
 
 namespace services
@@ -34,6 +35,18 @@ namespace services
             [this](const events::vfxruntime::SetVFXInstanceTransformCommand& cmd)
             {
                 setInstanceTransform(cmd.instanceId, cmd.worldTransform);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxruntime::AttachVFXInstanceToSocketCommand>(
+            [this](const events::vfxruntime::AttachVFXInstanceToSocketCommand& cmd)
+            {
+                attachInstanceToSocket(cmd.instanceId, EntityHandle{cmd.entityHandle}, cmd.socketName);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxruntime::DetachVFXInstanceCommand>(
+            [this](const events::vfxruntime::DetachVFXInstanceCommand& cmd)
+            {
+                detachInstance(cmd.instanceId);
             });
 
         dispatcher.registerCommandHandler<events::vfxruntime::ApplyVFXInstanceOverridesCommand>(
@@ -166,6 +179,7 @@ namespace services
 
     void VFXRuntimeServiceImpl::destroyInstance(VFXInstanceId id)
     {
+        socketAttachments.erase(id);
         if (vfxProvider)
             vfxProvider->destroyInstance(id);
     }
@@ -180,6 +194,49 @@ namespace services
     {
         if (vfxProvider)
             vfxProvider->setInstanceTransform(id, worldTransform);
+    }
+
+    void VFXRuntimeServiceImpl::attachInstanceToSocket(VFXInstanceId id, EntityHandle entity,
+                                                       const std::string& socketName)
+    {
+        if (id == 0 || !entity.isValid() || socketName.empty())
+            return;
+        socketAttachments[id] = SocketAttachment{entity, socketName};
+    }
+
+    void VFXRuntimeServiceImpl::detachInstance(VFXInstanceId id)
+    {
+        socketAttachments.erase(id);
+    }
+
+    void VFXRuntimeServiceImpl::updateSocketAttachments()
+    {
+        if (socketAttachments.empty() || !vfxProvider)
+            return;
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        for (auto it = socketAttachments.begin(); it != socketAttachments.end();)
+        {
+            const VFXInstanceId instanceId = it->first;
+            const SocketAttachment& attach = it->second;
+
+            // Auto-clear when the entity is gone or the socket no longer exists;
+            // leave the instance wherever it was last placed.
+            ::events::socket::HasSocketQuery hasQuery;
+            hasQuery.entity = attach.entity;
+            hasQuery.socketName = attach.socketName;
+            if (!dispatcher.query(hasQuery))
+            {
+                it = socketAttachments.erase(it);
+                continue;
+            }
+
+            ::events::socket::GetSocketWorldTransformQuery xformQuery;
+            xformQuery.parentEntity = attach.entity;
+            xformQuery.socketName = attach.socketName;
+            vfxProvider->setInstanceTransform(instanceId, dispatcher.query(xformQuery));
+            ++it;
+        }
     }
 
     void VFXRuntimeServiceImpl::playInstance(VFXInstanceId id)
@@ -202,6 +259,9 @@ namespace services
 
     void VFXRuntimeServiceImpl::update(float deltaTime)
     {
+        // Resolve socket-attached instances to their socket's current world
+        // transform before the provider advances instance simulation.
+        updateSocketAttachments();
         if (vfxProvider)
             vfxProvider->update(deltaTime);
     }

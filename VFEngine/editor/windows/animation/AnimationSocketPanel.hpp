@@ -13,6 +13,7 @@ namespace windows::animation
     private:
         int selectedSocketIndex = -1;
         char newSocketName[128] = "";
+        glm::vec3 newSocketEulerDeg{0.0f}; // working-copy rotation (euler degrees) for socket creation
         bool saveSuccess = false;
         float saveMessageTimer = 0.0f;
         

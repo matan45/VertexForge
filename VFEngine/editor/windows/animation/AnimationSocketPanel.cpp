@@ -3,6 +3,7 @@
 #include "../../../services/events/physics/SocketEvents.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "imgui.h"
+#include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 
 namespace windows::animation
@@ -135,6 +136,14 @@ namespace windows::animation
                 changed = true;
             }
 
+            glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(socket.localRotation));
+            float rot[3] = {eulerDeg.x, eulerDeg.y, eulerDeg.z};
+            if (ImGui::DragFloat3("Rotation", rot, 0.5f))
+            {
+                socket.localRotation = glm::quat(glm::radians(glm::vec3(rot[0], rot[1], rot[2])));
+                changed = true;
+            }
+
             ImGui::Unindent(10.0f);
         }
 
@@ -159,6 +168,12 @@ namespace windows::animation
             }
             ImGui::Text("Target Bone: %s", targetBone.c_str());
             ImGui::TextDisabled("(Select a bone in the Skeleton panel)");
+
+            float rot[3] = {newSocketEulerDeg.x, newSocketEulerDeg.y, newSocketEulerDeg.z};
+            if (ImGui::DragFloat3("Rotation", rot, 0.5f))
+            {
+                newSocketEulerDeg = glm::vec3(rot[0], rot[1], rot[2]);
+            }
 
             bool canCreate = std::strlen(newSocketName) > 0 &&
                              selectedChannel >= 0 &&
@@ -190,9 +205,11 @@ namespace windows::animation
                 newSocket.boneIndex = (it != boneNameToIndex.end())
                     ? static_cast<int32_t>(it->second)
                     : -1;
+                newSocket.localRotation = glm::quat(glm::radians(newSocketEulerDeg));
                 sockets.push_back(newSocket);
 
                 newSocketName[0] = '\0';
+                newSocketEulerDeg = glm::vec3(0.0f);
                 selectedSocketIndex = static_cast<int>(sockets.size()) - 1;
 
                 ImGui::Unindent(10.0f);

@@ -1,17 +1,75 @@
 #include <services/ScriptInterpreter.hpp>
 #include <environment/NativeContext.hpp>
 #include <span>
+#include <mutex>
+#include <deque>
+#include <unordered_map>
 
 #include "AnimatorAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/animation/AnimatorEvents.hpp"
+#include "events/animation/AnimationEventEvents.hpp"
 
 namespace core::api
 {
+    namespace
+    {
+        // Process-lifetime FIFO buffer of fired animation event names, keyed by
+        // script entity id. Populated by a single subscription to
+        // AnimationEventFiredNotification (published from the animation update
+        // path, possibly off the main thread) and drained by the script-thread
+        // pollEvent native — the mutex guards that cross-thread access.
+        struct AnimationEventQueues
+        {
+            std::mutex mtx;
+            std::unordered_map<int64_t, std::deque<std::string>> queues;
+            events::SubscriptionToken token;
+            bool subscribed = false;
+
+            // Bound per-entity backlog so events for entities that never poll
+            // (or already despawned) cannot grow without limit.
+            static constexpr std::size_t MAX_QUEUED_PER_ENTITY = 16;
+        };
+
+        AnimationEventQueues& animationEventQueues()
+        {
+            static AnimationEventQueues instance;
+            return instance;
+        }
+    }
+
     void AnimatorAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // Subscribe once (process lifetime) so fired animation events are
+        // buffered for the pollEvent native below.
+        {
+            auto& eventQueues = animationEventQueues();
+            std::lock_guard<std::mutex> lock(eventQueues.mtx);
+            if (!eventQueues.subscribed)
+            {
+                eventQueues.subscribed = true;
+                eventQueues.token = dispatcher.subscribe<events::animation::AnimationEventFiredNotification>(
+                    [](const events::animation::AnimationEventFiredNotification& n)
+                    {
+                        int64_t entityId = entityToInt(n.entity);
+                        if (entityId < 0)
+                        {
+                            return;
+                        }
+                        auto& eventQueues = animationEventQueues();
+                        std::lock_guard<std::mutex> lock(eventQueues.mtx);
+                        auto& queue = eventQueues.queues[entityId];
+                        queue.push_back(n.eventName);
+                        while (queue.size() > AnimationEventQueues::MAX_QUEUED_PER_ENTITY)
+                        {
+                            queue.pop_front();
+                        }
+                    });
+            }
+        }
 
         // ============================================================
         // PARAMETER SETTERS
@@ -518,6 +576,41 @@ namespace core::api
                                                 query.entity = intToEntity(entityId);
 
                                                 return value::Value(dispatcher.query(query));
+                                            }});
+
+        // ============================================================
+        // ANIMATION EVENTS
+        // ============================================================
+
+        // _native_animator_pollEvent(entityId) -> string
+        // Returns the next not-yet-consumed animation event name fired for the
+        // entity (FIFO), or "" if none remain. Each fired event is returned once.
+        interpreter->registerNativeFunction("_native_animator_pollEvent",
+                                            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                                                if (args.empty())
+                                                {
+                                                    vfLogError(
+                                                        "[Script] Animator.pollEvent: missing entityId argument");
+                                                    return value::Value(std::string(""));
+                                                }
+
+                                                int64_t entityId = extractInt64(args[0], "Animator.pollEvent");
+                                                if (entityId < 0)
+                                                {
+                                                    return value::Value(std::string(""));
+                                                }
+
+                                                auto& eventQueues = animationEventQueues();
+                                                std::lock_guard<std::mutex> lock(eventQueues.mtx);
+                                                auto it = eventQueues.queues.find(entityId);
+                                                if (it == eventQueues.queues.end() || it->second.empty())
+                                                {
+                                                    return value::Value(std::string(""));
+                                                }
+
+                                                std::string eventName = std::move(it->second.front());
+                                                it->second.pop_front();
+                                                return value::Value(std::move(eventName));
                                             }});
     }
 }

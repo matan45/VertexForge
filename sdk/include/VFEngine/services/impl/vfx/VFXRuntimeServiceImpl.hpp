@@ -1,5 +1,8 @@
 #pragma once
 #include "../../data/VFXTypes.hpp"
+#include "../../data/EntityHandle.hpp"
+#include <string>
+#include <unordered_map>
 
 namespace services
 {
@@ -9,6 +12,20 @@ namespace services
     {
     private:
         IVFXRuntimeProvider* vfxProvider = nullptr;
+
+        // VFX instances attached to entity sockets. Each frame, before the
+        // provider updates instance transforms, the attached instance's world
+        // transform is resolved from the socket and pushed down. Entries are
+        // erased when the socket can no longer be resolved or the instance is
+        // destroyed/detached.
+        struct SocketAttachment
+        {
+            EntityHandle entity;
+            std::string socketName;
+        };
+        std::unordered_map<VFXInstanceId, SocketAttachment> socketAttachments;
+
+        void updateSocketAttachments();
 
     public:
         explicit VFXRuntimeServiceImpl(IVFXRuntimeProvider* provider);
@@ -20,6 +37,8 @@ namespace services
         void destroyInstance(VFXInstanceId id);
         void applyInstanceOverrides(VFXInstanceId id, const VFXEmitterOverrides& overrides);
         void setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform);
+        void attachInstanceToSocket(VFXInstanceId id, EntityHandle entity, const std::string& socketName);
+        void detachInstance(VFXInstanceId id);
         void playInstance(VFXInstanceId id);
         void stopInstance(VFXInstanceId id);
         void resetInstance(VFXInstanceId id);

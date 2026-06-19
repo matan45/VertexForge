@@ -31,6 +31,24 @@ namespace services::events::vfxruntime
         std::string_view getName() const override { return "SetVFXInstanceTransform"; }
     };
 
+    // Attach a live instance to an entity socket. Each frame, before instance
+    // transforms update, the instance's worldTransform is set from the socket's
+    // current world transform. The attachment auto-clears when the entity is
+    // invalid, the socket no longer exists, or the instance is destroyed.
+    struct AttachVFXInstanceToSocketCommand : ::events::ICommand<void>
+    {
+        VFXInstanceId instanceId = 0;
+        uint64_t entityHandle = 0;
+        std::string socketName;
+        std::string_view getName() const override { return "AttachVFXInstanceToSocket"; }
+    };
+
+    struct DetachVFXInstanceCommand : ::events::ICommand<void>
+    {
+        VFXInstanceId instanceId = 0;
+        std::string_view getName() const override { return "DetachVFXInstance"; }
+    };
+
     struct ApplyVFXInstanceOverridesCommand : ::events::ICommand<void>
     {
         VFXInstanceId instanceId = 0;

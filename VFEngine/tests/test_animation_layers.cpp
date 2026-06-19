@@ -89,6 +89,34 @@ TEST_CASE("SocketDefinition: non-zero offset has matching translation") {
     CHECK(mat[2][2] == doctest::Approx(1.0f));
 }
 
+TEST_CASE("SocketDefinition: default localRotation is identity") {
+    animator::SocketDefinition socket;
+    CHECK(socket.localRotation.w == doctest::Approx(1.0f));
+    CHECK(socket.localRotation.x == doctest::Approx(0.0f));
+    CHECK(socket.localRotation.y == doctest::Approx(0.0f));
+    CHECK(socket.localRotation.z == doctest::Approx(0.0f));
+}
+
+TEST_CASE("SocketDefinition: rotation rotates basis while preserving translation") {
+    animator::SocketDefinition socket;
+    socket.localPosition = glm::vec3(1.0f, 2.0f, 3.0f);
+    // 90 degrees about Y maps local +X to world -Z (right-handed, column-major).
+    socket.localRotation = glm::quat(glm::radians(glm::vec3(0.0f, 90.0f, 0.0f)));
+
+    glm::mat4 mat = socket.getLocalOffsetMatrix();
+
+    // Translation column is unchanged by the rotation (rotation applied before translate).
+    CHECK(mat[3][0] == doctest::Approx(1.0f));
+    CHECK(mat[3][1] == doctest::Approx(2.0f));
+    CHECK(mat[3][2] == doctest::Approx(3.0f));
+
+    // Rotated +X axis (first column) should now point along -Z.
+    glm::vec3 rotatedX = glm::vec3(mat[0][0], mat[0][1], mat[0][2]);
+    CHECK(rotatedX.x == doctest::Approx(0.0f).epsilon(0.001f));
+    CHECK(rotatedX.y == doctest::Approx(0.0f).epsilon(0.001f));
+    CHECK(rotatedX.z == doctest::Approx(-1.0f).epsilon(0.001f));
+}
+
 // ---- MAX_BONE_MASK_SIZE ----
 
 TEST_CASE("MAX_BONE_MASK_SIZE equals 256") {

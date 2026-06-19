@@ -466,6 +466,60 @@ namespace core::api
                 return value::Value(std::monostate{});
             }});
 
+        // _native_vfx_attachToSocket(instanceId, parentEntityId, socketName) -> void
+        // Attach a spawned instance to an entity socket. The instance follows the
+        // socket's world transform each frame; auto-clears if the entity/socket
+        // becomes invalid or the instance is destroyed.
+        interpreter->registerNativeFunction("_native_vfx_attachToSocket",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 3)
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t instanceId = extractInt64(args[0]);
+                int64_t parentEntityId = extractInt64(args[1]);
+                if (instanceId <= 0 || parentEntityId < 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                std::string socketName = extractString(args[2], "VFX.attachToSocket");
+                if (socketName.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                services::events::vfxruntime::AttachVFXInstanceToSocketCommand cmd;
+                cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
+                cmd.entityHandle = services::EntityHandle{
+                    static_cast<uint64_t>(parentEntityId)
+                }.id;
+                cmd.socketName = std::move(socketName);
+                events::EventDispatcher::instance().execute(cmd);
+
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_detach(instanceId) -> void
+        interpreter->registerNativeFunction("_native_vfx_detach",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t instanceId = extractInt64(args[0]);
+                if (instanceId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                services::events::vfxruntime::DetachVFXInstanceCommand cmd;
+                cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
+                events::EventDispatcher::instance().execute(cmd);
+
+                return value::Value(std::monostate{});
+            }});
+
         // _native_vfx_setOverride(instanceId, name, value) -> bool
         // Scalar runtime overrides by name. Supported names:
         //   spawnRate, lifetime, startSize, startSpeed, stretchMultiplier,
