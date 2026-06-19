@@ -45,7 +45,17 @@ namespace windows
                     {"audioSource2D", "AudioSource2D"},
                     {"audioSource3D", "AudioSource3D"},
                     {"collider", "Collider"},
-                    {"rigidBody", "RigidBody"}
+                    {"rigidBody", "RigidBody"},
+                    {"script", "Script"},
+                    {"navmeshAgent", "NavmeshAgent"},
+                    {"vfx", "VFX"},
+                    {"socketAttachment", "SocketAttachment"},
+                    {"socketOverride", "SocketOverride"},
+                    {"directionalLight", "DirectionalLight"},
+                    {"pointLight", "PointLight"},
+                    {"spotLight", "SpotLight"},
+                    {"controller", "Controller"},
+                    {"prefabInstance", "PrefabInstance"}
                 };
 
                 for (const auto& [key, displayName] : componentMap)
