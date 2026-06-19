@@ -98,6 +98,12 @@ namespace serialization
                 entity.getComponent<components::NavmeshAgentComponent>());
         }
 
+        if (entity.hasComponent<components::NavmeshObstacleComponent>())
+        {
+            out["navmeshObstacle"] = SceneSerialization::serializeNavmeshObstacle(
+                entity.getComponent<components::NavmeshObstacleComponent>());
+        }
+
         if (entity.hasComponent<components::VFXComponent>())
         {
             out["vfx"] = SceneSerialization::serializeVFX(
@@ -432,6 +438,12 @@ namespace serialization
         {
             auto& navAgentComp = entity.addOrReplaceComponent<components::NavmeshAgentComponent>();
             SceneSerialization::deserializeNavmeshAgent(componentsJson["navmeshAgent"], navAgentComp);
+        }
+
+        if (componentsJson.contains("navmeshObstacle"))
+        {
+            auto& navObstacleComp = entity.addOrReplaceComponent<components::NavmeshObstacleComponent>();
+            SceneSerialization::deserializeNavmeshObstacle(componentsJson["navmeshObstacle"], navObstacleComp);
         }
 
         if (componentsJson.contains("socketAttachment"))
