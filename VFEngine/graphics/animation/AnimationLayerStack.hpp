@@ -62,6 +62,11 @@ namespace animation
 
         void update(float deltaTime);
 
+        // Evaluate the current (frame-0 / rest) pose into finalBoneMatrices WITHOUT
+        // advancing time, firing transitions, or collecting events. For the edit-mode
+        // socket-attachment preview (VK-1407). Idempotent.
+        void evaluateRestPose();
+
         const std::vector<glm::mat4>& getBoneMatrices() const { return finalBoneMatrices; }
         std::vector<glm::mat4>& getMutableBoneMatrices() { return finalBoneMatrices; }
 

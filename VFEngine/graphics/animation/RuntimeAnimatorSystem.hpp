@@ -63,6 +63,7 @@ namespace animation
 
         bool initialized = false;
         bool pendingCacheCleanup = false;
+        bool editPreviewDirty = true;
 
         // Pending animation state restores (keyed by entity UUID, consumed after animator init)
         std::unordered_map<uint64_t, events::animation::snapshot::AnimationSnapshot> pendingRestores;
@@ -89,6 +90,11 @@ namespace animation
 
         void updateAll(float deltaTime);
         void updateSocketAttachments();
+
+        // Edit-mode (no Play) socket-attachment preview: sync animators and evaluate
+        // each to a static rest pose (+IK) so socket transforms resolve and skeletal
+        // meshes render in rest pose. Dirty-gated — cheap (one bool check) when idle. VK-1407.
+        void updateEditModePreview();
 
         void initializeEntityAnimator(entt::entity entity, const std::string& animatorPath);
         void destroyEntityAnimator(entt::entity entity);

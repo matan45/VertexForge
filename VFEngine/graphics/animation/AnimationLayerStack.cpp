@@ -298,6 +298,17 @@ namespace animation
         blendLayers();
     }
 
+    void AnimationLayerStack::evaluateRestPose()
+    {
+        if (!initialized)
+            return;
+
+        // Each layer's state machine was already evaluated to its default state at
+        // time 0 during initialize(); blendLayers() composes that into finalBoneMatrices.
+        // No update()/time advance, so transitions and events do not fire.
+        blendLayers();
+    }
+
     void AnimationLayerStack::evaluateBaseLayerPose()
     {
         auto& baseLayer = layers[0];

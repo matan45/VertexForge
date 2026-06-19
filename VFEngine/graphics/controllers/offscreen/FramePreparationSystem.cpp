@@ -160,6 +160,10 @@ namespace controllers::offscreen
                 animatorSystem.syncWithRegistry();
                 animatorSystem.updateAll(ctx.deltaTime);
             }
+            else
+            {
+                animatorSystem.updateEditModePreview();
+            }
             animatorSystem.updateSocketAttachments();
         }
 

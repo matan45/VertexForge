@@ -124,6 +124,26 @@ namespace animation
         }
     }
 
+    void RuntimeAnimatorSystem::updateEditModePreview()
+    {
+        if (!editPreviewDirty)
+            return;
+
+        processPendingStreamingInits();
+        syncWithRegistry();
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (auto& [entity, anim] : animators)
+        {
+            if (!anim || !anim->isInitialized())
+                continue;
+            anim->evaluateRestPose();
+            applyIKPostProcess(entity, anim.get(), registry);
+        }
+
+        editPreviewDirty = false;
+    }
+
     bool RuntimeAnimatorSystem::isEntityInFrustum(entt::entity entity, entt::registry& registry) const
     {
         if (!cullingContext.enabled || !cullingContext.frustum.isInitialized())
@@ -240,6 +260,7 @@ namespace animation
 
     void RuntimeAnimatorSystem::destroyEntityAnimator(entt::entity entity)
     {
+        editPreviewDirty = true;
         auto it = animators.find(entity);
         if (it != animators.end())
         {
