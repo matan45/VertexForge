@@ -1,12 +1,31 @@
 #include <doctest.h>
 #include <serialization/SceneSerialization.hpp>
+#include <scene/SceneGraphSystem.hpp>
 #include <components/Components.hpp>
+#include <asset/AssetDatabase.hpp>
 #include <navigation/RootMotionSpeed.hpp>
 #include <nlohmann/json.hpp>
 
+#include <filesystem>
+#include <fstream>
+
 namespace
 {
+    namespace fs = std::filesystem;
     using json = nlohmann::json;
+
+    fs::path rootMotionTestRoot()
+    {
+        return fs::temp_directory_path() / "vf_root_motion_speed_tests";
+    }
+
+    void resetRootMotionTestRoot()
+    {
+        std::error_code ec;
+        fs::remove_all(rootMotionTestRoot(), ec);
+        fs::create_directories(rootMotionTestRoot(), ec);
+        asset::AssetDatabase::instance().clear();
+    }
 }
 
 TEST_SUITE("RootMotionSpeed")
@@ -132,40 +151,72 @@ TEST_SUITE("RootMotionSpeed")
 
 TEST_SUITE("NavmeshAgentRootMotionSerialization")
 {
+    // serializeNavmeshAgent/deserializeNavmeshAgent are internal to
+    // SceneSerialization, so the round-trip is exercised through the public
+    // saveScene/loadSceneInto path (same path the editor uses).
     TEST_CASE("rootMotionDriven round-trips true")
     {
-        components::NavmeshAgentComponent agent;
+        resetRootMotionTestRoot();
+
+        scene::SceneGraphSystem source;
+        auto& agent = source.GetRoot().addOrReplaceComponent<components::NavmeshAgentComponent>();
         agent.rootMotionDriven = true;
 
-        json j = serialization::SceneSerialization::serializeNavmeshAgent(agent);
-        REQUIRE(j.contains("rootMotionDriven"));
-        CHECK(j["rootMotionDriven"].get<bool>() == true);
+        fs::path scenePath = rootMotionTestRoot() / "RootMotionTrue.vfScene";
+        REQUIRE(serialization::SceneSerialization::saveScene(source, scenePath.string()));
 
-        components::NavmeshAgentComponent loaded;
-        serialization::SceneSerialization::deserializeNavmeshAgent(j, loaded);
-        CHECK(loaded.rootMotionDriven == true);
+        scene::SceneGraphSystem loaded;
+        REQUIRE(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
+        REQUIRE(loaded.GetRoot().hasComponent<components::NavmeshAgentComponent>());
+        CHECK(loaded.GetRoot().getComponent<components::NavmeshAgentComponent>().rootMotionDriven == true);
     }
 
     TEST_CASE("rootMotionDriven round-trips false")
     {
-        components::NavmeshAgentComponent agent;
+        resetRootMotionTestRoot();
+
+        scene::SceneGraphSystem source;
+        auto& agent = source.GetRoot().addOrReplaceComponent<components::NavmeshAgentComponent>();
         agent.rootMotionDriven = false;
 
-        json j = serialization::SceneSerialization::serializeNavmeshAgent(agent);
-        CHECK(j["rootMotionDriven"].get<bool>() == false);
+        fs::path scenePath = rootMotionTestRoot() / "RootMotionFalse.vfScene";
+        REQUIRE(serialization::SceneSerialization::saveScene(source, scenePath.string()));
 
-        components::NavmeshAgentComponent loaded;
-        loaded.rootMotionDriven = true; // ensure deserialize actually writes it
-        serialization::SceneSerialization::deserializeNavmeshAgent(j, loaded);
-        CHECK(loaded.rootMotionDriven == false);
+        scene::SceneGraphSystem loaded;
+        REQUIRE(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
+        REQUIRE(loaded.GetRoot().hasComponent<components::NavmeshAgentComponent>());
+        CHECK(loaded.GetRoot().getComponent<components::NavmeshAgentComponent>().rootMotionDriven == false);
     }
 
-    TEST_CASE("missing key keeps default false (back-compat)")
+    // Back-compat: a navmeshAgent block authored before VK-1408 has no
+    // "rootMotionDriven" key; deserialize must leave the default (false).
+    TEST_CASE("legacy navmeshAgent without key defaults to false")
     {
-        json empty = json::object();
+        resetRootMotionTestRoot();
 
-        components::NavmeshAgentComponent loaded; // default is false
-        serialization::SceneSerialization::deserializeNavmeshAgent(empty, loaded);
-        CHECK(loaded.rootMotionDriven == false);
+        fs::path scenePath = rootMotionTestRoot() / "LegacyNavmeshAgent.vfScene";
+        json sceneJson;
+        sceneJson["version"] = "1.0";
+        sceneJson["root"] = {
+            {"name", "Root"},
+            {"isActive", true},
+            {"components", {
+                {"navmeshAgent", {
+                    {"radius", 0.5f},
+                    {"height", 2.0f}
+                }}
+            }},
+            {"children", json::array()}
+        };
+
+        std::ofstream file(scenePath);
+        REQUIRE(file.is_open());
+        file << sceneJson.dump(2);
+        file.close();
+
+        scene::SceneGraphSystem loaded;
+        REQUIRE(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
+        REQUIRE(loaded.GetRoot().hasComponent<components::NavmeshAgentComponent>());
+        CHECK(loaded.GetRoot().getComponent<components::NavmeshAgentComponent>().rootMotionDriven == false);
     }
 }
