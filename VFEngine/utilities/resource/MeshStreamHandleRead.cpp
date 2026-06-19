@@ -344,11 +344,37 @@ namespace resource
 
     bool MeshStreamHandle::readSocketDefinitions(SkeletonData& outSkeleton)
     {
-        uint32_t socketCount = endian::readLE<uint32_t>(file);
+        // Socket-block versioning for backward compatibility (VK-1402):
+        // Legacy meshes start the block directly with a uint32 socketCount (always < 256).
+        // Versioned meshes start with a sentinel magic word (>> 256, so it can never collide
+        // with a legacy count) followed by a uint32 version, then the count. A version >= 2
+        // appends a 4-float (w,x,y,z) localRotation after the 3 position floats per socket.
+        // We read the first word: if it is the magic, parse the versioned layout; otherwise
+        // that word is already the legacy socket count (rotation stays identity).
+        constexpr uint32_t kSocketBlockMagic = 0x534F4B32; // 'SOK2'
+
+        uint32_t firstWord = endian::readLE<uint32_t>(file);
+        if (file.fail())
+        {
+            return true;
+        }
+
+        // Legacy layout: firstWord is the socket count directly. Versioned layout:
+        // firstWord is the magic sentinel, followed by version then count.
+        uint32_t socketBlockVersion = 1;
+        uint32_t socketCount = firstWord;
+        if (firstWord == kSocketBlockMagic)
+        {
+            socketBlockVersion = endian::readLE<uint32_t>(file);
+            socketCount = endian::readLE<uint32_t>(file);
+        }
+
         if (file.fail() || socketCount >= 256)
         {
             return true;
         }
+
+        const bool hasRotation = socketBlockVersion >= 2;
 
         outSkeleton.sockets.resize(socketCount);
         for (uint32_t s = 0; s < socketCount; ++s)
@@ -372,6 +398,14 @@ namespace resource
             socket.localPosition.x = endian::readLE<float>(file);
             socket.localPosition.y = endian::readLE<float>(file);
             socket.localPosition.z = endian::readLE<float>(file);
+
+            if (hasRotation)
+            {
+                socket.localRotation.w = endian::readLE<float>(file);
+                socket.localRotation.x = endian::readLE<float>(file);
+                socket.localRotation.y = endian::readLE<float>(file);
+                socket.localRotation.z = endian::readLE<float>(file);
+            }
 
             socket.boneIndex = outSkeleton.getBoneIndex(socket.targetBoneName);
 

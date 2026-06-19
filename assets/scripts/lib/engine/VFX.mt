@@ -124,6 +124,20 @@ public class VFX {
         _native_vfx_setInstancePosition(instanceId, x, y, z);
     }
 
+    // Attach a spawned instance to an entity socket. The instance follows the
+    // socket's world transform (position + rotation) each frame with no further
+    // scripting. The attachment auto-clears when the entity or socket becomes
+    // invalid, or when the instance is destroyed. Call detach to stop following.
+    public static function attachToSocket(int instanceId, int parentEntityId, string socketName): void {
+        _native_vfx_attachToSocket(instanceId, parentEntityId, socketName);
+    }
+
+    // Stop a spawned instance from following its socket. The instance stays at
+    // its last position.
+    public static function detach(int instanceId): void {
+        _native_vfx_detach(instanceId);
+    }
+
     // Check whether a spawned instance is still playing
     public static function instanceIsPlaying(int instanceId): bool {
         return _native_vfx_instanceIsPlaying(instanceId);

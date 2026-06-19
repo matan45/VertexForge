@@ -302,6 +302,8 @@ namespace serialization
         j["avoidanceQuality"] = agent.avoidanceQuality;
         j["separationWeight"] = agent.separationWeight;
         j["useCustomCosts"] = agent.useCustomCosts;
+        j["rootMotionDriven"] = agent.rootMotionDriven;
+        j["rootMotionSpeedScale"] = agent.rootMotionSpeedScale;
 
         if (agent.useCustomCosts)
         {
@@ -338,6 +340,10 @@ namespace serialization
             agent.separationWeight = it->get<float>();
         if (auto it = j.find("useCustomCosts"); it != j.end() && it->is_boolean())
             agent.useCustomCosts = it->get<bool>();
+        if (auto it = j.find("rootMotionDriven"); it != j.end() && it->is_boolean())
+            agent.rootMotionDriven = it->get<bool>();
+        if (auto it = j.find("rootMotionSpeedScale"); it != j.end() && it->is_number())
+            agent.rootMotionSpeedScale = it->get<float>();
 
         // Initialize all custom costs to 0 (use global default)
         for (int i = 0; i < 64; ++i)
@@ -356,6 +362,9 @@ namespace serialization
         // Reset runtime state
         agent.isActive = false;
         agent.crowdAgentIndex = -1;
+        agent.rootMotionPlanarDistance = 0.0f;
+        agent.rootMotionSpeedSmoothed = 0.0f;
+        agent.rootMotionFresh = false;
     }
 
     // ============================================

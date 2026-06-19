@@ -91,6 +91,14 @@ namespace types
 
         file.write(prefixData.data(), static_cast<std::streamsize>(prefixData.size()));
 
+        // Versioned socket block (VK-1402) — must mirror MeshSerializer::writeSocketData and
+        // MeshStreamHandle::readSocketDefinitions: magic + version precede the count, and
+        // version 2 appends a per-socket localRotation (w,x,y,z) after the position.
+        constexpr uint32_t kSocketBlockMagic = 0x534F4B32;   // 'SOK2'
+        constexpr uint32_t kSocketBlockVersion = 2;          // 2 = adds localRotation
+        resource::endian::writeLE<uint32_t>(file, kSocketBlockMagic);
+        resource::endian::writeLE<uint32_t>(file, kSocketBlockVersion);
+
         uint32_t socketCount = static_cast<uint32_t>(sockets.size());
         resource::endian::writeLE<uint32_t>(file, socketCount);
 
@@ -113,6 +121,11 @@ namespace types
             resource::endian::writeLE<float>(file, socket.localPosition.x);
             resource::endian::writeLE<float>(file, socket.localPosition.y);
             resource::endian::writeLE<float>(file, socket.localPosition.z);
+
+            resource::endian::writeLE<float>(file, socket.localRotation.w);
+            resource::endian::writeLE<float>(file, socket.localRotation.x);
+            resource::endian::writeLE<float>(file, socket.localRotation.y);
+            resource::endian::writeLE<float>(file, socket.localRotation.z);
         }
 
         if (file.fail())

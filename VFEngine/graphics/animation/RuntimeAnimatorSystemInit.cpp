@@ -81,6 +81,7 @@ namespace animation
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {
+                editPreviewDirty = true;
                 if (!notification.animatorPath.empty())
                     return;
 
@@ -95,6 +96,7 @@ namespace animation
         editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification&)
             {
+                editPreviewDirty = true;
                 clearAnimatorInstances();
                 dataCache.clearSkeletons();
                 pendingCacheCleanup = true;
@@ -108,6 +110,7 @@ namespace animation
         socketDataSavedToken = dispatcher.subscribe<events::socket::SocketDataSavedNotification>(
             [this](const events::socket::SocketDataSavedNotification& notification)
             {
+                editPreviewDirty = true;
                 dataCache.invalidateSkeleton(notification.meshPath);
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto view = registry.view<components::SocketAttachmentComponent>();
@@ -146,6 +149,7 @@ namespace animation
         sectorLoadedToken = dispatcher.subscribe<events::world::SectorLoadedNotification>(
             [this](const events::world::SectorLoadedNotification&)
             {
+                editPreviewDirty = true;
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto view = registry.view<components::MeshComponent>();
                 std::lock_guard<std::mutex> lock(pendingInitMutex);
@@ -160,6 +164,7 @@ namespace animation
         sectorUnloadedToken = dispatcher.subscribe<events::world::SectorUnloadedNotification>(
             [this](const events::world::SectorUnloadedNotification&)
             {
+                editPreviewDirty = true;
                 auto& registry = scene::EntityRegistry::getRegistry();
                 std::vector<entt::entity> toRemove;
                 for (const auto& [entity, animator] : animators)
@@ -363,5 +368,6 @@ namespace animation
         AnimationLayerStack* rawPtr = layerStack.get();
         animators[entity] = std::move(layerStack);
         setupEntityAnimatorComponent(entity, rawPtr, animatorPath);
+        editPreviewDirty = true;
     }
 }

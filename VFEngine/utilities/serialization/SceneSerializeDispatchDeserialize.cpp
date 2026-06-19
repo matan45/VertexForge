@@ -383,6 +383,11 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::VolumetricAgentComponent>();
             deserializeVolumetricAgent(c["volumetricAgent"], comp);
         }
+        if (c.contains("prefabInstance"))
+        {
+            entity.addOrReplaceComponent<components::PrefabInstanceComponent>().sourcePrefabPath =
+                c["prefabInstance"].value("sourcePrefabPath", std::string(""));
+        }
     }
 
     void SceneSerialization::deserializeEntityComponents(const json& componentsJson, scene::Entity& entity)

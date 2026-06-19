@@ -239,6 +239,15 @@ namespace types
 
     void MeshSerializer::writeSocketData(std::ofstream& outFile, const std::vector<animator::SocketDefinition>& sockets) const
     {
+        // Versioned socket block (VK-1402): a magic sentinel + version precede the count so
+        // older readers (which expect a raw count < 256) are not confused and newer readers
+        // know a per-socket localRotation (w,x,y,z) follows the position. See
+        // MeshStreamHandle::readSocketDefinitions for the matching read logic.
+        constexpr uint32_t kSocketBlockMagic = 0x534F4B32;   // 'SOK2'
+        constexpr uint32_t kSocketBlockVersion = 2;          // 2 = adds localRotation
+        resource::endian::writeLE<uint32_t>(outFile, kSocketBlockMagic);
+        resource::endian::writeLE<uint32_t>(outFile, kSocketBlockVersion);
+
         uint32_t socketCount = static_cast<uint32_t>(sockets.size());
         resource::endian::writeLE<uint32_t>(outFile, socketCount);
 
@@ -264,6 +273,12 @@ namespace types
             resource::endian::writeLE<float>(outFile, socket.localPosition.x);
             resource::endian::writeLE<float>(outFile, socket.localPosition.y);
             resource::endian::writeLE<float>(outFile, socket.localPosition.z);
+
+            // Local rotation (w,x,y,z) — version 2+
+            resource::endian::writeLE<float>(outFile, socket.localRotation.w);
+            resource::endian::writeLE<float>(outFile, socket.localRotation.x);
+            resource::endian::writeLE<float>(outFile, socket.localRotation.y);
+            resource::endian::writeLE<float>(outFile, socket.localRotation.z);
         }
     }
 }

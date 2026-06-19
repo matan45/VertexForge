@@ -145,6 +145,7 @@ namespace windows
         void drawDetails(services::EntityHandle handle);
         void drawEntityName(services::EntityHandle handle, const std::string& currentName);
         void drawEntityActiveCheckbox(services::EntityHandle handle, bool isActive, bool isEffectivelyActive);
+        void drawPrefabControls(services::EntityHandle handle);
 
         void subscribeToEvents();
         void onSceneCleared();

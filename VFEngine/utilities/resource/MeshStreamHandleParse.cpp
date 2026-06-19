@@ -328,10 +328,27 @@ namespace resource
         // Try to read socket data (appended after skeleton)
         socketDataOffset = file.tellg() - baseOffset;
         std::streampos beforeSockets = socketDataOffset;
-        uint32_t socketCount = endian::readLE<uint32_t>(file);
+
+        // Versioned socket block (VK-1402): a versioned block begins with a magic sentinel
+        // (>> 256 so it cannot be mistaken for a legacy count) followed by a version, then
+        // the count. Version 2 stores a per-socket localRotation (4 floats) after the
+        // position. Legacy blocks begin directly with the count. Keep this skip logic in
+        // sync with MeshStreamHandle::readSocketDefinitions.
+        constexpr uint32_t kSocketBlockMagic = 0x534F4B32; // 'SOK2'
+        uint32_t firstWord = endian::readLE<uint32_t>(file);
+        uint32_t socketBlockVersion = 1;
+        uint32_t socketCount = firstWord;
+        if (!file.fail() && firstWord == kSocketBlockMagic)
+        {
+            socketBlockVersion = endian::readLE<uint32_t>(file);
+            socketCount = endian::readLE<uint32_t>(file);
+        }
+
         if (!file.fail() && socketCount < 256)
         {
             hasSockets = true;
+            const std::streamoff rotationBytes =
+                (socketBlockVersion >= 2) ? static_cast<std::streamoff>(4 * sizeof(float)) : 0;
             // Skip socket data for header parsing
             for (uint32_t s = 0; s < socketCount; ++s)
             {
@@ -345,8 +362,8 @@ namespace resource
                 if (boneNameLength > 1024 || file.fail()) { hasSockets = false; break; }
                 file.seekg(boneNameLength, std::ios::cur);
 
-                // position(3) = 3 floats
-                file.seekg(3 * sizeof(float), std::ios::cur);
+                // position(3) = 3 floats, plus rotation(4) floats for version >= 2
+                file.seekg(3 * sizeof(float) + rotationBytes, std::ios::cur);
 
                 if (file.fail()) { hasSockets = false; break; }
             }

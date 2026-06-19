@@ -124,6 +124,26 @@ namespace animation
         }
     }
 
+    void RuntimeAnimatorSystem::updateEditModePreview()
+    {
+        if (!editPreviewDirty)
+            return;
+
+        processPendingStreamingInits();
+        syncWithRegistry();
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (auto& [entity, anim] : animators)
+        {
+            if (!anim || !anim->isInitialized())
+                continue;
+            anim->evaluateRestPose();
+            applyIKPostProcess(entity, anim.get(), registry);
+        }
+
+        editPreviewDirty = false;
+    }
+
     bool RuntimeAnimatorSystem::isEntityInFrustum(entt::entity entity, entt::registry& registry) const
     {
         if (!cullingContext.enabled || !cullingContext.frustum.isInitialized())
@@ -181,6 +201,22 @@ namespace animation
             return;
 
         glm::vec3 delta = anim->consumeRootMotionDelta();
+
+        // VK-1408: for a root-motion-driven NavmeshAgent the detour crowd owns
+        // translation; root motion only sets the pace. Publish the per-frame planar
+        // distance (even when it is 0 on a loop wrap so the consumer's EMA sees it)
+        // and skip the transform write so the two writers no longer stack.
+        if (auto* navAgent = registry.try_get<components::NavmeshAgentComponent>(entity);
+            navAgent && navAgent->rootMotionDriven)
+        {
+            auto& transform = registry.get<components::TransformComponent>(entity);
+            const glm::vec3 scaled = delta * transform.scale;
+            navAgent->rootMotionPlanarDistance =
+                glm::length(glm::vec2(scaled.x, scaled.z)) * navAgent->rootMotionSpeedScale;
+            navAgent->rootMotionFresh = true;
+            return;
+        }
+
         if (delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f)
         {
             auto& transform = registry.get<components::TransformComponent>(entity);
@@ -224,6 +260,7 @@ namespace animation
 
     void RuntimeAnimatorSystem::destroyEntityAnimator(entt::entity entity)
     {
+        editPreviewDirty = true;
         auto it = animators.find(entity);
         if (it != animators.end())
         {

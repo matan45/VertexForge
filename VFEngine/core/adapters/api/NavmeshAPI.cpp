@@ -191,6 +191,30 @@ namespace core::api
                 return value::Value(std::monostate{});
             }});
 
+        interpreter->registerNativeFunction("_native_navmesh_setRootMotionDriven",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                events::navmesh::UpdateAgentConfigCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.rootMotionDriven = extractBool(args[1]) ? 1 : 0;
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        interpreter->registerNativeFunction("_native_navmesh_setRootMotionScale",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                events::navmesh::UpdateAgentConfigCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.rootMotionSpeedScale = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
         interpreter->registerNativeFunction("_native_navmesh_getAgentSpeed",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();

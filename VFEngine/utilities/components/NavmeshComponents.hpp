@@ -32,11 +32,29 @@ namespace components
         bool useCustomCosts = false;
         float customAreaCosts[64] = {};     // 0 = use global default; >0 = override
 
+        // Root-motion-driven locomotion (VK-1408): when true the detour crowd still
+        // paths/steers/avoids/stops, but the animation's root motion sets the ground
+        // speed (crowd maxSpeed) instead of the configured maxSpeed, so the two no
+        // longer stack into double movement. Requires applyRootMotion=true on the
+        // AnimatorComponent. Defaults off so existing units are unaffected.
+        bool rootMotionDriven = false;
+        // Multiplier on the root-motion ground speed for driven agents (1.0 = clip's
+        // native speed). Still clamped to maxSpeed, so raise maxSpeed too for >1 scales.
+        float rootMotionSpeedScale = 1.0f;
+
         // Runtime state (not serialized)
         bool isActive = false;
         bool isSuspended = false;
         int crowdAgentIndex = -1;
         uint8_t queryFilterIndex = 0;
+
+        // Root-motion pacing handoff (not serialized). The animator (frame-prep pass)
+        // writes the per-frame planar root-motion distance + sets rootMotionFresh; the
+        // navmesh pass (earlier in the frame) consumes it to drive crowd maxSpeed and
+        // clears the flag. rootMotionSpeedSmoothed is the EMA state.
+        float rootMotionPlanarDistance = 0.0f;
+        float rootMotionSpeedSmoothed = 0.0f;
+        bool rootMotionFresh = false;
 
         // Stored state for suspend/resume
         glm::vec3 suspendedPosition{0.0f};

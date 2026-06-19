@@ -21,7 +21,7 @@ namespace services
         void removeAgent(EntityHandle entity);
         void setAgentDestination(EntityHandle entity, const glm::vec3& target);
         void stopAgent(EntityHandle entity);
-        void updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration);
+        void updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration, int rootMotionDriven = -1, float rootMotionSpeedScale = -1.0f);
         glm::vec3 getAgentVelocity(EntityHandle entity) const;
         float getAgentSpeed(EntityHandle entity) const;
         void updatePositions(float deltaTime);

@@ -1,4 +1,5 @@
 #include "AnimationLayerStack.hpp"
+#include <glm/gtc/quaternion.hpp>
 
 namespace animation
 {
@@ -216,8 +217,9 @@ namespace animation
                     * skeletonData->bindPoses[socket.boneIndex]
                     * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 
-                outSocketModelTransforms[i] = glm::translate(glm::mat4(1.0f),
-                    boneMeshPos + socket.localPosition);
+                outSocketModelTransforms[i] =
+                    glm::translate(glm::mat4(1.0f), boneMeshPos + socket.localPosition)
+                    * glm::mat4_cast(socket.localRotation);
             }
             else
             {

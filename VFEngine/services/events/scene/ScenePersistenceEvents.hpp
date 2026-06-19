@@ -45,6 +45,14 @@ namespace events::scene {
         std::string_view getName() const override { return "LoadPrefab"; }
     };
 
+    // "Update Prefab": returns the source .vfPrefab an entity was instantiated from
+    // (or saved as), or "" if the entity is not a prefab instance.
+    struct GetPrefabSourcePathQuery : IQuery<std::string> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetPrefabSourcePath"; }
+    };
+
     // Editor copy/paste: serialize an entity subtree to prefab-format JSON text.
     // Returns an empty string for invalid entities or the scene root.
     struct CopyEntityToJsonQuery : IQuery<std::string> {

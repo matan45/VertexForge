@@ -185,8 +185,9 @@ namespace animation
                     * skeleton->bindPoses[socket.boneIndex]
                     * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
             }
-            socketModelTransform = glm::translate(glm::mat4(1.0f),
-                boneMeshPos + socket.localPosition);
+            socketModelTransform =
+                glm::translate(glm::mat4(1.0f), boneMeshPos + socket.localPosition)
+                * glm::mat4_cast(socket.localRotation);
         }
         else
         {
