@@ -59,6 +59,19 @@ public class Blackboard {
         return _native_bt_hasBehaviorTree(entityId);
     }
 
+    // Attach a behavior tree (.vfBehaviorTree) to an entity at runtime and return
+    // whether it loaded. Use for entities spawned during play (e.g. units produced
+    // from a building) that were not present at the Edit->Play transition. After
+    // attaching, seed blackboard keys and call setEnabled(id, true) to start ticking.
+    public static function attachTree(int entityId, string treePath): bool {
+        return _native_bt_attachTree(entityId, treePath);
+    }
+
+    // Detach (and stop) the entity's behavior tree, clearing its runtime + blackboard.
+    public static function detachTree(int entityId): void {
+        _native_bt_detachTree(entityId);
+    }
+
     public static function setEnabled(int entityId, bool enabled): void {
         _native_bt_setBehaviorTreeEnabled(entityId, enabled);
     }

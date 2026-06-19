@@ -207,6 +207,32 @@ namespace core::api
 
         // === Behavior Tree control ===
 
+        interpreter->registerNativeFunction("_native_bt_attachTree",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(false);
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(false);
+
+                events::ai::AttachBehaviorTreeCommand cmd;
+                cmd.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
+                cmd.treePath = extractString(args[1]);
+                return value::Value(dispatcher.execute(cmd));
+            }});
+
+        interpreter->registerNativeFunction("_native_bt_detachTree",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(std::monostate{});
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(std::monostate{});
+
+                events::ai::DetachBehaviorTreeCommand cmd;
+                cmd.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
         interpreter->registerNativeFunction("_native_bt_hasBehaviorTree",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();
