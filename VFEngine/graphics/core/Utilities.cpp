@@ -94,7 +94,7 @@ namespace core {
 		return commandBuffer;
 	}
 
-	void Utilities::endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence, std::source_location)
+	void Utilities::endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence)
 	{
 		commandBuffer->end();
 
@@ -128,7 +128,7 @@ namespace core {
 		}
 	}
 
-	void Utilities::endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence, std::source_location)
+	void Utilities::endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence)
 	{
 		commandBuffer->end();
 

@@ -1,6 +1,5 @@
 #pragma once
 #include <optional>
-#include <source_location>
 
 #include <vulkan/vulkan.hpp>
 // Vulkan validation layers + debug messenger. Decoupled from the build config:
@@ -83,18 +82,14 @@ namespace core
 
 		static vk::UniqueCommandBuffer beginSingleTimeCommands(const vk::Device& device,
 			const vk::CommandPool& commandPool);
-		// NOTE (queue threading diagnostics): this overload submits to the passed queue WITHOUT
-		// locking Device::graphicsQueueMutex. If called off the render thread (e.g. a job-system
-		// worker) while the frame submit runs, two threads use the same VkQueue -> validation
-		// THREADING ERROR -> DEVICE_LOST. The defaulted source_location captures the caller site
-		// so the log below pinpoints the offending call without touching any call site.
+		// Submits a one-time command buffer on the given queue. Serializes internally on the
+		// Device's graphics-queue mutex (see .cpp), so it is safe to call from job-system workers
+		// without racing the render thread's frame submit (VkQueue must not be used concurrently).
 		static void endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer,
-			const vk::Fence& renderFence = nullptr,
-			std::source_location loc = std::source_location::current());
+			const vk::Fence& renderFence = nullptr);
 
-		// Thread-safe version that locks the graphics queue mutex
+		// Thread-safe version that locks the graphics queue mutex and submits to the graphics queue.
 		static void endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer,
-			const vk::Fence& renderFence = nullptr,
-			std::source_location loc = std::source_location::current());
+			const vk::Fence& renderFence = nullptr);
 	};
 }
