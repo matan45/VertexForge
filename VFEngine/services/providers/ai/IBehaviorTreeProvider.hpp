@@ -2,6 +2,7 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../../utilities/behaviortree/BehaviorTreeTypes.hpp"
 #include <string>
+#include <vector>
 
 namespace services {
 
@@ -15,6 +16,10 @@ namespace services {
         virtual void setEnabled(EntityHandle entity, bool enabled) = 0;
         virtual bool hasTree(EntityHandle entity) const = 0;
         virtual std::string getTreePath(EntityHandle entity) const = 0;
+        // Every entity with a live runtime, regardless of how it was attached
+        // (ECS component at play start, or script attachTree during play). The
+        // debugger lists these — runtimes are the source of truth, not components.
+        virtual std::vector<EntityHandle> getAttachedEntities() const = 0;
         virtual bool isEnabled(EntityHandle entity) const = 0;
         virtual std::string getStatus(EntityHandle entity) const = 0;
 

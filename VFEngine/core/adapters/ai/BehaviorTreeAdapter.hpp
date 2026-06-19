@@ -30,6 +30,7 @@ namespace core
         void setEnabled(services::EntityHandle entity, bool enabled) override;
         bool hasTree(services::EntityHandle entity) const override;
         std::string getTreePath(services::EntityHandle entity) const override;
+        std::vector<services::EntityHandle> getAttachedEntities() const override;
         bool isEnabled(services::EntityHandle entity) const override;
         std::string getStatus(services::EntityHandle entity) const override;
 

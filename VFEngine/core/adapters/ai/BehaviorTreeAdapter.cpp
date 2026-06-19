@@ -141,6 +141,15 @@ namespace core
         return it != runtimes.end() ? it->second.treePath : "";
     }
 
+    std::vector<services::EntityHandle> BehaviorTreeAdapter::getAttachedEntities() const
+    {
+        std::vector<services::EntityHandle> result;
+        result.reserve(runtimes.size());
+        for (const auto& [entityId, _] : runtimes)
+            result.push_back(services::EntityHandle{entityId});
+        return result;
+    }
+
     bool BehaviorTreeAdapter::isEnabled(services::EntityHandle entity) const
     {
         auto it = runtimes.find(entity.id);
