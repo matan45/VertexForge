@@ -11,6 +11,7 @@
 #include <glm/glm.hpp>
 #include "../../services/data/RenderHookTypes.hpp"
 #include "../../services/data/CustomPipelineTypes.hpp"
+#include "../../services/data/PostProcessEffectTypes.hpp"
 #include "../../services/data/PluginTextureTypes.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/interfaces/audio/IAudioService.hpp"
@@ -159,6 +160,35 @@ namespace plugin {
 
         virtual void destroyCustomPipeline(CustomPipelineHandle handle) = 0;
         virtual void destroyCustomMesh(CustomMeshHandle handle) = 0;
+
+        // === Custom Post-Process Effects (API v13) ===
+        // Only available when hasCapability(capability::graphics) is true.
+        // Register a full-screen read-modify-write post-process effect: the plugin
+        // supplies a fragment shader that samples the scene HDR color and an analytic
+        // params block (<= MAX_POSTPROCESS_PARAMS_SIZE bytes). The engine prepends its
+        // own fullscreen-triangle vertex stage, owns the scene-color sampler, the
+        // ping-pong targets, every layout transition, and the chain ordering. No
+        // Vulkan object crosses the DLL boundary. The effect is ordered relative to the
+        // built-in tonemap via PostProcessEffectDesc::order (or customPriority). All
+        // handles are cleaned up automatically on plugin unload, and the effect is
+        // suppressed while the plugin is soft-disabled per-scene.
+        //
+        // The fragment shader must declare (see PostProcessEffectTypes.hpp):
+        //   layout(location = 0) in  vec2 texCoord;
+        //   layout(location = 0) out vec4 outColor;
+        //   layout(set = 0, binding = 0) uniform sampler2D inputTexture;
+        //   layout(push_constant) uniform PC { ... } pc;   // paramsSize bytes, optional
+        virtual PostProcessEffectHandle registerPostProcessEffect(const PostProcessEffectDesc& desc) = 0;
+
+        // Update the effect's analytic params (call each frame from onUpdate). `size`
+        // must not exceed the desc's paramsSize; extra bytes are ignored.
+        virtual void updatePostProcessEffectParams(PostProcessEffectHandle handle,
+                                                   const void* params, size_t size) = 0;
+
+        // Toggle the effect without unregistering (cheap; no shader recompile).
+        virtual void setPostProcessEffectEnabled(PostProcessEffectHandle handle, bool enabled) = 0;
+
+        virtual void unregisterPostProcessEffect(PostProcessEffectHandle handle) = 0;
 
         // === Plugin Textures ===
         // Only available when hasCapability(capability::graphics) is true.

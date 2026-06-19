@@ -42,6 +42,10 @@ namespace plugin {
         std::vector<std::string> registeredScriptFunctions;
         std::vector<plugin::CustomPipelineHandle> managedCustomPipelines;
         std::vector<plugin::CustomMeshHandle> managedCustomMeshes;
+        // VK-1409: post-process effects + the plugin's requested enabled state, so a
+        // per-scene reactivate restores intent (rather than blindly re-enabling).
+        struct ManagedPostProcessEffect { plugin::PostProcessEffectHandle handle; bool requestedEnabled; };
+        std::vector<ManagedPostProcessEffect> managedPostProcessEffects;
         std::vector<plugin::PluginTextureHandle> managedTextures;
         plugin::PluginTextureHandle boundWorldMaskTexture;
         plugin::WorldMaskParams lastWorldMaskParams;
@@ -88,6 +92,11 @@ namespace plugin {
                             const std::vector<std::byte>& pushConstants) override;
         void destroyCustomPipeline(plugin::CustomPipelineHandle handle) override;
         void destroyCustomMesh(plugin::CustomMeshHandle handle) override;
+        plugin::PostProcessEffectHandle registerPostProcessEffect(const plugin::PostProcessEffectDesc& desc) override;
+        void updatePostProcessEffectParams(plugin::PostProcessEffectHandle handle,
+                                           const void* params, size_t size) override;
+        void setPostProcessEffectEnabled(plugin::PostProcessEffectHandle handle, bool enabled) override;
+        void unregisterPostProcessEffect(plugin::PostProcessEffectHandle handle) override;
         plugin::PluginTextureHandle createTexture2D(uint32_t width, uint32_t height,
                                                     plugin::TextureFormat format) override;
         void updateTexture2D(plugin::PluginTextureHandle handle, const void* data, size_t size) override;
