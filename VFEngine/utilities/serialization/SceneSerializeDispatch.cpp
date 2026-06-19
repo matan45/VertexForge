@@ -173,6 +173,10 @@ namespace serialization
             out["volumetricNavVolume"] = serializeVolumetricNavVolume(entity.getComponent<components::VolumetricNavVolumeComponent>());
         if (entity.hasComponent<components::VolumetricAgentComponent>())
             out["volumetricAgent"] = serializeVolumetricAgent(entity.getComponent<components::VolumetricAgentComponent>());
+        if (entity.hasComponent<components::PrefabInstanceComponent>())
+            out["prefabInstance"] = {
+                {"sourcePrefabPath", entity.getComponent<components::PrefabInstanceComponent>().sourcePrefabPath}
+            };
     }
 
     json SceneSerialization::serializeEntityComponents(scene::Entity& entity)

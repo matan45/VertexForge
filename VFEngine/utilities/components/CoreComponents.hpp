@@ -77,6 +77,14 @@ namespace components
         std::string scenePath;
     };
 
+    // Records the source .vfPrefab a scene entity was instantiated from, so the
+    // editor can re-save ("Update Prefab") edits back onto that asset. Set on the
+    // instance root only; scene-serialized so the link survives save/load.
+    struct PrefabInstanceComponent
+    {
+        std::string sourcePrefabPath;
+    };
+
     struct TransformComponent
     {
         glm::vec3 position{0.0f};

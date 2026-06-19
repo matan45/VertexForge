@@ -75,6 +75,12 @@ namespace services
                 return loadPrefab(cmd.filePath, cmd.parent);
             });
 
+        dispatcher.registerQueryHandler<events::scene::GetPrefabSourcePathQuery>(
+            [this](const events::scene::GetPrefabSourcePathQuery& query)
+            {
+                return getPrefabSourcePath(query.entity);
+            });
+
         dispatcher.registerQueryHandler<events::scene::CopyEntityToJsonQuery>(
             [this](const events::scene::CopyEntityToJsonQuery& query)
             {
@@ -546,6 +552,11 @@ namespace services
 
         if (success)
         {
+            // Saving an entity as a prefab makes it an instance of that prefab —
+            // link it so it immediately becomes "Update Prefab"-able.
+            registry.emplace_or_replace<components::PrefabInstanceComponent>(
+                internal::fromHandle(entity)).sourcePrefabPath = filePath;
+
             events::scene::PrefabCreatedNotification notification;
             notification.filePath = filePath;
             notification.sourceEntity = entity;
@@ -575,6 +586,12 @@ namespace services
             auto handle = internal::toHandle(result->getHandle());
             auto& dispatcher = events::EventDispatcher::instance();
 
+            // Link the instantiated root back to its source asset so the editor can
+            // "Update Prefab" later. Root only — children are never self-linked.
+            scene::EntityRegistry::getRegistry()
+                .emplace_or_replace<components::PrefabInstanceComponent>(result->getHandle())
+                .sourcePrefabPath = filePath;
+
             acquireAndNotifyResources(*result);
 
             events::scene::PrefabInstantiatedNotification notification;
@@ -586,6 +603,23 @@ namespace services
         }
 
         return std::nullopt;
+    }
+
+    std::string ScenePersistenceService::getPrefabSourcePath(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return {};
+        }
+
+        entt::entity handle = internal::fromHandle(entity);
+        if (const auto* link = registry.try_get<components::PrefabInstanceComponent>(handle))
+        {
+            return link->sourcePrefabPath;
+        }
+
+        return {};
     }
 
     void ScenePersistenceService::acquireAndNotifyResources(scene::Entity& entity) const

@@ -1,7 +1,10 @@
 #include "EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include <imgui.h>
+#include <filesystem>
 
 namespace windows
 {
@@ -63,6 +66,7 @@ namespace windows
 
         drawEntityName(handle, entityDataOpt->name);
         drawEntityActiveCheckbox(handle, entityDataOpt->isActive, entityDataOpt->isEffectivelyActive);
+        drawPrefabControls(handle);
         ImGui::Separator();
 
         transformDrawer.draw(handle);
@@ -203,6 +207,40 @@ namespace windows
                 ImGui::SetTooltip("When disabled, the entity and all its components are inactive");
             }
         }
+    }
+
+    void EntityDetailsPanel::drawPrefabControls(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::scene::GetPrefabSourcePathQuery query;
+        query.entity = handle;
+        const std::string sourcePath = dispatcher.query(query).value_or(std::string());
+
+        if (sourcePath.empty())
+            return;
+
+        if (ImGui::Button("Update Prefab"))
+        {
+            events::scene::SavePrefabCommand cmd;
+            cmd.entity = handle;
+            cmd.filePath = sourcePath;
+            if (dispatcher.execute(cmd))
+            {
+                // Refresh the asset/thumbnail for the overwritten prefab
+                events::resource::AssetSavedNotification assetNotif;
+                assetNotif.filePath = sourcePath;
+                dispatcher.publish(assetNotif);
+            }
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Overwrite the source prefab with this instance:\n%s", sourcePath.c_str());
+        }
+
+        ImGui::SameLine();
+        const std::string fileName = std::filesystem::path(sourcePath).filename().string();
+        ImGui::TextDisabled("%s", fileName.c_str());
     }
 
     void EntityDetailsPanel::pushComponentHeaderStyle()

@@ -66,6 +66,10 @@ namespace services
         std::optional<EntityHandle> loadPrefab(const std::string& filePath,
                                                std::optional<EntityHandle> parent = std::nullopt);
 
+        // Returns the source .vfPrefab path an entity was instantiated from (or saved
+        // as), or "" if it has no PrefabInstanceComponent.
+        std::string getPrefabSourcePath(EntityHandle entity) const;
+
         // Editor copy/paste of entity subtrees (prefab-format JSON, in-memory)
         std::string copyEntityToJson(EntityHandle entity) const;
         std::optional<EntityHandle> instantiateEntityFromJson(const std::string& jsonText,
