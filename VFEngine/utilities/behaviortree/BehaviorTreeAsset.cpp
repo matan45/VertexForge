@@ -1,6 +1,7 @@
 #include "BehaviorTreeAsset.hpp"
 #include "../print/Log.hpp"
 #include "../resource/VFSHelpers.hpp"
+#include "../asset/AssetDatabase.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -315,6 +316,17 @@ namespace behaviortree
     static std::optional<json> readJsonFromFile(std::string_view path)
     {
         fs::path filePath(path);
+        if (!fs::exists(filePath)) {
+            // The path may be project-relative (e.g. "assets/behaviortrees/X.vfBehaviorTree"
+            // passed from a script's attachTree). The verbatim path is resolved against the
+            // process CWD, which is not the project root; resolve it through the project root
+            // the same way every other asset load does. Component-driven loads pass an
+            // already-resolved absolute path, so they hit the fast path above and are unaffected.
+            std::string resolved = asset::AssetDatabase::instance().resolveAssetPath(std::string(path));
+            if (!resolved.empty() && resolved != std::string(path)) {
+                filePath = fs::path(resolved);
+            }
+        }
         if (!fs::exists(filePath)) {
             vfLogError("Behavior tree file not found: {}", path);
             return std::nullopt;
