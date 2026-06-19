@@ -25,6 +25,7 @@
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/CustomPipelineAdapter.hpp"
+#include "../../adapters/render/PostProcessEffectAdapter.hpp"
 #include "../../adapters/render/PluginTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
@@ -75,6 +76,7 @@ namespace core
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         renderHookAdapter = std::make_unique<RenderHookAdapter>(offScreen.get());
         customPipelineAdapter = std::make_unique<CustomPipelineAdapter>(offScreen.get());
+        postProcessEffectAdapter = std::make_unique<PostProcessEffectAdapter>(offScreen.get());
         pluginTextureAdapter = std::make_unique<PluginTextureAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
         grassRenderAdapter = std::make_unique<adapters::GrassRenderAdapter>();

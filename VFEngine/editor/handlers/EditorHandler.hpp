@@ -39,6 +39,7 @@
 #include "interfaces/physics/IControllerService.hpp"
 #include "interfaces/render/IRenderHookService.hpp"
 #include "interfaces/render/ICustomPipelineService.hpp"
+#include "interfaces/render/IPostProcessEffectService.hpp"
 #include "interfaces/render/IPluginTextureService.hpp"
 #include "interfaces/render/IDebugDrawService.hpp"
 #include "interfaces/render/IBillboardRenderService.hpp"
@@ -136,6 +137,7 @@ namespace handlers {
 		std::shared_ptr<services::IKComponentService> ikComponentService;
 		std::shared_ptr<services::IRenderHookService> renderHookService;
 		std::shared_ptr<services::ICustomPipelineService> customPipelineService;
+		std::shared_ptr<services::IPostProcessEffectService> postProcessEffectService;
 		std::shared_ptr<services::IPluginTextureService> pluginTextureService;
 		std::shared_ptr<services::IDebugDrawService> debugDrawService;
 		std::shared_ptr<services::IAssetLifecycleService> assetLifecycleService;
