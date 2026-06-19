@@ -112,6 +112,10 @@ namespace render::gpudriven
         // Each (batch, shaderGroup) section gets equal share of commands
         this->commandsPerSection = commandsPerBatch / shaderGroupCount;
 
+        // Mirror the validated grid dimensions into the (Device-free) occupancy tracker so
+        // recomputeOccupancy()/sectionHasCandidates() index the same section grid.
+        occupancy.configure(batchCount, shaderGroupCount);
+
         if (!createBuffers())
         {
             vfLogError("IndirectBatchManager: Failed to allocate GPU buffers");
