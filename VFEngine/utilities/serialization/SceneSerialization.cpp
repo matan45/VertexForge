@@ -109,8 +109,8 @@ namespace serialization
         }
     }
 
-    void SceneSerialization::deserializeEntity(const json& entityJson, scene::Entity& entity,
-                                               DeserializeEntityContext& ctx)
+    void SceneSerialization::deserializeEntitySelf(const json& entityJson, scene::Entity& entity,
+                                                   DeserializeEntityContext& ctx)
     {
         std::string entityName = "Unnamed";
         if (entityJson.contains("name"))
@@ -149,6 +149,12 @@ namespace serialization
         {
             deserializeEntityComponents(entityJson["components"], entity);
         }
+    }
+
+    void SceneSerialization::deserializeEntity(const json& entityJson, scene::Entity& entity,
+                                               DeserializeEntityContext& ctx)
+    {
+        deserializeEntitySelf(entityJson, entity, ctx);
 
         if (entityJson.contains("children") && entityJson["children"].is_array())
         {
@@ -257,6 +263,183 @@ namespace serialization
             sceneGraph.clearScene();
             return false;
         }
+    }
+
+    namespace
+    {
+        // Enqueue an entity's children in reverse so the work stack pops them in
+        // original array order -> identical DFS pre-order to the recursive loader.
+        void pushChildrenReversed(IncrementalLoadState& state, const scene::Entity& parent,
+                                  const json& parentJson)
+        {
+            if (!parentJson.contains("children") || !parentJson["children"].is_array())
+            {
+                return;
+            }
+            const json& children = parentJson["children"];
+            for (auto it = children.rbegin(); it != children.rend(); ++it)
+            {
+                state.stack.push_back(IncrementalLoadState::WorkItem{parent, &(*it)});
+            }
+        }
+    }
+
+    bool SceneSerialization::beginIncrementalLoad(std::string_view filename,
+                                                  scene::SceneGraphSystem& sceneGraph,
+                                                  SceneLoadProgressCallback progressCallback,
+                                                  IncrementalLoadState& state)
+    {
+        state = IncrementalLoadState{};
+        state.sceneGraph = &sceneGraph;
+        state.progressCallback = progressCallback;
+
+        auto rawData = resource::readFileBytes(std::string(filename));
+
+        // Binary scenes have no incremental path yet - load synchronously.
+        if (BinarySceneSerialization::isBinaryScene(rawData))
+        {
+            state.success =
+                BinarySceneSerialization::loadBinarySceneInto(rawData, sceneGraph, filename, progressCallback);
+            state.finished = true;
+            return false;
+        }
+
+        json settingsJson;
+        try
+        {
+            if (!rawData.empty())
+            {
+                state.sceneJson = json::parse(rawData.begin(), rawData.end());
+            }
+
+            if (state.sceneJson.is_null() || !state.sceneJson.is_object() ||
+                !state.sceneJson.contains("root") || !state.sceneJson["root"].is_object())
+            {
+                vfLogError("Invalid scene file (incremental load): {}", filename);
+                state.finished = true;
+                return false;
+            }
+
+            if (!readLinkedSceneSettings(state.sceneJson, filename, settingsJson))
+            {
+                state.finished = true;
+                return false;
+            }
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("JSON parse error during incremental scene load: {}", e.what());
+            state.finished = true;
+            return false;
+        }
+
+        try
+        {
+            state.totalEntities = countEntities(state.sceneJson["root"]);
+
+            sceneGraph.clearScene();
+            if (!deserializeSceneSettings(settingsJson, sceneGraph))
+            {
+                vfLogError("Failed to deserialize linked scene settings (incremental): {}", filename);
+                sceneGraph.clearScene();
+                state.finished = true;
+                return false;
+            }
+
+            const json& rootJson = state.sceneJson["root"];
+            scene::Entity& root = sceneGraph.GetRoot();
+            DeserializeEntityContext ctx{sceneGraph, true, progressCallback,
+                                         state.entitiesLoaded, state.totalEntities};
+            deserializeEntitySelf(rootJson, root, ctx);
+
+            pushChildrenReversed(state, root, rootJson);
+
+            if (state.stack.empty())
+            {
+                resolveRenderTextureSourceNames();
+                state.finished = true;
+                state.success = true;
+                return false;
+            }
+            return true; // stepping required
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to begin incremental scene load: {}", e.what());
+            sceneGraph.clearScene();
+            state.finished = true;
+            return false;
+        }
+    }
+
+    bool SceneSerialization::stepIncrementalLoad(IncrementalLoadState& state, int maxEntitiesPerFrame)
+    {
+        if (state.finished || !state.sceneGraph)
+        {
+            return false;
+        }
+
+        const int budget = maxEntitiesPerFrame > 0 ? maxEntitiesPerFrame : 1;
+        int processed = 0;
+
+        try
+        {
+            while (!state.stack.empty() && processed < budget)
+            {
+                IncrementalLoadState::WorkItem item = state.stack.back();
+                state.stack.pop_back();
+
+                const json& childJson = *item.childJson;
+                if (!childJson.is_object())
+                {
+                    vfLogWarning("Skipping invalid child entry in scene file (not an object)");
+                    continue;
+                }
+
+                std::string childName = childJson.value("name", "Unnamed");
+                scene::Entity child(childName);
+                if (!child.isValid())
+                {
+                    vfLogError("Failed to create child entity '{}' during incremental scene load", childName);
+                    continue;
+                }
+
+                if (childJson.contains("uuid") && childJson["uuid"].is_number_unsigned())
+                {
+                    uint64_t uuidValue = childJson["uuid"].get<uint64_t>();
+                    child.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
+                }
+
+                scene::Entity parent = item.parent;
+                state.sceneGraph->addChild(parent, child);
+
+                DeserializeEntityContext ctx{*state.sceneGraph, false, state.progressCallback,
+                                             state.entitiesLoaded, state.totalEntities};
+                deserializeEntitySelf(childJson, child, ctx);
+
+                pushChildrenReversed(state, child, childJson);
+
+                ++processed;
+            }
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed during incremental scene load step: {}", e.what());
+            state.stack.clear();
+            state.sceneGraph->clearScene();
+            state.finished = true;
+            state.success = false;
+            return false;
+        }
+
+        if (state.stack.empty())
+        {
+            resolveRenderTextureSourceNames();
+            state.finished = true;
+            state.success = true;
+            return false;
+        }
+        return true;
     }
 
     bool SceneSerialization::loadSceneAdditive(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
