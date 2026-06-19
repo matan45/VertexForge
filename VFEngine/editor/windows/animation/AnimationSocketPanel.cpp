@@ -138,7 +138,9 @@ namespace windows::animation
 
             glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(socket.localRotation));
             float rot[3] = {eulerDeg.x, eulerDeg.y, eulerDeg.z};
-            if (ImGui::DragFloat3("Rotation", rot, 0.5f))
+            // Unique ID suffix: the create-socket section also has a "Rotation"
+            // DragFloat3, and both can be visible at once (ImGui ID collision).
+            if (ImGui::DragFloat3("Rotation##socketEdit", rot, 0.5f))
             {
                 socket.localRotation = glm::quat(glm::radians(glm::vec3(rot[0], rot[1], rot[2])));
                 changed = true;
@@ -170,7 +172,7 @@ namespace windows::animation
             ImGui::TextDisabled("(Select a bone in the Skeleton panel)");
 
             float rot[3] = {newSocketEulerDeg.x, newSocketEulerDeg.y, newSocketEulerDeg.z};
-            if (ImGui::DragFloat3("Rotation", rot, 0.5f))
+            if (ImGui::DragFloat3("Rotation##socketNew", rot, 0.5f))
             {
                 newSocketEulerDeg = glm::vec3(rot[0], rot[1], rot[2]);
             }
