@@ -396,6 +396,15 @@ namespace core
             navCmd.entity = entity;
             navCmd.target = target;
             dispatcher.execute(navCmd);
+
+            // Defer the arrival check by one tick. The navmesh agent updates AFTER the
+            // behavior tree in the frame graph (Controllers -> BehaviorTrees -> Navmesh),
+            // so HasReachedDestination still reflects the PREVIOUS destination this frame.
+            // Checking it now would wrongly report "arrived" the instant a new move is
+            // issued (e.g. the return-home leg right after reaching the resource),
+            // collapsing the loop and pinning the agent in place. Let the agent act on
+            // the new destination first; arrival is evaluated on the next tick onward.
+            return BTNodeStatus::Running;
         }
 
         events::controller::HasReachedDestinationQuery reachedQuery;
