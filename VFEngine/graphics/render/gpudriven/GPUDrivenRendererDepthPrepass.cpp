@@ -145,6 +145,8 @@ namespace render::gpudriven
             {
                 for (uint32_t batch = 0; batch < batchCount; ++batch)
                 {
+                    if (!batchManager->sectionHasCandidates(batch, shaderGroup)) continue;
+
                     vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, shaderGroup);
                     vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, shaderGroup);
 

@@ -124,6 +124,8 @@ namespace render::gpudriven
         {
             for (uint32_t batch = 0; batch < batchCount; ++batch)
             {
+                if (!batchManager->sectionHasCandidates(batch, shaderGroup)) continue;
+
                 vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, shaderGroup);
                 vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, shaderGroup);
 
@@ -211,6 +213,8 @@ namespace render::gpudriven
 
         for (uint32_t batch = 0; batch < batchCount; ++batch)
         {
+            if (!batchManager->sectionHasCandidates(batch, SHADER_GROUP_TRANSPARENT)) continue;
+
             vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, SHADER_GROUP_TRANSPARENT);
             vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, SHADER_GROUP_TRANSPARENT);
 
@@ -294,6 +298,8 @@ namespace render::gpudriven
 
         for (uint32_t batch = 0; batch < batchCount; ++batch)
         {
+            if (!batchManager->sectionHasCandidates(batch, SHADER_GROUP_TRANSPARENT)) continue;
+
             vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, SHADER_GROUP_TRANSPARENT);
             vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, SHADER_GROUP_TRANSPARENT);
 
@@ -377,6 +383,8 @@ namespace render::gpudriven
 
         for (uint32_t batch = 0; batch < batchCount; ++batch)
         {
+            if (!batchManager->sectionHasCandidates(batch, SHADER_GROUP_BLEND)) continue;
+
             vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, SHADER_GROUP_BLEND);
             vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, SHADER_GROUP_BLEND);
 

@@ -186,6 +186,18 @@ namespace render::gpudriven
         }
 
         stats.totalObjects = currentObjectCount;
+
+        // Compute per-(batch, shaderGroup) occupancy so empty sections can skip their
+        // indirect draw. Identity-mapped in edit mode; in play mode slot indices over-mark
+        // inactive slots (safe superset, never under-marks). The RTT/minimap view renders the
+        // same object set via the same batchManager, so this single pass covers it too.
+        if (batchManager && mergedBuffer)
+        {
+            const uint32_t occCount = mergedBuffer->isPersistentMode()
+                ? static_cast<uint32_t>(mergedBuffer->getCPUObjectData().size())
+                : mergedBuffer->getObjectCount();
+            batchManager->recomputeOccupancy(mergedBuffer->getCPUObjectData(), occCount);
+        }
     }
 
     void GPUDrivenRenderer::beginRTTContext(const RTTRenderContext& ctx, const RTTCameraParams& params)
