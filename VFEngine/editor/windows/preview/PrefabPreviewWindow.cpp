@@ -48,6 +48,7 @@ namespace windows
                     {"rigidBody", "RigidBody"},
                     {"script", "Script"},
                     {"navmeshAgent", "NavmeshAgent"},
+                    {"navmeshObstacle", "NavmeshObstacle"},
                     {"vfx", "VFX"},
                     {"socketAttachment", "SocketAttachment"},
                     {"socketOverride", "SocketOverride"},

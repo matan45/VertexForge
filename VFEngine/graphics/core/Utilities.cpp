@@ -1,8 +1,10 @@
 #include "Utilities.hpp"
 #include "Device.hpp"
+#include "VulkanContext.hpp"
 #include "print/Log.hpp"
 #include <thread>
 #include <sstream>
+#include <mutex>
 
 namespace core {
 
@@ -111,18 +113,31 @@ namespace core {
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &(*commandBuffer);
 
-		// Queue-threading diagnostic: this path does NOT lock graphicsQueueMutex. Logging the
-		// caller site + thread lets us catch an off-render-thread submit racing the frame submit
-		// (THREADING ERROR -> DEVICE_LOST). Warning level so it stands out in the console.
-		vfLogWarning("[QUEUE-DIAG] UNGUARDED raw-queue endSingleTimeCommands submit on thread {} from {}:{} ({})",
-			currentThreadIdStr(), loc.file_name(), loc.line(), loc.function_name());
+		// This overload used to submit without holding Device::graphicsQueueMutex. When called
+		// from a job-system worker (e.g. BufferUtilities::copyToBuffer uploading the navmesh
+		// debug overlay) concurrently with the render thread's frame submit, the same VkQueue was
+		// used from two threads -> validation THREADING ERROR -> DEVICE_LOST. Serialize via the
+		// same graphics-queue mutex the render/present paths use. All production callers pass the
+		// graphics queue; a null global device (e.g. CPU tests) falls back to an unlocked submit.
+		Device* dev = VulkanContext::getDeviceRaw();
+		vfLogDebug("[QUEUE-DIAG] endSingleTimeCommands submit on thread {} from {}:{}",
+			currentThreadIdStr(), loc.file_name(), loc.line());
 
-		try {
-			queue.submit(submitInfo, renderFence);
-			queue.waitIdle();
-		}
-		catch (const vk::SystemError& err) {
-			vfLogError("Failed to submit command buffer: {}", err.what());
+		auto doSubmit = [&]() {
+			try {
+				queue.submit(submitInfo, renderFence);
+				queue.waitIdle();
+			}
+			catch (const vk::SystemError& err) {
+				vfLogError("Failed to submit command buffer: {}", err.what());
+			}
+		};
+
+		if (dev) {
+			std::lock_guard<std::mutex> lock(dev->getGraphicsQueueMutex());
+			doSubmit();
+		} else {
+			doSubmit();
 		}
 	}
 
