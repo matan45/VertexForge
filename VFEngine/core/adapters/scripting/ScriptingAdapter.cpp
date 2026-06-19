@@ -195,6 +195,12 @@ namespace core
         {
             vfLogInfo("[ScriptingAdapter] Building scripts from manifest: {}", manifestPath);
 
+            // Relative script paths (e.g. a behavior-tree ScriptTask's "game/ai/X.mt")
+            // resolve against the manifest's directory (the script source root). Scene
+            // ScriptComponents store absolute paths and are unaffected — loadScript falls
+            // back to the verbatim path when the joined path doesn't exist.
+            scriptLibraryPath = std::filesystem::path(manifestPath).parent_path().string();
+
             cleanScripts(manifestPath);
 
             project::ProjectConfigParser parser;
@@ -296,6 +302,11 @@ namespace core
 
         try
         {
+            // Mirror buildScripts: relative script paths resolve against the script
+            // source root (the manifest's directory) even when loading a prebuilt lib
+            // without a fresh build (e.g. on project open).
+            scriptLibraryPath = std::filesystem::path(manifestPath).parent_path().string();
+
             std::string libraryPath = getLibraryPath(manifestPath);
 
             if (!std::filesystem::exists(libraryPath))
