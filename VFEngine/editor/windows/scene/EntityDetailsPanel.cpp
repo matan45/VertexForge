@@ -215,7 +215,9 @@ namespace windows
 
         events::scene::GetPrefabSourcePathQuery query;
         query.entity = handle;
-        const std::string sourcePath = dispatcher.query(query).value_or(std::string());
+        // query() returns the IQuery result type directly (std::string here);
+        // the handler returns "" when the entity is not a prefab instance.
+        const std::string sourcePath = dispatcher.query(query);
 
         if (sourcePath.empty())
             return;
