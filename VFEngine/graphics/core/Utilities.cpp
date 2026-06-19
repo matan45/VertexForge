@@ -1,8 +1,20 @@
 #include "Utilities.hpp"
 #include "Device.hpp"
 #include "print/Log.hpp"
+#include <thread>
+#include <sstream>
 
 namespace core {
+
+	namespace {
+		// Stringify the current OS thread for the queue-threading diagnostics below.
+		std::string currentThreadIdStr() {
+			std::ostringstream oss;
+			oss << std::this_thread::get_id();
+			return oss.str();
+		}
+	}
+
 
 	QueueFamilyIndices Utilities::findQueueFamiliesFromDevice(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface)
 	{
@@ -91,13 +103,19 @@ namespace core {
 		return commandBuffer;
 	}
 
-	void Utilities::endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence)
+	void Utilities::endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence, std::source_location loc)
 	{
 		commandBuffer->end();
 
 		vk::SubmitInfo submitInfo{};
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &(*commandBuffer);
+
+		// Queue-threading diagnostic: this path does NOT lock graphicsQueueMutex. Logging the
+		// caller site + thread lets us catch an off-render-thread submit racing the frame submit
+		// (THREADING ERROR -> DEVICE_LOST). Warning level so it stands out in the console.
+		vfLogWarning("[QUEUE-DIAG] UNGUARDED raw-queue endSingleTimeCommands submit on thread {} from {}:{} ({})",
+			currentThreadIdStr(), loc.file_name(), loc.line(), loc.function_name());
 
 		try {
 			queue.submit(submitInfo, renderFence);
@@ -108,13 +126,18 @@ namespace core {
 		}
 	}
 
-	void Utilities::endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence)
+	void Utilities::endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence, std::source_location loc)
 	{
 		commandBuffer->end();
 
 		vk::SubmitInfo submitInfo{};
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &(*commandBuffer);
+
+		// Guarded path (locks graphicsQueueMutex). Logged at debug level so we can still see
+		// which thread/site used the queue when correlating against the unguarded warnings.
+		vfLogDebug("[QUEUE-DIAG] guarded endSingleTimeCommands submit on thread {} from {}:{} ({})",
+			currentThreadIdStr(), loc.file_name(), loc.line(), loc.function_name());
 
 		try {
 			device.submitGraphics(submitInfo, renderFence);

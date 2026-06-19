@@ -7,7 +7,7 @@
     ],
     "dependencies": [],
     "description": "Sample plugin custom post-process effects (VK-1409): a before-tonemap exposure/contrast pass on linear HDR and an after-tonemap color grade, tuned live from Plugins > Post-Process FX",
-    "enabled": false,
+    "enabled": true,
     "library": "PostProcessFX.dll",
     "loadOrder": 120,
     "name": "PostProcessFX",
