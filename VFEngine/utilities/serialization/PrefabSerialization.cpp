@@ -145,6 +145,14 @@ namespace serialization
             out["ikTarget"] = SceneSerialization::serializeIKTarget(
                 entity.getComponent<components::IKTargetComponent>());
         }
+
+        // Script components must be baked into prefabs so instantiated entities
+        // carry their @Script behavior (the scene serializer handles this too).
+        if (entity.hasComponent<components::ScriptComponent>())
+        {
+            out["script"] = SceneSerialization::serializeScript(
+                entity.getComponent<components::ScriptComponent>());
+        }
     }
 
     void PrefabSerialization::serializeUIComponents(const scene::Entity& entity, json& out)
@@ -440,6 +448,12 @@ namespace serialization
         {
             auto& ikTargetComp = entity.addOrReplaceComponent<components::IKTargetComponent>();
             SceneSerialization::deserializeIKTarget(componentsJson["ikTarget"], ikTargetComp);
+        }
+
+        if (componentsJson.contains("script"))
+        {
+            auto& scriptComp = entity.addOrReplaceComponent<components::ScriptComponent>();
+            SceneSerialization::deserializeScript(componentsJson["script"], scriptComp);
         }
     }
 
