@@ -195,6 +195,19 @@ namespace services
     {
         pendingLoadPath.reset();
         while (!pendingAdditiveLoads.empty()) pendingAdditiveLoads.pop();
+
+        // Abort an in-progress incremental load so the transition flag doesn't
+        // stay stuck (already-spawned entities are left for the next load/newScene
+        // to clear, same as cancelling any deferred load mid-way).
+        if (incrementalActive)
+        {
+            incrementalActive = false;
+            if (incrementalState)
+            {
+                *incrementalState = serialization::IncrementalLoadState{};
+            }
+            scene::EntityRegistry::setSceneTransitioning(false);
+        }
     }
 
     bool ScenePersistenceService::newScene()
