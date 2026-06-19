@@ -101,6 +101,12 @@ public class Navmesh {
         _native_navmesh_setAgentAcceleration(entityId, accel);
     }
 
+    // Enable/disable root-motion-driven locomotion: the animation's root motion sets
+    // the agent's ground speed while nav still paths/steers/avoids/stops (VK-1408).
+    public static function setRootMotionDriven(int entityId, bool enabled): void {
+        _native_navmesh_setRootMotionDriven(entityId, enabled);
+    }
+
     // Get the current max speed of an entity's NavmeshAgent
     public static function getSpeed(int entityId): float {
         return _native_navmesh_getAgentSpeed(entityId);

@@ -4,6 +4,7 @@
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "navigation/RootMotionSpeed.hpp"
 #include "print/Log.hpp"
 #include <iterator>
 #include <unordered_set>
@@ -158,24 +159,38 @@ namespace services
         }
     }
 
-    void NavmeshAgentManager::updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration)
+    void NavmeshAgentManager::updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration,
+                                                int rootMotionDriven)
     {
-        // Persist onto the component first, so values set before the agent joins
-        // the crowd (lazy registration happens on the first setAgentDestination)
-        // survive and are read by addAgent when it finally registers.
+        // Persist onto the component first, so values set before the agent joins the
+        // crowd (lazy registration on first setAgentDestination) survive and are read
+        // by addAgent when it finally registers.
         auto& registry = scene::EntityRegistry::getRegistry();
         auto enttEntity = internal::fromHandle(entity);
+        bool disabledRootMotion = false;
+        float configuredSpeed = maxSpeed;
         if (registry.valid(enttEntity) && registry.all_of<components::NavmeshAgentComponent>(enttEntity))
         {
             auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
             if (maxSpeed >= 0.0f) agent.maxSpeed = maxSpeed;
             if (maxAcceleration >= 0.0f) agent.maxAcceleration = maxAcceleration;
+            if (rootMotionDriven >= 0)
+            {
+                const bool enable = (rootMotionDriven != 0);
+                disabledRootMotion = agent.rootMotionDriven && !enable;
+                agent.rootMotionDriven = enable;
+            }
+            configuredSpeed = agent.maxSpeed;
         }
 
         auto it = entityToAgentIndex.find(entity.id);
         if (it == entityToAgentIndex.end()) return;
 
         navmeshProvider->updateCrowdAgentParams(it->second, maxSpeed, maxAcceleration);
+
+        // When disabling root-motion pacing, restore the crowd to the configured maxSpeed.
+        if (disabledRootMotion)
+            navmeshProvider->updateCrowdAgentParams(it->second, configuredSpeed, -1.0f);
     }
 
     glm::vec3 NavmeshAgentManager::getAgentVelocity(EntityHandle entity) const
@@ -197,6 +212,39 @@ namespace services
         if (entityToAgentIndex.empty())
         {
             return;
+        }
+
+        // VK-1408: for root-motion-driven agents, set the crowd maxSpeed from the
+        // animation's per-frame ground speed BEFORE updateCrowd, so the clip paces the
+        // unit (no double-move, no foot slide). When the animator was frustum-culled
+        // this frame (no fresh sample), fall back to the configured maxSpeed.
+        {
+            auto& rmRegistry = scene::EntityRegistry::getRegistry();
+            for (const auto& [entityId, agentIdx] : entityToAgentIndex)
+            {
+                auto enttEntity = internal::fromHandle(EntityHandle{entityId});
+                if (!rmRegistry.valid(enttEntity) ||
+                    !rmRegistry.all_of<components::NavmeshAgentComponent>(enttEntity))
+                    continue;
+                auto& agent = rmRegistry.get<components::NavmeshAgentComponent>(enttEntity);
+                if (!agent.rootMotionDriven)
+                    continue;
+
+                float spd;
+                if (agent.rootMotionFresh)
+                {
+                    spd = navigation::computeRootMotionCrowdSpeed(
+                        agent.rootMotionPlanarDistance, deltaTime,
+                        agent.rootMotionSpeedSmoothed, agent.maxSpeed);
+                    agent.rootMotionFresh = false;
+                }
+                else
+                {
+                    spd = agent.maxSpeed;
+                    agent.rootMotionSpeedSmoothed = agent.maxSpeed;
+                }
+                navmeshProvider->updateCrowdAgentParams(agentIdx, spd, -1.0f);
+            }
         }
 
         navmeshProvider->updateCrowd(deltaTime);

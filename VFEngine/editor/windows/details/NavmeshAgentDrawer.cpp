@@ -41,6 +41,11 @@ namespace windows::details
             ImGui::PopItemWidth();
 
             ImGui::Spacing();
+            ImGui::Checkbox("Root Motion Driven##NavAgentRootMotion", &agent.rootMotionDriven);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Animation root motion sets ground speed (requires applyRootMotion=true on the Animator).");
+
+            ImGui::Spacing();
             ImGui::Text("Avoidance");
             ImGui::PushItemWidth(-1);
             int quality = agent.avoidanceQuality;
