@@ -160,7 +160,7 @@ namespace services
     }
 
     void NavmeshAgentManager::updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration,
-                                                int rootMotionDriven)
+                                                int rootMotionDriven, float rootMotionSpeedScale)
     {
         // Persist onto the component first, so values set before the agent joins the
         // crowd (lazy registration on first setAgentDestination) survive and are read
@@ -180,6 +180,7 @@ namespace services
                 disabledRootMotion = agent.rootMotionDriven && !enable;
                 agent.rootMotionDriven = enable;
             }
+            if (rootMotionSpeedScale >= 0.0f) agent.rootMotionSpeedScale = rootMotionSpeedScale;
             configuredSpeed = agent.maxSpeed;
         }
 

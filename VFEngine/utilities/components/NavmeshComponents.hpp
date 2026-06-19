@@ -38,6 +38,9 @@ namespace components
         // longer stack into double movement. Requires applyRootMotion=true on the
         // AnimatorComponent. Defaults off so existing units are unaffected.
         bool rootMotionDriven = false;
+        // Multiplier on the root-motion ground speed for driven agents (1.0 = clip's
+        // native speed). Still clamped to maxSpeed, so raise maxSpeed too for >1 scales.
+        float rootMotionSpeedScale = 1.0f;
 
         // Runtime state (not serialized)
         bool isActive = false;

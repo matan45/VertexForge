@@ -206,7 +206,7 @@ namespace services
         dispatcher.registerCommandHandler<events::navmesh::UpdateAgentConfigCommand>(
             [this](const events::navmesh::UpdateAgentConfigCommand& cmd)
             {
-                agentManager.updateAgentConfig(cmd.entity, cmd.maxSpeed, cmd.maxAcceleration, cmd.rootMotionDriven);
+                agentManager.updateAgentConfig(cmd.entity, cmd.maxSpeed, cmd.maxAcceleration, cmd.rootMotionDriven, cmd.rootMotionSpeedScale);
             });
 
         dispatcher.registerQueryHandler<events::navmesh::GetAgentVelocityQuery>(

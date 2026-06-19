@@ -107,6 +107,11 @@ public class Navmesh {
         _native_navmesh_setRootMotionDriven(entityId, enabled);
     }
 
+    // Multiplier on root-motion ground speed for a driven agent (1.0 = clip speed).
+    public static function setRootMotionScale(int entityId, float scale): void {
+        _native_navmesh_setRootMotionScale(entityId, scale);
+    }
+
     // Get the current max speed of an entity's NavmeshAgent
     public static function getSpeed(int entityId): float {
         return _native_navmesh_getAgentSpeed(entityId);

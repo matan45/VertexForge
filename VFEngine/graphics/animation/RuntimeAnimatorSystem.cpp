@@ -191,7 +191,8 @@ namespace animation
         {
             auto& transform = registry.get<components::TransformComponent>(entity);
             const glm::vec3 scaled = delta * transform.scale;
-            navAgent->rootMotionPlanarDistance = glm::length(glm::vec2(scaled.x, scaled.z));
+            navAgent->rootMotionPlanarDistance =
+                glm::length(glm::vec2(scaled.x, scaled.z)) * navAgent->rootMotionSpeedScale;
             navAgent->rootMotionFresh = true;
             return;
         }

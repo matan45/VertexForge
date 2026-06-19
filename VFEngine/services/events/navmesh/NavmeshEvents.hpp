@@ -64,6 +64,7 @@ namespace events::navmesh
         float maxSpeed = -1.0f;
         float maxAcceleration = -1.0f;
         int rootMotionDriven = -1;
+        float rootMotionSpeedScale = -1.0f;
         std::string_view getName() const override { return "UpdateAgentConfig"; }
     };
 
