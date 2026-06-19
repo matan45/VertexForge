@@ -13,9 +13,9 @@ namespace core {
 
 namespace render::gpudriven {
 
-    // Per-(batch, shaderGroup) occupancy bitmask: 1 if any CPU object maps to that section,
-    // else 0. Used to skip recording empty indirect draws. Kept free of any Device/GPU
-    // dependency so the section-skip logic is unit-testable on the CPU in isolation.
+    // Per-(batch, shaderGroup) occupancy array (one uint8_t per section): 1 if any CPU object
+    // maps to that section, else 0. Used to skip recording empty indirect draws. Kept free of any
+    // Device/GPU dependency so the section-skip logic is unit-testable on the CPU in isolation.
     //
     // Section indexing matches IndirectBatchManager::getSectionIndex():
     //   index = batch * shaderGroupCount + shaderGroup
@@ -119,8 +119,6 @@ namespace render::gpudriven {
         uint32_t getSectionIndex(uint32_t batch, uint32_t shaderGroup) const {
             return batch * shaderGroupCount + shaderGroup;
         }
-
-        void clearOccupancy() { occupancy.clear(); }
 
         // Delegates to SectionOccupancy::recompute. See that struct for the indexing/superset
         // contract. occupancy is configured with this manager's batch/shaderGroup counts in init().
