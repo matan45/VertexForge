@@ -55,6 +55,7 @@ namespace windows
                     {"pointLight", "PointLight"},
                     {"spotLight", "SpotLight"},
                     {"controller", "Controller"},
+                    {"behaviorTree", "BehaviorTree"},
                     {"prefabInstance", "PrefabInstance"}
                 };
 
