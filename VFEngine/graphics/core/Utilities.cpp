@@ -2,20 +2,9 @@
 #include "Device.hpp"
 #include "VulkanContext.hpp"
 #include "print/Log.hpp"
-#include <thread>
-#include <sstream>
 #include <mutex>
 
 namespace core {
-
-	namespace {
-		// Stringify the current OS thread for the queue-threading diagnostics below.
-		std::string currentThreadIdStr() {
-			std::ostringstream oss;
-			oss << std::this_thread::get_id();
-			return oss.str();
-		}
-	}
 
 
 	QueueFamilyIndices Utilities::findQueueFamiliesFromDevice(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface)
@@ -105,7 +94,7 @@ namespace core {
 		return commandBuffer;
 	}
 
-	void Utilities::endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence, std::source_location loc)
+	void Utilities::endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence, std::source_location)
 	{
 		commandBuffer->end();
 
@@ -120,8 +109,6 @@ namespace core {
 		// same graphics-queue mutex the render/present paths use. All production callers pass the
 		// graphics queue; a null global device (e.g. CPU tests) falls back to an unlocked submit.
 		Device* dev = VulkanContext::getDeviceRaw();
-		vfLogDebug("[QUEUE-DIAG] endSingleTimeCommands submit on thread {} from {}:{}",
-			currentThreadIdStr(), loc.file_name(), loc.line());
 
 		auto doSubmit = [&]() {
 			try {
@@ -141,18 +128,13 @@ namespace core {
 		}
 	}
 
-	void Utilities::endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence, std::source_location loc)
+	void Utilities::endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence, std::source_location)
 	{
 		commandBuffer->end();
 
 		vk::SubmitInfo submitInfo{};
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &(*commandBuffer);
-
-		// Guarded path (locks graphicsQueueMutex). Logged at debug level so we can still see
-		// which thread/site used the queue when correlating against the unguarded warnings.
-		vfLogDebug("[QUEUE-DIAG] guarded endSingleTimeCommands submit on thread {} from {}:{} ({})",
-			currentThreadIdStr(), loc.file_name(), loc.line(), loc.function_name());
 
 		try {
 			device.submitGraphics(submitInfo, renderFence);
