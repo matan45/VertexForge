@@ -5,7 +5,9 @@
 
 namespace threading {
 
-	class TaskGraphBuilder {
+#pragma warning(push)
+#pragma warning(disable: 4251) // std::unique_ptr<BuilderImpl> member crossing the DLL boundary
+	class VF_THREADING_API TaskGraphBuilder {
 	public:
 		TaskGraphBuilder();
 		~TaskGraphBuilder();
@@ -30,5 +32,6 @@ namespace threading {
 		struct BuilderImpl;
 		std::unique_ptr<BuilderImpl> pImpl;
 	};
+#pragma warning(pop)
 
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "CancellationToken.hpp"
+#include "ThreadingExport.hpp"
 
 #include <future>
 #include <functional>
@@ -23,7 +24,9 @@ namespace threading {
 
 	// Lightweight, copyable token referring to a submitted job (see submitJob/then/whenAll).
 	// A default-constructed handle is invalid and reports complete.
-	class JobHandle {
+#pragma warning(push)
+#pragma warning(disable: 4251) // STL members crossing the DLL boundary (shared_ptr/unique_ptr/function)
+	class VF_THREADING_API JobHandle {
 	public:
 		JobHandle() = default;
 
@@ -40,7 +43,7 @@ namespace threading {
 		std::shared_ptr<JobControl> control;
 	};
 
-	class JobSystem {
+	class VF_THREADING_API JobSystem {
 	public:
 		static JobSystem& instance();
 
@@ -144,5 +147,6 @@ namespace threading {
 		struct Impl;
 		std::unique_ptr<Impl> pImpl;
 	};
+#pragma warning(pop)
 
 }
