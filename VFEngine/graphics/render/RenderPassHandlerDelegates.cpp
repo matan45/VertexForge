@@ -267,6 +267,16 @@ namespace render
         }
     }
 
+    void RenderPassHandler::updateBillboards(
+        std::vector<render::gpudriven::BillboardInstanceGPU> instances,
+        const std::vector<std::string>& texturePaths)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->updateBillboards(std::move(instances), texturePaths);
+        }
+    }
+
     void RenderPassHandler::setDecalRenderingEnabled(bool enabled)
     {
         decalRenderingEnabled = enabled;

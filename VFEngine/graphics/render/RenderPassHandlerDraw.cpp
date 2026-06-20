@@ -651,7 +651,7 @@ namespace render
             waterFuture = threading::JobSystem::instance().submit([&]() {
                 waterCmd = sceneThreadPoolManager->getSecondary(3, imageIndex);
                 setupSecondary(waterCmd);
-                gpuDrivenRenderer->renderBillboardDraw(waterCmd, iblDescriptorSet);
+                gpuDrivenRenderer->renderBillboardDraw(waterCmd, iblDescriptorSet, currentTime);
                 waterCmd.end();
             }, threading::JobPriority::HIGH);
         }
@@ -719,7 +719,7 @@ namespace render
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
 
             if (hasBillboards)
-                gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
+                gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet, currentTime);
 
             if (hasCustomShaderMeshes)
                 meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
@@ -801,7 +801,7 @@ namespace render
         }
 
         if (gpuDrivenRenderer->isBillboardRenderingEnabled())
-            gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
+            gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet, currentTime);
 
         if (hasCustomShaderMeshes)
             meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);

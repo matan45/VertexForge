@@ -97,6 +97,8 @@ namespace controllers::offscreen
     private:
         std::vector<render::billboard::BillboardRenderData> gatherBillboardData(const FrameContext& ctx);
         std::vector<render::text::TextRenderData> gatherTextData(const FrameContext& ctx);
+        // Phase 2: gather worldMarker billboards and feed the GPU mesh-shader path.
+        void prepareGPUBillboards(const FrameContext& ctx);
         void prepareDecals(const FrameContext& ctx);
 
     public:

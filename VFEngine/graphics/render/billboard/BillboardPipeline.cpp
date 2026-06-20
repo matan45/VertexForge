@@ -345,10 +345,10 @@ namespace render::billboard
     }
 
     void BillboardPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                                            const glm::vec3& cameraPos)
+                                            const glm::vec3& cameraPos, float time)
     {
         cameraPos_ = cameraPos;
-        bufferManager.updateCameraUBO(view, projection, cameraPos);
+        bufferManager.updateCameraUBO(view, projection, cameraPos, time);
     }
 
     void BillboardPipeline::setBillboardList(const std::vector<BillboardRenderData>& billboards)

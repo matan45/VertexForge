@@ -100,6 +100,16 @@ namespace services {
         else
             data.renderTextureSource = EntityHandle::invalid();
         data.renderTextureSourceName = comp.renderTextureSourceName;
+        data.flipbookColumns = comp.flipbookColumns;
+        data.flipbookRows = comp.flipbookRows;
+        data.flipbookFrameRate = comp.flipbookFrameRate;
+        data.scrollU = comp.scrollU;
+        data.scrollV = comp.scrollV;
+        data.pulseAmplitude = comp.pulseAmplitude;
+        data.pulseFrequency = comp.pulseFrequency;
+        data.spinSpeed = comp.spinSpeed;
+        data.animStartTime = comp.animStartTime;
+        data.worldMarker = comp.worldMarker;
         return data;
     }
 
@@ -123,6 +133,16 @@ namespace services {
         comp.size = billboardData.size;
         comp.colorTint = billboardData.colorTint;
         comp.renderTextureSourceName = billboardData.renderTextureSourceName;
+        comp.flipbookColumns = billboardData.flipbookColumns;
+        comp.flipbookRows = billboardData.flipbookRows;
+        comp.flipbookFrameRate = billboardData.flipbookFrameRate;
+        comp.scrollU = billboardData.scrollU;
+        comp.scrollV = billboardData.scrollV;
+        comp.pulseAmplitude = billboardData.pulseAmplitude;
+        comp.pulseFrequency = billboardData.pulseFrequency;
+        comp.spinSpeed = billboardData.spinSpeed;
+        comp.animStartTime = billboardData.animStartTime;
+        comp.worldMarker = billboardData.worldMarker;
         // Resolve renderTextureSourceName → entity handle
         comp.renderTextureSource = entt::null;
         if (!comp.renderTextureSourceName.empty()) {

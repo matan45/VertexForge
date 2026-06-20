@@ -296,6 +296,18 @@ namespace services
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         EntityHandle renderTextureSource;
         std::string renderTextureSourceName;
+
+        // Animation (Phase 1). Defaults render identically to a static billboard.
+        uint32_t flipbookColumns = 1;
+        uint32_t flipbookRows = 1;
+        float flipbookFrameRate = 0.0f;
+        float scrollU = 0.0f;
+        float scrollV = 0.0f;
+        float pulseAmplitude = 0.0f;
+        float pulseFrequency = 0.0f;
+        float spinSpeed = 0.0f;
+        float animStartTime = 0.0f;
+        bool worldMarker = false;
     };
 
     struct DecalData

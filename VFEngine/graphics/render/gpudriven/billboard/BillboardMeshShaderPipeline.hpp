@@ -57,7 +57,7 @@ namespace render::gpudriven
 
         void updateSharedDescriptors(vk::DescriptorSet bindlessTextureDescSet);
 
-        void dispatch(vk::CommandBuffer cmd, uint32_t instanceCount);
+        void dispatch(vk::CommandBuffer cmd, uint32_t instanceCount, float time);
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
 

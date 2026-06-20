@@ -42,7 +42,7 @@ namespace render::billboard
     }
 
     void BillboardBufferManager::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                                                  const glm::vec3& cameraPos) const
+                                                  const glm::vec3& cameraPos, float time) const
     {
         if (externalCameraBuffer) return;
 
@@ -50,7 +50,7 @@ namespace render::billboard
         ubo.view = view;
         ubo.projection = projection;
         ubo.cameraPos = cameraPos;
-        ubo.time = 0.0f;
+        ubo.time = time;
 
         if (cameraUBOAllocation.mappedPtr)
         {
@@ -85,6 +85,12 @@ namespace render::billboard
             instanceData[i].sizeMode = src.sizeMode;
             instanceData[i].entityId = src.entityId;
             instanceData[i].colorTint = src.colorTint;
+            instanceData[i].animParams0 = glm::vec4(
+                static_cast<float>(src.flipbookColumns), static_cast<float>(src.flipbookRows),
+                src.flipbookFrameRate, src.spinSpeed);
+            instanceData[i].animParams1 = glm::vec4(
+                src.scrollU, src.scrollV, src.pulseAmplitude, src.pulseFrequency);
+            instanceData[i].animStartTime = src.animStartTime;
         }
 
         vk::DeviceSize bufferSize = sizeof(BillboardInstanceData) * currentInstanceCount;
