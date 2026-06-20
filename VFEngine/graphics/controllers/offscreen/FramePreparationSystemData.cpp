@@ -33,6 +33,10 @@ namespace controllers::offscreen
             const auto& billboard = view.get<components::BillboardComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
+            // worldMarker billboards render exclusively through the GPU mesh-shader
+            // path (prepareGPUBillboards); skip them here to avoid double-rendering.
+            if (billboard.worldMarker) continue;
+
             if (billboard.editorOnly && !showEditorIcons) continue;
 
             render::billboard::BillboardRenderData renderData;
@@ -131,7 +135,8 @@ namespace controllers::offscreen
         for (auto entity : view)
         {
             const auto& billboard = view.get<components::BillboardComponent>(entity);
-            if (!billboard.worldMarker) continue;
+            // editorOnly==true is the "hidden" state for markers (Billboard::setVisible(false)).
+            if (!billboard.worldMarker || billboard.editorOnly) continue;
             if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
 
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);

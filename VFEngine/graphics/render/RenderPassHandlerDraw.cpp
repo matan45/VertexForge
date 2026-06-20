@@ -433,8 +433,11 @@ namespace render
         bool hasWaterToRender = gpuDrivenRenderer && gpuDrivenRenderer->isWaterRenderingEnabled()
             && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
 
+        bool hasBillboardsToRender = gpuDrivenRenderer && gpuDrivenRenderer->isBillboardRenderingEnabled();
+
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes
-            || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender || hasPluginDraws);
+            || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender || hasPluginDraws
+            || hasBillboardsToRender);
 
         updateGPUDrivenSceneData();
 
@@ -455,7 +458,7 @@ namespace render
 
         bool hasMeshesToRender = !currentMeshDrawList.empty();
 
-        if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender || hasPluginDraws)
+        if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender || hasPluginDraws || hasBillboardsToRender)
             && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
         {
             drawGPUDrivenMeshPassGraphManaged(commandBuffer, imageIndex, debugRendererPtr, hasCustomShaderMeshes, hasVFX);
