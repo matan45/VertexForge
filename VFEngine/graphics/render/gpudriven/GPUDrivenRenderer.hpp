@@ -754,7 +754,14 @@ namespace render::gpudriven
 
         // Billboard rendering
         void updateBillboards(const std::vector<BillboardInstanceGPU>& instances);
+        // Texture-resolving overload: texturePaths[i] is the .vfImage/texture path for
+        // instances[i] (empty = default texture). The bindless index is resolved here
+        // (where the bindless texture manager lives) and written into each instance
+        // before upload. Paths are resolved idempotently, so calling per-frame is cheap.
+        void updateBillboards(std::vector<BillboardInstanceGPU> instances,
+                              const std::vector<std::string>& texturePaths);
         void renderBillboardDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                  float time = 0.0f,
                                   uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void clearBillboardData();
         void setBillboardRenderingEnabled(bool enabled) { billboard.renderingEnabled = enabled; }

@@ -13,6 +13,7 @@
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include "common/SharedCameraUBO.hpp"
 #include "graph/RenderGraphTypes.hpp"
+#include "gpudriven/billboard/BillboardGPUTypes.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -454,6 +455,11 @@ namespace render
         void setTerrainTextureScale(float scale);
 
         void setBillboardRenderingEnabled(bool enabled);
+        // Feed GPU mesh-shader billboards (worldMarker billboards). texturePaths[i]
+        // pairs with instances[i] and is resolved to a bindless index inside the
+        // GPU-driven renderer. Safe to call per-frame.
+        void updateBillboards(std::vector<render::gpudriven::BillboardInstanceGPU> instances,
+                              const std::vector<std::string>& texturePaths);
 
         void setDecalRenderingEnabled(bool enabled);
         void setDecalDrawList(const std::vector<services::DecalRenderData>& decals);

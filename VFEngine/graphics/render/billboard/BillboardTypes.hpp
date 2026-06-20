@@ -51,7 +51,11 @@ namespace render::billboard
         glm::vec2 size;           // Size in pixels (screen-space) or world units
         uint32_t sizeMode;        // 0 = ScreenSpace, 1 = WorldSpace
         uint32_t entityId;        // Entity ID for picking
-        glm::vec4 colorTint;      
+        glm::vec4 colorTint;
+        glm::vec4 animParams0;    // x=cols y=rows z=frameRate w=spinSpeed
+        glm::vec4 animParams1;    // x=scrollU y=scrollV z=pulseAmp w=pulseFreq
+        float animStartTime;      // animation time origin (engine seconds)
+        float loopAnim;           // 1.0 = loop flipbook, 0.0 = play once then hold last frame
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -62,9 +66,9 @@ namespace render::billboard
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 8> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 4> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 8> attributes{};
 
             // location 2: worldPosition (vec3) + atlasIndex (float) packed as vec4
             attributes[0].binding = 1;
@@ -90,6 +94,30 @@ namespace render::billboard
             attributes[3].format = vk::Format::eR32G32B32A32Sfloat;
             attributes[3].offset = offsetof(BillboardInstanceData, colorTint);
 
+            // location 6: animParams0 (vec4) - x=cols y=rows z=frameRate w=spinSpeed
+            attributes[4].binding = 1;
+            attributes[4].location = 6;
+            attributes[4].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[4].offset = offsetof(BillboardInstanceData, animParams0);
+
+            // location 7: animParams1 (vec4) - x=scrollU y=scrollV z=pulseAmp w=pulseFreq
+            attributes[5].binding = 1;
+            attributes[5].location = 7;
+            attributes[5].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[5].offset = offsetof(BillboardInstanceData, animParams1);
+
+            // location 8: animStartTime (float)
+            attributes[6].binding = 1;
+            attributes[6].location = 8;
+            attributes[6].format = vk::Format::eR32Sfloat;
+            attributes[6].offset = offsetof(BillboardInstanceData, animStartTime);
+
+            // location 9: loopAnim (float) - 1.0 = loop, 0.0 = play once
+            attributes[7].binding = 1;
+            attributes[7].location = 9;
+            attributes[7].format = vk::Format::eR32Sfloat;
+            attributes[7].offset = offsetof(BillboardInstanceData, loopAnim);
+
             return attributes;
         }
     };
@@ -114,6 +142,19 @@ namespace render::billboard
         glm::vec4 colorTint;
         std::string texturePath; // Non-empty = use custom texture instead of atlas
         float atlasGridSize = 1.0f; // For impostor atlases: number of columns in grid
+
+        // Animation (Phase 1). Defaults render identically to a static billboard.
+        uint32_t flipbookColumns = 1;
+        uint32_t flipbookRows = 1;
+        float flipbookFrameRate = 0.0f;
+        float scrollU = 0.0f;
+        float scrollV = 0.0f;
+        float pulseAmplitude = 0.0f;
+        float pulseFrequency = 0.0f;
+        float spinSpeed = 0.0f;
+        float animStartTime = 0.0f;
+        bool loopAnimation = true; // flipbook: true=loop, false=play once then hold last frame
+        bool worldMarker = false;
     };
 
     // Atlas configuration

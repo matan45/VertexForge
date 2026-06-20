@@ -389,6 +389,55 @@ public class Physics {
     }
 
     // ============================================
+    // Spatial Overlap Queries (narrow-phase)
+    // ============================================
+    // Each returns an int[] of entity ids whose physics bodies overlap the shape
+    // (de-duplicated, empty if nothing overlaps). Useful for AoE damage, aggro
+    // ranges, trigger volumes and selection. Rate-limited per frame.
+
+    // Sphere centered at `center` with the given radius.
+    public static function overlapSphere(Vec3f center, float radius): int[] {
+        return _native_physics_overlapSphere(center.x, center.y, center.z, radius);
+    }
+
+    // Sphere overlap filtered by collision layer names (comma-separated, e.g. "Dynamic,Enemy").
+    public static function overlapSphere(Vec3f center, float radius, string layers): int[] {
+        return _native_physics_overlapSphere(center.x, center.y, center.z, radius, layers);
+    }
+
+    // Oriented box centered at `center` with the given half-extents and rotation.
+    public static function overlapBox(Vec3f center, Vec3f halfExtents, Quaternion rotation): int[] {
+        return _native_physics_overlapBox(center.x, center.y, center.z,
+            halfExtents.x, halfExtents.y, halfExtents.z,
+            rotation.x, rotation.y, rotation.z, rotation.w);
+    }
+
+    // Oriented box overlap filtered by collision layer names.
+    public static function overlapBox(Vec3f center, Vec3f halfExtents, Quaternion rotation,
+                                      string layers): int[] {
+        return _native_physics_overlapBox(center.x, center.y, center.z,
+            halfExtents.x, halfExtents.y, halfExtents.z,
+            rotation.x, rotation.y, rotation.z, rotation.w, layers);
+    }
+
+    // Capsule (Y-up) centered at `center`. halfHeight is half the cylinder length
+    // (excluding the hemispherical caps); radius is the cap/cylinder radius.
+    public static function overlapCapsule(Vec3f center, float halfHeight, float radius,
+                                          Quaternion rotation): int[] {
+        return _native_physics_overlapCapsule(center.x, center.y, center.z,
+            halfHeight, radius,
+            rotation.x, rotation.y, rotation.z, rotation.w);
+    }
+
+    // Capsule overlap filtered by collision layer names.
+    public static function overlapCapsule(Vec3f center, float halfHeight, float radius,
+                                          Quaternion rotation, string layers): int[] {
+        return _native_physics_overlapCapsule(center.x, center.y, center.z,
+            halfHeight, radius,
+            rotation.x, rotation.y, rotation.z, rotation.w, layers);
+    }
+
+    // ============================================
     // World Settings
     // ============================================
 

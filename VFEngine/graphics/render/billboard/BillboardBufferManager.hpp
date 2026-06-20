@@ -32,7 +32,7 @@ namespace render::billboard
         void cleanUp();
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                             const glm::vec3& cameraPos) const;
+                             const glm::vec3& cameraPos, float time) const;
 
         void updateInstanceBuffer(const std::vector<BillboardRenderData>& billboards);
 

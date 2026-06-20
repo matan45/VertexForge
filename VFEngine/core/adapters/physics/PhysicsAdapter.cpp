@@ -480,6 +480,56 @@ namespace core
         return physicsWorld->areBodiesInContact(bodyA, bodyB);
     }
 
+    std::vector<services::EntityHandle> PhysicsAdapter::overlapSphere(const glm::vec3& center,
+                                                                      float radius,
+                                                                      uint16_t layerMask) const
+    {
+        std::vector<services::EntityHandle> results;
+        if (!physicsWorld) return results;
+
+        auto ids = physicsWorld->overlapSphere(center, radius, layerMask);
+        results.reserve(ids.size());
+        for (uint64_t id : ids)
+        {
+            if (id != 0) results.push_back(services::EntityHandle{id});
+        }
+        return results;
+    }
+
+    std::vector<services::EntityHandle> PhysicsAdapter::overlapBox(const glm::vec3& center,
+                                                                   const glm::vec3& halfExtents,
+                                                                   const glm::quat& rotation,
+                                                                   uint16_t layerMask) const
+    {
+        std::vector<services::EntityHandle> results;
+        if (!physicsWorld) return results;
+
+        auto ids = physicsWorld->overlapBox(center, halfExtents, rotation, layerMask);
+        results.reserve(ids.size());
+        for (uint64_t id : ids)
+        {
+            if (id != 0) results.push_back(services::EntityHandle{id});
+        }
+        return results;
+    }
+
+    std::vector<services::EntityHandle> PhysicsAdapter::overlapCapsule(const glm::vec3& center,
+                                                                       float halfHeight, float radius,
+                                                                       const glm::quat& rotation,
+                                                                       uint16_t layerMask) const
+    {
+        std::vector<services::EntityHandle> results;
+        if (!physicsWorld) return results;
+
+        auto ids = physicsWorld->overlapCapsule(center, halfHeight, radius, rotation, layerMask);
+        results.reserve(ids.size());
+        for (uint64_t id : ids)
+        {
+            if (id != 0) results.push_back(services::EntityHandle{id});
+        }
+        return results;
+    }
+
     void PhysicsAdapter::applySettings(const types::PhysicsSettings& settings)
     {
         {

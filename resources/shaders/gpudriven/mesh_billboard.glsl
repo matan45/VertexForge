@@ -7,14 +7,15 @@ layout(triangles, max_vertices = 4, max_primitives = 2) out;
 
 struct BillboardInstance {
     vec4 positionAndScale;    // xyz = world position, w = uniform scale
-    vec4 atlasUVRect;         // xy = UV offset, zw = UV size
+    vec4 atlasUVRect;         // static: xy=UV offset, zw=UV size. animated: xy=scrollU/V, z=animStartTime
     vec4 colorTint;           // rgba
     uint bindlessTextureIndex;
     uint flags;
     uint entityId;
-    float rotation;
+    float rotation;           // static: radians. animated: spin rate (rad/sec)
     vec2 size;                // width, height in world units
-    uint padding[2];
+    float flipbookColsRows;   // encoded floor(cols)*256 + rows (animated only)
+    float flipbookFrameRate;  // frames/sec (animated only)
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer BillboardInstanceBuffer {
@@ -51,11 +52,17 @@ struct BillboardPayload {
 
 taskPayloadSharedEXT BillboardPayload payload;
 
+layout(push_constant) uniform Push {
+    float uTime; // animation time (seconds)
+} pc;
+
 layout(location = 0) out vec2 outUV[];
 layout(location = 1) out flat uint outTextureIndex[];
 layout(location = 2) out vec4 outColorTint[];
 
 const uint FLAG_AXIS_ALIGNED = 1u;
+const uint FLAG_ANIMATED = 2u;
+const uint FLAG_LOOP = 4u;
 
 void main() {
     uint tid = gl_LocalInvocationID.x;
@@ -93,9 +100,21 @@ void main() {
             up = camUp;
         }
 
-        if (inst.rotation != 0.0) {
-            float c = cos(inst.rotation);
-            float s = sin(inst.rotation);
+        bool animated = (inst.flags & FLAG_ANIMATED) != 0u;
+
+        // Animation time, measured from the per-instance start time stored in
+        // atlasUVRect.z (anchors play-once and matches the CPU billboard path's
+        // t = camera.time - animStartTime). Defaults (start=0) make t == pc.uTime.
+        float startT = animated ? inst.atlasUVRect.z : 0.0;
+        float t = pc.uTime - startT;
+
+        // Static: rotation is a fixed angle (radians). Animated: rotation is a spin
+        // rate (rad/sec) advanced by the animation time.
+        float effectiveRotation = animated ? (inst.rotation * t) : inst.rotation;
+
+        if (effectiveRotation != 0.0) {
+            float c = cos(effectiveRotation);
+            float s = sin(effectiveRotation);
             vec3 newRight = right * c + up * s;
             vec3 newUp = -right * s + up * c;
             right = newRight;
@@ -108,8 +127,44 @@ void main() {
         positions[2] = center - right * halfW + up * halfH;
         positions[3] = center + right * halfW + up * halfH;
 
-        vec2 uvOff = inst.atlasUVRect.xy;
-        vec2 uvSize = inst.atlasUVRect.zw;
+        // Determine the UV sub-rect. Non-animated: use atlasUVRect directly
+        // (offset.xy, size.zw). Animated: compute the flipbook frame sub-rect and add
+        // a time-based scroll (atlasUVRect.xy = scroll speed, units/sec). This mirrors
+        // render::computeFlipbookFrame in FlipbookMath.hpp.
+        vec2 uvOff;
+        vec2 uvSize;
+        if (animated) {
+            float colsF = floor(inst.flipbookColsRows / 256.0);
+            float rowsF = inst.flipbookColsRows - colsF * 256.0;
+            float total = colsF * rowsF;
+
+            if (total <= 1.0 || inst.flipbookFrameRate <= 0.0) {
+                uvOff = vec2(0.0, 0.0);
+                uvSize = vec2(1.0, 1.0);
+            } else {
+                // FLAG_LOOP set: frame wraps via mod(). Clear: play once then hold
+                // the last tile. Mirrors render::computeFlipbookFrame(..., loop).
+                float floored;
+                if ((inst.flags & FLAG_LOOP) != 0u) {
+                    float frame = mod(t * inst.flipbookFrameRate, total);
+                    if (frame < 0.0) frame += total;
+                    floored = floor(frame);
+                } else {
+                    floored = min(floor(t * inst.flipbookFrameRate), total - 1.0);
+                    floored = max(floored, 0.0);
+                }
+                float col = mod(floored, colsF);
+                float row = floor(floored / colsF);
+                uvSize = vec2(1.0 / colsF, 1.0 / rowsF);
+                uvOff = vec2(col, row) * uvSize;
+            }
+
+            // UV scroll (wraps within the current tile via the sampler's repeat).
+            uvOff += inst.atlasUVRect.xy * t;
+        } else {
+            uvOff = inst.atlasUVRect.xy;
+            uvSize = inst.atlasUVRect.zw;
+        }
 
         vec2 uvs[4];
         uvs[0] = uvOff + vec2(0.0, uvSize.y);

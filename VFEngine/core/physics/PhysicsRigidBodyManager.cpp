@@ -3,15 +3,21 @@
 #include "PhysicsBodyRegistry.hpp"
 #include "PhysicsShapeFactory.hpp"
 #include "JoltConversions.hpp"
+#include "SpatialQueryHelpers.hpp"
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/CollideShape.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/ObjectLayer.h>
 #include "print/Log.hpp"
+#include <algorithm>
 
 namespace core::physics
 {
@@ -89,8 +95,7 @@ namespace core::physics
 
             bool ShouldCollide(JPH::ObjectLayer inLayer) const override
             {
-                if (inLayer >= 16) return false;
-                return (mMask & (1u << inLayer)) != 0;
+                return layerMaskAllows(mMask, static_cast<uint32_t>(inLayer));
             }
 
         private:
@@ -326,6 +331,77 @@ namespace core::physics
         }
 
         return results;
+    }
+
+    std::vector<uint64_t> PhysicsRigidBodyManager::overlapSphere(const glm::vec3& center, float radius,
+                                                                  uint16_t layerMask) const
+    {
+        std::vector<uint64_t> entityIds;
+        if (!ctx || !ctx->physicsSystem) return entityIds;
+        if (radius <= 0.0f) return entityIds;  // SphereShape asserts radius > 0
+
+        JPH::SphereShape shape(radius);
+        return collectOverlap(&shape, JPH::RMat44::sTranslation(toJoltR(center)), layerMask);
+    }
+
+    std::vector<uint64_t> PhysicsRigidBodyManager::overlapBox(const glm::vec3& center,
+                                                               const glm::vec3& halfExtents,
+                                                               const glm::quat& rotation,
+                                                               uint16_t layerMask) const
+    {
+        std::vector<uint64_t> entityIds;
+        if (!ctx || !ctx->physicsSystem) return entityIds;
+        // BoxShape asserts every half-extent >= 0; the convex radius is internally
+        // clamped to the smallest half-extent so a tiny box is still valid.
+        glm::vec3 he = glm::max(halfExtents, glm::vec3(0.0f));
+        if (he.x <= 0.0f && he.y <= 0.0f && he.z <= 0.0f) return entityIds;
+
+        JPH::BoxShape shape(toJolt(he));
+        return collectOverlap(&shape,
+            JPH::RMat44::sRotationTranslation(toJolt(rotation), toJoltR(center)), layerMask);
+    }
+
+    std::vector<uint64_t> PhysicsRigidBodyManager::overlapCapsule(const glm::vec3& center,
+                                                                   float halfHeight, float radius,
+                                                                   const glm::quat& rotation,
+                                                                   uint16_t layerMask) const
+    {
+        std::vector<uint64_t> entityIds;
+        if (!ctx || !ctx->physicsSystem) return entityIds;
+        // CapsuleShape asserts halfHeight > 0 and radius > 0 (a 0 half-height would
+        // otherwise be a sphere; require a real capsule here).
+        if (halfHeight <= 0.0f || radius <= 0.0f) return entityIds;
+
+        JPH::CapsuleShape shape(halfHeight, radius);
+        return collectOverlap(&shape,
+            JPH::RMat44::sRotationTranslation(toJolt(rotation), toJoltR(center)), layerMask);
+    }
+
+    std::vector<uint64_t> PhysicsRigidBodyManager::collectOverlap(const JPH::Shape* shape,
+                                                                   const JPH::RMat44& centerOfMassTransform,
+                                                                   uint16_t layerMask) const
+    {
+        std::vector<uint64_t> entityIds;
+
+        JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> collector;
+        JPH::CollideShapeSettings settings;
+        LayerMaskFilter layerFilter(layerMask);
+
+        ctx->getNarrowPhaseQuery().CollideShape(
+            shape, JPH::Vec3::sReplicate(1.0f), centerOfMassTransform, settings,
+            JPH::RVec3::sZero(), collector, {}, layerFilter);
+
+        if (!collector.HadHit()) return entityIds;
+
+        entityIds.reserve(collector.mHits.size());
+        for (const auto& hit : collector.mHits)
+        {
+            entityIds.push_back(bodyRegistry->getEntityForBody(hit.mBodyID2));
+        }
+
+        // A compound/mesh body can report several sub-shape hits — collapse to one id per entity.
+        dedupeEntityIds(entityIds);
+        return entityIds;
     }
 
     bool PhysicsRigidBodyManager::areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const

@@ -52,6 +52,19 @@ namespace components
         entt::entity renderTextureSource = entt::null;
         std::string renderTextureSourceName;
 
+        // --- Animation (Phase 1). Defaults below render identically to a static billboard. ---
+        uint32_t flipbookColumns = 1;   // sprite-sheet columns (1 = no flipbook)
+        uint32_t flipbookRows = 1;      // sprite-sheet rows (1 = no flipbook)
+        float flipbookFrameRate = 0.0f; // frames/sec (<=0 = no flipbook advance)
+        float scrollU = 0.0f;           // UV scroll speed along U (units/sec)
+        float scrollV = 0.0f;           // UV scroll speed along V (units/sec)
+        float pulseAmplitude = 0.0f;    // scale-throb amplitude (0 = no pulse)
+        float pulseFrequency = 0.0f;    // scale-throb frequency (rad/sec)
+        float spinSpeed = 0.0f;         // spin speed about view normal (rad/sec)
+        float animStartTime = 0.0f;     // animation time origin (engine seconds)
+        bool loopAnimation = true;      // flipbook: true=loop (mod), false=play once then hold last frame
+        bool worldMarker = false;       // Phase 2: route through GPU billboard path
+
         uint32_t getEffectiveAtlasIndex() const
         {
             if (iconType == BillboardIconType::Custom)

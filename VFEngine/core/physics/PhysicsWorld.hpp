@@ -113,6 +113,15 @@ namespace core::physics
                               float maxDistance, uint16_t layerMask = 0xFFFF) const;
         std::vector<RaycastResult> raycastAll(const glm::vec3& origin, const glm::vec3& direction,
                                               float maxDistance, uint16_t layerMask = 0xFFFF) const;
+
+        // Spatial overlap queries — return de-duplicated entity ids of overlapping bodies.
+        std::vector<uint64_t> overlapSphere(const glm::vec3& center, float radius,
+                                            uint16_t layerMask = 0xFFFF) const;
+        std::vector<uint64_t> overlapBox(const glm::vec3& center, const glm::vec3& halfExtents,
+                                         const glm::quat& rotation, uint16_t layerMask = 0xFFFF) const;
+        std::vector<uint64_t> overlapCapsule(const glm::vec3& center, float halfHeight, float radius,
+                                             const glm::quat& rotation, uint16_t layerMask = 0xFFFF) const;
+
         bool areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const;
 
         // Entity-body mapping

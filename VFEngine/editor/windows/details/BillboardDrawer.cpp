@@ -56,6 +56,8 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawColorTint(data);
             ImGui::Spacing();
+            changed |= drawAnimation(data);
+            ImGui::Spacing();
 
             if (changed)
             {
@@ -187,6 +189,81 @@ namespace windows::details
         {
             changed = true;
         }
+
+        return changed;
+    }
+
+    bool BillboardDrawer::drawAnimation(services::BillboardData& data)
+    {
+        bool changed = false;
+
+        if (!ImGui::CollapsingHeader("Animation##Billboard"))
+        {
+            return false;
+        }
+
+        ImGui::Indent(10.0f);
+
+        ImGui::TextDisabled("Flipbook (sprite sheet)");
+        int cols = static_cast<int>(data.flipbookColumns);
+        int rows = static_cast<int>(data.flipbookRows);
+        if (ImGui::DragInt("Columns##Billboard", &cols, 0.1f, 1, 64))
+        {
+            data.flipbookColumns = static_cast<uint32_t>(cols < 1 ? 1 : cols);
+            changed = true;
+        }
+        if (ImGui::DragInt("Rows##Billboard", &rows, 0.1f, 1, 64))
+        {
+            data.flipbookRows = static_cast<uint32_t>(rows < 1 ? 1 : rows);
+            changed = true;
+        }
+        if (ImGui::DragFloat("Frame Rate##Billboard", &data.flipbookFrameRate, 0.1f, 0.0f, 240.0f, "%.1f fps"))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Frames per second. 0 disables flipbook playback.");
+        }
+        if (ImGui::Checkbox("Loop##Billboard", &data.loopAnimation))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("On: flipbook loops continuously.\nOff: plays once then holds the last frame.\n(Scroll/pulse/spin are always continuous.)");
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("UV Scroll");
+        if (ImGui::DragFloat("Scroll U##Billboard", &data.scrollU, 0.01f, -10.0f, 10.0f, "%.3f"))
+        {
+            changed = true;
+        }
+        if (ImGui::DragFloat("Scroll V##Billboard", &data.scrollV, 0.01f, -10.0f, 10.0f, "%.3f"))
+        {
+            changed = true;
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Pulse (scale throb)");
+        if (ImGui::DragFloat("Amplitude##BillboardPulse", &data.pulseAmplitude, 0.01f, 0.0f, 10.0f, "%.3f"))
+        {
+            changed = true;
+        }
+        if (ImGui::DragFloat("Frequency##BillboardPulse", &data.pulseFrequency, 0.01f, 0.0f, 50.0f, "%.3f"))
+        {
+            changed = true;
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Spin");
+        if (ImGui::DragFloat("Speed##BillboardSpin", &data.spinSpeed, 0.01f, -50.0f, 50.0f, "%.3f rad/s"))
+        {
+            changed = true;
+        }
+
+        ImGui::Unindent(10.0f);
 
         return changed;
     }

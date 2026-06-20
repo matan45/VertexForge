@@ -433,8 +433,11 @@ namespace render
         bool hasWaterToRender = gpuDrivenRenderer && gpuDrivenRenderer->isWaterRenderingEnabled()
             && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
 
+        bool hasBillboardsToRender = gpuDrivenRenderer && gpuDrivenRenderer->isBillboardRenderingEnabled();
+
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes
-            || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender || hasPluginDraws);
+            || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender || hasPluginDraws
+            || hasBillboardsToRender);
 
         updateGPUDrivenSceneData();
 
@@ -455,7 +458,7 @@ namespace render
 
         bool hasMeshesToRender = !currentMeshDrawList.empty();
 
-        if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender || hasPluginDraws)
+        if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender || hasPluginDraws || hasBillboardsToRender)
             && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
         {
             drawGPUDrivenMeshPassGraphManaged(commandBuffer, imageIndex, debugRendererPtr, hasCustomShaderMeshes, hasVFX);
@@ -651,7 +654,7 @@ namespace render
             waterFuture = threading::JobSystem::instance().submit([&]() {
                 waterCmd = sceneThreadPoolManager->getSecondary(3, imageIndex);
                 setupSecondary(waterCmd);
-                gpuDrivenRenderer->renderBillboardDraw(waterCmd, iblDescriptorSet);
+                gpuDrivenRenderer->renderBillboardDraw(waterCmd, iblDescriptorSet, currentTime);
                 waterCmd.end();
             }, threading::JobPriority::HIGH);
         }
@@ -719,7 +722,7 @@ namespace render
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
 
             if (hasBillboards)
-                gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
+                gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet, currentTime);
 
             if (hasCustomShaderMeshes)
                 meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
@@ -801,7 +804,7 @@ namespace render
         }
 
         if (gpuDrivenRenderer->isBillboardRenderingEnabled())
-            gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
+            gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet, currentTime);
 
         if (hasCustomShaderMeshes)
             meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);

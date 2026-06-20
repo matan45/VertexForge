@@ -96,7 +96,8 @@ project "Editor"
 	  "ImageProcessing",                -- Image background removal
 	  "GameExport",                     -- Game export pipeline with shader pre-compilation
 	  "ECSRegistry",                    -- Shared ECS registry singleton DLL
-	  "AssetDB"                         -- Shared asset database singleton DLL
+	  "AssetDB",                        -- Shared asset database singleton DLL
+	  "Threading"                       -- Shared JobSystem/TaskGraph singleton DLL (sole enkiTS owner)
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -233,7 +234,7 @@ project "Import"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
-   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp", "AssetDB" }
+   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp", "AssetDB", "Threading" }
 
    -- Copy DLLs to Editor output directory (Import is Editor-only)
    postbuildcommands {
@@ -362,7 +363,7 @@ project "Runtime"
       -- NOTE: NO VFEngine/core/controllers, NO VFEngine/graphics/controllers
    }
 
-   links { "Services", "Core", "Plugin", "ECSRegistry", "AssetDB" }  -- Core linked for RuntimeBootstrap, not direct access
+   links { "Services", "Core", "Plugin", "ECSRegistry", "AssetDB", "Threading" }  -- Core linked for RuntimeBootstrap, not direct access
 
    -- Delay-load shaderc: exported builds ship pre-compiled SPIR-V,
    -- so shaderc_shared.dll is not needed and never loaded at runtime
@@ -432,6 +433,7 @@ project "Utilities"
       "VFEngine/utilities/memory/**",
       "VFEngine/utilities/weather/**",
       "VFEngine/utilities/destruction/**",
+      "VFEngine/utilities/threading/**",              -- compiled by Threading DLL (sole enkiTS owner)
       "VFEngine/utilities/scene/EntityRegistry.cpp",  -- compiled by ECSRegistry DLL
       "VFEngine/utilities/asset/AssetDatabase.cpp"    -- compiled by AssetDB DLL
    }
@@ -448,7 +450,9 @@ project "Utilities"
       "dependencies/lz4/lib"             -- LZ4 compression for .vfpak archives
    }
 
-   links { "spdLog", "meshoptimizer", "enkiTS", "lz4" }
+   -- enkiTS is intentionally NOT linked here: threading/** moved to the Threading DLL,
+   -- which is the sole owner of enkiTS. Consumers link "Threading" instead.
+   links { "spdLog", "meshoptimizer", "lz4" }
 
    -- Export pipeline compiled in GameExport subsystem
    -- VFPakWriter is export-only; VFPakReader/Format stay in Utilities for runtime use
@@ -594,6 +598,47 @@ project "ECSRegistry"
    vfStandardConfigs()
 
 
+-- Threading subsystem (owns the JobSystem + TaskGraph + TaskProfiler singletons and the
+-- enkiTS scheduler, SharedLib/DLL). SOLE owner of enkiTS so the worker pool AND enki's
+-- thread-local thread index resolve to ONE instance across the whole process.
+-- RULE: any DLL/exe that uses JobSystem/TaskGraph/TaskProfiler/parallelFor MUST link
+-- "Threading", and MUST NOT link enkiTS directly (a second static enki copy would have its
+-- own thread-locals -> WaitforTask/GetThreadNum/AddTaskSetToPipe break). Mirrors ECSRegistry.
+project "Threading"
+   kind "SharedLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "VFEngine/utilities/threading/**.hpp",
+      "VFEngine/utilities/threading/**.cpp"
+   }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "dependencies/enkiTS/src",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_THREADING_BUILD_DLL" }
+
+   links { "spdLog", "enkiTS" }
+
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/Threading/%{cfg.buildcfg}/x64/Threading.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Threading/%{cfg.buildcfg}/x64/Threading.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
+
+   vfStandardConfigs()
+
+
 -- AssetDB subsystem (owns the AssetDatabase singleton, SharedLib/DLL)
 -- Required by any DLL that accesses AssetDatabase (Serialization, World,
 -- Terrain, Animation, Audio, Import, GameExport) so GUID<->path lookups and
@@ -621,7 +666,7 @@ project "AssetDB"
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_ASSETDB_BUILD_DLL" }
 
    -- Utilities: AssetMetadataSerializer + VFSHelpers used by persistence/meta scan
-   links { "Utilities", "spdLog" }
+   links { "Utilities", "spdLog", "Threading" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols defined in this DLL
 
    postbuildcommands {
@@ -658,7 +703,7 @@ project "Audio"
 
    -- Services: EventDispatcher used by AudioSceneUpdater
    -- Animation, Terrain: transitive deps from Utilities.lib (ResourceManager references AnimatorAsset/TerrainMaterialAsset)
-   links { "Utilities", "Services", "Animation", "Terrain", "ECSRegistry", "AssetDB" }
+   links { "Utilities", "Services", "Animation", "Terrain", "ECSRegistry", "AssetDB", "Threading" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
    links { "OpenAL32.lib" }
@@ -794,7 +839,7 @@ project "Terrain"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllimport)", "VF_TERRAIN_BUILD_DLL" }
 
-   links { "Utilities", "meshoptimizer", "enkiTS", "ECSRegistry", "AssetDB" }
+   links { "Utilities", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading" }
 
    buildoptions { "/bigobj" }
 
@@ -889,7 +934,7 @@ project "Serialization"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_SERIALIZATION_BUILD_DLL" }
 
-   links { "Utilities", "ECSRegistry", "AssetDB" }
+   links { "Utilities", "ECSRegistry", "AssetDB", "Threading" }
 
    buildoptions { "/bigobj" }
 
@@ -949,7 +994,7 @@ project "World"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_WORLD_BUILD_DLL" }
 
-   links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry", "AssetDB" }
+   links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading" }
 
    postbuildcommands {
       "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
@@ -999,7 +1044,7 @@ project "Animation"
 
    -- Services: EventDispatcher used by RuntimeAnimatorSystem
    -- Terrain: transitive dep from Utilities.lib (ResourceManager references TerrainMaterialAsset)
-   links { "Utilities", "Services", "Terrain", "ECSRegistry", "AssetDB" }
+   links { "Utilities", "Services", "Terrain", "ECSRegistry", "AssetDB", "Threading" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
    postbuildcommands {
@@ -1083,7 +1128,7 @@ project "GameExport"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_GAMEEXPORT_BUILD_DLL" }
 
-   links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib", "AssetDB" }
+   links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib", "AssetDB", "Threading" }
 
    postbuildcommands {
       "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
@@ -1139,9 +1184,9 @@ project "Tests"
 
    links {
       "Utilities", "Memory", "Destruction", "Terrain", "World", "Serialization",
-      "Animation", "ECSRegistry", "AssetDB", "Services", "Import",
+      "Animation", "ECSRegistry", "AssetDB", "Threading", "Services", "Import",
       "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW", "GameExport",
-      "spdLog", "meshoptimizer", "enkiTS", "lz4", "recast",
+      "spdLog", "meshoptimizer", "lz4", "recast",
       "vulkan-1.lib", "shaderc_shared.lib"
    }
 
@@ -1159,6 +1204,7 @@ project "Tests"
    postbuildcommands {
       "{COPY} ../../bin/ECSRegistry/%{cfg.buildcfg}/x64/ECSRegistry.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/AssetDB/%{cfg.buildcfg}/x64/AssetDB.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/Threading/%{cfg.buildcfg}/x64/Threading.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/Terrain/%{cfg.buildcfg}/x64/Terrain.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/Serialization/%{cfg.buildcfg}/x64/Serialization.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/World/%{cfg.buildcfg}/x64/World.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",

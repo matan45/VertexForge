@@ -23,6 +23,7 @@
 #include "../api/DebugDrawAPI.hpp"
 #include "../api/BehaviorTreeAPI.hpp"
 #include "../api/DecalAPI.hpp"
+#include "../api/BillboardAPI.hpp"
 #include "../api/CoroutineAPI.hpp"
 #include "../api/ScriptCommunicationAPI.hpp"
 #include "../api/InputActionAPI.hpp"
@@ -97,6 +98,7 @@ namespace core
         api::DebugDrawAPI::registerAPI(interpreter);
         api::BehaviorTreeAPI::registerAPI(interpreter);
         api::DecalAPI::registerAPI(interpreter);
+        api::BillboardAPI::registerAPI(interpreter);
         api::CoroutineAPI::registerAPI(interpreter);
         api::ScriptCommunicationAPI::registerAPI(interpreter);
         api::InputActionAPI::registerAPI(interpreter);

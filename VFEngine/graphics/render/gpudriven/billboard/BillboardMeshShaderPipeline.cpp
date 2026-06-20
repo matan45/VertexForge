@@ -192,7 +192,7 @@ namespace render::gpudriven
         bindlessTextureDescriptorSet = bindlessTextureDescSet;
     }
 
-    void BillboardMeshShaderPipeline::dispatch(vk::CommandBuffer cmd, uint32_t instanceCount)
+    void BillboardMeshShaderPipeline::dispatch(vk::CommandBuffer cmd, uint32_t instanceCount, float time)
     {
         if (!initialized || instanceCount == 0 || !graphicsPipeline) return;
 
@@ -211,6 +211,9 @@ namespace render::gpudriven
 
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
                                sets, {});
+
+        cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eMeshEXT, 0,
+                          sizeof(float), &time);
 
         uint32_t taskGroups = (instanceCount + 31) / 32;
         cmd.drawMeshTasksEXT(taskGroups, 1, 1);
@@ -289,10 +292,18 @@ namespace render::gpudriven
             bindlessTextureLayout
         };
 
+        // Push constant: animation time (seconds), consumed by the mesh stage to
+        // drive flipbook frame selection, UV scroll, and time-based spin.
+        vk::PushConstantRange pushRange{};
+        pushRange.stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
+        pushRange.offset = 0;
+        pushRange.size = sizeof(float);
+
         vk::PipelineLayoutCreateInfo layoutCreateInfo{};
         layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
         layoutCreateInfo.pSetLayouts = setLayouts.data();
-        layoutCreateInfo.pushConstantRangeCount = 0;
+        layoutCreateInfo.pushConstantRangeCount = 1;
+        layoutCreateInfo.pPushConstantRanges = &pushRange;
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
 

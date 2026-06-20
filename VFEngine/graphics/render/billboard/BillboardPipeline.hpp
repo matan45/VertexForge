@@ -83,7 +83,7 @@ namespace render::billboard
         bool loadAtlas(const std::string& atlasPath);
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                             const glm::vec3& cameraPos);
+                             const glm::vec3& cameraPos, float time);
 
         void setExternalCameraBuffer(vk::Buffer buffer) { bufferManager.setExternalCameraBuffer(buffer); }
 

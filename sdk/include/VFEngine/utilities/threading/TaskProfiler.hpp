@@ -25,12 +25,14 @@ namespace threading {
 	inline constexpr const char* kEditorOnlyTaskNames[] = { "ImGuiDraw" };
 
 	// Duration of a single named task in the snapshot (0 if absent / incomplete).
-	uint64_t taskDurationNs(const FrameProfileSnapshot& snapshot, const char* taskName);
+	VF_THREADING_API uint64_t taskDurationNs(const FrameProfileSnapshot& snapshot, const char* taskName);
 
 	// frameDurationNs minus the summed durations of all editor-only tasks.
-	uint64_t viewportFrameDurationNs(const FrameProfileSnapshot& snapshot);
+	VF_THREADING_API uint64_t viewportFrameDurationNs(const FrameProfileSnapshot& snapshot);
 
-	class TaskProfiler {
+#pragma warning(push)
+#pragma warning(disable: 4251) // std::mutex/std::vector members crossing the DLL boundary
+	class VF_THREADING_API TaskProfiler {
 	public:
 		static constexpr size_t MAX_HISTORY = 120;
 
@@ -67,5 +69,6 @@ namespace threading {
 		uint32_t maxThreadId = 0;
 		bool enabled = false;
 	};
+#pragma warning(pop)
 
 }

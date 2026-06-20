@@ -11,14 +11,15 @@ layout(local_size_x = 32) in;
 
 struct BillboardInstance {
     vec4 positionAndScale;    // xyz = world position, w = uniform scale
-    vec4 atlasUVRect;         // xy = UV offset, zw = UV size
+    vec4 atlasUVRect;         // static: xy=UV offset, zw=UV size. animated: xy=scrollU/V, z=animStartTime
     vec4 colorTint;           // rgba
     uint bindlessTextureIndex;
     uint flags;
     uint entityId;
-    float rotation;
+    float rotation;           // static: radians. animated: spin rate (rad/sec)
     vec2 size;                // width, height in world units
-    uint padding[2];
+    float flipbookColsRows;   // encoded floor(cols)*256 + rows (animated only)
+    float flipbookFrameRate;  // frames/sec (animated only)
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer BillboardInstanceBuffer {

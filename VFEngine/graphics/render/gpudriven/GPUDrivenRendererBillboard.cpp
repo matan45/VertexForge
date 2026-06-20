@@ -1,6 +1,9 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../material/MaterialTextureCache.hpp"
+#include "scene/BindlessTextureManager.hpp"
+#include "scene/TextureStreamManager.hpp"
 #include "print/Log.hpp"
 
 namespace render::gpudriven
@@ -69,8 +72,62 @@ namespace render::gpudriven
         );
     }
 
+    void GPUDrivenRenderer::updateBillboards(std::vector<BillboardInstanceGPU> instances,
+                                              const std::vector<std::string>& texturePaths)
+    {
+        if (!initialized || !billboard.initialized || !billboard.renderingEnabled) return;
+
+        // Resolve each instance's texture path to a bindless index. Registration is
+        // idempotent (BindlessTextureManager / MaterialTextureCache cache by path),
+        // so this is cheap after the first frame a given texture is seen. Mirrors the
+        // single-texture resolve pattern used for terrain layers.
+        auto resolveTexture = [&](const std::string& texPath) -> uint32_t
+        {
+            if (texPath.empty() || !bindlessTextures || !materials.textureCache)
+            {
+                return 0; // default texture slot
+            }
+
+            // .vfImage files prefer the mip-streaming path (same as material textures).
+            if (textureStreamManager && texPath.ends_with(".vfImage"))
+            {
+                uint32_t idx = textureStreamManager->registerTexture(texPath, vk::Format::eR8G8B8A8Srgb);
+                if (idx != INVALID_TEXTURE_INDEX)
+                {
+                    return idx;
+                }
+                // Fall through to legacy cache path on failure.
+            }
+
+            if (!materials.textureCache->loadTexture(texPath, vk::Format::eR8G8B8A8Srgb))
+            {
+                return 0;
+            }
+
+            vk::ImageView view = materials.textureCache->getViewForPath(texPath);
+            vk::Sampler sampler = materials.textureCache->getSamplerForPath(texPath);
+            if (!view || !sampler)
+            {
+                return 0;
+            }
+
+            uint32_t idx = bindlessTextures->registerTexture(texPath, view, sampler);
+            return (idx == INVALID_TEXTURE_INDEX) ? 0u : idx;
+        };
+
+        static const std::string emptyPath;
+        const size_t pathCount = texturePaths.size();
+        for (size_t i = 0; i < instances.size(); ++i)
+        {
+            const std::string& path = (i < pathCount) ? texturePaths[i] : emptyPath;
+            instances[i].bindlessTextureIndex = resolveTexture(path);
+        }
+
+        updateBillboards(instances);
+    }
+
     void GPUDrivenRenderer::renderBillboardDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                                                  uint32_t screenWidth, uint32_t screenHeight)
+                                                  float time, uint32_t screenWidth, uint32_t screenHeight)
     {
         if (!initialized || !billboard.initialized || !billboard.renderingEnabled) return;
 
@@ -108,7 +165,7 @@ namespace render::gpudriven
         cmd.setViewport(0, 1, &viewport);
         cmd.setScissor(0, 1, &scissor);
 
-        billboard.meshShaderPipeline->dispatch(cmd, count);
+        billboard.meshShaderPipeline->dispatch(cmd, count, time);
 
         billboard.stats.visibleInstances = count;
     }

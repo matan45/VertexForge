@@ -341,6 +341,17 @@ namespace serialization
         {
             j["renderTextureSourceName"] = billboard.renderTextureSourceName;
         }
+        j["flipbookColumns"] = billboard.flipbookColumns;
+        j["flipbookRows"] = billboard.flipbookRows;
+        j["flipbookFrameRate"] = billboard.flipbookFrameRate;
+        j["scrollU"] = billboard.scrollU;
+        j["scrollV"] = billboard.scrollV;
+        j["pulseAmplitude"] = billboard.pulseAmplitude;
+        j["pulseFrequency"] = billboard.pulseFrequency;
+        j["spinSpeed"] = billboard.spinSpeed;
+        j["animStartTime"] = billboard.animStartTime;
+        j["loopAnimation"] = billboard.loopAnimation;
+        j["worldMarker"] = billboard.worldMarker;
         return j;
     }
 
@@ -365,6 +376,17 @@ namespace serialization
         billboard.textureRef = readAssetRef(j, "textureRef");
         billboard.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
         billboard.renderTextureSource = entt::null; // Resolved post-load
+        billboard.flipbookColumns = j.value("flipbookColumns", 1u);
+        billboard.flipbookRows = j.value("flipbookRows", 1u);
+        billboard.flipbookFrameRate = j.value("flipbookFrameRate", 0.0f);
+        billboard.scrollU = j.value("scrollU", 0.0f);
+        billboard.scrollV = j.value("scrollV", 0.0f);
+        billboard.pulseAmplitude = j.value("pulseAmplitude", 0.0f);
+        billboard.pulseFrequency = j.value("pulseFrequency", 0.0f);
+        billboard.spinSpeed = j.value("spinSpeed", 0.0f);
+        billboard.animStartTime = j.value("animStartTime", 0.0f);
+        billboard.loopAnimation = j.value("loopAnimation", true);
+        billboard.worldMarker = j.value("worldMarker", false);
 
         // Warn about deprecated imposter fields from older scene files
         if (j.contains("imposterPath"))

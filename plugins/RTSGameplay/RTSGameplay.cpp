@@ -2,6 +2,7 @@
 #include "api/PluginExport.hpp"
 #include "api/PluginContext.hpp"
 #include "RTSComponents.hpp"
+#include "CombatRules.hpp"
 #include "FogOfWar.hpp"
 #include "FogOfWarWindow.hpp"
 #include <imgui.h>
@@ -37,6 +38,16 @@ public:
 
         ctx->registerNativeComponent<VisionComponent>("Vision")
             .data<&VisionComponent::sightRadius>("sightRadius");
+
+        ctx->registerNativeComponent<HealthComponent>("Health")
+            .data<&HealthComponent::maxHP>("maxHP")
+            .data<&HealthComponent::currentHP>("currentHP");
+
+        ctx->registerNativeComponent<AttackComponent>("Attack")
+            .data<&AttackComponent::damage>("damage")
+            .data<&AttackComponent::range>("range")
+            .data<&AttackComponent::cooldown>("cooldown")
+            .data<&AttackComponent::lastAttackTime>("lastAttackTime");
 
         fogSettings = std::make_shared<FogSettings>();
         fogOfWar.initialize(ctx, fogSettings);
@@ -117,6 +128,33 @@ private:
                     h->arraySet(result, i, h->makeInt(c, self->fogOfWar.queryFogState(x, z)));
                 }
                 return result;
+            }, this);
+
+        // _rts_apply_damage(targetId, amount) -> int: applies `amount` damage to
+        // the target's Health (VK-1404). Returns 1 if this killed it, 0 if it
+        // survived (incl. a no-op for amount <= 0), -1 if the target is invalid or
+        // has no Health. On a kill it publishes "rts.unit_killed" {entity:id} — the
+        // native never destroys the entity; scripts handle death/cleanup via the event.
+        ctx->registerScriptFunction("_rts_apply_damage",
+            [](void* userData, MTypeContext* c, const MTypeValue* const* args, int argc) -> MTypeValue*
+            {
+                auto* self = static_cast<RTSGameplay*>(userData);
+                const MTypePluginHost* h = self->host;
+                if (argc < 2) return h->makeInt(c, static_cast<int>(DamageResult::NoHealth));
+
+                const auto targetId = static_cast<uint32_t>(h->getInt(args[0]));
+                const float amount = numberArg(h, args[1]);
+
+                auto& reg = self->ctx->getRegistry();
+                const auto e = static_cast<entt::entity>(targetId);
+                if (!reg.valid(e) || !reg.all_of<HealthComponent>(e))
+                    return h->makeInt(c, static_cast<int>(DamageResult::NoHealth));
+
+                const DamageResult result = applyDamageToHealth(reg.get<HealthComponent>(e), amount);
+                if (result == DamageResult::Killed)
+                    self->ctx->publishEvent("rts.unit_killed", {{"entity", static_cast<int>(targetId)}});
+
+                return h->makeInt(c, static_cast<int>(result));
             }, this);
     }
 

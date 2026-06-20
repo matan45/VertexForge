@@ -2,8 +2,10 @@
 
 #include "../EventTypes.hpp"
 #include "../../providers/input/IRuntimePickerProvider.hpp" // services::PickRay, services::RaycastHit
+#include "../../data/EntityHandle.hpp"                       // services::EntityHandle
 #include <glm/glm.hpp>
 #include <optional>
+#include <vector>
 #include <cstdint>
 
 namespace events::input
@@ -29,5 +31,17 @@ namespace events::input
         glm::vec2 screenPos{0.0f};
         uint16_t layerMask = 0xFFFF;
         std::string_view getName() const override { return "PickEntity"; }
+    };
+
+    // All entities whose center falls inside the camera frustum of the given
+    // screen sub-rectangle (RTS drag-select). minPx/maxPx are viewport pixels in
+    // any corner order; the rect is normalized engine-side. Returns an empty
+    // vector if there is no primary camera/viewport.
+    struct PickRegionQuery : ::events::IQuery<std::vector<services::EntityHandle>>
+    {
+        glm::vec2 minPx{0.0f};
+        glm::vec2 maxPx{0.0f};
+        uint16_t layerMask = 0xFFFF;
+        std::string_view getName() const override { return "PickRegion"; }
     };
 }

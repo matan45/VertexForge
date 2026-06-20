@@ -182,6 +182,30 @@ namespace events::physics {
         std::string_view getName() const override { return "IsOverlapping"; }
     };
 
+    struct OverlapSphereQuery : ::events::IQuery<std::vector<services::EntityHandle>> {
+        glm::vec3 center;
+        float radius = 0.0f;
+        uint16_t layerMask = 0xFFFF;
+        std::string_view getName() const override { return "OverlapSphere"; }
+    };
+
+    struct OverlapBoxQuery : ::events::IQuery<std::vector<services::EntityHandle>> {
+        glm::vec3 center;
+        glm::vec3 halfExtents{0.0f};
+        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+        uint16_t layerMask = 0xFFFF;
+        std::string_view getName() const override { return "OverlapBox"; }
+    };
+
+    struct OverlapCapsuleQuery : ::events::IQuery<std::vector<services::EntityHandle>> {
+        glm::vec3 center;
+        float halfHeight = 0.0f;
+        float radius = 0.0f;
+        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+        uint16_t layerMask = 0xFFFF;
+        std::string_view getName() const override { return "OverlapCapsule"; }
+    };
+
     struct GetMassQuery : ::events::IQuery<float> {
         services::EntityHandle entity;
         std::string_view getName() const override { return "GetMass"; }
