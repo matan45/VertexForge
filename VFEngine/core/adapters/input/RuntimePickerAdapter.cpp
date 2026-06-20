@@ -7,6 +7,7 @@
 #include "../../../services/events/scene/EntityTransformEvents.hpp" // GetPrimaryCameraQuery
 #include "../../../services/events/project/ApplicationEvents.hpp"   // GetViewportWidth/HeightQuery
 #include "../../../services/events/physics/PhysicsEvents.hpp"       // RaycastQuery
+#include "math/ScreenRegionFrustum.hpp"                              // buildScreenRegionFrustum, classifyPointInFrustum
 
 #include <glm/glm.hpp>
 
@@ -103,5 +104,54 @@ namespace core
         q.maxDistance = PICK_MAX_DISTANCE;
         q.layerMask = layerMask;
         return dispatcher.query(q);
+    }
+
+    std::vector<services::EntityHandle> RuntimePickerAdapter::pickRegion(const glm::vec2& minPx,
+                                                                        const glm::vec2& maxPx,
+                                                                        uint16_t /*layerMask*/)
+    {
+        // layerMask is accepted for API symmetry with pickEntity but is not applied:
+        // there is no cheap per-entity physics layer here (entities carry only a
+        // TransformComponent in the general case). Scripts post-filter the returned
+        // ids by their own gameplay components (e.g. Selectable).
+        std::vector<services::EntityHandle> result;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto camEntity = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
+        if (!camEntity.has_value())
+            return result;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity cam = services::internal::fromHandle(*camEntity);
+        if (!registry.valid(cam) || !registry.all_of<components::CameraComponent>(cam))
+            return result;
+
+        const auto& camComp = registry.get<components::CameraComponent>(cam);
+
+        float w = static_cast<float>(dispatcher.query(events::application::GetViewportWidthQuery{}));
+        float h = static_cast<float>(dispatcher.query(events::application::GetViewportHeightQuery{}));
+        if (w <= 0.0f || h <= 0.0f)
+            return result;
+
+        // Build the 6 world-space frustum planes for the screen sub-rectangle. The
+        // helper normalizes inverted drags and uses the same pixel->NDC mapping as
+        // screenToWorldRay (no manual Y flip).
+        const math::Frustum frustum = math::buildScreenRegionFrustum(
+            camComp.viewMatrix, camComp.projectionMatrix, minPx, maxPx, w, h);
+
+        // Center-point selection: VertexForge has no cached per-entity world-space
+        // AABB component, so resolving a tight bounds per entity would require a
+        // synchronous mesh-resource lookup. Testing TransformComponent.position
+        // against the frustum is adequate for RTS drag-select.
+        auto view = registry.view<components::TransformComponent>();
+        for (entt::entity e : view)
+        {
+            const auto& transform = view.get<components::TransformComponent>(e);
+            if (math::classifyPointInFrustum(frustum, transform.position))
+                result.push_back(services::internal::toHandle(e));
+        }
+
+        return result;
     }
 }

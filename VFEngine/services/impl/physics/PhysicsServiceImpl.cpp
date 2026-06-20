@@ -330,6 +330,22 @@ namespace services {
                 return isOverlapping(query.entityA, query.entityB);
             });
 
+        dispatcher.registerQueryHandler<events::physics::OverlapSphereQuery>(
+            [this](const auto& query) {
+                return overlapSphere(query.center, query.radius, query.layerMask);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::OverlapBoxQuery>(
+            [this](const auto& query) {
+                return overlapBox(query.center, query.halfExtents, query.rotation, query.layerMask);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::OverlapCapsuleQuery>(
+            [this](const auto& query) {
+                return overlapCapsule(query.center, query.halfHeight, query.radius, query.rotation,
+                                      query.layerMask);
+            });
+
         // === Script-oriented queries (individual property access) ===
 
         dispatcher.registerQueryHandler<events::physics::GetMassQuery>(
@@ -566,6 +582,21 @@ namespace services {
 
     bool PhysicsServiceImpl::isOverlapping(EntityHandle entityA, EntityHandle entityB) const {
         return physicsProvider->isOverlapping(entityA, entityB);
+    }
+
+    std::vector<EntityHandle> PhysicsServiceImpl::overlapSphere(const glm::vec3& center, float radius,
+        uint16_t layerMask) {
+        return physicsProvider->overlapSphere(center, radius, layerMask);
+    }
+
+    std::vector<EntityHandle> PhysicsServiceImpl::overlapBox(const glm::vec3& center,
+        const glm::vec3& halfExtents, const glm::quat& rotation, uint16_t layerMask) {
+        return physicsProvider->overlapBox(center, halfExtents, rotation, layerMask);
+    }
+
+    std::vector<EntityHandle> PhysicsServiceImpl::overlapCapsule(const glm::vec3& center,
+        float halfHeight, float radius, const glm::quat& rotation, uint16_t layerMask) {
+        return physicsProvider->overlapCapsule(center, halfHeight, radius, rotation, layerMask);
     }
 
 }

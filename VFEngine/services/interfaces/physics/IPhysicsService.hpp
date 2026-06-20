@@ -2,6 +2,7 @@
 #include "../../data/EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <optional>
 #include <vector>
 #include <string>
@@ -103,6 +104,18 @@ namespace services {
                                                     float maxDistance, uint16_t layerMask = 0xFFFF) = 0;
 
         virtual bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const = 0;
+
+        // Spatial overlap queries — return the entities whose physics bodies overlap the shape.
+        virtual std::vector<EntityHandle> overlapSphere(const glm::vec3& center, float radius,
+                                                        uint16_t layerMask = 0xFFFF) = 0;
+
+        virtual std::vector<EntityHandle> overlapBox(const glm::vec3& center, const glm::vec3& halfExtents,
+                                                     const glm::quat& rotation,
+                                                     uint16_t layerMask = 0xFFFF) = 0;
+
+        virtual std::vector<EntityHandle> overlapCapsule(const glm::vec3& center, float halfHeight,
+                                                         float radius, const glm::quat& rotation,
+                                                         uint16_t layerMask = 0xFFFF) = 0;
     };
 
 }

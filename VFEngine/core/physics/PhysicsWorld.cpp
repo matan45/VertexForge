@@ -238,6 +238,25 @@ namespace core::physics
         return rigidBodyManager.raycastAll(origin, direction, maxDistance, layerMask);
     }
 
+    std::vector<uint64_t> PhysicsWorld::overlapSphere(const glm::vec3& center, float radius,
+                                                       uint16_t layerMask) const
+    {
+        return rigidBodyManager.overlapSphere(center, radius, layerMask);
+    }
+
+    std::vector<uint64_t> PhysicsWorld::overlapBox(const glm::vec3& center, const glm::vec3& halfExtents,
+                                                    const glm::quat& rotation, uint16_t layerMask) const
+    {
+        return rigidBodyManager.overlapBox(center, halfExtents, rotation, layerMask);
+    }
+
+    std::vector<uint64_t> PhysicsWorld::overlapCapsule(const glm::vec3& center, float halfHeight,
+                                                        float radius, const glm::quat& rotation,
+                                                        uint16_t layerMask) const
+    {
+        return rigidBodyManager.overlapCapsule(center, halfHeight, radius, rotation, layerMask);
+    }
+
     bool PhysicsWorld::areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const
     {
         return rigidBodyManager.areBodiesInContact(bodyA, bodyB);

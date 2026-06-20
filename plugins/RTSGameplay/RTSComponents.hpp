@@ -29,3 +29,23 @@ struct VisionComponent
 {
     float sightRadius = 24.0f;
 };
+
+// Hit points (VK-1404): authored on combat units and buildings. Damage is applied
+// via the _rts_apply_damage native (see CombatRules.hpp); scripts react to the
+// "rts.unit_killed" event for death/cleanup rather than the native destroying it.
+struct HealthComponent
+{
+    float maxHP = 100.0f;
+    float currentHP = 100.0f;
+};
+
+// Attack profile (VK-1404): damage per hit, engagement range in world units, and
+// the cooldown between hits. lastAttackTime is scratch state the combat script
+// stamps to throttle attacks; it is not authored.
+struct AttackComponent
+{
+    float damage = 10.0f;
+    float range = 8.0f;
+    float cooldown = 1.0f;
+    float lastAttackTime = 0.0f;
+};

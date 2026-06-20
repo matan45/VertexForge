@@ -217,6 +217,32 @@ namespace core::api
                 return value::Value(result);
             }});
 
+        // _native_picker_pickRegion(minX, minY, maxX, maxY, layerMask?)
+        //   Returns an int[] of entity ids whose center falls inside the camera
+        //   frustum of the screen sub-rectangle (RTS drag-select). Empty int[] when
+        //   nothing is inside or there is no primary camera. Corner order is free
+        //   (inverted drag normalized engine-side). layerMask is accepted for API
+        //   symmetry but not applied here (see RuntimePickerAdapter::pickRegion) —
+        //   scripts post-filter by their own selection component.
+        interpreter->registerNativeFunction("_native_picker_pickRegion",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 4)
+                    return value::Value(std::make_shared<value::NativeArray>(0, value::ValueType::INT));
+
+                events::input::PickRegionQuery q;
+                q.minPx = glm::vec2(extractFloat(args[0]), extractFloat(args[1]));
+                q.maxPx = glm::vec2(extractFloat(args[2]), extractFloat(args[3]));
+                q.layerMask = (args.size() >= 5) ? resolveLayerMask(extractString(args[4])) : 0xFFFF;
+
+                std::vector<services::EntityHandle> ids = dispatcher.query(q);
+
+                auto arr = std::make_shared<value::NativeArray>(ids.size(), value::ValueType::INT);
+                for (std::size_t i = 0; i < ids.size(); ++i)
+                    arr->set(i, value::Value(static_cast<int64_t>(static_cast<uint32_t>(ids[i].id))));
+                return value::Value(arr);
+            }});
+
         vfLogInfo("[RuntimePickerAPI] Registered Picker native functions");
     }
 }

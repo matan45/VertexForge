@@ -2,12 +2,18 @@
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
+#include <Jolt/Math/Real.h>
 #include "types/PhysicsTypes.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <vector>
 #include <cstdint>
 #include <string>
+
+namespace JPH
+{
+    class Shape;
+}
 
 namespace core::physics
 {
@@ -88,10 +94,26 @@ namespace core::physics
                               float maxDistance, uint16_t layerMask = 0xFFFF) const;
         std::vector<RaycastResult> raycastAll(const glm::vec3& origin, const glm::vec3& direction,
                                               float maxDistance, uint16_t layerMask = 0xFFFF) const;
+
+        // Spatial overlap queries — return the de-duplicated entity ids whose bodies
+        // overlap the given shape. Empty vector on no hit. (Phase 1 spatial queries)
+        std::vector<uint64_t> overlapSphere(const glm::vec3& center, float radius,
+                                            uint16_t layerMask = 0xFFFF) const;
+        std::vector<uint64_t> overlapBox(const glm::vec3& center, const glm::vec3& halfExtents,
+                                         const glm::quat& rotation, uint16_t layerMask = 0xFFFF) const;
+        std::vector<uint64_t> overlapCapsule(const glm::vec3& center, float halfHeight, float radius,
+                                             const glm::quat& rotation, uint16_t layerMask = 0xFFFF) const;
+
         bool areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const;
         bool isBodyActive(JPH::BodyID bodyId) const;
 
     private:
+        // Run a narrow-phase shape overlap and return the de-duplicated entity ids
+        // of every overlapping body. Shared by overlapSphere/Box/Capsule.
+        std::vector<uint64_t> collectOverlap(const JPH::Shape* shape,
+                                             const JPH::RMat44& centerOfMassTransform,
+                                             uint16_t layerMask) const;
+
         PhysicsContext* ctx = nullptr;
         PhysicsBodyRegistry* bodyRegistry = nullptr;
     };

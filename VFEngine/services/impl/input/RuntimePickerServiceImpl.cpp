@@ -42,5 +42,11 @@ namespace services
                     return RaycastHit{};
                 return pickerProvider->pickEntity(ray, q.layerMask);
             });
+
+        dispatcher.registerQueryHandler<::events::input::PickRegionQuery>(
+            [this](const ::events::input::PickRegionQuery& q) -> std::vector<EntityHandle>
+            {
+                return pickerProvider->pickRegion(q.minPx, q.maxPx, q.layerMask);
+            });
     }
 }

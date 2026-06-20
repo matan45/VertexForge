@@ -80,6 +80,15 @@ namespace core
                                                      float maxDistance, uint16_t layerMask = 0xFFFF) override;
         bool isOverlapping(services::EntityHandle entityA, services::EntityHandle entityB) const override;
 
+        std::vector<services::EntityHandle> overlapSphere(const glm::vec3& center, float radius,
+                                                          uint16_t layerMask = 0xFFFF) const override;
+        std::vector<services::EntityHandle> overlapBox(const glm::vec3& center, const glm::vec3& halfExtents,
+                                                       const glm::quat& rotation,
+                                                       uint16_t layerMask = 0xFFFF) const override;
+        std::vector<services::EntityHandle> overlapCapsule(const glm::vec3& center, float halfHeight,
+                                                           float radius, const glm::quat& rotation,
+                                                           uint16_t layerMask = 0xFFFF) const override;
+
         void applySettings(const types::PhysicsSettings& settings) override;
         types::PhysicsSettings getCurrentSettings() const override;
 
