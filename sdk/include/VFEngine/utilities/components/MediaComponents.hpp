@@ -62,6 +62,7 @@ namespace components
         float pulseFrequency = 0.0f;    // scale-throb frequency (rad/sec)
         float spinSpeed = 0.0f;         // spin speed about view normal (rad/sec)
         float animStartTime = 0.0f;     // animation time origin (engine seconds)
+        bool loopAnimation = true;      // flipbook: true=loop (mod), false=play once then hold last frame
         bool worldMarker = false;       // Phase 2: route through GPU billboard path
 
         uint32_t getEffectiveAtlasIndex() const

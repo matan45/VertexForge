@@ -11,7 +11,7 @@ layout(local_size_x = 32) in;
 
 struct BillboardInstance {
     vec4 positionAndScale;    // xyz = world position, w = uniform scale
-    vec4 atlasUVRect;         // static: xy=UV offset, zw=UV size. animated: xy=scrollU/V
+    vec4 atlasUVRect;         // static: xy=UV offset, zw=UV size. animated: xy=scrollU/V, z=animStartTime
     vec4 colorTint;           // rgba
     uint bindlessTextureIndex;
     uint flags;

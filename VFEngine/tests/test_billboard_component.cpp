@@ -7,8 +7,8 @@
 //      script natives mutate the registry component directly instead of routing
 //      through the service.
 //   3. BillboardInstanceData CPU vertex layout: the new animParams0/animParams1/
-//      animStartTime attributes (locations 6/7/8) must not overlap colorTint
-//      (location 5) and the 7 attribute descriptions must have monotonic,
+//      animStartTime/loopAnim attributes (locations 6/7/8/9) must not overlap
+//      colorTint (location 5) and the 8 attribute descriptions must have monotonic,
 //      non-overlapping, in-stride offsets. Mirrors the 80-byte GPU layout test.
 //
 // All CPU-only: no Vulkan device and no GLFW window are created. The service is
@@ -71,6 +71,7 @@ TEST_SUITE("BillboardComponentService")
         comp.pulseFrequency = 3.0f;
         comp.spinSpeed = 1.5f;
         comp.animStartTime = 42.0f;
+        comp.loopAnimation = false; // non-default so a dropped mapping is caught
         comp.worldMarker = true;
 
         services::BillboardComponentService service(std::make_shared<scene::SceneGraphSystem>());
@@ -90,6 +91,7 @@ TEST_SUITE("BillboardComponentService")
         CHECK(data->pulseFrequency == doctest::Approx(3.0f));
         CHECK(data->spinSpeed == doctest::Approx(1.5f));
         CHECK(data->animStartTime == doctest::Approx(42.0f));
+        CHECK(data->loopAnimation == false);
         CHECK(data->worldMarker == true);
     }
 
@@ -111,6 +113,7 @@ TEST_SUITE("BillboardComponentService")
         data.pulseFrequency = 6.0f;
         data.spinSpeed = -2.0f;
         data.animStartTime = 100.0f;
+        data.loopAnimation = false;
         data.worldMarker = true;
 
         services::BillboardComponentService service(std::make_shared<scene::SceneGraphSystem>());
@@ -131,6 +134,7 @@ TEST_SUITE("BillboardComponentService")
         CHECK(after.pulseFrequency == doctest::Approx(6.0f));
         CHECK(after.spinSpeed == doctest::Approx(-2.0f));
         CHECK(after.animStartTime == doctest::Approx(100.0f));
+        CHECK(after.loopAnimation == false);
         CHECK(after.worldMarker == true);
     }
 
@@ -185,18 +189,20 @@ TEST_SUITE("BillboardInstanceDataLayout")
               offsetof(BillboardInstanceData, animParams0) + sizeof(glm::vec4));
         CHECK(offsetof(BillboardInstanceData, animStartTime) >=
               offsetof(BillboardInstanceData, animParams1) + sizeof(glm::vec4));
+        CHECK(offsetof(BillboardInstanceData, loopAnim) >=
+              offsetof(BillboardInstanceData, animStartTime) + sizeof(float));
     }
 
-    TEST_CASE("getAttributeDescriptions has 7 monotonic non-overlapping in-stride entries")
+    TEST_CASE("getAttributeDescriptions has 8 monotonic non-overlapping in-stride entries")
     {
         const auto attrs = BillboardInstanceData::getAttributeDescriptions();
-        REQUIRE(attrs.size() == 7);
+        REQUIRE(attrs.size() == 8);
 
         const auto binding = BillboardInstanceData::getBindingDescription();
         const uint32_t stride = binding.stride;
         CHECK(stride == sizeof(BillboardInstanceData));
 
-        // Locations are 2..8 and offsets strictly increase, each staying inside
+        // Locations are 2..9 and offsets strictly increase, each staying inside
         // the instance stride.
         for (size_t i = 0; i < attrs.size(); ++i)
         {
@@ -209,10 +215,11 @@ TEST_SUITE("BillboardInstanceDataLayout")
             }
         }
 
-        // The last three attributes are the animation block, sourced from the
+        // The last four attributes are the animation block, sourced from the
         // matching struct members.
         CHECK(attrs[4].offset == offsetof(BillboardInstanceData, animParams0));
         CHECK(attrs[5].offset == offsetof(BillboardInstanceData, animParams1));
         CHECK(attrs[6].offset == offsetof(BillboardInstanceData, animStartTime));
+        CHECK(attrs[7].offset == offsetof(BillboardInstanceData, loopAnim));
     }
 }

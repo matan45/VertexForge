@@ -11,12 +11,14 @@ namespace render::gpudriven
     // flags bits for BillboardInstanceGPU::flags.
     constexpr uint32_t FLAG_AXIS_ALIGNED = 1u; // bit 0: cylindrical (Y-up) vs full camera-facing
     constexpr uint32_t FLAG_ANIMATED = 2u;     // bit 1: flipbook/scroll/spin animation active
+    constexpr uint32_t FLAG_LOOP = 4u;         // bit 2: flipbook loops (set) vs plays once then holds (clear)
 
     struct alignas(16) BillboardInstanceGPU
     {
         glm::vec4 positionAndScale;    // xyz = world position, w = uniform scale
         // When FLAG_ANIMATED is NOT set: xy = static UV offset, zw = static UV size.
-        // When FLAG_ANIMATED IS set:     xy = scrollU/scrollV (units/sec), zw unused.
+        // When FLAG_ANIMATED IS set:     xy = scrollU/scrollV (units/sec),
+        //                                z = animStartTime (engine seconds), w unused.
         glm::vec4 atlasUVRect;
         glm::vec4 colorTint;           // rgba
         uint32_t bindlessTextureIndex; // Index into bindless texture array

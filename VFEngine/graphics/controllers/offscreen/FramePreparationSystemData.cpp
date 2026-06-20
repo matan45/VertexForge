@@ -56,6 +56,7 @@ namespace controllers::offscreen
             renderData.pulseFrequency = billboard.pulseFrequency;
             renderData.spinSpeed = billboard.spinSpeed;
             renderData.animStartTime = billboard.animStartTime;
+            renderData.loopAnimation = billboard.loopAnimation;
             renderData.worldMarker = billboard.worldMarker;
 
             if (billboard.renderTextureSource != entt::null
@@ -158,7 +159,12 @@ namespace controllers::offscreen
             if (animated)
             {
                 inst.flags |= render::gpudriven::FLAG_ANIMATED;
-                inst.atlasUVRect = glm::vec4(billboard.scrollU, billboard.scrollV, 0.0f, 0.0f);
+                if (billboard.loopAnimation)
+                    inst.flags |= render::gpudriven::FLAG_LOOP;
+                // xy = scroll speed, z = animStartTime (anchors play-once and the
+                // shader's t origin so CPU/GPU agree), w unused.
+                inst.atlasUVRect = glm::vec4(billboard.scrollU, billboard.scrollV,
+                                             billboard.animStartTime, 0.0f);
                 inst.rotation = billboard.spinSpeed; // rad/sec, time-driven in shader
                 inst.flipbookColsRows = render::gpudriven::encodeFlipbookColsRows(
                     billboard.flipbookColumns, billboard.flipbookRows);

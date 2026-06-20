@@ -55,6 +55,7 @@ namespace render::billboard
         glm::vec4 animParams0;    // x=cols y=rows z=frameRate w=spinSpeed
         glm::vec4 animParams1;    // x=scrollU y=scrollV z=pulseAmp w=pulseFreq
         float animStartTime;      // animation time origin (engine seconds)
+        float loopAnim;           // 1.0 = loop flipbook, 0.0 = play once then hold last frame
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -65,9 +66,9 @@ namespace render::billboard
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 7> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 8> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 7> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 8> attributes{};
 
             // location 2: worldPosition (vec3) + atlasIndex (float) packed as vec4
             attributes[0].binding = 1;
@@ -111,6 +112,12 @@ namespace render::billboard
             attributes[6].format = vk::Format::eR32Sfloat;
             attributes[6].offset = offsetof(BillboardInstanceData, animStartTime);
 
+            // location 9: loopAnim (float) - 1.0 = loop, 0.0 = play once
+            attributes[7].binding = 1;
+            attributes[7].location = 9;
+            attributes[7].format = vk::Format::eR32Sfloat;
+            attributes[7].offset = offsetof(BillboardInstanceData, loopAnim);
+
             return attributes;
         }
     };
@@ -146,6 +153,7 @@ namespace render::billboard
         float pulseFrequency = 0.0f;
         float spinSpeed = 0.0f;
         float animStartTime = 0.0f;
+        bool loopAnimation = true; // flipbook: true=loop, false=play once then hold last frame
         bool worldMarker = false;
     };
 

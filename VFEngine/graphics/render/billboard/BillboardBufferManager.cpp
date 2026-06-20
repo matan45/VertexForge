@@ -91,6 +91,7 @@ namespace render::billboard
             instanceData[i].animParams1 = glm::vec4(
                 src.scrollU, src.scrollV, src.pulseAmplitude, src.pulseFrequency);
             instanceData[i].animStartTime = src.animStartTime;
+            instanceData[i].loopAnim = src.loopAnimation ? 1.0f : 0.0f;
         }
 
         vk::DeviceSize bufferSize = sizeof(BillboardInstanceData) * currentInstanceCount;

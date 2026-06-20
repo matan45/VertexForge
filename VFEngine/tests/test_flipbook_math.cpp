@@ -10,6 +10,7 @@
 // ============================================================
 
 using render::computeFlipbookFrame;
+using render::flipbookFinished;
 using render::pulseScale;
 using render::spinAngle;
 
@@ -76,6 +77,71 @@ TEST_CASE("FlipbookMath: frame selection matches GLSL formula")
         CHECK(f.uvOffset.x == doctest::Approx(0.0f));
         CHECK(f.uvOffset.y == doctest::Approx(0.0f));
     }
+}
+
+TEST_CASE("FlipbookMath: play-once clamps to the last frame and holds")
+{
+    const int cols = 4;
+    const int rows = 2; // 8 frames total
+    const float frameRate = 10.0f;
+    const float tileX = 0.25f; // 1/cols
+    const float tileY = 0.5f;  // 1/rows
+
+    // Mid-animation it tracks the loop path: t=0.25s -> frame 2 -> col 2, row 0.
+    {
+        auto f = computeFlipbookFrame(0.25f, frameRate, cols, rows, false);
+        CHECK(f.uvOffset.x == doctest::Approx(0.5f)); // col 2 * 0.25
+        CHECK(f.uvOffset.y == doctest::Approx(0.0f));
+        CHECK(f.uvScale.x == doctest::Approx(tileX));
+        CHECK(f.uvScale.y == doctest::Approx(tileY));
+    }
+
+    // At one full cycle (t=0.8s -> frame 8) it holds the LAST tile (frame 7),
+    // unlike loop which would wrap to frame 0.
+    {
+        auto once = computeFlipbookFrame(0.8f, frameRate, cols, rows, false);
+        // frame 7 -> col mod(7,4)=3, row floor(7/4)=1
+        CHECK(once.uvOffset.x == doctest::Approx(0.75f));
+        CHECK(once.uvOffset.y == doctest::Approx(0.5f));
+
+        auto loop = computeFlipbookFrame(0.8f, frameRate, cols, rows, true);
+        CHECK(loop.uvOffset.x == doctest::Approx(0.0f)); // wraps to frame 0
+        CHECK(loop.uvOffset.y == doctest::Approx(0.0f));
+    }
+
+    // Well past the end it stays on the last tile (holds, never advances).
+    {
+        auto f = computeFlipbookFrame(5.0f, frameRate, cols, rows, false);
+        CHECK(f.uvOffset.x == doctest::Approx(0.75f)); // still frame 7
+        CHECK(f.uvOffset.y == doctest::Approx(0.5f));
+    }
+
+    // The 4-arg overload still loops (backward compatible).
+    {
+        auto f4 = computeFlipbookFrame(0.8f, frameRate, cols, rows);
+        CHECK(f4.uvOffset.x == doctest::Approx(0.0f));
+        CHECK(f4.uvOffset.y == doctest::Approx(0.0f));
+    }
+}
+
+TEST_CASE("FlipbookMath: flipbookFinished transitions false->true at one full cycle")
+{
+    const int cols = 4;
+    const int rows = 2; // 8 frames; finishes when t*frameRate >= 8
+    const float frameRate = 10.0f;
+
+    // Looping animations never finish.
+    CHECK_FALSE(flipbookFinished(0.79f, frameRate, cols, rows, true));
+    CHECK_FALSE(flipbookFinished(100.0f, frameRate, cols, rows, true));
+
+    // Non-animated (<=1 frame or rate<=0) never finishes either.
+    CHECK_FALSE(flipbookFinished(100.0f, frameRate, 1, 1, false));
+    CHECK_FALSE(flipbookFinished(100.0f, 0.0f, cols, rows, false));
+
+    // One-shot: false just before the last frame completes, true at/after.
+    CHECK_FALSE(flipbookFinished(0.79f, frameRate, cols, rows, false)); // 7.9 < 8
+    CHECK(flipbookFinished(0.8f, frameRate, cols, rows, false));        // 8.0 >= 8
+    CHECK(flipbookFinished(1.5f, frameRate, cols, rows, false));
 }
 
 TEST_CASE("FlipbookMath: pulse and spin defaults are identity")

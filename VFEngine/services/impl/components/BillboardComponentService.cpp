@@ -109,6 +109,7 @@ namespace services {
         data.pulseFrequency = comp.pulseFrequency;
         data.spinSpeed = comp.spinSpeed;
         data.animStartTime = comp.animStartTime;
+        data.loopAnimation = comp.loopAnimation;
         data.worldMarker = comp.worldMarker;
         return data;
     }
@@ -142,6 +143,7 @@ namespace services {
         comp.pulseFrequency = billboardData.pulseFrequency;
         comp.spinSpeed = billboardData.spinSpeed;
         comp.animStartTime = billboardData.animStartTime;
+        comp.loopAnimation = billboardData.loopAnimation;
         comp.worldMarker = billboardData.worldMarker;
         // Resolve renderTextureSourceName → entity handle
         comp.renderTextureSource = entt::null;

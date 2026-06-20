@@ -9,6 +9,8 @@
 #include "components/Components.hpp"
 #include "asset/AssetRef.hpp"
 #include "data/EntityConversion.hpp"
+#include "time/Timer.hpp"
+#include "render/FlipbookMath.hpp"
 
 namespace core::api
 {
@@ -203,6 +205,55 @@ namespace core::api
                 if (args.empty()) return value::Value(false);
                 auto* comp = resolveBillboard(args[0]);
                 return value::Value(comp != nullptr && !comp->editorOnly);
+            }});
+
+        // _native_billboard_setLoop(entityId, loop) -> void
+        // loop=true  -> flipbook loops continuously (default).
+        // loop=false -> flipbook plays once then holds the last frame.
+        // Scroll/pulse/spin remain continuous regardless of this toggle.
+        interpreter->registerNativeFunction("_native_billboard_setLoop",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 2) return value::Value(std::monostate{});
+                auto* comp = resolveBillboard(args[0]);
+                if (!comp) return value::Value(std::monostate{});
+
+                comp->loopAnimation = extractBool(args[1]);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_billboard_restart(entityId) -> void
+        // Re-anchor the animation origin to "now" so the flipbook (and the
+        // continuous scroll/pulse/spin phase) restart from the current engine
+        // time. Required for play-once animations and pooled/reused markers.
+        // Uses engineTime::Timer::getElapsedTime() — the same clock that feeds
+        // camera.time (ViewPort.cpp / RuntimeHandler.cpp) and the GPU billboard
+        // pc.uTime, so the CPU restart point and the shader's t origin agree.
+        interpreter->registerNativeFunction("_native_billboard_restart",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty()) return value::Value(std::monostate{});
+                auto* comp = resolveBillboard(args[0]);
+                if (!comp) return value::Value(std::monostate{});
+
+                comp->animStartTime = static_cast<float>(engineTime::Timer::getElapsedTime());
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_billboard_isAnimationFinished(entityId) -> bool
+        // True only for a one-shot (loopAnimation==false) flipbook whose single
+        // cycle has completed: (engineTime - animStartTime)*frameRate >= cols*rows.
+        // Returns false for looping or non-animated billboards (they never finish).
+        interpreter->registerNativeFunction("_native_billboard_isAnimationFinished",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty()) return value::Value(false);
+                auto* comp = resolveBillboard(args[0]);
+                if (!comp) return value::Value(false);
+
+                const float t = static_cast<float>(engineTime::Timer::getElapsedTime()) - comp->animStartTime;
+                return value::Value(render::flipbookFinished(
+                    t, comp->flipbookFrameRate,
+                    static_cast<int>(comp->flipbookColumns),
+                    static_cast<int>(comp->flipbookRows),
+                    comp->loopAnimation));
             }});
     }
 }

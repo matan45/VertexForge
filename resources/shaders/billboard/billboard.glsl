@@ -14,6 +14,7 @@ layout(location = 5) in vec4 inColorTint;         // RGBA color tint
 layout(location = 6) in vec4 inAnimParams0;       // x=cols y=rows z=frameRate w=spinSpeed
 layout(location = 7) in vec4 inAnimParams1;       // x=scrollU y=scrollV z=pulseAmp w=pulseFreq
 layout(location = 8) in float inAnimStartTime;    // animation time origin (engine seconds)
+layout(location = 9) in float inLoopAnim;         // 1.0 = loop flipbook, 0.0 = play once then hold
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColorTint;
@@ -96,10 +97,19 @@ void main() {
     if (flipbookActive) {
         // Flipbook takes precedence (custom/RTT textures, gridSize == 1.0):
         // advance through the sprite sheet at frameRate frames/sec.
+        // loop (inLoopAnim>0.5): frame wraps via mod().
+        // play-once: frame clamps to the last tile (holds final frame).
+        // Mirrors render::computeFlipbookFrame(time, frameRate, cols, rows, loop).
         float totalFrames = cols * rows;
-        float frame = mod(t * frameRate, totalFrames);
-        float col = mod(floor(frame), cols);
-        float row = floor(floor(frame) / cols);
+        float floored;
+        if (inLoopAnim > 0.5) {
+            floored = floor(mod(t * frameRate, totalFrames));
+        } else {
+            floored = min(floor(t * frameRate), totalFrames - 1.0);
+            floored = max(floored, 0.0);
+        }
+        float col = mod(floored, cols);
+        float row = floor(floored / cols);
         vec2 tileSize = vec2(1.0 / cols, 1.0 / rows);
         fragTexCoord = (vec2(col, row) + uv) * tileSize;
     } else if (gridSize == 1.0) {

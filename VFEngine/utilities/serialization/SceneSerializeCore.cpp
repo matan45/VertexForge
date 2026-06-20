@@ -350,6 +350,7 @@ namespace serialization
         j["pulseFrequency"] = billboard.pulseFrequency;
         j["spinSpeed"] = billboard.spinSpeed;
         j["animStartTime"] = billboard.animStartTime;
+        j["loopAnimation"] = billboard.loopAnimation;
         j["worldMarker"] = billboard.worldMarker;
         return j;
     }
@@ -384,6 +385,7 @@ namespace serialization
         billboard.pulseFrequency = j.value("pulseFrequency", 0.0f);
         billboard.spinSpeed = j.value("spinSpeed", 0.0f);
         billboard.animStartTime = j.value("animStartTime", 0.0f);
+        billboard.loopAnimation = j.value("loopAnimation", true);
         billboard.worldMarker = j.value("worldMarker", false);
 
         // Warn about deprecated imposter fields from older scene files

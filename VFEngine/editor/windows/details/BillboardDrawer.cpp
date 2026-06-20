@@ -225,6 +225,14 @@ namespace windows::details
         {
             ImGui::SetTooltip("Frames per second. 0 disables flipbook playback.");
         }
+        if (ImGui::Checkbox("Loop##Billboard", &data.loopAnimation))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("On: flipbook loops continuously.\nOff: plays once then holds the last frame.\n(Scroll/pulse/spin are always continuous.)");
+        }
 
         ImGui::Spacing();
         ImGui::TextDisabled("UV Scroll");

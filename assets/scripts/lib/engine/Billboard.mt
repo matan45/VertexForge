@@ -10,6 +10,8 @@
 //   Billboard::setSize(self, 1.5, 1.5);             // world-space size (units)
 //   Billboard::setTint(self, 0.0, 1.0, 0.0, 1.0);   // green
 //   Billboard::setFlipbook(self, 4, 4, 12.0);       // 4x4 sheet @ 12 fps
+//   Billboard::setLoop(self, false);                // play once then hold last frame
+//   Billboard::restart(self);                       // re-anchor animation to "now"
 //   Billboard::setSpin(self, 1.0);                  // 1 rad/sec spin
 //   Billboard::setVisible(self, false);             // hide in Play
 
@@ -81,6 +83,26 @@ public class Billboard {
     // Spin about the view normal, in radians/sec. 0 = no spin.
     public static function setSpin(int entityId, float radPerSec): void {
         _native_billboard_setSpin(entityId, radPerSec);
+    }
+
+    // Flipbook playback mode. true = loop continuously (default); false = play the
+    // sprite sheet once then hold the last frame. Only governs flipbook frame
+    // selection; scroll/pulse/spin stay continuous either way.
+    public static function setLoop(int entityId, bool loop): void {
+        _native_billboard_setLoop(entityId, loop);
+    }
+
+    // Re-anchor the animation origin to the current engine time so the flipbook
+    // (and the scroll/pulse/spin phase) restart from now. Needed for play-once
+    // animations and pooled/reused markers.
+    public static function restart(int entityId): void {
+        _native_billboard_restart(entityId);
+    }
+
+    // True only for a one-shot (setLoop false) flipbook whose single cycle has
+    // completed. Always false for looping or non-animated billboards.
+    public static function isAnimationFinished(int entityId): bool {
+        return _native_billboard_isAnimationFinished(entityId);
     }
 
     // ============================================

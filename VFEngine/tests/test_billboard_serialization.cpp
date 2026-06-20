@@ -2,7 +2,8 @@
 //   1. Backward compatibility: a .vfScene written before the animation fields
 //      existed (a "billboard" component block with only the original keys) must
 //      load with the static-billboard defaults (cols=1, rows=1, every
-//      rate/scroll/pulse/spin/animStartTime=0, worldMarker=false).
+//      rate/scroll/pulse/spin/animStartTime=0, loopAnimation=true,
+//      worldMarker=false).
 //      deserializeBillboard uses j.value(key, default), so a missing key falls
 //      back to the default and older scenes keep rendering.
 //   2. Round-trip: a component with non-default animation values must save and
@@ -71,6 +72,7 @@ TEST_SUITE("BillboardSerialization")
         billboard.pulseFrequency = 2.0f;
         billboard.spinSpeed = 1.25f;
         billboard.animStartTime = 5.0f;
+        billboard.loopAnimation = false; // non-default so a key mismatch is caught
         billboard.worldMarker = true;
 
         fs::path scenePath = billboardTestRoot() / "AnimatedBillboard.vfScene";
@@ -94,6 +96,7 @@ TEST_SUITE("BillboardSerialization")
         CHECK(after.pulseFrequency == doctest::Approx(2.0f));
         CHECK(after.spinSpeed == doctest::Approx(1.25f));
         CHECK(after.animStartTime == doctest::Approx(5.0f));
+        CHECK(after.loopAnimation == false);
         CHECK(after.worldMarker == true);
     }
 
@@ -142,6 +145,7 @@ TEST_SUITE("BillboardSerialization")
         CHECK(billboard.pulseFrequency == doctest::Approx(0.0f));
         CHECK(billboard.spinSpeed == doctest::Approx(0.0f));
         CHECK(billboard.animStartTime == doctest::Approx(0.0f));
+        CHECK(billboard.loopAnimation == true); // missing key -> looping default
         CHECK(billboard.worldMarker == false);
 
         // Original fields still load alongside the defaults.

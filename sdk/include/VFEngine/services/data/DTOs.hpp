@@ -307,6 +307,7 @@ namespace services
         float pulseFrequency = 0.0f;
         float spinSpeed = 0.0f;
         float animStartTime = 0.0f;
+        bool loopAnimation = true; // flipbook: true=loop, false=play once then hold last frame
         bool worldMarker = false;
     };
 
