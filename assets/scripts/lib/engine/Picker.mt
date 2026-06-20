@@ -79,6 +79,22 @@ public class Picker {
         );
     }
 
+    // All entities whose center falls inside the camera frustum of a screen
+    // sub-rectangle (RTS drag-select box). Pass the box corners in viewport pixel
+    // space (same space as Input::getViewportMouseX/Y); corner order is free.
+    // Returns the entity ids; post-filter by your own selection component.
+    public static function pickRegion(float minX, float minY, float maxX, float maxY): int[] {
+        return _native_picker_pickRegion(minX, minY, maxX, maxY, "");
+    }
+
+    // pickRegion filtered by comma-separated collision layer names. Note: the
+    // current engine native does not apply the layer filter (no cheap per-entity
+    // layer); it is accepted for forward compatibility. Prefer post-filtering the
+    // returned ids by a gameplay/selection component.
+    public static function pickRegion(float minX, float minY, float maxX, float maxY, string layers): int[] {
+        return _native_picker_pickRegion(minX, minY, maxX, maxY, layers);
+    }
+
     // World position -> viewport pixel (inverse of the screen ray; same pixel space
     // as Input::getViewportMouseX/Y). ScreenPoint.visible is false when there is no
     // primary camera or the point is behind the camera; x/y may lie outside the

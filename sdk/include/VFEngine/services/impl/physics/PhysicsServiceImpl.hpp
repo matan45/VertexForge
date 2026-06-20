@@ -54,6 +54,13 @@ namespace services {
             float maxDistance, uint16_t layerMask = 0xFFFF) override;
         bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const override;
 
+        std::vector<EntityHandle> overlapSphere(const glm::vec3& center, float radius,
+            uint16_t layerMask = 0xFFFF) override;
+        std::vector<EntityHandle> overlapBox(const glm::vec3& center, const glm::vec3& halfExtents,
+            const glm::quat& rotation, uint16_t layerMask = 0xFFFF) override;
+        std::vector<EntityHandle> overlapCapsule(const glm::vec3& center, float halfHeight,
+            float radius, const glm::quat& rotation, uint16_t layerMask = 0xFFFF) override;
+
     private:
         IPhysicsProvider* physicsProvider;
         ::events::SubscriptionToken entityDeletedToken;

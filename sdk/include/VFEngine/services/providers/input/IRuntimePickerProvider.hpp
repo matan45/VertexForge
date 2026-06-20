@@ -2,8 +2,10 @@
 
 #include <glm/glm.hpp>
 #include <optional>
+#include <vector>
 #include <cstdint>
 #include "../../interfaces/physics/IPhysicsService.hpp" // services::RaycastHit
+#include "../../data/EntityHandle.hpp"                   // services::EntityHandle
 
 namespace services
 {
@@ -33,5 +35,14 @@ namespace services
 
         // Physics raycast against scene entities. hit=false on miss.
         virtual RaycastHit pickEntity(const PickRay& ray, uint16_t layerMask) = 0;
+
+        // All entities whose center lies inside the camera frustum of the given
+        // screen sub-rectangle (drag-select box). minPx/maxPx are viewport pixels
+        // in any corner order. Returns an empty vector when there is no primary
+        // camera/viewport. layerMask is accepted for API symmetry but is not
+        // applied here (no cheap per-entity physics layer); scripts post-filter.
+        virtual std::vector<EntityHandle> pickRegion(const glm::vec2& minPx,
+                                                     const glm::vec2& maxPx,
+                                                     uint16_t layerMask) = 0;
     };
 }

@@ -57,11 +57,24 @@ namespace core::api
 
             return mask == 0 ? 0xFFFF : mask;
         }
+
+        // Pack a list of entity handles into a pure-int NativeArray (the int[] idiom
+        // used by Entity.findAll / _plugin_findAll). Length 0 on no hits.
+        value::Value makeEntityIdArray(const std::vector<services::EntityHandle>& entities)
+        {
+            auto arr = std::make_shared<value::NativeArray>(entities.size(), value::ValueType::INT);
+            for (size_t i = 0; i < entities.size(); ++i)
+            {
+                arr->set(i, value::Value(entityToInt(entities[i])));
+            }
+            return value::Value(arr);
+        }
     }
 
     void PhysicsAPI::beginFrame()
     {
         raycastCountThisFrame = 0;
+        overlapCountThisFrame = 0;
         PhysicsRigidBodyAPI::beginFrame();
     }
 
@@ -203,6 +216,98 @@ namespace core::api
                 query.entityA = services::EntityHandle{static_cast<uint64_t>(idA)};
                 query.entityB = services::EntityHandle{static_cast<uint64_t>(idB)};
                 return value::Value(dispatcher.query(query));
+            }});
+
+        // overlapSphere(cx, cy, cz, radius [, layers]) -> int[] entity ids
+        interpreter->registerNativeFunction("_native_physics_overlapSphere",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (overlapCountThisFrame >= MAX_OVERLAPS_PER_FRAME)
+                {
+                    vfLogWarning("[Script] Overlap query rate limit exceeded ({}/frame)",
+                                 MAX_OVERLAPS_PER_FRAME);
+                    return value::Value(std::make_shared<value::NativeArray>(0, value::ValueType::INT));
+                }
+                overlapCountThisFrame++;
+
+                if (args.size() < 4)
+                {
+                    return value::Value(std::make_shared<value::NativeArray>(0, value::ValueType::INT));
+                }
+
+                events::physics::OverlapSphereQuery query;
+                query.center = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
+                                         extractFloat(args[2]));
+                query.radius = extractFloat(args[3]);
+                if (args.size() >= 5)
+                {
+                    query.layerMask = resolveLayerMask(extractString(args[4]));
+                }
+                return makeEntityIdArray(dispatcher.query(query));
+            }});
+
+        // overlapBox(cx, cy, cz, hx, hy, hz, qx, qy, qz, qw [, layers]) -> int[] entity ids
+        interpreter->registerNativeFunction("_native_physics_overlapBox",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (overlapCountThisFrame >= MAX_OVERLAPS_PER_FRAME)
+                {
+                    vfLogWarning("[Script] Overlap query rate limit exceeded ({}/frame)",
+                                 MAX_OVERLAPS_PER_FRAME);
+                    return value::Value(std::make_shared<value::NativeArray>(0, value::ValueType::INT));
+                }
+                overlapCountThisFrame++;
+
+                if (args.size() < 10)
+                {
+                    return value::Value(std::make_shared<value::NativeArray>(0, value::ValueType::INT));
+                }
+
+                events::physics::OverlapBoxQuery query;
+                query.center = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
+                                         extractFloat(args[2]));
+                query.halfExtents = glm::vec3(extractFloat(args[3]), extractFloat(args[4]),
+                                              extractFloat(args[5]));
+                // mType Quaternion is (x, y, z, w); glm::quat ctor is (w, x, y, z).
+                query.rotation = glm::quat(extractFloat(args[9]), extractFloat(args[6]),
+                                           extractFloat(args[7]), extractFloat(args[8]));
+                if (args.size() >= 11)
+                {
+                    query.layerMask = resolveLayerMask(extractString(args[10]));
+                }
+                return makeEntityIdArray(dispatcher.query(query));
+            }});
+
+        // overlapCapsule(cx, cy, cz, halfHeight, radius, qx, qy, qz, qw [, layers]) -> int[] entity ids
+        interpreter->registerNativeFunction("_native_physics_overlapCapsule",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (overlapCountThisFrame >= MAX_OVERLAPS_PER_FRAME)
+                {
+                    vfLogWarning("[Script] Overlap query rate limit exceeded ({}/frame)",
+                                 MAX_OVERLAPS_PER_FRAME);
+                    return value::Value(std::make_shared<value::NativeArray>(0, value::ValueType::INT));
+                }
+                overlapCountThisFrame++;
+
+                if (args.size() < 9)
+                {
+                    return value::Value(std::make_shared<value::NativeArray>(0, value::ValueType::INT));
+                }
+
+                events::physics::OverlapCapsuleQuery query;
+                query.center = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
+                                         extractFloat(args[2]));
+                query.halfHeight = extractFloat(args[3]);
+                query.radius = extractFloat(args[4]);
+                // mType Quaternion is (x, y, z, w); glm::quat ctor is (w, x, y, z).
+                query.rotation = glm::quat(extractFloat(args[8]), extractFloat(args[5]),
+                                           extractFloat(args[6]), extractFloat(args[7]));
+                if (args.size() >= 10)
+                {
+                    query.layerMask = resolveLayerMask(extractString(args[9]));
+                }
+                return makeEntityIdArray(dispatcher.query(query));
             }});
 
         interpreter->registerNativeFunction("_native_physics_getGravity",
