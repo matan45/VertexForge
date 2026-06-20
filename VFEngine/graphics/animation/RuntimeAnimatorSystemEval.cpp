@@ -92,6 +92,15 @@ namespace animation
                     lodManager.updateEntityLOD(lodState, 0.0f);
                 }
 
+                // VK-1410: a root-motion-driven NavmeshAgent must evaluate every frame. Under LOD
+                // throttling, frames where the animator is skipped leave rootMotionFresh=false and
+                // the navmesh falls back to maxSpeed, so the unit's ground speed scales with camera
+                // distance/zoom. Pin such agents to LOD0 (every-frame eval) so root-motion pacing
+                // stays camera-independent. (Read mirrors the existing registry reads above.)
+                if (auto* navAgent = registry.try_get<components::NavmeshAgentComponent>(item.entity);
+                    navAgent && navAgent->rootMotionDriven)
+                    lodState.currentLOD = AnimationLODLevel::LOD0;
+
                 ++tlLodCounts[slot][static_cast<uint8_t>(lodState.currentLOD)];
 
                 if (lodManager.shouldEvaluateThisFrame(lodState))

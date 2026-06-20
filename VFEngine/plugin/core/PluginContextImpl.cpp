@@ -6,6 +6,7 @@
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
 #include "events/render/CustomPipelineEvents.hpp"
+#include "events/render/PostProcessEffectEvents.hpp"
 #include "events/render/PluginTextureEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
@@ -284,6 +285,74 @@ namespace plugin {
             [&](const plugin::CustomMeshHandle& h) { return h.id == handle.id; });
     }
 
+    plugin::PostProcessEffectHandle PluginContextImpl::registerPostProcessEffect(
+        const plugin::PostProcessEffectDesc& desc)
+    {
+        if (!hasCapability(std::string(capability::graphics))) {
+            vfLogWarning("[Plugin:{}] Cannot register post-process effect - graphics capability not available", pluginName);
+            return {};
+        }
+
+        events::postprocessfx::RegisterPostProcessEffectCommand cmd;
+        cmd.desc = desc;
+        auto handle = events::EventDispatcher::instance().execute(cmd);
+
+        if (handle.isValid()) {
+            managedPostProcessEffects.push_back({handle, desc.startEnabled});
+            // If the plugin is currently soft-disabled, the effect must start inert.
+            if (!isActive() && desc.startEnabled) {
+                events::postprocessfx::SetPostProcessEffectEnabledCommand off;
+                off.handle = handle;
+                off.enabled = false;
+                events::EventDispatcher::instance().execute(off);
+            }
+            vfLogInfo("[Plugin:{}] Registered post-process effect {}", pluginName, handle.id);
+        } else {
+            vfLogError("[Plugin:{}] Post-process effect registration failed (see engine log)", pluginName);
+        }
+
+        return handle;
+    }
+
+    void PluginContextImpl::updatePostProcessEffectParams(plugin::PostProcessEffectHandle handle,
+                                                          const void* params, size_t size)
+    {
+        if (!handle.isValid() || params == nullptr || size == 0) return;
+
+        events::postprocessfx::UpdatePostProcessEffectParamsCommand cmd;
+        cmd.handle = handle;
+        const auto* bytes = static_cast<const std::byte*>(params);
+        cmd.params.assign(bytes, bytes + size);
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::setPostProcessEffectEnabled(plugin::PostProcessEffectHandle handle, bool enabled)
+    {
+        if (!handle.isValid()) return;
+
+        // Record the plugin's intent so a per-scene reactivate restores it.
+        for (auto& e : managedPostProcessEffects) {
+            if (e.handle.id == handle.id) { e.requestedEnabled = enabled; break; }
+        }
+
+        events::postprocessfx::SetPostProcessEffectEnabledCommand cmd;
+        cmd.handle = handle;
+        cmd.enabled = enabled && isActive(); // stay inert while soft-disabled
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::unregisterPostProcessEffect(plugin::PostProcessEffectHandle handle)
+    {
+        if (!handle.isValid()) return;
+
+        events::postprocessfx::UnregisterPostProcessEffectCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+
+        std::erase_if(managedPostProcessEffects,
+            [&](const ManagedPostProcessEffect& e) { return e.handle.id == handle.id; });
+    }
+
     plugin::PluginTextureHandle PluginContextImpl::createTexture2D(uint32_t width, uint32_t height,
                                                                    plugin::TextureFormat format)
     {
@@ -397,6 +466,15 @@ namespace plugin {
             events::plugintexture::SetWorldMaskParamsCommand cmd;
             cmd.params = lastWorldMaskParams;
             if (!active) cmd.params.enabled = false;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+
+        // VK-1409: suppress/restore plugin post-process effects. Restoring replays the
+        // plugin's per-effect requested-enabled intent (no shader recompile).
+        for (const auto& e : managedPostProcessEffects) {
+            events::postprocessfx::SetPostProcessEffectEnabledCommand cmd;
+            cmd.handle = e.handle;
+            cmd.enabled = active && e.requestedEnabled;
             events::EventDispatcher::instance().execute(cmd);
         }
     }
@@ -1178,6 +1256,16 @@ namespace plugin {
             }
         }
         managedCustomMeshes.clear();
+
+        for (const auto& e : managedPostProcessEffects) {
+            events::postprocessfx::UnregisterPostProcessEffectCommand cmd;
+            cmd.handle = e.handle;
+            try {
+                dispatcher.execute(cmd);
+            } catch (...) {
+            }
+        }
+        managedPostProcessEffects.clear();
 
         // Unbind the world mask if this plugin owns it, then destroy its textures
         if (boundWorldMaskTexture.isValid()) {

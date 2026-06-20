@@ -8,6 +8,8 @@ namespace plugin {
     // v10: script Value access (scriptArray*/scriptObject*/scriptMake*) on PluginContext.
     // v11: onActivate/onDeactivate lifecycle hooks on IPlugin (per-scene soft-disable).
     // v12: registerAssetImporter on PluginContext (full custom asset importers).
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 12;
+    // v13: registerPostProcessEffect on PluginContext (scene-color read-modify-write
+    //      full-screen post-process effects: tone mapping, grading, LUT, sharpen).
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 13;
 
 }

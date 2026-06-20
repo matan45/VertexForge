@@ -195,6 +195,19 @@ namespace services
     {
         pendingLoadPath.reset();
         while (!pendingAdditiveLoads.empty()) pendingAdditiveLoads.pop();
+
+        // Abort an in-progress incremental load so the transition flag doesn't
+        // stay stuck (already-spawned entities are left for the next load/newScene
+        // to clear, same as cancelling any deferred load mid-way).
+        if (incrementalActive)
+        {
+            incrementalActive = false;
+            if (incrementalState)
+            {
+                *incrementalState = serialization::IncrementalLoadState{};
+            }
+            scene::EntityRegistry::setSceneTransitioning(false);
+        }
     }
 
     bool ScenePersistenceService::newScene()
@@ -283,13 +296,36 @@ namespace services
         return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);;
     }
 
+    void ScenePersistenceService::setIncrementalLoadBudget(int entitiesPerFrame)
+    {
+        incrementalLoadBudget = entitiesPerFrame;
+    }
+
     void ScenePersistenceService::update()
     {
+        // Drive an in-progress incremental load before anything else; only one
+        // scene load runs at a time, so hold off other work until it finishes.
+        if (incrementalActive)
+        {
+            bool more = serialization::SceneSerialization::stepIncrementalLoad(
+                *incrementalState, incrementalLoadBudget);
+            if (!more)
+            {
+                incrementalActive = false;
+                finishLoad(incrementalFilePath, incrementalState->success);
+            }
+            return;
+        }
+
         if (pendingLoadPath.has_value())
         {
             std::string filePath = std::move(pendingLoadPath.value());
             pendingLoadPath.reset();
             performDeferredLoad(filePath);
+            if (incrementalActive)
+            {
+                return; // incremental load just began; resume stepping next frame
+            }
         }
 
         if (!pendingAdditiveLoads.empty())
@@ -355,15 +391,43 @@ namespace services
         events::scene::SceneClearedNotification clearedNotif;
         dispatcher.publish(clearedNotif);
 
-        auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total)
+        // Captureless so it can be safely stored and invoked across future frames
+        // by the incremental loader (no dangling reference to a local dispatcher).
+        auto progressCallback = [](const std::string& entityName, size_t loaded, size_t total)
         {
             events::scene::SceneLoadingProgressUpdatedNotification progressNotif;
             progressNotif.currentEntityName = entityName;
             progressNotif.progress = (total > 0) ? static_cast<float>(loaded) / static_cast<float>(total) : 0.0f;
-            dispatcher.publish(progressNotif);
+            events::EventDispatcher::instance().publish(progressNotif);
         };
 
+        if (incrementalLoadBudget > 0)
+        {
+            if (!incrementalState)
+            {
+                incrementalState = std::make_unique<serialization::IncrementalLoadState>();
+            }
+            bool stepping = serialization::SceneSerialization::beginIncrementalLoad(
+                filePath, *sceneGraph, progressCallback, *incrementalState);
+            if (stepping)
+            {
+                // Deserialization continues over the next frames in update();
+                // finishLoad() runs when the work stack drains.
+                incrementalActive = true;
+                incrementalFilePath = filePath;
+                return;
+            }
+            finishLoad(filePath, incrementalState->success);
+            return;
+        }
+
         bool success = serialization::SceneSerialization::loadSceneInto(filePath, *sceneGraph, progressCallback);
+        finishLoad(filePath, success);
+    }
+
+    void ScenePersistenceService::finishLoad(const std::string& filePath, bool success)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
 
         events::scene::SceneLoadingCompletedNotification completeNotif;
         completeNotif.scenePath = filePath;

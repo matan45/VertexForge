@@ -213,6 +213,35 @@ namespace render
         customPipelineManager->destroyPipeline(handle);
     }
 
+    plugin::PostProcessEffectHandle RenderPassHandler::registerPostProcessEffect(
+        const plugin::PostProcessEffectDesc& desc)
+    {
+        if (!plugin::validatePostProcessEffectDesc(desc) || !postProcessPipeline)
+            return {};
+        return postProcessPipeline->addPluginEffect(
+            desc.fragmentGlsl, plugin::postProcessOrderToPriority(desc),
+            desc.paramsSize, desc.startEnabled, desc.debugName);
+    }
+
+    void RenderPassHandler::updatePostProcessEffectParams(plugin::PostProcessEffectHandle handle,
+                                                          std::vector<std::byte>&& params)
+    {
+        if (postProcessPipeline)
+            postProcessPipeline->setPluginEffectParams(handle, std::move(params));
+    }
+
+    void RenderPassHandler::setPostProcessEffectEnabled(plugin::PostProcessEffectHandle handle, bool enabled)
+    {
+        if (postProcessPipeline)
+            postProcessPipeline->setPluginEffectEnabled(handle, enabled);
+    }
+
+    void RenderPassHandler::unregisterPostProcessEffect(plugin::PostProcessEffectHandle handle)
+    {
+        if (postProcessPipeline)
+            postProcessPipeline->removePluginEffect(handle);
+    }
+
     void RenderPassHandler::destroyCustomMesh(plugin::CustomMeshHandle handle)
     {
         customPipelineManager->destroyMesh(handle);

@@ -62,6 +62,11 @@ namespace services
         persistenceService->update();
     }
 
+    void SceneServiceImpl::setIncrementalLoadBudget(int entitiesPerFrame)
+    {
+        persistenceService->setIncrementalLoadBudget(entitiesPerFrame);
+    }
+
     void SceneServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = events::EventDispatcher::instance();

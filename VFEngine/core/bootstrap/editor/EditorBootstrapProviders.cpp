@@ -19,6 +19,7 @@
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/CustomPipelineAdapter.hpp"
+#include "../../adapters/render/PostProcessEffectAdapter.hpp"
 #include "../../adapters/render/PluginTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
@@ -130,6 +131,11 @@ namespace core
     services::ICustomPipelineProvider* EditorBootstrap::getCustomPipelineProvider()
     {
         return customPipelineAdapter.get();
+    }
+
+    services::IPostProcessEffectProvider* EditorBootstrap::getPostProcessEffectProvider()
+    {
+        return postProcessEffectAdapter.get();
     }
 
     services::IPluginTextureProvider* EditorBootstrap::getPluginTextureProvider()

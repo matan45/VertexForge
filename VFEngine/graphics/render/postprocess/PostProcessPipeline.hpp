@@ -2,9 +2,14 @@
 
 #include "PostProcessEffect.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
+#include "../../../services/data/PostProcessEffectTypes.hpp"
 #include <glm/glm.hpp>
+#include <atomic>
+#include <cstddef>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 namespace core
@@ -17,6 +22,8 @@ namespace core
 
 namespace render::postprocess
 {
+    class PluginPostProcessEffect;
+
     struct SunInfo
     {
         glm::vec2 screenPos{0.5f};
@@ -83,6 +90,22 @@ namespace render::postprocess
         std::optional<float> autoExposureOverride;
         core::DeferredDeletionQueue* deletionQueue = nullptr;
 
+        // --- Plugin effect registry (VK-1409) ---
+        // A move-only deferred op; applied on the render thread in drainPendingOps().
+        struct PendingOp
+        {
+            enum class Kind { Add, Remove, SetEnabled, SetParams } kind;
+            uint64_t id = 0;
+            std::unique_ptr<PluginPostProcessEffect> effect; // Add only
+            bool enabled = false;                            // SetEnabled only
+            std::vector<std::byte> params;                   // SetParams only
+        };
+        std::mutex pendingMutex;
+        std::vector<PendingOp> pendingOps;
+        std::atomic<uint64_t> nextPluginEffectId{1};
+        // Render-thread-only: maps handle id -> non-owning ptr (owner is `effects`).
+        std::unordered_map<uint64_t, PluginPostProcessEffect*> pluginEffects;
+
     public:
         explicit PostProcessPipeline(core::Device& device, core::SwapChain& swapChain,
                                      core::OffscreenResources& offscreenResources);
@@ -105,6 +128,20 @@ namespace render::postprocess
         void removeEffect(::postprocess::EffectType type);
         void updateSettings(const ::postprocess::PostProcessSettings& settings);
         void applySettings(const ::postprocess::PostProcessSettings& settings);
+
+        // Plugin-registered full-screen effects (VK-1409). These are handle-keyed
+        // (plugin effects all share EffectType::PluginCustom) and thread-safe: the
+        // calls below may run on the main thread while execute() runs on the render
+        // thread, so they only enqueue ops, drained at the top of each execute*().
+        plugin::PostProcessEffectHandle addPluginEffect(std::string fragmentGlsl,
+                                                        uint32_t priority,
+                                                        uint32_t paramsSize,
+                                                        bool startEnabled,
+                                                        std::string debugName);
+        void removePluginEffect(plugin::PostProcessEffectHandle handle);
+        void setPluginEffectEnabled(plugin::PostProcessEffectHandle handle, bool enabled);
+        void setPluginEffectParams(plugin::PostProcessEffectHandle handle,
+                                   std::vector<std::byte> params);
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
         void setSunData(const glm::vec2& screenPos, bool hasSun);
@@ -132,5 +169,9 @@ namespace render::postprocess
 
         void cleanupPingPongTargets();
         void sortEffects();
+
+        // Apply queued plugin-effect ops on the render thread. Called first thing
+        // in each execute*() so a freshly-registered effect is live this frame.
+        void drainPendingOps();
     };
 }

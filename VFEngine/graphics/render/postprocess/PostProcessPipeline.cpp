@@ -11,6 +11,7 @@
 #include "effects/ColorGradingEffect.hpp"
 #include "effects/UnderwaterEffect.hpp"
 #include "effects/RainDropletsEffect.hpp"
+#include "effects/PluginPostProcessEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../upscaling/UpscaleManager.hpp"
@@ -67,6 +68,8 @@ namespace render::postprocess
 
     void PostProcessPipeline::execute(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
+        drainPendingOps();
+
         if (!hasEnabledEffects())
             return;
 
@@ -171,6 +174,8 @@ namespace render::postprocess
     void PostProcessPipeline::executePreUpscale(const vk::CommandBuffer& commandBuffer,
                                                   uint32_t imageIndex)
     {
+        drainPendingOps();
+
         if (!hasEnabledEffects())
             return;
 
@@ -271,6 +276,8 @@ namespace render::postprocess
                                                   uint32_t imageIndex,
                                                   vk::Image sourceImage, vk::ImageView sourceView)
     {
+        drainPendingOps();
+
         if (!initialized)
             lazyInit();
 
@@ -647,6 +654,142 @@ namespace render::postprocess
     {
         for (auto& effect : effects)
             effect->updateParameters(settings);
+    }
+
+    // --- Plugin effects (VK-1409) -----------------------------------------------
+    // The public methods run on the caller's thread (typically main, via the
+    // event dispatcher) and only enqueue ops. drainPendingOps() applies them on
+    // the render thread, where mutating `effects` is safe.
+
+    plugin::PostProcessEffectHandle PostProcessPipeline::addPluginEffect(
+        std::string fragmentGlsl, uint32_t priority, uint32_t paramsSize,
+        bool startEnabled, std::string debugName)
+    {
+        uint64_t id = nextPluginEffectId.fetch_add(1, std::memory_order_relaxed);
+
+        // Constructing the effect only stores data (no GPU work) — safe off-thread.
+        auto effect = std::make_unique<PluginPostProcessEffect>(
+            device, std::move(fragmentGlsl), priority, paramsSize, startEnabled,
+            std::move(debugName));
+
+        PendingOp op;
+        op.kind = PendingOp::Kind::Add;
+        op.id = id;
+        op.effect = std::move(effect);
+
+        {
+            std::lock_guard<std::mutex> lk(pendingMutex);
+            pendingOps.push_back(std::move(op));
+        }
+        return plugin::PostProcessEffectHandle{id};
+    }
+
+    void PostProcessPipeline::removePluginEffect(plugin::PostProcessEffectHandle handle)
+    {
+        if (!handle.isValid()) return;
+        PendingOp op;
+        op.kind = PendingOp::Kind::Remove;
+        op.id = handle.id;
+        std::lock_guard<std::mutex> lk(pendingMutex);
+        pendingOps.push_back(std::move(op));
+    }
+
+    void PostProcessPipeline::setPluginEffectEnabled(plugin::PostProcessEffectHandle handle, bool enabled)
+    {
+        if (!handle.isValid()) return;
+        PendingOp op;
+        op.kind = PendingOp::Kind::SetEnabled;
+        op.id = handle.id;
+        op.enabled = enabled;
+        std::lock_guard<std::mutex> lk(pendingMutex);
+        pendingOps.push_back(std::move(op));
+    }
+
+    void PostProcessPipeline::setPluginEffectParams(plugin::PostProcessEffectHandle handle,
+                                                    std::vector<std::byte> params)
+    {
+        if (!handle.isValid()) return;
+        PendingOp op;
+        op.kind = PendingOp::Kind::SetParams;
+        op.id = handle.id;
+        op.params = std::move(params);
+        std::lock_guard<std::mutex> lk(pendingMutex);
+        pendingOps.push_back(std::move(op));
+    }
+
+    void PostProcessPipeline::drainPendingOps()
+    {
+        std::vector<PendingOp> ops;
+        {
+            std::lock_guard<std::mutex> lk(pendingMutex);
+            if (pendingOps.empty()) return;
+            ops.swap(pendingOps);
+        }
+
+        auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+
+        for (auto& op : ops)
+        {
+            switch (op.kind)
+            {
+            case PendingOp::Kind::Add:
+            {
+                auto* ptr = op.effect.get();
+                pluginEffects[op.id] = ptr;
+                effects.push_back(std::move(op.effect));
+                sortEffects();
+                if (initialized && !ptr->isInitialized())
+                {
+                    auto ext = ptr->isPreUpscale() ? swapChain.getSwapchainExtent()
+                                                   : swapChain.getDisplayExtent();
+                    ptr->init(sceneColorFormat, ext);
+                }
+                break;
+            }
+            case PendingOp::Kind::Remove:
+            {
+                auto mapIt = pluginEffects.find(op.id);
+                if (mapIt == pluginEffects.end()) break;
+                PostProcessEffect* target = mapIt->second;
+                pluginEffects.erase(mapIt);
+
+                for (auto it = effects.begin(); it != effects.end(); ++it)
+                {
+                    if (it->get() != target) continue;
+
+                    if ((*it)->isInitialized() && dq)
+                    {
+                        // 3-frame deferred destroy — the effect's pipeline may be
+                        // referenced by in-flight command buffers.
+                        auto shared = std::shared_ptr<PostProcessEffect>(std::move(*it));
+                        dq->queueCustom([shared](vk::Device) { shared->cleanup(); });
+                    }
+                    else if ((*it)->isInitialized())
+                    {
+                        device.getLogicalDevice().waitIdle();
+                        (*it)->cleanup();
+                    }
+                    effects.erase(it);
+                    break;
+                }
+                break;
+            }
+            case PendingOp::Kind::SetEnabled:
+            {
+                auto mapIt = pluginEffects.find(op.id);
+                if (mapIt != pluginEffects.end())
+                    mapIt->second->setEnabledExternal(op.enabled);
+                break;
+            }
+            case PendingOp::Kind::SetParams:
+            {
+                auto mapIt = pluginEffects.find(op.id);
+                if (mapIt != pluginEffects.end())
+                    mapIt->second->setParams(op.params.data(), op.params.size());
+                break;
+            }
+            }
+        }
     }
 
     void PostProcessPipeline::applySettings(const ::postprocess::PostProcessSettings& settings)

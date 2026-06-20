@@ -225,11 +225,17 @@ namespace handlers {
     }
 
     void RuntimeHandler::initializeServices() {
-        sceneService = std::make_shared<services::SceneServiceImpl>(
+        auto sceneServiceImpl = std::make_shared<services::SceneServiceImpl>(
             bootstrap->getSceneGraphSystem(),
             bootstrap->getAnimatorProvider(),
             bootstrap->getSocketProvider()
         );
+        // Spread deferred scene loads across frames so a loading screen can
+        // animate during transitions instead of the game hitching for one frame
+        // (VK-1268). The render loop keeps presenting between spawn batches.
+        // (Set on the concrete impl; not part of the ISceneService interface.)
+        sceneServiceImpl->setIncrementalLoadBudget(64);
+        sceneService = sceneServiceImpl;
         renderService = std::make_shared<services::RuntimeRenderServiceImpl>(
             bootstrap->getOffScreenProvider(),
             bootstrap->getPostProcessProvider()

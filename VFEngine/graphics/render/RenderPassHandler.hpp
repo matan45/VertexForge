@@ -8,6 +8,7 @@
 #include "../../services/data/RenderHookTypes.hpp"
 #include "../../services/data/RenderHookContext.hpp"
 #include "../../services/data/CustomPipelineTypes.hpp"
+#include "../../services/data/PostProcessEffectTypes.hpp"
 #include "../../services/data/PluginTextureTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include "common/SharedCameraUBO.hpp"
@@ -481,6 +482,14 @@ namespace render
         void enqueueCustomDraw(plugin::CustomDrawItem&& item);
         void destroyCustomPipeline(plugin::CustomPipelineHandle handle);
         void destroyCustomMesh(plugin::CustomMeshHandle handle);
+
+        // Plugin custom post-process effects (VK-1409) — full-screen read-modify-write
+        // effects slotted into the post-process chain (ordered by priority relative
+        // to the built-in tonemap). Forwarded to PostProcessPipeline.
+        plugin::PostProcessEffectHandle registerPostProcessEffect(const plugin::PostProcessEffectDesc& desc);
+        void updatePostProcessEffectParams(plugin::PostProcessEffectHandle handle, std::vector<std::byte>&& params);
+        void setPostProcessEffectEnabled(plugin::PostProcessEffectHandle handle, bool enabled);
+        void unregisterPostProcessEffect(plugin::PostProcessEffectHandle handle);
 
         // Plugin 2D textures + world-space mask (terrain dim / entity discard)
         plugin::PluginTextureHandle createPluginTexture2D(uint32_t width, uint32_t height,

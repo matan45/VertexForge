@@ -23,6 +23,7 @@
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/CustomPipelineAdapter.hpp"
+#include "../../adapters/render/PostProcessEffectAdapter.hpp"
 #include "../../adapters/render/PluginTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/terrain/OceanRenderAdapter.hpp"
@@ -79,6 +80,7 @@ namespace core
         renderTextureAdapter.reset();
         renderHookAdapter.reset();
         customPipelineAdapter.reset();
+        postProcessEffectAdapter.reset();
         pluginTextureAdapter.reset();
         debugDrawAdapter.reset();
         oceanRenderAdapter.reset();

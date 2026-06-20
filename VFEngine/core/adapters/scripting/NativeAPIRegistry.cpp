@@ -41,6 +41,7 @@
 #include "../api/RuntimePickerAPI.hpp"
 #include "../api/WorldMaskAPI.hpp"
 #include "../api/MaterialAPI.hpp"
+#include "../api/LoadingAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -114,6 +115,7 @@ namespace core
         api::RuntimePickerAPI::registerAPI(interpreter);
         api::WorldMaskAPI::registerAPI(interpreter);
         api::MaterialAPI::registerAPI(interpreter);
+        api::LoadingAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

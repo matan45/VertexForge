@@ -17,6 +17,7 @@ namespace world
             load.entityName = std::move(name);
             load.entityJson = std::move(json);
             pendingLoads.push_back(std::move(load));
+            ++totalQueuedLoads;
         }
     }
 
@@ -36,6 +37,10 @@ namespace world
             if (!(load.coord == coord))
                 remaining.push_back(std::move(load));
         }
+        // Cancelled loads will never be processed; drop them from the queued total
+        // so progress can still reach 1.0.
+        const size_t removed = pendingLoads.size() - remaining.size();
+        totalQueuedLoads -= static_cast<uint64_t>(removed);
         pendingLoads = std::move(remaining);
     }
 
@@ -78,6 +83,7 @@ namespace world
         {
             auto pending = std::move(pendingLoads.front());
             pendingLoads.pop_front();
+            ++totalProcessedLoads;
 
             try
             {

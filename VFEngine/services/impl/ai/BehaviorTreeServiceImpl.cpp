@@ -107,16 +107,19 @@ namespace services
             {
                 std::vector<events::ai::BTAttachedTreeInfo> result;
                 auto& registry = scene::EntityRegistry::getRegistry();
-                auto view = registry.view<components::BehaviorTreeComponent>();
-                for (auto entity : view)
-                {
-                    auto handle = internal::toHandle(entity);
-                    if (!provider->hasTree(handle)) continue;
 
+                // Enumerate the live runtimes, not the BehaviorTreeComponent view: a tree
+                // attached at runtime via script (Blackboard::attachTree) has a runtime but
+                // no component, so a component walk would miss it and the debugger would
+                // wrongly report "no entities running this tree".
+                for (auto handle : provider->getAttachedEntities())
+                {
                     events::ai::BTAttachedTreeInfo info;
                     info.entity = handle;
                     info.treePath = provider->getTreePath(handle);
-                    if (registry.all_of<components::NameComponent>(entity))
+
+                    auto entity = internal::fromHandle(handle);
+                    if (registry.valid(entity) && registry.all_of<components::NameComponent>(entity))
                     {
                         info.name = registry.get<components::NameComponent>(entity).name;
                     }

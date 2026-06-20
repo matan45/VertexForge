@@ -4,6 +4,7 @@
 #include <functional>
 #include <shared_mutex>
 #include <filesystem>
+#include <vector>
 #include <nlohmann/json.hpp>
 #include "../scene/Entity.hpp"
 #include "../asset/AssetRef.hpp"
@@ -41,6 +42,40 @@ namespace serialization
     };
     #pragma warning(pop)
 
+    // Frame-budgeted ("incremental") scene load state. Holds the parsed scene
+    // plus a DFS work stack so a load can be spread across many frames instead
+    // of blocking a single frame (VK-1268). Entity visit order matches the
+    // synchronous loadSceneInto exactly (DFS pre-order), so component reference
+    // resolution sees the same already-created set at each step.
+    //
+    // Plain header-only struct (NOT dll-exported): callers own it by value /
+    // unique_ptr. Must not be moved or copied while a load is in progress, since
+    // the work stack holds pointers into sceneJson.
+    struct IncrementalLoadState
+    {
+        struct WorkItem
+        {
+            scene::Entity parent;     // entity to attach the child to
+            const json* childJson;    // points into sceneJson; stable for the load
+        };
+
+        json sceneJson;
+        std::vector<WorkItem> stack;          // DFS: back() is processed next
+        size_t entitiesLoaded = 0;
+        size_t totalEntities = 0;
+        SceneLoadProgressCallback progressCallback;
+        scene::SceneGraphSystem* sceneGraph = nullptr;
+        bool finished = false;
+        bool success = false;
+
+        [[nodiscard]] float fraction() const
+        {
+            return totalEntities > 0
+                       ? static_cast<float>(entitiesLoaded) / static_cast<float>(totalEntities)
+                       : 1.0f;
+        }
+    };
+
     #pragma warning(push)
     #pragma warning(disable: 4251)
     class VF_SERIALIZATION_API SceneSerialization
@@ -57,6 +92,19 @@ namespace serialization
         static scene::SceneGraphSystem loadScene(std::string_view filename);
         static bool loadSceneInto(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
                                   SceneLoadProgressCallback progressCallback = nullptr);
+
+        // Frame-budgeted variant of loadSceneInto (VK-1268). beginIncrementalLoad
+        // parses + clears + spawns the root, then returns true if stepping is
+        // required (call stepIncrementalLoad each frame until it returns false).
+        // Returns false when the load already finished in begin() — binary scenes
+        // (loaded synchronously), parse failures, or an empty scene; check
+        // state.success. Binary scenes are not yet incremental.
+        static bool beginIncrementalLoad(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
+                                         SceneLoadProgressCallback progressCallback,
+                                         IncrementalLoadState& state);
+        // Process up to maxEntitiesPerFrame entities (clamped to >= 1). Returns
+        // true while more work remains, false once complete (state.success set).
+        static bool stepIncrementalLoad(IncrementalLoadState& state, int maxEntitiesPerFrame);
         static bool loadSceneAdditive(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
                                       scene::Entity& containerParent,
                                       SceneLoadProgressCallback progressCallback = nullptr);
@@ -127,6 +175,12 @@ namespace serialization
 
         static void deserializeChildren(const json& childrenJson, scene::Entity& parent,
                                         DeserializeEntityContext& ctx);
+
+        // The non-recursive part of deserializeEntity (name, active flag, progress,
+        // root uuid, transform, components). Children are handled by the caller so
+        // the same routine serves both the recursive and incremental loaders.
+        static void deserializeEntitySelf(const json& entityJson, scene::Entity& entity,
+                                          DeserializeEntityContext& ctx);
 
         static json serializeTransform(const components::TransformComponent& transform);
         static void deserializeTransform(const json& j, components::TransformComponent& transform);

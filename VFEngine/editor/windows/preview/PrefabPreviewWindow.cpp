@@ -48,6 +48,7 @@ namespace windows
                     {"rigidBody", "RigidBody"},
                     {"script", "Script"},
                     {"navmeshAgent", "NavmeshAgent"},
+                    {"navmeshObstacle", "NavmeshObstacle"},
                     {"vfx", "VFX"},
                     {"socketAttachment", "SocketAttachment"},
                     {"socketOverride", "SocketOverride"},
@@ -55,6 +56,7 @@ namespace windows
                     {"pointLight", "PointLight"},
                     {"spotLight", "SpotLight"},
                     {"controller", "Controller"},
+                    {"behaviorTree", "BehaviorTree"},
                     {"prefabInstance", "PrefabInstance"}
                 };
 

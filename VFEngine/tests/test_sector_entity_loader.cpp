@@ -231,6 +231,76 @@ TEST_SUITE("SectorEntityLoader")
         unloadAll(loader, sceneGraph, coord, {910401});
     }
 
+    TEST_CASE("getLoadProgress tracks queued vs processed entities")
+    {
+        scene::SceneGraphSystem sceneGraph;
+        world::SectorEntityLoader loader;
+        world::SectorCoord coord{0, 0};
+
+        // Idle loader reports complete (nothing queued).
+        CHECK(loader.getLoadProgress().entitiesQueued == 0);
+        CHECK(loader.getLoadProgress().pending() == 0);
+        CHECK(loader.getLoadProgress().fraction() == doctest::Approx(1.0f));
+
+        std::vector<uint64_t> uuids{910600, 910601, 910602, 910603};
+        std::vector<std::pair<std::string, json>> payload;
+        for (size_t i = 0; i < uuids.size(); ++i)
+            payload.push_back(makeEntityPayload("Prog" + std::to_string(i), uuids[i],
+                                                glm::vec3(static_cast<float>(i), 0.0f, 0.0f)));
+        loader.queueSectorLoadFromData(coord, payload);
+
+        auto p = loader.getLoadProgress();
+        CHECK(p.entitiesQueued == 4);
+        CHECK(p.entitiesLoaded == 0);
+        CHECK(p.pending() == 4);
+        CHECK(p.fraction() == doctest::Approx(0.0f));
+
+        loader.update(sceneGraph, 2);
+        p = loader.getLoadProgress();
+        CHECK(p.entitiesLoaded == 2);
+        CHECK(p.pending() == 2);
+        CHECK(p.fraction() == doctest::Approx(0.5f));
+
+        loader.flush(sceneGraph);
+        p = loader.getLoadProgress();
+        CHECK(p.entitiesLoaded == 4);
+        CHECK(p.pending() == 0);
+        CHECK(p.fraction() == doctest::Approx(1.0f));
+
+        unloadAll(loader, sceneGraph, coord, uuids);
+    }
+
+    TEST_CASE("cancelled loads do not strand progress below 1.0")
+    {
+        scene::SceneGraphSystem sceneGraph;
+        world::SectorEntityLoader loader;
+        world::SectorCoord keep{1, 0};
+        world::SectorCoord cancel{0, 0};
+
+        std::vector<std::pair<std::string, json>> cancelPayload;
+        cancelPayload.push_back(makeEntityPayload("CancelledProg", 910700, glm::vec3(0.0f)));
+        cancelPayload.push_back(makeEntityPayload("CancelledProg2", 910701, glm::vec3(0.0f)));
+        loader.queueSectorLoadFromData(cancel, cancelPayload);
+
+        std::vector<std::pair<std::string, json>> keepPayload;
+        keepPayload.push_back(makeEntityPayload("KeptProg", 910702, glm::vec3(0.0f)));
+        loader.queueSectorLoadFromData(keep, keepPayload);
+
+        CHECK(loader.getLoadProgress().entitiesQueued == 3);
+
+        loader.cancelPendingLoads(cancel);
+        // Two cancelled entities drop out of the queued total.
+        CHECK(loader.getLoadProgress().entitiesQueued == 1);
+
+        loader.flush(sceneGraph);
+        auto p = loader.getLoadProgress();
+        CHECK(p.entitiesLoaded == 1);
+        CHECK(p.pending() == 0);
+        CHECK(p.fraction() == doctest::Approx(1.0f));
+
+        unloadAll(loader, sceneGraph, keep, {910702});
+    }
+
     TEST_CASE("cancelPendingLoads drops only the cancelled sector")
     {
         scene::SceneGraphSystem sceneGraph;

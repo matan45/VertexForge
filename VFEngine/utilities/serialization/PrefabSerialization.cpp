@@ -98,6 +98,12 @@ namespace serialization
                 entity.getComponent<components::NavmeshAgentComponent>());
         }
 
+        if (entity.hasComponent<components::NavmeshObstacleComponent>())
+        {
+            out["navmeshObstacle"] = SceneSerialization::serializeNavmeshObstacle(
+                entity.getComponent<components::NavmeshObstacleComponent>());
+        }
+
         if (entity.hasComponent<components::VFXComponent>())
         {
             out["vfx"] = SceneSerialization::serializeVFX(
@@ -144,6 +150,14 @@ namespace serialization
         {
             out["ikTarget"] = SceneSerialization::serializeIKTarget(
                 entity.getComponent<components::IKTargetComponent>());
+        }
+
+        // Behavior tree must be baked so instantiated entities carry their AI brain
+        // (the .vfBehaviorTree ref + enabled flag); matches the scene serializer.
+        if (entity.hasComponent<components::BehaviorTreeComponent>())
+        {
+            out["behaviorTree"] = SceneSerialization::serializeBehaviorTree(
+                entity.getComponent<components::BehaviorTreeComponent>());
         }
 
         // Script components must be baked into prefabs so instantiated entities
@@ -426,6 +440,12 @@ namespace serialization
             SceneSerialization::deserializeNavmeshAgent(componentsJson["navmeshAgent"], navAgentComp);
         }
 
+        if (componentsJson.contains("navmeshObstacle"))
+        {
+            auto& navObstacleComp = entity.addOrReplaceComponent<components::NavmeshObstacleComponent>();
+            SceneSerialization::deserializeNavmeshObstacle(componentsJson["navmeshObstacle"], navObstacleComp);
+        }
+
         if (componentsJson.contains("socketAttachment"))
         {
             auto& attachment = entity.addOrReplaceComponent<components::SocketAttachmentComponent>();
@@ -448,6 +468,12 @@ namespace serialization
         {
             auto& ikTargetComp = entity.addOrReplaceComponent<components::IKTargetComponent>();
             SceneSerialization::deserializeIKTarget(componentsJson["ikTarget"], ikTargetComp);
+        }
+
+        if (componentsJson.contains("behaviorTree"))
+        {
+            auto& btComp = entity.addOrReplaceComponent<components::BehaviorTreeComponent>();
+            SceneSerialization::deserializeBehaviorTree(componentsJson["behaviorTree"], btComp);
         }
 
         if (componentsJson.contains("script"))

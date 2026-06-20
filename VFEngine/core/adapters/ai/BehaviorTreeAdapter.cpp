@@ -141,6 +141,15 @@ namespace core
         return it != runtimes.end() ? it->second.treePath : "";
     }
 
+    std::vector<services::EntityHandle> BehaviorTreeAdapter::getAttachedEntities() const
+    {
+        std::vector<services::EntityHandle> result;
+        result.reserve(runtimes.size());
+        for (const auto& [entityId, _] : runtimes)
+            result.push_back(services::EntityHandle{entityId});
+        return result;
+    }
+
     bool BehaviorTreeAdapter::isEnabled(services::EntityHandle entity) const
     {
         auto it = runtimes.find(entity.id);
@@ -396,11 +405,34 @@ namespace core
             navCmd.entity = entity;
             navCmd.target = target;
             dispatcher.execute(navCmd);
+
+            // Defer the arrival check by one tick. The navmesh agent updates AFTER the
+            // behavior tree in the frame graph (Controllers -> BehaviorTrees -> Navmesh),
+            // so HasReachedDestination still reflects the PREVIOUS destination this frame.
+            // Checking it now would wrongly report "arrived" the instant a new move is
+            // issued (e.g. the return-home leg right after reaching the resource),
+            // collapsing the loop and pinning the agent in place. Let the agent act on
+            // the new destination first; arrival is evaluated on the next tick onward.
+            return BTNodeStatus::Running;
         }
 
-        events::controller::HasReachedDestinationQuery reachedQuery;
-        reachedQuery.entity = entity;
-        return dispatcher.query(reachedQuery) ? BTNodeStatus::Success : BTNodeStatus::Running;
+        // Arrival check by horizontal distance to the target. MoveTo issues the
+        // destination through the navmesh agent (SetAgentDestinationCommand above), but
+        // the controller-based HasReachedDestinationQuery only works for entities that
+        // have a ControllerComponent and returns true for everything else (e.g. a
+        // NavmeshAgent-driven unit), which collapses the loop. A direct distance test
+        // works for any movement system (mirrors the legacy harvester's arrived()).
+        glm::vec3 pos = target;
+        events::scene::GetWorldTransformQuery transformQuery;
+        transformQuery.entity = entity;
+        auto transformOpt = dispatcher.query(transformQuery);
+        if (transformOpt.has_value())
+            pos = transformOpt->position;
+
+        float dx = target.x - pos.x;
+        float dz = target.z - pos.z;
+        bool reached = (dx * dx + dz * dz) <= (arrivalDistance * arrivalDistance);
+        return reached ? BTNodeStatus::Success : BTNodeStatus::Running;
     }
 
     BTNodeStatus BehaviorTreeAdapter::executePlayAnimation(services::EntityHandle entity,

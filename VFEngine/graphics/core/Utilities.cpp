@@ -1,8 +1,11 @@
 #include "Utilities.hpp"
 #include "Device.hpp"
+#include "VulkanContext.hpp"
 #include "print/Log.hpp"
+#include <mutex>
 
 namespace core {
+
 
 	QueueFamilyIndices Utilities::findQueueFamiliesFromDevice(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface)
 	{
@@ -99,12 +102,29 @@ namespace core {
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &(*commandBuffer);
 
-		try {
-			queue.submit(submitInfo, renderFence);
-			queue.waitIdle();
-		}
-		catch (const vk::SystemError& err) {
-			vfLogError("Failed to submit command buffer: {}", err.what());
+		// This overload used to submit without holding Device::graphicsQueueMutex. When called
+		// from a job-system worker (e.g. BufferUtilities::copyToBuffer uploading the navmesh
+		// debug overlay) concurrently with the render thread's frame submit, the same VkQueue was
+		// used from two threads -> validation THREADING ERROR -> DEVICE_LOST. Serialize via the
+		// same graphics-queue mutex the render/present paths use. All production callers pass the
+		// graphics queue; a null global device (e.g. CPU tests) falls back to an unlocked submit.
+		Device* dev = VulkanContext::getDeviceRaw();
+
+		auto doSubmit = [&]() {
+			try {
+				queue.submit(submitInfo, renderFence);
+				queue.waitIdle();
+			}
+			catch (const vk::SystemError& err) {
+				vfLogError("Failed to submit command buffer: {}", err.what());
+			}
+		};
+
+		if (dev) {
+			std::lock_guard<std::mutex> lock(dev->getGraphicsQueueMutex());
+			doSubmit();
+		} else {
+			doSubmit();
 		}
 	}
 

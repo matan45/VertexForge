@@ -82,10 +82,13 @@ namespace core
 
 		static vk::UniqueCommandBuffer beginSingleTimeCommands(const vk::Device& device,
 			const vk::CommandPool& commandPool);
+		// Submits a one-time command buffer on the given queue. Serializes internally on the
+		// Device's graphics-queue mutex (see .cpp), so it is safe to call from job-system workers
+		// without racing the render thread's frame submit (VkQueue must not be used concurrently).
 		static void endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer,
 			const vk::Fence& renderFence = nullptr);
 
-		// Thread-safe version that locks the graphics queue mutex
+		// Thread-safe version that locks the graphics queue mutex and submits to the graphics queue.
 		static void endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer,
 			const vk::Fence& renderFence = nullptr);
 	};
