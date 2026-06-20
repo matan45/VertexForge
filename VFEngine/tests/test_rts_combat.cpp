@@ -74,6 +74,19 @@ TEST_SUITE("RTSCombat")
         }
     }
 
+    TEST_CASE("applyDamageToHealth does not re-kill an already-dead target")
+    {
+        // Regression: a dead-but-not-yet-cleaned-up unit hit by AoE/aggro must
+        // report Survived (HP stays 0), so "rts.unit_killed" fires only once.
+        HealthComponent h;
+        h.currentHP = 0.0f;
+
+        const DamageResult r = applyDamageToHealth(h, 50.0f);
+
+        CHECK(r == DamageResult::Survived);
+        CHECK(h.currentHP == doctest::Approx(0.0f));
+    }
+
     TEST_CASE("DamageResult enum values match the native int contract")
     {
         // _rts_apply_damage returns these ints: -1 no Health, 0 survived, 1 killed.

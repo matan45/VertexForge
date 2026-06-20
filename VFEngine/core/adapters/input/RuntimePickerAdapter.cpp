@@ -147,8 +147,16 @@ namespace core
         auto view = registry.view<components::TransformComponent>();
         for (entt::entity e : view)
         {
-            const auto& transform = view.get<components::TransformComponent>(e);
-            if (math::classifyPointInFrustum(frustum, transform.position))
+            // Prefer the cached world transform so parented selectables are tested at
+            // their real position; fall back to the local transform for top-level
+            // entities (where local == world), mirroring AudioAPI's positioning.
+            glm::vec3 position;
+            if (registry.all_of<components::WorldTransformComponent>(e))
+                position = glm::vec3(registry.get<components::WorldTransformComponent>(e).worldMatrix[3]);
+            else
+                position = view.get<components::TransformComponent>(e).position;
+
+            if (math::classifyPointInFrustum(frustum, position))
                 result.push_back(services::internal::toHandle(e));
         }
 

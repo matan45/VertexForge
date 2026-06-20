@@ -22,7 +22,10 @@ enum class DamageResult
 // Returns Killed only on the transition to 0 HP; a target already at 0 survives.
 inline DamageResult applyDamageToHealth(HealthComponent& health, float amount)
 {
-    if (amount <= 0.0f)
+    // No-op for healing (amount <= 0) and for a target already at 0 HP, so a kill
+    // is reported exactly once on the transition to 0 — repeated AoE/aggro hits on
+    // a dead-but-not-yet-cleaned-up unit must not re-fire "rts.unit_killed".
+    if (amount <= 0.0f || health.currentHP <= 0.0f)
         return DamageResult::Survived;
 
     health.currentHP = std::max(0.0f, health.currentHP - amount);
