@@ -1,6 +1,7 @@
 #include "api/IPlugin.hpp"
 #include "api/PluginExport.hpp"
 #include "api/PluginContext.hpp"
+#include "asset/AssetRef.hpp"
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <string>
@@ -31,6 +32,11 @@ struct TestComponent
     ElementType element = ElementType::Fire;
     std::vector<BuffEntry> buffs{{"Shield", 10.0f, 1, false}, {"Regen", 5.0f, 3, true}};
     std::map<std::string, BuffEntry> namedBuffs{{"primary", {"Haste", 8.0f, 2, false}}};
+    glm::vec4 tintColor{1.0f, 1.0f, 1.0f, 1.0f};
+    // Asset reference field (VK-1422 Phase 2). The plugin only declares the
+    // field; the engine owns all serialization/resolution — never call
+    // resolve()/fromPath() from plugin code (they need the engine AssetDatabase).
+    asset::AssetRef iconAsset;
 };
 
 class PluginAPITest : public plugin::IPlugin
@@ -73,7 +79,61 @@ public:
             .data<&TestComponent::stats>("stats")
             .data<&TestComponent::element>("element")
             .data<&TestComponent::buffs>("buffs")
-            .data<&TestComponent::namedBuffs>("namedBuffs");
+            .data<&TestComponent::namedBuffs>("namedBuffs")
+            .data<&TestComponent::tintColor>("tintColor")
+            .data<&TestComponent::iconAsset>("iconAsset");
+
+        // ----------------------------------------------------------------
+        // VK-1422 Phase 3: per-field inspector attributes (API v14).
+        // Field names must match the .data<>() names registered above.
+        // ----------------------------------------------------------------
+        namespace insp = plugin::inspector;
+
+        // Ranged slider on a float, with a display name, units, tooltip, and a
+        // shared "Stats" group header (shared with `speed` below).
+        ctx->setFieldAttributes("TestComponent", "health",
+            insp::Field{}
+                .name("Health")
+                .help("Current hit points")
+                .range(0.f, 1000.f)
+                .slider()
+                .units("hp")
+                .group("Stats")
+                .build());
+
+        // Second field in the same "Stats" group, demonstrating a ranged drag.
+        ctx->setFieldAttributes("TestComponent", "speed",
+            insp::Field{}
+                .name("Move Speed")
+                .help("World units per second")
+                .range(0.f, 50.f)
+                .units("m/s")
+                .group("Stats")
+                .build());
+
+        // Color picker on a vec4 (drawn as ColorEdit4; serialization unchanged).
+        ctx->setFieldAttributes("TestComponent", "tintColor",
+            insp::Field{}
+                .name("Tint Color")
+                .help("Multiplied with the base color")
+                .color()
+                .build());
+
+        // Read-only display field.
+        ctx->setFieldAttributes("TestComponent", "isActive",
+            insp::Field{}
+                .name("Active (read-only)")
+                .help("Runtime-managed flag; not author-editable")
+                .readOnly()
+                .build());
+
+        // AssetRef field restricted to .vfimage in the drag-drop picker.
+        ctx->setFieldAttributes("TestComponent", "iconAsset",
+            insp::Field{}
+                .name("Icon")
+                .help("Icon image shown in UI")
+                .asset(".vfimage")
+                .build());
 
         ctx->logInfo("PluginAPITest initialized - TestComponent registered via meta");
 

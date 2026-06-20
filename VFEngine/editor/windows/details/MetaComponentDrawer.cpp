@@ -1,14 +1,20 @@
 #include "MetaComponentDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "core/PluginContextImpl.hpp"
+#include "api/FieldAttributes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "data/EntityConversion.hpp"
+#include "asset/AssetRef.hpp"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <entt/entt.hpp>
 #include <unordered_map>
 #include <optional>
+#include <vector>
+#include <string>
+#include <algorithm>
 
 namespace windows::details
 {
@@ -82,6 +88,33 @@ namespace windows::details
                 ImGui::EndCombo();
             }
         }
+        // AssetRef — drag-drop asset picker (engine resolves the GUID).
+        else if (elemType.info() == entt::type_id<asset::AssetRef>()) {
+            auto ref = elem.cast<asset::AssetRef>();
+            if (ref.isValid()) {
+                std::string filename = ref.resolve();
+                auto lastSlash = filename.find_last_of("/\\");
+                if (lastSlash != std::string::npos)
+                    filename = filename.substr(lastSlash + 1);
+                ImGui::Text("%s: %s", label, filename.empty() ? "(unresolved)" : filename.c_str());
+            }
+            else {
+                ImGui::Text("%s: ", label);
+                ImGui::SameLine();
+                ImGui::TextDisabled("No asset");
+            }
+            if (auto dropped = windows::acceptAssetDropOnLastItem(label, {}))
+                return entt::meta_any{asset::AssetRef::fromPath(*dropped)};
+            ImGui::SameLine();
+            ImGui::PushID(label);
+            bool wasEmpty = !ref.isValid();
+            if (wasEmpty) ImGui::BeginDisabled();
+            bool cleared = ImGui::SmallButton("Clear");
+            if (wasEmpty) ImGui::EndDisabled();
+            ImGui::PopID();
+            if (cleared)
+                return entt::meta_any{asset::AssetRef::invalid()};
+        }
         // Struct/class — draw each member as a sub-field
         else if (elemType.is_class())
         {
@@ -130,22 +163,70 @@ namespace windows::details
         return {};
     }
 
-    static bool drawMetaData(entt::meta_data data, entt::meta_any& instance)
+    static bool drawMetaData(entt::meta_data data, entt::meta_any& instance, const char* componentName)
     {
         bool changed = false;
         const char* name = data.name();
         if (!name) return false;
+
+        // Per-field inspector attributes (nullptr when the plugin registered none —
+        // in that case every branch below behaves exactly as it did before).
+        const plugin::inspector::FieldAttributes* attr =
+            plugin::PluginContextImpl::getFieldAttributes(componentName, name);
+
+        using plugin::inspector::Widget;
+        const Widget widget = attr ? attr->widget : Widget::Auto;
+
+        // Hidden fields are skipped entirely.
+        if (attr && widget == Widget::Hidden)
+            return false;
 
         auto value = data.get(instance);
         if (!value) return false;
 
         auto type = data.type();
 
+        // Display label: attribute label (or raw name), optionally suffixed with
+        // units. A stable "##<rawName>" id keeps ImGui IDs collision-free even when
+        // two fields share a display label.
+        const char* baseLabel = (attr && attr->label[0]) ? attr->label : name;
+        std::string labelStr;
+        if (attr && attr->units[0])
+            labelStr = std::string(baseLabel) + " (" + attr->units + ")##" + name;
+        else
+            labelStr = std::string(baseLabel) + "##" + name;
+        const char* label = labelStr.c_str();
+
+        // ReadOnly fields render disabled and never write back to the component.
+        const bool readOnly = (attr && widget == Widget::ReadOnly);
+        if (readOnly)
+            ImGui::BeginDisabled();
+
+        // Apply the tooltip (if any) to whatever widget the branch below submits last.
+        const auto applyTooltip = [&]() {
+            if (attr && attr->tooltip[0] && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("%s", attr->tooltip);
+        };
+
         // int
         if (type.info() == entt::type_id<int>())
         {
             int val = value.cast<int>();
-            if (ImGui::DragInt(name, &val))
+            bool edited = false;
+            if (attr && attr->hasRange)
+            {
+                if (widget == Widget::Slider)
+                    edited = ImGui::SliderInt(label, &val, static_cast<int>(attr->vmin), static_cast<int>(attr->vmax));
+                else
+                    edited = ImGui::DragInt(label, &val, attr->step > 0.f ? attr->step : 1.0f,
+                                            static_cast<int>(attr->vmin), static_cast<int>(attr->vmax));
+            }
+            else
+            {
+                edited = ImGui::DragInt(label, &val);
+            }
+            applyTooltip();
+            if (edited && !readOnly)
             {
                 data.set(instance, val);
                 changed = true;
@@ -155,7 +236,21 @@ namespace windows::details
         else if (type.info() == entt::type_id<float>())
         {
             float val = value.cast<float>();
-            if (ImGui::DragFloat(name, &val, 0.1f))
+            bool edited = false;
+            if (attr && attr->hasRange)
+            {
+                if (widget == Widget::Slider)
+                    edited = ImGui::SliderFloat(label, &val, attr->vmin, attr->vmax);
+                else
+                    edited = ImGui::DragFloat(label, &val, attr->step > 0.f ? attr->step : 0.1f,
+                                              attr->vmin, attr->vmax);
+            }
+            else
+            {
+                edited = ImGui::DragFloat(label, &val, 0.1f);
+            }
+            applyTooltip();
+            if (edited && !readOnly)
             {
                 data.set(instance, val);
                 changed = true;
@@ -165,7 +260,9 @@ namespace windows::details
         else if (type.info() == entt::type_id<bool>())
         {
             bool val = value.cast<bool>();
-            if (ImGui::Checkbox(name, &val))
+            bool edited = ImGui::Checkbox(label, &val);
+            applyTooltip();
+            if (edited && !readOnly)
             {
                 data.set(instance, val);
                 changed = true;
@@ -178,7 +275,13 @@ namespace windows::details
             char buffer[256];
             std::strncpy(buffer, str.c_str(), sizeof(buffer));
             buffer[sizeof(buffer) - 1] = '\0';
-            if (ImGui::InputText(name, buffer, sizeof(buffer)))
+            bool edited = false;
+            if (attr && widget == Widget::MultilineText)
+                edited = ImGui::InputTextMultiline(label, buffer, sizeof(buffer));
+            else
+                edited = ImGui::InputText(label, buffer, sizeof(buffer));
+            applyTooltip();
+            if (edited && !readOnly)
             {
                 data.set(instance, std::string(buffer));
                 changed = true;
@@ -188,7 +291,9 @@ namespace windows::details
         else if (type.info() == entt::type_id<glm::vec2>())
         {
             auto val = value.cast<glm::vec2>();
-            if (ImGui::DragFloat2(name, &val.x, 0.1f))
+            bool edited = ImGui::DragFloat2(label, &val.x, 0.1f);
+            applyTooltip();
+            if (edited && !readOnly)
             {
                 data.set(instance, val);
                 changed = true;
@@ -198,7 +303,13 @@ namespace windows::details
         else if (type.info() == entt::type_id<glm::vec3>())
         {
             auto val = value.cast<glm::vec3>();
-            if (ImGui::DragFloat3(name, &val.x, 0.1f))
+            bool edited = false;
+            if (attr && widget == Widget::Color)
+                edited = ImGui::ColorEdit3(label, &val.x);
+            else
+                edited = ImGui::DragFloat3(label, &val.x, 0.1f);
+            applyTooltip();
+            if (edited && !readOnly)
             {
                 data.set(instance, val);
                 changed = true;
@@ -208,7 +319,13 @@ namespace windows::details
         else if (type.info() == entt::type_id<glm::vec4>())
         {
             auto val = value.cast<glm::vec4>();
-            if (ImGui::DragFloat4(name, &val.x, 0.1f))
+            bool edited = false;
+            if (attr && widget == Widget::Color)
+                edited = ImGui::ColorEdit4(label, &val.x);
+            else
+                edited = ImGui::DragFloat4(label, &val.x, 0.1f);
+            applyTooltip();
+            if (edited && !readOnly)
             {
                 data.set(instance, val);
                 changed = true;
@@ -219,7 +336,9 @@ namespace windows::details
         {
             auto q = value.cast<glm::quat>();
             glm::vec3 euler = glm::degrees(glm::eulerAngles(q));
-            if (ImGui::DragFloat3(name, &euler.x, 0.5f))
+            bool edited = ImGui::DragFloat3(label, &euler.x, 0.5f);
+            applyTooltip();
+            if (edited && !readOnly)
             {
                 data.set(instance, glm::quat(glm::radians(euler)));
                 changed = true;
@@ -250,26 +369,70 @@ namespace windows::details
 
             if (!enumEntries.empty())
             {
-                if (ImGui::BeginCombo(name, currentName ? currentName : "???"))
+                if (ImGui::BeginCombo(label, currentName ? currentName : "???"))
                 {
                     for (int i = 0; i < static_cast<int>(enumEntries.size()); ++i)
                     {
                         bool selected = (i == currentIndex);
                         if (ImGui::Selectable(enumEntries[i].first, selected))
                         {
-                            data.set(instance, enumEntries[i].second);
-                            changed = true;
+                            if (!readOnly)
+                            {
+                                data.set(instance, enumEntries[i].second);
+                                changed = true;
+                            }
                         }
                         if (selected)
                             ImGui::SetItemDefaultFocus();
                     }
                     ImGui::EndCombo();
                 }
+                applyTooltip();
             }
             else
             {
-                ImGui::TextDisabled("%s (enum, no values registered)", name);
+                ImGui::TextDisabled("%s (enum, no values registered)", baseLabel);
             }
+        }
+        // AssetRef — drag-drop asset picker (engine resolves the GUID).
+        else if (type.info() == entt::type_id<asset::AssetRef>())
+        {
+            auto ref = value.cast<asset::AssetRef>();
+            if (ref.isValid())
+            {
+                std::string filename = ref.resolve();
+                auto lastSlash = filename.find_last_of("/\\");
+                if (lastSlash != std::string::npos)
+                    filename = filename.substr(lastSlash + 1);
+                ImGui::Text("%s: %s", baseLabel, filename.empty() ? "(unresolved)" : filename.c_str());
+            }
+            else
+            {
+                ImGui::Text("%s: ", baseLabel);
+                ImGui::SameLine();
+                ImGui::TextDisabled("No asset");
+            }
+            applyTooltip();
+            // Restrict the picker to a single extension when the field declares one.
+            std::optional<std::string> dropped =
+                (attr && attr->assetFilter[0])
+                    ? windows::acceptAssetDropOnLastItem(name, {attr->assetFilter})
+                    : windows::acceptAssetDropOnLastItem(name, {});
+            if (dropped && !readOnly)
+            {
+                data.set(instance, asset::AssetRef::fromPath(*dropped));
+                changed = true;
+            }
+            ImGui::SameLine();
+            bool wasEmpty = !ref.isValid();
+            if (wasEmpty) ImGui::BeginDisabled();
+            std::string clearId = std::string("Clear##") + name;
+            if (ImGui::SmallButton(clearId.c_str()) && !readOnly)
+            {
+                data.set(instance, asset::AssetRef::invalid());
+                changed = true;
+            }
+            if (wasEmpty) ImGui::EndDisabled();
         }
         // Sequence containers (std::vector<T>, etc.)
         else if (type.is_sequence_container())
@@ -433,8 +596,11 @@ namespace windows::details
         }
         else
         {
-            ImGui::TextDisabled("%s (unsupported type)", name);
+            ImGui::TextDisabled("%s (unsupported type)", baseLabel);
         }
+
+        if (readOnly)
+            ImGui::EndDisabled();
 
         return changed;
     }
@@ -491,9 +657,56 @@ namespace windows::details
                 ImGui::Indent(8.0f);
                 ImGui::PushID(static_cast<int>(bridge.typeId));
 
+                const char* compName = bridge.name.c_str();
+
+                // Pass 1: snapshot the fields in EnTT iteration order and collect the
+                // distinct group names in first-seen order (ungrouped = empty string).
+                std::vector<entt::meta_data> fields;
+                std::vector<std::string> groupOrder; // non-empty group names, first-seen
                 for (auto&& [id, member] : metaType.data())
                 {
-                    drawMetaData(member, instance);
+                    fields.push_back(member);
+
+                    const char* fieldName = member.name();
+                    if (!fieldName)
+                        continue;
+                    const auto* attr = plugin::PluginContextImpl::getFieldAttributes(compName, fieldName);
+                    if (attr && attr->group[0])
+                    {
+                        const std::string g = attr->group;
+                        if (std::find(groupOrder.begin(), groupOrder.end(), g) == groupOrder.end())
+                            groupOrder.push_back(g);
+                    }
+                }
+
+                // Returns the field's group name ("" when ungrouped).
+                const auto groupOf = [&](const entt::meta_data& member) -> std::string {
+                    const char* fieldName = member.name();
+                    if (!fieldName)
+                        return std::string();
+                    const auto* attr = plugin::PluginContextImpl::getFieldAttributes(compName, fieldName);
+                    return (attr && attr->group[0]) ? std::string(attr->group) : std::string();
+                };
+
+                // Pass 2a: ungrouped fields first, at the current indent.
+                for (auto& member : fields)
+                {
+                    if (groupOf(member).empty())
+                        drawMetaData(member, instance, compName);
+                }
+
+                // Pass 2b: each non-empty group under its own collapsing header.
+                for (const auto& groupName : groupOrder)
+                {
+                    std::string headerLabel = groupName + "##meta_group_" + std::to_string(bridge.typeId) + "_" + groupName;
+                    if (ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        for (auto& member : fields)
+                        {
+                            if (groupOf(member) == groupName)
+                                drawMetaData(member, instance, compName);
+                        }
+                    }
                 }
 
                 ImGui::PopID();

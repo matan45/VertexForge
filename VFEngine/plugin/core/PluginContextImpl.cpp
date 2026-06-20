@@ -36,6 +36,7 @@ namespace plugin {
 
     // Static member definitions
     std::vector<MetaComponentBridge> PluginContextImpl::allBridges{};
+    std::unordered_map<std::string, PluginContextImpl::FieldAttributeEntry> PluginContextImpl::fieldAttributes{};
     PluginContextImpl::ScriptBindingRegistrar PluginContextImpl::scriptBindingRegistrar{};
     PluginContextImpl::ScriptBindingClearer PluginContextImpl::scriptBindingClearer{};
     const MTypePluginHost* PluginContextImpl::scriptHostVTable = nullptr;
@@ -1179,6 +1180,28 @@ namespace plugin {
         allBridges.push_back(std::move(bridge));
     }
 
+    void PluginContextImpl::setFieldAttributes(const char* component, const char* field,
+                                               const inspector::FieldAttributes& attrs)
+    {
+        if (!component || !field) {
+            vfLogWarning("[Plugin:{}] setFieldAttributes called with null component/field name", pluginName);
+            return;
+        }
+        // Deep value copy: the fixed char arrays own all string data, so the entry
+        // outlives the plugin DLL safely. Keyed by "component::field"; pluginName is
+        // stored alongside so unload cleanup can erase this plugin's entries.
+        std::string key = std::string(component) + "::" + field;
+        fieldAttributes[key] = FieldAttributeEntry{ pluginName, attrs };
+    }
+
+    const inspector::FieldAttributes* PluginContextImpl::getFieldAttributes(const char* component, const char* field)
+    {
+        if (!component || !field) return nullptr;
+        std::string key = std::string(component) + "::" + field;
+        auto it = fieldAttributes.find(key);
+        return it == fieldAttributes.end() ? nullptr : &it->second.attrs;
+    }
+
     void PluginContextImpl::cleanupAll()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -1206,6 +1229,11 @@ namespace plugin {
         // Remove component bridges registered by this plugin
         std::erase_if(allBridges, [this](const MetaComponentBridge& b) {
             return b.pluginName == pluginName;
+        });
+
+        // Remove this plugin's per-field inspector metadata (mirrors allBridges).
+        std::erase_if(fieldAttributes, [this](const auto& kv) {
+            return kv.second.pluginName == pluginName;
         });
 
         for (const auto& token : managedSubscriptions) {
