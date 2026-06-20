@@ -27,27 +27,54 @@ public:
     {
         ctx = context;
 
+        using plugin::inspector::Field;
+
         ctx->registerNativeComponent<SelectableComponent>("Selectable")
-            .data<&SelectableComponent::canBeSelected>("canBeSelected");
+            .data<&SelectableComponent::canBeSelected>("canBeSelected")
+            .data<&SelectableComponent::portrait>("portrait");
+        ctx->setFieldAttributes("Selectable", "canBeSelected",
+            Field{}.name("Can Be Selected").help("Whether the RTS selection system can pick this unit").build());
+        ctx->setFieldAttributes("Selectable", "portrait",
+            Field{}.name("Portrait").help("Icon shown in the selection panel — drag a .vfImage here").asset(".vfimage").build());
 
         ctx->registerNativeComponent<SelectedComponent>("Selected")
             .data<&SelectedComponent::active>("active");
 
         ctx->registerNativeComponent<TeamComponent>("Team")
-            .data<&TeamComponent::teamId>("teamId");
+            .data<&TeamComponent::teamId>("teamId")
+            .data<&TeamComponent::color>("color");
+        ctx->setFieldAttributes("Team", "teamId",
+            Field{}.name("Team").help("0 = Player, 1 = Enemy, 2 = Neutral").range(0.f, 2.f, 1.f).slider().group("Faction").build());
+        ctx->setFieldAttributes("Team", "color",
+            Field{}.name("Team Color").help("Tint used for minimap blips and unit highlight").color().group("Faction").build());
 
         ctx->registerNativeComponent<VisionComponent>("Vision")
             .data<&VisionComponent::sightRadius>("sightRadius");
+        ctx->setFieldAttributes("Vision", "sightRadius",
+            Field{}.name("Sight Radius").help("Fog-of-war reveal radius around this unit").range(0.f, 100.f, 0.5f).slider().units("m").build());
 
         ctx->registerNativeComponent<HealthComponent>("Health")
             .data<&HealthComponent::maxHP>("maxHP")
             .data<&HealthComponent::currentHP>("currentHP");
+        ctx->setFieldAttributes("Health", "maxHP",
+            Field{}.name("Max HP").help("Maximum hit points").range(1.f, 2000.f, 1.f).slider().units("hp").group("Vitals").build());
+        ctx->setFieldAttributes("Health", "currentHP",
+            Field{}.name("Current HP").help("Current hit points (clamped to Max HP at runtime)").range(0.f, 2000.f, 1.f).slider().units("hp").group("Vitals").build());
 
         ctx->registerNativeComponent<AttackComponent>("Attack")
             .data<&AttackComponent::damage>("damage")
             .data<&AttackComponent::range>("range")
             .data<&AttackComponent::cooldown>("cooldown")
             .data<&AttackComponent::lastAttackTime>("lastAttackTime");
+        ctx->setFieldAttributes("Attack", "damage",
+            Field{}.name("Damage").help("Damage applied per hit").range(0.f, 500.f, 1.f).slider().group("Combat").build());
+        ctx->setFieldAttributes("Attack", "range",
+            Field{}.name("Range").help("Engagement range in world units").range(0.f, 50.f, 0.5f).slider().units("m").group("Combat").build());
+        ctx->setFieldAttributes("Attack", "cooldown",
+            Field{}.name("Cooldown").help("Seconds between attacks").range(0.f, 10.f, 0.05f).slider().units("s").group("Combat").build());
+        // Scratch state stamped by the combat script — hide it from designers.
+        ctx->setFieldAttributes("Attack", "lastAttackTime",
+            Field{}.name("Last Attack Time").hidden().build());
 
         fogSettings = std::make_shared<FogSettings>();
         fogOfWar.initialize(ctx, fogSettings);

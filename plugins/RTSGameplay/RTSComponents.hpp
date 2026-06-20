@@ -1,5 +1,8 @@
 #pragma once
 
+#include "asset/AssetRef.hpp"
+#include <glm/glm.hpp>
+
 // RTS gameplay tag components (VK-1302). Registered as plugin components so the
 // engine core stays game-agnostic — scripts access them via PluginComponent.mt
 // (has/getInt/add/remove/findAll) and designers via the Add Component popup.
@@ -8,6 +11,9 @@
 struct SelectableComponent
 {
     bool canBeSelected = true;
+    // Portrait icon shown in the selection panel. Authored via drag-drop in the
+    // inspector (engine resolves the GUID; the plugin only declares the field).
+    asset::AssetRef portrait;
 };
 
 // Runtime-only selection marker managed by the selection controller during play.
@@ -21,6 +27,8 @@ struct SelectedComponent
 struct TeamComponent
 {
     int teamId = 0;
+    // Faction tint used for minimap blips / unit highlight (RGBA 0..1).
+    glm::vec4 color{0.2f, 0.55f, 1.0f, 1.0f};
 };
 
 // Fog-of-war vision source (VK-1314): the entity reveals a circle of sightRadius
