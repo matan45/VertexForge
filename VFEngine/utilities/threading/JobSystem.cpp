@@ -161,6 +161,14 @@ namespace threading {
 
 	void JobSystem::init(uint32_t threadCount, uint32_t maxExternalThreads)
 	{
+		// Idempotent: the JobSystem is now a single process-wide instance exported from the
+		// Threading DLL, so several owners (MainLoop, Import, test scopes) may each call init().
+		// Only the first wins; later calls are harmless no-ops (re-Initializing the underlying
+		// enki scheduler would otherwise tear down and recreate the running worker pool).
+		if (pImpl->initialized.load(std::memory_order_acquire)) {
+			return;
+		}
+
 		if (threadCount == 0) {
 			uint32_t hw = std::thread::hardware_concurrency();
 			threadCount = (hw > 3) ? (hw - 2) : 2;

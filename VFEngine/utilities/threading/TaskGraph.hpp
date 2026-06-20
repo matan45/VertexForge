@@ -26,7 +26,9 @@ namespace threading {
 		JobPriority priority = JobPriority::NORMAL;
 	};
 
-	class TaskGraph {
+#pragma warning(push)
+#pragma warning(disable: 4251) // std::unique_ptr<Impl> member crossing the DLL boundary
+	class VF_THREADING_API TaskGraph {
 	public:
 		~TaskGraph();
 		TaskGraph(TaskGraph&&) noexcept;
@@ -50,5 +52,6 @@ namespace threading {
 		struct Impl;
 		std::unique_ptr<Impl> pImpl;
 	};
+#pragma warning(pop)
 
 }
