@@ -133,6 +133,11 @@ namespace serialization
                 billboard.iconType = components::BillboardIconType::Particle;
             }
         }
+        if (c.contains("vfxSequence"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::VFXSequenceComponent>();
+            deserializeVFXSequence(c["vfxSequence"], comp);
+        }
     }
 
     void SceneSerialization::deserializeLightComponents(const json& c, scene::Entity& entity)

@@ -89,6 +89,7 @@ namespace windows
         bool hasDestructible = destructibleDrawer.draw(handle);
         bool hasPhysicsAnimation = physicsAnimationDrawer.draw(handle);
         bool hasVFX = vfxDrawer.draw(handle);
+        vfxSequenceDrawer.draw(handle);
         bool hasBillboard = billboardDrawer.draw(handle);
         bool hasText = textDrawer.draw(handle);
 

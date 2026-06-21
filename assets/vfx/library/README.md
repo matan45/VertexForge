@@ -32,3 +32,32 @@ VFX::setOverrideColor(id, 0.2, 0.4, 1.0, 1.0);
 All effects ship with no texture assigned (engine default white particle).
 Assign a `.vfImage` in the emitter's `texture` property for full quality —
 only `.vfImage` is supported by the engine loaders.
+
+## Combo sequences (`.vfVFXSequence` — VK-1425)
+
+A `.vfVFXSequence` composes several of the `.vfVFX` effects above into one timed
+"combo" (no graph duplication — each step just references an existing `.vfVFX`).
+Open one in the **VFX Sequence Editor** (double-click), or drive it at runtime.
+
+| Example | Shows |
+|---|---|
+| `example_impact_combo.vfVFXSequence` | 4 one-shot steps at staggered times (muzzle → sparks → dust → smoke) — plays standalone |
+| `example_cast_combo.vfVFXSequence` | a **looping** charge effect on the `hand_R` socket + a **cue-driven** release step (`cueName: "release"`) |
+
+```mt
+// Standalone: spawn + play a whole combo at a world position
+int combo = VFX::spawnCombo("assets/vfx/library/example_impact_combo.vfVFXSequence", x, y, z);
+
+// Cast combo: looping charge follows the hand; fire the release cue on attack
+int cast = VFX::spawnComboLooping("assets/vfx/library/example_cast_combo.vfVFXSequence", x, y, z);
+VFX::attachComboToSocket(cast, casterEntity, "hand_R");
+VFX::triggerComboCue(cast, "release");
+VFX::destroyCombo(cast);
+```
+
+Data-driven alternative: add a **VFX Sequence** component to an entity, set
+`sequenceRef` + `autoPlay` for standalone play, or add a **trigger**
+(`eventName → sequence`) so an authored animation notify event spawns the combo
+automatically (see VK-1425). The referenced child `.vfVFX` here use project paths,
+so they resolve before GUIDs are assigned; re-saving from the editor bakes GUID
+references + a `.vfmeta` dependency list.

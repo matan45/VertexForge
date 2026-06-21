@@ -136,36 +136,51 @@ namespace animation
             return;
 
         const animator::AnimatorState* currentState = getCurrentAnimatorState();
-        if (!currentState || currentState->events.empty())
+        if (!currentState)
             return;
 
         float duration = getAnimationDuration(state.currentStateId);
         if (duration <= 0.0f)
             return;
 
-        float currentNormalized = std::fmod(state.stateTime / duration, 1.0f);
-        float prevNormalized = state.previousNormalizedTime;
+        const float currentNormalized = std::fmod(state.stateTime / duration, 1.0f);
+        const float prevNormalized = state.previousNormalizedTime;
 
-        bool looped = (state.currentLoopCount != eventLastLoopCount) || (currentNormalized < prevNormalized);
+        const bool looped = (state.currentLoopCount != eventLastLoopCount) || (currentNormalized < prevNormalized);
 
-        for (const auto& event : currentState->events)
+        // Shared crossing test: fires an event when the playhead crosses its normalizedTime this
+        // frame, with loop-wrap handling identical for both event sources below.
+        const auto shouldFire = [&](const animator::AnimationEvent& event) -> bool
         {
-            bool shouldFire = false;
-
             if (looped)
             {
-                shouldFire = (event.normalizedTime > prevNormalized) ||
-                             (event.normalizedTime <= currentNormalized);
+                return (event.normalizedTime > prevNormalized) ||
+                       (event.normalizedTime <= currentNormalized);
             }
-            else
-            {
-                shouldFire = (event.normalizedTime > prevNormalized) &&
-                             (event.normalizedTime <= currentNormalized);
-            }
+            return (event.normalizedTime > prevNormalized) &&
+                   (event.normalizedTime <= currentNormalized);
+        };
 
-            if (shouldFire)
-            {
+        // Source A: state-level events authored directly on the animator state.
+        for (const auto& event : currentState->events)
+        {
+            if (shouldFire(event))
                 firedEventsThisFrame.push_back(&event);
+        }
+
+        // Source B: timeline notify events authored on the .vfAnim clip itself (VK-1425). Only
+        // single-clip states have a canonical clip; blend-tree states keep firing state events only.
+        // Pointers reference the resource-cached AnimationData, stable for the state machine lifetime.
+        if (!currentState->blendTree.has_value())
+        {
+            auto it = loadedAnimations.find(state.currentStateId);
+            if (it != loadedAnimations.end() && it->second)
+            {
+                for (const auto& event : it->second->events)
+                {
+                    if (shouldFire(event))
+                        firedEventsThisFrame.push_back(&event);
+                }
             }
         }
 
@@ -290,6 +305,10 @@ namespace animation
         state.currentLoopCount = 0;
         state.exitTimeEvaluatedAtLoop = 0;
         state.previousNormalizedTime = 0.0f;
+        // Keep the event loop-tracking in step with the reset loop count, otherwise the first frame
+        // of the new state sees currentLoopCount(0) != eventLastLoopCount(>0) and spuriously treats
+        // it as a wrap, firing every event with normalizedTime > 0 (VK-1425).
+        eventLastLoopCount = 0;
 
         loadAnimationForState(state.currentStateId);
 

@@ -248,6 +248,7 @@ namespace windows
         if (extension == ".vfMatInstance") return MaterialInstance;
         if (extension == ".vfAnimator") return Animator;
         if (extension == ".vfVFX") return VFX;
+        if (extension == ".vfVFXSequence") return VFXSequence;
         if (extension == ".vfPrefab") return Prefab;
         if (extension == ".vfTerrainMat") return TerrainMaterial;
         if (extension == ".vfTerrain") return Terrain;

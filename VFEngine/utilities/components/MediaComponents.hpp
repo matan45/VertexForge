@@ -237,6 +237,23 @@ namespace components
         bool isPlaying = false;
     };
 
+    struct VFXSequenceTrigger
+    {
+        std::string eventName;       // animation notify event name
+        asset::AssetRef sequenceRef; // .vfVFXSequence to play when that event fires
+        std::string socketName;      // optional attach socket
+    };
+
+    struct VFXSequenceComponent
+    {
+        asset::AssetRef sequenceRef; // standalone autoplay sequence
+        bool autoPlay = false;
+        bool loop = false;
+        std::string socketName; // optional attach for the standalone combo
+        std::vector<VFXSequenceTrigger> triggers;
+        uint32_t runtimeComboId = 0; // transient — NOT serialized
+    };
+
     struct SocketAttachmentComponent
     {
         entt::entity parentEntity = entt::null;

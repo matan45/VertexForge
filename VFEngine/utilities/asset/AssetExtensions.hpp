@@ -26,6 +26,7 @@ namespace asset
             if (ext == ".vfmatinstance")  return resource::AssetType::MaterialInstance;
             if (ext == ".vfanimator")     return resource::AssetType::Animator;
             if (ext == ".vfvfx")          return resource::AssetType::VFX;
+            if (ext == ".vfvfxsequence")  return resource::AssetType::VFXSequence;
             if (ext == ".vffont")         return resource::AssetType::Font;
             if (ext == ".vfnavmesh")      return resource::AssetType::Navmesh;
             if (ext == ".vfnavindex")     return resource::AssetType::Navmesh;
@@ -52,6 +53,7 @@ namespace asset
             static const std::unordered_set<std::string> set = {
                 ".vfimage", ".vfhdr", ".vfmesh", ".vfaudio", ".vfanim",
                 ".vfmat", ".vfmatinstance", ".vfanimator", ".vfvfx",
+                ".vfvfxsequence",
                 ".vffont", ".vfscene", ".vfsettings", ".vfprefab", ".vftheme",
                 ".vfterrain", ".vfterrainmat", ".vfwater", ".vfnavmesh",
                 ".vfnavindex", ".vfimposter", ".vfinputmapping",
@@ -67,7 +69,8 @@ namespace asset
         {
             static const std::unordered_set<std::string> set = {
                 ".vfscene", ".vfsettings", ".vfprefab", ".vfmat",
-                ".vfmatinstance", ".vfanimator", ".vfvfx", ".vfterrainmat",
+                ".vfmatinstance", ".vfanimator", ".vfvfx", ".vfvfxsequence",
+                ".vfterrainmat",
                 ".vftheme", ".vfbehaviortree", ".vfinputmapping",
                 ".vfrig", ".vfretarget"
             };

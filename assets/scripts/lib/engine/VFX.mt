@@ -166,4 +166,64 @@ public class VFX {
     public static function setOverrideColor(int instanceId, float r, float g, float b, float a): bool {
         return _native_vfx_setOverrideVec(instanceId, "startColor", r, g, b, a);
     }
+
+    // ============================================
+    // Combo Sequences (.vfVFXSequence — VK-1425)
+    // A combo plays several .vfVFX steps at scheduled times/cues from one
+    // .vfVFXSequence asset. The returned id is a combo id, distinct from the
+    // per-instance ids above; pass it to the other combo functions.
+    // ============================================
+
+    // Spawn a combo at a world position and play it. Auto-destroys once every
+    // step has finished. Returns the combo id (0 on failure).
+    public static function spawnCombo(string path, float x, float y, float z): int {
+        return _native_vfx_spawnCombo(path, x, y, z, false);
+    }
+
+    // Spawn a combo that stays alive after its steps finish (caller owns it and
+    // must call destroyCombo). Useful for combos with looping steps.
+    public static function spawnComboLooping(string path, float x, float y, float z): int {
+        return _native_vfx_spawnCombo(path, x, y, z, true);
+    }
+
+    // Destroy a combo and all of its child effects.
+    public static function destroyCombo(int comboId): void {
+        _native_vfx_destroyCombo(comboId);
+    }
+
+    // Stop a combo: non-looping children finish naturally, looping children are destroyed.
+    public static function stopCombo(int comboId): void {
+        _native_vfx_stopCombo(comboId);
+    }
+
+    // Reset a combo back to its start (destroys children, rewinds to time 0).
+    public static function resetCombo(int comboId): void {
+        _native_vfx_resetCombo(comboId);
+    }
+
+    // Move a combo to a new world position (children keep their per-step offsets).
+    public static function setComboPosition(int comboId, float x, float y, float z): void {
+        _native_vfx_setComboPosition(comboId, x, y, z);
+    }
+
+    // Attach the whole combo to an entity socket; children follow the socket each
+    // frame while keeping their per-step local offsets.
+    public static function attachComboToSocket(int comboId, int parentEntityId, string socketName): void {
+        _native_vfx_attachComboToSocket(comboId, parentEntityId, socketName);
+    }
+
+    // Stop a combo from following its socket.
+    public static function detachCombo(int comboId): void {
+        _native_vfx_detachCombo(comboId);
+    }
+
+    // Fire all cue-driven steps in the combo whose cue name matches.
+    public static function triggerComboCue(int comboId, string cueName): void {
+        _native_vfx_triggerComboCue(comboId, cueName);
+    }
+
+    // Check whether a combo is still playing (has unfinished steps).
+    public static function comboIsPlaying(int comboId): bool {
+        return _native_vfx_comboIsPlaying(comboId);
+    }
 }

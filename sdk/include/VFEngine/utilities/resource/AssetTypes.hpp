@@ -32,6 +32,7 @@ namespace resource {
 		Prefab = 21,
 		HumanoidRig = 22,
 		RetargetMap = 23,
+		VFXSequence = 24,
 		COUNT
 	};
 
@@ -61,6 +62,7 @@ namespace resource {
 		case AssetType::Prefab:           return "Prefab";
 		case AssetType::HumanoidRig:      return "HumanoidRig";
 		case AssetType::RetargetMap:      return "RetargetMap";
+		case AssetType::VFXSequence:      return "VFXSequence";
 		default:                          return "Unknown";
 		}
 	}

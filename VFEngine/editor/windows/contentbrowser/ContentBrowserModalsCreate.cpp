@@ -8,6 +8,7 @@
 #include <material/MaterialAsset.hpp>
 #include <animator/AnimatorAsset.hpp>
 #include <vfx/VFXAsset.hpp>
+#include <vfx/VFXSequenceAsset.hpp>
 #include <terrain/TerrainMaterialAsset.hpp>
 #include <behaviortree/BehaviorTreeAsset.hpp>
 #include <ui/UIThemeSerialization.hpp>
@@ -188,6 +189,56 @@ namespace windows
             {
                 ImGui::CloseCurrentPopup();
                 showCreateVFXModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawCreateVFXSequenceModal(const fs::path& currentPath)
+    {
+        if (showCreateVFXSequenceModal &&
+            ImGui::BeginPopupModal("Create New VFX Sequence", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            char buffer[256];
+            std::strncpy(buffer, newVFXSequenceName.c_str(), sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText("Sequence Name", buffer, IM_ARRAYSIZE(buffer)))
+            {
+                newVFXSequenceName = std::string(buffer);
+            }
+
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                if (!newVFXSequenceName.empty())
+                {
+                    std::string extension = ".vfVFXSequence";
+                    fs::path newPath = currentPath / (newVFXSequenceName + extension);
+
+                    int counter = 1;
+                    while (fs::exists(newPath))
+                    {
+                        newPath = currentPath / (newVFXSequenceName + "_" + std::to_string(counter) + extension);
+                        counter++;
+                    }
+
+                    std::string pathStr = StringUtil::wstringToUtf8(newPath.wstring());
+                    auto defaultSeq = vfx::VFXSequenceAsset::createDefault(newVFXSequenceName);
+                    if (vfx::VFXSequenceAsset::save(defaultSeq, pathStr))
+                    {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
+                        if (refreshCallback) refreshCallback();
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+                showCreateVFXSequenceModal = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showCreateVFXSequenceModal = false;
             }
             ImGui::EndPopup();
         }

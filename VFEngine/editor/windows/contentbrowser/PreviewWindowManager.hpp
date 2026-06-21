@@ -19,6 +19,7 @@ namespace windows
     class AnimationPreviewWindow;
     class AnimatorEditorWindow;
     class VFXEditorWindow;
+    class VFXSequenceEditorWindow;
     class TerrainMaterialEditorWindow;
     class RetargetingEditorWindow;
 }
@@ -43,6 +44,7 @@ namespace windows
         std::unordered_map<std::string, std::weak_ptr<AnimationPreviewWindow>> openAnimationPreviews;
         std::unordered_map<std::string, std::weak_ptr<AnimatorEditorWindow>> openAnimatorEditors;
         std::unordered_map<std::string, std::weak_ptr<VFXEditorWindow>> openVFXEditors;
+        std::unordered_map<std::string, std::weak_ptr<VFXSequenceEditorWindow>> openVFXSequenceEditors;
         std::unordered_map<std::string, std::weak_ptr<TerrainMaterialEditorWindow>> openTerrainMaterialEditors;
         std::unordered_map<std::string, std::weak_ptr<editor::windows::BehaviorTreeEditorWindow>> openBehaviorTreeEditors;
         std::unordered_map<std::string, std::weak_ptr<RetargetingEditorWindow>> openRetargetEditors;
@@ -78,6 +80,7 @@ namespace windows
         void openAnimationPreview(const std::string& path);
         void openAnimatorEditor(const std::string& path);
         void openVFXEditor(const std::string& path);
+        void openVFXSequenceEditor(const std::string& path);
         void openTerrainMaterialEditor(const std::string& path);
         void openBehaviorTreeEditor(const std::string& path);
         void openRetargetEditor(const std::string& path);
