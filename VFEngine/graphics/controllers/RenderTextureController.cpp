@@ -29,6 +29,7 @@ namespace controllers
         viewport = std::make_unique<render::RenderTextureViewPort>(device, swapChain);
         viewport->setClearColor(desc.clearColor);
         viewport->setRenderShadows(desc.renderShadows);
+        viewport->setTonemap(desc.tonemap);
         viewport->init(desc.width, desc.height);
     }
 
@@ -42,13 +43,15 @@ namespace controllers
     }
 
     void RenderTextureController::updateCamera(const glm::mat4& view, const glm::mat4& proj,
-                                                const glm::vec3& pos, float nearVal, float farVal)
+                                                const glm::vec3& pos, float nearVal, float farVal,
+                                                uint32_t mask)
     {
         viewMatrix = view;
         projectionMatrix = proj;
         cameraPosition = pos;
         nearPlane = nearVal;
         farPlane = farVal;
+        cullingMask = mask;
     }
 
     void* RenderTextureController::render(render::RenderPassHandler* mainPassHandler)
@@ -62,7 +65,8 @@ namespace controllers
             projectionMatrix,
             cameraPosition,
             nearPlane,
-            farPlane
+            farPlane,
+            cullingMask
         );
 
         lastRenderedHandle = static_cast<void*>(result);

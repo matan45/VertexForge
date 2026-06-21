@@ -3,9 +3,12 @@
 #include "../../graphics/render/RenderPassHandler.hpp"
 #include "../../graphics/core/RenderManager.hpp"
 #include "../../graphics/render/OffScreenViewPort.hpp"
+#include "../../graphics/render/gpudriven/GPUDrivenRenderer.hpp"
+#include "../../graphics/render/gpudriven/scene/BindlessTextureManager.hpp"
 #include "../../controllers/OffScreen.hpp"
 #include <algorithm>
 #include <cassert>
+#include <string>
 #include <vector>
 
 namespace core
@@ -29,6 +32,29 @@ namespace core
         if (!mainOffScreen)
             return nullptr;
         return mainOffScreen->getRenderPassHandler();
+    }
+
+    void RenderTextureAdapter::releaseMaterialBindlessSlots(render::RenderPassHandler* passHandler,
+                                                            rendertexture::RenderTextureId id,
+                                                            const std::string& key)
+    {
+        auto mapIt = rttMaterialBindlessSlots.find(id);
+        if (mapIt == rttMaterialBindlessSlots.end())
+            return;
+
+        auto* gpu = passHandler ? passHandler->getGPUDrivenRenderer() : nullptr;
+        auto* bindless = gpu ? gpu->getBindlessTextureManager() : nullptr;
+        if (bindless)
+        {
+            for (uint32_t i = 0; i < mapIt->second.size(); ++i)
+            {
+                if (mapIt->second[i] != INVALID_TEXTURE_INDEX)
+                {
+                    bindless->unregisterTexture(key + "#" + std::to_string(i));
+                }
+            }
+        }
+        rttMaterialBindlessSlots.erase(mapIt);
     }
 
     rendertexture::RenderTextureId RenderTextureAdapter::createRenderTexture(
@@ -68,6 +94,10 @@ namespace core
                 if (auto* passHandler = getMainRenderPassHandler())
                 {
                     passHandler->unregisterExternalTexture(key);
+                    // VK-1418: drop the per-image scene-bindless material slots for this RTT.
+                    // controller->cleanUp() below waitIdles, so no in-flight submission references
+                    // these slots; the default texture takes their place after unregister.
+                    releaseMaterialBindlessSlots(passHandler, id, key);
                 }
             }
             it->second->cleanUp();
@@ -77,13 +107,13 @@ namespace core
 
     void RenderTextureAdapter::updateCamera(rendertexture::RenderTextureId id,
         const glm::mat4& view, const glm::mat4& proj,
-        const glm::vec3& pos, float nearPlane, float farPlane)
+        const glm::vec3& pos, float nearPlane, float farPlane, uint32_t cullingMask)
     {
         std::lock_guard lock(controllersMutex);
         auto* controller = getController(id);
         if (controller)
         {
-            controller->updateCamera(view, proj, pos, nearPlane, farPlane);
+            controller->updateCamera(view, proj, pos, nearPlane, farPlane, cullingMask);
         }
     }
 
@@ -159,6 +189,14 @@ namespace core
         // RenderManager already waited imagesInFlight[I] before invoking preRenderCallback, so no
         // in-flight UI command buffer is referencing the descriptor for slot I.
         const uint32_t currentImageIndex = ::core::RenderManager::getImageIndex();
+
+        // VK-1418: reach the scene-wide bindless table to repoint per-image RTT material slots.
+        // Same VK-1334 safety window as the external repoint below: RenderManager already waited
+        // imagesInFlight[currentImageIndex], so slot [id][currentImageIndex] is provably idle
+        // (UpdateAfterBind requirement met).
+        auto* gpu = passHandler->getGPUDrivenRenderer();
+        auto* bindless = gpu ? gpu->getBindlessTextureManager() : nullptr;
+
         for (auto& [id, ctrl] : enabled)
         {
             const auto& key = ctrl->getTextureKey();
@@ -169,6 +207,29 @@ namespace core
             if (!sampler || !view) continue;
 
             passHandler->registerExternalTexture(key, currentImageIndex, view, sampler);
+
+            if (bindless && currentImageIndex < ::core::MAX_SWAPCHAIN_IMAGES)
+            {
+                // Lazily reserve a dedicated bindless slot for this image. registerTexture dedups
+                // by path, so re-registering the same per-image key returns the same stable index.
+                auto mapIt = rttMaterialBindlessSlots.find(id);
+                if (mapIt == rttMaterialBindlessSlots.end())
+                {
+                    std::array<uint32_t, ::core::MAX_SWAPCHAIN_IMAGES> fresh;
+                    fresh.fill(INVALID_TEXTURE_INDEX);
+                    mapIt = rttMaterialBindlessSlots.emplace(id, fresh).first;
+                }
+                auto& slots = mapIt->second;
+                const std::string imageKey = key + "#" + std::to_string(currentImageIndex);
+                if (slots[currentImageIndex] == INVALID_TEXTURE_INDEX)
+                {
+                    slots[currentImageIndex] = bindless->registerTexture(imageKey, view, sampler);
+                }
+                else
+                {
+                    bindless->updateTexture(slots[currentImageIndex], view, sampler);
+                }
+            }
         }
     }
 
@@ -217,6 +278,10 @@ namespace core
             if (auto* passHandler = getMainRenderPassHandler())
             {
                 passHandler->unregisterExternalTexture(key);
+                // VK-1418: the per-slot color images (and their views) are about to be freed, so
+                // drop the bindless material slots too. renderAll re-reserves them with the fresh
+                // views on the next frame. controller->resize waitIdles before freeing the views.
+                releaseMaterialBindlessSlots(passHandler, id, key);
             }
         }
 
@@ -252,5 +317,39 @@ namespace core
         {
             controller->requestRender();
         }
+    }
+
+    std::vector<services::RenderTextureDebugInfo> RenderTextureAdapter::getActiveRenderTextures() const
+    {
+        std::lock_guard lock(controllersMutex);
+
+        std::vector<services::RenderTextureDebugInfo> result;
+        result.reserve(controllers.size());
+
+        for (const auto& [id, ctrl] : controllers)
+        {
+            if (!ctrl)
+                continue;
+
+            services::RenderTextureDebugInfo info;
+            info.textureId = id;
+            info.width = ctrl->getWidth();
+            info.height = ctrl->getHeight();
+            info.updateMode = static_cast<uint8_t>(ctrl->getUpdateMode());
+            info.priority = ctrl->getPriority();
+            info.enabled = ctrl->isEnabled();
+            info.hasRendered = ctrl->getLastRenderedHandle() != nullptr;
+            info.submittedLastFrame = ctrl->didSubmitLastRender();
+            result.push_back(info);
+        }
+
+        // Sort ascending by priority so the returned order matches the render order in renderAll().
+        std::sort(result.begin(), result.end(),
+            [](const services::RenderTextureDebugInfo& a, const services::RenderTextureDebugInfo& b)
+            {
+                return a.priority < b.priority;
+            });
+
+        return result;
     }
 }

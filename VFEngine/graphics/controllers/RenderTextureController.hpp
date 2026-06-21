@@ -31,6 +31,7 @@ namespace controllers
         glm::vec3 cameraPosition{0.0f};
         float nearPlane = 0.1f;
         float farPlane = 1000.0f;
+        uint32_t cullingMask = 0xFFFFFFFFu; // VK-1415: render-layer mask of this RTT's camera
         bool enabled = true;
         bool renderRequested = false;
         float timeSinceLastRender = 0.0f;
@@ -48,7 +49,8 @@ namespace controllers
         void cleanUp();
 
         void updateCamera(const glm::mat4& view, const glm::mat4& proj,
-                          const glm::vec3& pos, float nearVal, float farVal);
+                          const glm::vec3& pos, float nearVal, float farVal,
+                          uint32_t cullingMask = 0xFFFFFFFFu);
 
         void* render(render::RenderPassHandler* mainPassHandler);
 

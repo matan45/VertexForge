@@ -40,6 +40,7 @@ namespace services
         bool isPrimary = false;
         bool showFrustum = false;
         float orthoSize = 10.0f;
+        uint32_t cullingMask = 0xFFFFFFFFu; // VK-1415: per-camera render-layer mask (all layers by default)
     };
 
     struct IBLData
@@ -61,6 +62,7 @@ namespace services
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config
         int32_t submeshIndex = -1; // -1 = all, >= 0 = only this submesh
+        uint32_t renderLayer = 0; // VK-1415: render-layer index 0-31
     };
 
     struct MeshBoundingBox
@@ -70,11 +72,21 @@ namespace services
     };
 
 
+    // VK-1418: per-entity binding of a material texture slot to a live RTT. The entity handle is
+    // runtime-only; only the name is persisted (mirrors BillboardData renderTextureSource).
+    struct RenderTextureSlotBindingData
+    {
+        EntityHandle source = EntityHandle::invalid();
+        std::string sourceName;
+    };
+
     struct MaterialData
     {
         asset::AssetRef defaultMaterialRef; // .vfMat asset for unmapped submeshes
         std::map<std::string, asset::AssetRef> subMeshMaterials; // submesh NAME -> .vfMat asset
         std::map<std::string, material::ParameterValue> parameterOverrides; // Runtime named-parameter tweaks
+        // VK-1418: slot name ("albedo" | "emission") -> RTT source entity binding.
+        std::map<std::string, RenderTextureSlotBindingData> renderTextureSlotBindings;
     };
 
     struct SubMeshInfo
@@ -287,6 +299,29 @@ namespace services
         uint32_t priority = 0;
         bool enabled = true;
         bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
+        bool tonemap = true; // true = match main viewport (tonemap/gamma); false = raw HDR (e.g. minimap)
+        // VK-1414: optional reference to a SEPARATE camera entity to render from. The handle is
+        // in/out for the editor picker; sourceCameraName is the serialized identity that drives
+        // resolution. Empty/invalid = use this entity's own camera (legacy).
+        EntityHandle sourceCamera;
+        std::string sourceCameraName;
+        // Output-only: the live render-texture id, populated only in play mode (0 / INVALID
+        // otherwise). Read for the editor live preview; never written back to the component.
+        uint32_t runtimeTextureId = 0;
+    };
+
+    // Read-only snapshot of one active render-texture controller, used by the editor RTT debug
+    // overlay (VK-1413). Enumerated from RenderTextureAdapter's controllers in render order.
+    struct RenderTextureDebugInfo
+    {
+        uint32_t textureId = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint8_t updateMode = 0; // 0=EveryFrame, 1=OnDemand, 2=FixedInterval
+        uint32_t priority = 0;
+        bool enabled = false;
+        bool hasRendered = false;       // has produced at least one frame (lastRenderedHandle != null)
+        bool submittedLastFrame = false; // rendered this frame (didSubmitLastRender)
     };
 
     struct BillboardData

@@ -3,6 +3,8 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include <imgui.h>
+#include <cstdint>
+#include <cstdio>
 
 namespace windows::details {
 
@@ -61,6 +63,50 @@ namespace windows::details {
             if (!camera.isPerspective)
             {
                 changed |= ImGui::DragFloat("Orthographic Size", &camera.orthoSize, 0.1f, 0.1f, 1000.0f);
+            }
+
+            // VK-1415: per-camera render-layer culling mask.
+            ImGui::Separator();
+            ImGui::Text("Culling Mask");
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Render layers this camera draws (VK-1415).\n"
+                                  "A mesh on layer N is visible only if bit N is set here.\n"
+                                  "Applies to RTT / secondary cameras (e.g. a minimap or security cam).\n"
+                                  "The main viewport always renders all layers.");
+            }
+            ImGui::SameLine();
+            if (camera.cullingMask == 0xFFFFFFFFu)
+                ImGui::TextDisabled("(All layers)");
+            else
+                ImGui::TextDisabled("(0x%08X)", camera.cullingMask);
+
+            {
+                uint32_t mask = camera.cullingMask;
+                if (ImGui::InputScalar("Mask (hex)", ImGuiDataType_U32, &mask, nullptr, nullptr, "%08X",
+                                       ImGuiInputTextFlags_CharsHexadecimal))
+                {
+                    camera.cullingMask = mask;
+                    changed = true;
+                }
+            }
+            if (ImGui::TreeNode("Layers"))
+            {
+                for (int layer = 0; layer < 32; ++layer)
+                {
+                    bool on = (camera.cullingMask & (1u << layer)) != 0u;
+                    char label[24];
+                    std::snprintf(label, sizeof(label), "Layer %d", layer);
+                    if (ImGui::Checkbox(label, &on))
+                    {
+                        if (on)
+                            camera.cullingMask |= (1u << layer);
+                        else
+                            camera.cullingMask &= ~(1u << layer);
+                        changed = true;
+                    }
+                }
+                ImGui::TreePop();
             }
 
             if (changed)

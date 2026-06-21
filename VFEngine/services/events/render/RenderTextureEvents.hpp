@@ -3,6 +3,7 @@
 #include "../../data/DTOs.hpp"
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <glm/glm.hpp>
+#include <vector>
 
 namespace services::events::rendertexture {
 
@@ -27,6 +28,7 @@ namespace services::events::rendertexture {
         glm::vec3 cameraPos;
         float nearPlane = 0.1f;
         float farPlane = 1000.0f;
+        uint32_t cullingMask = 0xFFFFFFFFu; // VK-1415: per-camera render-layer mask
         std::string_view getName() const override { return "UpdateRenderTextureCamera"; }
     };
 
@@ -65,6 +67,10 @@ namespace services::events::rendertexture {
     struct IsRenderTextureValidQuery : ::events::IQuery<bool> {
         ::rendertexture::RenderTextureId textureId;
         std::string_view getName() const override { return "IsRenderTextureValid"; }
+    };
+
+    struct GetActiveRenderTexturesQuery : ::events::IQuery<std::vector<services::RenderTextureDebugInfo>> {
+        std::string_view getName() const override { return "GetActiveRenderTextures"; }
     };
 
 }

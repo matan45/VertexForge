@@ -129,6 +129,12 @@ namespace serialization
         static void deserializeParameterOverrides(
             const json& j, std::map<std::string, ::material::ParameterValue>& overrides);
 
+        // Material serialization + the post-load RTT-source-name resolve (VK-1418).
+        // Public for tests (mirrors the parameter-override helpers above).
+        static json serializeMaterial(const components::MaterialComponent& material);
+        static void deserializeMaterial(const json& j, components::MaterialComponent& material);
+        static void resolveRenderTextureSourceNames();
+
     private:
         static json serializeRootEntity(scene::Entity& root);
         // Shared serializer for serializeEntity (serial children) and serializeRootEntity
@@ -193,9 +199,6 @@ namespace serialization
 
         static json serializeMesh(const components::MeshComponent& mesh);
         static void deserializeMesh(const json& j, components::MeshComponent& mesh);
-
-        static json serializeMaterial(const components::MaterialComponent& material);
-        static void deserializeMaterial(const json& j, components::MaterialComponent& material);
 
         static json serializeBillboard(const components::BillboardComponent& billboard);
         static void deserializeBillboard(const json& j, components::BillboardComponent& billboard);
@@ -432,8 +435,6 @@ namespace serialization
 
         static std::string updateModeToString(rendertexture::UpdateMode mode);
         static rendertexture::UpdateMode stringToUpdateMode(const std::string& str);
-
-        static void resolveRenderTextureSourceNames();
 
         static std::string uiScaleModeToString(components::UIScaleMode mode);
         static components::UIScaleMode stringToUIScaleMode(const std::string& str);

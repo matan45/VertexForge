@@ -122,6 +122,14 @@ namespace components
         bool enableOcclusionCulling = true;
         bool isRegistered = false;
 
+        // VK-1416: when true, a script owns the camera's view (and projection) matrices and the
+        // engine's per-frame recompute is skipped (set by lookAt / setViewMatrix / setProjectionMatrix).
+        bool viewMatrixOverride = false;
+
+        // VK-1415: per-camera render-visibility mask. A mesh on render layer L is visible to this
+        // camera only if bit L is set here. Default 0xFFFFFFFF = render all layers (legacy behavior).
+        uint32_t cullingMask = 0xFFFFFFFFu;
+
         static inline uint32_t nextCameraId = 0;
 
         static uint32_t generateCameraId()
@@ -217,8 +225,16 @@ namespace components
         uint32_t priority = 0;
         bool enabled = true;
         bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
+        bool tonemap = true; // true = match main viewport (tonemap/gamma); false = raw HDR (e.g. minimap)
         bool needsRender = true;
         float timeSinceLastRender = 0.0f;
+
+        // VK-1414: pull the RTT view from a SEPARATE camera entity (security cam / portal) instead
+        // of requiring a CameraComponent on this same entity. entt::null (default) preserves the
+        // legacy RTT-is-camera behavior. Only sourceCameraName is serialized; the handle is
+        // re-resolved by name on scene load and on inspector edit.
+        entt::entity sourceCamera = entt::null;
+        std::string sourceCameraName;
     };
 
     struct MeshComponent
@@ -232,6 +248,9 @@ namespace components
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config
         int32_t submeshIndex = -1; // -1 = render all, >= 0 = render only this submesh
+        // VK-1415: render-layer index 0-31. Packed into GPUObjectData.flags and matched against a
+        // camera's cullingMask in the GPU cull shader. Default 0 = visible to any default-mask camera.
+        uint32_t renderLayer = 0;
     };
 
     struct MaterialComponent
@@ -241,6 +260,16 @@ namespace components
         // Per-entity runtime overrides of the material's named parameters (typed —
         // scalar/vec2/vec3/vec4). Applied on top of instance overrides at extraction.
         std::map<std::string, material::ParameterValue> parameterOverrides;
+
+        // VK-1418: per-entity binding of a material texture slot to a live RTT. Key = slot name
+        // ("albedo" | "emission"). Only sourceName is serialized; source is re-resolved by name on
+        // scene load (mirrors BillboardComponent renderTextureSource/renderTextureSourceName).
+        struct RenderTextureSlotBinding
+        {
+            std::string sourceName;
+            entt::entity source = entt::null;
+        };
+        std::map<std::string, RenderTextureSlotBinding> renderTextureSlotBindings;
 
         void setSubMeshMaterial(const std::string& submeshName, const asset::AssetRef& matRef)
         {

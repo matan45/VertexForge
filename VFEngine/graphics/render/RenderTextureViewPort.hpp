@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/OffScreen.hpp"
 #include "../core/VulkanMemoryManager.hpp"
+#include "postprocess/effects/ToneMappingEffect.hpp"
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -40,6 +41,7 @@ namespace render
         uint32_t height = 512;
         glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
         bool renderShadows = false; // false = skip shadow sampling (flat-lit, e.g. minimap)
+        bool tonemap = true; // VK-1419: true = tonemap/gamma to match main viewport; false = raw HDR
         uint32_t lastRenderedImageIndex = 0;
         vk::Semaphore lastRenderCompleteSemaphore{};
         bool lastRenderSubmitted = false;
@@ -72,6 +74,16 @@ namespace render
 
         gpudriven::GPUDrivenRenderer* rttCullDescPoolOwnerRenderer = nullptr;
 
+        // VK-1419: optional tonemap pass so a render texture showing the lit scene matches the main
+        // viewport instead of sampling raw clipped HDR. Lazily allocated in createOffscreenResources()
+        // only when `tonemap` is true; torn down in cleanupOffscreenResources(); recreated on resize().
+        // The pass reads the HDR colorImages[i], writes a per-swapchain-image scratch image, then
+        // copies the scratch back into colorImages[i], so downstream consumers keep sampling colorImages.
+        std::unique_ptr<render::postprocess::ToneMappingEffect> tonemapEffect;
+        std::vector<core::ColorImage> tonemapScratchImages;
+        vk::DescriptorPool tonemapInputDescPool{};
+        std::vector<vk::DescriptorSet> tonemapInputDescSets;
+
     public:
         RenderTextureViewPort(core::Device& device, core::SwapChain& swapChain);
         ~RenderTextureViewPort();
@@ -85,6 +97,7 @@ namespace render
 
         void setClearColor(const glm::vec4& color) { clearColor = color; }
         void setRenderShadows(bool value) { renderShadows = value; }
+        void setTonemap(bool value) { tonemap = value; }
 
         // Render scene from RTT camera perspective using the shared main renderer
         vk::DescriptorSet render(
@@ -93,7 +106,8 @@ namespace render
             const glm::mat4& projection,
             const glm::vec3& cameraPosition,
             float nearPlane,
-            float farPlane
+            float farPlane,
+            uint32_t cullingMask = 0xFFFFFFFFu
         );
 
         uint32_t getWidth() const { return width; }

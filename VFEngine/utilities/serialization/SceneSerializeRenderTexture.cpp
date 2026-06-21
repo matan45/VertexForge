@@ -51,6 +51,11 @@ namespace serialization
         j["priority"] = rtt.priority;
         j["enabled"] = rtt.enabled;
         j["renderShadows"] = rtt.renderShadows;
+        j["tonemap"] = rtt.tonemap;
+        // VK-1414: only the source-camera identity (name) is serialized; the runtime handle is
+        // resolved on load via resolveRenderTextureSourceNames.
+        if (!rtt.sourceCameraName.empty())
+            j["sourceCameraName"] = rtt.sourceCameraName;
         return j;
     }
 
@@ -64,6 +69,11 @@ namespace serialization
         rtt.priority = j.value("priority", 0u);
         rtt.enabled = j.value("enabled", true);
         rtt.renderShadows = j.value("renderShadows", false);
+        // Default TRUE so legacy scenes (no key) tonemap and match the main viewport.
+        rtt.tonemap = j.value("tonemap", true);
+        // VK-1414: source-camera name is serialized; the handle is runtime-only and resolved later.
+        rtt.sourceCameraName = j.value("sourceCameraName", std::string{});
+        rtt.sourceCamera = entt::null;
         // textureId is runtime-only, not serialized
         rtt.textureId = rendertexture::INVALID_RENDER_TEXTURE_ID;
     }
@@ -81,6 +91,34 @@ namespace serialization
             if (!name.empty())
             {
                 rttEntityMap[name] = entity;
+            }
+        }
+
+        // VK-1414: resolve RenderTextureComponent.sourceCameraName → a CAMERA entity. This must run
+        // even when no RTT entity has a name (rttEntityMap empty), so it is placed BEFORE the guard
+        // below and uses a separate camera-name map (the source is a camera, not another RTT).
+        std::unordered_map<std::string, entt::entity> cameraNameMap;
+        auto cameraView = registry.view<components::CameraComponent, components::NameComponent>();
+        for (auto entity : cameraView)
+        {
+            const auto& name = cameraView.get<components::NameComponent>(entity).name;
+            if (!name.empty())
+            {
+                cameraNameMap[name] = entity;
+            }
+        }
+
+        auto rttSourceView = registry.view<components::RenderTextureComponent>();
+        for (auto entity : rttSourceView)
+        {
+            auto& rtt = rttSourceView.get<components::RenderTextureComponent>(entity);
+            if (!rtt.sourceCameraName.empty() && rtt.sourceCamera == entt::null)
+            {
+                auto it = cameraNameMap.find(rtt.sourceCameraName);
+                if (it != cameraNameMap.end())
+                {
+                    rtt.sourceCamera = it->second;
+                }
             }
         }
 
@@ -113,6 +151,24 @@ namespace serialization
                 if (it != rttEntityMap.end())
                 {
                     billboard.renderTextureSource = it->second;
+                }
+            }
+        }
+
+        // VK-1418: resolve MaterialComponent per-slot RTT bindings (albedo/emission) by name.
+        auto matView = registry.view<components::MaterialComponent>();
+        for (auto entity : matView)
+        {
+            auto& material = matView.get<components::MaterialComponent>(entity);
+            for (auto& [slotKey, binding] : material.renderTextureSlotBindings)
+            {
+                if (!binding.sourceName.empty() && binding.source == entt::null)
+                {
+                    auto it = rttEntityMap.find(binding.sourceName);
+                    if (it != rttEntityMap.end())
+                    {
+                        binding.source = it->second;
+                    }
                 }
             }
         }

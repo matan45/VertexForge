@@ -73,6 +73,15 @@ namespace services {
         data.priority = comp.priority;
         data.enabled = comp.enabled;
         data.renderShadows = comp.renderShadows;
+        data.tonemap = comp.tonemap;
+        // VK-1414: source-camera reference. The name is the serialized identity; the handle mirrors
+        // the resolved entt entity (mirrors BillboardComponentService renderTextureSource mapping).
+        data.sourceCameraName = comp.sourceCameraName;
+        if (comp.sourceCamera != entt::null)
+            data.sourceCamera = EntityHandle{static_cast<uint64_t>(comp.sourceCamera)};
+        else
+            data.sourceCamera = EntityHandle::invalid();
+        data.runtimeTextureId = comp.textureId;
         return data;
     }
 
@@ -97,6 +106,20 @@ namespace services {
         comp.priority = renderTextureData.priority;
         comp.enabled = renderTextureData.enabled;
         comp.renderShadows = renderTextureData.renderShadows;
+        comp.tonemap = renderTextureData.tonemap;
+        // VK-1414: persist the source-camera name and eager-resolve it to a CAMERA entity handle.
+        // textureId is intentionally NOT touched here (runtime-owned).
+        comp.sourceCameraName = renderTextureData.sourceCameraName;
+        comp.sourceCamera = entt::null;
+        if (!comp.sourceCameraName.empty()) {
+            auto camView = registry.view<components::NameComponent, components::CameraComponent>();
+            for (auto e : camView) {
+                if (camView.get<components::NameComponent>(e).name == comp.sourceCameraName) {
+                    comp.sourceCamera = e;
+                    break;
+                }
+            }
+        }
         return true;
     }
 

@@ -196,6 +196,7 @@ namespace render::mesh
         float maxDrawDistance = 0.0f;
         bool isStatic = true;
         int32_t submeshIndex = -1; // -1 = all, >= 0 = only this submesh
+        uint32_t renderLayer = 0; // VK-1415: render-layer index 0-31, packed into GPUObjectData.flags
 
         // Instance batching: if non-empty, render N instances with different transforms
         struct InstanceData

@@ -585,24 +585,31 @@ namespace handlers {
 
                 auto& worldTransform = cameraView.get<components::WorldTransformComponent>(entity);
 
-                if (windowStateService) {
-                    uint32_t w = windowStateService->getWidth();
-                    uint32_t h = windowStateService->getHeight();
-                    if (w > 0 && h > 0) {
-                        float newAspect = static_cast<float>(w) / static_cast<float>(h);
-                        if (std::abs(camComp.aspectRatio - newAspect) > 0.001f) {
-                            camComp.aspectRatio = newAspect;
-                            camComp.updateProjectionMatrix();
+                // VK-1416: when a script owns the camera matrices (viewMatrixOverride), skip the
+                // engine recompute and use the stored view/projection as-is.
+                glm::vec3 cameraPos;
+                if (!camComp.viewMatrixOverride) {
+                    if (windowStateService) {
+                        uint32_t w = windowStateService->getWidth();
+                        uint32_t h = windowStateService->getHeight();
+                        if (w > 0 && h > 0) {
+                            float newAspect = static_cast<float>(w) / static_cast<float>(h);
+                            if (std::abs(camComp.aspectRatio - newAspect) > 0.001f) {
+                                camComp.aspectRatio = newAspect;
+                                camComp.updateProjectionMatrix();
+                            }
                         }
                     }
-                }
 
-                // World-space eye position with the camera's LOCAL Euler rotation. Decomposing the
-                // world matrix to Euler (extractEulerAngleXYZ) has its gimbal singularity on the middle
-                // (yaw) axis at ±90°, which flips a yawing fixed-pitch camera to the sky (VK-1350).
-                const auto& localTransform = registry.get<components::TransformComponent>(entity);
-                camComp.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, localTransform);
-                glm::vec3 cameraPos = glm::vec3(worldTransform.worldMatrix[3]);
+                    // World-space eye position with the camera's LOCAL Euler rotation. Decomposing the
+                    // world matrix to Euler (extractEulerAngleXYZ) has its gimbal singularity on the middle
+                    // (yaw) axis at ±90°, which flips a yawing fixed-pitch camera to the sky (VK-1350).
+                    const auto& localTransform = registry.get<components::TransformComponent>(entity);
+                    camComp.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, localTransform);
+                    cameraPos = glm::vec3(worldTransform.worldMatrix[3]);
+                } else {
+                    cameraPos = glm::vec3(glm::inverse(camComp.viewMatrix)[3]);
+                }
 
                 events::render::UpdateMeshCameraCommand meshCameraCmd;
                 meshCameraCmd.viewMatrix = camComp.viewMatrix;

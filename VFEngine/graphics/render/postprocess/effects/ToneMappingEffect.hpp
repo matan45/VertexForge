@@ -45,6 +45,10 @@ namespace render::postprocess
 
         void setExposureOverride(float value) { currentExposure = value; }
 
+        // VK-1419: layout of the set-0/binding-0 combined-image-sampler input. Render textures own
+        // their own ToneMappingEffect and allocate input descriptor sets against this layout.
+        vk::DescriptorSetLayout getInputDescriptorSetLayout() const { return inputDescriptorSetLayout; }
+
     private:
         void loadShader();
         void createDescriptorSetLayout();

@@ -38,6 +38,7 @@ namespace render::gpudriven
         const IndirectBatchManager* batchManager;
         uint32_t screenWidth = 0;   // 0 = use swapchain extent
         uint32_t screenHeight = 0;
+        uint32_t cullingMask = 0xFFFFFFFFu; // VK-1415: per-camera render-layer mask (all layers by default)
     };
 
     class GPUDrivenCameraBuffer

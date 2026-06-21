@@ -139,6 +139,12 @@ namespace render::gpudriven
             ? mergedBuffer->getActiveObjectCount()
             : mergedBuffer->getObjectCount();
 
+        // VK-1415: the main viewport always renders ALL layers. The per-camera render-layer
+        // cullingMask is applied only to RTT/secondary camera cull passes (beginRTTContext),
+        // because this single object-cull also feeds the shared shadow (VSM) pass — masking the
+        // main view here would drop shadow casters and affect other views. So the main camera's
+        // CameraComponent.cullingMask is intentionally ignored; cameraParams.cullingMask keeps its
+        // 0xFFFFFFFF default below.
         CameraUpdateParams cameraParams{
             .view = view,
             .projection = projection,
@@ -157,6 +163,7 @@ namespace render::gpudriven
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()
+            // .cullingMask intentionally omitted -> 0xFFFFFFFF default (main view = all layers).
         };
         cameraBuffer->update(cameraParams);
 
@@ -228,7 +235,8 @@ namespace render::gpudriven
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get(),
             .screenWidth = params.screenWidth,
-            .screenHeight = params.screenHeight
+            .screenHeight = params.screenHeight,
+            .cullingMask = params.cullingMask
         };
         ctx.cameraBuffer->update(cameraParams);
 
@@ -543,6 +551,56 @@ namespace render::gpudriven
             auto& obj = mergedBuffer->getMutableObjectData(slot);
             obj.meshletLod3.w = move.newOffset;
             mergedBuffer->markSlotDirty(slot);
+        }
+    }
+
+    void GPUDrivenRenderer::patchRenderTextureMaterialSlots(uint32_t imageIndex)
+    {
+        // Runtime (persistent) path only. The editor live-preview (non-persistent rebuild path)
+        // re-derives texture indices each rebuild and is OUT OF SCOPE here — follow-up if needed.
+        if (!mergedBuffer || !mergedBuffer->isPersistentMode() || !bindlessTextures)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::MaterialComponent, components::UUIDComponent>();
+        for (auto e : view)
+        {
+            const auto& mat = view.get<components::MaterialComponent>(e);
+            if (mat.renderTextureSlotBindings.empty())
+                continue;
+
+            uint32_t slot = mergedBuffer->getSlotForEntityUUID(view.get<components::UUIDComponent>(e).id.getValue());
+            if (slot == UINT32_MAX)
+                continue;
+
+            auto& obj = mergedBuffer->getMutableObjectData(slot);
+            bool dirty = false;
+            for (const auto& [slotKey, binding] : mat.renderTextureSlotBindings)
+            {
+                if (binding.source == entt::null || !registry.valid(binding.source))
+                    continue;
+                const auto* rtt = registry.try_get<components::RenderTextureComponent>(binding.source);
+                if (!rtt || rtt->textureId == rendertexture::INVALID_RENDER_TEXTURE_ID)
+                    continue;
+
+                std::string key = "__rtt_" + std::to_string(rtt->textureId) + "__#" + std::to_string(imageIndex);
+                uint32_t idx = bindlessTextures->getTextureIndex(key);
+                if (idx == INVALID_TEXTURE_INDEX)
+                    continue;
+
+                if (slotKey == "albedo")
+                {
+                    obj.textureIndices0.x = idx;
+                    dirty = true;
+                }
+                else if (slotKey == "emission")
+                {
+                    obj.textureIndices1.z = idx;
+                    dirty = true;
+                }
+            }
+            if (dirty)
+                mergedBuffer->markSlotDirty(slot);
         }
     }
 

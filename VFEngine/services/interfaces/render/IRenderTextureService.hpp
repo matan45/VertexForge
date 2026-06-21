@@ -2,6 +2,7 @@
 #include <rendertexture/RenderTextureTypes.hpp>
 #include "../../data/DTOs.hpp"
 #include <glm/glm.hpp>
+#include <vector>
 
 namespace services
 {
@@ -16,7 +17,8 @@ namespace services
 
         virtual void updateCamera(rendertexture::RenderTextureId id,
             const glm::mat4& view, const glm::mat4& proj,
-            const glm::vec3& pos, float nearPlane, float farPlane) = 0;
+            const glm::vec3& pos, float nearPlane, float farPlane,
+            uint32_t cullingMask = 0xFFFFFFFFu) = 0;
 
         virtual void renderAll(float deltaTime) = 0;
 
@@ -29,6 +31,8 @@ namespace services
         virtual void setUpdateMode(rendertexture::RenderTextureId id,
                                    rendertexture::UpdateMode mode) = 0;
         virtual void requestRender(rendertexture::RenderTextureId id) = 0;
+
+        [[nodiscard]] virtual std::vector<services::RenderTextureDebugInfo> getActiveRenderTextures() const = 0;
 
         virtual void registerEventHandlers() = 0;
     };

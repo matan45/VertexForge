@@ -257,6 +257,7 @@ namespace render::gpudriven
             renderData.modelMatrix = worldTransform->worldMatrix;
             renderData.maxDrawDistance = meshComp->maxDrawDistance;
             renderData.submeshIndex = meshComp->submeshIndex;
+            renderData.renderLayer = meshComp->renderLayer; // VK-1415
             renderData.showBoundingBox = false;
 
             auto* materialComp = registry.try_get<components::MaterialComponent>(entry.entity);
@@ -409,6 +410,9 @@ namespace render::gpudriven
                     {
                         obj.flags |= ObjectFlags::UniformScale;
                     }
+
+                    // VK-1415: pack the render-layer index (0-31) into flags bits 18-22.
+                    obj.flags |= (renderData.renderLayer & ObjectFlags::LayerMask) << ObjectFlags::LayerShift;
 
                     buffer.updateObjectAtSlot(slot, obj);
                     buffer.mapEntityToSlot(uuid, slot);

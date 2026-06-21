@@ -652,6 +652,9 @@ namespace render::postprocess
 
     void PostProcessPipeline::updateSettings(const ::postprocess::PostProcessSettings& settings)
     {
+        // VK-1419: cache the tone-mapping sub-settings so render textures can mirror the
+        // main viewport's look via their own ToneMappingEffect.
+        lastToneMapping = settings.toneMapping;
         for (auto& effect : effects)
             effect->updateParameters(settings);
     }

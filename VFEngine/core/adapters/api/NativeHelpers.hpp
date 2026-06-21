@@ -292,4 +292,17 @@ namespace core::api
         }
         return value::Value(arr);
     }
+
+    // Reads a 16-float row-major NativeArray (mType Matrix4f layout) into a column-major glm::mat4.
+    // Inverse of makeMat4Array. Returns false if the value is not a >=16-element array.
+    inline bool extractMat4(const value::Value& val, glm::mat4& out)
+    {
+        if (!value::isNativeArray(val)) return false;
+        const auto& arr = value::asNativeArray(val);
+        if (!arr || arr->size() < 16) return false;
+        for (int row = 0; row < 4; ++row)
+            for (int col = 0; col < 4; ++col)
+                out[col][row] = static_cast<float>(value::asFloat((*arr)[row * 4 + col]));
+        return true;
+    }
 }

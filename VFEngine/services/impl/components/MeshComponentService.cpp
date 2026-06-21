@@ -33,6 +33,7 @@ namespace services {
         data.applyRootMotion = comp.applyRootMotion;
         data.maxDrawDistance = comp.maxDrawDistance;
         data.submeshIndex = comp.submeshIndex;
+        data.renderLayer = comp.renderLayer;
 
         return data;
     }
@@ -67,6 +68,7 @@ namespace services {
             comp.applyRootMotion = mesh.applyRootMotion;
             comp.maxDrawDistance = mesh.maxDrawDistance;
             comp.submeshIndex = mesh.submeshIndex;
+            comp.renderLayer = mesh.renderLayer;
         }
         else {
             auto& comp = sceneEntity.addComponent<components::MeshComponent>();
@@ -77,6 +79,7 @@ namespace services {
             comp.applyRootMotion = mesh.applyRootMotion;
             comp.maxDrawDistance = mesh.maxDrawDistance;
             comp.submeshIndex = mesh.submeshIndex;
+            comp.renderLayer = mesh.renderLayer;
         }
 
         // Sync applyRootMotion to AnimatorComponent if it exists

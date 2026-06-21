@@ -198,6 +198,12 @@ namespace scene
             auto entity = Entity(entityHandle);
             auto& camera = entity.getComponent<components::CameraComponent>();
 
+            // VK-1416: when a script owns this camera's view matrix (viewMatrixOverride), do not
+            // recompute it from the transform — this runs every frame for all cameras and would
+            // otherwise clobber a script-set lookAt / setViewMatrix on both primary and RTT cameras.
+            if (camera.viewMatrixOverride)
+                continue;
+
             const auto& transform = entity.getComponent<components::TransformComponent>();
             if (entity.hasComponent<components::WorldTransformComponent>())
             {

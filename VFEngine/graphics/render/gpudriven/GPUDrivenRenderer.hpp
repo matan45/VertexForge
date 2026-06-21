@@ -633,6 +633,10 @@ namespace render::gpudriven
         TextureStreamManager* getTextureStreamManager() const { return textureStreamManager.get(); }
         const TextureStreamStats* getTextureStreamStats() const;
 
+        // VK-1418: scene-wide bindless table, used by the RTT adapter to reserve/repoint per-image
+        // RTT material slots and by the per-frame RTT material inject pass.
+        gpudriven::BindlessTextureManager* getBindlessTextureManager() const { return bindlessTextures.get(); }
+
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();
         bool isBVHLightCullingEnabled() const { return lightCulling.useBVH; }
@@ -804,6 +808,9 @@ namespace render::gpudriven
         TextureIndexResolver createTextureResolver();
         BoneOffsetResolver updateAnimationBones();
         void patchBoneOffsetsInGPUData(const std::vector<BoneDefragResult>& moves);
+        // VK-1418: per-frame inject of live RTT bindless slots into bound entities' material
+        // texture indices (albedo/emission). Runs before uploadDirtyObjects each frame.
+        void patchRenderTextureMaterialSlots(uint32_t imageIndex);
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
         void updatePipelineDescriptors();
         void updateAllPipelinesHiZ();

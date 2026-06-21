@@ -293,5 +293,51 @@ namespace core::api
                 cmd.materialPath = path;
                 return value::Value(dispatcher.execute(cmd));
             }});
+
+        // _native_mesh_setRenderLayer(entityId, layer) -> bool  (VK-1415)
+        // Sets the entity's render-layer index (clamped 0-31), preserving the rest of
+        // its MeshData. A camera renders this mesh only if its cullingMask has the
+        // matching bit set. Returns false if the entity has no MeshComponent.
+        interpreter->registerNativeFunction("_native_mesh_setRenderLayer",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2)
+                {
+                    vfLogError("[Script] Mesh.setRenderLayer: missing arguments");
+                    return value::Value(false);
+                }
+                int64_t id = extractInt64(args[0], "Mesh.setRenderLayer");
+                int64_t layer = extractInt64(args[1], "Mesh.setRenderLayer");
+                if (id < 0) return value::Value(false);
+                if (layer < 0) layer = 0;
+                if (layer > 31) layer = 31;
+
+                auto entity = intToEntity(id);
+                events::scene::GetMeshDataQuery q;
+                q.entity = entity;
+                auto current = dispatcher.query(q);
+                if (!current.has_value()) return value::Value(false);
+
+                current->renderLayer = static_cast<uint32_t>(layer);
+
+                events::scene::SetMeshDataCommand setCmd;
+                setCmd.entity = entity;
+                setCmd.meshData = *current;
+                return value::Value(dispatcher.execute(setCmd));
+            }});
+
+        // _native_mesh_getRenderLayer(entityId) -> int  (VK-1415); -1 if no mesh.
+        interpreter->registerNativeFunction("_native_mesh_getRenderLayer",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(static_cast<int64_t>(-1));
+                int64_t id = extractInt64(args[0], "Mesh.getRenderLayer");
+                if (id < 0) return value::Value(static_cast<int64_t>(-1));
+                events::scene::GetMeshDataQuery q;
+                q.entity = intToEntity(id);
+                auto result = dispatcher.query(q);
+                if (!result.has_value()) return value::Value(static_cast<int64_t>(-1));
+                return value::Value(static_cast<int64_t>(result->renderLayer));
+            }});
     }
 }

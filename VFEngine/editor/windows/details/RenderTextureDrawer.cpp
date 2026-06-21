@@ -2,6 +2,8 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
+#include "events/render/RenderTextureEvents.hpp"
+#include <rendertexture/RenderTextureTypes.hpp>
 #include <imgui.h>
 
 namespace windows::details
@@ -43,9 +45,41 @@ namespace windows::details
             ImGui::TextDisabled("Renders camera view to a texture");
             ImGui::Spacing();
 
+            events::scene::HasCameraComponentQuery camQuery;
+            camQuery.entity = handle;
+            bool hasCamera = dispatcher.query(camQuery);
+            if (!hasCamera)
+            {
+                ImGui::TextColored(ImVec4(0.9f, 0.2f, 0.2f, 1.0f), "No Camera - this RTT renders nothing.");
+                if (ImGui::Button("Add Camera##RT"))
+                {
+                    events::scene::AddCameraComponentCommand addCam;
+                    addCam.entity = handle;
+                    dispatcher.execute(addCam);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Adds a Camera (and Transform) so the Render Texture has a view to render.");
+                }
+                ImGui::Spacing();
+            }
+
             changed |= drawResolution(data);
             ImGui::Spacing();
             changed |= drawSettings(data);
+
+            ImGui::Spacing();
+            ImGui::SeparatorText("Source Camera");
+            // VK-1414: optionally render from a SEPARATE camera entity instead of this entity's own
+            // camera. Filtered to Camera entities; empty selection = legacy self-camera behavior.
+            changed |= sourceCameraPicker.draw(
+                "RenderTextureSourceCamera",
+                data.sourceCameraName,
+                data.sourceCamera,
+                services::ComponentTypeId::Camera,
+                "Source Camera",
+                "Render from a separate Camera entity instead of this entity's own camera.\n"
+                "Leave as None to render from this entity (legacy behavior).");
 
             if (changed)
             {
@@ -53,6 +87,32 @@ namespace windows::details
                 cmd.entity = handle;
                 cmd.renderTextureData = data;
                 dispatcher.execute(cmd);
+            }
+
+            ImGui::Spacing();
+            ImGui::SeparatorText("Preview");
+            if (data.runtimeTextureId != rendertexture::INVALID_RENDER_TEXTURE_ID)
+            {
+                services::events::rendertexture::GetRenderTextureHandleQuery handleQuery;
+                handleQuery.textureId = data.runtimeTextureId;
+                auto texHandle = dispatcher.query(handleQuery);
+                if (texHandle.imguiDescriptorSet)
+                {
+                    float aspect = (texHandle.height > 0)
+                        ? static_cast<float>(texHandle.width) / static_cast<float>(texHandle.height)
+                        : 1.0f;
+                    float previewW = 256.0f;
+                    float previewH = previewW / (aspect > 0.0f ? aspect : 1.0f);
+                    ImGui::Image(texHandle.imguiDescriptorSet, ImVec2(previewW, previewH));
+                }
+                else
+                {
+                    ImGui::TextDisabled("Rendering...");
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("Preview available in Play mode");
             }
 
             ImGui::Unindent(10.0f);
@@ -132,12 +192,27 @@ namespace windows::details
                               "whose top-down view doesn't match the primary camera's shadow clipmap.");
         }
 
+        if (ImGui::Checkbox("Tonemap##RT", &data.tonemap))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Apply the scene tonemap/gamma so this render texture matches the main viewport.\n"
+                              "Off = raw HDR (e.g. minimap).");
+        }
+
         const char* updateModes[] = {"Every Frame", "On Demand", "Fixed Interval"};
         int currentMode = static_cast<int>(data.updateMode);
         if (ImGui::Combo("Update Mode##RT", &currentMode, updateModes, IM_ARRAYSIZE(updateModes)))
         {
             data.updateMode = static_cast<uint8_t>(currentMode);
             changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Every Frame re-renders the whole scene each frame (expensive).\n"
+                              "Prefer On Demand or Fixed Interval for mostly-static views.");
         }
 
         if (data.updateMode == 2) // FixedInterval

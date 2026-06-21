@@ -152,6 +152,7 @@ namespace core::api
                 desc.updateMode = static_cast<rendertexture::UpdateMode>(mode);
                 desc.priority = rttComp.priority;
                 desc.renderShadows = rttComp.renderShadows;
+                desc.tonemap = rttComp.tonemap;
 
                 services::events::rendertexture::CreateRenderTextureCommand cmd;
                 cmd.desc = desc;
@@ -262,7 +263,51 @@ namespace core::api
                 cmd.cameraPos = transform.position;
                 cmd.nearPlane = cam.nearPlane;
                 cmd.farPlane = cam.farPlane;
+                cmd.cullingMask = cam.cullingMask; // VK-1415: parity with the persistent sourceCamera path
                 dispatcher.execute(cmd);
+
+                return value::Value(std::monostate{});
+            }});
+
+        interpreter->registerNativeFunction("_native_rtt_setSourceCamera",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 2) return value::Value(std::monostate{});
+                int64_t rttId = extractInt64(args[0]);
+                int64_t camId = extractInt64(args[1]);
+                if (rttId < 0) return value::Value(std::monostate{});
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+
+                auto rttEntity = services::internal::fromHandle(services::EntityHandle{
+                    static_cast<uint64_t>(rttId)
+                });
+                if (!registry.valid(rttEntity) ||
+                    !registry.all_of<components::RenderTextureComponent>(rttEntity))
+                    return value::Value(std::monostate{});
+
+                auto& rttComp = registry.get<components::RenderTextureComponent>(rttEntity);
+
+                // camId < 0 clears the reference (revert to legacy self-camera behavior).
+                if (camId < 0)
+                {
+                    rttComp.sourceCamera = entt::null;
+                    rttComp.sourceCameraName.clear();
+                    return value::Value(std::monostate{});
+                }
+
+                auto camEntity = services::internal::fromHandle(services::EntityHandle{
+                    static_cast<uint64_t>(camId)
+                });
+                if (!registry.valid(camEntity) ||
+                    !registry.all_of<components::CameraComponent, components::TransformComponent>(camEntity))
+                    return value::Value(std::monostate{});
+
+                // Persistent: set the component fields (re-read every frame by the play-mode handler),
+                // not a one-shot view/proj push like _native_rtt_setCamera.
+                rttComp.sourceCamera = camEntity;
+                rttComp.sourceCameraName = registry.all_of<components::NameComponent>(camEntity)
+                    ? registry.get<components::NameComponent>(camEntity).name
+                    : std::string{};
 
                 return value::Value(std::monostate{});
             }});

@@ -88,6 +88,8 @@ namespace render::postprocess
 
         std::vector<std::unique_ptr<PostProcessEffect>> effects;
         std::optional<float> autoExposureOverride;
+        // VK-1419: snapshot of the last-applied tone-mapping sub-settings (see getToneMappingSettings).
+        ::postprocess::ToneMappingSettings lastToneMapping{};
         core::DeferredDeletionQueue* deletionQueue = nullptr;
 
         // --- Plugin effect registry (VK-1409) ---
@@ -153,6 +155,10 @@ namespace render::postprocess
         bool hasEnabledEffects() const;
         bool isInitialized() const { return initialized; }
         std::optional<float> getComputedExposure() const { return autoExposureOverride; }
+
+        // VK-1419: the most recently applied tone-mapping sub-settings. Render textures build
+        // their own ToneMappingEffect and feed it these so their look matches the main viewport.
+        const ::postprocess::ToneMappingSettings& getToneMappingSettings() const { return lastToneMapping; }
 
         vk::Format getColorFormat() const { return sceneColorFormat; }
         vk::DescriptorSetLayout getInputDescriptorSetLayout() const { return inputDescriptorSetLayout; }

@@ -106,6 +106,13 @@ void main() {
     uint objectIndex = activeIndices[threadIndex];
     GPUObjectData obj = objects[objectIndex];
 
+    // VK-1415: per-object render layer vs per-camera culling mask. Single early-out, before any
+    // other cull work, so a camera (incl. an RTT camera) renders only its selected layers.
+    uint objLayerBit = 1u << ((obj.flags >> LAYER_SHIFT) & LAYER_MASK);
+    if ((objLayerBit & camera.cullExtra.x) == 0u) {
+        return;
+    }
+
     uint batchIndex = objectIndex % camera.batchCount;
     uint shaderGroup = obj.shaderGroupIndex;
     uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
