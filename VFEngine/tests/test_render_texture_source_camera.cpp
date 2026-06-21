@@ -133,6 +133,13 @@ TEST_SUITE("RenderTextureSourceCamera")
         scan(sceneJson["root"]);
         CHECK(foundSerializedName);
 
+        // Drop the source scene's entities from the shared singleton registry before loading,
+        // so the loaded scene's camera is the only one with this name. Otherwise two same-named
+        // cameras live on the singleton at once and findEntityByName / resolveRenderTextureSourceNames
+        // become ambiguous (they pick different ones), which is a test-isolation artifact, not a
+        // product bug — the engine cannot disambiguate two live entities sharing a name.
+        source.clearScene();
+
         // Reload into a fresh scene; resolveRenderTextureSourceNames runs inside load.
         scene::SceneGraphSystem loaded;
         REQUIRE(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
