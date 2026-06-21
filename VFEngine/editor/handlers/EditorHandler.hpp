@@ -77,6 +77,8 @@ namespace services {
 	class PhysicsPlayModeHandler;
 	class VFXPlayModeHandler;
 	class VFXRuntimeServiceImpl;
+	class VFXSequencePlayModeHandler;
+	class VFXSequenceRuntimeServiceImpl;
 	class RenderTexturePlayModeHandler;
 	class BehaviorTreePlayModeHandler;
 	class EditorRenderServiceImpl;
@@ -131,6 +133,8 @@ namespace handlers {
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;
 		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
+		std::unique_ptr<services::VFXSequencePlayModeHandler> vfxSequencePlayModeHandler;
+		std::unique_ptr<services::VFXSequenceRuntimeServiceImpl> vfxSequenceRuntimeService;
 		std::shared_ptr<services::IRenderTextureService> renderTextureService;
 		std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
 		std::shared_ptr<services::IControllerService> controllerService;

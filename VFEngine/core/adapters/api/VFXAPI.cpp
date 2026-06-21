@@ -7,6 +7,7 @@
 #include "NativeHelpers.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
+#include "events/vfx/VFXSequenceRuntimeEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "data/EntityConversion.hpp"
@@ -518,6 +519,212 @@ namespace core::api
                 events::EventDispatcher::instance().execute(cmd);
 
                 return value::Value(std::monostate{});
+            }});
+
+        // ============================================================
+        // VFX COMBO SEQUENCES (VK-1425)
+        // A combo plays multiple .vfVFX steps from a .vfVFXSequence asset; the
+        // returned int is a VFXComboInstanceId (0 on failure), distinct from the
+        // per-instance ids above.
+        // ============================================================
+
+        // _native_vfx_spawnCombo(path, x, y, z [, keepAlive]) -> int comboId
+        // keepAlive=true keeps the combo alive after all steps finish (default
+        // false => auto-destroy when complete). Looping steps keep playing regardless.
+        interpreter->registerNativeFunction("_native_vfx_spawnCombo",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 4)
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+                std::string path = extractString(args[0], "VFX.spawnCombo");
+                if (path.empty())
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+                glm::vec3 position{extractFloat(args[1]), extractFloat(args[2]), extractFloat(args[3])};
+
+                bool keepAlive = false;
+                if (args.size() >= 5 && value::isBool(args[4]))
+                {
+                    keepAlive = value::asBool(args[4]);
+                }
+
+                services::events::vfxsequence::CreateVFXComboInstanceCommand createCmd;
+                createCmd.sequenceAssetPath = path;
+                createCmd.worldTransform = glm::translate(glm::mat4(1.0f), position);
+                createCmd.autoDestroyOnFinish = !keepAlive;
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                services::VFXComboInstanceId comboId = dispatcher.execute(createCmd);
+                if (comboId != 0)
+                {
+                    services::events::vfxsequence::PlayVFXComboInstanceCommand playCmd;
+                    playCmd.comboId = comboId;
+                    dispatcher.execute(playCmd);
+                }
+
+                return value::Value(static_cast<int64_t>(comboId));
+            }});
+
+        // _native_vfx_destroyCombo(comboId) -> void
+        interpreter->registerNativeFunction("_native_vfx_destroyCombo",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                services::events::vfxsequence::DestroyVFXComboInstanceCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_stopCombo(comboId) -> void
+        interpreter->registerNativeFunction("_native_vfx_stopCombo",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                services::events::vfxsequence::StopVFXComboInstanceCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_resetCombo(comboId) -> void
+        interpreter->registerNativeFunction("_native_vfx_resetCombo",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                services::events::vfxsequence::ResetVFXComboInstanceCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_setComboPosition(comboId, x, y, z) -> void
+        interpreter->registerNativeFunction("_native_vfx_setComboPosition",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 4)
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                glm::vec3 position{extractFloat(args[1]), extractFloat(args[2]), extractFloat(args[3])};
+                services::events::vfxsequence::SetVFXComboInstanceTransformCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                cmd.worldTransform = glm::translate(glm::mat4(1.0f), position);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_attachComboToSocket(comboId, parentEntityId, socketName) -> void
+        interpreter->registerNativeFunction("_native_vfx_attachComboToSocket",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 3)
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                int64_t parentEntityId = extractInt64(args[1]);
+                if (comboId <= 0 || parentEntityId < 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                std::string socketName = extractString(args[2], "VFX.attachComboToSocket");
+                if (socketName.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                services::events::vfxsequence::AttachVFXComboInstanceToSocketCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                cmd.entityHandle = services::EntityHandle{static_cast<uint64_t>(parentEntityId)}.id;
+                cmd.socketName = std::move(socketName);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_detachCombo(comboId) -> void
+        interpreter->registerNativeFunction("_native_vfx_detachCombo",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                services::events::vfxsequence::DetachVFXComboInstanceCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_triggerComboCue(comboId, cueName) -> void
+        interpreter->registerNativeFunction("_native_vfx_triggerComboCue",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 2)
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                std::string cueName = extractString(args[1], "VFX.triggerComboCue");
+                if (cueName.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                services::events::vfxsequence::TriggerVFXComboCueCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                cmd.cueName = std::move(cueName);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_comboIsPlaying(comboId) -> bool
+        interpreter->registerNativeFunction("_native_vfx_comboIsPlaying",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(false);
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(false);
+                }
+                services::events::vfxsequence::IsVFXComboInstancePlayingQuery query;
+                query.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                bool playing = events::EventDispatcher::instance().query(query);
+                return value::Value(playing);
             }});
 
         // _native_vfx_setOverride(instanceId, name, value) -> bool

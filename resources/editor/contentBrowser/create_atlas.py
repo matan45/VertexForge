@@ -60,7 +60,8 @@ ICON_FILES = {
     19: "ai-tree",              # physics animation
     20: "plugin",              # physics animation
     21: "input",             # physics animation
-    22: "animation-retarget"             # physics animation
+    22: "animation-retarget",             # physics animation
+    23: "VFXSequence",             # physics animation
 }
 
 def find_icon_file(base_name):

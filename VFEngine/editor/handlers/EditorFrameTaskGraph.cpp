@@ -2,6 +2,7 @@
 #include "editor/EditorBootstrap.hpp"
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/vfx/VFXPlayModeHandler.hpp"
+#include "impl/vfx/VFXSequencePlayModeHandler.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
 #include "core/PluginManager.hpp"
@@ -83,6 +84,11 @@ namespace handlers
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && vfxPlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 vfxPlayModeHandler->update(dt);
+                // VK-1425: step running combos and drain queued animation-event triggers (after the
+                // per-instance handler so child Create/Play/SetTransform run before UpdateVFXRuntime).
+                if (vfxSequencePlayModeHandler) {
+                    vfxSequencePlayModeHandler->update(dt);
+                }
             }
         });
 

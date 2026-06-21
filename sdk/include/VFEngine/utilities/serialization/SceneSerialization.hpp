@@ -239,6 +239,9 @@ namespace serialization
         static json serializeVFX(const components::VFXComponent& vfx);
         static void deserializeVFX(const json& j, components::VFXComponent& vfx);
 
+        static json serializeVFXSequence(const components::VFXSequenceComponent& seq);
+        static void deserializeVFXSequence(const json& j, components::VFXSequenceComponent& seq);
+
         static json serializePhysicsAnimation(const components::PhysicsAnimationComponent& physAnim);
         static void deserializePhysicsAnimation(const json& j, components::PhysicsAnimationComponent& physAnim);
 

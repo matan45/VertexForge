@@ -71,6 +71,8 @@ namespace serialization
             out["physicsAnimation"] = serializePhysicsAnimation(entity.getComponent<components::PhysicsAnimationComponent>());
         if (entity.hasComponent<components::VFXComponent>())
             out["vfx"] = serializeVFX(entity.getComponent<components::VFXComponent>());
+        if (entity.hasComponent<components::VFXSequenceComponent>())
+            out["vfxSequence"] = serializeVFXSequence(entity.getComponent<components::VFXSequenceComponent>());
     }
 
     void SceneSerialization::serializeLightEnvironmentComponents(scene::Entity& entity, json& out)

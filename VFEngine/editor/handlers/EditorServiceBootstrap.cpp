@@ -17,6 +17,8 @@
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/vfx/VFXPlayModeHandler.hpp"
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
+#include "impl/vfx/VFXSequencePlayModeHandler.hpp"
+#include "impl/vfx/VFXSequenceRuntimeServiceImpl.hpp"
 #include "impl/project/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
 #include "impl/scene/OceanService.hpp"
@@ -189,6 +191,13 @@ namespace handlers
             vfxRuntimeService->registerEventHandlers();
             vfxPlayModeHandler = std::make_unique<services::VFXPlayModeHandler>(vfxProvider);
             vfxPlayModeHandler->subscribeToEvents();
+
+            // VFX combo sequences (VK-1425) — orchestrate child instances through the per-instance
+            // command API above; only meaningful when the VFX runtime is available.
+            vfxSequenceRuntimeService = std::make_unique<services::VFXSequenceRuntimeServiceImpl>();
+            vfxSequenceRuntimeService->registerEventHandlers();
+            vfxSequencePlayModeHandler = std::make_unique<services::VFXSequencePlayModeHandler>();
+            vfxSequencePlayModeHandler->subscribeToEvents();
         }
     }
 

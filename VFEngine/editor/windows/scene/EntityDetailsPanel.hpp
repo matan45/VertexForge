@@ -16,6 +16,7 @@
 #include "../details/DestructibleDrawer.hpp"
 #include "../details/PhysicsAnimationDrawer.hpp"
 #include "../details/VFXDrawer.hpp"
+#include "../details/VFXSequenceDrawer.hpp"
 #include "../details/BillboardDrawer.hpp"
 #include "../details/TextDrawer.hpp"
 #include "../details/DirectionalLightDrawer.hpp"
@@ -86,6 +87,7 @@ namespace windows
         details::DestructibleDrawer destructibleDrawer;
         details::PhysicsAnimationDrawer physicsAnimationDrawer;
         details::VFXDrawer vfxDrawer;
+        details::VFXSequenceDrawer vfxSequenceDrawer;
         details::BillboardDrawer billboardDrawer;
         details::TextDrawer textDrawer;
         details::DirectionalLightDrawer directionalLightDrawer;

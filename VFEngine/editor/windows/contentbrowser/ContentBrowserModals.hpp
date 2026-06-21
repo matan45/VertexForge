@@ -26,6 +26,9 @@ namespace windows
         std::string newVFXName;
         bool showCreateVFXModal = false;
 
+        std::string newVFXSequenceName;
+        bool showCreateVFXSequenceModal = false;
+
         std::string newTerrainMaterialName;
         bool showCreateTerrainMaterialModal = false;
 
@@ -88,6 +91,7 @@ namespace windows
         void drawCreateMaterialModal(const fs::path& currentPath);
         void drawCreateAnimatorModal(const fs::path& currentPath);
         void drawCreateVFXModal(const fs::path& currentPath);
+        void drawCreateVFXSequenceModal(const fs::path& currentPath);
         void drawCreateTerrainMaterialModal(const fs::path& currentPath);
         void drawCreateBehaviorTreeModal(const fs::path& currentPath);
         void drawCreateThemeModal(const fs::path& currentPath);

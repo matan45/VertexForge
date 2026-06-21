@@ -90,6 +90,10 @@ namespace windows
             ImGui::OpenPopup("Create New VFX");
         drawCreateVFXModal(currentPath);
 
+        if (showCreateVFXSequenceModal)
+            ImGui::OpenPopup("Create New VFX Sequence");
+        drawCreateVFXSequenceModal(currentPath);
+
         if (showCreateTerrainMaterialModal)
             ImGui::OpenPopup("Create New Terrain Material");
         drawCreateTerrainMaterialModal(currentPath);
@@ -152,6 +156,11 @@ namespace windows
                 {
                     showCreateVFXModal = true;
                     newVFXName.clear();
+                }
+                if (ImGui::MenuItem("VFX Sequence"))
+                {
+                    showCreateVFXSequenceModal = true;
+                    newVFXSequenceName.clear();
                 }
                 if (ImGui::MenuItem("Terrain Material"))
                 {

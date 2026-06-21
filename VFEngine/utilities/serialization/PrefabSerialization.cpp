@@ -110,6 +110,12 @@ namespace serialization
                 entity.getComponent<components::VFXComponent>());
         }
 
+        if (entity.hasComponent<components::VFXSequenceComponent>())
+        {
+            out["vfxSequence"] = SceneSerialization::serializeVFXSequence(
+                entity.getComponent<components::VFXSequenceComponent>());
+        }
+
         if (entity.hasComponent<components::DirectionalLightComponent>())
         {
             out["directionalLight"] = SceneSerialization::serializeDirectionalLight(
@@ -516,6 +522,12 @@ namespace serialization
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                 billboard.iconType = components::BillboardIconType::Particle;
             }
+        }
+
+        if (componentsJson.contains("vfxSequence"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::VFXSequenceComponent>();
+            SceneSerialization::deserializeVFXSequence(componentsJson["vfxSequence"], comp);
         }
     }
 

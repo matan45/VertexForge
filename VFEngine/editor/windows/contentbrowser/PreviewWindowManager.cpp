@@ -9,6 +9,7 @@
 #include "../animation/AnimationPreviewWindow.hpp"
 #include "../animation/AnimatorEditorWindow.hpp"
 #include "../vfx/VFXEditorWindow.hpp"
+#include "../vfx/VFXSequenceEditorWindow.hpp"
 #include "../terrain/TerrainMaterialEditorWindow.hpp"
 #include "../ai/BehaviorTreeEditorWindow.hpp"
 #include "../animation/RetargetingEditorWindow.hpp"
@@ -29,6 +30,7 @@ namespace windows
         eraseExpired(openAnimationPreviews);
         eraseExpired(openAnimatorEditors);
         eraseExpired(openVFXEditors);
+        eraseExpired(openVFXSequenceEditors);
         eraseExpired(openTerrainMaterialEditors);
         eraseExpired(openBehaviorTreeEditors);
         eraseExpired(openRetargetEditors);
@@ -74,6 +76,9 @@ namespace windows
             return true;
         case AssetType::VFX:
             openVFXEditor(path);
+            return true;
+        case AssetType::VFXSequence:
+            openVFXSequenceEditor(path);
             return true;
         case AssetType::TerrainMaterial:
             openTerrainMaterialEditor(path);
@@ -129,6 +134,10 @@ namespace windows
 
         auto vfxIt = openVFXEditors.find(path);
         if (vfxIt != openVFXEditors.end() && !vfxIt->second.expired())
+            return true;
+
+        auto vfxSeqIt = openVFXSequenceEditors.find(path);
+        if (vfxSeqIt != openVFXSequenceEditors.end() && !vfxSeqIt->second.expired())
             return true;
 
         auto terrainMatIt = openTerrainMaterialEditors.find(path);
@@ -249,6 +258,17 @@ namespace windows
             auto editorWindow = std::make_shared<VFXEditorWindow>(path);
             controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
             openVFXEditors[path] = editorWindow;
+        }
+    }
+
+    void PreviewWindowManager::openVFXSequenceEditor(const std::string& path)
+    {
+        auto it = openVFXSequenceEditors.find(path);
+        if (it == openVFXSequenceEditors.end() || it->second.expired())
+        {
+            auto editorWindow = std::make_shared<VFXSequenceEditorWindow>(path);
+            controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
+            openVFXSequenceEditors[path] = editorWindow;
         }
     }
 

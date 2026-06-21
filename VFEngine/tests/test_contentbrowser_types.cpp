@@ -37,6 +37,15 @@ TEST_CASE("assetTypeInfo returns the matching entry")
     CHECK(std::string(windows::assetTypeInfo(AssetType::MaterialInstance).label) == "Material Instance");
 }
 
+TEST_CASE("VFX Sequence type is registered in the table")
+{
+    using windows::AssetType;
+    // The VFXSequence row has its own label/type and a dedicated atlas icon (slot 23).
+    CHECK(windows::assetTypeInfo(AssetType::VFXSequence).type == AssetType::VFXSequence);
+    CHECK(std::string(windows::assetTypeInfo(AssetType::VFXSequence).label) == "VFX Sequence");
+    CHECK(windows::assetTypeInfo(AssetType::VFXSequence).icon == windows::AtlasIcon::VFXSequence);
+}
+
 TEST_CASE("formatFileSize uses binary units")
 {
     CHECK(windows::formatFileSize(0) == "0 B");
@@ -61,6 +70,8 @@ TEST_CASE("fromResourceType is total and maps known pairs")
         CHECK(fromResourceType(resource::AssetType::Scene) == AssetType::Scene);
         CHECK(fromResourceType(resource::AssetType::Prefab) == AssetType::Prefab);
         CHECK(fromResourceType(resource::AssetType::MaterialInstance) == AssetType::MaterialInstance);
+        CHECK(fromResourceType(resource::AssetType::VFX) == AssetType::VFX);
+        CHECK(fromResourceType(resource::AssetType::VFXSequence) == AssetType::VFXSequence);
     }
 
     SUBCASE("types without a browser counterpart fall back to Other")

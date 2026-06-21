@@ -291,6 +291,66 @@ namespace serialization
         vfx.isPlaying = false;
     }
 
+    json SceneSerialization::serializeVFXSequence(const components::VFXSequenceComponent& seq)
+    {
+        json j;
+        writeAssetRef(j, "sequenceRef", seq.sequenceRef);
+        j["autoPlay"] = seq.autoPlay;
+        j["loop"] = seq.loop;
+        j["socketName"] = seq.socketName;
+
+        json triggers = json::array();
+        for (const auto& trigger : seq.triggers)
+        {
+            json t;
+            t["eventName"] = trigger.eventName;
+            writeAssetRef(t, "sequenceRef", trigger.sequenceRef);
+            t["socketName"] = trigger.socketName;
+            triggers.push_back(std::move(t));
+        }
+        j["triggers"] = std::move(triggers);
+        return j;
+    }
+
+    void SceneSerialization::deserializeVFXSequence(const json& j, components::VFXSequenceComponent& seq)
+    {
+        seq.sequenceRef = readAssetRef(j, "sequenceRef", "sequencePath");
+        if (auto it = j.find("autoPlay"); it != j.end() && it->is_boolean())
+        {
+            seq.autoPlay = it->get<bool>();
+        }
+        if (auto it = j.find("loop"); it != j.end() && it->is_boolean())
+        {
+            seq.loop = it->get<bool>();
+        }
+        if (auto it = j.find("socketName"); it != j.end() && it->is_string())
+        {
+            seq.socketName = it->get<std::string>();
+        }
+
+        seq.triggers.clear();
+        if (auto it = j.find("triggers"); it != j.end() && it->is_array())
+        {
+            for (const auto& t : *it)
+            {
+                components::VFXSequenceTrigger trigger;
+                if (auto ev = t.find("eventName"); ev != t.end() && ev->is_string())
+                {
+                    trigger.eventName = ev->get<std::string>();
+                }
+                trigger.sequenceRef = readAssetRef(t, "sequenceRef", "sequencePath");
+                if (auto sn = t.find("socketName"); sn != t.end() && sn->is_string())
+                {
+                    trigger.socketName = sn->get<std::string>();
+                }
+                seq.triggers.push_back(std::move(trigger));
+            }
+        }
+
+        // Reset runtime state
+        seq.runtimeComboId = 0;
+    }
+
     json SceneSerialization::serializeNavmeshAgent(const components::NavmeshAgentComponent& agent)
     {
         json j;

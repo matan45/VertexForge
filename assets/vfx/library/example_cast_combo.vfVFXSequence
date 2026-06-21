@@ -1,0 +1,37 @@
+{
+    "version": "1.0",
+    "uuid": "7421558899005678",
+    "name": "Example Cast Combo",
+    "steps": [
+        {
+            "vfxRef": "assets/vfx/library/fire_loop.vfVFX",
+            "label": "charge",
+            "startTime": 0.0,
+            "cueName": "",
+            "localPosition": [0.0, 0.0, 0.0],
+            "localEulerDeg": [0.0, 0.0, 0.0],
+            "localScale": [0.5, 0.5, 0.5],
+            "loop": true,
+            "duration": 0.0,
+            "stopMode": 0,
+            "socketName": "hand_R",
+            "scalarOverrides": [],
+            "vectorOverrides": []
+        },
+        {
+            "vfxRef": "assets/vfx/library/magic_heal.vfVFX",
+            "label": "release",
+            "startTime": 0.0,
+            "cueName": "release",
+            "localPosition": [0.0, 0.0, 0.0],
+            "localEulerDeg": [0.0, 0.0, 0.0],
+            "localScale": [1.0, 1.0, 1.0],
+            "loop": false,
+            "duration": 0.0,
+            "stopMode": 0,
+            "socketName": "hand_R",
+            "scalarOverrides": [],
+            "vectorOverrides": []
+        }
+    ]
+}
