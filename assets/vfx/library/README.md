@@ -39,6 +39,9 @@ A `.vfVFXSequence` composes several of the `.vfVFX` effects above into one timed
 "combo" (no graph duplication — each step just references an existing `.vfVFX`).
 Open one in the **VFX Sequence Editor** (double-click), or drive it at runtime.
 
+> **Full guide:** [`docs/VFX_SEQUENCES.md`](../../../docs/VFX_SEQUENCES.md) — authoring,
+> the timeline, sockets, the three trigger paths, `comboId`, events & cues, and scope.
+
 | Example | Shows |
 |---|---|
 | `example_impact_combo.vfVFXSequence` | 4 one-shot steps at staggered times (muzzle → sparks → dust → smoke) — plays standalone |
