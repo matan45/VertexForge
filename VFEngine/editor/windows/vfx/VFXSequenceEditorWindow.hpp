@@ -38,6 +38,14 @@ namespace windows
 
         std::unique_ptr<editor::vfxeditor::VFXPreviewPanel> previewPanel;
 
+        // Bottom timeline built on ImSequencer: one draggable clip per step
+        // (drag = edit Start Time, drag the right edge = edit Duration).
+        class SequenceTimeline;                 // ImSequencer adapter (defined in .cpp)
+        std::unique_ptr<SequenceTimeline> timeline;
+        int previewFrame = 0;
+        int timelineFirstFrame = 0;
+        bool timelineExpanded = true;
+
     public:
         explicit VFXSequenceEditorWindow(const std::string& seqPath);
         ~VFXSequenceEditorWindow() override;    // out-of-line (VFXPreviewPanel is incomplete here)

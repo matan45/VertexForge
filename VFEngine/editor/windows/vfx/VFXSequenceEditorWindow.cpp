@@ -5,6 +5,7 @@
 
 #include "print/Log.hpp"
 #include "imgui.h"
+#include "ImSequencer.h"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 
@@ -18,6 +19,8 @@
 #include <ctime>
 #include <algorithm>
 #include <string>
+#include <vector>
+#include <cmath>
 
 namespace fs = std::filesystem;
 
@@ -59,9 +62,95 @@ namespace windows
         }
     }
 
+    // ImSequencer adapter: one clip per step. starts/ends are in "frames"
+    // (kFps frames per second). ImSequencer mutates them in place when a clip is
+    // dragged; writeback() converts changes back to Start Time / Duration.
+    class VFXSequenceEditorWindow::SequenceTimeline : public ImSequencer::SequenceInterface
+    {
+    public:
+        static constexpr int kFps = 100;        // 0.01s timeline resolution
+        static constexpr float kDisplayDefaultSec = 0.5f; // shown width for duration==0 steps
+
+        vfx::VFXSequenceData* data = nullptr;
+        std::vector<int> starts, ends, snapStarts, snapEnds;
+
+        void sync(vfx::VFXSequenceData* d)
+        {
+            data = d;
+            const size_t n = d ? d->steps.size() : 0;
+            starts.resize(n);
+            ends.resize(n);
+            for (size_t i = 0; i < n; ++i)
+            {
+                const auto& s = d->steps[i];
+                const float endSec = s.startTime + (s.duration > 0.0f ? s.duration : kDisplayDefaultSec);
+                starts[i] = static_cast<int>(std::lround(s.startTime * kFps));
+                ends[i] = static_cast<int>(std::lround(endSec * kFps));
+            }
+            snapStarts = starts;
+            snapEnds = ends;
+        }
+
+        // Apply clip drags back onto the steps; returns true if anything changed.
+        bool writeback()
+        {
+            if (!data)
+                return false;
+            bool changed = false;
+            const size_t n = std::min(starts.size(), data->steps.size());
+            for (size_t i = 0; i < n; ++i)
+            {
+                if (starts[i] != snapStarts[i])
+                {
+                    data->steps[i].startTime = static_cast<float>(std::max(0, starts[i])) / kFps;
+                    changed = true;
+                }
+                if (ends[i] != snapEnds[i])
+                {
+                    data->steps[i].duration = static_cast<float>(std::max(0, ends[i] - starts[i])) / kFps;
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
+        int GetFrameMin() const override { return 0; }
+        int GetFrameMax() const override
+        {
+            int mx = kFps; // at least 1s of track
+            for (int e : ends)
+                mx = std::max(mx, e);
+            return mx;
+        }
+        int GetItemCount() const override { return data ? static_cast<int>(data->steps.size()) : 0; }
+
+        const char* GetItemLabel(int index) const override
+        {
+            if (!data || index < 0 || index >= static_cast<int>(data->steps.size()))
+                return "";
+            const auto& s = data->steps[static_cast<size_t>(index)];
+            return s.label.empty() ? "(step)" : s.label.c_str();
+        }
+
+        void Get(int index, int** start, int** end, int* type, unsigned int* color) override
+        {
+            if (index < 0 || index >= static_cast<int>(starts.size()))
+                return;
+            if (start) *start = &starts[static_cast<size_t>(index)];
+            if (end) *end = &ends[static_cast<size_t>(index)];
+            if (type) *type = 0;
+            if (color)
+            {
+                const bool cue = data && !data->steps[static_cast<size_t>(index)].cueName.empty();
+                *color = cue ? 0xFF888888u : 0xFFC84FF7u; // gray = cue-driven, pink = time-driven
+            }
+        }
+    };
+
     VFXSequenceEditorWindow::VFXSequenceEditorWindow(const std::string& seqPath)
         : seqPath(seqPath)
         , previewPanel(std::make_unique<editor::vfxeditor::VFXPreviewPanel>(this))
+        , timeline(std::make_unique<SequenceTimeline>())
     {
         windowTitle = "VFX Sequence: " + fs::path(seqPath).filename().string();
     }
@@ -138,7 +227,7 @@ namespace windows
                 drawToolbar();
 
                 ImVec2 avail = ImGui::GetContentRegionAvail();
-                float timelineHeight = 70.0f;
+                float timelineHeight = 190.0f; // room for the ImSequencer track view
                 float spacingX = ImGui::GetStyle().ItemSpacing.x;
                 float spacingY = ImGui::GetStyle().ItemSpacing.y;
                 float topHeight = avail.y - timelineHeight - spacingY;
@@ -449,22 +538,11 @@ namespace windows
 
     void VFXSequenceEditorWindow::drawTimeline()
     {
-        // Scrub/transport. As the playhead advances, the active step's real VFX
-        // is played in the preview viewport (one step at a time). Markers show
-        // each step at its startTime.
-        float maxTime = 1.0f;
-        for (const auto& step : data->steps)
-            maxTime = std::max(maxTime, step.startTime + std::max(step.duration, 0.5f));
-
-        ImGui::SetNextItemWidth(-300.0f);
-        ImGui::SliderFloat("##previewTime", &previewTime, 0.0f, maxTime, "t = %.2f s");
-        ImGui::SameLine();
+        // Transport row, then an ImSequencer track view: one draggable clip per
+        // step. Drag a clip to set its Start Time, drag its right edge to set
+        // Duration; the playhead (current frame) scrubs the preview.
         if (ImGui::Button(previewPlaying ? "Pause" : "Play"))
-        {
             previewPlaying = !previewPlaying;
-            if (previewPlaying && previewTime >= maxTime)
-                previewTime = 0.0f;
-        }
         ImGui::SameLine();
         if (ImGui::Button("Reset"))
         {
@@ -477,6 +555,12 @@ namespace windows
             previewActiveStep = -1; // re-load the active step's (possibly edited) .vfVFX
         ImGui::SameLine();
         ImGui::Checkbox("Loop", &previewLoop);
+        ImGui::SameLine();
+        ImGui::Text("t = %.2f s", previewTime);
+
+        float maxTime = 1.0f;
+        for (const auto& step : data->steps)
+            maxTime = std::max(maxTime, step.startTime + std::max(step.duration, 0.5f));
 
         if (previewPlaying)
         {
@@ -496,31 +580,20 @@ namespace windows
             }
         }
 
-        // Marker bar.
-        ImVec2 barMin = ImGui::GetCursorScreenPos();
-        ImVec2 region = ImGui::GetContentRegionAvail();
-        float barH = std::max(region.y, 12.0f);
-        ImVec2 barMax = ImVec2(barMin.x + region.x, barMin.y + barH);
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(barMin, barMax, IM_COL32(40, 40, 48, 255));
+        // ImSequencer track view (one clip per step).
+        timeline->sync(data.get());
+        previewFrame = static_cast<int>(std::lround(previewTime * SequenceTimeline::kFps));
+        int selected = selectedStep;
+        const int options = ImSequencer::SEQUENCER_CHANGE_FRAME | ImSequencer::SEQUENCER_EDIT_STARTEND;
+        ImSequencer::Sequencer(timeline.get(), &previewFrame, &timelineExpanded, &selected,
+                               &timelineFirstFrame, options);
 
-        auto timeToX = [&](float t) {
-            float frac = maxTime > 0.0f ? std::clamp(t / maxTime, 0.0f, 1.0f) : 0.0f;
-            return barMin.x + frac * region.x;
-        };
-
-        for (int i = 0; i < static_cast<int>(data->steps.size()); ++i)
-        {
-            float x = timeToX(data->steps[static_cast<size_t>(i)].startTime);
-            ImU32 col = (i == selectedStep) ? IM_COL32(255, 200, 80, 255) : IM_COL32(247, 79, 200, 255);
-            dl->AddLine(ImVec2(x, barMin.y), ImVec2(x, barMax.y), col, 2.0f);
-        }
-
-        // Scrub cursor.
-        float cx = timeToX(previewTime);
-        dl->AddLine(ImVec2(cx, barMin.y), ImVec2(cx, barMax.y), IM_COL32(255, 255, 255, 220), 1.5f);
-
-        ImGui::Dummy(ImVec2(region.x, barH));
+        // Scrubbing moved the playhead; clip drags edited step timing.
+        previewTime = std::clamp(static_cast<float>(previewFrame) / SequenceTimeline::kFps, 0.0f, maxTime);
+        if (timeline->writeback())
+            isDirty = true;
+        if (selected >= 0 && selected < static_cast<int>(data->steps.size()))
+            selectedStep = selected;
     }
 
     int VFXSequenceEditorWindow::pickActiveStep() const
