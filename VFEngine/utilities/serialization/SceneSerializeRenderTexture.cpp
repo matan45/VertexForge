@@ -51,6 +51,10 @@ namespace serialization
         j["priority"] = rtt.priority;
         j["enabled"] = rtt.enabled;
         j["renderShadows"] = rtt.renderShadows;
+        // VK-1414: only the source-camera identity (name) is serialized; the runtime handle is
+        // resolved on load via resolveRenderTextureSourceNames.
+        if (!rtt.sourceCameraName.empty())
+            j["sourceCameraName"] = rtt.sourceCameraName;
         return j;
     }
 
@@ -64,6 +68,9 @@ namespace serialization
         rtt.priority = j.value("priority", 0u);
         rtt.enabled = j.value("enabled", true);
         rtt.renderShadows = j.value("renderShadows", false);
+        // VK-1414: source-camera name is serialized; the handle is runtime-only and resolved later.
+        rtt.sourceCameraName = j.value("sourceCameraName", std::string{});
+        rtt.sourceCamera = entt::null;
         // textureId is runtime-only, not serialized
         rtt.textureId = rendertexture::INVALID_RENDER_TEXTURE_ID;
     }
@@ -81,6 +88,34 @@ namespace serialization
             if (!name.empty())
             {
                 rttEntityMap[name] = entity;
+            }
+        }
+
+        // VK-1414: resolve RenderTextureComponent.sourceCameraName → a CAMERA entity. This must run
+        // even when no RTT entity has a name (rttEntityMap empty), so it is placed BEFORE the guard
+        // below and uses a separate camera-name map (the source is a camera, not another RTT).
+        std::unordered_map<std::string, entt::entity> cameraNameMap;
+        auto cameraView = registry.view<components::CameraComponent, components::NameComponent>();
+        for (auto entity : cameraView)
+        {
+            const auto& name = cameraView.get<components::NameComponent>(entity).name;
+            if (!name.empty())
+            {
+                cameraNameMap[name] = entity;
+            }
+        }
+
+        auto rttSourceView = registry.view<components::RenderTextureComponent>();
+        for (auto entity : rttSourceView)
+        {
+            auto& rtt = rttSourceView.get<components::RenderTextureComponent>(entity);
+            if (!rtt.sourceCameraName.empty() && rtt.sourceCamera == entt::null)
+            {
+                auto it = cameraNameMap.find(rtt.sourceCameraName);
+                if (it != cameraNameMap.end())
+                {
+                    rtt.sourceCamera = it->second;
+                }
             }
         }
 

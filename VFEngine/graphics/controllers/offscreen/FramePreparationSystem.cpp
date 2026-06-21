@@ -227,6 +227,7 @@ namespace controllers::offscreen
             rd.showBoundingBox = (!ctx.playModeActive && ctx.showDebugRendering) ? meshComp.showBoundingBox : false;
             rd.maxDrawDistance = meshComp.maxDrawDistance;
             rd.submeshIndex = meshComp.submeshIndex;
+            rd.renderLayer = meshComp.renderLayer; // VK-1415
 
             if (registry.all_of<components::TransformComponent>(entity))
                 rd.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
@@ -270,11 +271,13 @@ namespace controllers::offscreen
             size_t submeshMaterialHash;
             float maxDrawDistance;
             int32_t submeshIndex;
+            uint32_t renderLayer; // VK-1415: distinct layers must not merge into one instanced draw
 
             bool operator==(const BatchKey& o) const
             {
                 return meshPath == o.meshPath && materialPath == o.materialPath && submeshMaterialHash == o.
-                    submeshMaterialHash && maxDrawDistance == o.maxDrawDistance && submeshIndex == o.submeshIndex;
+                    submeshMaterialHash && maxDrawDistance == o.maxDrawDistance && submeshIndex == o.submeshIndex &&
+                    renderLayer == o.renderLayer;
             }
         };
         struct BatchKeyHash
@@ -286,6 +289,7 @@ namespace controllers::offscreen
                 h ^= k.submeshMaterialHash + 0x9e3779b9 + (h << 6) + (h >> 2);
                 h ^= std::hash<float>{}(k.maxDrawDistance) + 0x9e3779b9 + (h << 6) + (h >> 2);
                 h ^= std::hash<int32_t>{}(k.submeshIndex) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(k.renderLayer) + 0x9e3779b9 + (h << 6) + (h >> 2);
                 return h;
             }
         };
@@ -369,7 +373,7 @@ namespace controllers::offscreen
 
                 BatchKey key{
                     renderData.meshPath, batchMaterialPath, hashSubmeshMaterials(renderData.submeshMaterials),
-                    renderData.maxDrawDistance, renderData.submeshIndex
+                    renderData.maxDrawDistance, renderData.submeshIndex, renderData.renderLayer
                 };
                 auto it = batchMap.find(key);
                 if (it != batchMap.end())

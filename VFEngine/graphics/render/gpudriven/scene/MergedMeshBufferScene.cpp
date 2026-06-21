@@ -251,6 +251,9 @@ namespace render::gpudriven
             obj.flags |= ObjectFlags::UniformScale;
         }
 
+        // VK-1415: pack the render-layer index (0-31) into flags bits 18-22.
+        obj.flags |= (meshRender.renderLayer & ObjectFlags::LayerMask) << ObjectFlags::LayerShift;
+
         obj.availableLODMask = submeshLoc.getAvailableLODMask();
         obj.shaderGroupIndex = (resolvers.shaderGroupResolver && !materialPath.empty())
                                    ? resolvers.shaderGroupResolver(materialPath) : 0;

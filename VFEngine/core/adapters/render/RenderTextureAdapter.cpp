@@ -77,13 +77,13 @@ namespace core
 
     void RenderTextureAdapter::updateCamera(rendertexture::RenderTextureId id,
         const glm::mat4& view, const glm::mat4& proj,
-        const glm::vec3& pos, float nearPlane, float farPlane)
+        const glm::vec3& pos, float nearPlane, float farPlane, uint32_t cullingMask)
     {
         std::lock_guard lock(controllersMutex);
         auto* controller = getController(id);
         if (controller)
         {
-            controller->updateCamera(view, proj, pos, nearPlane, farPlane);
+            controller->updateCamera(view, proj, pos, nearPlane, farPlane, cullingMask);
         }
     }
 

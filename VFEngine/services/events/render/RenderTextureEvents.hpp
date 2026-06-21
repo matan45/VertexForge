@@ -28,6 +28,7 @@ namespace services::events::rendertexture {
         glm::vec3 cameraPos;
         float nearPlane = 0.1f;
         float farPlane = 1000.0f;
+        uint32_t cullingMask = 0xFFFFFFFFu; // VK-1415: per-camera render-layer mask
         std::string_view getName() const override { return "UpdateRenderTextureCamera"; }
     };
 

@@ -19,7 +19,8 @@ namespace services
 
         void updateCamera(rendertexture::RenderTextureId id,
             const glm::mat4& view, const glm::mat4& proj,
-            const glm::vec3& pos, float nearPlane, float farPlane) override;
+            const glm::vec3& pos, float nearPlane, float farPlane,
+            uint32_t cullingMask = 0xFFFFFFFFu) override;
 
         void renderAll(float deltaTime) override;
 

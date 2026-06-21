@@ -25,6 +25,11 @@ const uint FLAG_MULTIPLY_BLEND = 1u << 11;
 const uint CATEGORY_SHIFT = 13u;
 const uint CATEGORY_MASK  = 0xFu;
 
+// VK-1415: per-object render-layer index (0-31) packed in flags bits 18-22.
+// Matched against a camera's cullingMask in gpu_cull_lod.glsl. Must match ObjectFlags::Layer* in GPUDrivenTypes.hpp.
+const uint LAYER_SHIFT = 18u;
+const uint LAYER_MASK  = 0x1Fu;
+
 // Task workgroup size — must match the mesh/task shaders that consume the draws.
 const uint TASK_WORKGROUP_SIZE = 32u;
 

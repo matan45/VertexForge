@@ -68,6 +68,19 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawSettings(data);
 
+            ImGui::Spacing();
+            ImGui::SeparatorText("Source Camera");
+            // VK-1414: optionally render from a SEPARATE camera entity instead of this entity's own
+            // camera. Filtered to Camera entities; empty selection = legacy self-camera behavior.
+            changed |= sourceCameraPicker.draw(
+                "RenderTextureSourceCamera",
+                data.sourceCameraName,
+                data.sourceCamera,
+                services::ComponentTypeId::Camera,
+                "Source Camera",
+                "Render from a separate Camera entity instead of this entity's own camera.\n"
+                "Leave as None to render from this entity (legacy behavior).");
+
             if (changed)
             {
                 events::scene::SetRenderTextureDataCommand cmd;

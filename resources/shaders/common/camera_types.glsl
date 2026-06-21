@@ -14,7 +14,7 @@ struct CameraData {
     vec4 frustumPlanes[6];
 };
 
-// Must match GPUCameraData in GPUDrivenTypes.hpp (528 bytes)
+// Must match GPUCameraData in GPUDrivenTypes.hpp (544 bytes)
 struct GPUCameraData {
     mat4 view;
     mat4 projection;
@@ -44,6 +44,7 @@ struct GPUCameraData {
 
     vec4 categoryDistSq0;   // [staticMesh, terrain, foliage, vfx] squared distances
     vec4 categoryDistSq1;   // [decals, 0, 0, shadowMultiplier]
+    uvec4 cullExtra;        // VK-1415: .x = per-camera render-layer cullingMask; yzw reserved
 };
 
 // enableLODSelection values

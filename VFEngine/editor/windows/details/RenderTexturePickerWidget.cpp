@@ -7,13 +7,16 @@ namespace windows::details
 {
     bool RenderTexturePickerWidget::draw(const char* imguiId,
                                           std::string& renderTextureSourceName,
-                                          services::EntityHandle& renderTextureSource)
+                                          services::EntityHandle& renderTextureSource,
+                                          services::ComponentTypeId filter,
+                                          const char* comboLabel,
+                                          const char* tooltip)
     {
         bool changed = false;
 
         if (needsRefresh)
         {
-            refresh();
+            refresh(filter);
             needsRefresh = false;
             syncSelection(renderTextureSourceName);
         }
@@ -24,7 +27,7 @@ namespace windows::details
 
         ImGui::PushID(imguiId);
 
-        if (ImGui::BeginCombo("RTT Source", preview))
+        if (ImGui::BeginCombo(comboLabel, preview))
         {
             // "None" option
             if (ImGui::Selectable("None##RTTPicker", selectedIdx < 0))
@@ -52,16 +55,15 @@ namespace windows::details
             }
             ImGui::EndCombo();
         }
-        if (ImGui::IsItemHovered())
+        if (ImGui::IsItemHovered() && tooltip)
         {
-            ImGui::SetTooltip("Entity with RenderTextureComponent + CameraComponent.\n"
-                              "Displays camera feed during play mode.");
+            ImGui::SetTooltip("%s", tooltip);
         }
 
         ImGui::SameLine();
         if (ImGui::Button("Refresh##RTTPicker"))
         {
-            refresh();
+            refresh(filter);
             syncSelection(renderTextureSourceName);
         }
 
@@ -70,7 +72,7 @@ namespace windows::details
         return changed;
     }
 
-    void RenderTexturePickerWidget::refresh()
+    void RenderTexturePickerWidget::refresh(services::ComponentTypeId filter)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -79,7 +81,7 @@ namespace windows::details
         selectedIdx = -1;
 
         events::scene::GetEntitiesWithComponentQuery compQuery;
-        compQuery.componentType = services::ComponentTypeId::RenderTexture;
+        compQuery.componentType = filter;
         candidates = dispatcher.query(compQuery);
 
         for (const auto& candidate : candidates)

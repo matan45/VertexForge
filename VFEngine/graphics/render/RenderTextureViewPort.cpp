@@ -92,7 +92,8 @@ namespace render
         const glm::mat4& projection,
         const glm::vec3& cameraPosition,
         float nearPlane,
-        float farPlane)
+        float farPlane,
+        uint32_t cullingMask)
     {
         lastRenderSubmitted = false;
         lastRenderCompleteSemaphore = vk::Semaphore{};
@@ -171,7 +172,8 @@ namespace render
               .nearPlane = nearPlane,
               .farPlane = farPlane,
               .screenWidth = width,
-              .screenHeight = height });
+              .screenHeight = height,
+              .cullingMask = cullingMask });
 
         // RAII guard: endRTTContext MUST run before this function returns, even on exception
         // (the new waitForFences after submit at the bottom can throw vk::DeviceLostError, etc.).

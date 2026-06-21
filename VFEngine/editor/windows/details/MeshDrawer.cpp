@@ -8,6 +8,7 @@
 #include "../../dragdrop/AssetDropTarget.hpp"
 #include <imgui.h>
 #include <fstream>
+#include <algorithm>
 
 namespace windows::details
 {
@@ -134,6 +135,7 @@ namespace windows::details
             drawBoundingBoxCheckbox(handle, *meshOpt);
             drawMaxDrawDistance(handle, *meshOpt);
             drawSubmeshIndex(handle, *meshOpt);
+            drawRenderLayer(handle, *meshOpt);
 
             ImGui::Unindent(10.0f);
         }
@@ -347,6 +349,26 @@ namespace windows::details
         if (ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("-1 = render all submeshes\n>= 0 = render only the specified submesh");
+        }
+    }
+
+    void MeshDrawer::drawRenderLayer(services::EntityHandle handle, const services::MeshData& currentData)
+    {
+        int renderLayer = static_cast<int>(currentData.renderLayer);
+        if (ImGui::InputInt("Render Layer", &renderLayer))
+        {
+            renderLayer = std::clamp(renderLayer, 0, 31);
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::scene::SetMeshDataCommand cmd;
+            cmd.entity = handle;
+            cmd.meshData = currentData;
+            cmd.meshData.renderLayer = static_cast<uint32_t>(renderLayer);
+            dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Render layer index 0-31 (VK-1415).\nA camera renders this mesh only if its Culling Mask has this layer's bit set.");
         }
     }
 }

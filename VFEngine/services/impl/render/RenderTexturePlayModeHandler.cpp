@@ -61,8 +61,10 @@ namespace services
 
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        auto view = registry.view<components::CameraComponent, components::RenderTextureComponent,
-                                   components::TransformComponent>();
+        // Iterate every RTT entity (not just self-camera RTTs): an RTT may render from a SEPARATE
+        // camera entity referenced via sourceCamera (VK-1414), so a view that requires a co-located
+        // CameraComponent would silently skip those.
+        auto view = registry.view<components::RenderTextureComponent>();
 
         for (auto entity : view)
         {
@@ -77,6 +79,15 @@ namespace services
                 if (!nameComp.isActive)
                     continue;
             }
+
+            // Need either this entity's own camera+transform, or a valid source-camera entity.
+            const bool hasOwnCamera =
+                registry.all_of<components::CameraComponent, components::TransformComponent>(entity);
+            const bool hasSourceCamera =
+                rtComp.sourceCamera != entt::null && registry.valid(rtComp.sourceCamera) &&
+                registry.all_of<components::CameraComponent, components::TransformComponent>(rtComp.sourceCamera);
+            if (!hasOwnCamera && !hasSourceCamera)
+                continue;
 
             rendertexture::RenderTextureDesc desc;
             desc.width = rtComp.width;
@@ -135,49 +146,54 @@ namespace services
         for (const auto& [handle, textureId] : activeTextures)
         {
             auto enttEntity = internal::fromHandle(handle);
-            if (!registry.valid(enttEntity))
+            if (!registry.valid(enttEntity) ||
+                !registry.all_of<components::RenderTextureComponent>(enttEntity))
                 continue;
 
-            if (!registry.all_of<components::CameraComponent>(enttEntity) ||
-                !registry.all_of<components::TransformComponent>(enttEntity))
+            const auto& rtComp = registry.get<components::RenderTextureComponent>(enttEntity);
+
+            // Render from the referenced source camera (VK-1414) when it is valid; otherwise fall
+            // back silently to this RTT entity's own camera (legacy / stale-handle).
+            entt::entity camEntity = enttEntity;
+            if (rtComp.sourceCamera != entt::null && registry.valid(rtComp.sourceCamera) &&
+                registry.all_of<components::CameraComponent, components::TransformComponent>(rtComp.sourceCamera))
+            {
+                camEntity = rtComp.sourceCamera;
+            }
+
+            if (!registry.all_of<components::CameraComponent, components::TransformComponent>(camEntity))
                 continue;
 
-            auto& camera = registry.get<components::CameraComponent>(enttEntity);
+            // Operate on a VALUE COPY of the source camera so a shared camera (e.g. the player's)
+            // is never mutated by the RTT's aspect-ratio / view recompute.
+            auto camCopy = registry.get<components::CameraComponent>(camEntity);
+            const auto& srcTransform = registry.get<components::TransformComponent>(camEntity);
 
             // Use the world-space eye position (to support child cameras that inherit parent movement)
             // with the camera's LOCAL Euler rotation. Decomposing/inverting the world matrix for the
             // rotation hits the extractEulerAngleXYZ yaw singularity and flips the view to the sky past
             // ±90° of yaw (VK-1350).
-            const auto& transform = registry.get<components::TransformComponent>(enttEntity);
             glm::vec3 worldPos;
-            if (registry.all_of<components::WorldTransformComponent>(enttEntity)) {
-                const auto& worldTransform = registry.get<components::WorldTransformComponent>(enttEntity);
-                camera.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, transform);
+            if (registry.all_of<components::WorldTransformComponent>(camEntity)) {
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(camEntity);
+                camCopy.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, srcTransform);
                 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
             } else {
-                camera.updateViewMatrix(transform.position, transform.rotation);
-                worldPos = transform.position;
+                camCopy.updateViewMatrix(srcTransform.position, srcTransform.rotation);
+                worldPos = srcTransform.position;
             }
-            glm::mat4 worldViewMatrix = camera.viewMatrix;
 
-            if (registry.all_of<components::RenderTextureComponent>(enttEntity))
-            {
-                const auto& rtComp = registry.get<components::RenderTextureComponent>(enttEntity);
-                float rttAspect = static_cast<float>(rtComp.width) / static_cast<float>(rtComp.height);
-                if (camera.aspectRatio != rttAspect)
-                {
-                    camera.aspectRatio = rttAspect;
-                    camera.updateProjectionMatrix();
-                }
-            }
+            camCopy.aspectRatio = static_cast<float>(rtComp.width) / static_cast<float>(rtComp.height);
+            camCopy.updateProjectionMatrix();
 
             provider->updateCamera(
                 textureId,
-                worldViewMatrix,
-                camera.projectionMatrix,
+                camCopy.viewMatrix,
+                camCopy.projectionMatrix,
                 worldPos,
-                camera.nearPlane,
-                camera.farPlane
+                camCopy.nearPlane,
+                camCopy.farPlane,
+                camCopy.cullingMask
             );
         }
 

@@ -118,6 +118,12 @@ namespace render::gpudriven
         constexpr uint32_t Billboard = 1 << 14;
         constexpr uint32_t Instanced = 1 << 15;
         constexpr uint32_t ShadowStatic = 1 << 17;  // Object's shadow geometry is cacheable (from TransformComponent::isStatic)
+
+        // VK-1415: per-object render-layer index (0-31) packed in flags bits 18-22 (bits 23-31 stay
+        // free). Expanded in the cull shader to a bit (1u << index) and AND-ed with the camera's
+        // cullingMask. Must match LAYER_SHIFT/LAYER_MASK in resources/shaders/common/gpu_draw_functions.glsl.
+        constexpr uint32_t LayerShift = 18;
+        constexpr uint32_t LayerMask  = 0x1Fu;
     }
 
     namespace ObjectCategory
@@ -277,6 +283,7 @@ namespace render::gpudriven
         float farPlane;
         uint32_t screenWidth = 0;
         uint32_t screenHeight = 0;
+        uint32_t cullingMask = 0xFFFFFFFFu; // VK-1415: per-camera render-layer mask for this RTT view
     };
 
     struct GPUDrivenStats

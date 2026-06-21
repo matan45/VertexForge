@@ -19,5 +19,6 @@ namespace windows::details
         void drawBoundingBoxCheckbox(services::EntityHandle handle, const services::MeshData& currentData);
         void drawMaxDrawDistance(services::EntityHandle handle, const services::MeshData& currentData);
         void drawSubmeshIndex(services::EntityHandle handle, const services::MeshData& currentData);
+        void drawRenderLayer(services::EntityHandle handle, const services::MeshData& currentData);
     };
 }

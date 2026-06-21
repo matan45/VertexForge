@@ -229,5 +229,43 @@ namespace core::api
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             }});
+
+        // _native_camera_getCullingMask(entityId) -> int  (VK-1415)
+        // The 32-bit per-camera render-layer mask. A mesh on layer N is visible to
+        // this camera only if bit N is set. Returns nil if the entity has no camera.
+        interpreter->registerNativeFunction("_native_camera_getCullingMask",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(std::monostate{});
+                auto handle = intToEntity(extractInt64(args[0]));
+                events::scene::GetCameraDataQuery q;
+                q.entity = handle;
+                auto result = dispatcher.query(q);
+                if (!result.has_value()) return value::Value(std::monostate{});
+                return value::Value(static_cast<int64_t>(result->cullingMask));
+            }});
+
+        // _native_camera_setCullingMask(entityId, mask)  (VK-1415)
+        // Sets the per-camera render-layer mask (0xFFFFFFFF = all layers). Takes effect
+        // next frame for this camera's view (incl. an RTT driven by this camera).
+        interpreter->registerNativeFunction("_native_camera_setCullingMask",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(std::monostate{});
+                auto handle = intToEntity(extractInt64(args[0]));
+
+                events::scene::GetCameraDataQuery q;
+                q.entity = handle;
+                auto current = dispatcher.query(q);
+                if (!current.has_value()) return value::Value(std::monostate{});
+
+                current->cullingMask = static_cast<uint32_t>(extractInt64(args[1]));
+
+                events::scene::SetCameraDataCommand cmd;
+                cmd.entity = handle;
+                cmd.cameraData = *current;
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
     }
 }

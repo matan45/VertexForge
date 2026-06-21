@@ -93,7 +93,8 @@ namespace render
             const glm::mat4& projection,
             const glm::vec3& cameraPosition,
             float nearPlane,
-            float farPlane
+            float farPlane,
+            uint32_t cullingMask = 0xFFFFFFFFu
         );
 
         uint32_t getWidth() const { return width; }

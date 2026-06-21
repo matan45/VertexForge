@@ -114,4 +114,20 @@ public class Camera {
     public static function setIsPrimary(int entityId, bool isPrimary): void {
         _native_camera_setIsPrimary(entityId, isPrimary);
     }
+
+    // ============================================
+    // Render-layer culling mask (VK-1415)
+    // ============================================
+
+    // 32-bit per-camera render-layer mask: a mesh on layer N is visible to this
+    // camera only if bit N is set. 0xFFFFFFFF (-1 as int) = all layers (default).
+    // Applies to the camera's view, including an RTT/minimap driven by it. Build a
+    // mask with bit ops, e.g. all-except-layer-10: ~(1 << 10).
+    public static function getCullingMask(int entityId): int {
+        return _native_camera_getCullingMask(entityId);
+    }
+
+    public static function setCullingMask(int entityId, int mask): void {
+        _native_camera_setCullingMask(entityId, mask);
+    }
 }

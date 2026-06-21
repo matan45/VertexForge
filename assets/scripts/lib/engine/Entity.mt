@@ -252,4 +252,21 @@ public class Entity {
     public static function setMaterial(int entityId, string materialPath): bool {
         return _native_material_setMaterial(entityId, materialPath);
     }
+
+    // ============================================
+    // Render layer (VK-1415)
+    // ============================================
+
+    // Set an entity's render-layer index (0-31). A camera renders this mesh only
+    // if its culling mask has the matching bit set (Camera::setCullingMask). Set
+    // once at spawn for static categorisation (units/buildings/doodads). Returns
+    // false if the entity has no MeshComponent.
+    public static function setRenderLayer(int entityId, int layer): bool {
+        return _native_mesh_setRenderLayer(entityId, layer);
+    }
+
+    // Get an entity's render-layer index (0-31), or -1 if it has no MeshComponent.
+    public static function getRenderLayer(int entityId): int {
+        return _native_mesh_getRenderLayer(entityId);
+    }
 }

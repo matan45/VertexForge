@@ -1,6 +1,7 @@
 #pragma once
 #include "data/EntityHandle.hpp"
 #include "data/DTOs.hpp"
+#include "RenderTexturePickerWidget.hpp"
 
 namespace windows::details
 {
@@ -13,5 +14,7 @@ namespace windows::details
         bool drawHeader(bool& outRemove);
         bool drawResolution(services::RenderTextureData& data);
         bool drawSettings(services::RenderTextureData& data);
+
+        RenderTexturePickerWidget sourceCameraPicker;
     };
 }

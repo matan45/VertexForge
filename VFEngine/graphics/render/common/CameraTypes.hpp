@@ -51,6 +51,8 @@ namespace render::common
         float globalLodBias;
         glm::vec4 categoryDistSq0;     // [staticMesh^2, terrain^2, foliage^2, vfx^2]
         glm::vec4 categoryDistSq1;     // [decals^2, 0, 0, shadowMultiplier]
+        // VK-1415: .x = per-camera render-layer cullingMask (default all layers). yzw reserved.
+        glm::uvec4 cullExtra{0xFFFFFFFFu, 0u, 0u, 0u};
     };
-    static_assert(sizeof(GPUCameraData) == 528, "GPUCameraData must be 528 bytes to match GLSL GPUCameraData");
+    static_assert(sizeof(GPUCameraData) == 544, "GPUCameraData must be 544 bytes to match GLSL GPUCameraData");
 }

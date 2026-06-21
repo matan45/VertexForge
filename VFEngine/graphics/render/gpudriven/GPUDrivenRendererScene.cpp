@@ -139,6 +139,12 @@ namespace render::gpudriven
             ? mergedBuffer->getActiveObjectCount()
             : mergedBuffer->getObjectCount();
 
+        // VK-1415: the main viewport always renders ALL layers. The per-camera render-layer
+        // cullingMask is applied only to RTT/secondary camera cull passes (beginRTTContext),
+        // because this single object-cull also feeds the shared shadow (VSM) pass — masking the
+        // main view here would drop shadow casters and affect other views. So the main camera's
+        // CameraComponent.cullingMask is intentionally ignored; cameraParams.cullingMask keeps its
+        // 0xFFFFFFFF default below.
         CameraUpdateParams cameraParams{
             .view = view,
             .projection = projection,
@@ -157,6 +163,7 @@ namespace render::gpudriven
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get()
+            // .cullingMask intentionally omitted -> 0xFFFFFFFF default (main view = all layers).
         };
         cameraBuffer->update(cameraParams);
 
@@ -228,7 +235,8 @@ namespace render::gpudriven
             .globalLodBias = culling.globalLodBias,
             .batchManager = batchManager.get(),
             .screenWidth = params.screenWidth,
-            .screenHeight = params.screenHeight
+            .screenHeight = params.screenHeight,
+            .cullingMask = params.cullingMask
         };
         ctx.cameraBuffer->update(cameraParams);
 

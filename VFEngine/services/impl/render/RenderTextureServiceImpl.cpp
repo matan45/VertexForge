@@ -31,7 +31,7 @@ namespace services
             [this](const events::rendertexture::UpdateRenderTextureCameraCommand& cmd)
             {
                 updateCamera(cmd.textureId, cmd.view, cmd.projection,
-                             cmd.cameraPos, cmd.nearPlane, cmd.farPlane);
+                             cmd.cameraPos, cmd.nearPlane, cmd.farPlane, cmd.cullingMask);
             });
 
         dispatcher.registerCommandHandler<events::rendertexture::ResizeRenderTextureCommand>(
@@ -90,9 +90,9 @@ namespace services
 
     void RenderTextureServiceImpl::updateCamera(rendertexture::RenderTextureId id,
         const glm::mat4& view, const glm::mat4& proj,
-        const glm::vec3& pos, float nearPlane, float farPlane)
+        const glm::vec3& pos, float nearPlane, float farPlane, uint32_t cullingMask)
     {
-        provider->updateCamera(id, view, proj, pos, nearPlane, farPlane);
+        provider->updateCamera(id, view, proj, pos, nearPlane, farPlane, cullingMask);
     }
 
     void RenderTextureServiceImpl::renderAll(float deltaTime)

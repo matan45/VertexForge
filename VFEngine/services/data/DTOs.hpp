@@ -40,6 +40,7 @@ namespace services
         bool isPrimary = false;
         bool showFrustum = false;
         float orthoSize = 10.0f;
+        uint32_t cullingMask = 0xFFFFFFFFu; // VK-1415: per-camera render-layer mask (all layers by default)
     };
 
     struct IBLData
@@ -61,6 +62,7 @@ namespace services
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config
         int32_t submeshIndex = -1; // -1 = all, >= 0 = only this submesh
+        uint32_t renderLayer = 0; // VK-1415: render-layer index 0-31
     };
 
     struct MeshBoundingBox
@@ -287,6 +289,11 @@ namespace services
         uint32_t priority = 0;
         bool enabled = true;
         bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
+        // VK-1414: optional reference to a SEPARATE camera entity to render from. The handle is
+        // in/out for the editor picker; sourceCameraName is the serialized identity that drives
+        // resolution. Empty/invalid = use this entity's own camera (legacy).
+        EntityHandle sourceCamera;
+        std::string sourceCameraName;
         // Output-only: the live render-texture id, populated only in play mode (0 / INVALID
         // otherwise). Read for the editor live preview; never written back to the component.
         uint32_t runtimeTextureId = 0;

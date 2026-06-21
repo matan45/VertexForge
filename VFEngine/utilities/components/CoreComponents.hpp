@@ -122,6 +122,10 @@ namespace components
         bool enableOcclusionCulling = true;
         bool isRegistered = false;
 
+        // VK-1415: per-camera render-visibility mask. A mesh on render layer L is visible to this
+        // camera only if bit L is set here. Default 0xFFFFFFFF = render all layers (legacy behavior).
+        uint32_t cullingMask = 0xFFFFFFFFu;
+
         static inline uint32_t nextCameraId = 0;
 
         static uint32_t generateCameraId()
@@ -219,6 +223,13 @@ namespace components
         bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
         bool needsRender = true;
         float timeSinceLastRender = 0.0f;
+
+        // VK-1414: pull the RTT view from a SEPARATE camera entity (security cam / portal) instead
+        // of requiring a CameraComponent on this same entity. entt::null (default) preserves the
+        // legacy RTT-is-camera behavior. Only sourceCameraName is serialized; the handle is
+        // re-resolved by name on scene load and on inspector edit.
+        entt::entity sourceCamera = entt::null;
+        std::string sourceCameraName;
     };
 
     struct MeshComponent
@@ -232,6 +243,9 @@ namespace components
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config
         int32_t submeshIndex = -1; // -1 = render all, >= 0 = render only this submesh
+        // VK-1415: render-layer index 0-31. Packed into GPUObjectData.flags and matched against a
+        // camera's cullingMask in the GPU cull shader. Default 0 = visible to any default-mask camera.
+        uint32_t renderLayer = 0;
     };
 
     struct MaterialComponent

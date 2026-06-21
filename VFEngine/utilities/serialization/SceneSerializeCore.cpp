@@ -26,6 +26,10 @@ namespace serialization
         j["isPrimary"] = camera.isPrimary;
         j["showFrustum"] = camera.showFrustum;
         j["orthoSize"] = camera.orthoSize;
+        if (camera.cullingMask != 0xFFFFFFFFu)
+        {
+            j["cullingMask"] = camera.cullingMask; // VK-1415 (omit default to keep diffs clean)
+        }
         return j;
     }
 
@@ -64,6 +68,10 @@ namespace serialization
             j["maxDrawDistance"] = mesh.maxDrawDistance;
         }
         j["submeshIndex"] = mesh.submeshIndex;
+        if (mesh.renderLayer != 0)
+        {
+            j["renderLayer"] = mesh.renderLayer; // VK-1415 (omit default 0 to keep diffs clean)
+        }
         return j;
     }
 
@@ -108,6 +116,8 @@ namespace serialization
             camera.showFrustum = it->get<bool>();
         if (auto it = j.find("orthoSize"); it != j.end() && it->is_number())
             camera.orthoSize = it->get<float>();
+        if (auto it = j.find("cullingMask"); it != j.end() && it->is_number_unsigned())
+            camera.cullingMask = it->get<uint32_t>();
         camera.updateProjectionMatrix();
     }
 
@@ -136,6 +146,10 @@ namespace serialization
         if (auto it = j.find("submeshIndex"); it != j.end() && it->is_number_integer())
         {
             mesh.submeshIndex = it->get<int32_t>();
+        }
+        if (auto it = j.find("renderLayer"); it != j.end() && it->is_number_unsigned())
+        {
+            mesh.renderLayer = it->get<uint32_t>();
         }
     }
 

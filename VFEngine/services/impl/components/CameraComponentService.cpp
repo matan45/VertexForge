@@ -34,6 +34,7 @@ namespace services {
         data.isPrimary = comp.isPrimary;
         data.showFrustum = comp.showFrustum;
         data.orthoSize = comp.orthoSize;
+        data.cullingMask = comp.cullingMask;
 
         return data;
     }
@@ -57,6 +58,7 @@ namespace services {
         comp.isPerspective = camera.isPerspective;
         comp.showFrustum = camera.showFrustum;
         comp.orthoSize = camera.orthoSize;
+        comp.cullingMask = camera.cullingMask;
 
         // Narrow primary-camera handoff (VK-1330 / VK-1333): clear only the
         // previously-primary camera instead of sweeping every CameraComponent.
