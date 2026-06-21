@@ -60,6 +60,8 @@ namespace core
                            rendertexture::UpdateMode mode) override;
         void requestRender(rendertexture::RenderTextureId id) override;
 
+        std::vector<services::RenderTextureDebugInfo> getActiveRenderTextures() const override;
+
     private:
         ::controllers::RenderTextureController* getController(rendertexture::RenderTextureId id) const;
         render::RenderPassHandler* getMainRenderPassHandler() const;

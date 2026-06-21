@@ -34,6 +34,7 @@
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "theme/ThemeEditorWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
+#include "debug/RTTDebugWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
 #include "export/ExportGameWindow.hpp"
 #include "../handlers/EditorLayoutManager.hpp"
@@ -374,6 +375,7 @@ namespace windows
             if (ImGui::MenuItem("Light Streaming") && lightStreamingDebugWindow) lightStreamingDebugWindow->show();
             if (ImGui::MenuItem("Task Graph") && taskGraphWindow) taskGraphWindow->show();
             if (ImGui::MenuItem("Memory Diagnostics") && memoryDiagnosticsWindow) memoryDiagnosticsWindow->show();
+            if (ImGui::MenuItem("RTT Debug") && rttDebugWindow) rttDebugWindow->show();
 
             ImGui::EndMenu();
         }

@@ -42,6 +42,7 @@ namespace windows
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
         menuBar.setThemeEditorWindow(&themeEditorWindow);
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
+        menuBar.setRTTDebugWindow(&rttDebugWindow);
         menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
 
         editorSettingsWindow.setWindows(&projectSettingsWindow, &editorCameraWindow,
@@ -219,6 +220,7 @@ namespace windows
             backgroundRemovalWindow.draw();
             themeEditorWindow.draw();
             memoryDiagnosticsWindow.draw();
+            rttDebugWindow.draw();
             editorPreferencesWindow.draw();
             editorSettingsWindow.draw();
             environmentWindow.draw();

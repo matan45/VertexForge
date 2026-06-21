@@ -69,6 +69,12 @@ namespace services
             {
                 return isValid(query.textureId);
             });
+
+        dispatcher.registerQueryHandler<events::rendertexture::GetActiveRenderTexturesQuery>(
+            [this](const events::rendertexture::GetActiveRenderTexturesQuery&)
+            {
+                return getActiveRenderTextures();
+            });
     }
 
     rendertexture::RenderTextureId RenderTextureServiceImpl::createRenderTexture(
@@ -131,5 +137,10 @@ namespace services
     void RenderTextureServiceImpl::requestRender(rendertexture::RenderTextureId id)
     {
         provider->requestRender(id);
+    }
+
+    std::vector<services::RenderTextureDebugInfo> RenderTextureServiceImpl::getActiveRenderTextures() const
+    {
+        return provider->getActiveRenderTextures();
     }
 }

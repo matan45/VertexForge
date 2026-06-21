@@ -36,6 +36,7 @@ namespace windows
     class BackgroundRemovalWindow;
     class ThemeEditorWindow;
     class MemoryDiagnosticsWindow;
+    class RTTDebugWindow;
     class EditorPreferencesWindow;
     class EditorSettingsWindow;
     class ExportGameWindow;
@@ -78,6 +79,7 @@ namespace windows
         BackgroundRemovalWindow* backgroundRemovalWindow = nullptr;
         ThemeEditorWindow* themeEditorWindow = nullptr;
         MemoryDiagnosticsWindow* memoryDiagnosticsWindow = nullptr;
+        RTTDebugWindow* rttDebugWindow = nullptr;
         EditorPreferencesWindow* editorPreferencesWindow = nullptr;
         EditorSettingsWindow* editorSettingsWindow = nullptr;
         ExportGameWindow* exportGameWindow = nullptr;
@@ -218,6 +220,11 @@ namespace windows
         void setMemoryDiagnosticsWindow(MemoryDiagnosticsWindow* window)
         {
             memoryDiagnosticsWindow = window;
+        }
+
+        void setRTTDebugWindow(RTTDebugWindow* window)
+        {
+            rttDebugWindow = window;
         }
 
         void setEditorPreferencesWindow(EditorPreferencesWindow* window)

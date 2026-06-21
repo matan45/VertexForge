@@ -36,6 +36,7 @@
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
 #include "theme/ThemeEditorWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
+#include "debug/RTTDebugWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
 #include "config/EditorSettingsWindow.hpp"
 #include "config/EnvironmentWindow.hpp"
@@ -95,6 +96,7 @@ namespace windows
         BackgroundRemovalWindow backgroundRemovalWindow;
         ThemeEditorWindow themeEditorWindow;
         MemoryDiagnosticsWindow memoryDiagnosticsWindow;
+        RTTDebugWindow rttDebugWindow;
         EditorPreferencesWindow editorPreferencesWindow;
         EditorSettingsWindow editorSettingsWindow;
         EnvironmentWindow environmentWindow;

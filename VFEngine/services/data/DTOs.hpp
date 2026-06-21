@@ -287,6 +287,23 @@ namespace services
         uint32_t priority = 0;
         bool enabled = true;
         bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
+        // Output-only: the live render-texture id, populated only in play mode (0 / INVALID
+        // otherwise). Read for the editor live preview; never written back to the component.
+        uint32_t runtimeTextureId = 0;
+    };
+
+    // Read-only snapshot of one active render-texture controller, used by the editor RTT debug
+    // overlay (VK-1413). Enumerated from RenderTextureAdapter's controllers in render order.
+    struct RenderTextureDebugInfo
+    {
+        uint32_t textureId = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint8_t updateMode = 0; // 0=EveryFrame, 1=OnDemand, 2=FixedInterval
+        uint32_t priority = 0;
+        bool enabled = false;
+        bool hasRendered = false;       // has produced at least one frame (lastRenderedHandle != null)
+        bool submittedLastFrame = false; // rendered this frame (didSubmitLastRender)
     };
 
     struct BillboardData

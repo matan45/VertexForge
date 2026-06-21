@@ -3,6 +3,7 @@
 #include "../../data/DTOs.hpp"
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <glm/glm.hpp>
+#include <vector>
 
 namespace services::events::rendertexture {
 
@@ -65,6 +66,10 @@ namespace services::events::rendertexture {
     struct IsRenderTextureValidQuery : ::events::IQuery<bool> {
         ::rendertexture::RenderTextureId textureId;
         std::string_view getName() const override { return "IsRenderTextureValid"; }
+    };
+
+    struct GetActiveRenderTexturesQuery : ::events::IQuery<std::vector<services::RenderTextureDebugInfo>> {
+        std::string_view getName() const override { return "GetActiveRenderTextures"; }
     };
 
 }

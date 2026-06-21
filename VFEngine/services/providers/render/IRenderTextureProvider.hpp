@@ -1,7 +1,9 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <rendertexture/RenderTextureTypes.hpp>
+#include "../../data/DTOs.hpp"
 #include <cstdint>
+#include <vector>
 
 namespace services {
 
@@ -28,6 +30,8 @@ namespace services {
         virtual void setUpdateMode(rendertexture::RenderTextureId id,
                                    rendertexture::UpdateMode mode) = 0;
         virtual void requestRender(rendertexture::RenderTextureId id) = 0;
+
+        virtual std::vector<services::RenderTextureDebugInfo> getActiveRenderTextures() const = 0;
     };
 
 }

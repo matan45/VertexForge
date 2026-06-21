@@ -73,6 +73,7 @@ namespace services {
         data.priority = comp.priority;
         data.enabled = comp.enabled;
         data.renderShadows = comp.renderShadows;
+        data.runtimeTextureId = comp.textureId;
         return data;
     }
 

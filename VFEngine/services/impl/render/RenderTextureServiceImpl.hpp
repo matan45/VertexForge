@@ -32,6 +32,8 @@ namespace services
                            rendertexture::UpdateMode mode) override;
         void requestRender(rendertexture::RenderTextureId id) override;
 
+        std::vector<services::RenderTextureDebugInfo> getActiveRenderTextures() const override;
+
         void registerEventHandlers() override;
     };
 }

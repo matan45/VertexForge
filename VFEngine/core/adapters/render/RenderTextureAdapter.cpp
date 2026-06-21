@@ -253,4 +253,38 @@ namespace core
             controller->requestRender();
         }
     }
+
+    std::vector<services::RenderTextureDebugInfo> RenderTextureAdapter::getActiveRenderTextures() const
+    {
+        std::lock_guard lock(controllersMutex);
+
+        std::vector<services::RenderTextureDebugInfo> result;
+        result.reserve(controllers.size());
+
+        for (const auto& [id, ctrl] : controllers)
+        {
+            if (!ctrl)
+                continue;
+
+            services::RenderTextureDebugInfo info;
+            info.textureId = id;
+            info.width = ctrl->getWidth();
+            info.height = ctrl->getHeight();
+            info.updateMode = static_cast<uint8_t>(ctrl->getUpdateMode());
+            info.priority = ctrl->getPriority();
+            info.enabled = ctrl->isEnabled();
+            info.hasRendered = ctrl->getLastRenderedHandle() != nullptr;
+            info.submittedLastFrame = ctrl->didSubmitLastRender();
+            result.push_back(info);
+        }
+
+        // Sort ascending by priority so the returned order matches the render order in renderAll().
+        std::sort(result.begin(), result.end(),
+            [](const services::RenderTextureDebugInfo& a, const services::RenderTextureDebugInfo& b)
+            {
+                return a.priority < b.priority;
+            });
+
+        return result;
+    }
 }
