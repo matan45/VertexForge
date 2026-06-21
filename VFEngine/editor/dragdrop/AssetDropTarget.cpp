@@ -12,6 +12,11 @@ namespace windows
         bool extensionMatches(const std::string& path,
                               std::initializer_list<std::string_view> extensions)
         {
+            // Empty filter means "accept any asset" (used by the generic plugin-component
+            // AssetRef widget, which has no extension restriction yet).
+            if (extensions.size() == 0)
+                return true;
+
             std::string ext = std::filesystem::path(path).extension().string();
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 

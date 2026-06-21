@@ -3,6 +3,7 @@
 #include "events/EventTypes.hpp"
 #include <atomic>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 #include <memory>
 #include <string>
@@ -58,6 +59,16 @@ namespace plugin {
         std::vector<services::AudioHandle> managedAudioHandles;
         std::vector<services::VFXInstanceId> managedVFXInstances;
         static std::vector<MetaComponentBridge> allBridges;
+        // API v14: per-field inspector metadata side-map, sibling to allBridges.
+        // Keyed by "component::field"; the value carries the owning pluginName so
+        // unload cleanup can erase this plugin's entries (mirrors allBridges). The
+        // FieldAttributes is a deep value copy — its fixed char arrays own all
+        // string data, so nothing dangles when the plugin DLL unloads.
+        struct FieldAttributeEntry {
+            std::string pluginName;
+            inspector::FieldAttributes attrs;
+        };
+        static std::unordered_map<std::string, FieldAttributeEntry> fieldAttributes;
         static ScriptBindingRegistrar scriptBindingRegistrar;
         static ScriptBindingClearer scriptBindingClearer;
         // API v10: mType's process-stable plugin host vtable, installed by Core
@@ -189,8 +200,15 @@ namespace plugin {
 
         // Meta component registration
         void registerComponentBridge(MetaComponentBridge bridge) override;
+        void setFieldAttributes(const char* component, const char* field,
+                                const inspector::FieldAttributes& attrs) override;
 
         static const std::vector<MetaComponentBridge>& getAllBridges() { return allBridges; }
+
+        // Look up per-field inspector metadata registered via setFieldAttributes.
+        // Returns nullptr when the field has no attributes. The Editor inspector
+        // (MetaComponentDrawer) calls this per field to drive widget selection.
+        static const inspector::FieldAttributes* getFieldAttributes(const char* component, const char* field);
 
         static void setScriptBindingRegistrar(ScriptBindingRegistrar registrar) { scriptBindingRegistrar = std::move(registrar); }
         static ScriptBindingRegistrar getScriptBindingRegistrar() { return scriptBindingRegistrar; }

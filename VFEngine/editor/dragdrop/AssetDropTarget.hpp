@@ -11,7 +11,7 @@ namespace windows
     // ID-less items (plain ImGui::Text rows). Highlights the item green when
     // the dragged asset's extension matches (red otherwise) and returns the
     // dragged path on delivery. Extensions are matched case-insensitively and
-    // include the dot (".vfmesh").
+    // include the dot (".vfmesh"). An empty extension list accepts any asset.
     std::optional<std::string> acceptAssetDropOnLastItem(
         const char* idSuffix,
         std::initializer_list<std::string_view> extensions);

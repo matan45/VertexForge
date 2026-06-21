@@ -614,6 +614,8 @@ namespace services
     void NavmeshServiceImpl::update(float deltaTime, bool simulateAgents)
     {
         playModeActive = simulateAgents;
+        // VK-1422: keep runtime navmesh tile rebuilds in-memory during play (no disk writes).
+        tileManager.setPlayModeActive(simulateAgents);
 
         pollBakeCompletion();
         tileManager.pollTileBakeCompletions();

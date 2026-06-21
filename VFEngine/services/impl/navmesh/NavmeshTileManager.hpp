@@ -72,6 +72,9 @@ namespace services
 
         void setInvokerSources(std::vector<StreamingSource> sources);
         void setSaveOnDemandToCache(bool save) { saveOnDemandToCache = save; }
+        // In play mode, runtime tile rebuilds (obstacles, on-demand streaming) must stay
+        // in-memory only and never write back to the authored .vfNavTile assets (VK-1422).
+        void setPlayModeActive(bool active) { playModeActive = active; }
         void ensureTiledNavmeshInitialized();
 
         navigation::NavmeshTileCoord worldToTileCoord(const glm::vec3& worldPos) const;
@@ -113,6 +116,7 @@ namespace services
         std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> pendingGenerationTiles;
         bool tiledNavmeshInitialized = false;
         bool saveOnDemandToCache = true;
+        bool playModeActive = false; // VK-1422: gate disk writes off during play
 
         // In-flight bake jobs. The handle is used only for throttling (count) and for
         // draining on clear(); the baked result is delivered out-of-band via completedBakes

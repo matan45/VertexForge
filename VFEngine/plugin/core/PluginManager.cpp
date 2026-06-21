@@ -3,6 +3,9 @@
 #include "PluginContextImpl.hpp"
 #include "../api/PluginVersion.hpp"
 #include "serialization/SceneSerialization.hpp"
+#include "serialization/MetaJsonSerializer.hpp"
+#include "serialization/AssetRefSerializationHelper.hpp"
+#include "asset/AssetRef.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
@@ -380,228 +383,6 @@ namespace plugin {
         return true;
     }
 
-    static nlohmann::json serializeMetaAny(const entt::meta_any& value, const entt::meta_type& type)
-    {
-        if (type.info() == entt::type_id<int>()) return value.cast<int>();
-        if (type.info() == entt::type_id<float>()) return value.cast<float>();
-        if (type.info() == entt::type_id<bool>()) return value.cast<bool>();
-        if (type.info() == entt::type_id<std::string>()) return value.cast<std::string>();
-        if (type.info() == entt::type_id<glm::vec2>()) {
-            auto v = value.cast<glm::vec2>();
-            return nlohmann::json::array({v.x, v.y});
-        }
-        if (type.info() == entt::type_id<glm::vec3>()) {
-            auto v = value.cast<glm::vec3>();
-            return nlohmann::json::array({v.x, v.y, v.z});
-        }
-        if (type.info() == entt::type_id<glm::vec4>()) {
-            auto v = value.cast<glm::vec4>();
-            return nlohmann::json::array({v.x, v.y, v.z, v.w});
-        }
-        if (type.info() == entt::type_id<glm::quat>()) {
-            auto q = value.cast<glm::quat>();
-            return nlohmann::json::array({q.x, q.y, q.z, q.w});
-        }
-
-        // Enums — serialize as string (enum value name)
-        if (type.is_enum())
-        {
-            for (auto [id, member] : type.data())
-            {
-                if (member.get({}) == value)
-                {
-                    const char* n = member.name();
-                    if (n) return std::string(n);
-                }
-            }
-            // Fallback: serialize as underlying integer
-            return value.allow_cast<int>().cast<int>();
-        }
-
-        // Sequence containers (std::vector<T>, etc.)
-        if (type.is_sequence_container())
-        {
-            auto view = value.as_sequence_container();
-            auto arr = nlohmann::json::array();
-            for (std::size_t i = 0, n = view.size(); i < n; ++i)
-            {
-                arr.push_back(serializeMetaAny(view[i], view.value_type()));
-            }
-            return arr;
-        }
-
-        // Associative containers (std::map<K,V>, std::unordered_map<K,V>, etc.)
-        if (type.is_associative_container())
-        {
-            auto view = value.as_associative_container();
-            auto obj = nlohmann::json::object();
-            for (auto it = view.begin(), last = view.end(); it != last; ++it)
-            {
-                auto [key, val] = *it;
-                std::string keyStr;
-                if (auto* s = key.try_cast<std::string>())
-                    keyStr = *s;
-                else if (auto* i = key.try_cast<int>())
-                    keyStr = std::to_string(*i);
-                else
-                    continue;
-                obj[keyStr] = serializeMetaAny(val, view.mapped_type());
-            }
-            return obj;
-        }
-
-        // Structs/classes — serialize each reflected member
-        if (type.is_class())
-        {
-            auto obj = nlohmann::json::object();
-            for (auto&& [id, member] : type.data())
-            {
-                const char* n = member.name();
-                if (!n) continue;
-                auto val = member.get(value);
-                if (!val) continue;
-                auto serialized = serializeMetaAny(val, member.type());
-                if (!serialized.is_null())
-                    obj[n] = std::move(serialized);
-            }
-            return obj.empty() ? nullptr : obj;
-        }
-
-        return nullptr;
-    }
-
-    // Convert a JSON value to an entt::meta_any matching the expected meta type.
-    static entt::meta_any jsonToMetaAny(const nlohmann::json& j, const entt::meta_type& type)
-    {
-        if (type.info() == entt::type_id<int>() && j.is_number_integer())
-            return j.get<int>();
-        if (type.info() == entt::type_id<float>() && j.is_number())
-            return j.get<float>();
-        if (type.info() == entt::type_id<bool>() && j.is_boolean())
-            return j.get<bool>();
-        if (type.info() == entt::type_id<std::string>() && j.is_string())
-            return j.get<std::string>();
-        if (type.info() == entt::type_id<glm::vec2>() && j.is_array() && j.size() >= 2)
-            return glm::vec2(j[0].get<float>(), j[1].get<float>());
-        if (type.info() == entt::type_id<glm::vec3>() && j.is_array() && j.size() >= 3)
-            return glm::vec3(j[0].get<float>(), j[1].get<float>(), j[2].get<float>());
-        if (type.info() == entt::type_id<glm::vec4>() && j.is_array() && j.size() >= 4)
-            return glm::vec4(j[0].get<float>(), j[1].get<float>(), j[2].get<float>(), j[3].get<float>());
-        if (type.info() == entt::type_id<glm::quat>() && j.is_array() && j.size() >= 4)
-            return glm::quat(j[3].get<float>(), j[0].get<float>(), j[1].get<float>(), j[2].get<float>());
-        // Enum from string name
-        if (type.is_enum() && j.is_string())
-        {
-            std::string valName = j.get<std::string>();
-            for (auto [id, member] : type.data())
-            {
-                const char* n = member.name();
-                if (n && valName == n)
-                    return member.get({});
-            }
-        }
-        // Structs/classes — default-construct then populate members from JSON object
-        if (type.is_class() && j.is_object())
-        {
-            auto instance = type.construct();
-            if (!instance) return {};
-            for (auto&& [id, member] : type.data())
-            {
-                const char* n = member.name();
-                if (!n || !j.contains(n)) continue;
-                auto converted = jsonToMetaAny(j[n], member.type());
-                if (converted)
-                    member.set(instance, converted);
-            }
-            return instance;
-        }
-        return {};
-    }
-
-    // Convert a JSON object key string to an entt::meta_any matching the expected key type.
-    static entt::meta_any jsonKeyToMetaAny(const std::string& key, const entt::meta_type& keyType)
-    {
-        if (keyType.info() == entt::type_id<std::string>())
-            return key;
-        if (keyType.info() == entt::type_id<int>())
-        {
-            try { return std::stoi(key); }
-            catch (...) { return {}; }
-        }
-        return {};
-    }
-
-    static void deserializeMetaData(entt::meta_data data, entt::meta_any& instance, const nlohmann::json& value)
-    {
-        auto type = data.type();
-        if (type.info() == entt::type_id<int>() && value.is_number_integer())
-            data.set(instance, value.get<int>());
-        else if (type.info() == entt::type_id<float>() && value.is_number())
-            data.set(instance, value.get<float>());
-        else if (type.info() == entt::type_id<bool>() && value.is_boolean())
-            data.set(instance, value.get<bool>());
-        else if (type.info() == entt::type_id<std::string>() && value.is_string())
-            data.set(instance, value.get<std::string>());
-        else if (type.info() == entt::type_id<glm::vec2>() && value.is_array() && value.size() >= 2)
-            data.set(instance, glm::vec2(value[0].get<float>(), value[1].get<float>()));
-        else if (type.info() == entt::type_id<glm::vec3>() && value.is_array() && value.size() >= 3)
-            data.set(instance, glm::vec3(value[0].get<float>(), value[1].get<float>(), value[2].get<float>()));
-        else if (type.info() == entt::type_id<glm::vec4>() && value.is_array() && value.size() >= 4)
-            data.set(instance, glm::vec4(value[0].get<float>(), value[1].get<float>(), value[2].get<float>(), value[3].get<float>()));
-        else if (type.info() == entt::type_id<glm::quat>() && value.is_array() && value.size() >= 4)
-            data.set(instance, glm::quat(value[3].get<float>(), value[0].get<float>(), value[1].get<float>(), value[2].get<float>()));
-        // Sequence containers (std::vector<T>, etc.)
-        else if (type.is_sequence_container() && value.is_array())
-        {
-            auto fieldVal = data.get(instance);
-            auto view = fieldVal.as_sequence_container();
-            view.clear();
-            for (const auto& elem : value)
-            {
-                auto converted = jsonToMetaAny(elem, view.value_type());
-                if (converted)
-                    view.insert(view.end(), converted);
-            }
-            data.set(instance, fieldVal);
-        }
-        // Associative containers (std::map<K,V>, etc.)
-        else if (type.is_associative_container() && value.is_object())
-        {
-            auto fieldVal = data.get(instance);
-            auto view = fieldVal.as_associative_container();
-            view.clear();
-            for (auto& [k, v] : value.items())
-            {
-                auto keyAny = jsonKeyToMetaAny(k, view.key_type());
-                auto valAny = jsonToMetaAny(v, view.mapped_type());
-                if (keyAny && valAny)
-                    view.insert(keyAny, valAny);
-            }
-            data.set(instance, fieldVal);
-        }
-        // Enums — deserialize from string name
-        else if (type.is_enum() && value.is_string())
-        {
-            std::string valName = value.get<std::string>();
-            for (auto [id, member] : type.data())
-            {
-                const char* n = member.name();
-                if (n && valName == n)
-                {
-                    data.set(instance, member.get({}));
-                    break;
-                }
-            }
-        }
-        // Structs/classes — deserialize from JSON object
-        else if (type.is_class() && value.is_object())
-        {
-            auto constructed = jsonToMetaAny(value, type);
-            if (constructed)
-                data.set(instance, constructed);
-        }
-    }
-
     void PluginManager::initializeAll()
     {
         // Set up plugin component serialization hooks
@@ -626,7 +407,14 @@ namespace plugin {
                         if (!val) continue;
                         const char* name = member.name();
                         if (!name) continue;
-                        auto serialized = serializeMetaAny(val, member.type());
+                        // AssetRef field — emit GUID hex + <name>Path sibling inside the
+                        // component object (engine owns AssetRef serialization).
+                        if (member.type().info() == entt::type_id<asset::AssetRef>())
+                        {
+                            serialization::writeAssetRef(compJson, name, val.cast<asset::AssetRef>());
+                            continue;
+                        }
+                        auto serialized = serialization::meta::serializeMetaAny(val, member.type());
                         if (!serialized.is_null())
                             compJson[name] = std::move(serialized);
                     }
@@ -653,11 +441,35 @@ namespace plugin {
                     auto instance = bridge.metaType.from_void(ptr);
                     if (!instance) continue;
 
+                    // Collect reflected field names for the unknown-key diagnostic below.
+                    std::unordered_set<std::string> reflectedNames;
                     for (auto&& [id, member] : bridge.metaType.data())
                     {
                         const char* name = member.name();
-                        if (!name || !compJson.contains(name)) continue;
-                        deserializeMetaData(member, instance, compJson[name]);
+                        if (!name) continue;
+                        reflectedNames.insert(name);
+                        // AssetRef field — read GUID hex + <name>Path sibling from the
+                        // parent component object (engine owns AssetRef deserialization).
+                        if (member.type().info() == entt::type_id<asset::AssetRef>())
+                        {
+                            member.set(instance, serialization::readAssetRef(compJson, name, ""));
+                            continue;
+                        }
+                        if (!compJson.contains(name)) continue;
+                        serialization::meta::deserializeMetaData(member, instance, compJson[name]);
+                    }
+
+                    // Diagnostics: warn on JSON sub-keys that match no reflected field
+                    // (ignore the AssetRef <name>Path siblings, which are expected).
+                    for (auto it = compJson.begin(); it != compJson.end(); ++it)
+                    {
+                        const std::string& subKey = it.key();
+                        if (reflectedNames.count(subKey)) continue;
+                        if (subKey.size() > 4 && subKey.compare(subKey.size() - 4, 4, "Path") == 0
+                            && reflectedNames.count(subKey.substr(0, subKey.size() - 4)))
+                            continue;
+                        vfLogWarning("Plugin component '{}': JSON key '{}' matches no reflected field",
+                                     bridge.name, subKey);
                     }
                 }
             }

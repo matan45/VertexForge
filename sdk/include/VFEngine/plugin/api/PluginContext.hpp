@@ -20,6 +20,7 @@
 #include "../../utilities/terrain/TerrainHeightAtResult.hpp"
 #include "../../utilities/navigation/NavmeshData.hpp"
 #include "../../services/data/VFXTypes.hpp"
+#include "FieldAttributes.hpp"
 
 #include <plugin/PluginHostApi.h>   // mType plugin C ABI (MTypeNativeFn, MTypePluginHost)
 
@@ -395,6 +396,14 @@ namespace plugin {
 
         // Register a type-erased component bridge for engine-side access (inspector, Add Component UI).
         virtual void registerComponentBridge(MetaComponentBridge bridge) = 0;
+
+        // Attach per-field inspector metadata to a registered component field (API v14).
+        // `component` / `field` are the names passed to registerNativeComponent / .data<>().
+        // The attributes are deep-copied and stored engine-side (the fixed char arrays own
+        // all string data), so nothing dangles when the plugin DLL unloads. Optional:
+        // fields with no attributes draw exactly as before. Call during onInitialize.
+        virtual void setFieldAttributes(const char* component, const char* field,
+                                        const inspector::FieldAttributes& attrs) = 0;
 
         // Template helper — registers a native component with a bridge + meta reflection.
         // Instantiated in the plugin DLL so type_index is correct for that DLL.

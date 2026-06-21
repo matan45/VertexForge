@@ -570,7 +570,7 @@ namespace services
                 areaModifiers = collectAreaModifiers(bounds);
 
             submitTileBake(coord, std::move(geometry), std::move(offMeshLinks), std::move(areaModifiers),
-                           saveOnDemandToCache, threading::JobPriority::LOW);
+                           saveOnDemandToCache && !playModeActive, threading::JobPriority::LOW);
             submitted++;
         }
     }
@@ -611,8 +611,10 @@ namespace services
             if (collectAreaModifiers)
                 areaModifiers = collectAreaModifiers(bounds);
 
+            // VK-1422: never persist runtime rebuilds (e.g. obstacle carving) to the authored
+            // .vfNavTile assets during play — they live in-memory for the play session only.
             submitTileBake(coord, std::move(geometry), std::move(offMeshLinks), std::move(areaModifiers),
-                           true, threading::JobPriority::NORMAL);
+                           !playModeActive, threading::JobPriority::NORMAL);
             submitted++;
         }
     }
