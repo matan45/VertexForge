@@ -22,14 +22,19 @@ namespace windows
         bool isDirty = false;
         bool needsInit = true;
 
-        // Timeline preview scrub (time-driven marker preview only; live child
-        // spawning against the VFX preview provider is a follow-up — see .cpp).
+        // Timeline preview scrub. Drives a lightweight CPU particle simulation
+        // (no GPU / no VFX preview provider) so the whole combo can be previewed
+        // composited in one viewport — the runtime uses the real GPU path.
         float previewTime = 0.0f;
         bool previewPlaying = false;
+        bool previewLoop = true;
+
+        struct PreviewState;                    // CPU sim state (defined in .cpp)
+        std::unique_ptr<PreviewState> preview;
 
     public:
         explicit VFXSequenceEditorWindow(const std::string& seqPath);
-        ~VFXSequenceEditorWindow() override = default;
+        ~VFXSequenceEditorWindow() override;    // out-of-line (PreviewState is incomplete here)
 
         void draw() override;
         bool shouldClose() const override { return !isOpen; }
@@ -44,5 +49,10 @@ namespace windows
         void drawStepList();
         void drawStepInspector();
         void drawTimeline();
+
+        // CPU combo preview.
+        void drawPreviewViewport();
+        void resetPreview();
+        void stepPreview(float dt);
     };
 }

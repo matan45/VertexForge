@@ -4,6 +4,7 @@
 #include "../../data/EditorMode.hpp"
 #include "../../data/VFXSequenceTypes.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -29,7 +30,9 @@ namespace services
         std::unordered_map<EntityHandle, VFXComboInstanceId, EntityHandle::Hash> autoPlayCombos;
         // Fire-and-forget combos spawned by animation triggers (auto-destroy on finish; tracked for teardown).
         std::vector<VFXComboInstanceId> triggeredCombos;
-        bool sequenceActive = false;
+        // Read by the off-thread AnimationEvent/Transform subscribers, written on the main thread
+        // (enter/exit play) — atomic to avoid a data race.
+        std::atomic<bool> sequenceActive{false};
 
         struct PendingTrigger
         {
