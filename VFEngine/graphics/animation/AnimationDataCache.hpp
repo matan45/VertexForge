@@ -5,6 +5,7 @@
 #include "resource/Types.hpp"
 #include <entt/entt.hpp>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 
@@ -20,6 +21,12 @@ namespace animation
         std::unordered_map<std::string, std::shared_ptr<animator::AnimatorData>> animatorDataCache;
         std::unordered_map<std::string, std::shared_ptr<resource::AnimationData>> animationDataCache;
         std::unordered_map<std::string, std::shared_ptr<resource::SkeletonData>> skeletonDataCache;
+
+        // Guards the three caches above. They are read/written concurrently by the parallel leader
+        // animation evaluation (RuntimeAnimatorSystem::evaluateLeadersAndSync runs each leader's
+        // update() on a worker thread, and update() can reach loadAnimation via the shared load
+        // callback). shared_mutex keeps the steady-state cache-hit path concurrent (VK-1424).
+        mutable std::shared_mutex cacheMutex;
     public:
         std::shared_ptr<animator::AnimatorData> loadAnimatorData(const std::string& path);
         const resource::AnimationData* loadAnimation(const std::string& path);
