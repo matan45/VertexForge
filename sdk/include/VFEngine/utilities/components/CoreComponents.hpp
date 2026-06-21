@@ -122,6 +122,10 @@ namespace components
         bool enableOcclusionCulling = true;
         bool isRegistered = false;
 
+        // VK-1416: when true, a script owns the camera's view (and projection) matrices and the
+        // engine's per-frame recompute is skipped (set by lookAt / setViewMatrix / setProjectionMatrix).
+        bool viewMatrixOverride = false;
+
         // VK-1415: per-camera render-visibility mask. A mesh on render layer L is visible to this
         // camera only if bit L is set here. Default 0xFFFFFFFF = render all layers (legacy behavior).
         uint32_t cullingMask = 0xFFFFFFFFu;

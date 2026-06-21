@@ -169,22 +169,27 @@ namespace services
             auto camCopy = registry.get<components::CameraComponent>(camEntity);
             const auto& srcTransform = registry.get<components::TransformComponent>(camEntity);
 
-            // Use the world-space eye position (to support child cameras that inherit parent movement)
-            // with the camera's LOCAL Euler rotation. Decomposing/inverting the world matrix for the
-            // rotation hits the extractEulerAngleXYZ yaw singularity and flips the view to the sky past
-            // ±90° of yaw (VK-1350).
             glm::vec3 worldPos;
-            if (registry.all_of<components::WorldTransformComponent>(camEntity)) {
-                const auto& worldTransform = registry.get<components::WorldTransformComponent>(camEntity);
-                camCopy.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, srcTransform);
-                worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+            if (camCopy.viewMatrixOverride) {
+                // VK-1416: the source camera's view/projection are script-owned — render exactly those.
+                worldPos = glm::vec3(glm::inverse(camCopy.viewMatrix)[3]);
             } else {
-                camCopy.updateViewMatrix(srcTransform.position, srcTransform.rotation);
-                worldPos = srcTransform.position;
-            }
+                // Use the world-space eye position (to support child cameras that inherit parent movement)
+                // with the camera's LOCAL Euler rotation. Decomposing/inverting the world matrix for the
+                // rotation hits the extractEulerAngleXYZ yaw singularity and flips the view to the sky past
+                // ±90° of yaw (VK-1350).
+                if (registry.all_of<components::WorldTransformComponent>(camEntity)) {
+                    const auto& worldTransform = registry.get<components::WorldTransformComponent>(camEntity);
+                    camCopy.updateViewMatrixFromWorldEye(worldTransform.worldMatrix, srcTransform);
+                    worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+                } else {
+                    camCopy.updateViewMatrix(srcTransform.position, srcTransform.rotation);
+                    worldPos = srcTransform.position;
+                }
 
-            camCopy.aspectRatio = static_cast<float>(rtComp.width) / static_cast<float>(rtComp.height);
-            camCopy.updateProjectionMatrix();
+                camCopy.aspectRatio = static_cast<float>(rtComp.width) / static_cast<float>(rtComp.height);
+                camCopy.updateProjectionMatrix();
+            }
 
             provider->updateCamera(
                 textureId,

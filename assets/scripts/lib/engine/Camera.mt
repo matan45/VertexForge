@@ -130,4 +130,81 @@ public class Camera {
     public static function setCullingMask(int entityId, int mask): void {
         _native_camera_setCullingMask(entityId, mask);
     }
+
+    // ============================================
+    // View / Projection control (VK-1416)
+    // ============================================
+
+    // Aim the camera at a world-space point from its current position. Pins the view
+    // (engine stops recomputing it each frame) until setViewMatrixOverride(id, false).
+    public static function lookAt(int entityId, Vec3f target, Vec3f up): void {
+        _native_camera_lookAt(entityId, target.x, target.y, target.z, up.x, up.y, up.z);
+    }
+
+    // Set an arbitrary view matrix (row-major). Pins the view (viewMatrixOverride = true).
+    public static function setViewMatrix(int entityId, Matrix4f m): void {
+        float[] a = new float[16];
+        a[0]  = m.m00; a[1]  = m.m01; a[2]  = m.m02; a[3]  = m.m03;
+        a[4]  = m.m10; a[5]  = m.m11; a[6]  = m.m12; a[7]  = m.m13;
+        a[8]  = m.m20; a[9]  = m.m21; a[10] = m.m22; a[11] = m.m23;
+        a[12] = m.m30; a[13] = m.m31; a[14] = m.m32; a[15] = m.m33;
+        _native_camera_setViewMatrix(entityId, a);
+    }
+
+    // Set an arbitrary projection matrix (row-major). Pins the camera (viewMatrixOverride = true).
+    public static function setProjectionMatrix(int entityId, Matrix4f m): void {
+        float[] a = new float[16];
+        a[0]  = m.m00; a[1]  = m.m01; a[2]  = m.m02; a[3]  = m.m03;
+        a[4]  = m.m10; a[5]  = m.m11; a[6]  = m.m12; a[7]  = m.m13;
+        a[8]  = m.m20; a[9]  = m.m21; a[10] = m.m22; a[11] = m.m23;
+        a[12] = m.m30; a[13] = m.m31; a[14] = m.m32; a[15] = m.m33;
+        _native_camera_setProjectionMatrix(entityId, a);
+    }
+
+    // Toggle whether the script owns the camera matrices. Pass false to return to engine-driven view.
+    public static function setViewMatrixOverride(int entityId, bool enabled): void {
+        _native_camera_setViewMatrixOverride(entityId, enabled);
+    }
+
+    public static function getViewMatrixOverride(int entityId): bool {
+        return _native_camera_getViewMatrixOverride(entityId);
+    }
+
+    // ============================================
+    // Projection mode (VK-1416)
+    // ============================================
+
+    // true = orthographic, false = perspective. Projection rebuilds immediately and keeps
+    // tracking the window aspect ratio (unless a custom projection override is active).
+    public static function setOrthographic(int entityId, bool orthographic): void {
+        _native_camera_setOrthographic(entityId, orthographic);
+    }
+
+    public static function isOrthographic(int entityId): bool {
+        return _native_camera_isOrthographic(entityId);
+    }
+
+    // Half-height of the orthographic view volume, in world units.
+    public static function setOrthoSize(int entityId, float size): void {
+        _native_camera_setOrthoSize(entityId, size);
+    }
+
+    public static function getOrthoSize(int entityId): float {
+        return _native_camera_getOrthoSize(entityId);
+    }
+
+    // ============================================
+    // Render-to-texture (VK-1417)
+    // ============================================
+
+    // One-call RTT setup on the camera's OWN entity. Prerequisite: the camera entity carries a
+    // RenderTextureComponent (added in the editor) which the engine materializes at play entry.
+    // The RTT auto-binds to this entity's camera; consume it by this entity id from UI/material.
+    // updateMode: use RenderTextureUpdateMode constants (EVERY_FRAME=0, ON_DEMAND=1, FIXED_INTERVAL=2).
+    public static function renderTo(int cameraEntityId, int width, int height, int updateMode): void {
+        _native_rtt_create(cameraEntityId, width, height, updateMode);
+        _native_rtt_resize(cameraEntityId, width, height);
+        _native_rtt_setUpdateMode(cameraEntityId, updateMode);
+        _native_rtt_setEnabled(cameraEntityId, true);
+    }
 }
