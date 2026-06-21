@@ -41,6 +41,16 @@ namespace components
     }
 
     template <>
+    inline void resetClonedRuntimeState<MaterialComponent>(MaterialComponent& c)
+    {
+        // VK-1418: keep sourceName (resolved later) but drop the stale source handle on clone.
+        for (auto& [slotKey, binding] : c.renderTextureSlotBindings)
+        {
+            binding.source = entt::null;
+        }
+    }
+
+    template <>
     inline void resetClonedRuntimeState<UIScrollComponent>(UIScrollComponent& c)
     {
         c.scrollOffset = {0.0f, 0.0f};

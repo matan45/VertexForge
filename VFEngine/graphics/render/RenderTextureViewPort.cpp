@@ -10,6 +10,7 @@
 #include "RenderPassHandler.hpp"
 #include "IBL.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
+#include "postprocess/PostProcessPipeline.hpp"
 #include "common/CameraTypes.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "gpudriven/GPUDrivenCameraBuffer.hpp"
@@ -282,16 +283,114 @@ namespace render
 
         core::endDynamicRendering(commandBuffer);
 
-        // Transition back to eShaderReadOnlyOptimal so UI consumers (runtime UIImage with
-        // renderTextureSourceName, or the editor ImGui preview descriptor) can sample
-        // immediately, and so the next frame's pre-pass barrier observes the expected
-        // oldLayout regardless of whether a consumer ran this frame.
-        core::ImageUtilities::transitionImageLayout(
-            commandBuffer,
-            offscreenResources.colorImages[imageIndex].colorImage,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor);
+        // VK-1419: optional tonemap pass. The scene was rendered into the HDR colorImage; sampling it
+        // raw looks over-bright/clipped vs the main viewport (which tonemaps HDR->display-referred).
+        // When `tonemap` is on, run a self-contained ToneMappingEffect that reads colorImage, writes a
+        // scratch image, then copies scratch back into colorImage. Both branches leave colorImage in
+        // eShaderReadOnlyOptimal, so the next frame's pre-pass barrier and the returned ImGui
+        // descriptor are unchanged. All barriers are intra-command-buffer (sync2).
+        if (tonemap && tonemapEffect)
+        {
+            vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
+            core::ColorImage& scratch = tonemapScratchImages[imageIndex];
+
+            // Feed the effect the main viewport's tone-mapping params so the look matches. The RTT
+            // records unconditionally, so force `enabled` true regardless of the main toggle.
+            if (auto* pp = mainPassHandler->getPostProcessPipeline())
+            {
+                ::postprocess::PostProcessSettings settings{};
+                settings.enabled = true;
+                settings.toneMapping = pp->getToneMappingSettings();
+                settings.toneMapping.enabled = true;
+                tonemapEffect->updateParameters(settings);
+                if (auto exposure = pp->getComputedExposure())
+                {
+                    tonemapEffect->setExposureOverride(exposure.value());
+                }
+            }
+
+            // 1) colorImage eColorAttachmentOptimal -> eShaderReadOnlyOptimal (tonemap samples it).
+            core::ImageUtilities::transitionImageLayout(
+                commandBuffer, colorImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            // 2) scratch eUndefined -> eColorAttachmentOptimal (tonemap writes it).
+            core::ImageUtilities::transitionImageLayout(
+                commandBuffer, scratch.colorImage,
+                vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            // 3) record the tonemap full-screen pass into scratch.
+            core::DynamicRenderingInfo tmInfo{};
+            tmInfo.extent = vk::Extent2D{width, height};
+            tmInfo.colorAttachments = {core::colorDontCare(scratch.colorImageView)};
+
+            core::beginDynamicRendering(commandBuffer, tmInfo);
+            commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
+
+            vk::Viewport tmViewport{0.0f, 0.0f,
+                                    static_cast<float>(width), static_cast<float>(height),
+                                    0.0f, 1.0f};
+            commandBuffer.setViewport(0, tmViewport);
+            vk::Rect2D tmScissor{{0, 0}, {width, height}};
+            commandBuffer.setScissor(0, tmScissor);
+
+            tonemapEffect->record(commandBuffer, tonemapInputDescSets[imageIndex]);
+
+            core::endDynamicRendering(commandBuffer);
+
+            // 4) scratch eColorAttachmentOptimal -> eTransferSrcOptimal.
+            core::ImageUtilities::transitionImageLayout(
+                commandBuffer, scratch.colorImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eTransferSrcOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            // 5) colorImage eShaderReadOnlyOptimal -> eTransferDstOptimal.
+            core::ImageUtilities::transitionImageLayout(
+                commandBuffer, colorImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eTransferDstOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            // 6) copy scratch -> colorImage (full extent).
+            vk::ImageCopy region{};
+            region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            region.srcSubresource.layerCount = 1;
+            region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            region.dstSubresource.layerCount = 1;
+            region.extent.width = width;
+            region.extent.height = height;
+            region.extent.depth = 1;
+
+            commandBuffer.copyImage(
+                scratch.colorImage, vk::ImageLayout::eTransferSrcOptimal,
+                colorImage, vk::ImageLayout::eTransferDstOptimal,
+                region);
+
+            // 7) colorImage eTransferDstOptimal -> eShaderReadOnlyOptimal (consumers sample it).
+            core::ImageUtilities::transitionImageLayout(
+                commandBuffer, colorImage,
+                vk::ImageLayout::eTransferDstOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+        else
+        {
+            // Transition back to eShaderReadOnlyOptimal so UI consumers (runtime UIImage with
+            // renderTextureSourceName, or the editor ImGui preview descriptor) can sample
+            // immediately, and so the next frame's pre-pass barrier observes the expected
+            // oldLayout regardless of whether a consumer ran this frame.
+            core::ImageUtilities::transitionImageLayout(
+                commandBuffer,
+                offscreenResources.colorImages[imageIndex].colorImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
 
         commandBuffer.end();
 
@@ -715,10 +814,100 @@ namespace render
             depthImages.push_back(std::move(depth));
             offscreenResources.colorImages.push_back(std::move(color));
         }
+
+        // VK-1419: tonemap pass resources. One scratch color image per swapchain image (HDR, same
+        // format as colorImages), a self-contained ToneMappingEffect at the RTT extent, and a
+        // combined-image-sampler descriptor set per image bound to that image's colorImageView.
+        if (tonemap)
+        {
+            const uint32_t imageCount = swapChain.getImageCount();
+            const auto logicalDevice = device.getLogicalDevice();
+
+            core::ImageInfoRequest scratchInfo(logicalDevice, device.getPhysicalDevice());
+            scratchInfo.width = width;
+            scratchInfo.height = height;
+            scratchInfo.format = colorFormat;
+            scratchInfo.tiling = vk::ImageTiling::eOptimal;
+            scratchInfo.usage = vk::ImageUsageFlagBits::eColorAttachment
+                              | vk::ImageUsageFlagBits::eSampled
+                              | vk::ImageUsageFlagBits::eTransferSrc;
+            scratchInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+
+            tonemapScratchImages.reserve(imageCount);
+            for (uint32_t i = 0; i < imageCount; ++i)
+            {
+                core::ColorImage scratch;
+                core::ImageUtilities::createImage(scratchInfo, scratch.colorImage,
+                    scratch.colorImageAllocation, device.getMemoryManager());
+                core::ImageViewInfoRequest scratchViewReq(logicalDevice, scratch.colorImage);
+                scratchViewReq.format = colorFormat;
+                core::ImageUtilities::createImageView(scratchViewReq, scratch.colorImageView);
+                tonemapScratchImages.push_back(std::move(scratch));
+            }
+
+            tonemapEffect = std::make_unique<render::postprocess::ToneMappingEffect>(device);
+            tonemapEffect->init(colorFormat, vk::Extent2D{width, height});
+
+            vk::DescriptorPoolSize poolSize{};
+            poolSize.type = vk::DescriptorType::eCombinedImageSampler;
+            poolSize.descriptorCount = imageCount;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+            poolInfo.maxSets = imageCount;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            tonemapInputDescPool = logicalDevice.createDescriptorPool(poolInfo);
+
+            std::vector<vk::DescriptorSetLayout> layouts(
+                imageCount, tonemapEffect->getInputDescriptorSetLayout());
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = tonemapInputDescPool;
+            allocInfo.descriptorSetCount = imageCount;
+            allocInfo.pSetLayouts = layouts.data();
+            tonemapInputDescSets = logicalDevice.allocateDescriptorSets(allocInfo);
+
+            for (uint32_t i = 0; i < imageCount; ++i)
+            {
+                vk::DescriptorImageInfo imageInfo{};
+                imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                imageInfo.imageView = offscreenResources.colorImages[i].colorImageView;
+                imageInfo.sampler = sampler;
+
+                vk::WriteDescriptorSet write{};
+                write.dstSet = tonemapInputDescSets[i];
+                write.dstBinding = 0;
+                write.dstArrayElement = 0;
+                write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+                write.descriptorCount = 1;
+                write.pImageInfo = &imageInfo;
+                logicalDevice.updateDescriptorSets(write, nullptr);
+            }
+        }
     }
 
     void RenderTextureViewPort::cleanupOffscreenResources()
     {
+        // VK-1419: tear down the tonemap pass resources (mirrors the colorImages teardown below).
+        tonemapInputDescSets.clear();
+        if (tonemapInputDescPool)
+        {
+            device.getLogicalDevice().destroyDescriptorPool(tonemapInputDescPool);
+            tonemapInputDescPool = nullptr;
+        }
+        if (tonemapEffect)
+        {
+            tonemapEffect->cleanup();
+            tonemapEffect.reset();
+        }
+        for (auto const& scratch : tonemapScratchImages)
+        {
+            device.getLogicalDevice().destroyImageView(scratch.colorImageView);
+            device.getLogicalDevice().destroyImage(scratch.colorImage);
+            device.getMemoryManager().free(scratch.colorImageAllocation);
+        }
+        tonemapScratchImages.clear();
+
         for (auto const& resources : offscreenResources.colorImages)
         {
             device.getLogicalDevice().destroyImageView(resources.colorImageView);

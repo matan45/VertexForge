@@ -225,6 +225,7 @@ namespace components
         uint32_t priority = 0;
         bool enabled = true;
         bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
+        bool tonemap = true; // true = match main viewport (tonemap/gamma); false = raw HDR (e.g. minimap)
         bool needsRender = true;
         float timeSinceLastRender = 0.0f;
 
@@ -259,6 +260,16 @@ namespace components
         // Per-entity runtime overrides of the material's named parameters (typed —
         // scalar/vec2/vec3/vec4). Applied on top of instance overrides at extraction.
         std::map<std::string, material::ParameterValue> parameterOverrides;
+
+        // VK-1418: per-entity binding of a material texture slot to a live RTT. Key = slot name
+        // ("albedo" | "emission"). Only sourceName is serialized; source is re-resolved by name on
+        // scene load (mirrors BillboardComponent renderTextureSource/renderTextureSourceName).
+        struct RenderTextureSlotBinding
+        {
+            std::string sourceName;
+            entt::entity source = entt::null;
+        };
+        std::map<std::string, RenderTextureSlotBinding> renderTextureSlotBindings;
 
         void setSubMeshMaterial(const std::string& submeshName, const asset::AssetRef& matRef)
         {

@@ -170,6 +170,16 @@ namespace serialization
 
         j["parameterOverrides"] = serializeParameterOverrides(material.parameterOverrides);
 
+        // VK-1418: serialize per-slot RTT bindings by source name only (the entity handle is
+        // runtime-only and resolved on load via resolveRenderTextureSourceNames).
+        for (const auto& [slotKey, binding] : material.renderTextureSlotBindings)
+        {
+            if (!binding.sourceName.empty())
+            {
+                j["renderTextureSlotBindings"][slotKey] = binding.sourceName;
+            }
+        }
+
         return j;
     }
 
@@ -243,6 +253,22 @@ namespace serialization
         if (auto it = j.find("parameterOverrides"); it != j.end() && it->is_object())
         {
             deserializeParameterOverrides(*it, material.parameterOverrides);
+        }
+
+        // VK-1418: read per-slot RTT bindings (source entity resolved post-load by name).
+        if (auto it = j.find("renderTextureSlotBindings"); it != j.end() && it->is_object())
+        {
+            material.renderTextureSlotBindings.clear();
+            for (auto& [slotKey, value] : it->items())
+            {
+                if (value.is_string())
+                {
+                    components::MaterialComponent::RenderTextureSlotBinding binding;
+                    binding.sourceName = value.get<std::string>();
+                    binding.source = entt::null;
+                    material.renderTextureSlotBindings[slotKey] = std::move(binding);
+                }
+            }
         }
     }
 

@@ -152,6 +152,7 @@ namespace core::api
                 desc.updateMode = static_cast<rendertexture::UpdateMode>(mode);
                 desc.priority = rttComp.priority;
                 desc.renderShadows = rttComp.renderShadows;
+                desc.tonemap = rttComp.tonemap;
 
                 services::events::rendertexture::CreateRenderTextureCommand cmd;
                 cmd.desc = desc;

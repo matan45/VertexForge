@@ -66,6 +66,12 @@ namespace windows::details
 
             drawSubmeshMaterials(handle, meshDataOpt->meshRef.resolve(), *matOpt);
 
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            drawRenderTextureSlots(handle, *matOpt);
+
             ImGui::Unindent(10.0f);
         }
 
@@ -221,6 +227,68 @@ namespace windows::details
 
         ImGui::Unindent(20.0f);
         ImGui::PopID();
+    }
+
+    void MaterialDrawer::drawRenderTextureSlots(services::EntityHandle handle,
+                                                const services::MaterialData& matData)
+    {
+        if (!ImGui::CollapsingHeader("Render Texture Slots"))
+        {
+            return;
+        }
+
+        ImGui::Indent(10.0f);
+        ImGui::TextDisabled("Drive a material slot with a live Render Texture");
+        ImGui::Spacing();
+
+        services::MaterialData data = matData;
+        bool changed = false;
+
+        changed |= drawRenderTextureSlot(albedoRttPicker, "albedo", "Albedo \xE2\x86\x90 RTT", data);
+        ImGui::Spacing();
+        changed |= drawRenderTextureSlot(emissionRttPicker, "emission", "Emission \xE2\x86\x90 RTT", data);
+
+        if (changed)
+        {
+            events::material::SetMaterialDataCommand cmd;
+            cmd.entity = handle;
+            cmd.materialData = data;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+
+        ImGui::Unindent(10.0f);
+    }
+
+    bool MaterialDrawer::drawRenderTextureSlot(RenderTexturePickerWidget& picker,
+                                               const char* slotKey,
+                                               const char* comboLabel,
+                                               services::MaterialData& data)
+    {
+        // Seed the picker from the current binding (empty name == unbound).
+        auto it = data.renderTextureSlotBindings.find(slotKey);
+        std::string sourceName = (it != data.renderTextureSlotBindings.end()) ? it->second.sourceName : std::string();
+        services::EntityHandle source = (it != data.renderTextureSlotBindings.end())
+            ? it->second.source
+            : services::EntityHandle::invalid();
+
+        bool changed = picker.draw(slotKey, sourceName, source,
+                                   services::ComponentTypeId::RenderTexture, comboLabel,
+                                   "Entity with RenderTextureComponent.\n"
+                                   "Drives this material slot with the live render each frame (play mode).");
+        if (changed)
+        {
+            if (sourceName.empty())
+            {
+                data.renderTextureSlotBindings.erase(slotKey);
+            }
+            else
+            {
+                auto& binding = data.renderTextureSlotBindings[slotKey];
+                binding.sourceName = sourceName;
+                binding.source = source;
+            }
+        }
+        return changed;
     }
 
     const std::vector<std::string>& MaterialDrawer::getSubmeshNames(const std::string& meshPath)

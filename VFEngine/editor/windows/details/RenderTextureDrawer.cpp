@@ -192,6 +192,16 @@ namespace windows::details
                               "whose top-down view doesn't match the primary camera's shadow clipmap.");
         }
 
+        if (ImGui::Checkbox("Tonemap##RT", &data.tonemap))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Apply the scene tonemap/gamma so this render texture matches the main viewport.\n"
+                              "Off = raw HDR (e.g. minimap).");
+        }
+
         const char* updateModes[] = {"Every Frame", "On Demand", "Fixed Interval"};
         int currentMode = static_cast<int>(data.updateMode);
         if (ImGui::Combo("Update Mode##RT", &currentMode, updateModes, IM_ARRAYSIZE(updateModes)))

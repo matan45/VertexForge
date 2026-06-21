@@ -23,5 +23,6 @@ namespace rendertexture
         glm::vec4 clearColor{0.0f, 0.0f, 0.0f, 1.0f};
         uint32_t priority = 0;
         bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
+        bool tonemap = true; // true = match main viewport (tonemap/gamma); false = raw HDR (e.g. minimap)
     };
 }

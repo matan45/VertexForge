@@ -72,11 +72,21 @@ namespace services
     };
 
 
+    // VK-1418: per-entity binding of a material texture slot to a live RTT. The entity handle is
+    // runtime-only; only the name is persisted (mirrors BillboardData renderTextureSource).
+    struct RenderTextureSlotBindingData
+    {
+        EntityHandle source = EntityHandle::invalid();
+        std::string sourceName;
+    };
+
     struct MaterialData
     {
         asset::AssetRef defaultMaterialRef; // .vfMat asset for unmapped submeshes
         std::map<std::string, asset::AssetRef> subMeshMaterials; // submesh NAME -> .vfMat asset
         std::map<std::string, material::ParameterValue> parameterOverrides; // Runtime named-parameter tweaks
+        // VK-1418: slot name ("albedo" | "emission") -> RTT source entity binding.
+        std::map<std::string, RenderTextureSlotBindingData> renderTextureSlotBindings;
     };
 
     struct SubMeshInfo
@@ -289,6 +299,7 @@ namespace services
         uint32_t priority = 0;
         bool enabled = true;
         bool renderShadows = false; // false = flat-lit (e.g. minimap); true = sample shadows
+        bool tonemap = true; // true = match main viewport (tonemap/gamma); false = raw HDR (e.g. minimap)
         // VK-1414: optional reference to a SEPARATE camera entity to render from. The handle is
         // in/out for the editor picker; sourceCameraName is the serialized identity that drives
         // resolution. Empty/invalid = use this entity's own camera (legacy).

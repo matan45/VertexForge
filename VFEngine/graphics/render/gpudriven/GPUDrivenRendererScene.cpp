@@ -554,6 +554,56 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::patchRenderTextureMaterialSlots(uint32_t imageIndex)
+    {
+        // Runtime (persistent) path only. The editor live-preview (non-persistent rebuild path)
+        // re-derives texture indices each rebuild and is OUT OF SCOPE here — follow-up if needed.
+        if (!mergedBuffer || !mergedBuffer->isPersistentMode() || !bindlessTextures)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::MaterialComponent, components::UUIDComponent>();
+        for (auto e : view)
+        {
+            const auto& mat = view.get<components::MaterialComponent>(e);
+            if (mat.renderTextureSlotBindings.empty())
+                continue;
+
+            uint32_t slot = mergedBuffer->getSlotForEntityUUID(view.get<components::UUIDComponent>(e).id.getValue());
+            if (slot == UINT32_MAX)
+                continue;
+
+            auto& obj = mergedBuffer->getMutableObjectData(slot);
+            bool dirty = false;
+            for (const auto& [slotKey, binding] : mat.renderTextureSlotBindings)
+            {
+                if (binding.source == entt::null || !registry.valid(binding.source))
+                    continue;
+                const auto* rtt = registry.try_get<components::RenderTextureComponent>(binding.source);
+                if (!rtt || rtt->textureId == rendertexture::INVALID_RENDER_TEXTURE_ID)
+                    continue;
+
+                std::string key = "__rtt_" + std::to_string(rtt->textureId) + "__#" + std::to_string(imageIndex);
+                uint32_t idx = bindlessTextures->getTextureIndex(key);
+                if (idx == INVALID_TEXTURE_INDEX)
+                    continue;
+
+                if (slotKey == "albedo")
+                {
+                    obj.textureIndices0.x = idx;
+                    dirty = true;
+                }
+                else if (slotKey == "emission")
+                {
+                    obj.textureIndices1.z = idx;
+                    dirty = true;
+                }
+            }
+            if (dirty)
+                mergedBuffer->markSlotDirty(slot);
+        }
+    }
+
     void GPUDrivenRenderer::updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane)
     {
         if (!clusterGridManager)

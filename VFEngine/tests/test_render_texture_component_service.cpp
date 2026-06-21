@@ -63,6 +63,7 @@ TEST_SUITE("RenderTextureComponentService")
         comp.priority = 7u;
         comp.enabled = false;
         comp.renderShadows = true;
+        comp.tonemap = false;
 
         services::RenderTextureComponentService service(std::make_shared<scene::SceneGraphSystem>());
         auto data = service.getRenderTextureData(handleOf(entity));
@@ -80,6 +81,8 @@ TEST_SUITE("RenderTextureComponentService")
         CHECK(data->priority == 7u);
         CHECK(data->enabled == false);
         CHECK(data->renderShadows == true);
+        // VK-1419: tonemap opt-out flag rides the DTO like renderShadows.
+        CHECK(data->tonemap == false);
     }
 
     TEST_CASE("getRenderTextureData reports the default INVALID id when none is assigned")
@@ -114,6 +117,7 @@ TEST_SUITE("RenderTextureComponentService")
         data.priority = 3u;
         data.enabled = false;
         data.renderShadows = true;
+        data.tonemap = false;
         // A stray runtime id on the inbound DTO must be ignored by the setter.
         data.runtimeTextureId = 1234u;
 
@@ -134,6 +138,8 @@ TEST_SUITE("RenderTextureComponentService")
         CHECK(after.priority == 3u);
         CHECK(after.enabled == false);
         CHECK(after.renderShadows == true);
+        // VK-1419: tonemap opt-out round-trips through the setter (default true -> set false).
+        CHECK(after.tonemap == false);
     }
 
     TEST_CASE("setRenderTextureData on a fresh component leaves textureId at INVALID")

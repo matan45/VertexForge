@@ -97,6 +97,7 @@ namespace services
             desc.clearColor = rtComp.clearColor;
             desc.priority = rtComp.priority;
             desc.renderShadows = rtComp.renderShadows;
+            desc.tonemap = rtComp.tonemap;
 
             rendertexture::RenderTextureId textureId = provider->createRenderTexture(desc);
 

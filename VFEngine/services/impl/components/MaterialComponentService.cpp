@@ -74,6 +74,15 @@ namespace services {
         data.defaultMaterialRef = comp.defaultMaterialRef;
         data.subMeshMaterials = comp.subMeshMaterials;
         data.parameterOverrides = comp.parameterOverrides;
+        // VK-1418: expose per-slot RTT bindings (name + runtime handle) to the editor.
+        for (const auto& [slotKey, binding] : comp.renderTextureSlotBindings) {
+            RenderTextureSlotBindingData out;
+            out.sourceName = binding.sourceName;
+            out.source = (binding.source != entt::null)
+                ? EntityHandle{static_cast<uint64_t>(binding.source)}
+                : EntityHandle::invalid();
+            data.renderTextureSlotBindings[slotKey] = std::move(out);
+        }
         return data;
     }
 
@@ -117,6 +126,26 @@ namespace services {
         comp.defaultMaterialRef = material.defaultMaterialRef;
         comp.subMeshMaterials = material.subMeshMaterials;
         comp.parameterOverrides = material.parameterOverrides;
+
+        // VK-1418: apply per-slot RTT bindings. Store the source name and resolve the runtime
+        // entity handle from it (mirrors BillboardComponentService); empty names drop the binding.
+        comp.renderTextureSlotBindings.clear();
+        for (const auto& [slotKey, in] : material.renderTextureSlotBindings) {
+            if (in.sourceName.empty()) {
+                continue;
+            }
+            components::MaterialComponent::RenderTextureSlotBinding binding;
+            binding.sourceName = in.sourceName;
+            binding.source = entt::null;
+            auto nameView = registry.view<components::NameComponent, components::RenderTextureComponent>();
+            for (auto e : nameView) {
+                if (nameView.get<components::NameComponent>(e).name == binding.sourceName) {
+                    binding.source = e;
+                    break;
+                }
+            }
+            comp.renderTextureSlotBindings[slotKey] = std::move(binding);
+        }
         return true;
     }
 

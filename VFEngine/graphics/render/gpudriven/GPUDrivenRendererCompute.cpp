@@ -292,6 +292,9 @@ namespace render::gpudriven
         {
             if (mergedBuffer->isPersistentMode())
             {
+                // VK-1418: repoint RTT-bound material slots to this image's bindless slot before
+                // the dirty upload so the change rides the existing transfer→shader barrier.
+                patchRenderTextureMaterialSlots(imageIndex);
                 mergedBuffer->uploadDirtyObjects(cmd);
                 mergedBuffer->uploadActiveIndices(cmd);
             }
