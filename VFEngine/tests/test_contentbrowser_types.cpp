@@ -40,10 +40,10 @@ TEST_CASE("assetTypeInfo returns the matching entry")
 TEST_CASE("VFX Sequence type is registered in the table")
 {
     using windows::AssetType;
-    // The VFXSequence row reuses the VFX atlas icon but has its own label/type.
+    // The VFXSequence row has its own label/type and a dedicated atlas icon (slot 23).
     CHECK(windows::assetTypeInfo(AssetType::VFXSequence).type == AssetType::VFXSequence);
     CHECK(std::string(windows::assetTypeInfo(AssetType::VFXSequence).label) == "VFX Sequence");
-    CHECK(windows::assetTypeInfo(AssetType::VFXSequence).icon == windows::AtlasIcon::VFX);
+    CHECK(windows::assetTypeInfo(AssetType::VFXSequence).icon == windows::AtlasIcon::VFXSequence);
 }
 
 TEST_CASE("formatFileSize uses binary units")

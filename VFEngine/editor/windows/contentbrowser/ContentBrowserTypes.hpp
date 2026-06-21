@@ -63,7 +63,8 @@ namespace windows
         BehaviorTree = 19,
         Plugin = 20,
         InputMapping = 21,
-        Retarget = 22 // shared by .vfrig and .vfretarget (VK-910)
+        Retarget = 22, // shared by .vfrig and .vfretarget (VK-910)
+        VFXSequence = 23 // .vfVFXSequence combo asset (VK-1425)
     };
 
     // Canonical per-type display data. Single source of truth for the filter
@@ -104,7 +105,7 @@ namespace windows
             {Plugin,           "Plugin",            AtlasIcon::Plugin,       0xFFF74F4F},
             {InputMapping,     "Input Mapping",     AtlasIcon::InputMapping, 0xFFAAAAF7},
             {Retarget,         "Retarget",          AtlasIcon::Retarget,     0xFFD08AF7},
-            {VFXSequence,      "VFX Sequence",      AtlasIcon::VFX,          0xFFF74FC8},
+            {VFXSequence,      "VFX Sequence",      AtlasIcon::VFXSequence,  0xFFF74FC8},
             {Other,            "Other",             AtlasIcon::File,         0xFF909090}
         }};
         return table;
