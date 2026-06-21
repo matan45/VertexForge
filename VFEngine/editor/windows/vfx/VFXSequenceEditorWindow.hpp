@@ -4,6 +4,11 @@
 #include <memory>
 #include <string>
 
+namespace editor::vfxeditor
+{
+    class VFXPreviewPanel;
+}
+
 namespace windows
 {
     // Authoring window for a .vfVFXSequence "combo" asset: an ordered list of
@@ -22,19 +27,20 @@ namespace windows
         bool isDirty = false;
         bool needsInit = true;
 
-        // Timeline preview scrub. Drives a lightweight CPU particle simulation
-        // (no GPU / no VFX preview provider) so the whole combo can be previewed
-        // composited in one viewport — the runtime uses the real GPU path.
+        // Timeline scrub. Drives the real GPU single-emitter preview
+        // (VFXPreviewPanel / IVFXPreviewProvider) one step at a time: whichever
+        // step is active at the playhead is loaded and played. The runtime plays
+        // the full composited combo on the GPU in Play mode.
         float previewTime = 0.0f;
         bool previewPlaying = false;
         bool previewLoop = true;
+        int previewActiveStep = -1;             // step currently loaded into the panel
 
-        struct PreviewState;                    // CPU sim state (defined in .cpp)
-        std::unique_ptr<PreviewState> preview;
+        std::unique_ptr<editor::vfxeditor::VFXPreviewPanel> previewPanel;
 
     public:
         explicit VFXSequenceEditorWindow(const std::string& seqPath);
-        ~VFXSequenceEditorWindow() override;    // out-of-line (PreviewState is incomplete here)
+        ~VFXSequenceEditorWindow() override;    // out-of-line (VFXPreviewPanel is incomplete here)
 
         void draw() override;
         bool shouldClose() const override { return !isOpen; }
@@ -50,9 +56,9 @@ namespace windows
         void drawStepInspector();
         void drawTimeline();
 
-        // CPU combo preview.
+        // Real GPU preview (one active step at a time).
         void drawPreviewViewport();
-        void resetPreview();
-        void stepPreview(float dt);
+        int pickActiveStep() const;
+        void syncPreviewToStep(int stepIndex);
     };
 }

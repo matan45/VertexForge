@@ -1,4 +1,6 @@
 #include "VFXSequenceEditorWindow.hpp"
+#include "VFXPreviewPanel.hpp"
+#include "VFXPreviewParamsBuilder.hpp"
 #include "../../dragdrop/AssetDropTarget.hpp"
 
 #include "print/Log.hpp"
@@ -8,19 +10,14 @@
 
 #include <vfx/VFXSequenceAsset.hpp>
 #include <vfx/VFXAsset.hpp>
-#include <vfx/VFXTypes.hpp>
 #include <asset/AssetRef.hpp>
 #include <asset/AssetMetadataSerializer.hpp>
 
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/glm.hpp>
 #include <filesystem>
 #include <ctime>
 #include <algorithm>
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <vector>
-#include <variant>
+#include <string>
 
 namespace fs = std::filesystem;
 
@@ -60,123 +57,11 @@ namespace windows
 
             asset::AssetMetadataSerializer::save(meta, metaPath);
         }
-
-        // ===== CPU combo preview (editor-only; the runtime uses the GPU path) =====
-        // A deliberately lightweight simulation: enough to see WHEN each step
-        // fires, WHERE it sits (offset), and roughly its color/size/spread. Not a
-        // pixel match to the GPU shaders.
-        struct PreviewEmitterCfg
-        {
-            bool valid = false;
-            float spawnRate = 10.0f, lifetime = 2.0f, startSize = 1.0f, startSpeed = 1.0f;
-            glm::vec3 emitDir{0.0f, 1.0f, 0.0f};
-            glm::vec4 startColor{1.0f, 1.0f, 1.0f, 1.0f};
-            glm::vec3 gravity{0.0f};
-        };
-
-        struct PreviewParticle
-        {
-            glm::vec3 pos{0.0f};
-            glm::vec3 vel{0.0f};
-            float age = 0.0f, life = 1.0f, size = 1.0f;
-            glm::vec4 color{1.0f};
-        };
-
-        struct PreviewEmitterRuntime
-        {
-            std::vector<PreviewParticle> particles;
-            float spawnAccum = 0.0f;
-            uint32_t rng = 0x1234567u;
-        };
-
-        // xorshift32 -> [0,1)
-        inline float prngFloat(uint32_t& s)
-        {
-            s ^= s << 13; s ^= s >> 17; s ^= s << 5;
-            return static_cast<float>(s & 0xFFFFFFu) / static_cast<float>(0x1000000);
-        }
-        inline float prngSym(uint32_t& s) { return prngFloat(s) * 2.0f - 1.0f; }
-
-        // Read a property off a VFX graph node directly from the variant. Avoids
-        // VFXEmitterConfigLoader (which pulls in graphics-only render::vfx types).
-        float nodeFloat(const vfx::VFXNode& n, const char* key, float def)
-        {
-            auto it = n.properties.find(key);
-            if (it == n.properties.end()) return def;
-            if (const auto* p = std::get_if<float>(&it->second.value)) return *p;
-            if (const auto* p = std::get_if<int32_t>(&it->second.value)) return static_cast<float>(*p);
-            return def;
-        }
-        glm::vec3 nodeVec3(const vfx::VFXNode& n, const char* key, const glm::vec3& def)
-        {
-            auto it = n.properties.find(key);
-            if (it == n.properties.end()) return def;
-            if (const auto* p = std::get_if<glm::vec3>(&it->second.value)) return *p;
-            return def;
-        }
-        glm::vec4 nodeVec4(const vfx::VFXNode& n, const char* key, const glm::vec4& def)
-        {
-            auto it = n.properties.find(key);
-            if (it == n.properties.end()) return def;
-            if (const auto* p = std::get_if<glm::vec4>(&it->second.value)) return *p; // covers Vec4 and Color
-            return def;
-        }
-
-        PreviewEmitterCfg loadPreviewCfg(const vfx::VFXSequenceStep& step)
-        {
-            PreviewEmitterCfg cfg;
-            const std::string path = step.vfxRef.isValid() ? step.vfxRef.resolve() : std::string();
-            if (path.empty())
-                return cfg;
-            auto data = vfx::VFXAsset::load(path);
-            if (!data)
-                return cfg;
-            const vfx::VFXNode* emitter = data->graph.findEmitterNode();
-            if (!emitter)
-                return cfg;
-
-            cfg.spawnRate = nodeFloat(*emitter, "spawnRate", vfx::EmitterDefaults::SPAWN_RATE);
-            cfg.lifetime = nodeFloat(*emitter, "lifetime", vfx::EmitterDefaults::LIFETIME);
-            cfg.startSize = nodeFloat(*emitter, "startSize", vfx::EmitterDefaults::START_SIZE);
-            cfg.startSpeed = nodeFloat(*emitter, "startSpeed", vfx::EmitterDefaults::START_SPEED);
-            cfg.emitDir = nodeVec3(*emitter, "startVelocity", glm::vec3(0.0f, 1.0f, 0.0f));
-            cfg.startColor = nodeVec4(*emitter, "startColor", glm::vec4(1.0f));
-            // Gravity/forces are intentionally not simulated here — this preview is for
-            // timing/placement/color, not physics. cfg.gravity stays zero.
-
-            // Apply the step's name-keyed overrides (same names the runtime uses).
-            for (const auto& [name, value] : step.scalarOverrides)
-            {
-                if (name == "spawnRate") cfg.spawnRate = value;
-                else if (name == "lifetime") cfg.lifetime = value;
-                else if (name == "startSize") cfg.startSize = value;
-                else if (name == "startSpeed") cfg.startSpeed = value;
-            }
-            for (const auto& [name, value] : step.vectorOverrides)
-            {
-                if (name == "startColor") cfg.startColor = value;
-                else if (name == "emitDirection") cfg.emitDir = glm::vec3(value);
-            }
-
-            cfg.spawnRate = std::max(cfg.spawnRate, 0.0f);
-            cfg.lifetime = std::max(cfg.lifetime, 0.05f);
-            cfg.startSize = std::max(cfg.startSize, 0.001f);
-            cfg.valid = true;
-            return cfg;
-        }
     }
-
-    struct VFXSequenceEditorWindow::PreviewState
-    {
-        std::vector<PreviewEmitterCfg> cfgs;     // per step
-        std::vector<PreviewEmitterRuntime> rt;   // per step
-        float yaw = 0.7f, pitch = 0.35f, dist = 9.0f;
-        bool cfgsDirty = true;
-    };
 
     VFXSequenceEditorWindow::VFXSequenceEditorWindow(const std::string& seqPath)
         : seqPath(seqPath)
-        , preview(std::make_unique<PreviewState>())
+        , previewPanel(std::make_unique<editor::vfxeditor::VFXPreviewPanel>(this))
     {
         windowTitle = "VFX Sequence: " + fs::path(seqPath).filename().string();
     }
@@ -229,7 +114,11 @@ namespace windows
     void VFXSequenceEditorWindow::draw()
     {
         if (!isOpen)
+        {
+            if (previewPanel)
+                previewPanel->cleanup();
             return;
+        }
 
         if (needsInit)
         {
@@ -237,7 +126,7 @@ namespace windows
             needsInit = false;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(900, 600), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(960, 620), ImGuiCond_FirstUseEver);
 
         std::string title = windowTitle + (isDirty ? " *" : "  ") + "###VFXSequenceEditor:" + seqPath;
 
@@ -254,7 +143,7 @@ namespace windows
                 float spacingY = ImGui::GetStyle().ItemSpacing.y;
                 float topHeight = avail.y - timelineHeight - spacingY;
                 float listWidth = 220.0f;
-                float previewWidth = std::max(280.0f, avail.x * 0.38f);
+                float previewWidth = std::max(300.0f, avail.x * 0.40f);
                 float inspectorWidth = avail.x - listWidth - previewWidth - 2.0f * spacingX;
                 if (inspectorWidth < 200.0f)
                     inspectorWidth = 200.0f;
@@ -337,6 +226,7 @@ namespace windows
                 if (selectedStep == i) selectedStep = i - 1;
                 else if (selectedStep == i - 1) selectedStep = i;
                 isDirty = true;
+                previewActiveStep = -1;
                 ImGui::PopID();
                 continue;
             }
@@ -347,6 +237,7 @@ namespace windows
                 if (selectedStep == i) selectedStep = i + 1;
                 else if (selectedStep == i + 1) selectedStep = i;
                 isDirty = true;
+                previewActiveStep = -1;
                 ImGui::PopID();
                 continue;
             }
@@ -357,6 +248,7 @@ namespace windows
                 if (selectedStep == i) selectedStep = -1;
                 else if (selectedStep > i) --selectedStep;
                 isDirty = true;
+                previewActiveStep = -1;
                 ImGui::PopID();
                 break; // container mutated — restart next frame
             }
@@ -409,7 +301,7 @@ namespace windows
             {
                 step.vfxRef = ref;
                 isDirty = true;
-                if (preview) preview->cfgsDirty = true;
+                previewActiveStep = -1; // force the preview to reload this step
             }
         }
 
@@ -557,49 +449,44 @@ namespace windows
 
     void VFXSequenceEditorWindow::drawTimeline()
     {
-        // Scrub bar + transport that drives the CPU combo preview (see
-        // drawPreviewViewport). Step markers show each step at its startTime.
+        // Scrub/transport. As the playhead advances, the active step's real VFX
+        // is played in the preview viewport (one step at a time). Markers show
+        // each step at its startTime.
         float maxTime = 1.0f;
         for (const auto& step : data->steps)
             maxTime = std::max(maxTime, step.startTime + std::max(step.duration, 0.5f));
 
         ImGui::SetNextItemWidth(-300.0f);
-        if (ImGui::SliderFloat("##previewTime", &previewTime, 0.0f, maxTime, "t = %.2f s"))
-            resetPreview(); // jumping time invalidates the incremental sim
+        ImGui::SliderFloat("##previewTime", &previewTime, 0.0f, maxTime, "t = %.2f s");
         ImGui::SameLine();
         if (ImGui::Button(previewPlaying ? "Pause" : "Play"))
         {
             previewPlaying = !previewPlaying;
             if (previewPlaying && previewTime >= maxTime)
-            {
                 previewTime = 0.0f;
-                resetPreview();
-            }
         }
         ImGui::SameLine();
         if (ImGui::Button("Reset"))
         {
             previewTime = 0.0f;
             previewPlaying = false;
-            resetPreview();
+            previewActiveStep = -1;
         }
         ImGui::SameLine();
         if (ImGui::Button("Reload"))
-            resetPreview(); // pick up edited child .vfVFX / params
+            previewActiveStep = -1; // re-load the active step's (possibly edited) .vfVFX
         ImGui::SameLine();
         ImGui::Checkbox("Loop", &previewLoop);
 
         if (previewPlaying)
         {
-            const float dt = std::min(ImGui::GetIO().DeltaTime, 0.05f);
-            previewTime += dt;
-            stepPreview(dt);
+            previewTime += ImGui::GetIO().DeltaTime;
             if (previewTime > maxTime)
             {
                 if (previewLoop)
                 {
                     previewTime = 0.0f;
-                    resetPreview();
+                    previewActiveStep = -1;
                 }
                 else
                 {
@@ -636,181 +523,109 @@ namespace windows
         ImGui::Dummy(ImVec2(region.x, barH));
     }
 
-    void VFXSequenceEditorWindow::resetPreview()
+    int VFXSequenceEditorWindow::pickActiveStep() const
     {
-        if (!preview)
-            return;
-        preview->cfgs.clear();
-        preview->rt.clear();
-        preview->cfgsDirty = true;
-    }
+        if (!data || data->steps.empty())
+            return -1;
 
-    void VFXSequenceEditorWindow::stepPreview(float dt)
-    {
-        if (!preview || !data)
-            return;
-
-        const size_t n = data->steps.size();
-        if (preview->cfgsDirty || preview->cfgs.size() != n)
+        if (previewPlaying)
         {
-            preview->cfgs.resize(n);
-            preview->rt.assign(n, PreviewEmitterRuntime{});
-            for (size_t i = 0; i < n; ++i)
+            // The most-recently-started time-driven step at/under the playhead.
+            int best = -1;
+            float bestStart = -1.0f;
+            for (int i = 0; i < static_cast<int>(data->steps.size()); ++i)
             {
-                preview->cfgs[i] = loadPreviewCfg(data->steps[i]);
-                preview->rt[i].rng = 0x9E3779B9u ^ static_cast<uint32_t>(i * 2654435761u + 1u);
-            }
-            preview->cfgsDirty = false;
-        }
-
-        constexpr size_t kMaxParticlesPerEmitter = 400;
-        for (size_t i = 0; i < n; ++i)
-        {
-            const auto& step = data->steps[i];
-            const auto& cfg = preview->cfgs[i];
-            auto& rt = preview->rt[i];
-            if (!cfg.valid)
-                continue;
-
-            // Time-driven steps emit while the playhead is inside their window;
-            // cue-driven steps don't auto-fire in the preview.
-            const bool timeDriven = step.cueName.empty();
-            const float emitWindow = step.loop ? 1.0e9f
-                                               : (step.duration > 0.0f ? step.duration : cfg.lifetime);
-            const bool emitting = timeDriven && previewTime >= step.startTime &&
-                                  previewTime < step.startTime + emitWindow;
-
-            if (emitting)
-            {
-                rt.spawnAccum += cfg.spawnRate * dt;
-                while (rt.spawnAccum >= 1.0f && rt.particles.size() < kMaxParticlesPerEmitter)
+                const auto& s = data->steps[static_cast<size_t>(i)];
+                if (!s.cueName.empty() || !s.vfxRef.isValid())
+                    continue; // cue-driven steps don't auto-fire in the preview
+                if (previewTime + 1.0e-4f >= s.startTime && s.startTime >= bestStart)
                 {
-                    rt.spawnAccum -= 1.0f;
-
-                    glm::vec3 dir = cfg.emitDir;
-                    if (glm::dot(dir, dir) < 1.0e-6f)
-                        dir = glm::vec3(0.0f, 1.0f, 0.0f);
-                    dir = glm::normalize(dir);
-                    const glm::vec3 jitter(prngSym(rt.rng), prngSym(rt.rng), prngSym(rt.rng));
-                    dir = glm::normalize(dir + 0.25f * jitter);
-
-                    PreviewParticle p;
-                    p.pos = step.localPosition;
-                    p.vel = dir * cfg.startSpeed;
-                    p.life = cfg.lifetime;
-                    p.size = cfg.startSize;
-                    p.color = cfg.startColor;
-                    rt.particles.push_back(p);
+                    bestStart = s.startTime;
+                    best = i;
                 }
             }
-
-            for (auto& p : rt.particles)
-            {
-                p.age += dt;
-                p.vel += cfg.gravity * dt;
-                p.pos += p.vel * dt;
-            }
-            rt.particles.erase(
-                std::remove_if(rt.particles.begin(), rt.particles.end(),
-                    [](const PreviewParticle& p) { return p.age >= p.life; }),
-                rt.particles.end());
+            if (best >= 0)
+                return best;
         }
+
+        // Not playing (or nothing active yet): preview the selected step.
+        if (selectedStep >= 0 && selectedStep < static_cast<int>(data->steps.size()) &&
+            data->steps[static_cast<size_t>(selectedStep)].vfxRef.isValid())
+            return selectedStep;
+
+        return -1;
+    }
+
+    void VFXSequenceEditorWindow::syncPreviewToStep(int stepIndex)
+    {
+        previewActiveStep = stepIndex;
+        if (!previewPanel || !data)
+            return;
+
+        if (stepIndex < 0 || stepIndex >= static_cast<int>(data->steps.size()))
+        {
+            previewPanel->stop();
+            return;
+        }
+
+        const auto& step = data->steps[static_cast<size_t>(stepIndex)];
+        const std::string path = step.vfxRef.isValid() ? step.vfxRef.resolve() : std::string();
+        if (path.empty())
+        {
+            previewPanel->stop();
+            return;
+        }
+
+        auto vfxData = vfx::VFXAsset::load(path);
+        if (!vfxData)
+        {
+            previewPanel->stop();
+            return;
+        }
+
+        services::VFXPreviewParams params = editor::vfxeditor::buildVFXPreviewParams(*vfxData);
+
+        // Apply the step's name-keyed overrides for parity with the runtime.
+        for (const auto& [name, value] : step.scalarOverrides)
+        {
+            if (name == "spawnRate") params.spawnRate = value;
+            else if (name == "lifetime") params.lifetime = value;
+            else if (name == "startSize") params.startSize = value;
+            else if (name == "startSpeed") params.startSpeed = value;
+            else if (name == "stretchMultiplier") params.stretchMultiplier = value;
+        }
+        for (const auto& [name, value] : step.vectorOverrides)
+        {
+            if (name == "startColor") params.startColor = value;
+            else if (name == "emitDirection") params.emitDirection = glm::vec3(value);
+        }
+
+        previewPanel->setParams(params);
+        previewPanel->play();
     }
 
     void VFXSequenceEditorWindow::drawPreviewViewport()
     {
-        ImVec2 size = ImGui::GetContentRegionAvail();
-        ImVec2 p0 = ImGui::GetCursorScreenPos();
-        ImVec2 p1 = ImVec2(p0.x + size.x, p0.y + size.y);
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(p0, p1, IM_COL32(18, 18, 22, 255));
-        if (size.x < 16.0f || size.y < 16.0f || !preview)
+        if (!previewPanel)
             return;
+        if (!previewPanel->isInitialized())
+            previewPanel->init();
 
-        dl->PushClipRect(p0, p1, true);
+        const int active = pickActiveStep();
+        if (active != previewActiveStep)
+            syncPreviewToStep(active);
 
-        // Orbit interaction over the viewport.
-        ImGui::InvisibleButton("##previewVP", size);
-        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+        if (previewActiveStep >= 0 && previewActiveStep < static_cast<int>(data->steps.size()))
         {
-            const ImVec2 d = ImGui::GetIO().MouseDelta;
-            preview->yaw += d.x * 0.01f;
-            preview->pitch = std::clamp(preview->pitch + d.y * 0.01f, -1.45f, 1.45f);
+            const auto& s = data->steps[static_cast<size_t>(previewActiveStep)];
+            const std::string label = s.label.empty() ? ("step " + std::to_string(previewActiveStep)) : s.label;
+            ImGui::Text("Previewing: %s", label.c_str());
         }
-        if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
-            preview->dist = std::clamp(preview->dist - ImGui::GetIO().MouseWheel * 0.6f, 1.5f, 40.0f);
-
-        // Camera.
-        const float cp = std::cos(preview->pitch), sp = std::sin(preview->pitch);
-        const float cy = std::cos(preview->yaw), sy = std::sin(preview->yaw);
-        const glm::vec3 target(0.0f, 1.0f, 0.0f);
-        const glm::vec3 eye = target + glm::vec3(sy * cp, sp, cy * cp) * preview->dist;
-        const glm::mat4 view = glm::lookAt(eye, target, glm::vec3(0.0f, 1.0f, 0.0f));
-        const float fov = glm::radians(45.0f);
-        const float aspect = size.x / size.y;
-        const glm::mat4 proj = glm::perspective(fov, aspect, 0.05f, 200.0f);
-        const float focal = size.y / (2.0f * std::tan(fov * 0.5f));
-
-        auto project = [&](const glm::vec3& wp, ImVec2& out, float& depth) -> bool
+        else
         {
-            const glm::vec4 vp = view * glm::vec4(wp, 1.0f);
-            depth = -vp.z;
-            if (depth <= 0.05f)
-                return false;
-            const glm::vec4 c = proj * vp;
-            if (c.w <= 0.0f)
-                return false;
-            const glm::vec3 ndc = glm::vec3(c) / c.w;
-            out.x = p0.x + (ndc.x * 0.5f + 0.5f) * size.x;
-            out.y = p0.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * size.y;
-            return true;
-        };
-
-        // Reference ground grid.
-        for (int g = -5; g <= 5; ++g)
-        {
-            ImVec2 a, b; float da = 0.0f, db = 0.0f;
-            if (project(glm::vec3(static_cast<float>(g), 0.0f, -5.0f), a, da) &&
-                project(glm::vec3(static_cast<float>(g), 0.0f, 5.0f), b, db))
-                dl->AddLine(a, b, IM_COL32(60, 60, 70, 110));
-            if (project(glm::vec3(-5.0f, 0.0f, static_cast<float>(g)), a, da) &&
-                project(glm::vec3(5.0f, 0.0f, static_cast<float>(g)), b, db))
-                dl->AddLine(a, b, IM_COL32(60, 60, 70, 110));
+            ImGui::TextDisabled("Select a step (or press Play) to preview its VFX");
         }
 
-        // Gather particle splats, sort back-to-front, draw.
-        struct Splat { float depth; ImVec2 sc; float r; ImU32 col; };
-        std::vector<Splat> splats;
-        for (const auto& emitter : preview->rt)
-        {
-            for (const auto& part : emitter.particles)
-            {
-                ImVec2 sc; float depth = 0.0f;
-                if (!project(part.pos, sc, depth))
-                    continue;
-                const float t = part.life > 0.0f ? part.age / part.life : 1.0f;
-                const float alpha = std::clamp((1.0f - t) * part.color.a, 0.0f, 1.0f);
-                if (alpha <= 0.01f)
-                    continue;
-                const float r = std::clamp(part.size * focal / depth * 0.5f, 1.5f, 64.0f);
-                const ImU32 col = IM_COL32(
-                    static_cast<int>(std::clamp(part.color.r, 0.0f, 1.0f) * 255.0f),
-                    static_cast<int>(std::clamp(part.color.g, 0.0f, 1.0f) * 255.0f),
-                    static_cast<int>(std::clamp(part.color.b, 0.0f, 1.0f) * 255.0f),
-                    static_cast<int>(alpha * 255.0f));
-                splats.push_back({depth, sc, r, col});
-            }
-        }
-        std::sort(splats.begin(), splats.end(),
-                  [](const Splat& a, const Splat& b) { return a.depth > b.depth; });
-        for (const auto& s : splats)
-            dl->AddCircleFilled(s.sc, s.r, s.col);
-
-        char info[80];
-        std::snprintf(info, sizeof(info), "t=%.2fs   particles=%d   (drag: orbit, wheel: zoom)",
-                      previewTime, static_cast<int>(splats.size()));
-        dl->AddText(ImVec2(p0.x + 6.0f, p0.y + 4.0f), IM_COL32(200, 200, 210, 255), info);
-
-        dl->PopClipRect();
+        previewPanel->draw();
     }
 }
