@@ -1,5 +1,5 @@
-// CPU-only coverage for VK-1418: per-entity binding of a material texture slot
-// (albedo/emission) to a live Render Texture.
+// CPU-only coverage for VK-1418: per-entity binding of the albedo material texture
+// slot to a live Render Texture.
 //
 // Mirrors the BillboardComponent renderTextureSource by-name re-resolve pattern:
 //   - Only the source *name* is serialized; the entity handle is runtime-only.
@@ -45,25 +45,20 @@ TEST_SUITE("MaterialRttSlotBinding")
         components::MaterialComponent mat;
         // A stray runtime handle must NOT be serialized; only the name persists.
         mat.renderTextureSlotBindings["albedo"] = {"MonitorFeed", static_cast<entt::entity>(123)};
-        mat.renderTextureSlotBindings["emission"] = {"GlowFeed", static_cast<entt::entity>(456)};
 
         nlohmann::json j = serialization::SceneSerialization::serializeMaterial(mat);
 
         REQUIRE(j.contains("renderTextureSlotBindings"));
         CHECK(j["renderTextureSlotBindings"]["albedo"].get<std::string>() == "MonitorFeed");
-        CHECK(j["renderTextureSlotBindings"]["emission"].get<std::string>() == "GlowFeed");
 
         components::MaterialComponent loaded;
         serialization::SceneSerialization::deserializeMaterial(j, loaded);
 
         REQUIRE(loaded.renderTextureSlotBindings.count("albedo") == 1);
-        REQUIRE(loaded.renderTextureSlotBindings.count("emission") == 1);
         CHECK(loaded.renderTextureSlotBindings["albedo"].sourceName == "MonitorFeed");
-        CHECK(loaded.renderTextureSlotBindings["emission"].sourceName == "GlowFeed");
         // The handle is runtime-only — it must come back as null, resolved later by name.
         // Extra parens force eager bool eval, avoiding the doctest/EnTT operator== ambiguity.
         CHECK((loaded.renderTextureSlotBindings["albedo"].source == entt::null));
-        CHECK((loaded.renderTextureSlotBindings["emission"].source == entt::null));
     }
 
     TEST_CASE("empty-name bindings are not serialized")
@@ -109,22 +104,22 @@ TEST_SUITE("MaterialRttSlotBinding")
         services::RenderTextureSlotBindingData binding;
         binding.sourceName = "Feed01";
         binding.source = services::EntityHandle::invalid(); // editor may not know the handle
-        data.renderTextureSlotBindings["emission"] = binding;
+        data.renderTextureSlotBindings["albedo"] = binding;
 
         REQUIRE(service.setMaterialData(handleOf(meshEntity), data));
 
         // The component must have resolved the source entity from the name.
         const auto& comp = meshEntity.getComponent<components::MaterialComponent>();
-        REQUIRE(comp.renderTextureSlotBindings.count("emission") == 1);
-        CHECK(comp.renderTextureSlotBindings.at("emission").sourceName == "Feed01");
-        CHECK(comp.renderTextureSlotBindings.at("emission").source == rttEntity.getHandle());
+        REQUIRE(comp.renderTextureSlotBindings.count("albedo") == 1);
+        CHECK(comp.renderTextureSlotBindings.at("albedo").sourceName == "Feed01");
+        CHECK(comp.renderTextureSlotBindings.at("albedo").source == rttEntity.getHandle());
 
         // get surfaces the binding back out with the resolved handle.
         auto out = service.getMaterialData(handleOf(meshEntity));
         REQUIRE(out.has_value());
-        REQUIRE(out->renderTextureSlotBindings.count("emission") == 1);
-        CHECK(out->renderTextureSlotBindings.at("emission").sourceName == "Feed01");
-        CHECK(out->renderTextureSlotBindings.at("emission").source.isValid());
+        REQUIRE(out->renderTextureSlotBindings.count("albedo") == 1);
+        CHECK(out->renderTextureSlotBindings.at("albedo").sourceName == "Feed01");
+        CHECK(out->renderTextureSlotBindings.at("albedo").source.isValid());
     }
 
     TEST_CASE("setMaterialData drops bindings with empty source names")

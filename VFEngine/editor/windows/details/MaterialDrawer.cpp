@@ -245,8 +245,6 @@ namespace windows::details
         bool changed = false;
 
         changed |= drawRenderTextureSlot(albedoRttPicker, "albedo", "Albedo \xE2\x86\x90 RTT", data);
-        ImGui::Spacing();
-        changed |= drawRenderTextureSlot(emissionRttPicker, "emission", "Emission \xE2\x86\x90 RTT", data);
 
         if (changed)
         {

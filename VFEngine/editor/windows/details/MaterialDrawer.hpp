@@ -12,9 +12,8 @@ namespace windows::details
     {
     private:
         std::unordered_map<std::string, std::vector<std::string>> submeshNameCache;
-        // VK-1418: one picker per RTT-drivable slot (albedo, emission).
+        // VK-1418: one picker for the RTT-drivable albedo slot.
         RenderTexturePickerWidget albedoRttPicker;
-        RenderTexturePickerWidget emissionRttPicker;
 
     public:
         void draw(services::EntityHandle handle);

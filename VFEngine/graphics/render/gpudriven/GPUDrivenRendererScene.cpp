@@ -593,11 +593,8 @@ namespace render::gpudriven
                     obj.textureIndices0.x = idx;
                     dirty = true;
                 }
-                else if (slotKey == "emission")
-                {
-                    obj.textureIndices1.z = idx;
-                    dirty = true;
-                }
+                // Only the albedo slot is RTT-drivable. Any other stored key (e.g. a stale
+                // "emission" binding from an older scene) is intentionally ignored.
             }
             if (dirty)
                 mergedBuffer->markSlotDirty(slot);
