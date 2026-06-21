@@ -3,6 +3,7 @@
 #include <vfx/VFXSequenceTypes.hpp>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace editor::vfxeditor
 {
@@ -46,6 +47,11 @@ namespace windows
         int timelineFirstFrame = 0;
         bool timelineExpanded = true;
 
+        // Optional reference mesh (editor-only, not saved): when set, the per-step
+        // Socket field becomes a dropdown of that mesh's authored sockets.
+        std::string socketMeshPath;
+        std::vector<std::string> socketNames;
+
     public:
         explicit VFXSequenceEditorWindow(const std::string& seqPath);
         ~VFXSequenceEditorWindow() override;    // out-of-line (VFXPreviewPanel is incomplete here)
@@ -68,5 +74,8 @@ namespace windows
         void drawPreviewViewport();
         int pickActiveStep() const;
         void syncPreviewToStep(int stepIndex);
+
+        void loadSocketNames();             // read sockets from socketMeshPath
+        void drawSocketField(vfx::VFXSequenceStep& step); // dropdown if a mesh is set, else text
     };
 }

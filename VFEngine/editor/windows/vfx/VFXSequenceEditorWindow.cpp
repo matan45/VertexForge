@@ -13,6 +13,7 @@
 #include <vfx/VFXAsset.hpp>
 #include <asset/AssetRef.hpp>
 #include <asset/AssetMetadataSerializer.hpp>
+#include <resource/MeshStreamHandle.hpp>
 
 #include <glm/glm.hpp>
 #include <filesystem>
@@ -292,7 +293,101 @@ namespace windows
             selectedStep = static_cast<int>(data->steps.size()) - 1;
             isDirty = true;
         }
+
+        // Optional reference mesh: drives the per-step Socket dropdown. Drop a
+        // .vfMesh that has the sockets your combo will attach to. Not saved.
+        ImGui::SameLine();
+        ImGui::TextDisabled("|");
+        ImGui::SameLine();
+        const std::string meshLabel = socketMeshPath.empty()
+            ? std::string("Socket Mesh: (drop a .vfMesh)")
+            : ("Socket Mesh: " + fs::path(socketMeshPath).filename().string() +
+               "  [" + std::to_string(socketNames.size()) + "]");
+        ImGui::Button(meshLabel.c_str());
+        if (auto dropped = acceptAssetDropOnLastItem("##socketMesh", {".vfmesh"}))
+        {
+            socketMeshPath = *dropped;
+            loadSocketNames();
+        }
+        if (!socketMeshPath.empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Clear Mesh"))
+            {
+                socketMeshPath.clear();
+                socketNames.clear();
+            }
+        }
+
         ImGui::Separator();
+    }
+
+    void VFXSequenceEditorWindow::loadSocketNames()
+    {
+        socketNames.clear();
+        if (socketMeshPath.empty())
+            return;
+
+        auto stream = resource::MeshStreamResource::openStream(socketMeshPath);
+        if (!stream || !stream->hasSkeletonData())
+        {
+            vfLogWarning("[VFXSequence] mesh '{}' has no skeleton/sockets", socketMeshPath);
+            return;
+        }
+
+        resource::SkeletonData skeleton;
+        if (stream->readSkeleton(skeleton))
+        {
+            socketNames.reserve(skeleton.sockets.size());
+            for (const auto& socket : skeleton.sockets)
+                socketNames.push_back(socket.name);
+        }
+    }
+
+    void VFXSequenceEditorWindow::drawSocketField(vfx::VFXSequenceStep& step)
+    {
+        if (socketNames.empty())
+        {
+            // No reference mesh loaded — free text (must match a socket on the
+            // target entity's mesh at runtime).
+            char socketBuf[256];
+            std::strncpy(socketBuf, step.socketName.c_str(), sizeof(socketBuf) - 1);
+            socketBuf[sizeof(socketBuf) - 1] = '\0';
+            if (ImGui::InputText("Socket", socketBuf, IM_ARRAYSIZE(socketBuf)))
+            {
+                step.socketName = socketBuf;
+                isDirty = true;
+            }
+            return;
+        }
+
+        // Dropdown of the reference mesh's sockets (+ none + keep-custom).
+        const std::string preview = step.socketName.empty() ? std::string("(none)") : step.socketName;
+        if (ImGui::BeginCombo("Socket", preview.c_str()))
+        {
+            if (ImGui::Selectable("(none)", step.socketName.empty()))
+            {
+                step.socketName.clear();
+                isDirty = true;
+            }
+            for (const auto& name : socketNames)
+            {
+                const bool selected = (step.socketName == name);
+                if (ImGui::Selectable(name.c_str(), selected))
+                {
+                    step.socketName = name;
+                    isDirty = true;
+                }
+            }
+            // Preserve a custom value not present on this mesh (e.g. a different target rig).
+            if (!step.socketName.empty() &&
+                std::find(socketNames.begin(), socketNames.end(), step.socketName) == socketNames.end())
+            {
+                ImGui::Separator();
+                ImGui::TextDisabled("custom: %s", step.socketName.c_str());
+            }
+            ImGui::EndCombo();
+        }
     }
 
     void VFXSequenceEditorWindow::drawStepList()
@@ -430,14 +525,7 @@ namespace windows
         if (ImGui::DragFloat3("Local Scale", &step.localScale.x, 0.01f, 0.0001f, 1000.0f))
             isDirty = true;
 
-        char socketBuf[256];
-        std::strncpy(socketBuf, step.socketName.c_str(), sizeof(socketBuf) - 1);
-        socketBuf[sizeof(socketBuf) - 1] = '\0';
-        if (ImGui::InputText("Socket", socketBuf, IM_ARRAYSIZE(socketBuf)))
-        {
-            step.socketName = socketBuf;
-            isDirty = true;
-        }
+        drawSocketField(step);
 
         ImGui::Separator();
 
