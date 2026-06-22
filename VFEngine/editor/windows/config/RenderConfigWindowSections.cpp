@@ -446,6 +446,20 @@ namespace windows
             if (settings.rtShadows.enabled)
             {
                 ImGui::Spacing();
+                ImGui::SeparatorText("Resolution");
+                // VK-1430: shared resolution scale for directional + spot + point RT shadows. Half
+                // traces+denoises at half res then edge-aware upsamples to full; Full is the default.
+                const char* resItems[] = { "Full", "Half" };
+                int resIndex = static_cast<int>(settings.rtShadows.shadowResolutionScale);
+                if (ImGui::Combo("Shadow Resolution", &resIndex, resItems, IM_ARRAYSIZE(resItems)))
+                {
+                    settings.rtShadows.shadowResolutionScale =
+                        static_cast<types::ShadowResolutionScale>(resIndex);
+                    markDirty();
+                }
+                ImGui::TextDisabled("Half: ~2-4x faster trace+denoise, joint-bilateral upsampled.");
+
+                ImGui::Spacing();
                 ImGui::SeparatorText("Ray Parameters");
                 if (ImGui::SliderFloat("Max Ray Distance", &settings.rtShadows.maxRayDistance, 50.0f, 2000.0f, "%.0f"))
                     markDirty();

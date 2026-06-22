@@ -71,6 +71,9 @@ namespace render::raytracing
         // Fragment shader consumption: denoised mask array.
         vk::DescriptorSetLayout getDenoisedMaskSamplerLayout() const { return denoisedMaskSamplerLayout; }
         vk::DescriptorSet getDenoisedMaskSamplerDescriptorSet() const { return denoisedMaskSamplerDescSet; }
+        // VK-1430: per-slice denoised layer view (e2D), read by the half-res layered upsample as input.
+        // The output image carries eSampled usage, so this storage-style layer view is samplable too.
+        vk::ImageView getDenoisedMaskLayerView(uint32_t slice) const { return denoisedOutputLayerView[slice]; }
 
         void setTemporalBlend(float v) { temporalBlend = v; }
         void setDepthThreshold(float v) { depthThreshold = v; }

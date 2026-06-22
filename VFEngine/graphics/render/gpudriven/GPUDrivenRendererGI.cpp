@@ -6,6 +6,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/RenderManager.hpp"
 #include "../../core/GraphicsConstants.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "types/RenderSettings.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
@@ -416,6 +417,10 @@ namespace render::gpudriven
                 rtShadowProfiler->markBLASBuilt();
             }
 
+            // Drain queued BLAS compactions before the TLAS build so compacted device
+            // addresses (and the forced-rebuild flag) are consumed this same frame (VK-1430).
+            accelStructManager->processPendingCompactions(cmd);
+
             {
                 bool hasTerrainAS = terrain.adapter && terrain.pipeline &&
                                     terrain.pipeline->getCurrentTileCount() > 0;
@@ -501,6 +506,11 @@ namespace render::gpudriven
     vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTShadowMaskLayout() const
     {
         if (!rtShadowPipeline || !rtShadowPipeline->isInitialized()) return nullptr;
+        // VK-1430: in Half mode the full-res producer the fragment shader samples is the upsample,
+        // not the (half-res) denoiser. Its sampler set/layout mirror the denoiser's exactly, so the
+        // set-13 vkCopyDescriptorSets repoint stays validation-clean.
+        if (rtShadowHalfResolution && rtShadowUpsample && rtShadowUpsample->isInitialized())
+            return rtShadowUpsample->getOutputSamplerLayout();
         // Same denoised-vs-raw selection as the mesh/terrain pipelines (see dispatchRTShadow).
         return (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
             ? rtShadowDenoiser->getDenoisedMaskSamplerLayout()
@@ -510,6 +520,8 @@ namespace render::gpudriven
     vk::DescriptorSet GPUDrivenRenderer::getActiveRTShadowMaskDescriptorSet() const
     {
         if (!rtShadowPipeline || !rtShadowPipeline->isInitialized()) return nullptr;
+        if (rtShadowHalfResolution && rtShadowUpsample && rtShadowUpsample->isInitialized())
+            return rtShadowUpsample->getOutputSamplerDescriptorSet();
         return (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
             ? rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
             : rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
@@ -518,6 +530,8 @@ namespace render::gpudriven
     vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTSpotShadowMaskLayout() const
     {
         if (!rtSpotShadowPipeline || !rtSpotShadowPipeline->isInitialized()) return nullptr;
+        if (rtShadowHalfResolution && rtSpotShadowUpsample && rtSpotShadowUpsample->isInitialized())
+            return rtSpotShadowUpsample->getOutputSamplerLayout();
         return (rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized())
             ? rtSpotShadowDenoiser->getDenoisedMaskSamplerLayout()
             : rtSpotShadowPipeline->getShadowMaskSamplerLayout();
@@ -526,6 +540,8 @@ namespace render::gpudriven
     vk::DescriptorSet GPUDrivenRenderer::getActiveRTSpotShadowMaskDescriptorSet() const
     {
         if (!rtSpotShadowPipeline || !rtSpotShadowPipeline->isInitialized()) return nullptr;
+        if (rtShadowHalfResolution && rtSpotShadowUpsample && rtSpotShadowUpsample->isInitialized())
+            return rtSpotShadowUpsample->getOutputSamplerDescriptorSet();
         return (rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized())
             ? rtSpotShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
             : rtSpotShadowPipeline->getShadowMaskSamplerDescriptorSet();
@@ -562,6 +578,8 @@ namespace render::gpudriven
     vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTPointShadowMaskLayout() const
     {
         if (!rtPointShadowPipeline || !rtPointShadowPipeline->isInitialized()) return nullptr;
+        if (rtShadowHalfResolution && rtPointShadowUpsample && rtPointShadowUpsample->isInitialized())
+            return rtPointShadowUpsample->getOutputSamplerLayout();
         return (rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized())
             ? rtPointShadowDenoiser->getDenoisedMaskSamplerLayout()
             : rtPointShadowPipeline->getShadowMaskSamplerLayout();
@@ -570,9 +588,74 @@ namespace render::gpudriven
     vk::DescriptorSet GPUDrivenRenderer::getActiveRTPointShadowMaskDescriptorSet() const
     {
         if (!rtPointShadowPipeline || !rtPointShadowPipeline->isInitialized()) return nullptr;
+        if (rtShadowHalfResolution && rtPointShadowUpsample && rtPointShadowUpsample->isInitialized())
+            return rtPointShadowUpsample->getOutputSamplerDescriptorSet();
         return (rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized())
             ? rtPointShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
             : rtPointShadowPipeline->getShadowMaskSamplerDescriptorSet();
+    }
+
+    void GPUDrivenRenderer::upsampleLayeredRTShadow(vk::CommandBuffer cmd,
+                                                    raytracing::RTLayeredShadowUpsamplePipeline& upsample,
+                                                    const raytracing::RTLayeredShadowDenoiser& denoiser,
+                                                    const std::vector<raytracing::RTLayeredDispatchInfo>& slices,
+                                                    uint32_t traceW, uint32_t traceH,
+                                                    uint32_t fullW, uint32_t fullH,
+                                                    uint32_t frameIndex)
+    {
+        if (slices.empty()) return;
+
+        std::vector<raytracing::RTLayeredUpsampleInfo> upsampleList;
+        upsampleList.reserve(slices.size());
+        for (const auto& d : slices)
+        {
+            raytracing::RTLayeredUpsampleInfo ui{};
+            ui.slice = d.slice;
+            ui.halfResDenoisedLayerView = denoiser.getDenoisedMaskLayerView(d.slice);
+            upsampleList.push_back(ui);
+        }
+
+        // The denoiser left depth in attachment + normal in color-attachment layout; transition both
+        // to SHADER_READ for the upsample guide reads, then restore so downstream passes see the
+        // legacy (attachment) state — identical to the directional path's dance.
+        core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDepthImage(),
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eDepth);
+        core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        // VK-1430: make the layered denoiser's compute write to the denoised mask array visible to
+        // the upsample's compute reads. Its final transition (eGeneral->eShaderReadOnlyOptimal) only
+        // scoped the write to the FRAGMENT stage, so the compute reads below would be a RAW hazard
+        // without this compute->compute dependency. One global memory barrier covers every slice; the
+        // array is already in eShaderReadOnlyOptimal so no layout change is needed.
+        {
+            vk::MemoryBarrier maskBarrier{};
+            maskBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+            maskBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eComputeShader,
+                vk::PipelineStageFlagBits::eComputeShader,
+                {}, 1, &maskBarrier, 0, nullptr, 0, nullptr);
+        }
+
+        upsample.dispatch(cmd, upsampleList,
+            depthPrepass->getDepthImageView(), depthPrepass->getNormalImageView(),
+            traceW, traceH, fullW, fullH,
+            rtShadowUpsampleDepthThreshold, rtShadowUpsampleNormalExp,
+            frameIndex);
+
+        core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDepthImage(),
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageAspectFlagBits::eDepth);
+        core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 
     bool GPUDrivenRenderer::isRTPointShadowReady() const
@@ -930,33 +1013,31 @@ namespace render::gpudriven
         uint32_t h = depthPrepass->getHeight();
         if (w != 0 && h != 0)
         {
-            if (rtShadowPipeline->resize(w, h) && rtShadowProfiler)
+            // VK-1430: trace + denoiser are sized to the (possibly half) trace dims; the upsample
+            // output (Half only) is sized to full res. resize() early-outs when unchanged, so a
+            // Full->Half toggle (which flips rtShadowHalfResolution in applyRTShadowSettings) auto-
+            // reallocates everything to the right dims on the next frame.
+            auto [tw, th] = rtShadowTraceDims(w, h);
+            if (rtShadowPipeline->resize(tw, th) && rtShadowProfiler)
                 rtShadowProfiler->invalidateFrameSlots();
             if (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+                rtShadowDenoiser->resize(tw, th);
+            // Lazily create the upsample the first time we run a Half frame with the pipeline online
+            // (covers scenes that load with Half already set, before any Full->Half toggle).
+            if (rtShadowHalfResolution && !rtShadowUpsample)
+                rtShadowUpsample = std::make_unique<raytracing::RTShadowUpsamplePipeline>(device);
+            if (rtShadowHalfResolution && rtShadowUpsample)
+                rtShadowUpsample->resize(w, h);
+
+            // Re-point the set-13 producer after any resize. getActiveRTShadowMaskDescriptorSet()
+            // already selects upsample (Half) vs denoiser vs raw, so this one call covers all modes.
+            vk::DescriptorSet activeMask = getActiveRTShadowMaskDescriptorSet();
+            if (activeMask)
             {
-                rtShadowDenoiser->resize(w, h);
-                // Re-bind denoised output after resize
-                if (meshShaderPipeline)
-                    meshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
-                if (transparentMeshShaderPipeline)
-                    transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
-                if (wboitMeshShaderPipeline)
-                    wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
-                if (terrain.pipeline)
-                    terrain.pipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
-            }
-            else
-            {
-                // No denoiser: update mesh pipelines with raw shadow mask after resize
-                vk::DescriptorSet rawMask = rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
-                if (meshShaderPipeline)
-                    meshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
-                if (transparentMeshShaderPipeline)
-                    transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
-                if (wboitMeshShaderPipeline)
-                    wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
-                if (terrain.pipeline)
-                    terrain.pipeline->updateRTShadowMaskDescriptor(rawMask);
+                if (meshShaderPipeline) meshShaderPipeline->updateRTShadowMaskDescriptor(activeMask);
+                if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(activeMask);
+                if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(activeMask);
+                if (terrain.pipeline) terrain.pipeline->updateRTShadowMaskDescriptor(activeMask);
             }
         }
 
@@ -1029,6 +1110,12 @@ namespace render::gpudriven
                 vk::PipelineStageFlagBits::eComputeShader);
         }
 
+        // VK-1430: trace + denoise run at trace dims (half when Half, full otherwise). depth/normal
+        // are always full-res; the trace samples them by normalized UV (rt_shadow.glsl line 42), so a
+        // half thread grid maps cleanly to [0,1]. In Half mode the upsample (below) reconstructs full
+        // res. RR bypass keeps the raw (half) mask flowing to Ray Reconstruction with no upsample.
+        auto [tw, th] = rtShadowTraceDims(w, h);
+
         rtShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(),
             depthPrepass->getDepthImage(),
@@ -1039,7 +1126,7 @@ namespace render::gpudriven
             glm::vec3(camData.cameraPosition),
             camData.farPlane,
             lightDir.value(),
-            w, h,
+            tw, th,
             useDenoiser, // skip final transitions when denoiser handles them
             fi);
 
@@ -1061,9 +1148,60 @@ namespace render::gpudriven
                 depthPrepass->getNormalImage(),
                 camData.invViewProjection,
                 camData.viewProjection,
-                w, h,
+                tw, th,
                 camData.frameIndex,
                 fi);
+
+            // VK-1430: Half mode — reconstruct the full-res mask from the half-res denoised output.
+            // The denoiser leaves its output in eShaderReadOnlyOptimal and depth/normal in attachment
+            // layout. We re-transition depth/normal to SHADER_READ for the upsample's guide reads,
+            // run the upsample (writes full-res output, leaves it in SHADER_READ for set 13), then
+            // restore depth/normal to attachment layout so downstream passes see the legacy state.
+            if (rtShadowHalfResolution && rtShadowUpsample && rtShadowUpsample->isInitialized())
+            {
+                core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDepthImage(),
+                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::ImageAspectFlagBits::eDepth);
+                core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
+                    vk::ImageLayout::eColorAttachmentOptimal,
+                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::ImageAspectFlagBits::eColor);
+
+                // VK-1430: make the denoiser's compute write to the denoised mask visible to the
+                // upsample's compute read. The denoiser's final layout transition only scoped that
+                // write to the FRAGMENT stage (eGeneral->eShaderReadOnlyOptimal); the upsample reads
+                // the same image in COMPUTE, so without this compute->compute dependency it is a RAW
+                // hazard. The image is already in eShaderReadOnlyOptimal, so a plain memory barrier
+                // (no layout change) suffices.
+                {
+                    vk::MemoryBarrier maskBarrier{};
+                    maskBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+                    maskBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+                    cmd.pipelineBarrier(
+                        vk::PipelineStageFlagBits::eComputeShader,
+                        vk::PipelineStageFlagBits::eComputeShader,
+                        {}, 1, &maskBarrier, 0, nullptr, 0, nullptr);
+                }
+
+                rtShadowUpsample->dispatch(cmd,
+                    rtShadowDenoiser->getDenoisedMaskSamplerImageView(),
+                    depthPrepass->getDepthImageView(),
+                    depthPrepass->getNormalImageView(),
+                    tw, th, w, h,
+                    rtShadowUpsampleDepthThreshold,
+                    rtShadowUpsampleNormalExp,
+                    fi);
+
+                core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDepthImage(),
+                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                    vk::ImageAspectFlagBits::eDepth);
+                core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
+                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::ImageLayout::eColorAttachmentOptimal,
+                    vk::ImageAspectFlagBits::eColor);
+            }
         }
 
         if (rtShadowProfiler && rtShadowProfiler->isValid())
@@ -1195,23 +1333,24 @@ namespace render::gpudriven
         uint32_t h = depthPrepass->getHeight();
         if (w != 0 && h != 0)
         {
-            const bool pipeResized = rtSpotShadowPipeline->resize(w, h);
+            // VK-1430: trace+denoiser at trace dims (half when Half); layered upsample output at full.
+            auto [tw, th] = rtShadowTraceDims(w, h);
+            rtSpotShadowPipeline->resize(tw, th);
             if (rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized())
+                rtSpotShadowDenoiser->resize(tw, th);
+            if (rtShadowHalfResolution && !rtSpotShadowUpsample)
+                rtSpotShadowUpsample = std::make_unique<raytracing::RTLayeredShadowUpsamplePipeline>(device);
+            if (rtShadowHalfResolution && rtSpotShadowUpsample)
+                rtSpotShadowUpsample->resize(w, h);
+
+            // Re-point the set-15 producer (getActive* selects upsample/denoiser/raw per mode).
+            vk::DescriptorSet ds = getActiveRTSpotShadowMaskDescriptorSet();
+            if (ds)
             {
-                rtSpotShadowDenoiser->resize(w, h);
-                vk::DescriptorSet ds = rtSpotShadowDenoiser->getDenoisedMaskSamplerDescriptorSet();
                 if (meshShaderPipeline) meshShaderPipeline->updateRTSpotShadowMaskDescriptor(ds);
                 if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(ds);
                 if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(ds);
                 if (terrain.pipeline) terrain.pipeline->updateRTSpotShadowMaskDescriptor(ds);
-            }
-            else if (pipeResized)
-            {
-                vk::DescriptorSet raw = rtSpotShadowPipeline->getShadowMaskSamplerDescriptorSet();
-                if (meshShaderPipeline) meshShaderPipeline->updateRTSpotShadowMaskDescriptor(raw);
-                if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(raw);
-                if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateRTSpotShadowMaskDescriptor(raw);
-                if (terrain.pipeline) terrain.pipeline->updateRTSpotShadowMaskDescriptor(raw);
             }
         }
 
@@ -1253,13 +1392,14 @@ namespace render::gpudriven
         lightBufferManager->setRTSpotShadowActive(true);
 
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+        auto [tw, th] = rtShadowTraceDims(w, h);
 
         rtSpotShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
             depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
             accelStructManager->getTLASDescriptorSet(),
             camData.invViewProjection, camPos, camData.farPlane,
-            w, h, dispatchList,
+            tw, th, dispatchList,
             useDenoiser, // skip final transitions when the denoiser consumes the raw mask
             fi);
 
@@ -1278,7 +1418,13 @@ namespace render::gpudriven
                 depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
                 depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
                 camData.invViewProjection, camData.viewProjection,
-                w, h, camData.frameIndex, fi);
+                tw, th, camData.frameIndex, fi);
+
+            // VK-1430: Half mode — reconstruct full-res per-slice masks from the half-res denoised
+            // slices (see dispatchRTShadow for the depth/normal layout dance).
+            if (rtShadowHalfResolution && rtSpotShadowUpsample && rtSpotShadowUpsample->isInitialized())
+                upsampleLayeredRTShadow(cmd, *rtSpotShadowUpsample, *rtSpotShadowDenoiser,
+                                        dispatchList, tw, th, w, h, fi);
         }
     }
 
@@ -1397,23 +1543,24 @@ namespace render::gpudriven
         uint32_t h = depthPrepass->getHeight();
         if (w != 0 && h != 0)
         {
-            const bool pipeResized = rtPointShadowPipeline->resize(w, h);
+            // VK-1430: trace+denoiser at trace dims (half when Half); layered upsample output at full.
+            auto [tw, th] = rtShadowTraceDims(w, h);
+            rtPointShadowPipeline->resize(tw, th);
             if (rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized())
+                rtPointShadowDenoiser->resize(tw, th);
+            if (rtShadowHalfResolution && !rtPointShadowUpsample)
+                rtPointShadowUpsample = std::make_unique<raytracing::RTLayeredShadowUpsamplePipeline>(device);
+            if (rtShadowHalfResolution && rtPointShadowUpsample)
+                rtPointShadowUpsample->resize(w, h);
+
+            // Re-point the set-16 producer (getActive* selects upsample/denoiser/raw per mode).
+            vk::DescriptorSet ds = getActiveRTPointShadowMaskDescriptorSet();
+            if (ds)
             {
-                rtPointShadowDenoiser->resize(w, h);
-                vk::DescriptorSet ds = rtPointShadowDenoiser->getDenoisedMaskSamplerDescriptorSet();
                 if (meshShaderPipeline) meshShaderPipeline->updateRTPointShadowMaskDescriptor(ds);
                 if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateRTPointShadowMaskDescriptor(ds);
                 if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateRTPointShadowMaskDescriptor(ds);
                 if (terrain.pipeline) terrain.pipeline->updateRTPointShadowMaskDescriptor(ds);
-            }
-            else if (pipeResized)
-            {
-                vk::DescriptorSet raw = rtPointShadowPipeline->getShadowMaskSamplerDescriptorSet();
-                if (meshShaderPipeline) meshShaderPipeline->updateRTPointShadowMaskDescriptor(raw);
-                if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateRTPointShadowMaskDescriptor(raw);
-                if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateRTPointShadowMaskDescriptor(raw);
-                if (terrain.pipeline) terrain.pipeline->updateRTPointShadowMaskDescriptor(raw);
             }
         }
 
@@ -1456,13 +1603,14 @@ namespace render::gpudriven
         lightBufferManager->setRTPointShadowActive(true);
 
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+        auto [tw, th] = rtShadowTraceDims(w, h);
 
         rtPointShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
             depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
             accelStructManager->getTLASDescriptorSet(),
             camData.invViewProjection, camPos, camData.farPlane,
-            w, h, dispatchList,
+            tw, th, dispatchList,
             useDenoiser, // skip final transitions when the denoiser consumes the raw mask
             fi);
 
@@ -1481,7 +1629,12 @@ namespace render::gpudriven
                 depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
                 depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
                 camData.invViewProjection, camData.viewProjection,
-                w, h, camData.frameIndex, fi);
+                tw, th, camData.frameIndex, fi);
+
+            // VK-1430: Half mode — reconstruct full-res per-slice masks from the half-res denoised slices.
+            if (rtShadowHalfResolution && rtPointShadowUpsample && rtPointShadowUpsample->isInitialized())
+                upsampleLayeredRTShadow(cmd, *rtPointShadowUpsample, *rtPointShadowDenoiser,
+                                        dispatchList, tw, th, w, h, fi);
         }
     }
 
@@ -1558,6 +1711,32 @@ namespace render::gpudriven
             rtPointShadowDenoiser->setSpatialPhiDepth(settings.spatialPhiDepth);
             rtPointShadowDenoiser->setSpatialPhiNormal(settings.spatialPhiNormal);
             rtPointShadowDenoiser->setSpatialPasses(settings.spatialPasses);
+        }
+
+        // VK-1430: shared resolution scale for directional + spot + point RT shadows. Upsample
+        // edge-stopping reuses the denoiser depth threshold + spatial normal exponent.
+        rtShadowUpsampleDepthThreshold = settings.depthThreshold;
+        rtShadowUpsampleNormalExp = settings.spatialPhiNormal;
+
+        const bool wantHalf = settings.shadowResolutionScale == types::ShadowResolutionScale::Half;
+        if (wantHalf != rtShadowHalfResolution)
+        {
+            // Flip the shared flag so the per-frame resize blocks size trace+denoiser to the new dims
+            // (their resize() early-outs on unchanged dims, so the flip drives reallocation), lazily
+            // create the upsample pipelines (Half), and select the right producer via
+            // getActive*MaskDescriptorSet(). The set-13/15/16 layouts are identical between denoiser
+            // and upsample, so NO pipeline recreate is needed — the resize blocks re-copy the producer
+            // into the VK-1398 ring via updateRT*MaskDescriptor.
+            rtShadowHalfResolution = wantHalf;
+
+            // Back to Full: drop the upsample objects so Full mode holds zero extra GPU resources
+            // (reset() idles the device). Half-mode creation happens lazily in the resize blocks.
+            if (!wantHalf)
+            {
+                rtShadowUpsample.reset();
+                rtSpotShadowUpsample.reset();
+                rtPointShadowUpsample.reset();
+            }
         }
     }
 

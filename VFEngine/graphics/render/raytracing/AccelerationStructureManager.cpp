@@ -79,6 +79,17 @@ namespace render::raytracing
         pendingTerrainBLASBuilds.clear();
         terrainOffsetToTileKey.clear();
 
+        // Drop any in-flight compaction state (the source structures were just destroyed above).
+        pendingCompactions.clear();
+        freeCompactionSlots.clear();
+        compactionFrameCounter = 0;
+        forceNextTlasRebuild = false;
+        if (compactionQueryPool)
+        {
+            vkDevice.destroyQueryPool(compactionQueryPool);
+            compactionQueryPool = nullptr;
+        }
+
         // Destroy TLAS
         if (tlas)
         {
@@ -242,6 +253,7 @@ namespace render::raytracing
         uint64_t offsetKey = makeGeometryOffsetKey(it->second.lod0VertexOffset, it->second.lod0IndexOffset);
         geometryOffsetToSubmeshKey.erase(offsetKey);
 
+        invalidatePendingCompaction(it->second.blas);
         destroyBLASEntry(it->second);
         blasCache.erase(it);
 
@@ -268,6 +280,11 @@ namespace render::raytracing
         }
 
         vk::Device vkDevice = device.getLogicalDevice();
+
+        // Keys of BLAS actually (re)built this dispatch — queued for compaction after the
+        // build-complete barrier below.
+        std::vector<std::string> builtKeys;
+        builtKeys.reserve(localPending.size());
 
         vk::DeviceAddress vertexBufferAddress = vkDevice.getBufferAddress({vertexBuffer});
         vk::DeviceAddress indexBufferAddress = vkDevice.getBufferAddress({indexBuffer});
@@ -296,7 +313,8 @@ namespace render::raytracing
 
             vk::AccelerationStructureBuildGeometryInfoKHR bi{};
             bi.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
-            bi.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+            bi.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace |
+                       vk::BuildAccelerationStructureFlagBitsKHR::eAllowCompaction;
             bi.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
             bi.geometryCount = 1;
             bi.pGeometries = &geom;
@@ -332,7 +350,8 @@ namespace render::raytracing
 
             vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
             buildInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
-            buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+            buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace |
+                              vk::BuildAccelerationStructureFlagBitsKHR::eAllowCompaction;
             buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
             buildInfo.geometryCount = 1;
             buildInfo.pGeometries = &geometry;
@@ -347,6 +366,12 @@ namespace render::raytracing
             auto it = blasCache.find(pending.key);
             if (it != blasCache.end() && it->second.blas)
             {
+                // A pending compaction may still reference this old BLAS — invalidate it
+                // so processPendingCompactions doesn't double-free the structure we destroy here.
+                {
+                    std::lock_guard<std::mutex> lock(pendingMutex);
+                    invalidatePendingCompaction(it->second.blas);
+                }
                 destroyBLASEntry(it->second);
             }
 
@@ -409,6 +434,7 @@ namespace render::raytracing
             memoryBudget.blasCount++;
 
             blasCache[pending.key] = entry;
+            builtKeys.push_back(pending.key);
         }
 
         // Single barrier after all BLAS builds
@@ -421,6 +447,18 @@ namespace render::raytracing
             vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
             vk::DependencyFlags{},
             1, &barrier, 0, nullptr, 0, nullptr);
+
+        // Queue compaction-size queries for the BLAS just built (after the build-complete
+        // barrier — writeAccelerationStructuresPropertiesKHR must observe finished builds).
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            for (const auto& key : builtKeys)
+            {
+                auto it = blasCache.find(key);
+                if (it != blasCache.end() && it->second.blas)
+                    queueBlasForCompaction(cmd, key, it->second, /*isTerrain*/ false);
+            }
+        }
 
         memoryBudget.scratchPeakBytes = blasScratchPool.getPeakSize();
 
@@ -448,6 +486,245 @@ namespace render::raytracing
             vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
             vk::DependencyFlags{},
             1, &barrier, 0, nullptr, 0, nullptr);
+    }
+
+    // ============================================================
+    // BLAS compaction (VK-1430)
+    // ============================================================
+
+    void AccelerationStructureManager::ensureCompactionQueryPool()
+    {
+        if (compactionQueryPool) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        vk::QueryPoolCreateInfo poolInfo{};
+        poolInfo.queryType = vk::QueryType::eAccelerationStructureCompactedSizeKHR;
+        poolInfo.queryCount = kCompactionQueryCapacity;
+
+        compactionQueryPool = vkDevice.createQueryPool(poolInfo);
+
+        freeCompactionSlots.clear();
+        freeCompactionSlots.reserve(kCompactionQueryCapacity);
+        // Push in reverse so pop_back() hands out ascending indices first (cosmetic).
+        for (uint32_t i = kCompactionQueryCapacity; i-- > 0;)
+            freeCompactionSlots.push_back(i);
+    }
+
+    void AccelerationStructureManager::queueBlasForCompaction(vk::CommandBuffer cmd,
+                                                              const std::string& key,
+                                                              const BLASEntry& entry,
+                                                              bool isTerrain)
+    {
+        // Caller holds pendingMutex.
+        ensureCompactionQueryPool();
+
+        if (freeCompactionSlots.empty())
+        {
+            static bool warned = false;
+            if (!warned)
+            {
+                warned = true;
+                vfLogWarning("AccelerationStructureManager: compaction query pool exhausted "
+                             "({} slots), skipping compaction for some BLAS this frame",
+                             kCompactionQueryCapacity);
+            }
+            return;
+        }
+
+        uint32_t slot = freeCompactionSlots.back();
+        freeCompactionSlots.pop_back();
+
+        cmd.resetQueryPool(compactionQueryPool, slot, 1);
+        cmd.writeAccelerationStructuresPropertiesKHR(
+            1, &entry.blas,
+            vk::QueryType::eAccelerationStructureCompactedSizeKHR,
+            compactionQueryPool, slot);
+
+        PendingCompaction pc{};
+        pc.key = key;
+        pc.isTerrain = isTerrain;
+        pc.stale = false;
+        pc.srcAS = entry.blas;
+        pc.srcBuffer = entry.buffer;
+        pc.srcAlloc = entry.allocation;
+        pc.srcSize = entry.size;
+        pc.queryIndex = slot;
+        pc.frameQueued = compactionFrameCounter;
+        pendingCompactions.push_back(std::move(pc));
+    }
+
+    void AccelerationStructureManager::invalidatePendingCompaction(vk::AccelerationStructureKHR srcAS)
+    {
+        // Caller holds pendingMutex. The cache-destroy path owns the structure; mark any
+        // matching pending record stale and null its handles so processPendingCompactions
+        // only recycles the query slot.
+        if (!srcAS) return;
+        for (auto& pc : pendingCompactions)
+        {
+            if (pc.srcAS == srcAS)
+            {
+                pc.stale = true;
+                pc.srcAS = nullptr;
+                pc.srcBuffer = nullptr;
+                pc.srcAlloc = {};
+            }
+        }
+    }
+
+    void AccelerationStructureManager::processPendingCompactions(vk::CommandBuffer cmd)
+    {
+        if (!initialized) return;
+
+        std::lock_guard<std::mutex> lock(pendingMutex);
+
+        ++compactionFrameCounter;
+
+        if (pendingCompactions.empty()) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        bool anyCopied = false;
+        uint32_t processed = 0;
+
+        for (auto it = pendingCompactions.begin(); it != pendingCompactions.end(); )
+        {
+            if (processed >= kMaxCompactionsPerFrame)
+                break;
+
+            PendingCompaction& pc = *it;
+
+            // Not yet safe to read the query (writes from frameQueued may still be in flight).
+            if (pc.frameQueued + core::MAX_FRAMES_IN_FLIGHT > compactionFrameCounter)
+            {
+                ++it;
+                continue;
+            }
+
+            ++processed;
+
+            // Source was destroyed by an eviction — just recycle the slot.
+            if (pc.stale)
+            {
+                freeCompactionSlots.push_back(pc.queryIndex);
+                it = pendingCompactions.erase(it);
+                continue;
+            }
+
+            // Read compacted size without waiting; if not ready, leave for a later frame.
+            vk::DeviceSize compactedSize = 0;
+            vk::Result res = vkDevice.getQueryPoolResults(
+                compactionQueryPool, pc.queryIndex, 1,
+                sizeof(vk::DeviceSize), &compactedSize, sizeof(vk::DeviceSize),
+                vk::QueryResultFlagBits::e64);
+
+            if (res == vk::Result::eNotReady)
+            {
+                --processed; // didn't actually consume a compaction budget slot
+                ++it;
+                continue;
+            }
+
+            // Bad/non-beneficial result — drop the record, keep the original BLAS.
+            if (res != vk::Result::eSuccess || compactedSize == 0 || compactedSize >= pc.srcSize)
+            {
+                freeCompactionSlots.push_back(pc.queryIndex);
+                it = pendingCompactions.erase(it);
+                continue;
+            }
+
+            // Verify the cache still holds this key AND still points at the BLAS we queued
+            // (it may have been evicted or rebuilt between queue and now — eviction would have
+            // marked us stale, but a rebuild replaces the entry without touching this record).
+            auto& cache = pc.isTerrain ? terrainBlasCache : blasCache;
+            auto cacheIt = cache.find(pc.key);
+            if (cacheIt == cache.end() || cacheIt->second.blas != pc.srcAS)
+            {
+                // The source is owned elsewhere now (or already freed). Recycle slot only.
+                freeCompactionSlots.push_back(pc.queryIndex);
+                it = pendingCompactions.erase(it);
+                continue;
+            }
+
+            // Allocate the compacted acceleration structure (mirrors buildPending*BLAS).
+            vk::Buffer newBuffer;
+            core::VulkanAllocation newAlloc;
+            {
+                core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+                request.size = compactedSize;
+                request.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+                                vk::BufferUsageFlagBits::eShaderDeviceAddress;
+                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::BufferUtilities::createBuffer(request, newBuffer, newAlloc, device.getMemoryManager());
+            }
+
+            vk::AccelerationStructureCreateInfoKHR createInfo{};
+            createInfo.buffer = newBuffer;
+            createInfo.size = compactedSize;
+            createInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
+            vk::AccelerationStructureKHR newAS = vkDevice.createAccelerationStructureKHR(createInfo);
+
+            vk::CopyAccelerationStructureInfoKHR copyInfo{};
+            copyInfo.src = pc.srcAS;
+            copyInfo.dst = newAS;
+            copyInfo.mode = vk::CopyAccelerationStructureModeKHR::eCompact;
+            cmd.copyAccelerationStructureKHR(copyInfo);
+
+            vk::DeviceAddress newAddr = vkDevice.getAccelerationStructureAddressKHR({newAS});
+
+            // Swap the compacted structure into the cache entry.
+            cacheIt->second.blas = newAS;
+            cacheIt->second.buffer = newBuffer;
+            cacheIt->second.allocation = newAlloc;
+            cacheIt->second.deviceAddress = newAddr;
+            cacheIt->second.size = compactedSize;
+
+            // Budget: replace original size with compacted size (count unchanged).
+            memoryBudget.blasTotalBytes -= pc.srcSize;
+            memoryBudget.blasTotalBytes += compactedSize;
+
+            // Defer-free the original AS + buffer (mirror destroyBLASEntry).
+            {
+                auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+                if (dq)
+                {
+                    vk::AccelerationStructureKHR oldAS = pc.srcAS;
+                    vk::Buffer oldBuf = pc.srcBuffer;
+                    core::VulkanAllocation oldAlloc = pc.srcAlloc;
+                    core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+                    dq->queueCustom([oldAS, oldBuf, oldAlloc, memMgr](vk::Device dev) mutable {
+                        if (oldAS) dev.destroyAccelerationStructureKHR(oldAS);
+                        if (oldBuf) core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, *memMgr);
+                    });
+                }
+                else
+                {
+                    if (pc.srcAS) vkDevice.destroyAccelerationStructureKHR(pc.srcAS);
+                    if (pc.srcBuffer)
+                        core::BufferUtilities::destroyBuffer(vkDevice, pc.srcBuffer, pc.srcAlloc, device.getMemoryManager());
+                }
+            }
+
+            freeCompactionSlots.push_back(pc.queryIndex);
+            it = pendingCompactions.erase(it);
+
+            forceNextTlasRebuild = true;
+            anyCopied = true;
+        }
+
+        // One barrier so the TLAS build that follows reads the compacted BLAS correctly.
+        if (anyCopied)
+        {
+            vk::MemoryBarrier barrier{
+                vk::AccessFlagBits::eAccelerationStructureWriteKHR,
+                vk::AccessFlagBits::eAccelerationStructureReadKHR
+            };
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+                vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+                vk::DependencyFlags{},
+                1, &barrier, 0, nullptr, 0, nullptr);
+        }
     }
 
     void AccelerationStructureManager::buildTLAS(vk::CommandBuffer cmd,
@@ -550,7 +827,9 @@ namespace render::raytracing
         tlasGeometry.geometryType = vk::GeometryTypeKHR::eInstances;
         tlasGeometry.geometry.instances = instancesData;
 
-        bool canUpdate = tlasBuilt && (currentInstanceCount == instanceCount);
+        // A BLAS compaction this frame replaces a BLAS device address; the TLAS must be
+        // rebuilt (not refit) so it picks up the new acceleration structure references.
+        bool canUpdate = tlasBuilt && (currentInstanceCount == instanceCount) && !forceNextTlasRebuild;
 
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
@@ -629,6 +908,9 @@ namespace render::raytracing
         currentInstanceCount = instanceCount;
         tlasBuilt = true;
         memoryBudget.tlasInstanceCount = instanceCount;
+
+        // The TLAS build above consumed any compaction-driven rebuild request.
+        forceNextTlasRebuild = false;
 
         currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT;
 
@@ -769,6 +1051,7 @@ namespace render::raytracing
             // Remove old reverse mapping
             uint64_t oldKey = makeGeometryOffsetKey(it->second.lod0VertexOffset, it->second.lod0IndexOffset);
             terrainOffsetToTileKey.erase(oldKey);
+            invalidatePendingCompaction(it->second.blas);
             destroyBLASEntry(it->second);
             terrainBlasCache.erase(it);
         }
@@ -796,6 +1079,7 @@ namespace render::raytracing
 
         uint64_t offsetKey = makeGeometryOffsetKey(it->second.lod0VertexOffset, it->second.lod0IndexOffset);
         terrainOffsetToTileKey.erase(offsetKey);
+        invalidatePendingCompaction(it->second.blas);
         destroyBLASEntry(it->second);
         terrainBlasCache.erase(it);
 
@@ -820,6 +1104,10 @@ namespace render::raytracing
         }
 
         vk::Device vkDevice = device.getLogicalDevice();
+
+        // Keys of terrain BLAS actually (re)built this dispatch — queued for compaction below.
+        std::vector<std::string> builtKeys;
+        builtKeys.reserve(localPending.size());
 
         vk::DeviceAddress vertexBufferAddress = vkDevice.getBufferAddress({terrainVertexBuffer});
         vk::DeviceAddress indexBufferAddress = vkDevice.getBufferAddress({terrainIndexBuffer});
@@ -848,7 +1136,8 @@ namespace render::raytracing
 
             vk::AccelerationStructureBuildGeometryInfoKHR bi{};
             bi.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
-            bi.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+            bi.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace |
+                       vk::BuildAccelerationStructureFlagBitsKHR::eAllowCompaction;
             bi.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
             bi.geometryCount = 1;
             bi.pGeometries = &geom;
@@ -883,7 +1172,8 @@ namespace render::raytracing
 
             vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
             buildInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
-            buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+            buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace |
+                              vk::BuildAccelerationStructureFlagBitsKHR::eAllowCompaction;
             buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
             buildInfo.geometryCount = 1;
             buildInfo.pGeometries = &geometry;
@@ -948,10 +1238,15 @@ namespace render::raytracing
             auto existingIt = terrainBlasCache.find(pending.key);
             if (existingIt != terrainBlasCache.end())
             {
+                {
+                    std::lock_guard<std::mutex> lock(pendingMutex);
+                    invalidatePendingCompaction(existingIt->second.blas);
+                }
                 destroyBLASEntry(existingIt->second);
                 terrainBlasCache.erase(existingIt);
             }
             terrainBlasCache[pending.key] = entry;
+            builtKeys.push_back(pending.key);
         }
 
         // Final barrier: BLAS builds → TLAS build reads
@@ -964,6 +1259,17 @@ namespace render::raytracing
             vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
             vk::DependencyFlags{},
             1, &barrier, 0, nullptr, 0, nullptr);
+
+        // Queue compaction-size queries for the terrain BLAS just built (after barrier).
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            for (const auto& key : builtKeys)
+            {
+                auto it = terrainBlasCache.find(key);
+                if (it != terrainBlasCache.end() && it->second.blas)
+                    queueBlasForCompaction(cmd, key, it->second, /*isTerrain*/ true);
+            }
+        }
 
         memoryBudget.scratchPeakBytes = blasScratchPool.getPeakSize();
 
@@ -1094,7 +1400,9 @@ namespace render::raytracing
         tlasGeometry.geometryType = vk::GeometryTypeKHR::eInstances;
         tlasGeometry.geometry.instances = instancesData;
 
-        bool canUpdate = tlasBuilt && (currentInstanceCount == instanceCount);
+        // A BLAS compaction this frame replaces a BLAS device address; the TLAS must be
+        // rebuilt (not refit) so it picks up the new acceleration structure references.
+        bool canUpdate = tlasBuilt && (currentInstanceCount == instanceCount) && !forceNextTlasRebuild;
 
         vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
         buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
@@ -1168,6 +1476,9 @@ namespace render::raytracing
         currentInstanceCount = instanceCount;
         tlasBuilt = true;
         memoryBudget.tlasInstanceCount = instanceCount;
+
+        // The TLAS build above consumed any compaction-driven rebuild request.
+        forceNextTlasRebuild = false;
 
         currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT;
 

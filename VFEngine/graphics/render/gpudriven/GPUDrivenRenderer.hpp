@@ -49,6 +49,8 @@
 #include "../raytracing/RTShadowProfiler.hpp"
 #include "../raytracing/RTLayeredShadowPipeline.hpp"
 #include "../raytracing/RTLayeredShadowDenoiser.hpp"
+#include "../raytracing/RTShadowUpsamplePipeline.hpp"
+#include "../raytracing/RTLayeredShadowUpsamplePipeline.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
@@ -61,6 +63,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <cstdint>
+#include <utility>
 
 namespace core
 {
@@ -361,6 +364,27 @@ namespace render::gpudriven
         std::unique_ptr<raytracing::RTLayeredShadowDenoiser> rtPointShadowDenoiser;
         bool rtPointShadowEnabled = false;
         uint32_t rtPointShadowBudget = 8;
+        // VK-1430: shared half-resolution toggle for directional+spot+point RT shadows. When true the
+        // trace+denoise run at half resolution and these upsample pipelines reconstruct full-res masks
+        // (lazily created on first Half frame; torn down when switched back to Full so Full mode keeps
+        // zero extra allocations / dispatches). currentRTShadowHalfRes tracks the last applied state so
+        // dispatch/resize know which dims to size the trace+denoiser to.
+        bool rtShadowHalfResolution = false;
+        std::unique_ptr<raytracing::RTShadowUpsamplePipeline> rtShadowUpsample;
+        std::unique_ptr<raytracing::RTLayeredShadowUpsamplePipeline> rtSpotShadowUpsample;
+        std::unique_ptr<raytracing::RTLayeredShadowUpsamplePipeline> rtPointShadowUpsample;
+        // Half = ((w+1)/2, (h+1)/2); Full = (w, h). Single source of truth for the trace/denoise dims.
+        std::pair<uint32_t, uint32_t> rtShadowTraceDims(uint32_t fullW, uint32_t fullH) const
+        {
+            return rtShadowHalfResolution
+                ? std::pair<uint32_t, uint32_t>{(fullW + 1) / 2, (fullH + 1) / 2}
+                : std::pair<uint32_t, uint32_t>{fullW, fullH};
+        }
+        // VK-1430: edge-stopping thresholds for the upsample, threaded from RTShadowSettings in
+        // applyRTShadowSettings (depthThreshold reuses the denoiser depth edge-stop; normalExp reuses
+        // spatialPhiNormal, the spatial denoiser's normal pow exponent).
+        float rtShadowUpsampleDepthThreshold = 0.01f;
+        float rtShadowUpsampleNormalExp = 32.0f;
         gi::GISettings cachedGISettings;
         bool giProbeBuffersNeedInit = true;
 
@@ -535,6 +559,18 @@ namespace render::gpudriven
         // else null. Used to preserve set 16 across unrelated pipeline recreates.
         vk::DescriptorSetLayout getActiveRTPointShadowMaskLayout() const;
         vk::DescriptorSet getActiveRTPointShadowMaskDescriptorSet() const;
+
+        // VK-1430: shared Half-mode upsample of the per-slice layered RT shadow masks (spot/point).
+        // Transitions depth/normal to SHADER_READ, runs the layered upsample over the scheduled
+        // slices (reading the denoiser's half-res per-slice views), then restores depth/normal to
+        // attachment layout. Mirrors the directional upsample step in dispatchRTShadow.
+        void upsampleLayeredRTShadow(vk::CommandBuffer cmd,
+                                     raytracing::RTLayeredShadowUpsamplePipeline& upsample,
+                                     const raytracing::RTLayeredShadowDenoiser& denoiser,
+                                     const std::vector<raytracing::RTLayeredDispatchInfo>& slices,
+                                     uint32_t traceW, uint32_t traceH,
+                                     uint32_t fullW, uint32_t fullH,
+                                     uint32_t frameIndex);
 
         // Plugin world-space mask: lazily recreates the scene + terrain pipelines with
         // WORLD_MASK_ENABLED on the first bind, then keeps descriptors in sync.
