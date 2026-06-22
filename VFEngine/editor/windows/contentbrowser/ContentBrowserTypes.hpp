@@ -39,32 +39,32 @@ namespace windows
         Other
     };
 
+    // Atlas grid index == enum value (see AssetGridRenderer::getAtlasUV, 5x5 grid).
+    // Must stay in lockstep with resources/editor/contentBrowser/create_atlas.py.
+    // VK-1426: Texture/Mesh/Material/Hdr glyphs dropped — those types now render
+    // real thumbnails (AssetThumbnailCache) and fall back to File ("Other").
     enum class AtlasIcon : uint32_t
     {
         Animation = 0,
-        Texture = 1,
-        Mtype = 2,
-        Mesh = 3,
-        Material = 4,
-        Folder = 5,
-        Scene = 6,
-        Hdr = 7,
-        Audio = 8,
-        File = 9,
-        Prefab = 10,
-        Font = 11,
-        Project = 12,
-        Animator = 13,
-        VFX = 14,
-        Terrain = 15,
-        Navmesh = 16,
-        PhysAnim = 17,
-        Water = 18,
-        BehaviorTree = 19,
-        Plugin = 20,
-        InputMapping = 21,
-        Retarget = 22, // shared by .vfrig and .vfretarget (VK-910)
-        VFXSequence = 23 // .vfVFXSequence combo asset (VK-1425)
+        Mtype = 1,
+        Folder = 2,
+        Scene = 3,
+        Audio = 4,
+        File = 5,
+        Prefab = 6,
+        Font = 7,
+        Project = 8,
+        Animator = 9,
+        VFX = 10,
+        Terrain = 11,
+        Navmesh = 12,
+        PhysAnim = 13,
+        Water = 14,
+        BehaviorTree = 15,
+        Plugin = 16,
+        InputMapping = 17,
+        Retarget = 18, // shared by .vfrig and .vfretarget (VK-910)
+        VFXSequence = 19 // .vfVFXSequence combo asset (VK-1425)
     };
 
     // Canonical per-type display data. Single source of truth for the filter
@@ -82,21 +82,21 @@ namespace windows
     {
         using enum AssetType;
         static const std::array<AssetTypeInfo, 25> table = {{
-            {Texture,          "Texture",           AtlasIcon::Texture,      0xFFF7C34F},
-            {HDR,              "HDR",               AtlasIcon::Hdr,          0xFFF7E04F},
-            {Model,            "Model",             AtlasIcon::Mesh,         0xFF4FC3F7},
+            {Texture,          "Texture",           AtlasIcon::File,         0xFFF7C34F},
+            {HDR,              "HDR",               AtlasIcon::File,         0xFFF7E04F},
+            {Model,            "Model",             AtlasIcon::File,         0xFF4FC3F7},
             {Audio,            "Audio",             AtlasIcon::Audio,        0xFF4FF78A},
             {Animation,        "Animation",         AtlasIcon::Animation,    0xFFB04FF7},
             {Scene,            "Scene",             AtlasIcon::Scene,        0xFF4F6EF7},
-            {Material,         "Material",          AtlasIcon::Material,     0xFF4FF7DD},
-            {MaterialInstance, "Material Instance", AtlasIcon::Material,     0xFF4FD7C0},
+            {Material,         "Material",          AtlasIcon::File,         0xFF4FF7DD},
+            {MaterialInstance, "Material Instance", AtlasIcon::File,         0xFF4FD7C0},
             {Animator,         "Animator",          AtlasIcon::Animator,     0xFF914FF7},
             {VFX,              "VFX",               AtlasIcon::VFX,          0xFFF74F9E},
             {Prefab,           "Prefab",            AtlasIcon::Prefab,       0xFF4F9EF7},
             {Script,           "Script",            AtlasIcon::Mtype,        0xFF8AF74F},
             {Font,             "Font",              AtlasIcon::Font,         0xFFC0C0C0},
             {Project,          "Project",           AtlasIcon::Project,      0xFFE0E0E0},
-            {TerrainMaterial,  "Terrain Material",  AtlasIcon::Material,     0xFF4FB78A},
+            {TerrainMaterial,  "Terrain Material",  AtlasIcon::File,         0xFF4FB78A},
             {Terrain,          "Terrain",           AtlasIcon::Terrain,      0xFF4F8A5E},
             {Navmesh,          "Navmesh",           AtlasIcon::Navmesh,      0xFF6EC0F7},
             {PhysAnim,         "Phys Anim",         AtlasIcon::PhysAnim,     0xFFC04FF7},
