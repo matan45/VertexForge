@@ -7,6 +7,7 @@
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "../../animation/AnimatorStateMachine.hpp"
+#include "../../animation/AnimationLayerStack.hpp"
 #include "../../core/Texture.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/AssetLifecycleManager.hpp"
@@ -500,7 +501,16 @@ namespace render::gpudriven
                 }
             }
 
-            const std::vector<glm::mat4>& boneMatrices = animator->getBoneMatrices();
+            // Upload the AnimationLayerStack's composed pose (finalBoneMatrices): it
+            // includes overlay-layer blending AND the IK post-process. The base state
+            // machine's currentBoneMatrices is only the base-layer pose (pre-IK), so
+            // reading it here silently dropped IK / additive layers. Fall back to the
+            // state machine only when the layer-stack pose is unavailable.
+            const animation::AnimationLayerStack* layerStack = animatorSystem.getLayerStack(entity);
+            const std::vector<glm::mat4>& boneMatrices =
+                (layerStack && !layerStack->getBoneMatrices().empty())
+                    ? layerStack->getBoneMatrices()
+                    : animator->getBoneMatrices();
             if (boneMatrices.empty())
             {
                 continue;
