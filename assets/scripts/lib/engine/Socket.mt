@@ -1,6 +1,10 @@
 // Socket - Static utility class for socket attachment operations
-// Sockets are named attachment points on skeleton bones (e.g., "RightHand", "Head")
-// Use this to attach entities (weapons, shields, VFX) to animated characters
+// Sockets are named attachment points authored on a .vfMesh. They can live on a
+// skeleton bone of an animated mesh (e.g., "RightHand", "Head") OR on a STATIC,
+// non-skeletal mesh (VK-1427) — e.g., a "Muzzle" point on a rifle. The same API
+// works for both; a static socket's world transform is parentWorld * localOffset.
+// Use this to attach entities (weapons, shields, VFX) to characters or static props.
+// Multi-level chains resolve in one frame (e.g. soldier hand -> rifle -> muzzle flash).
 //
 // Usage examples:
 //   int self = Entity::self();

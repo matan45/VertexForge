@@ -87,7 +87,11 @@ namespace resource
 
     std::streampos MeshStreamHandle::getSocketDataOffset()
     {
-        if (!hasSkeleton || socketDataOffset == std::streampos(0))
+        // Valid for static meshes too (VK-1427): socketDataOffset is recorded by
+        // detectSocketBlock() right after the skeleton (or the hasSkinning byte for a
+        // static mesh), whether or not a socket block is actually present. The latter
+        // case is the first-write offset used by MeshSocketWriter.
+        if (socketDataOffset == std::streampos(0))
             return 0;
         return socketDataOffset;
     }
@@ -279,6 +283,16 @@ namespace resource
             if (!stream->readSkeleton(result.skeleton))
             {
                 vfLogError("MeshStreamResource: Failed to read skeleton from {}", path);
+                return MeshesData{};
+            }
+        }
+        else if (stream->hasSocketData())
+        {
+            // Static mesh with named sockets but no skeleton (VK-1427): read the SOK2
+            // block into result.skeleton.sockets so the unified socket accessor works.
+            if (!stream->readSockets(result.skeleton))
+            {
+                vfLogError("MeshStreamResource: Failed to read static sockets from {}", path);
                 return MeshesData{};
             }
         }

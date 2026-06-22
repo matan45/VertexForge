@@ -42,12 +42,10 @@ namespace types
             return std::streampos(0);
         }
 
-        if (!stream->hasSkeletonData())
-        {
-            vfLogError("MeshSocketWriter: Mesh has no skeleton data");
-            return std::streampos(0);
-        }
-
+        // VK-1427: static meshes carry sockets too. getSocketDataOffset() is recorded
+        // right after the skeleton (or the hasSkinning byte for a static mesh), so no
+        // skeleton is required. The prefix [0, offset) is preserved and a fresh SOK2
+        // block is appended.
         std::streampos offset = stream->getSocketDataOffset();
         if (offset == std::streampos(0))
         {

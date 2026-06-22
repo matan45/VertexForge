@@ -411,6 +411,11 @@ namespace animation
         return dataCache.loadSkeleton(meshPath);
     }
 
+    const std::vector<animator::SocketDefinition>* RuntimeAnimatorSystem::loadSockets(const std::string& meshPath)
+    {
+        return dataCache.loadSockets(meshPath);
+    }
+
     const std::vector<glm::mat4>* RuntimeAnimatorSystem::getCachedSocketTransforms(entt::entity entity) const
     {
         return socketUpdater->getCachedSocketTransforms(entity);

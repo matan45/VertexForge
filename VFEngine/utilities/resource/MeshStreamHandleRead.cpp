@@ -280,6 +280,34 @@ namespace resource
         return true;
     }
 
+    bool MeshStreamHandle::readSockets(SkeletonData& outSkeleton)
+    {
+        std::lock_guard<std::mutex> lock(fileMutex);
+
+        if (!file.is_open())
+        {
+            vfLogError("MeshStreamHandle: File not open");
+            return false;
+        }
+
+        if (!hasSockets || socketDataOffset == std::streampos(0))
+        {
+            // No socket block present — leave outSkeleton.sockets as-is (empty).
+            return true;
+        }
+
+        file.seekg(baseOffset + socketDataOffset);
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to seek to socket data");
+            return false;
+        }
+
+        // readSocketDefinitions resolves boneIndex via outSkeleton.getBoneIndex(); for a
+        // static mesh (no bones) that yields -1, the static-socket convention (VK-1427).
+        return readSocketDefinitions(outSkeleton);
+    }
+
     bool MeshStreamHandle::readBoneHierarchy(uint32_t boneCount, SkeletonData& outSkeleton)
     {
         for (uint32_t b = 0; b < boneCount; ++b)

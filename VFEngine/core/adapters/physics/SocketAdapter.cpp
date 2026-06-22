@@ -33,6 +33,30 @@ namespace core
         return animation::RuntimeAnimatorSystem::instance().loadSkeleton(meshComp.meshRef.resolve());
     }
 
+    const std::vector<animator::SocketDefinition>* SocketAdapter::getSocketsForEntity(entt::entity entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::MeshComponent>(entity))
+            return nullptr;
+
+        const auto& meshComp = registry.get<components::MeshComponent>(entity);
+        if (!meshComp.meshRef.isValid())
+            return nullptr;
+
+        return animation::RuntimeAnimatorSystem::instance().loadSockets(meshComp.meshRef.resolve());
+    }
+
+    int32_t SocketAdapter::indexOfSocket(const std::vector<animator::SocketDefinition>& sockets,
+                                         const std::string& socketName)
+    {
+        for (size_t i = 0; i < sockets.size(); ++i)
+        {
+            if (sockets[i].name == socketName)
+                return static_cast<int32_t>(i);
+        }
+        return -1;
+    }
+
     bool SocketAdapter::attachToSocket(services::EntityHandle childEntity, services::EntityHandle parentEntity,
                                        const std::string& socketName)
     {
@@ -47,14 +71,14 @@ namespace core
         auto child = services::internal::fromHandle(childEntity);
         auto parent = services::internal::fromHandle(parentEntity);
 
-        const auto* skeleton = getSkeletonForEntity(parent);
-        if (!skeleton)
+        const auto* sockets = getSocketsForEntity(parent);
+        if (!sockets || sockets->empty())
         {
-            vfLogWarning("[SocketAdapter] Parent entity has no skeleton data");
+            vfLogWarning("[SocketAdapter] Parent entity has no socket data");
             return false;
         }
 
-        int32_t socketIdx = skeleton->getSocketIndex(socketName);
+        int32_t socketIdx = indexOfSocket(*sockets, socketName);
         if (socketIdx < 0)
         {
             vfLogWarning("[SocketAdapter] Socket '{}' not found on parent entity", socketName);
@@ -76,12 +100,17 @@ namespace core
         {
             auto& transform = registry.get<components::TransformComponent>(child);
 
-            const auto& socket = skeleton->sockets[socketIdx];
+            const auto& socket = (*sockets)[socketIdx];
             glm::mat4 socketModel = socket.getLocalOffsetMatrix();
-            if (socket.boneIndex >= 0 &&
-                socket.boneIndex < static_cast<int32_t>(skeleton->bindPoses.size()))
+            // Skinned socket: pre-multiply by the bone's bind pose. Static sockets have
+            // boneIndex == -1, so the offset matrix alone is the model-space transform.
+            if (socket.boneIndex >= 0)
             {
-                socketModel = skeleton->bindPoses[socket.boneIndex] * socketModel;
+                if (const auto* skeleton = getSkeletonForEntity(parent);
+                    skeleton && socket.boneIndex < static_cast<int32_t>(skeleton->bindPoses.size()))
+                {
+                    socketModel = skeleton->bindPoses[socket.boneIndex] * socketModel;
+                }
             }
 
             glm::mat4 parentWorld = glm::mat4(1.0f);
@@ -155,12 +184,12 @@ namespace core
         auto resolved = resolveEntity(entity);
         if (!resolved) return {};
 
-        const auto* skeleton = getSkeletonForEntity(*resolved);
-        if (!skeleton) return {};
+        const auto* sockets = getSocketsForEntity(*resolved);
+        if (!sockets) return {};
 
         std::vector<std::string> names;
-        names.reserve(skeleton->sockets.size());
-        for (const auto& socket : skeleton->sockets)
+        names.reserve(sockets->size());
+        for (const auto& socket : *sockets)
         {
             names.push_back(socket.name);
         }
@@ -172,8 +201,8 @@ namespace core
         auto resolved = resolveEntity(entity);
         if (!resolved) return false;
 
-        const auto* skeleton = getSkeletonForEntity(*resolved);
-        return skeleton && skeleton->getSocketIndex(socketName) >= 0;
+        const auto* sockets = getSocketsForEntity(*resolved);
+        return sockets && indexOfSocket(*sockets, socketName) >= 0;
     }
 
     bool SocketAdapter::isAttached(services::EntityHandle entity) const
@@ -312,30 +341,50 @@ namespace core
 
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        const auto* skeleton = getSkeletonForEntity(parent);
-        if (!skeleton)
-            return glm::mat4(1.0f);
-
-        int32_t socketIdx = skeleton->getSocketIndex(socketName);
-        if (socketIdx < 0)
-            return glm::mat4(1.0f);
-
         auto& animSystem = animation::RuntimeAnimatorSystem::instance();
 
-        const std::vector<glm::mat4>* socketTransforms = animSystem.getCachedSocketTransforms(parent);
-
-        std::vector<glm::mat4> computedTransforms;
-        if (!socketTransforms)
+        // Discriminator: a mesh WITH a skeleton is skinned — its sockets resolve through
+        // animated bone transforms (the original path, verbatim). A mesh with NO skeleton
+        // is static and resolves directly from its SOK2 sockets (VK-1427). Keying on
+        // skeleton presence (not animator state) keeps the skinned path bit-identical to
+        // the original even on the first frame before the animator initializes.
+        const auto* skeleton = getSkeletonForEntity(parent);
+        if (skeleton)
         {
-            auto* animator = animSystem.getAnimator(parent);
-            if (!animator || !animator->isInitialized())
+            int32_t socketIdx = skeleton->getSocketIndex(socketName);
+            if (socketIdx < 0)
                 return glm::mat4(1.0f);
 
-            animator->computeSocketTransforms(skeleton->sockets, computedTransforms);
-            socketTransforms = &computedTransforms;
+            const std::vector<glm::mat4>* socketTransforms = animSystem.getCachedSocketTransforms(parent);
+            std::vector<glm::mat4> computedTransforms;
+            if (!socketTransforms)
+            {
+                auto* animator = animSystem.getAnimator(parent);
+                if (!animator || !animator->isInitialized())
+                    return glm::mat4(1.0f);
+                animator->computeSocketTransforms(skeleton->sockets, computedTransforms);
+                socketTransforms = &computedTransforms;
+            }
+
+            if (socketIdx >= static_cast<int32_t>(socketTransforms->size()))
+                return glm::mat4(1.0f);
+
+            glm::mat4 parentWorld = glm::mat4(1.0f);
+            if (registry.all_of<components::WorldTransformComponent>(parent))
+            {
+                parentWorld = registry.get<components::WorldTransformComponent>(parent).worldMatrix;
+            }
+
+            return parentWorld * (*socketTransforms)[socketIdx];
         }
 
-        if (socketIdx >= static_cast<int32_t>(socketTransforms->size()))
+        // Static mesh: model-space socket transform is the local offset matrix.
+        const auto* sockets = getSocketsForEntity(parent);
+        if (!sockets)
+            return glm::mat4(1.0f);
+
+        int32_t socketIdx = indexOfSocket(*sockets, socketName);
+        if (socketIdx < 0)
             return glm::mat4(1.0f);
 
         glm::mat4 parentWorld = glm::mat4(1.0f);
@@ -344,6 +393,6 @@ namespace core
             parentWorld = registry.get<components::WorldTransformComponent>(parent).worldMatrix;
         }
 
-        return parentWorld * (*socketTransforms)[socketIdx];
+        return parentWorld * (*sockets)[socketIdx].getLocalOffsetMatrix();
     }
 }

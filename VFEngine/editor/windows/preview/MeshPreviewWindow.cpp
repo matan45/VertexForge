@@ -4,13 +4,19 @@
 #include "PreviewToolbar.hpp"
 #include "../../camera/OrbitCamera.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "MeshSocketWriter.hpp"
 #include "imgui.h"
 #include <imgui_internal.h>
+#include "ImGuizmo.h"
 #include "events/EventDispatcher.hpp"
 #include "events/render/PreviewEvents.hpp"
+#include "events/physics/SocketEvents.hpp"
 #include <IconsFontAwesome6.h>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <filesystem>
 #include <map>
+#include <cstring>
 
 namespace windows
 {
@@ -167,9 +173,27 @@ namespace windows
     void MeshPreviewWindow::loadSkeletonData()
     {
         auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
-        if (!streamHandle || !streamHandle->hasSkeletonData())
+        if (!streamHandle)
         {
             hasSkeleton = false;
+            return;
+        }
+
+        if (!streamHandle->hasSkeletonData())
+        {
+            // Static mesh (no skeleton). It may still carry a SOK2 socket block
+            // (VK-1427) — load those so the static-mesh socket editor can author them.
+            hasSkeleton = false;
+            boneNames.clear();
+            sockets.clear();
+            if (streamHandle->hasSocketData())
+            {
+                resource::SkeletonData tmp;
+                if (streamHandle->readSockets(tmp))
+                {
+                    sockets = tmp.sockets;
+                }
+            }
             return;
         }
 
@@ -228,7 +252,14 @@ namespace windows
 
         camera->setAspectRatio(width / height);
 
-        editor::preview::PreviewInputHandler::handleInput(camera.get(), isDraggingOrbit, isDraggingPan);
+        // Don't let the orbit camera consume mouse input while the socket gizmo is
+        // being dragged (static-mesh authoring) — otherwise the camera fights the
+        // gizmo. ImGuizmo::IsUsing() reflects the state from the previous frame's
+        // Manipulate() call, which is exactly the drag we want to protect.
+        if (!ImGuizmo::IsUsing())
+        {
+            editor::preview::PreviewInputHandler::handleInput(camera.get(), isDraggingOrbit, isDraggingPan);
+        }
 
         sendEnvironmentParams();
 
@@ -261,6 +292,47 @@ namespace windows
         if (textureHandle.imguiDescriptorSet)
         {
             ImGui::Image(textureHandle.imguiDescriptorSet, ImVec2(width, height));
+
+            // VK-1427 Phase 3: ImGuizmo handle over the rendered image, anchored to
+            // the image's screen rect (captured from the item we just submitted).
+            drawSocketGizmo();
+        }
+    }
+
+    void MeshPreviewWindow::drawSocketGizmo()
+    {
+        // Static-mesh authoring only, and only for a valid selection.
+        if (hasSkeleton) return;
+        if (selectedSocketIndex < 0 || selectedSocketIndex >= static_cast<int>(sockets.size())) return;
+
+        // Rect of the ImGui::Image() submitted immediately before this call.
+        ImVec2 imgMin = ImGui::GetItemRectMin();
+        ImVec2 imgSz = ImGui::GetItemRectSize();
+        if (imgSz.x <= 0.0f || imgSz.y <= 0.0f) return;
+
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetDrawlist();
+        ImGuizmo::SetRect(imgMin.x, imgMin.y, imgSz.x, imgSz.y);
+
+        // Undo the Vulkan Y-flip for ImGuizmo (expects OpenGL-style projection),
+        // matching ViewPortGizmo.
+        glm::mat4 view = camera->getViewMatrix();
+        glm::mat4 proj = camera->getProjectionMatrix();
+        proj[1][1] *= -1.0f;
+
+        // The static mesh is rendered at the origin (model == identity), so the
+        // socket's local offset is its world transform.
+        auto& socket = sockets[selectedSocketIndex];
+        glm::mat4 objectMatrix = socket.getLocalOffsetMatrix();
+
+        if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
+                                 socketGizmoOp, socketGizmoMode, glm::value_ptr(objectMatrix)))
+        {
+            float translation[3], rotation[3], scale[3];
+            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(objectMatrix),
+                                                  translation, rotation, scale);
+            socket.localPosition = glm::vec3(translation[0], translation[1], translation[2]);
+            socket.localRotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
         }
     }
 
@@ -438,17 +510,22 @@ namespace windows
             }
         }
 
-        if (hasSkeleton)
-        {
-            ImGui::Separator();
-            drawSocketPanel();
-        }
+        ImGui::Separator();
+        drawSocketPanel();
     }
 
     void MeshPreviewWindow::drawSocketPanel()
     {
-        if (ImGui::CollapsingHeader("Sockets", ImGuiTreeNodeFlags_DefaultOpen))
+        if (!ImGui::CollapsingHeader("Sockets", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            return;
+        }
+
+        if (hasSkeleton)
+        {
+            // Skeletal meshes: sockets are bound to bones and authored in the
+            // Animation Preview. Keep this panel read-only to avoid regressing
+            // that flow (a socket without a valid bone makes no sense here).
             ImGui::Text("Bones: %zu", boneNames.size());
 
             if (sockets.empty())
@@ -470,6 +547,186 @@ namespace windows
                                         socket.localPosition.x, socket.localPosition.y, socket.localPosition.z);
                     ImGui::TreePop();
                 }
+            }
+            return;
+        }
+
+        // Static mesh: full authoring. Sockets are mesh-local (no bone), so
+        // targetBoneName stays empty and boneIndex == -1.
+        drawStaticSocketEditor();
+    }
+
+    void MeshPreviewWindow::drawStaticSocketEditor()
+    {
+        // --- Create socket ---
+        if (ImGui::CollapsingHeader("Create Socket", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(10.0f);
+
+            ImGui::InputText("Name", newSocketName, sizeof(newSocketName));
+
+            float rot[3] = {newSocketEulerDeg.x, newSocketEulerDeg.y, newSocketEulerDeg.z};
+            if (ImGui::DragFloat3("Rotation##staticSocketNew", rot, 0.5f))
+            {
+                newSocketEulerDeg = glm::vec3(rot[0], rot[1], rot[2]);
+            }
+
+            bool canCreate = std::strlen(newSocketName) > 0;
+            if (canCreate)
+            {
+                for (const auto& existing : sockets)
+                {
+                    if (existing.name == newSocketName)
+                    {
+                        canCreate = false;
+                        ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Name already exists");
+                        break;
+                    }
+                }
+            }
+
+            if (!canCreate) ImGui::BeginDisabled();
+            bool addClicked = ImGui::Button("Add Socket");
+            if (!canCreate) ImGui::EndDisabled();
+
+            if (addClicked)
+            {
+                animator::SocketDefinition newSocket;
+                newSocket.name = newSocketName;
+                newSocket.targetBoneName.clear();
+                newSocket.boneIndex = -1;
+                newSocket.localRotation = glm::quat(glm::radians(newSocketEulerDeg));
+                sockets.push_back(newSocket);
+
+                newSocketName[0] = '\0';
+                newSocketEulerDeg = glm::vec3(0.0f);
+                selectedSocketIndex = static_cast<int>(sockets.size()) - 1;
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+
+        ImGui::Spacing();
+        ImGui::Text("Socket List (%zu)", sockets.size());
+        ImGui::Separator();
+
+        if (sockets.empty())
+        {
+            ImGui::TextDisabled("No sockets defined");
+            drawSocketSaveButton();
+            return;
+        }
+
+        // --- Socket list (selectable) ---
+        for (int i = 0; i < static_cast<int>(sockets.size()); ++i)
+        {
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (selectedSocketIndex == i)
+                flags |= ImGuiTreeNodeFlags_Selected;
+
+            bool nodeOpen = ImGui::TreeNodeEx(sockets[i].name.c_str(), flags);
+            if (ImGui::IsItemClicked())
+                selectedSocketIndex = i;
+            if (nodeOpen)
+                ImGui::TreePop();
+        }
+
+        // --- Selected-socket editor ---
+        if (selectedSocketIndex >= 0 && selectedSocketIndex < static_cast<int>(sockets.size()))
+        {
+            auto& socket = sockets[selectedSocketIndex];
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            if (ImGui::CollapsingHeader("Socket Properties", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Indent(10.0f);
+
+                ImGui::Text("Name: %s", socket.name.c_str());
+
+                float pos[3] = {socket.localPosition.x, socket.localPosition.y, socket.localPosition.z};
+                if (ImGui::DragFloat3("Position", pos, 0.01f))
+                {
+                    socket.localPosition = glm::vec3(pos[0], pos[1], pos[2]);
+                }
+
+                glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(socket.localRotation));
+                float rot[3] = {eulerDeg.x, eulerDeg.y, eulerDeg.z};
+                if (ImGui::DragFloat3("Rotation##staticSocketEdit", rot, 0.5f))
+                {
+                    socket.localRotation = glm::quat(glm::radians(glm::vec3(rot[0], rot[1], rot[2])));
+                }
+
+                ImGui::Spacing();
+                ImGui::TextDisabled("Gizmo:");
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Move", socketGizmoOp == ImGuizmo::TRANSLATE))
+                    socketGizmoOp = ImGuizmo::TRANSLATE;
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Rotate", socketGizmoOp == ImGuizmo::ROTATE))
+                    socketGizmoOp = ImGuizmo::ROTATE;
+
+                ImGui::Unindent(10.0f);
+            }
+
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+            if (ImGui::Button("Delete Socket"))
+            {
+                sockets.erase(sockets.begin() + selectedSocketIndex);
+                selectedSocketIndex = -1;
+            }
+            ImGui::PopStyleColor(2);
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        drawSocketSaveButton();
+    }
+
+    void MeshPreviewWindow::drawSocketSaveButton()
+    {
+        if (socketSaveMessageTimer > 0.0f)
+        {
+            socketSaveMessageTimer -= ImGui::GetIO().DeltaTime;
+        }
+
+        bool canSave = !meshPath.empty() && !sockets.empty();
+
+        if (!canSave) ImGui::BeginDisabled();
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.5f, 0.15f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.65f, 0.2f, 1.0f));
+        if (ImGui::Button("Save Sockets to Mesh"))
+        {
+            socketSaveSuccess = types::MeshSocketWriter::saveSocketsToMesh(meshPath, sockets);
+            socketSaveMessageTimer = 3.0f;
+            if (socketSaveSuccess)
+            {
+                events::socket::SocketDataSavedNotification notif;
+                notif.meshPath = meshPath;
+                events::EventDispatcher::instance().publish(notif);
+            }
+        }
+        ImGui::PopStyleColor(2);
+
+        if (!canSave) ImGui::EndDisabled();
+
+        if (sockets.empty())
+        {
+            ImGui::TextDisabled("No sockets to save");
+        }
+
+        if (socketSaveMessageTimer > 0.0f)
+        {
+            if (socketSaveSuccess)
+            {
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Sockets saved!");
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Save failed! Check log.");
             }
         }
     }

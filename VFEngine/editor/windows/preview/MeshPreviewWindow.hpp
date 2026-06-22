@@ -8,6 +8,7 @@
 #include "resource/Types.hpp"
 #include <math/Frustum.hpp>
 #include <glm/glm.hpp>
+#include "ImGuizmo.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -55,6 +56,17 @@ namespace windows
         std::vector<std::string> boneNames;
         std::vector<animator::SocketDefinition> sockets;
 
+        // VK-1427 Phase 3: static-mesh socket authoring (numeric fields + ImGuizmo).
+        // Editing is enabled only for static meshes here; skeletal sockets stay
+        // read-only (authored in the Animation Preview).
+        int selectedSocketIndex = -1;
+        char newSocketName[128] = "";
+        glm::vec3 newSocketEulerDeg{0.0f}; // working-copy rotation (euler degrees) for socket creation
+        bool socketSaveSuccess = false;
+        float socketSaveMessageTimer = 0.0f;
+        ImGuizmo::OPERATION socketGizmoOp = ImGuizmo::TRANSLATE;
+        ImGuizmo::MODE socketGizmoMode = ImGuizmo::LOCAL;
+
     public:
         explicit MeshPreviewWindow(const std::string& meshFilePath);
         ~MeshPreviewWindow() override;
@@ -70,6 +82,9 @@ namespace windows
         void drawViewport(float width, float height);
         void drawSubMeshPanel();
         void drawSocketPanel();
+        void drawStaticSocketEditor();
+        void drawSocketSaveButton();
+        void drawSocketGizmo();
         void drawLoadingIndicator(float width, float height);
         void onLoadingComplete();
         void loadSkeletonData();

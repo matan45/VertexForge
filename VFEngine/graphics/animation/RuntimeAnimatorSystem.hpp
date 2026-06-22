@@ -117,6 +117,10 @@ namespace animation
 
         const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
 
+        // Unified socket accessor (VK-1427): skeletal sockets for a skinned mesh, or
+        // static SOK2 sockets for a non-skeletal mesh. nullptr if the mesh has neither.
+        const std::vector<animator::SocketDefinition>* loadSockets(const std::string& meshPath);
+
         uint32_t getTotalAnimatorCount() const { return static_cast<uint32_t>(animators.size()); }
         AnimationLODManager& getLODManager() { return lodManager; }
         const AnimationLODManager& getLODManager() const { return lodManager; }
