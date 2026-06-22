@@ -94,6 +94,21 @@ namespace core::api
                 return value::Value(std::monostate{});
             }});
 
+        // Toggle an entity's NavmeshObstacle on/off. Disable while previewing a
+        // placement ghost so it does not re-bake tiles every frame; re-enable on
+        // commit to carve the building's footprint into the navmesh once.
+        interpreter->registerNativeFunction("_native_navmesh_setObstacleActive",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                events::navmesh::SetNavmeshObstacleActiveCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.active = extractBool(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
         interpreter->registerNativeFunction("_native_navmesh_isPointOnNavmesh",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();
