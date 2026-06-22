@@ -260,6 +260,24 @@ namespace animation
             }
         }
 
+        // Static-socket parents (VK-1427) have no animator, so they never appear in the
+        // animator-derived usedMeshPaths above. Without seeding their mesh paths here,
+        // every cleanup would evict the very staticSocketCache entries it was added for,
+        // forcing a re-parse of the SOK2 block on the next socket query/attachment.
+        for (auto entity : registry.view<components::SocketAttachmentComponent>())
+        {
+            const auto& att = registry.get<components::SocketAttachmentComponent>(entity);
+            if (att.parentEntity != entt::null && registry.valid(att.parentEntity) &&
+                registry.all_of<components::MeshComponent>(att.parentEntity))
+            {
+                const auto& meshComp = registry.get<components::MeshComponent>(att.parentEntity);
+                if (meshComp.meshRef.isValid())
+                {
+                    usedMeshPaths.insert(meshComp.meshRef.resolve());
+                }
+            }
+        }
+
         size_t removedAnimators = 0;
         size_t removedAnimations = 0;
         size_t removedSkeletons = 0;

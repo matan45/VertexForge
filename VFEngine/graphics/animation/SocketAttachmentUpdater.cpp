@@ -43,7 +43,6 @@ namespace animation
         {
             if (!registry.valid(attachedEntity))
                 continue;
-            resolveAttachmentParent(attachedEntity);
             resolveChain(attachedEntity);
         }
     }
@@ -58,6 +57,13 @@ namespace animation
         inProgress.insert(attachedEntity);
 
         auto& registry = scene::EntityRegistry::getRegistry();
+
+        // Resolve THIS entity's parent (by name, if pending) BEFORE recursing/applying.
+        // The view is visited in arbitrary order, so a chain whose child is reached before
+        // its parent must still apply the parent against a resolved parentEntity this frame
+        // — otherwise the parent would be marked resolved with a stale/unresolved parent.
+        resolveAttachmentParent(attachedEntity);
+
         const auto* att = registry.try_get<components::SocketAttachmentComponent>(attachedEntity);
         if (att && att->isActive && att->parentEntity != entt::null &&
             registry.valid(att->parentEntity) &&
