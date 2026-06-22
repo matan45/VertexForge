@@ -67,6 +67,11 @@ namespace windows
         ImGuizmo::OPERATION socketGizmoOp = ImGuizmo::TRANSLATE;
         ImGuizmo::MODE socketGizmoMode = ImGuizmo::LOCAL;
 
+        // Preview-only mesh orientation (turntable buttons in the panel). Applied as
+        // the render model matrix and composed into the socket gizmo; socket offsets
+        // remain stored in mesh-local space regardless of this rotation.
+        glm::quat meshPreviewRotation{1.0f, 0.0f, 0.0f, 0.0f};
+
     public:
         explicit MeshPreviewWindow(const std::string& meshFilePath);
         ~MeshPreviewWindow() override;
