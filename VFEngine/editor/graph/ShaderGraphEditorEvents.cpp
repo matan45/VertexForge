@@ -290,6 +290,18 @@ namespace editor::graph {
                     createNode(material::NodeType::Remap, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
+                if (ImGui::MenuItem("Flipbook")) {
+                    createNode(material::NodeType::Flipbook, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Rotator")) {
+                    createNode(material::NodeType::Rotator, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Custom Rotator")) {
+                    createNode(material::NodeType::CustomRotator, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
                 ImGui::EndMenu();
             }
 

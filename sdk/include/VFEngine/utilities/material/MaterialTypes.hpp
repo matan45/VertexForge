@@ -176,6 +176,9 @@ namespace material
         Panner,
         UVTransform,
         Remap,
+        Flipbook,
+        Rotator,
+        CustomRotator,
     };
 
     inline std::string nodeTypeToString(NodeType type)
@@ -235,6 +238,9 @@ namespace material
         case NodeType::Panner: return "Panner";
         case NodeType::UVTransform: return "UVTransform";
         case NodeType::Remap: return "Remap";
+        case NodeType::Flipbook: return "Flipbook";
+        case NodeType::Rotator: return "Rotator";
+        case NodeType::CustomRotator: return "CustomRotator";
         default: return "Unknown";
         }
     }
@@ -294,6 +300,9 @@ namespace material
         if (str == "Panner") return NodeType::Panner;
         if (str == "UVTransform") return NodeType::UVTransform;
         if (str == "Remap") return NodeType::Remap;
+        if (str == "Flipbook") return NodeType::Flipbook;
+        if (str == "Rotator") return NodeType::Rotator;
+        if (str == "CustomRotator") return NodeType::CustomRotator;
         return NodeType::ConstantScalar;
     }
 
