@@ -111,6 +111,13 @@ namespace services {
         virtual bool isMouseEnabled() const = 0;
         virtual bool isCursorVisible() const = 0;
 
+        // Relative ("captured") mouse mode for camera look (VK-1428). When enabled the OS cursor
+        // is locked and hidden and getRelativeMouseDelta() returns OS-level relative motion free
+        // of coalescing/clamping; when disabled the cursor is restored to where it was captured.
+        virtual void setRelativeMouseMode(bool enabled) = 0;
+        virtual bool isRelativeMouseMode() const = 0;
+        virtual glm::vec2 getRelativeMouseDelta() const = 0;
+
     };
 
 }

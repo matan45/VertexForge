@@ -162,20 +162,6 @@ namespace windows
                               "- Point: Sphere radius (magenta)");
         }
 
-        const char* debugModes[] = { "None", "Cascade Overlay", "Tile Pool Heatmap", "Bias Visualization" };
-        int currentMode = static_cast<int>(settings.shadows.debugMode);
-        if (ImGui::Combo("Debug Mode", &currentMode, debugModes, 4))
-        {
-            settings.shadows.debugMode = static_cast<types::ShadowDebugMode>(currentMode);
-            markDirty();
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("None: No overlay\n"
-                              "Cascade Overlay: Color-code cascade/clipmap levels\n"
-                              "Tile Pool Heatmap: Show VSM page allocation density\n"
-                              "Bias Visualization: Highlight bias-affected regions");
-        }
     }
 
     void RenderConfigWindow::drawShadowStatistics()

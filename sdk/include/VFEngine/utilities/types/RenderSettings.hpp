@@ -50,14 +50,6 @@ namespace types
         MsaaSamples msaa = MsaaSamples::Off;
     };
 
-    enum class ShadowDebugMode : uint8_t
-    {
-        None = 0,
-        CascadeOverlay,
-        TilePoolHeatmap,
-        BiasVisualization
-    };
-
     // VK-1430: one shared resolution scale for the directional/spot/point RT shadow trace+denoise.
     // Full (default) is a byte-identical bypass of today's behavior. Half traces+denoises at half
     // resolution then runs an edge-aware joint-bilateral upsample back to full resolution.
@@ -174,9 +166,6 @@ namespace types
         uint32_t clipmapLevelCount = 4;
         float clipmapBaseExtent = 32.0f;
         float clipmapDepthRange = 4000.0f;
-
-        // Debug visualization
-        ShadowDebugMode debugMode = ShadowDebugMode::None;
     };
 
     struct CullingSettings

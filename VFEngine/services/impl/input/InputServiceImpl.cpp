@@ -239,6 +239,20 @@ namespace services {
     bool InputServiceImpl::isMouseEnabled() const { return mouseEnabled; }
     bool InputServiceImpl::isCursorVisible() const { return cursorVisible; }
 
+    void InputServiceImpl::setRelativeMouseMode(bool enabled) {
+        if (!inputController) return;
+        if (enabled) inputController->beginRelativeMouse();
+        else         inputController->endRelativeMouse();
+    }
+
+    bool InputServiceImpl::isRelativeMouseMode() const {
+        return inputController && inputController->isRelativeMouseActive();
+    }
+
+    glm::vec2 InputServiceImpl::getRelativeMouseDelta() const {
+        return inputController ? inputController->getRelativeMouseDelta() : glm::vec2(0.0f);
+    }
+
     void InputServiceImpl::registerEventHandlers() {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -321,6 +335,21 @@ namespace services {
         dispatcher.registerCommandHandler<events::input::SetCursorVisibleCommand>(
             [this](const events::input::SetCursorVisibleCommand& cmd) {
                 setCursorVisible(cmd.visible);
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetRelativeMouseModeCommand>(
+            [this](const events::input::SetRelativeMouseModeCommand& cmd) {
+                setRelativeMouseMode(cmd.enabled);
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetRelativeMouseDeltaQuery>(
+            [this](const events::input::GetRelativeMouseDeltaQuery&) {
+                return getRelativeMouseDelta();
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsRelativeMouseModeQuery>(
+            [this](const events::input::IsRelativeMouseModeQuery&) {
+                return isRelativeMouseMode();
             });
 
         dispatcher.registerQueryHandler<events::input::IsKeyboardEnabledQuery>(

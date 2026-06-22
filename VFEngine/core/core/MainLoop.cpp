@@ -53,7 +53,13 @@ namespace core {
 	void MainLoop::run()
 	{
 		while (!mainWindow->shouldClose()) {
-			mainWindow->pollEvents();
+			// Wait for the render thread to finish the previous frame BEFORE sampling input
+			// and time. Under FIFO VSync this wait is up to a full frame long; sampling input
+			// and the frame delta *after* the wait (not before) keeps the frame we simulate
+			// aligned with the frame actually being produced, so editor/camera movement is
+			// smooth instead of stepped (VK-1428). Also ensures descriptor sets aren't updated
+			// while the GPU is still using them.
+			renderController->beginFrame();
 
 			// NVIDIA Reflex: mint this frame's token, mark input/latency ping, then sleep
 			// as early as possible to reduce render/input latency. No-ops when Reflex inactive.
@@ -64,11 +70,9 @@ namespace core {
 				reflex->reflexSleep();
 			}
 
-			engineTime::Timer::update();
+			mainWindow->pollEvents();
 
-			// Wait for render thread to finish previous frame before starting new frame.
-			// This ensures descriptor sets aren't updated while the GPU is still using them.
-			renderController->beginFrame();
+			engineTime::Timer::update();
 
 			// The frame callback orchestrates the entire frame pipeline
 			// (service updates, scene graph, post-update, imgui, render)

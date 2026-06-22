@@ -20,6 +20,15 @@ namespace window
         glm::vec2 mouseDelta{0.0f};
         bool firstMouseUpdate{true};
 
+        // Relative ("captured") mouse mode for editor camera look (VK-1428). While active the OS
+        // cursor is GLFW_CURSOR_DISABLED (+ raw motion when supported); the virtual cursor's
+        // frame-to-frame difference is the true relative motion, free of OS coalescing/clamping.
+        bool relativeMouseActive{false};
+        glm::vec2 captureRestorePos{0.0f};   // OS cursor pos saved on enter, restored on exit
+        glm::vec2 relativeLastPos{0.0f};      // last virtual-cursor sample within a session
+        bool relativeFirstSample{true};
+        glm::vec2 relativeDelta{0.0f};        // captured delta for the current frame
+
         glm::vec2 scrollDelta{0.0f};
         glm::vec2 frameScrollDelta{0.0f};
 
@@ -92,6 +101,14 @@ namespace window
 
         Window* getWindow() const { return window; }
         void setCursorMode(int mode) { if (glfwWindow) glfwSetInputMode(glfwWindow, GLFW_CURSOR, mode); }
+
+        // Relative mouse capture for camera look (VK-1428). begin saves the cursor position and
+        // disables the OS cursor (+ raw motion if supported); end restores both. getRelativeMouseDelta
+        // returns the captured motion for the current frame (zero when inactive).
+        void beginRelativeMouse();
+        void endRelativeMouse();
+        bool isRelativeMouseActive() const { return relativeMouseActive; }
+        glm::vec2 getRelativeMouseDelta() const { return relativeDelta; }
 
         void onScroll(double xoffset, double yoffset);
 
