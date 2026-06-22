@@ -81,6 +81,13 @@ namespace services
                 }
             }
 
+            // A moving nav-mesh agent (e.g. a unit/soldier) must never be baked into the
+            // nav-mesh it walks on — that would carve solid geometry under it and trap it.
+            if (registry.all_of<components::NavmeshAgentComponent>(entity))
+            {
+                continue;
+            }
+
             const auto& mesh = view.get<components::MeshComponent>(entity);
             const auto& transform = view.get<components::TransformComponent>(entity);
 
@@ -156,6 +163,13 @@ namespace services
                 {
                     continue;
                 }
+            }
+
+            // A moving nav-mesh agent (e.g. a unit/soldier) must never be baked into the
+            // nav-mesh it walks on — that would carve solid geometry under it and trap it.
+            if (registry.all_of<components::NavmeshAgentComponent>(entity))
+            {
+                continue;
             }
 
             const auto& collider = view.get<components::ColliderComponent>(entity);
@@ -336,6 +350,11 @@ namespace services
                     continue;
             }
 
+            // A moving nav-mesh agent (e.g. a unit/soldier) must never be baked into the
+            // nav-mesh it walks on — that would carve solid geometry under it and trap it.
+            if (registry.all_of<components::NavmeshAgentComponent>(entity))
+                continue;
+
             const auto& transform = view.get<components::TransformComponent>(entity);
             glm::vec3 pos = transform.position;
 
@@ -397,6 +416,11 @@ namespace services
                 if (rb.type == components::RigidBodyType::Dynamic)
                     continue;
             }
+
+            // A moving nav-mesh agent (e.g. a unit/soldier) must never be baked into the
+            // nav-mesh it walks on — that would carve solid geometry under it and trap it.
+            if (registry.all_of<components::NavmeshAgentComponent>(entity))
+                continue;
 
             const auto& collider = view.get<components::ColliderComponent>(entity);
             if (collider.isTrigger)
