@@ -601,17 +601,18 @@ namespace render::raytracing
                 continue;
             }
 
-            ++processed;
-
             // Source was destroyed by an eviction — just recycle the slot.
             if (pc.stale)
             {
+                ++processed;
                 freeCompactionSlots.push_back(pc.queryIndex);
                 it = pendingCompactions.erase(it);
                 continue;
             }
 
             // Read compacted size without waiting; if not ready, leave for a later frame.
+            // A not-ready query costs no compaction budget, so it must not count toward
+            // `processed` — only bump the counter once a result has actually resolved.
             vk::DeviceSize compactedSize = 0;
             vk::Result res = vkDevice.getQueryPoolResults(
                 compactionQueryPool, pc.queryIndex, 1,
@@ -620,10 +621,11 @@ namespace render::raytracing
 
             if (res == vk::Result::eNotReady)
             {
-                --processed; // didn't actually consume a compaction budget slot
                 ++it;
                 continue;
             }
+
+            ++processed;
 
             // Bad/non-beneficial result — drop the record, keep the original BLAS.
             if (res != vk::Result::eSuccess || compactedSize == 0 || compactedSize >= pc.srcSize)

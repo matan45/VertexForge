@@ -3,6 +3,7 @@
 #include "resource/EndianUtils.hpp"
 #include "resource/MeshStreamHandle.hpp"
 
+#include <cstdint>
 #include <fstream>
 #include <vector>
 #include <filesystem>
@@ -18,7 +19,8 @@ namespace types
             return false;
         }
 
-        std::streampos socketOffset = findSocketOffset(meshPath);
+        std::streampos suffixOffset = 0;
+        std::streampos socketOffset = findSocketOffset(meshPath, suffixOffset);
         if (socketOffset == std::streampos(0))
             return false;
 
@@ -26,15 +28,26 @@ namespace types
         if (!readFilePrefix(meshPath, socketOffset, prefixData))
             return false;
 
-        if (!writeSocketFile(meshPath, prefixData, sockets))
+        // Preserve everything after the existing socket block (the IK-chain block lives
+        // here for skeletal meshes). Truncating without this silently destroyed IK chains
+        // whenever sockets were saved. suffixOffset == 0 means nothing trails the socket
+        // block (e.g. static meshes), so the suffix stays empty.
+        std::vector<char> suffixData;
+        if (suffixOffset != std::streampos(0) && !readFileSuffix(meshPath, suffixOffset, suffixData))
             return false;
 
-        vfLogDebug("MeshSocketWriter: Saved {} sockets to {}", sockets.size(), meshPath);
+        if (!writeSocketFile(meshPath, prefixData, sockets, suffixData))
+            return false;
+
+        vfLogDebug("MeshSocketWriter: Saved {} sockets to {} (preserved {} trailing bytes)",
+                   sockets.size(), meshPath, suffixData.size());
         return true;
     }
 
-    std::streampos MeshSocketWriter::findSocketOffset(const std::string& meshPath)
+    std::streampos MeshSocketWriter::findSocketOffset(const std::string& meshPath, std::streampos& outSuffixOffset)
     {
+        outSuffixOffset = std::streampos(0);
+
         auto stream = resource::MeshStreamResource::openStream(meshPath);
         if (!stream)
         {
@@ -51,6 +64,11 @@ namespace types
         {
             vfLogError("MeshSocketWriter: Failed to get socket data offset");
         }
+
+        // End of the existing socket block == start of the IK-chain block (skeletal meshes).
+        // Returns 0 for static meshes (no skeleton), where the socket block is the last block
+        // and there is nothing trailing to preserve.
+        outSuffixOffset = stream->getIKChainDataOffset();
 
         return offset;
     }
@@ -77,8 +95,47 @@ namespace types
         return true;
     }
 
+    bool MeshSocketWriter::readFileSuffix(const std::string& meshPath, std::streampos offset,
+                                           std::vector<char>& outData)
+    {
+        outData.clear();
+
+        std::error_code ec;
+        const std::uintmax_t fileSize = std::filesystem::file_size(meshPath, ec);
+        if (ec)
+        {
+            vfLogError("MeshSocketWriter: Failed to query file size: {}", meshPath);
+            return false;
+        }
+
+        const std::uintmax_t start = static_cast<std::uintmax_t>(offset);
+        if (start >= fileSize)
+            return true; // nothing trails the socket block
+
+        std::ifstream file(meshPath, std::ios::binary);
+        if (!file.is_open())
+        {
+            vfLogError("MeshSocketWriter: Cannot open file for reading suffix: {}", meshPath);
+            return false;
+        }
+
+        const size_t suffixSize = static_cast<size_t>(fileSize - start);
+        outData.resize(suffixSize);
+        file.seekg(offset);
+        file.read(outData.data(), static_cast<std::streamsize>(suffixSize));
+
+        if (file.fail())
+        {
+            vfLogError("MeshSocketWriter: Failed to read file suffix");
+            return false;
+        }
+
+        return true;
+    }
+
     bool MeshSocketWriter::writeSocketFile(const std::string& meshPath, const std::vector<char>& prefixData,
-                                            const std::vector<animator::SocketDefinition>& sockets)
+                                            const std::vector<animator::SocketDefinition>& sockets,
+                                            const std::vector<char>& suffixData)
     {
         std::ofstream file(meshPath, std::ios::binary | std::ios::trunc);
         if (!file.is_open())
@@ -124,6 +181,13 @@ namespace types
             resource::endian::writeLE<float>(file, socket.localRotation.x);
             resource::endian::writeLE<float>(file, socket.localRotation.y);
             resource::endian::writeLE<float>(file, socket.localRotation.z);
+        }
+
+        // Re-append any block that followed the old socket region (IK chains, etc.) so a
+        // socket save no longer truncates trailing data.
+        if (!suffixData.empty())
+        {
+            file.write(suffixData.data(), static_cast<std::streamsize>(suffixData.size()));
         }
 
         if (file.fail())

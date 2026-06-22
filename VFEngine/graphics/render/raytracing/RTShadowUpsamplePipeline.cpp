@@ -50,8 +50,11 @@ namespace render::raytracing
             createComputePipeline();
             if (!computePipeline)
             {
-                // Shader failed to compile — tear down what we built and stay uninitialized.
+                // Pipeline creation failed — tear down what we built and stay uninitialized.
+                // pipelineLayout is created inside createComputePipeline() before the pipeline
+                // itself, so it must be destroyed here (cleanup() early-returns while !initialized).
                 vk::Device vkDevice = device.getLogicalDevice();
+                vkDevice.destroyPipelineLayout(pipelineLayout);
                 vkDevice.destroyDescriptorPool(computePool);
                 vkDevice.destroyDescriptorPool(outputSamplerPool);
                 vkDevice.destroyDescriptorSetLayout(computeLayout);

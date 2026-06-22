@@ -57,6 +57,17 @@ namespace events::navmesh
         std::string_view getName() const override { return "StopNavmeshAgent"; }
     };
 
+    // Toggle an entity's NavmeshObstacleComponent on/off at runtime. Disabling
+    // makes it inert (no carving / no avoidance phantom); enabling carves its
+    // footprint once at the current pose. Used so a placement ghost does not
+    // continuously re-bake tiles while following the cursor.
+    struct SetNavmeshObstacleActiveCommand : ICommand<>
+    {
+        services::EntityHandle entity;
+        bool active = true;
+        std::string_view getName() const override { return "SetNavmeshObstacleActive"; }
+    };
+
 
     struct UpdateAgentConfigCommand : ICommand<>
     {
