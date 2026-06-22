@@ -247,9 +247,15 @@ namespace animation
 
         if (skeleton)
         {
+            // IK targets are world-space; the solver runs in model space. Pass the
+            // entity's world matrix so applyIK can convert (identity if absent).
+            glm::mat4 entityWorld(1.0f);
+            if (registry.all_of<components::WorldTransformComponent>(entity))
+                entityWorld = registry.get<components::WorldTransformComponent>(entity).worldMatrix;
+
             auto& matrices = anim->getMutableBoneMatrices();
             IKPostProcessor::applyIK(matrices, *skeleton,
-                                      ikComp.chains, ikComp.runtimeStates);
+                                      ikComp.chains, ikComp.runtimeStates, entityWorld);
         }
     }
 

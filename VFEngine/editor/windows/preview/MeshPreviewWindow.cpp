@@ -263,7 +263,7 @@ namespace windows
 
         sendEnvironmentParams();
 
-        glm::mat4 model = glm::mat4(1.0f);
+        glm::mat4 model = glm::mat4_cast(meshPreviewRotation);
 
         services::MeshPreviewParams meshParams;
         meshParams.modelMatrix = model;
@@ -320,16 +320,20 @@ namespace windows
         glm::mat4 proj = camera->getProjectionMatrix();
         proj[1][1] *= -1.0f;
 
-        // The static mesh is rendered at the origin (model == identity), so the
-        // socket's local offset is its world transform.
+        // The mesh may be shown under a preview rotation (turntable buttons), so the
+        // socket's world transform is model * localOffset. Manipulate in world, then
+        // strip the model rotation back off so the stored offset stays mesh-local
+        // (when meshPreviewRotation is identity this is byte-for-byte the old path).
         auto& socket = sockets[selectedSocketIndex];
-        glm::mat4 objectMatrix = socket.getLocalOffsetMatrix();
+        glm::mat4 model = glm::mat4_cast(meshPreviewRotation);
+        glm::mat4 objectMatrix = model * socket.getLocalOffsetMatrix();
 
         if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
                                  socketGizmoOp, socketGizmoMode, glm::value_ptr(objectMatrix)))
         {
+            glm::mat4 localMatrix = glm::inverse(model) * objectMatrix;
             float translation[3], rotation[3], scale[3];
-            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(objectMatrix),
+            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMatrix),
                                                   translation, rotation, scale);
             socket.localPosition = glm::vec3(translation[0], translation[1], translation[2]);
             socket.localRotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
@@ -507,6 +511,39 @@ namespace windows
             if (ImGui::Button("Fit to Mesh", ImVec2(-1, 0)))
             {
                 camera->fitToBounds(meshBounds);
+            }
+        }
+
+        if (ImGui::CollapsingHeader("Orientation", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::TextDisabled("Rotate mesh (preview only)");
+
+            // Pre-multiply so each press rotates the mesh about a fixed world axis,
+            // which reads more intuitively than local-axis turns. Preview-only: this
+            // never touches the saved mesh or the socket offsets (see drawSocketGizmo).
+            auto rotateMesh = [this](const glm::vec3& axis, float deg)
+            {
+                meshPreviewRotation = glm::normalize(
+                    glm::angleAxis(glm::radians(deg), axis) * meshPreviewRotation);
+            };
+
+            float btnW = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+
+            if (ImGui::Button("X -90", ImVec2(btnW, 0))) rotateMesh(glm::vec3(1, 0, 0), -90.0f);
+            ImGui::SameLine();
+            if (ImGui::Button("X +90", ImVec2(btnW, 0))) rotateMesh(glm::vec3(1, 0, 0), 90.0f);
+
+            if (ImGui::Button("Y -90", ImVec2(btnW, 0))) rotateMesh(glm::vec3(0, 1, 0), -90.0f);
+            ImGui::SameLine();
+            if (ImGui::Button("Y +90", ImVec2(btnW, 0))) rotateMesh(glm::vec3(0, 1, 0), 90.0f);
+
+            if (ImGui::Button("Z -90", ImVec2(btnW, 0))) rotateMesh(glm::vec3(0, 0, 1), -90.0f);
+            ImGui::SameLine();
+            if (ImGui::Button("Z +90", ImVec2(btnW, 0))) rotateMesh(glm::vec3(0, 0, 1), 90.0f);
+
+            if (ImGui::Button("Reset Orientation", ImVec2(-1, 0)))
+            {
+                meshPreviewRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
             }
         }
 
