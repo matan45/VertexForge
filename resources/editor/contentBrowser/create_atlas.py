@@ -2,25 +2,6 @@
 Creates a transparent icon atlas from individual PNG icons.
 Atlas layout: 4 columns x 5 rows, 64x64 pixels per tile, 256x320 total
 
-Icon indices:
-0 - animation
-1 - image (texture)
-2 - glsl
-3 - mesh
-4 - material
-5 - folder
-6 - scene
-7 - hdr
-8 - audio
-9 - other (file)
-10 - prefab
-11 - font
-12 - project
-13 - animator
-14 - particle
-15 - terrain
-16 - navmesh
-17 - physAnim
 
 Usage: python create_atlas.py
 """
@@ -39,29 +20,25 @@ ATLAS_HEIGHT = TILE_SIZE * GRID_ROWS  # 320
 # Update these filenames to match your actual icon files
 ICON_FILES = {
     0: "animation-file",      # animation
-    1: "texture-file",        # image/texture
-    2: "mType",        # image/texture
-    3: "mesh-file",           # mesh
-    4: "material-icon",       # material
-    5: "folder",              # folder
-    6: "scene",               # scene
-    7: "hdr-file",            # hdr
-    8: "audio-file",          # audio
-    9: "file",          # audio
-    10: "Prefab",                # other/file
-    11: "font",                # other/file
-    12: "project",                # other/file
-    13: "animator",                # other/file
-    14: "particle",                # other/file
-    15: "terrain",                # terrain
-    16: "navmesh",               # navmesh
-    17: "physAnim",              # physics animation
-    18: "sea",              # physics animation
-    19: "ai-tree",              # physics animation
-    20: "plugin",              # physics animation
-    21: "input",             # physics animation
-    22: "animation-retarget",             # physics animation
-    23: "VFXSequence",             # physics animation
+    1: "mType",        # image/texture
+    2: "folder",              # folder
+    3: "scene",               # scene
+    4: "audio-file",          # audio
+    5: "file",          # audio
+    6: "Prefab",                # other/file
+    7: "font",                # other/file
+    8: "project",                # other/file
+    9: "animator",                # other/file
+    10: "particle",                # other/file
+    11: "terrain",                # terrain
+    12: "navmesh",               # navmesh
+    13: "physAnim",              # physics animation
+    14: "sea",              # physics animation
+    15: "ai-tree",              # physics animation
+    16: "plugin",              # physics animation
+    17: "input",             # physics animation
+    18: "animation-retarget",             # physics animation
+    19: "VFXSequence",             # physics animation
 }
 
 def find_icon_file(base_name):
