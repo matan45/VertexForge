@@ -642,7 +642,25 @@ namespace windows
             {
                 ImGui::Indent(10.0f);
 
-                ImGui::Text("Name: %s", socket.name.c_str());
+                // Editable name. Seed a local buffer from the socket and write back on
+                // change so an existing socket can be renamed (not just at creation).
+                char nameBuf[128];
+                std::strncpy(nameBuf, socket.name.c_str(), sizeof(nameBuf) - 1);
+                nameBuf[sizeof(nameBuf) - 1] = '\0';
+                if (ImGui::InputText("Name##staticSocketEdit", nameBuf, sizeof(nameBuf)))
+                {
+                    socket.name = nameBuf;
+                }
+                // Non-blocking warning if the (edited) name now collides with another
+                // socket — duplicate names make Socket::getPosition(name) ambiguous.
+                for (int j = 0; j < static_cast<int>(sockets.size()); ++j)
+                {
+                    if (j != selectedSocketIndex && sockets[j].name == socket.name)
+                    {
+                        ImGui::TextColored(ImVec4(1, 0.6f, 0.2f, 1), "Duplicate name");
+                        break;
+                    }
+                }
 
                 float pos[3] = {socket.localPosition.x, socket.localPosition.y, socket.localPosition.z};
                 if (ImGui::DragFloat3("Position", pos, 0.01f))
