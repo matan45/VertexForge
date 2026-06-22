@@ -202,4 +202,54 @@ TEST_CASE("applyIK: unresolved bone name is a safe no-op (no crash, no change)")
     CHECK(glm::length(translationOf(boneMatrices[2]) - originalTip) < 1e-5f);
 }
 
+TEST_CASE("applyIK: world-space target is converted by the entity world matrix")
+{
+    // The solver runs in model space, but targets are supplied in world space. For
+    // an entity that is translated AND scaled, the target must be converted or the
+    // limb is yanked to the raw world coords interpreted as model space (the
+    // real-world "missing arm" bug). Guard both: with conversion the hand reaches
+    // the world target; without it (identity) it does not.
+    resource::SkeletonData skeleton = makeArmSkeleton();
+
+    const glm::mat4 entityWorld =
+        glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 5.0f, -3.0f)) *
+        glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
+
+    animator::ik::IKChainConfig chain;
+    chain.chainName = "LeftArm";
+    chain.tipBoneName = "Hand";
+    chain.chainBoneNames = { "Shoulder", "Elbow" };
+    chain.weight = 1.0f;
+    chain.enabled = true;
+
+    // World-space target within reach (world reach = model reach 2 * scale 0.5 = 1).
+    const glm::vec3 worldTarget(10.5f, 5.5f, -3.0f);
+
+    components::IKChainRuntimeState baseState;
+    baseState.targetPosition = worldTarget;
+    baseState.isActive = true;
+    baseState.currentWeight = 1.0f;
+    baseState.resolvedTipIndex = -1;
+
+    std::vector<animator::ik::IKChainConfig> chains = { chain };
+
+    // With the entity world matrix: the tip's WORLD position should reach the target.
+    std::vector<glm::mat4> boneMatrices = makeArmBoneMatrices();
+    std::vector<components::IKChainRuntimeState> states = { baseState };
+    IKPostProcessor::applyIK(boneMatrices, skeleton, chains, states, entityWorld);
+
+    const glm::vec3 handWorld = glm::vec3(entityWorld * glm::vec4(translationOf(boneMatrices[2]), 1.0f));
+    CHECK(glm::length(handWorld - worldTarget) < 0.1f);
+
+    // Without conversion (identity): the hand chases world coords in model space and
+    // lands nowhere near the world target — proves the conversion is what matters.
+    std::vector<glm::mat4> boneMatricesNoConv = makeArmBoneMatrices();
+    std::vector<components::IKChainRuntimeState> statesNoConv = { baseState };
+    IKPostProcessor::applyIK(boneMatricesNoConv, skeleton, chains, statesNoConv, glm::mat4(1.0f));
+
+    const glm::vec3 handWorldNoConv =
+        glm::vec3(entityWorld * glm::vec4(translationOf(boneMatricesNoConv[2]), 1.0f));
+    CHECK(glm::length(handWorldNoConv - worldTarget) > 0.1f);
+}
+
 } // TEST_SUITE("IK PostProcess")

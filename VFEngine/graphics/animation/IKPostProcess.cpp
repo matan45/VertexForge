@@ -12,10 +12,17 @@ namespace animation
         std::vector<glm::mat4>& boneMatrices,
         const resource::SkeletonData& skeleton,
         std::vector<animator::ik::IKChainConfig>& chains,
-        std::vector<components::IKChainRuntimeState>& runtimeStates)
+        std::vector<components::IKChainRuntimeState>& runtimeStates,
+        const glm::mat4& entityWorldMatrix)
     {
         if (chains.empty() || boneMatrices.empty())
             return;
+
+        // Targets arrive in entity WORLD space but the solver runs in the skeleton's
+        // MODEL space (bone transforms below never include the entity transform).
+        // Convert once here; for an entity at the origin with unit scale this is
+        // identity and changes nothing.
+        const glm::mat4 worldToModel = glm::inverse(entityWorldMatrix);
 
         if (runtimeStates.size() != chains.size())
             runtimeStates.resize(chains.size());
@@ -46,7 +53,7 @@ namespace animation
             if (state.resolvedBoneIndices.size() < 2 || state.resolvedTipIndex < 0)
                 continue;
 
-            solveChain(boneMatrices, skeleton, config, state);
+            solveChain(boneMatrices, skeleton, config, state, worldToModel);
         }
     }
 
@@ -90,7 +97,8 @@ namespace animation
         std::vector<glm::mat4>& boneMatrices,
         const resource::SkeletonData& skeleton,
         const animator::ik::IKChainConfig& config,
-        const components::IKChainRuntimeState& state)
+        const components::IKChainRuntimeState& state,
+        const glm::mat4& worldToModel)
     {
         const auto& chainIndices = state.resolvedBoneIndices;
         const size_t chainLen = chainIndices.size();
@@ -141,9 +149,19 @@ namespace animation
             solverInput.constraints[i] = config.constraints[i];
         }
 
+        // Convert the world-space target into the model space the chain lives in.
         animator::ik::IKTarget target;
-        target.position = state.targetPosition;
-        target.rotation = state.targetRotation;
+        target.position = glm::vec3(worldToModel * glm::vec4(state.targetPosition, 1.0f));
+        if (state.targetRotation.has_value())
+        {
+            // Rotation-only part of worldToModel (columns normalized to drop the
+            // uniform scale that the inverse world matrix carries).
+            glm::mat3 rot = glm::mat3(worldToModel);
+            rot[0] = glm::normalize(rot[0]);
+            rot[1] = glm::normalize(rot[1]);
+            rot[2] = glm::normalize(rot[2]);
+            target.rotation = glm::quat_cast(rot) * state.targetRotation.value();
+        }
 
         // Step 3: Solve
         auto solverResult = FABRIKSolver::solve(solverInput, target);
