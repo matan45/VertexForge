@@ -153,6 +153,9 @@ namespace editor::graph {
             case material::NodeType::Panner:         return "Panner";
             case material::NodeType::UVTransform:    return "UV Transform";
             case material::NodeType::Remap:          return "Remap";
+            case material::NodeType::Flipbook:       return "Flipbook";
+            case material::NodeType::Rotator:        return "Rotator";
+            case material::NodeType::CustomRotator:  return "Custom Rotator";
             default:                                 return "Unknown";
         }
     }

@@ -125,16 +125,81 @@ namespace animation
         return it->second.get();
     }
 
+    const std::vector<animator::SocketDefinition>* AnimationDataCache::loadSockets(const std::string& meshPath)
+    {
+        // Skinned mesh: skeleton.sockets is authoritative (return it whether empty or not).
+        // loadSkeleton returns a present-nullptr for static meshes, so a null result here
+        // means "not skinned" and we fall through to the static SOK2 path.
+        const resource::SkeletonData* skeleton = loadSkeleton(meshPath);
+        if (skeleton)
+        {
+            return &skeleton->sockets;
+        }
+        return loadStaticSockets(meshPath);
+    }
+
+    const std::vector<animator::SocketDefinition>* AnimationDataCache::loadStaticSockets(const std::string& meshPath)
+    {
+        if (meshPath.empty())
+        {
+            return nullptr;
+        }
+
+        {
+            // Present-key is the hit test; a present nullptr is the negative cache.
+            std::shared_lock readLock(cacheMutex);
+            auto it = staticSocketCache.find(meshPath);
+            if (it != staticSocketCache.end())
+            {
+                return it->second.get();
+            }
+        }
+
+        // Read the SOK2 block outside the lock.
+        auto stream = resource::MeshStreamResource::openStream(meshPath);
+        if (!stream)
+        {
+            // Transient open failure: do not cache.
+            vfLogError("[AnimationDataCache] Failed to open mesh for static sockets: {}", meshPath);
+            return nullptr;
+        }
+
+        if (!stream->hasSocketData())
+        {
+            std::unique_lock writeLock(cacheMutex);
+            auto [it, inserted] = staticSocketCache.try_emplace(meshPath, nullptr);
+            return it->second.get();
+        }
+
+        resource::SkeletonData tmp; // no bones -> socket.boneIndex resolves to -1 (static)
+        if (!stream->readSockets(tmp))
+        {
+            vfLogError("[AnimationDataCache] Failed to read static sockets from: {}", meshPath);
+            std::unique_lock writeLock(cacheMutex);
+            auto [it, inserted] = staticSocketCache.try_emplace(meshPath, nullptr);
+            return it->second.get();
+        }
+
+        auto sockets = std::make_shared<std::vector<animator::SocketDefinition>>(std::move(tmp.sockets));
+
+        // First-writer-wins.
+        std::unique_lock writeLock(cacheMutex);
+        auto [it, inserted] = staticSocketCache.try_emplace(meshPath, std::move(sockets));
+        return it->second.get();
+    }
+
     void AnimationDataCache::invalidateSkeleton(const std::string& meshPath)
     {
         std::unique_lock writeLock(cacheMutex);
         skeletonDataCache.erase(meshPath);
+        staticSocketCache.erase(meshPath);
     }
 
     void AnimationDataCache::clearSkeletons()
     {
         std::unique_lock writeLock(cacheMutex);
         skeletonDataCache.clear();
+        staticSocketCache.clear();
     }
 
     void AnimationDataCache::clearAll()
@@ -143,6 +208,7 @@ namespace animation
         animatorDataCache.clear();
         animationDataCache.clear();
         skeletonDataCache.clear();
+        staticSocketCache.clear();
     }
 
     void AnimationDataCache::cleanupUnused(const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators)
@@ -194,6 +260,24 @@ namespace animation
             }
         }
 
+        // Static-socket parents (VK-1427) have no animator, so they never appear in the
+        // animator-derived usedMeshPaths above. Without seeding their mesh paths here,
+        // every cleanup would evict the very staticSocketCache entries it was added for,
+        // forcing a re-parse of the SOK2 block on the next socket query/attachment.
+        for (auto entity : registry.view<components::SocketAttachmentComponent>())
+        {
+            const auto& att = registry.get<components::SocketAttachmentComponent>(entity);
+            if (att.parentEntity != entt::null && registry.valid(att.parentEntity) &&
+                registry.all_of<components::MeshComponent>(att.parentEntity))
+            {
+                const auto& meshComp = registry.get<components::MeshComponent>(att.parentEntity);
+                if (meshComp.meshRef.isValid())
+                {
+                    usedMeshPaths.insert(meshComp.meshRef.resolve());
+                }
+            }
+        }
+
         size_t removedAnimators = 0;
         size_t removedAnimations = 0;
         size_t removedSkeletons = 0;
@@ -230,6 +314,18 @@ namespace animation
             {
                 it = skeletonDataCache.erase(it);
                 ++removedSkeletons;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        for (auto it = staticSocketCache.begin(); it != staticSocketCache.end();)
+        {
+            if (usedMeshPaths.find(it->first) == usedMeshPaths.end())
+            {
+                it = staticSocketCache.erase(it);
             }
             else
             {

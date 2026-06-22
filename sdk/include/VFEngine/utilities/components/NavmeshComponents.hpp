@@ -118,6 +118,12 @@ namespace components
         glm::vec3 offset{0.0f};              // Local-space offset
         float movementThreshold = 0.5f;       // Min movement to trigger re-dirty
 
+        // Runtime (not serialized). When false the obstacle is inert: it neither
+        // carves nor registers an avoidance phantom. Used to suppress carving on a
+        // placement ghost that follows the cursor (which would otherwise re-bake
+        // tiles every frame); re-enabled once the building is committed.
+        bool enabled = true;
+
         // Runtime (not serialized)
         bool isRegistered = false;
         glm::vec3 lastBakedPosition{0.0f};

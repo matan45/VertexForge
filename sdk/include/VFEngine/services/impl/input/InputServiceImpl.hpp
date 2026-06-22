@@ -52,6 +52,10 @@ namespace services {
         bool isMouseEnabled() const override;
         bool isCursorVisible() const override;
 
+        void setRelativeMouseMode(bool enabled) override;
+        bool isRelativeMouseMode() const override;
+        glm::vec2 getRelativeMouseDelta() const override;
+
     private:
        void publishInputNotifications();
 

@@ -25,9 +25,7 @@ namespace windows
         ViewPortGizmo gizmo;
         ViewPortOverlay overlay;
 
-        bool isFirstMouseInput = true;
-        float lastMouseX = 0.0f;
-        float lastMouseY = 0.0f;
+        bool cameraLookActive = false;  // RMB-held OS mouse capture for camera look (VK-1428)
 
         bool sculptDragging = false;
         bool paintDragging = false;
@@ -45,6 +43,7 @@ namespace windows
 
     private:
         void handleCameraInput();
+        void updateCameraLook(bool isPlayMode);  // maintain/exit RMB look capture (VK-1428)
         bool tryGetGameCameraState(CameraState& state, float aspectRatio);
         CameraState getActiveCameraState(bool isPlayMode, float aspectRatio);
         void updateRendererCameras(const CameraState& camera);

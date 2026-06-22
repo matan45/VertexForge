@@ -97,6 +97,7 @@ namespace services
         void trackObstacleTransforms();
         void drawObstacleDebug();
         void cleanupPhantomAgents();
+        void setObstacleActive(EntityHandle entity, bool active);
 
         // Area modifier volume support
         navigation::AreaModifiersMap collectAllAreaModifiers();

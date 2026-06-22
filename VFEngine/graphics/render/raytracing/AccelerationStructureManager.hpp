@@ -96,6 +96,12 @@ namespace render::raytracing
                                   const std::vector<gpudriven::TerrainTileGPUData>& terrainTiles,
                                   uint32_t terrainTileCount);
 
+        // Drains queued BLAS compactions: reads compacted sizes, copies eligible BLAS into
+        // smaller structures, and frees the originals. Must run after buildPending*BLAS and
+        // before the TLAS build of the same dispatch (compacted addresses + the rebuild flag
+        // are consumed by that build). No-op when nothing is pending.
+        void processPendingCompactions(vk::CommandBuffer cmd);
+
         bool isInitialized() const { return initialized; }
         bool isTLASReady() const { return tlasBuilt; }
         bool hasPendingBLASBuilds() const { std::lock_guard<std::mutex> lock(pendingMutex); return !pendingBLASBuilds.empty(); }
@@ -167,6 +173,33 @@ namespace render::raytracing
         bool tlasBuilt = false;
         bool initialized = false;
 
+        // ---- BLAS compaction (VK-1430) ----
+        // Freshly built BLAS are built with eAllowCompaction. After the build completes
+        // we query each one's compacted size, then a few frames later copy it into a
+        // tightly-sized acceleration structure and free the original. Cached entries are
+        // updated in place so the next TLAS build picks up the compacted device address.
+        static constexpr uint32_t kCompactionQueryCapacity = 256;
+        static constexpr uint32_t kMaxCompactionsPerFrame = 8;
+
+        vk::QueryPool compactionQueryPool{};
+        std::vector<uint32_t> freeCompactionSlots;
+
+        struct PendingCompaction
+        {
+            std::string key;
+            bool isTerrain = false;
+            bool stale = false;                  // src already freed by an eviction; just recycle the slot
+            vk::AccelerationStructureKHR srcAS{};
+            vk::Buffer srcBuffer{};
+            core::VulkanAllocation srcAlloc;
+            vk::DeviceSize srcSize = 0;
+            uint32_t queryIndex = 0;
+            uint64_t frameQueued = 0;
+        };
+        std::vector<PendingCompaction> pendingCompactions;
+        uint64_t compactionFrameCounter = 0;
+        bool forceNextTlasRebuild = false;
+
         ASMemoryBudget memoryBudget;
 
         static std::string makeSubmeshKey(const std::string& meshPath,
@@ -187,6 +220,16 @@ namespace render::raytracing
         void ensureStagingBuffer(StagingBuffer& staging, vk::DeviceSize requiredSize);
         void ensureTlasScratch(vk::DeviceSize requiredSize);
         void insertTLASCrossFrameBarrier(vk::CommandBuffer cmd);
+
+        // BLAS compaction helpers (VK-1430)
+        void ensureCompactionQueryPool();
+        void queueBlasForCompaction(vk::CommandBuffer cmd, const std::string& key,
+                                    const BLASEntry& entry, bool isTerrain);
+        // Marks any pending compaction whose source AS is being destroyed as stale and nulls
+        // its captured src handles, so processPendingCompactions only recycles the query slot
+        // and never double-frees (the cache-destroy path is the sole owner). Caller must hold
+        // pendingMutex.
+        void invalidatePendingCompaction(vk::AccelerationStructureKHR srcAS);
 
         core::DeferredDeletionQueue* deletionQueue = nullptr;
     };

@@ -170,16 +170,6 @@ namespace events::render {
         std::string_view getName() const override { return "GetShowShadowDebug"; }
     };
 
-    struct SetShadowDebugModeCommand : ICommand<> {
-        types::ShadowDebugMode mode;
-
-        std::string_view getName() const override { return "SetShadowDebugMode"; }
-    };
-
-    struct GetShadowDebugModeQuery : IQuery<types::ShadowDebugMode> {
-        std::string_view getName() const override { return "GetShadowDebugMode"; }
-    };
-
     struct SetShowWireframeCommand : ICommand<> {
         bool show = false;
 

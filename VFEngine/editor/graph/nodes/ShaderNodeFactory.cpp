@@ -113,6 +113,12 @@ namespace editor::graph {
                 return std::make_unique<UVTransformNode>();
             case material::NodeType::Remap:
                 return std::make_unique<RemapNode>();
+            case material::NodeType::Flipbook:
+                return std::make_unique<FlipbookNode>();
+            case material::NodeType::Rotator:
+                return std::make_unique<RotatorNode>();
+            case material::NodeType::CustomRotator:
+                return std::make_unique<CustomRotatorNode>();
 
             default:
                 return std::make_unique<ConstantScalarNode>();  // Default fallback

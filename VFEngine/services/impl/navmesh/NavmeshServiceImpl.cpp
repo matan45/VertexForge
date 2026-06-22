@@ -178,6 +178,12 @@ namespace services
                 stopAgent(cmd.entity);
             });
 
+        dispatcher.registerCommandHandler<events::navmesh::SetNavmeshObstacleActiveCommand>(
+            [this](const events::navmesh::SetNavmeshObstacleActiveCommand& cmd)
+            {
+                setObstacleActive(cmd.entity, cmd.active);
+            });
+
 
         dispatcher.registerQueryHandler<events::navmesh::FindPathQuery>(
             [this](const events::navmesh::FindPathQuery& query)
@@ -391,6 +397,18 @@ namespace services
             {
                 ++tileVersion;
                 navmeshProvider->onTileAdded(notif.tileX, notif.tileZ);
+
+                // A play-mode rebake (e.g. an obstacle carving in a placed
+                // building) replaces the dtNavMesh tile, which invalidates the
+                // Detour poly refs of any crowd agent standing on it and leaves
+                // the unit permanently stuck. Re-validate by suspending and
+                // immediately resuming agents on the rebaked tile: this removes
+                // them from the crowd and re-adds them against the fresh tile,
+                // re-issuing their cached destination so they keep moving. Both
+                // calls no-op cheaply when no agent is on the tile.
+                std::vector<navigation::NavmeshTileCoord> rebaked{ {notif.tileX, notif.tileZ} };
+                agentManager.suspendAgentsOnUnloadedTiles(rebaked);
+                agentManager.resumeAgentsOnLoadedTiles(rebaked);
             });
 
         dispatcher.registerQueryHandler<events::navmesh::GetNavmeshTileVersionQuery>(
@@ -609,6 +627,61 @@ namespace services
     void NavmeshServiceImpl::stopAgent(EntityHandle entity)
     {
         agentManager.stopAgent(entity);
+    }
+
+    void NavmeshServiceImpl::setObstacleActive(EntityHandle entity, bool active)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto e = internal::fromHandle(entity);
+        if (!registry.valid(e) || !registry.all_of<components::NavmeshObstacleComponent>(e))
+            return;
+
+        auto& obstacle = registry.get<components::NavmeshObstacleComponent>(e);
+        if (obstacle.enabled == active)
+            return;
+        obstacle.enabled = active;
+
+        uint64_t id = static_cast<uint64_t>(e);
+
+        if (!active)
+        {
+            // Going inert: drop position tracking so it cannot dirty tiles and
+            // release any avoidance phantom it had registered. Carve obstacles
+            // leave their previously-baked footprint in place (a ghost never
+            // carved, so there is nothing to undo).
+            lastObstaclePositions.erase(id);
+            if (obstacle.phantomAgentIndex >= 0)
+            {
+                navmeshProvider->removeCrowdAgent(obstacle.phantomAgentIndex);
+                obstacle.phantomAgentIndex = -1;
+                obstacle.isRegistered = false;
+            }
+            return;
+        }
+
+        // Becoming active: carve the footprint once at the current pose, then
+        // seed the tracked position so a stationary obstacle does not re-dirty.
+        // trackObstacleTransforms() only dirties on movement and treats a
+        // first-seen obstacle as a no-op, so an explicit carve here is required.
+        if (!registry.all_of<components::TransformComponent>(e))
+            return;
+        const auto& transform = registry.get<components::TransformComponent>(e);
+        glm::vec3 worldPos = transform.position + obstacle.offset;
+
+        if (obstacle.mode == components::NavmeshObstacleMode::Carve && navmeshProvider->hasNavmesh())
+        {
+            glm::vec3 half = (obstacle.shape == components::NavmeshObstacleShape::Box)
+                ? obstacle.size * 0.5f
+                : glm::vec3(obstacle.size.x, obstacle.size.y * 0.5f, obstacle.size.x);
+            auto coordMin = tileManager.worldToTileCoord(worldPos - half);
+            auto coordMax = tileManager.worldToTileCoord(worldPos + half);
+            for (int tx = coordMin.x; tx <= coordMax.x; ++tx)
+                for (int tz = coordMin.z; tz <= coordMax.z; ++tz)
+                    tileManager.markTileDirty(tx, tz);
+        }
+
+        obstacle.lastBakedPosition = worldPos;
+        lastObstaclePositions[id] = worldPos;
     }
 
     void NavmeshServiceImpl::update(float deltaTime, bool simulateAgents)
@@ -887,6 +960,11 @@ namespace services
         for (auto entity : view)
         {
             auto& obstacle = view.get<components::NavmeshObstacleComponent>(entity);
+            // Inert obstacles (e.g. a placement ghost) neither carve nor avoid.
+            // Skip before tracking so they never dirty tiles; the stale-entry
+            // sweep below drops any position recorded before they were disabled.
+            if (!obstacle.enabled)
+                continue;
             const auto& transform = view.get<components::TransformComponent>(entity);
             uint64_t id = static_cast<uint64_t>(entity);
             liveIds.insert(id);

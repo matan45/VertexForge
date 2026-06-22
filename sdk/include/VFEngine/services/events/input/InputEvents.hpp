@@ -101,6 +101,20 @@ namespace events::input {
         std::string_view getName() const override { return "SetCursorVisible"; }
     };
 
+    // Relative ("captured") mouse mode for editor camera look (VK-1428).
+    struct SetRelativeMouseModeCommand : ICommand<void> {
+        bool enabled;
+        std::string_view getName() const override { return "SetRelativeMouseMode"; }
+    };
+
+    struct GetRelativeMouseDeltaQuery : IQuery<glm::vec2> {
+        std::string_view getName() const override { return "GetRelativeMouseDelta"; }
+    };
+
+    struct IsRelativeMouseModeQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsRelativeMouseMode"; }
+    };
+
     struct IsKeyboardEnabledQuery : IQuery<bool> {
         std::string_view getName() const override { return "IsKeyboardEnabled"; }
     };

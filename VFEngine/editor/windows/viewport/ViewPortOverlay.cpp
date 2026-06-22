@@ -220,7 +220,6 @@ namespace windows
             // Query current state
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
             bool wireframe = dispatcher.query(events::render::GetShowWireframeQuery{});
-            auto shadowDebug = dispatcher.query(events::render::GetShadowDebugModeQuery{});
 
             // Unified dropdown entries:
             // 0-11: View modes (Color, Meshlet, LOD, ...)
@@ -266,9 +265,6 @@ namespace windows
                         // Clear debug modes
                         events::render::SetShowWireframeCommand wireCmd; wireCmd.show = false;
                         dispatcher.execute(wireCmd);
-                        events::render::SetShadowDebugModeCommand shadowCmd;
-                        shadowCmd.mode = types::ShadowDebugMode::None;
-                        dispatcher.execute(shadowCmd);
 
                         // Set view mode
                         events::render::SetViewModeCommand cmd;
@@ -288,9 +284,6 @@ namespace windows
                         // Clear all debug modes first
                         events::render::SetShowWireframeCommand wireCmd; wireCmd.show = false;
                         dispatcher.execute(wireCmd);
-                        events::render::SetShadowDebugModeCommand shadowCmd;
-                        shadowCmd.mode = types::ShadowDebugMode::None;
-                        dispatcher.execute(shadowCmd);
 
                         // Reset view mode to Color
                         events::render::SetViewModeCommand viewCmd;

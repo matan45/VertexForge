@@ -280,6 +280,34 @@ namespace resource
         return true;
     }
 
+    bool MeshStreamHandle::readSockets(SkeletonData& outSkeleton)
+    {
+        std::lock_guard<std::mutex> lock(fileMutex);
+
+        if (!file.is_open())
+        {
+            vfLogError("MeshStreamHandle: File not open");
+            return false;
+        }
+
+        if (!hasSockets || socketDataOffset == std::streampos(0))
+        {
+            // No socket block present — leave outSkeleton.sockets as-is (empty).
+            return true;
+        }
+
+        file.seekg(baseOffset + socketDataOffset);
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to seek to socket data");
+            return false;
+        }
+
+        // readSocketDefinitions resolves boneIndex via outSkeleton.getBoneIndex(); for a
+        // static mesh (no bones) that yields -1, the static-socket convention (VK-1427).
+        return readSocketDefinitions(outSkeleton);
+    }
+
     bool MeshStreamHandle::readBoneHierarchy(uint32_t boneCount, SkeletonData& outSkeleton)
     {
         for (uint32_t b = 0; b < boneCount; ++b)
@@ -381,15 +409,19 @@ namespace resource
         {
             auto& socket = outSkeleton.sockets[s];
 
+            // Bound must match detectSocketBlock()'s skip path in MeshStreamHandleParse.cpp,
+            // which rejects only `> 1024` (i.e. accepts a length of exactly 1024). Using
+            // `<= 1024` here keeps the read and skip paths in sync at the boundary; a mismatch
+            // would desync the stream by `nameLength` bytes for a name of exactly 1024.
             uint32_t nameLength = endian::readLE<uint32_t>(file);
-            if (nameLength > 0 && nameLength < 1024)
+            if (nameLength > 0 && nameLength <= 1024)
             {
                 socket.name.resize(nameLength);
                 file.read(socket.name.data(), nameLength);
             }
 
             uint32_t boneNameLength = endian::readLE<uint32_t>(file);
-            if (boneNameLength > 0 && boneNameLength < 1024)
+            if (boneNameLength > 0 && boneNameLength <= 1024)
             {
                 socket.targetBoneName.resize(boneNameLength);
                 file.read(socket.targetBoneName.data(), boneNameLength);

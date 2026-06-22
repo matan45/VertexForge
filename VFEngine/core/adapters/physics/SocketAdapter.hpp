@@ -1,7 +1,9 @@
 #pragma once
 #include "../../services/providers/physics/ISocketProvider.hpp"
+#include "animator/SocketTypes.hpp"
 #include <entt/entt.hpp>
 #include <optional>
+#include <vector>
 
 namespace resource { struct SkeletonData; }
 
@@ -39,5 +41,11 @@ namespace core
     private:
         static std::optional<entt::entity> resolveEntity(services::EntityHandle handle);
         static const resource::SkeletonData* getSkeletonForEntity(entt::entity entity);
+        // Unified socket lookup (VK-1427): skeletal sockets for a skinned mesh, or
+        // static SOK2 sockets for a non-skeletal mesh. nullptr if the entity has neither.
+        static const std::vector<animator::SocketDefinition>* getSocketsForEntity(entt::entity entity);
+        // Linear name scan over a socket vector; -1 if absent.
+        static int32_t indexOfSocket(const std::vector<animator::SocketDefinition>& sockets,
+                                     const std::string& socketName);
     };
 }

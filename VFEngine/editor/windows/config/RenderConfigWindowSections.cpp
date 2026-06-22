@@ -162,20 +162,6 @@ namespace windows
                               "- Point: Sphere radius (magenta)");
         }
 
-        const char* debugModes[] = { "None", "Cascade Overlay", "Tile Pool Heatmap", "Bias Visualization" };
-        int currentMode = static_cast<int>(settings.shadows.debugMode);
-        if (ImGui::Combo("Debug Mode", &currentMode, debugModes, 4))
-        {
-            settings.shadows.debugMode = static_cast<types::ShadowDebugMode>(currentMode);
-            markDirty();
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("None: No overlay\n"
-                              "Cascade Overlay: Color-code cascade/clipmap levels\n"
-                              "Tile Pool Heatmap: Show VSM page allocation density\n"
-                              "Bias Visualization: Highlight bias-affected regions");
-        }
     }
 
     void RenderConfigWindow::drawShadowStatistics()
@@ -445,6 +431,20 @@ namespace windows
 
             if (settings.rtShadows.enabled)
             {
+                ImGui::Spacing();
+                ImGui::SeparatorText("Resolution");
+                // VK-1430: shared resolution scale for directional + spot + point RT shadows. Half
+                // traces+denoises at half res then edge-aware upsamples to full; Full is the default.
+                const char* resItems[] = { "Full", "Half" };
+                int resIndex = static_cast<int>(settings.rtShadows.shadowResolutionScale);
+                if (ImGui::Combo("Shadow Resolution", &resIndex, resItems, IM_ARRAYSIZE(resItems)))
+                {
+                    settings.rtShadows.shadowResolutionScale =
+                        static_cast<types::ShadowResolutionScale>(resIndex);
+                    markDirty();
+                }
+                ImGui::TextDisabled("Half: ~2-4x faster trace+denoise, joint-bilateral upsampled.");
+
                 ImGui::Spacing();
                 ImGui::SeparatorText("Ray Parameters");
                 if (ImGui::SliderFloat("Max Ray Distance", &settings.rtShadows.maxRayDistance, 50.0f, 2000.0f, "%.0f"))

@@ -237,8 +237,69 @@ namespace editor::materialeditor
             drawExposeSection(*selectedNode, changed);
         }
 
+        // Dedicated widgets for properties whose range exceeds [0,1]; the generic float loop below
+        // clamps DragFloat to [0,1], which would make these unusable. The skip-list keeps the
+        // generic loop from re-drawing them. The helper lambda lives only on the code paths that
+        // use it, so there is no unused-variable case for other node types.
+        if (selectedNode->type == ::material::NodeType::Flipbook ||
+            selectedNode->type == ::material::NodeType::Rotator) {
+            auto floatProp = [&](const char* key, float def) -> float {
+                auto it = selectedNode->properties.find(key);
+                if (it != selectedNode->properties.end())
+                    if (const float* v = std::get_if<float>(&it->second)) return *v;
+                return def;
+            };
+
+            if (selectedNode->type == ::material::NodeType::Flipbook) {
+                int columns = static_cast<int>(floatProp("columns", 4.0f));
+                int rows    = static_cast<int>(floatProp("rows", 4.0f));
+                float fps   = floatProp("framesPerSecond", 30.0f);
+                int totalOv = static_cast<int>(floatProp("totalFrames", 0.0f));
+                bool loop   = floatProp("loop", 1.0f) != 0.0f;
+
+                if (ImGui::DragInt("Columns", &columns, 1.0f, 1, 64)) {
+                    selectedNode->properties["columns"] = static_cast<float>(columns < 1 ? 1 : columns);
+                    changed = true;
+                }
+                if (ImGui::DragInt("Rows", &rows, 1.0f, 1, 64)) {
+                    selectedNode->properties["rows"] = static_cast<float>(rows < 1 ? 1 : rows);
+                    changed = true;
+                }
+                if (ImGui::DragFloat("Frames/sec", &fps, 0.5f, 0.0f, 240.0f)) {
+                    selectedNode->properties["framesPerSecond"] = fps < 0.0f ? 0.0f : fps;
+                    changed = true;
+                }
+                if (ImGui::DragInt("Total Frames (0=cols*rows)", &totalOv, 1.0f, 0, 4096)) {
+                    selectedNode->properties["totalFrames"] = static_cast<float>(totalOv < 0 ? 0 : totalOv);
+                    changed = true;
+                }
+                if (ImGui::Checkbox("Loop", &loop)) {
+                    selectedNode->properties["loop"] = loop ? 1.0f : 0.0f;
+                    changed = true;
+                }
+                ImGui::Separator();
+            }
+            else { // Rotator
+                float speed = floatProp("rotationSpeed", 0.25f);
+                if (ImGui::DragFloat("Rotation Speed (rot/s)", &speed, 0.01f, -64.0f, 64.0f)) {
+                    selectedNode->properties["rotationSpeed"] = speed;
+                    changed = true;
+                }
+                // "center" (vec2) falls through to the unclamped DragFloat2 in the generic loop.
+            }
+        }
+
         for (auto& [propName, propValue] : selectedNode->properties) {
             if (propName == "textureIndex" || isParameterMetaProperty(propName)) {
+                continue;
+            }
+            // Properties drawn by the dedicated blocks above.
+            if (selectedNode->type == ::material::NodeType::Flipbook &&
+                (propName == "rows" || propName == "columns" ||
+                 propName == "framesPerSecond" || propName == "loop" || propName == "totalFrames")) {
+                continue;
+            }
+            if (selectedNode->type == ::material::NodeType::Rotator && propName == "rotationSpeed") {
                 continue;
             }
 

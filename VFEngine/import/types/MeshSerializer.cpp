@@ -204,6 +204,11 @@ namespace types
 
         if (!skeleton.hasSkinning)
         {
+            // Static mesh (VK-1427): still emit a SOK2 socket block (usually empty at
+            // import; authored later in the mesh preview window) so static meshes can
+            // carry named sockets. Reuse the self-contained writeSocketData. Absence
+            // would read as EOF, so this is also forward-safe for old readers.
+            writeSocketData(outFile, skeleton.sockets);
             return;
         }
 

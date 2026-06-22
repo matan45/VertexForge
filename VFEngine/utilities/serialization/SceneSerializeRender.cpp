@@ -96,7 +96,12 @@ namespace serialization
                 {"spotEnabled", s.spotEnabled},
                 {"spotBudget", s.spotBudget},
                 {"pointEnabled", s.pointEnabled},
-                {"pointBudget", s.pointBudget}
+                {"pointBudget", s.pointBudget},
+                {"shadowResolutionScale", static_cast<uint32_t>(s.shadowResolutionScale)},
+                // VK-1430: persist the adaptive-budget tunables too (previously unsaved).
+                {"adaptiveBudgetEnabled", s.adaptiveBudgetEnabled},
+                {"budgetMs", s.budgetMs},
+                {"asMemoryBudgetMB", s.asMemoryBudgetMB}
             };
         }
 
@@ -133,6 +138,22 @@ namespace serialization
                 settings.pointEnabled = rt["pointEnabled"].get<bool>();
             if (rt.contains("pointBudget") && rt["pointBudget"].is_number_integer())
                 settings.pointBudget = std::clamp(rt["pointBudget"].get<uint32_t>(), 1u, 8u);
+            // VK-1430: shared RT shadow resolution scale (0 = Full, 1 = Half). Unknown values clamp to
+            // Full so old/garbage scenes default to the byte-identical legacy behavior.
+            if (rt.contains("shadowResolutionScale") && rt["shadowResolutionScale"].is_number_integer())
+            {
+                uint32_t scale = rt["shadowResolutionScale"].get<uint32_t>();
+                settings.shadowResolutionScale = (scale == 1)
+                    ? types::ShadowResolutionScale::Half
+                    : types::ShadowResolutionScale::Full;
+            }
+            // Adaptive-budget tunables (previously not deserialized; default to struct defaults).
+            if (rt.contains("adaptiveBudgetEnabled") && rt["adaptiveBudgetEnabled"].is_boolean())
+                settings.adaptiveBudgetEnabled = rt["adaptiveBudgetEnabled"].get<bool>();
+            if (rt.contains("budgetMs") && rt["budgetMs"].is_number())
+                settings.budgetMs = rt["budgetMs"].get<float>();
+            if (rt.contains("asMemoryBudgetMB") && rt["asMemoryBudgetMB"].is_number())
+                settings.asMemoryBudgetMB = rt["asMemoryBudgetMB"].get<float>();
         }
 
         json serializeCullingSettings(const types::CullingSettings& s)

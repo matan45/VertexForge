@@ -133,6 +133,44 @@ namespace window
         return frameScrollDelta;
     }
 
+    void InputController::beginRelativeMouse()
+    {
+        if (!glfwWindow || relativeMouseActive) return;
+
+        // Save the current OS cursor position so it can be restored on exit (no visible jump).
+        double x, y;
+        glfwGetCursorPos(glfwWindow, &x, &y);
+        captureRestorePos = glm::vec2(static_cast<float>(x), static_cast<float>(y));
+
+        glfwSetInputMode(glfwWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        if (glfwRawMouseMotionSupported())
+        {
+            glfwSetInputMode(glfwWindow, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        }
+
+        relativeFirstSample = true;       // drop the first delta after entering capture
+        relativeDelta = glm::vec2(0.0f);
+        relativeMouseActive = true;
+        firstMouseUpdate = true;          // reseed absolute-delta tracking, avoid a spurious jump
+    }
+
+    void InputController::endRelativeMouse()
+    {
+        if (!glfwWindow || !relativeMouseActive) return;
+
+        if (glfwRawMouseMotionSupported())
+        {
+            glfwSetInputMode(glfwWindow, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
+        }
+        glfwSetInputMode(glfwWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        glfwSetCursorPos(glfwWindow, static_cast<double>(captureRestorePos.x),
+                         static_cast<double>(captureRestorePos.y));
+
+        relativeMouseActive = false;
+        relativeDelta = glm::vec2(0.0f);
+        firstMouseUpdate = true;          // reseed absolute-delta tracking after the restore warp
+    }
+
     void InputController::update()
     {
         // Calculate mouse delta
@@ -148,6 +186,28 @@ namespace window
         {
             mouseDelta = currentPos - lastMousePos;
             lastMousePos = currentPos;
+        }
+
+        // Captured relative motion. Under GLFW_CURSOR_DISABLED currentPos is the virtual,
+        // unbounded cursor position, so its frame-to-frame difference is the true relative
+        // motion (with raw motion when supported). Tracked separately from mouseDelta. VK-1428.
+        if (relativeMouseActive)
+        {
+            if (relativeFirstSample)
+            {
+                relativeLastPos = currentPos;
+                relativeFirstSample = false;
+                relativeDelta = glm::vec2(0.0f);
+            }
+            else
+            {
+                relativeDelta = currentPos - relativeLastPos;
+                relativeLastPos = currentPos;
+            }
+        }
+        else
+        {
+            relativeDelta = glm::vec2(0.0f);
         }
 
         // Save scroll delta for this frame, then reset accumulator

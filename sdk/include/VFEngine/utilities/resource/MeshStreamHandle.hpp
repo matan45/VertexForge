@@ -115,8 +115,17 @@ namespace resource
 
         bool readSkeleton(SkeletonData& outSkeleton);
 
-        // Returns the file offset where socket data begins (after skeleton).
-        // Used by MeshSocketWriter to avoid re-parsing the entire file.
+        // Reads the SOK2 socket block into outSkeleton.sockets independent of whether a
+        // skeleton precedes it (VK-1427: static meshes carry sockets too). readSkeleton
+        // returns early for static meshes before sockets, so this is the unified path.
+        bool readSockets(SkeletonData& outSkeleton);
+
+        // True if the file has a socket block (valid for static meshes too, VK-1427).
+        bool hasSocketData() const { return hasSockets; }
+
+        // Returns the file offset where socket data begins (after the skeleton, or after
+        // the hasSkinning byte for static meshes). Used by MeshSocketWriter to avoid
+        // re-parsing the entire file.
         std::streampos getSocketDataOffset();
 
         // Returns the file offset where IK chain data begins (after sockets).
@@ -132,6 +141,10 @@ namespace resource
         bool parseConvexHeaders(uint32_t meshIdx);
 
         bool parseSkeletonHeader();
+
+        // Detects/skips a trailing SOK2 socket block at the current file position,
+        // recording socketDataOffset and hasSockets. Works with or without a skeleton.
+        void detectSocketBlock();
 
         bool readBoneHierarchy(uint32_t boneCount, SkeletonData& outSkeleton);
         bool readBindPoseData(uint32_t boneCount, SkeletonData& outSkeleton);

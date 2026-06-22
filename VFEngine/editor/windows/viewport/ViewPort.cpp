@@ -16,6 +16,7 @@
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/meshbrush/MeshBrushEvents.hpp"
 #include "events/ui/UIPickEvents.hpp"
+#include "events/input/InputEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include "events/render/MaterialEvents.hpp"
@@ -49,7 +50,15 @@ namespace windows
             bool isHovered = ImGui::IsWindowHovered();
             bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
 
-            if (isFocused && isHovered && !isPlayMode)
+            // Maintain/exit an active RMB look capture every frame regardless of hover: the OS
+            // cursor is locked (GLFW_CURSOR_DISABLED) while captured, so IsWindowHovered is
+            // unreliable and gating exit on it could strand the capture on (VK-1428).
+            updateCameraLook(isPlayMode);
+
+            // Allow camera input when hovered, OR while a look capture is active (the locked OS
+            // cursor makes IsWindowHovered unreliable, but WASD fly must keep working while the
+            // user holds RMB to look). Entry into look still requires hover (handleCameraInput).
+            if (isFocused && !isPlayMode && (isHovered || cameraLookActive))
             {
                 handleCameraInput();
             }
@@ -513,31 +522,44 @@ namespace windows
             editorCamera->processKeyboardInput(dt, forward, backward, left, right, up, down, sprint);
         }
 
-        if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
+        // Enter camera look on RMB press. Capture is done OS-side (GLFW_CURSOR_DISABLED + raw
+        // motion) so rotation uses true relative motion free of FIFO coalescing/clamping; the
+        // delta is applied — and capture released — in updateCameraLook(), which runs every frame
+        // regardless of hover. Entry stays gated on focus+hover (here) so look only starts when
+        // the viewport is genuinely under the cursor. VK-1428.
+        if (!cameraLookActive && ImGui::IsMouseDown(ImGuiMouseButton_Right))
         {
-            ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-            ImVec2 mousePos = ImGui::GetMousePos();
-
-            if (isFirstMouseInput)
-            {
-                lastMouseX = mousePos.x;
-                lastMouseY = mousePos.y;
-                isFirstMouseInput = false;
-            }
-            else
-            {
-                float xOffset = mousePos.x - lastMouseX;
-                float yOffset = mousePos.y - lastMouseY;
-
-                editorCamera->processMouseMovement(xOffset, yOffset);
-
-                lastMouseX = mousePos.x;
-                lastMouseY = mousePos.y;
-            }
+            events::input::SetRelativeMouseModeCommand cmd;
+            cmd.enabled = true;
+            events::EventDispatcher::instance().execute(cmd);
+            cameraLookActive = true;
         }
-        else
+    }
+
+    void ViewPort::updateCameraLook(bool isPlayMode)
+    {
+        if (!cameraLookActive)
         {
-            isFirstMouseInput = true;
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Exit on RMB release, focus loss, or entering play mode — release the OS cursor and
+        // restore its pre-capture position.
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Right) || !ImGui::IsWindowFocused() || isPlayMode)
+        {
+            events::input::SetRelativeMouseModeCommand cmd;
+            cmd.enabled = false;
+            dispatcher.execute(cmd);
+            cameraLookActive = false;
+            return;
+        }
+
+        glm::vec2 delta = dispatcher.query(events::input::GetRelativeMouseDeltaQuery{});
+        if (delta.x != 0.0f || delta.y != 0.0f)
+        {
+            editorCamera->processMouseMovement(delta.x, delta.y);
         }
     }
 

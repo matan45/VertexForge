@@ -20,6 +20,7 @@ namespace windows
         {
             drawQualitySection();
             drawProbeSection();
+            drawFarFieldSection();
             drawSSGISection();
             drawDebugSection();
             drawStatsSection();
@@ -87,6 +88,43 @@ namespace windows
                 isDirty = true;
             if (ImGui::SliderFloat("Max Probe Distance", &settings.maxProbeDistance, 50.0f, 500.0f))
                 isDirty = true;
+        }
+    }
+
+    void GIConfigWindow::drawFarFieldSection()
+    {
+        if (settings.quality < render::gi::GIQuality::Medium) return;
+
+        if (ImGui::CollapsingHeader("Far-Field GI"))
+        {
+            if (ImGui::Checkbox("Enable Far-Field", &settings.farFieldEnabled))
+                isDirty = true;
+
+            if (settings.farFieldEnabled)
+            {
+                if (ImGui::SliderFloat("Max Distance (m)##farfield", &settings.farFieldMaxDistance, 100.0f, 2000.0f, "%.0f"))
+                    isDirty = true;
+
+                int farCascadeCount = static_cast<int>(settings.farFieldCascadeCount);
+                if (ImGui::SliderInt("Cascade Count##farfield", &farCascadeCount, 1, 4))
+                {
+                    settings.farFieldCascadeCount = static_cast<uint32_t>(farCascadeCount);
+                    isDirty = true;
+                }
+
+                if (ImGui::SliderFloat("Probe Spacing (m)##farfield", &settings.farFieldProbeSpacing, 1.0f, 64.0f, "%.1f"))
+                    isDirty = true;
+
+                int farRaysPerUpdate = static_cast<int>(settings.farFieldRaysPerUpdate);
+                if (ImGui::SliderInt("Rays Per Probe##farfield", &farRaysPerUpdate, 8, 256))
+                {
+                    settings.farFieldRaysPerUpdate = static_cast<uint32_t>(farRaysPerUpdate);
+                    isDirty = true;
+                }
+
+                if (ImGui::SliderFloat("Update Rate##farfield", &settings.farFieldUpdateRate, 0.05f, 1.0f))
+                    isDirty = true;
+            }
         }
     }
 

@@ -40,10 +40,33 @@ TEST_CASE("assetTypeInfo returns the matching entry")
 TEST_CASE("VFX Sequence type is registered in the table")
 {
     using windows::AssetType;
-    // The VFXSequence row has its own label/type and a dedicated atlas icon (slot 23).
+    // The VFXSequence row has its own label/type and a dedicated atlas icon (slot 19).
     CHECK(windows::assetTypeInfo(AssetType::VFXSequence).type == AssetType::VFXSequence);
     CHECK(std::string(windows::assetTypeInfo(AssetType::VFXSequence).label) == "VFX Sequence");
     CHECK(windows::assetTypeInfo(AssetType::VFXSequence).icon == windows::AtlasIcon::VFXSequence);
+}
+
+TEST_CASE("thumbnailed types fall back to the generic File icon, not a per-type glyph")
+{
+    using windows::AssetType;
+    using windows::AtlasIcon;
+
+    // VK-1426: Texture/HDR/Mesh/Material/MaterialInstance render real thumbnails
+    // (AssetThumbnailCache::isThumbnailable). Their dedicated atlas glyphs were
+    // dropped, so the icon column must point at the generic File ("Other") icon —
+    // that is what the grid draws while a thumbnail is loading or has failed.
+    CHECK(windows::assetTypeInfo(AssetType::Texture).icon == AtlasIcon::File);
+    CHECK(windows::assetTypeInfo(AssetType::HDR).icon == AtlasIcon::File);
+    CHECK(windows::assetTypeInfo(AssetType::Model).icon == AtlasIcon::File);
+    CHECK(windows::assetTypeInfo(AssetType::Material).icon == AtlasIcon::File);
+    CHECK(windows::assetTypeInfo(AssetType::MaterialInstance).icon == AtlasIcon::File);
+
+    // TerrainMaterial shared the (now removed) Material glyph and is NOT
+    // thumbnailed, so it likewise resolves to the generic File icon.
+    CHECK(windows::assetTypeInfo(AssetType::TerrainMaterial).icon == AtlasIcon::File);
+
+    // The generic "Other" row itself stays on File.
+    CHECK(windows::assetTypeInfo(AssetType::Other).icon == AtlasIcon::File);
 }
 
 TEST_CASE("formatFileSize uses binary units")

@@ -50,12 +50,13 @@ namespace types
         MsaaSamples msaa = MsaaSamples::Off;
     };
 
-    enum class ShadowDebugMode : uint8_t
+    // VK-1430: one shared resolution scale for the directional/spot/point RT shadow trace+denoise.
+    // Full (default) is a byte-identical bypass of today's behavior. Half traces+denoises at half
+    // resolution then runs an edge-aware joint-bilateral upsample back to full resolution.
+    enum class ShadowResolutionScale : uint32_t
     {
-        None = 0,
-        CascadeOverlay,
-        TilePoolHeatmap,
-        BiasVisualization
+        Full = 0,
+        Half = 1
     };
 
     struct RTShadowSettings
@@ -96,6 +97,17 @@ namespace types
         // closest/brightest shadow-casting point lights get RT (the rest stay on VSM).
         bool pointEnabled = false;
         uint32_t pointBudget = 8;
+
+        // VK-1430: shared resolution scale for the directional + spot + point RT trace/denoise.
+        // Full = byte-identical to legacy behavior. Half halves the trace/denoise resolution and
+        // reconstructs a full-res mask via an edge-aware joint-bilateral upsample.
+        ShadowResolutionScale shadowResolutionScale = ShadowResolutionScale::Full;
+
+        // Half = 0.5x trace/denoise dimensions, Full = 1.0x (no scaling).
+        float scaleFactor() const
+        {
+            return shadowResolutionScale == ShadowResolutionScale::Half ? 0.5f : 1.0f;
+        }
     };
 
     struct RTShadowStats
@@ -154,9 +166,6 @@ namespace types
         uint32_t clipmapLevelCount = 4;
         float clipmapBaseExtent = 32.0f;
         float clipmapDepthRange = 4000.0f;
-
-        // Debug visualization
-        ShadowDebugMode debugMode = ShadowDebugMode::None;
     };
 
     struct CullingSettings

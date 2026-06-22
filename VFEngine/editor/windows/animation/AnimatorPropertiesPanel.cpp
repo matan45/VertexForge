@@ -26,6 +26,9 @@ namespace windows::animation
         ImGui::Separator();
 
         int indexToRemove = -1;
+        // Scope per-item IDs so the parameter "X" buttons don't collide with the identically
+        // labelled condition/blend-tree "X" buttons rendered elsewhere in the same window.
+        ImGui::PushID("animatorParameters");
         for (size_t i = 0; i < animatorData->graph.parameters.size(); ++i)
         {
             ImGui::PushID(static_cast<int>(i));
@@ -41,6 +44,7 @@ namespace windows::animation
 
             ImGui::PopID();
         }
+        ImGui::PopID();
 
         if (indexToRemove >= 0)
         {
@@ -194,6 +198,9 @@ namespace windows::animation
         ImGui::Separator(); ImGui::Text("Conditions:");
 
         int conditionToRemove = -1;
+        // Distinct scope so condition "X" buttons don't share an ID with the parameter/
+        // blend-tree "X" buttons (same label + same per-item index in the same window).
+        ImGui::PushID("transitionConditions");
         for (size_t i = 0; i < transition->conditions.size(); ++i) {
             ImGui::PushID(static_cast<int>(i));
             drawConditionEditor(transition->conditions[i], animatorData, isDirty);
@@ -201,6 +208,7 @@ namespace windows::animation
             if (ImGui::SmallButton("X")) conditionToRemove = static_cast<int>(i);
             ImGui::PopID();
         }
+        ImGui::PopID();
 
         if (conditionToRemove >= 0) { transition->conditions.erase(transition->conditions.begin() + conditionToRemove); isDirty = true; }
         if (ImGui::Button("Add Condition")) {
@@ -302,6 +310,9 @@ namespace windows::animation
         ImGui::Text("Entries:");
 
         int entryToRemove = -1;
+        // Distinct scope so blend-tree entry "X" buttons don't collide with the parameter/
+        // condition "X" buttons sharing the same label and per-item index.
+        ImGui::PushID("blendTreeEntries");
         for (size_t i = 0; i < bt.entries.size(); ++i)
         {
             ImGui::PushID(static_cast<int>(i));
@@ -314,6 +325,7 @@ namespace windows::animation
             ImGui::Separator();
             ImGui::PopID();
         }
+        ImGui::PopID();
 
         if (entryToRemove >= 0)
         {

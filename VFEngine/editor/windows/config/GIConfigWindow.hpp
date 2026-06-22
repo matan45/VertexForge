@@ -14,6 +14,7 @@ namespace windows
 
         void drawQualitySection();
         void drawProbeSection();
+        void drawFarFieldSection();
         void drawSSGISection();
         void drawDebugSection();
         void drawStatsSection();

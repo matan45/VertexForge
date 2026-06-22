@@ -63,6 +63,8 @@ namespace render::raytracing
 
         vk::DescriptorSetLayout getDenoisedMaskSamplerLayout() const { return denoisedMaskSamplerLayout; }
         vk::DescriptorSet getDenoisedMaskSamplerDescriptorSet() const { return denoisedMaskSamplerDescSet; }
+        // VK-1430: sampled view of the denoised output (the half-res upsample reads it as its input).
+        vk::ImageView getDenoisedMaskSamplerImageView() const { return denoisedOutputSampledView; }
 
         // Tunable parameters
         void setTemporalBlend(float v) { temporalBlend = v; }
