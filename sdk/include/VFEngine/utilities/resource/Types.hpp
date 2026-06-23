@@ -245,12 +245,7 @@ namespace resource
 
         int32_t getSocketIndex(const std::string& socketName) const
         {
-            for (size_t i = 0; i < sockets.size(); ++i)
-            {
-                if (sockets[i].name == socketName)
-                    return static_cast<int32_t>(i);
-            }
-            return -1;
+            return animator::indexOfSocket(sockets, socketName);
         }
 
         const animator::SocketDefinition* getSocketByName(const std::string& socketName) const

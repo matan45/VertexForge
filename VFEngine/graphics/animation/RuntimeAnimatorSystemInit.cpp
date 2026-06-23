@@ -104,7 +104,11 @@ namespace animation
                 auto& reg = scene::EntityRegistry::getRegistry();
                 auto view = reg.view<components::SocketAttachmentComponent>();
                 for (auto entity : view)
-                    reg.get<components::SocketAttachmentComponent>(entity).needsParentResolution = true;
+                {
+                    auto& att = reg.get<components::SocketAttachmentComponent>(entity);
+                    att.needsParentResolution = true;
+                    att.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
+                }
             });
 
         socketDataSavedToken = dispatcher.subscribe<events::socket::SocketDataSavedNotification>(
@@ -115,7 +119,11 @@ namespace animation
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto view = registry.view<components::SocketAttachmentComponent>();
                 for (auto entity : view)
-                    registry.get<components::SocketAttachmentComponent>(entity).cachedSocketIndex = -1;
+                {
+                    auto& att = registry.get<components::SocketAttachmentComponent>(entity);
+                    att.cachedSocketIndex = -1;
+                    att.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
+                }
             });
 
         subscribeToWorldEvents();
