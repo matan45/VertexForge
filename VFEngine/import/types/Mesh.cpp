@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "Mesh.hpp"
+#include "Texture.hpp"
 #include "MeshLODGenerator.hpp"
 #include "MeshSerializer.hpp"
 #include "FractureProcessor.hpp"
@@ -414,7 +415,8 @@ namespace types
 {
     void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
                             std::string_view location, MeshProgressCallback progressCallback,
-                            std::vector<std::string>* outWrittenFiles) const
+                            std::vector<std::string>* outWrittenFiles,
+                            std::vector<std::string>* outWrittenTextures) const
     {
         if (progressCallback) progressCallback(0.0f);
 
@@ -445,7 +447,60 @@ namespace types
             }
         }
 
+        // VK-55: extract textures embedded in the model (gated by the importer
+        // option, surfaced here via a non-null out-pointer).
+        if (outWrittenTextures)
+        {
+            extractEmbeddedTextures(scene, location, fileName, file.config, *outWrittenTextures);
+        }
+
         if (progressCallback) progressCallback(1.0f);
+    }
+
+    void Mesh::extractEmbeddedTextures(const aiScene* scene, std::string_view location,
+                                       std::string_view fileName, const importConfig::ImportConfig& config,
+                                       std::vector<std::string>& outWrittenTextures) const
+    {
+        if (!scene || scene->mNumTextures == 0)
+            return;
+
+        vfLogDebug("Extracting {} embedded texture(s) from '{}'", scene->mNumTextures, fileName);
+
+        Texture textureWriter;
+        std::unordered_set<std::string> usedStems;
+
+        for (unsigned int i = 0; i < scene->mNumTextures; ++i)
+        {
+            const aiTexture* tex = scene->mTextures[i];
+            if (!tex || !tex->pcData)
+                continue;
+
+            std::string texName = sanitizeFileStem(tex->mFilename.C_Str());
+            if (texName.empty())
+                texName = "tex" + std::to_string(i);
+
+            const std::string candidate = std::string(fileName) + "_" + texName;
+            std::string stem = candidate;
+            unsigned int counter = 0;
+            while (!usedStems.insert(toLowerCopy(stem)).second)
+                stem = candidate + "_" + std::to_string(counter++);
+
+            // Assimp: mHeight == 0 => pcData is a compressed file blob of mWidth
+            // bytes; otherwise pcData is mWidth*mHeight uncompressed BGRA texels.
+            const bool compressed = tex->mHeight == 0;
+            const size_t byteLength = compressed
+                                          ? static_cast<size_t>(tex->mWidth)
+                                          : static_cast<size_t>(tex->mWidth) * tex->mHeight * 4;
+
+            if (textureWriter.saveEmbeddedTexture(stem, location,
+                                                  reinterpret_cast<const unsigned char*>(tex->pcData),
+                                                  byteLength, compressed, tex->mWidth, tex->mHeight, config))
+            {
+                const std::filesystem::path outPath =
+                    std::filesystem::path(location) / (stem + "." + FileExtension::textrue);
+                outWrittenTextures.push_back(outPath.string());
+            }
+        }
     }
 
     LODMeshData Mesh::convertAssimpMesh(const aiMesh* assimpMesh, const ExtractedSkeleton& skeleton) const

@@ -5,6 +5,7 @@
 #include <optional>
 #include <functional>
 #include "config/Config.hpp"
+#include "resource/AssetTypes.hpp"
 
 namespace controllers {
     // Forward declare the callback type
@@ -33,8 +34,15 @@ namespace pipeline
 
         // Engine assets written by the importer's process(). Empty => the
         // controller falls back to the single deriveOutputPath(). Lets one
-        // input file emit N outputs (e.g. one .vfMesh per mesh in the model).
-        std::vector<std::string> outputFiles;
+        // input file emit N outputs, each carrying its own asset type (e.g. one
+        // .vfMesh per mesh in the model, plus extracted .vfImage textures).
+        struct OutputAsset
+        {
+            std::string path;
+            // COUNT => the controller resolves the type via assetTypeForContext().
+            resource::AssetType type = resource::AssetType::COUNT;
+        };
+        std::vector<OutputAsset> outputFiles;
 
         // Constructor with file and location (required since ImportFiles has explicit constructor)
         ImportContext(const importConfig::ImportFiles& f, std::string_view loc)

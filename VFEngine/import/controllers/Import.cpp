@@ -92,7 +92,7 @@ namespace controllers
 
             std::vector<ImportFileResult> results;
 
-            auto addResult = [&](const std::string& outputPath)
+            auto addResult = [&](const std::string& outputPath, resource::AssetType outputType)
             {
                 ImportFileResult fileResult;
                 fileResult.success = true;
@@ -103,13 +103,19 @@ namespace controllers
                 fileResult.outputPath = outputPath;
                 fileResult.fileType = ctx.fileType;
 
+                // A single import can emit mixed asset types (e.g. .vfMesh outputs
+                // plus extracted .vfImage textures); a per-output type overrides
+                // the context default.
+                const resource::AssetType resolvedType =
+                    (outputType != resource::AssetType::COUNT) ? outputType : assetType;
+
                 // Create .vfmeta sidecar with importSource and importTimestamp.
                 // Existence guard: config-dependent outputs (e.g. animation-only
                 // mesh import of a file without animations) may not be written.
                 if (!outputPath.empty() && std::filesystem::exists(outputPath) &&
-                    assetType != resource::AssetType::COUNT)
+                    resolvedType != resource::AssetType::COUNT)
                 {
-                    createVfMeta(outputPath, ctx.file.path, assetType);
+                    createVfMeta(outputPath, ctx.file.path, resolvedType);
                 }
 
                 results.push_back(std::move(fileResult));
@@ -119,12 +125,12 @@ namespace controllers
             {
                 // One input file emitted multiple engine assets (e.g. one
                 // .vfMesh per mesh in the model): a .vfmeta and a result each.
-                for (const auto& outputPath : ctx.outputFiles)
-                    addResult(outputPath);
+                for (const auto& output : ctx.outputFiles)
+                    addResult(output.path, output.type);
             }
             else
             {
-                addResult(deriveOutputPath(ctx));
+                addResult(deriveOutputPath(ctx), resource::AssetType::COUNT);
             }
 
             if (progressCallback)

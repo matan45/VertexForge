@@ -33,9 +33,6 @@ namespace types
 	{
 		if (progressCallback) progressCallback(0.0f);
 
-		resource::TextureData textureData;
-		textureData.headerFileType = resource::FileType::TEXTURE;
-
 		if (file.config.isImageFlipVertically)
 		{
 			stbi_set_flip_vertically_on_load(true);
@@ -56,19 +53,8 @@ namespace types
 
 		if (progressCallback) progressCallback(0.15f);
 
-		textureData.width = static_cast<uint32_t>(width);
-		textureData.height = static_cast<uint32_t>(height);
-		textureData.numbersOfChannels = channels;
-
 		std::vector<unsigned char> rgbaData;
 		convertTo4Channels(imageData, width, height, channels, rgbaData);
-
-		textureData.mipData.push_back({
-			static_cast<uint32_t>(width),
-			static_cast<uint32_t>(height),
-			0,
-			std::move(rgbaData)
-		});
 
 		if (progressCallback) progressCallback(0.3f);
 
@@ -79,18 +65,89 @@ namespace types
 
 		stbi_image_free(imageData);
 
-		generateMipmaps(textureData);
-
-		if (progressCallback) progressCallback(0.5f);
-
-		// Compress mips
-		compressTextureMips(textureData, file.config.compressionMode, file.config.compressionQuality);
-
-		if (progressCallback) progressCallback(0.85f);
-
-		saveToFileTextureWithMips(fileName, location, textureData);
+		writeRGBAAsVfImage(fileName, location, std::move(rgbaData),
+			static_cast<uint32_t>(width), static_cast<uint32_t>(height),
+			static_cast<uint32_t>(channels),
+			file.config.compressionMode, file.config.compressionQuality);
 
 		if (progressCallback) progressCallback(1.0f);
+	}
+
+	void Texture::writeRGBAAsVfImage(std::string_view fileName, std::string_view location,
+		std::vector<unsigned char> rgba, uint32_t width, uint32_t height, uint32_t numChannels,
+		importConfig::TextureCompressionMode mode,
+		importConfig::TextureCompressionQuality quality) const
+	{
+		resource::TextureData textureData;
+		textureData.headerFileType = resource::FileType::TEXTURE;
+		textureData.width = width;
+		textureData.height = height;
+		textureData.numbersOfChannels = numChannels;
+
+		textureData.mipData.push_back({width, height, 0, std::move(rgba)});
+
+		generateMipmaps(textureData);
+		compressTextureMips(textureData, mode, quality);
+		saveToFileTextureWithMips(fileName, location, textureData);
+	}
+
+	bool Texture::saveEmbeddedTexture(std::string_view fileName, std::string_view location,
+		const unsigned char* data, size_t byteLength, bool isCompressed,
+		uint32_t width, uint32_t height, const importConfig::ImportConfig& config) const
+	{
+		if (!data || byteLength == 0)
+		{
+			vfLogWarning("Embedded texture '{}' has no data; skipping", fileName);
+			return false;
+		}
+
+		std::vector<unsigned char> rgba;
+		uint32_t outWidth = 0;
+		uint32_t outHeight = 0;
+
+		if (isCompressed)
+		{
+			int w = 0;
+			int h = 0;
+			int channels = 0;
+			unsigned char* decoded = stbi_load_from_memory(data, static_cast<int>(byteLength),
+				&w, &h, &channels, 4);
+			if (!decoded)
+			{
+				vfLogWarning("Failed to decode embedded texture '{}': {}", fileName, stbi_failure_reason());
+				return false;
+			}
+			outWidth = static_cast<uint32_t>(w);
+			outHeight = static_cast<uint32_t>(h);
+			rgba.assign(decoded, decoded + static_cast<size_t>(w) * h * 4);
+			stbi_image_free(decoded);
+		}
+		else
+		{
+			if (width == 0 || height == 0 ||
+				byteLength < static_cast<size_t>(width) * height * 4)
+			{
+				vfLogWarning("Embedded texture '{}' has invalid raw dimensions; skipping", fileName);
+				return false;
+			}
+			outWidth = width;
+			outHeight = height;
+			// Assimp aiTexel stores B, G, R, A; convert to RGBA.
+			const size_t texelCount = static_cast<size_t>(width) * height;
+			rgba.resize(texelCount * 4);
+			for (size_t i = 0; i < texelCount; ++i)
+			{
+				const unsigned char* src = data + i * 4;
+				rgba[i * 4 + 0] = src[2]; // R
+				rgba[i * 4 + 1] = src[1]; // G
+				rgba[i * 4 + 2] = src[0]; // B
+				rgba[i * 4 + 3] = src[3]; // A
+			}
+		}
+
+		writeRGBAAsVfImage(fileName, location, std::move(rgba), outWidth, outHeight, 4,
+			config.compressionMode, config.compressionQuality);
+		return true;
 	}
 
 	void Texture::loadHDRFile(const importConfig::ImportFiles& file, std::string_view fileName,
