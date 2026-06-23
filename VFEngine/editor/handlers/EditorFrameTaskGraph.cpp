@@ -34,30 +34,34 @@ namespace handlers
             if (windowStateService) windowStateService->update();
         });
 
+        // Gameplay tasks gate on isGameTimeActive(): false when paused without a
+        // pending step or when time-scale is 0, so a single predicate unifies
+        // pause + step + scale==0. They also use getGameDeltaTime() so slow-mo /
+        // fast-forward scales gameplay without touching editor camera/UI/render pacing.
         frameTaskGraph->addTask("PhysicsKick", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && physicsPlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && physicsPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 physicsPlayModeHandler->kickUpdate(dt);
             }
         });
 
         frameTaskGraph->addTask("PhysicsSync", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && physicsPlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && physicsPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 physicsPlayModeHandler->syncUpdate(dt);
             }
         });
 
         frameTaskGraph->addTask("Destruction", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && destructionService) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && destructionService) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 destructionService->update(dt);
             }
         });
 
         frameTaskGraph->addTask("Scripts", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && scriptingService) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && scriptingService) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 // Safety net: a catchable mType (interpreter) error in any script
                 // is logged and play mode continues, instead of killing the editor.
                 // Native JIT faults still go to the crash handler (see CrashHandler).
@@ -67,22 +71,22 @@ namespace handlers
         });
 
         frameTaskGraph->addTask("Controllers", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && controllerService) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && controllerService) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 controllerService->applyControllerMovement(dt);
             }
         });
 
         frameTaskGraph->addTask("BehaviorTrees", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && behaviorTreeService) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && behaviorTreeService) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 behaviorTreeService->updateAll(dt);
             }
         });
 
         frameTaskGraph->addTask("VFX", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && vfxPlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && vfxPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 vfxPlayModeHandler->update(dt);
                 // VK-1425: step running combos and drain queued animation-event triggers (after the
                 // per-instance handler so child Create/Play/SetTransform run before UpdateVFXRuntime).
@@ -96,8 +100,10 @@ namespace handlers
         // only the crowd agent simulation is play-mode gated.
         frameTaskGraph->addTask("Navmesh", [this]() {
             if (navmeshService) {
+                // Streaming/bake run in edit mode on raw dt; only agent simulation is
+                // gameplay-gated, so it follows isGameTimeActive() (pause/step/scale).
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                bool simulateAgents = editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused();
+                bool simulateAgents = editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive();
                 navmeshService->update(dt, simulateAgents);
             }
         });
@@ -168,8 +174,8 @@ namespace handlers
         });
 
         frameTaskGraph->addTask("LateScripts", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && scriptingService) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && scriptingService) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 try { scriptingService->lateUpdateScripts(dt); }
                 catch (const std::exception& e) { vfLogError("[Script] lateUpdateScripts threw: {}", e.what()); }
             }

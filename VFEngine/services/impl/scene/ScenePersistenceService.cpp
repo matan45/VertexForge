@@ -26,6 +26,7 @@
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <functional>
 #include <fstream>
@@ -33,6 +34,13 @@
 
 namespace services
 {
+    // Defined here so nlohmann::json stays out of the header (mirrors how
+    // IncrementalLoadState is hidden). Holds the Play-time scene snapshot.
+    struct PieSnapshotState
+    {
+        nlohmann::json json;
+    };
+
     ScenePersistenceService::ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
                                                      EntityStateService* entityStateService)
         : sceneGraph(sceneGraph)
@@ -187,6 +195,25 @@ namespace services
                 cancelPendingLoads();
             });
 
+        // Play/Stop in-memory snapshot (Phase 3)
+        dispatcher.registerCommandHandler<events::scene::CaptureSceneSnapshotCommand>(
+            [this](const events::scene::CaptureSceneSnapshotCommand&)
+            {
+                return captureSnapshot();
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RestoreSceneSnapshotCommand>(
+            [this](const events::scene::RestoreSceneSnapshotCommand&)
+            {
+                return restoreSnapshot();
+            });
+
+        dispatcher.registerCommandHandler<events::scene::DiscardSceneSnapshotCommand>(
+            [this](const events::scene::DiscardSceneSnapshotCommand&)
+            {
+                discardSnapshot();
+            });
+
         // Streaming zone events
         streamingZoneManager->registerEventHandlers(dispatcher);
     }
@@ -195,6 +222,11 @@ namespace services
     {
         pendingLoadPath.reset();
         while (!pendingAdditiveLoads.empty()) pendingAdditiveLoads.pop();
+
+        // Drop any armed-but-not-yet-serviced snapshot restore (Phase 3); the
+        // snapshot itself is kept so an explicit RestoreSceneSnapshotCommand can
+        // still re-arm it.
+        pendingSnapshotRestore = false;
 
         // Abort an in-progress incremental load so the transition flag doesn't
         // stay stuck (already-spawned entities are left for the next load/newScene
@@ -208,6 +240,103 @@ namespace services
             }
             scene::EntityRegistry::setSceneTransitioning(false);
         }
+    }
+
+    bool ScenePersistenceService::captureSnapshot()
+    {
+        if (!sceneGraph)
+        {
+            vfLogError("SceneGraph is null, cannot capture scene snapshot.");
+            return false;
+        }
+
+        pieSnapshot = std::make_unique<PieSnapshotState>();
+        pieSnapshot->json = serialization::SceneSerialization::createSnapshot(*sceneGraph);
+
+        // createSnapshot returns an empty/null json on failure.
+        if (pieSnapshot->json.is_null() || pieSnapshot->json.empty())
+        {
+            vfLogError("Failed to capture scene snapshot.");
+            pieSnapshot.reset();
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScenePersistenceService::restoreSnapshot()
+    {
+        if (!pieSnapshot)
+        {
+            vfLogWarning("No scene snapshot captured; nothing to restore.");
+            return false;
+        }
+
+        // Defer the heavy restore to update() (mirrors pendingLoadPath) so the
+        // registry isn't rebuilt while the render thread may be reading it.
+        pendingSnapshotRestore = true;
+        return true;
+    }
+
+    void ScenePersistenceService::discardSnapshot()
+    {
+        pieSnapshot.reset();
+    }
+
+    void ScenePersistenceService::performDeferredSnapshotRestore()
+    {
+        if (!pieSnapshot || !sceneGraph)
+        {
+            pieSnapshot.reset();
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Resolve the real scene path BEFORE the prologue's SceneClearedNotification
+        // clears the editor's currentScenePath tracking. The scene was loaded from
+        // disk before Play, so this query is already tracking it; finishLoad's
+        // SceneLoadedNotification then re-publishes it so tracking is restored.
+        std::string scenePath = dispatcher.query(events::scene::GetCurrentScenePathQuery{});
+
+        // Same prologue as performDeferredLoad: block render preparation from
+        // touching the registry, tear down IBL/terrain, clear the scene + selection,
+        // and broadcast that the scene was cleared.
+        scene::EntityRegistry::setSceneTransitioning(true);
+
+        events::render::RemoveIBLCommand removeIblCmd;
+        dispatcher.execute(removeIblCmd);
+
+        events::terrain::TerrainDeletedNotification terrainNotif;
+        dispatcher.publish(terrainNotif);
+
+        sceneGraph->clearScene();
+
+        if (entityStateService)
+        {
+            entityStateService->clearSelection();
+        }
+
+        events::scene::SceneClearedNotification clearedNotif;
+        dispatcher.publish(clearedNotif);
+
+        // Same captureless progress callback performDeferredLoad uses.
+        auto progressCallback = [](const std::string& entityName, size_t loaded, size_t total)
+        {
+            events::scene::SceneLoadingProgressUpdatedNotification progressNotif;
+            progressNotif.currentEntityName = entityName;
+            progressNotif.progress = (total > 0) ? static_cast<float>(loaded) / static_cast<float>(total) : 0.0f;
+            events::EventDispatcher::instance().publish(progressNotif);
+        };
+
+        bool ok = serialization::SceneSerialization::restoreFromSnapshot(
+            pieSnapshot->json, *sceneGraph, progressCallback);
+
+        // Re-use the exact post-load wiring (IBL, terrain, per-mesh notifications,
+        // navmesh, Apply* settings, SceneLoadedNotification, clears transitioning).
+        finishLoad(scenePath, ok);
+
+        pieSnapshot.reset();
     }
 
     bool ScenePersistenceService::newScene()
@@ -314,6 +443,16 @@ namespace services
                 incrementalActive = false;
                 finishLoad(incrementalFilePath, incrementalState->success);
             }
+            return;
+        }
+
+        // Play/Stop in-memory snapshot restore (Phase 3). Like a deferred load,
+        // run it here (not mid-frame) so the render thread isn't reading the
+        // registry while it is rebuilt; hold off other loads until it completes.
+        if (pendingSnapshotRestore)
+        {
+            pendingSnapshotRestore = false;
+            performDeferredSnapshotRestore();
             return;
         }
 

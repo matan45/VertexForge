@@ -28,6 +28,16 @@ namespace core::api
                 return coroutineManager->waitForSeconds(instanceId, seconds);
             }});
 
+        interpreter->registerNativeFunction("_native_coroutine_waitForRealSeconds",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (!coroutineManager || args.empty())
+                    return value::Value(std::monostate{});
+
+                double seconds = static_cast<double>(extractFloat(args[0]));
+                uint64_t instanceId = NativeAPIRegistry::getCurrentInstanceId();
+                return coroutineManager->waitForRealSeconds(instanceId, seconds);
+            }});
+
         interpreter->registerNativeFunction("_native_coroutine_waitForFrames",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (!coroutineManager || args.empty())

@@ -44,8 +44,5 @@ namespace core
         // Unified socket lookup (VK-1427): skeletal sockets for a skinned mesh, or
         // static SOK2 sockets for a non-skeletal mesh. nullptr if the entity has neither.
         static const std::vector<animator::SocketDefinition>* getSocketsForEntity(entt::entity entity);
-        // Linear name scan over a socket vector; -1 if absent.
-        static int32_t indexOfSocket(const std::vector<animator::SocketDefinition>& sockets,
-                                     const std::string& socketName);
     };
 }

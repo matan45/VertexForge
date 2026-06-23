@@ -3,25 +3,11 @@
 #include "AnimationLayerStack.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "animator/SocketTypes.hpp"
 #include <glm/gtc/quaternion.hpp>
 
 namespace animation
 {
-    namespace
-    {
-        // Linear name scan over a static socket vector; -1 if absent.
-        int32_t findStaticSocketIndex(const std::vector<animator::SocketDefinition>& sockets,
-                                      const std::string& socketName)
-        {
-            for (size_t i = 0; i < sockets.size(); ++i)
-            {
-                if (sockets[i].name == socketName)
-                    return static_cast<int32_t>(i);
-            }
-            return -1;
-        }
-    }
-
     SocketAttachmentUpdater::SocketAttachmentUpdater(
         const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators,
         AnimationDataCache& dataCache)
@@ -135,6 +121,7 @@ namespace animation
         attachment.needsParentResolution = false;
         attachment.parentEntity = entt::null;
         attachment.cachedSocketIndex = -1;
+        attachment.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
 
         entt::entity ancestor = entt::null;
         if (registry.all_of<components::ParentComponent>(attachedEntity))
@@ -171,6 +158,8 @@ namespace animation
 
     void SocketAttachmentUpdater::applyAttachmentTransform(entt::entity attachedEntity)
     {
+        using ParentKind = components::SocketAttachmentComponent::ParentKind;
+
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!registry.valid(attachedEntity) || !registry.all_of<components::SocketAttachmentComponent>(attachedEntity))
             return;
@@ -182,7 +171,20 @@ namespace animation
         if (!registry.valid(attachment.parentEntity))
             return;
 
-        std::string parentMeshPath;
+        // VK-1432 fast path: a static-mesh parent's model-space socket offset is constant.
+        // Once resolved we skip loadSkeleton/loadSockets (3 locked cache finds), the
+        // meshRef.resolve() string copy, and the per-frame getLocalOffsetMatrix() recompute,
+        // re-multiplying only by the (possibly moved) parentWorld. Reset via the existing
+        // cachedSocketIndex/needsParentResolution invalidation channels.
+        if (attachment.parentKind == ParentKind::Static && attachment.cachedSocketIndex >= 0)
+        {
+            applyModelOffset(attachedEntity, attachment.parentEntity, attachment.cachedStaticSocketOffset);
+            return;
+        }
+
+        // resolve() returns a const std::string& into the MeshComponent; bind it without
+        // copying. It stays valid for this call (no registry mutation of the parent here).
+        const std::string* parentMeshPath = nullptr;
         const resource::SkeletonData* skeleton = nullptr;
         const std::vector<animator::SocketDefinition>* staticSockets = nullptr;
         if (registry.all_of<components::MeshComponent>(attachment.parentEntity))
@@ -190,47 +192,65 @@ namespace animation
             const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
             if (meshComp.meshRef.isValid())
             {
-                parentMeshPath = meshComp.meshRef.resolve();
-                skeleton = dataCache.loadSkeleton(parentMeshPath);
+                parentMeshPath = &meshComp.meshRef.resolve();
+                skeleton = dataCache.loadSkeleton(*parentMeshPath);
                 // Static (non-skeletal) parent: SOK2 sockets. loadSockets returns the
                 // skeleton's sockets when skinned, so only use it on the static path.
                 if (!skeleton)
                 {
-                    staticSockets = dataCache.loadSockets(parentMeshPath);
+                    staticSockets = dataCache.loadSockets(*parentMeshPath);
                 }
             }
         }
+
+        const bool havePath = parentMeshPath != nullptr && !parentMeshPath->empty();
 
         int32_t socketIdx = attachment.cachedSocketIndex;
         if (socketIdx < 0 && skeleton)
         {
             socketIdx = skeleton->getSocketIndex(attachment.socketName);
-            if (socketIdx < 0 && !attachment.socketName.empty() && !parentMeshPath.empty())
+            if (socketIdx < 0 && !attachment.socketName.empty() && havePath)
             {
-                dataCache.invalidateSkeleton(parentMeshPath);
-                skeleton = dataCache.loadSkeleton(parentMeshPath);
+                dataCache.invalidateSkeleton(*parentMeshPath);
+                skeleton = dataCache.loadSkeleton(*parentMeshPath);
                 if (skeleton)
                 {
                     socketIdx = skeleton->getSocketIndex(attachment.socketName);
                 }
             }
-            auto& mutableAttachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
-            mutableAttachment.cachedSocketIndex = socketIdx;
+            attachment.cachedSocketIndex = socketIdx;
         }
         else if (socketIdx < 0 && staticSockets)
         {
-            socketIdx = findStaticSocketIndex(*staticSockets, attachment.socketName);
-            if (socketIdx < 0 && !attachment.socketName.empty() && !parentMeshPath.empty())
+            socketIdx = animator::indexOfSocket(*staticSockets, attachment.socketName);
+            if (socketIdx < 0 && !attachment.socketName.empty() && havePath)
             {
-                dataCache.invalidateSkeleton(parentMeshPath);
-                staticSockets = dataCache.loadSockets(parentMeshPath);
+                dataCache.invalidateSkeleton(*parentMeshPath);
+                staticSockets = dataCache.loadSockets(*parentMeshPath);
                 if (staticSockets)
                 {
-                    socketIdx = findStaticSocketIndex(*staticSockets, attachment.socketName);
+                    socketIdx = animator::indexOfSocket(*staticSockets, attachment.socketName);
                 }
             }
-            auto& mutableAttachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
-            mutableAttachment.cachedSocketIndex = socketIdx;
+            attachment.cachedSocketIndex = socketIdx;
+        }
+
+        // VK-1432: classify the parent once (independent of how the index was obtained — it may
+        // have been pre-set by SocketAdapter::attachToSocket). A Static classification caches the
+        // constant model-space offset so every later frame takes the fast path above. Only commit
+        // on a positive resolve so a transient load failure leaves parentKind == Unknown to retry.
+        if (attachment.parentKind == ParentKind::Unknown && socketIdx >= 0)
+        {
+            if (skeleton)
+            {
+                // Skinned parents read the per-frame socketTransformCache; never the static fast path.
+                attachment.parentKind = ParentKind::Skinned;
+            }
+            else if (staticSockets && socketIdx < static_cast<int32_t>(staticSockets->size()))
+            {
+                attachment.parentKind = ParentKind::Static;
+                attachment.cachedStaticSocketOffset = (*staticSockets)[socketIdx].getLocalOffsetMatrix();
+            }
         }
 
         if (socketIdx < 0)
@@ -271,10 +291,18 @@ namespace animation
             return;
         }
 
+        applyModelOffset(attachedEntity, attachment.parentEntity, socketModelTransform);
+    }
+
+    void SocketAttachmentUpdater::applyModelOffset(entt::entity attachedEntity, entt::entity parentEntity,
+                                                   const glm::mat4& socketModelTransform)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
         glm::mat4 parentWorld = glm::mat4(1.0f);
-        if (registry.all_of<components::WorldTransformComponent>(attachment.parentEntity))
+        if (registry.all_of<components::WorldTransformComponent>(parentEntity))
         {
-            parentWorld = registry.get<components::WorldTransformComponent>(attachment.parentEntity).worldMatrix;
+            parentWorld = registry.get<components::WorldTransformComponent>(parentEntity).worldMatrix;
         }
 
         glm::mat4 socketWorld = parentWorld * socketModelTransform;

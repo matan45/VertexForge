@@ -9,7 +9,10 @@ namespace windows
     private:
         float height = 36.0f;
         float buttonWidth = 60.0f;
+        bool actionsRegistered = false;
 
+        void registerHotkeys();
+        void handleHotkeys();
         void drawPlayControls();
         void drawBuildActions();
 

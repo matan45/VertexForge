@@ -1,9 +1,10 @@
 #include "RTShadowUpsamplePipeline.hpp"
+#include "RTShadowSamplers.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/Shader.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
+#include <glm/glm.hpp>
+#include <array>
 
 #ifdef MemoryBarrier
 #undef MemoryBarrier
@@ -11,24 +12,8 @@
 
 namespace render::raytracing
 {
-    namespace
-    {
-        // Mirrors the push_constant block in rt_shadow_upsample.glsl (std430-compatible layout).
-        struct UpsamplePushConstants
-        {
-            glm::uvec2 dstExtent;   // offset 0
-            glm::vec2 invHalfDims;  // offset 8
-            glm::vec2 invFullDims;  // offset 16
-            float depthThreshold;   // offset 24
-            float normalExp;        // offset 28
-            int32_t reserved0;      // offset 32 (padding; shared 40-byte layout with the layered upsampler)
-            int32_t reserved1;      // offset 36
-        };
-        static_assert(sizeof(UpsamplePushConstants) == 40);
-    }
-
     RTShadowUpsamplePipeline::RTShadowUpsamplePipeline(core::Device& device)
-        : device(device)
+        : device(device), upsampleCore(device)
     {
     }
 
@@ -43,27 +28,14 @@ namespace render::raytracing
 
         if (!initialized)
         {
-            createSamplers();
+            if (!upsampleCore.init(core::MAX_FRAMES_IN_FLIGHT))
+            {
+                // UpsampleCore tore down its own objects on failure; nothing of ours is built yet.
+                return;
+            }
             createDescriptorLayouts();
             createDescriptorPools();
             allocateDescriptorSets();
-            createComputePipeline();
-            if (!computePipeline)
-            {
-                // Pipeline creation failed — tear down what we built and stay uninitialized.
-                // pipelineLayout is created inside createComputePipeline() before the pipeline
-                // itself, so it must be destroyed here (cleanup() early-returns while !initialized).
-                vk::Device vkDevice = device.getLogicalDevice();
-                vkDevice.destroyPipelineLayout(pipelineLayout);
-                vkDevice.destroyDescriptorPool(computePool);
-                vkDevice.destroyDescriptorPool(outputSamplerPool);
-                vkDevice.destroyDescriptorSetLayout(computeLayout);
-                vkDevice.destroyDescriptorSetLayout(outputSamplerLayout);
-                vkDevice.destroySampler(outputSampler);
-                vkDevice.destroySampler(guideSampler);
-                shader.reset();
-                return;
-            }
             createOutputImage(fullW, fullH);
             createOutputSamplerDescriptor();
             initialized = true;
@@ -89,20 +61,12 @@ namespace render::raytracing
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        vkDevice.destroyPipeline(computePipeline);
-        vkDevice.destroyPipelineLayout(pipelineLayout);
-
-        vkDevice.destroyDescriptorPool(computePool);
         vkDevice.destroyDescriptorPool(outputSamplerPool);
-        vkDevice.destroyDescriptorSetLayout(computeLayout);
         vkDevice.destroyDescriptorSetLayout(outputSamplerLayout);
-
-        vkDevice.destroySampler(outputSampler);
-        vkDevice.destroySampler(guideSampler);
 
         destroyOutputImage();
 
-        shader.reset();
+        upsampleCore.cleanup();
         initialized = false;
     }
 
@@ -146,67 +110,15 @@ namespace render::raytracing
         outputAllocation = {};
     }
 
-    void RTShadowUpsamplePipeline::createSamplers()
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        // Nearest sampler for depth/normal guides AND the half-res mask (the joint-bilateral math
-        // does its own weighting; we explicitly fetch the 4 half taps, so no hardware bilinear).
-        vk::SamplerCreateInfo nearestInfo{};
-        nearestInfo.magFilter = vk::Filter::eNearest;
-        nearestInfo.minFilter = vk::Filter::eNearest;
-        nearestInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        nearestInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        nearestInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        guideSampler = vkDevice.createSampler(nearestInfo);
-
-        // Linear sampler for the full-res output's fragment-shader reads — matches the denoiser's
-        // denoisedMaskSampler so the consumer behaves identically.
-        vk::SamplerCreateInfo linearInfo = nearestInfo;
-        linearInfo.magFilter = vk::Filter::eLinear;
-        linearInfo.minFilter = vk::Filter::eLinear;
-        outputSampler = vkDevice.createSampler(linearInfo);
-    }
-
     void RTShadowUpsamplePipeline::createDescriptorLayouts()
     {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        // Compute set: half mask (sampler) + depth (sampler) + normal (sampler) + output (storage).
-        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
-        bindings[0] = {0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute};
-        bindings[1] = {1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute};
-        bindings[2] = {2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute};
-        bindings[3] = {3, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute};
-
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-        computeLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-
-        // Output sampler layout — MUST match RTShadowDenoiser::denoisedMaskSamplerLayout exactly:
-        // binding 0, combined image sampler, fragment stage.
-        vk::DescriptorSetLayoutBinding maskBinding{0, vk::DescriptorType::eCombinedImageSampler, 1,
-                                                   vk::ShaderStageFlagBits::eFragment};
-        vk::DescriptorSetLayoutCreateInfo maskLayoutInfo{};
-        maskLayoutInfo.bindingCount = 1;
-        maskLayoutInfo.pBindings = &maskBinding;
-        outputSamplerLayout = vkDevice.createDescriptorSetLayout(maskLayoutInfo);
+        // Output sampler layout — canonical denoised-mask layout (matches RTShadowDenoiser exactly).
+        outputSamplerLayout = createDenoisedMaskLayout(device.getLogicalDevice());
     }
 
     void RTShadowUpsamplePipeline::createDescriptorPools()
     {
         vk::Device vkDevice = device.getLogicalDevice();
-
-        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
-        poolSizes[0] = {vk::DescriptorType::eCombinedImageSampler, 3 * core::MAX_FRAMES_IN_FLIGHT};
-        poolSizes[1] = {vk::DescriptorType::eStorageImage, 1 * core::MAX_FRAMES_IN_FLIGHT};
-
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = core::MAX_FRAMES_IN_FLIGHT;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        computePool = vkDevice.createDescriptorPool(poolInfo);
 
         vk::DescriptorPoolSize maskPoolSize{vk::DescriptorType::eCombinedImageSampler, 1};
         vk::DescriptorPoolCreateInfo maskPoolInfo{};
@@ -220,10 +132,11 @@ namespace render::raytracing
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
+        vk::DescriptorSetLayout computeLayout = upsampleCore.computeDescriptorLayout();
         for (uint32_t f = 0; f < core::MAX_FRAMES_IN_FLIGHT; ++f)
         {
             vk::DescriptorSetAllocateInfo allocInfo{};
-            allocInfo.descriptorPool = computePool;
+            allocInfo.descriptorPool = upsampleCore.computeDescriptorPool();
             allocInfo.descriptorSetCount = 1;
             allocInfo.pSetLayouts = &computeLayout;
             computeDescSet[f] = vkDevice.allocateDescriptorSets(allocInfo)[0];
@@ -236,40 +149,10 @@ namespace render::raytracing
         outputSamplerDescSet = vkDevice.allocateDescriptorSets(maskAllocInfo)[0];
     }
 
-    void RTShadowUpsamplePipeline::createComputePipeline()
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        shader = std::make_unique<core::Shader>(device);
-        shader->readShader("../../resources/shaders/shadow/rt_shadow_upsample.glsl");
-        if (shader->getShaderStages().empty())
-        {
-            vfLogError("RTShadowUpsamplePipeline: Failed to compile shader: {}", shader->getLastCompilationError());
-            return;
-        }
-
-        vk::PushConstantRange pushRange{};
-        pushRange.stageFlags = vk::ShaderStageFlagBits::eCompute;
-        pushRange.offset = 0;
-        pushRange.size = sizeof(UpsamplePushConstants);
-
-        vk::PipelineLayoutCreateInfo layoutInfo{};
-        layoutInfo.setLayoutCount = 1;
-        layoutInfo.pSetLayouts = &computeLayout;
-        layoutInfo.pushConstantRangeCount = 1;
-        layoutInfo.pPushConstantRanges = &pushRange;
-        pipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
-
-        vk::ComputePipelineCreateInfo pipelineInfo{};
-        pipelineInfo.stage = shader->getShaderStages()[0];
-        pipelineInfo.layout = pipelineLayout;
-        computePipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
-    }
-
     void RTShadowUpsamplePipeline::createOutputSamplerDescriptor()
     {
         vk::DescriptorImageInfo maskInfo{};
-        maskInfo.sampler = outputSampler;
+        maskInfo.sampler = upsampleCore.output();
         maskInfo.imageView = outputSampledView;
         maskInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
@@ -293,9 +176,11 @@ namespace render::raytracing
                                             float normalExp,
                                             uint32_t frameIndex)
     {
-        if (!initialized || !computePipeline) return;
+        if (!initialized || !upsampleCore.valid()) return;
 
         uint32_t fi = frameIndex % core::MAX_FRAMES_IN_FLIGHT;
+
+        vk::Sampler guideSampler = upsampleCore.guide();
 
         // Update this frame's compute descriptor set.
         vk::DescriptorImageInfo halfInfo{};
@@ -372,8 +257,8 @@ namespace render::raytracing
             }
         }
 
-        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout,
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, upsampleCore.pipeline());
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, upsampleCore.layout(),
                                0, 1, &computeDescSet[fi], 0, nullptr);
 
         UpsamplePushConstants pc{};
@@ -384,7 +269,7 @@ namespace render::raytracing
         pc.normalExp = normalExp;
         pc.reserved0 = 0;
         pc.reserved1 = 0;
-        cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
+        cmd.pushConstants(upsampleCore.layout(), vk::ShaderStageFlagBits::eCompute,
                           0, sizeof(UpsamplePushConstants), &pc);
 
         uint32_t groupsX = (fullW + 7) / 8;

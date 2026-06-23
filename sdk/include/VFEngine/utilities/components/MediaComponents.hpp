@@ -256,12 +256,20 @@ namespace components
 
     struct SocketAttachmentComponent
     {
+        // Classifies the socket parent so the per-frame update can skip cache lookups
+        // for static-mesh parents (whose model-space socket offset never changes). VK-1432.
+        enum class ParentKind : uint8_t { Unknown = 0, Skinned, Static };
+
         entt::entity parentEntity = entt::null;
         std::string parentEntityName; // For persistence across scene/prefab loads
         std::string socketName;
         int32_t cachedSocketIndex = -1;
         bool isActive = true;
         bool needsParentResolution = false; // Set true on deserialization/mode change
+        // Transient runtime cache (NOT serialized) — resolved lazily on the cold path,
+        // reset alongside cachedSocketIndex whenever the parent/socket must re-resolve.
+        ParentKind parentKind = ParentKind::Unknown;
+        glm::mat4 cachedStaticSocketOffset = glm::mat4(1.0f); // constant model-space offset (Static only)
     };
 
     struct SocketOverrideComponent

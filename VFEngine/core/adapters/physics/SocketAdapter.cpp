@@ -46,17 +46,6 @@ namespace core
         return animation::RuntimeAnimatorSystem::instance().loadSockets(meshComp.meshRef.resolve());
     }
 
-    int32_t SocketAdapter::indexOfSocket(const std::vector<animator::SocketDefinition>& sockets,
-                                         const std::string& socketName)
-    {
-        for (size_t i = 0; i < sockets.size(); ++i)
-        {
-            if (sockets[i].name == socketName)
-                return static_cast<int32_t>(i);
-        }
-        return -1;
-    }
-
     bool SocketAdapter::attachToSocket(services::EntityHandle childEntity, services::EntityHandle parentEntity,
                                        const std::string& socketName)
     {
@@ -78,7 +67,7 @@ namespace core
             return false;
         }
 
-        int32_t socketIdx = indexOfSocket(*sockets, socketName);
+        int32_t socketIdx = animator::indexOfSocket(*sockets, socketName);
         if (socketIdx < 0)
         {
             vfLogWarning("[SocketAdapter] Socket '{}' not found on parent entity", socketName);
@@ -90,6 +79,9 @@ namespace core
         attachment.socketName = socketName;
         attachment.cachedSocketIndex = socketIdx;
         attachment.isActive = true;
+        // Re-attach may reuse an existing component; clear the VK-1432 static-offset
+        // classification so the updater re-resolves it for the new parent/socket.
+        attachment.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
 
         if (registry.all_of<components::NameComponent>(parent))
         {
@@ -202,7 +194,7 @@ namespace core
         if (!resolved) return false;
 
         const auto* sockets = getSocketsForEntity(*resolved);
-        return sockets && indexOfSocket(*sockets, socketName) >= 0;
+        return sockets && animator::indexOfSocket(*sockets, socketName) >= 0;
     }
 
     bool SocketAdapter::isAttached(services::EntityHandle entity) const
@@ -383,7 +375,7 @@ namespace core
         if (!sockets)
             return glm::mat4(1.0f);
 
-        int32_t socketIdx = indexOfSocket(*sockets, socketName);
+        int32_t socketIdx = animator::indexOfSocket(*sockets, socketName);
         if (socketIdx < 0)
             return glm::mat4(1.0f);
 

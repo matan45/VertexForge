@@ -43,15 +43,30 @@ namespace types
     class Mesh
     {
     public:
+        // outWrittenFiles, when non-null, receives the absolute path of every
+        // .vfMesh written (one per mesh in the model). outWrittenTextures, when
+        // non-null, enables embedded-texture extraction (VK-55): each texture in
+        // aiScene->mTextures is written as a .vfImage and its path appended. Both
+        // let the importer surface produced assets for .vfmeta / registration.
         void loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
-                          std::string_view location, MeshProgressCallback progressCallback = nullptr) const;
+                          std::string_view location, MeshProgressCallback progressCallback = nullptr,
+                          std::vector<std::string>* outWrittenFiles = nullptr,
+                          std::vector<std::string>* outWrittenTextures = nullptr) const;
 
     private:
         static constexpr uint32_t MAX_BONES_PER_VERTEX = 4;
 
+        // Extracts aiScene embedded textures (aiScene->mTextures) into .vfImage
+        // files in `location`, appending each written path to outWrittenTextures.
+        void extractEmbeddedTextures(const aiScene* scene, std::string_view location,
+                                     std::string_view fileName, const importConfig::ImportConfig& config,
+                                     std::vector<std::string>& outWrittenTextures) const;
+
+        // Writes one .vfMesh per mesh in the scene (each with numMeshes == 1).
         void saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
                                         const aiScene* scene, const importConfig::ImportConfig& config,
-                                        MeshProgressCallback progressCallback) const;
+                                        MeshProgressCallback progressCallback,
+                                        std::vector<std::string>* outWrittenFiles) const;
 
         void generateAndSaveFracturedMesh(std::string_view location, std::string_view fileName,
                                           const aiScene* scene, const importConfig::ImportConfig& config,

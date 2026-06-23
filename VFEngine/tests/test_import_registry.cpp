@@ -303,10 +303,12 @@ TEST_SUITE("ImporterRegistry")
         CHECK(importer->deriveOutputFile(context) == "anim.vfAnim");
         CHECK(importer->deriveAssetType(context) == resource::AssetType::Animation);
 
-        // The option surfaces in the import dialog for mesh extensions.
+        // The options surface in the import dialog for mesh extensions:
+        // animationOnly (VK-194) and extractEmbeddedTextures (VK-55).
         auto options = import::ImporterRegistry::instance().optionsForExtension("fbx");
-        REQUIRE(options.size() == 1);
+        REQUIRE(options.size() == 2);
         CHECK(options[0].key == "animationOnly");
+        CHECK(options[1].key == "extractEmbeddedTextures");
     }
 
     TEST_CASE("parallel detection is stable")

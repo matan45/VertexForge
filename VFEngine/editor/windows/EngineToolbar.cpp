@@ -1,8 +1,10 @@
 #include "EngineToolbar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorModeEvents.hpp"
+#include "events/editor/EditorKeybindingEvents.hpp"
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
+#include "print/Log.hpp"
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -10,6 +12,15 @@ namespace windows
 {
     void EngineToolbar::draw(const ImGuiViewport* viewport)
     {
+        if (!actionsRegistered)
+        {
+            registerHotkeys();
+            actionsRegistered = true;
+        }
+
+        // Consume Play/Pause/Stop/Step hotkeys once per frame on the main thread.
+        handleHotkeys();
+
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings;
@@ -38,6 +49,98 @@ namespace windows
         }
         ImGui::End();
         ImGui::PopStyleVar();
+    }
+
+    void EngineToolbar::registerHotkeys()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Register a single-key (optionally Shift-modified) action and warn on any binding
+        // conflict instead of silently overriding another action's shortcut.
+        auto reg = [&](const std::string& name, const std::string& display, int key, bool shift)
+        {
+            services::InputBinding b;
+            b.type = services::BindingType::Key;
+            b.code = key;
+            b.requireShift = shift;
+
+            events::editor::GetKeybindingConflictsQuery conflictQuery;
+            conflictQuery.actionName = name;
+            conflictQuery.binding = b;
+            auto conflicts = dispatcher.query(conflictQuery);
+            for (const auto& c : conflicts)
+                vfLogWarning("Editor hotkey '{}' conflicts with existing action '{}'", name, c.conflictingAction);
+
+            events::editor::RegisterEditorActionCommand cmd;
+            cmd.actionName = name;
+            cmd.category = "Play Controls";
+            cmd.displayName = display;
+            cmd.defaultBindings = {b};
+            dispatcher.execute(cmd);
+        };
+
+        reg("Editor.Play", "Play", ImGuiKey_F5, false);
+        reg("Editor.PauseResume", "Pause / Resume", ImGuiKey_F6, false);
+        reg("Editor.Stop", "Stop", ImGuiKey_F5, true);
+        reg("Editor.Step", "Step Frame", ImGuiKey_F10, false);
+    }
+
+    void EngineToolbar::handleHotkeys()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto isPressed = [&](const std::string& action)
+        {
+            events::editor::IsEditorActionPressedQuery q;
+            q.actionName = action;
+            return dispatcher.query(q);
+        };
+
+        auto currentMode = dispatcher.query(events::editor::GetEditorModeQuery{});
+        bool isPlayMode = (currentMode == services::EditorMode::Play);
+
+        // Play: block only on sculpt mode here. The scripts-compiled gate now lives
+        // in the SetEditorModeCommand handler (Phase 4a), which auto-builds when
+        // needed and refuses Play only if that build fails — so F5 benefits from
+        // auto-build instead of being silently swallowed when scripts are stale.
+        if (!isPlayMode && isPressed("Editor.Play"))
+        {
+            bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+            if (!isSculptMode)
+            {
+                events::editor::SetEditorModeCommand cmd;
+                cmd.mode = services::EditorMode::Play;
+                dispatcher.execute(cmd);
+            }
+        }
+
+        // Stop: only meaningful while playing.
+        if (isPlayMode && isPressed("Editor.Stop"))
+        {
+            events::editor::SetEditorModeCommand cmd;
+            cmd.mode = services::EditorMode::Edit;
+            dispatcher.execute(cmd);
+        }
+
+        // Pause / Resume: toggle, only while playing.
+        if (isPlayMode && isPressed("Editor.PauseResume"))
+        {
+            bool isPaused = dispatcher.query(events::editor::IsEditorPausedQuery{});
+            events::editor::SetEditorPausedCommand cmd;
+            cmd.paused = !isPaused;
+            dispatcher.execute(cmd);
+        }
+
+        // Step: advance one gameplay frame, only meaningful while playing and paused
+        // (mirrors EditorModeServiceImpl::stepFrame()'s own guard).
+        if (isPlayMode && isPressed("Editor.Step"))
+        {
+            bool isPaused = dispatcher.query(events::editor::IsEditorPausedQuery{});
+            if (isPaused)
+            {
+                dispatcher.execute(events::editor::StepFrameCommand{});
+            }
+        }
     }
 
     void EngineToolbar::drawPlayControls()
@@ -143,6 +246,51 @@ namespace windows
                 dispatcher.execute(cmd);
             }
             ImGui::PopStyleColor(3);
+
+            // Step (one gameplay frame) - only meaningful while paused.
+            if (isPaused)
+            {
+                ImGui::SameLine(0.0f, 4.0f);
+                if (ImGui::Button("Step", ImVec2(buttonWidth, 0)))
+                {
+                    dispatcher.execute(events::editor::StepFrameCommand{});
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Advance one gameplay frame");
+            }
+
+            // Status label so the running/paused state is obvious from the toolbar too.
+            ImGui::SameLine(0.0f, 12.0f);
+            if (isPaused)
+                ImGui::TextColored(ImVec4(0.90f, 0.71f, 0.24f, 1.0f), "PAUSED");
+            else
+                ImGui::TextColored(ImVec4(0.31f, 0.78f, 0.47f, 1.0f), "PLAYING");
+
+            // Time-scale control (slow-mo / fast-forward) for gameplay only.
+            ImGui::SameLine(0.0f, 16.0f);
+            float scale = dispatcher.query(events::editor::GetTimeScaleQuery{});
+            ImGui::SetNextItemWidth(80.0f);
+            if (ImGui::SliderFloat("##timescale", &scale, 0.1f, 4.0f, "%.2fx"))
+            {
+                events::editor::SetTimeScaleCommand cmd;
+                cmd.scale = scale;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Gameplay time scale (slow-mo / fast-forward)");
+
+            // Quick presets.
+            auto setScale = [&dispatcher](float s) {
+                events::editor::SetTimeScaleCommand cmd;
+                cmd.scale = s;
+                dispatcher.execute(cmd);
+            };
+            ImGui::SameLine(0.0f, 6.0f);
+            if (ImGui::SmallButton("0.25x")) setScale(0.25f);
+            ImGui::SameLine(0.0f, 4.0f);
+            if (ImGui::SmallButton("1x")) setScale(1.0f);
+            ImGui::SameLine(0.0f, 4.0f);
+            if (ImGui::SmallButton("2x")) setScale(2.0f);
         }
     }
 

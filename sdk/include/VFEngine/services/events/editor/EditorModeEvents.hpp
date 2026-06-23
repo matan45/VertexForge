@@ -52,6 +52,26 @@ namespace events::editor {
     };
 
     // ============================================
+    // TIME CONTROL (Phase 2) - step + time scale
+    // ============================================
+
+    // Advance exactly one gameplay frame while paused.
+    struct StepFrameCommand : ICommand<> {
+        std::string_view getName() const override { return "StepFrame"; }
+    };
+
+    // Set the gameplay time scale (slow-mo / fast-forward). Clamped service-side.
+    struct SetTimeScaleCommand : ICommand<> {
+        float scale = 1.0f;
+
+        std::string_view getName() const override { return "SetTimeScale"; }
+    };
+
+    struct GetTimeScaleQuery : IQuery<float> {
+        std::string_view getName() const override { return "GetTimeScale"; }
+    };
+
+    // ============================================
     // NOTIFICATIONS - State change broadcasts
     // ============================================
 
@@ -73,6 +93,12 @@ namespace events::editor {
         bool paused;
 
         std::string_view getName() const override { return "EditorPauseChanged"; }
+    };
+
+    struct TimeScaleChangedNotification : INotification {
+        float scale = 1.0f;
+
+        std::string_view getName() const override { return "TimeScaleChanged"; }
     };
 
 }

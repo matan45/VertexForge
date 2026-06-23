@@ -10,6 +10,7 @@
 #include <vm/runtime/VirtualMachine.hpp>
 #include <runtime/EventLoop.hpp>
 
+#include "time/Timer.hpp"
 #include "print/Log.hpp"
 
 namespace core
@@ -143,7 +144,14 @@ namespace core
     void ScriptingAdapter::tickCoroutines(float deltaTime)
     {
         if (coroutineManager)
-            coroutineManager->tickFrame(static_cast<double>(deltaTime));
+        {
+            // Use Timer's scaled (game) and raw deltas directly so Seconds waits
+            // pause on freeze / honor time-scale while RealSeconds waits do not.
+            // The forwarded deltaTime param is intentionally ignored for coroutine
+            // bookkeeping; Timer is the single source of truth here.
+            coroutineManager->tickFrame(engineTime::Timer::getGameDeltaTime(),
+                                        engineTime::Timer::getDeltaTime());
+        }
 
         auto vm = interpreter->getVM();
         if (vm)

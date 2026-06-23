@@ -55,6 +55,14 @@ namespace import::builtin
                    std::get<bool>(it->second);
         }
 
+        bool isExtractEmbeddedTextures(const pipeline::ImportContext& context)
+        {
+            const auto& options = context.file.config.customOptions;
+            auto it = options.find("extractEmbeddedTextures");
+            return it != options.end() && std::holds_alternative<bool>(it->second) &&
+                   std::get<bool>(it->second);
+        }
+
         bool isOBJ(std::span<const unsigned char> header)
         {
             const std::vector<std::string> objKeywords = {"# ", "v ", "vn ", "vt ", "f ", "o ", "g "};
@@ -111,7 +119,23 @@ namespace import::builtin
                 };
             }
 
-            meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
+            // The model may contain several meshes; each is written to its own
+            // .vfMesh. Optionally (VK-55) embedded textures are extracted to
+            // .vfImage. Surface every produced file so the controller creates a
+            // .vfmeta and an ImportFileResult per asset (with the right type).
+            const bool extractEmbedded = isExtractEmbeddedTextures(context);
+
+            std::vector<std::string> writtenMeshes;
+            std::vector<std::string> writtenTextures;
+            meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress,
+                                       &writtenMeshes,
+                                       extractEmbedded ? &writtenTextures : nullptr);
+
+            for (auto& path : writtenMeshes)
+                context.outputFiles.push_back({std::move(path), resource::AssetType::Mesh});
+
+            for (auto& path : writtenTextures)
+                context.outputFiles.push_back({std::move(path), resource::AssetType::Texture});
         }
 
         types::AnimationProgressCallback animProgress = nullptr;
@@ -149,6 +173,15 @@ namespace import::builtin
         animationOnly.tooltip = "Extract only animations (.vfAnim) and skip the mesh data entirely";
         animationOnly.type = ImportOptionDesc::Type::Bool;
         animationOnly.defaultValue = false;
-        return {animationOnly};
+
+        ImportOptionDesc extractEmbeddedTextures;
+        extractEmbeddedTextures.key = "extractEmbeddedTextures";
+        extractEmbeddedTextures.label = "Extract Embedded Textures";
+        extractEmbeddedTextures.tooltip =
+            "Extract textures embedded in the model file and save each as a separate .vfImage asset";
+        extractEmbeddedTextures.type = ImportOptionDesc::Type::Bool;
+        extractEmbeddedTextures.defaultValue = false;
+
+        return {animationOnly, extractEmbeddedTextures};
     }
 }

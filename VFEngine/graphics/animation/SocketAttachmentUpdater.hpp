@@ -30,6 +30,9 @@ namespace animation
         void buildSocketTransformCache();
         void resolveAttachmentParent(entt::entity attachedEntity);
         void applyAttachmentTransform(entt::entity attachedEntity);
+        // Shared tail: compose final world = parentWorld * socketModelTransform * entityLocal.
+        void applyModelOffset(entt::entity attachedEntity, entt::entity parentEntity,
+                              const glm::mat4& socketModelTransform);
         // Depth-first, parent-first resolve so chained sockets converge in one frame.
         void resolveChain(entt::entity attachedEntity);
 

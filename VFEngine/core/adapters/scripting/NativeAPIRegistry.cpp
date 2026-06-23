@@ -25,6 +25,7 @@
 #include "../api/DecalAPI.hpp"
 #include "../api/BillboardAPI.hpp"
 #include "../api/CoroutineAPI.hpp"
+#include "../api/TimeAPI.hpp"
 #include "../api/ScriptCommunicationAPI.hpp"
 #include "../api/InputActionAPI.hpp"
 #include "../api/InputAxisAPI.hpp"
@@ -100,6 +101,7 @@ namespace core
         api::DecalAPI::registerAPI(interpreter);
         api::BillboardAPI::registerAPI(interpreter);
         api::CoroutineAPI::registerAPI(interpreter);
+        api::TimeAPI::registerAPI(interpreter);
         api::ScriptCommunicationAPI::registerAPI(interpreter);
         api::InputActionAPI::registerAPI(interpreter);
         api::InputAxisAPI::registerAPI(interpreter);

@@ -33,6 +33,15 @@ namespace services {
 
         virtual void setPaused(bool paused) = 0;
         virtual bool isPaused() const = 0;
+
+        // ============================================
+        // Time Control (Phase 2)
+        // ============================================
+        // Default bodies so out-of-tree / SDK implementers don't break when these
+        // are added.
+        virtual void stepFrame() {}
+        virtual void setTimeScale(float /*scale*/) {}
+        virtual float getTimeScale() const { return 1.0f; }
     };
 
 }

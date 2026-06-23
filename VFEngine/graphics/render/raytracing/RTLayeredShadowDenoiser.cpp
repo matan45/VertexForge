@@ -1,5 +1,6 @@
 #include "RTLayeredShadowDenoiser.hpp"
 #include "RTShadowDenoiser.hpp" // ShadowDenoiserUBO + ShadowSpatialPushConstants (shared layouts)
+#include "RTShadowSamplers.hpp"
 #include <algorithm>
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
@@ -206,19 +207,8 @@ namespace render::raytracing
     void RTLayeredShadowDenoiser::createSamplers()
     {
         vk::Device vkDevice = device.getLogicalDevice();
-
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.magFilter = vk::Filter::eNearest;
-        samplerInfo.minFilter = vk::Filter::eNearest;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        nearestSampler = vkDevice.createSampler(samplerInfo);
-
-        vk::SamplerCreateInfo linearInfo = samplerInfo;
-        linearInfo.magFilter = vk::Filter::eLinear;
-        linearInfo.minFilter = vk::Filter::eLinear;
-        denoisedMaskSampler = vkDevice.createSampler(linearInfo);
+        nearestSampler = createGuideSampler(vkDevice);
+        denoisedMaskSampler = createDenoisedMaskSampler(vkDevice);
     }
 
     void RTLayeredShadowDenoiser::createParamsBuffer()
@@ -255,12 +245,7 @@ namespace render::raytracing
         spatialLayoutInfo.pBindings = spatialBindings.data();
         spatialDSLayout = vkDevice.createDescriptorSetLayout(spatialLayoutInfo);
 
-        vk::DescriptorSetLayoutBinding maskBinding{0, vk::DescriptorType::eCombinedImageSampler, 1,
-                                                    vk::ShaderStageFlagBits::eFragment};
-        vk::DescriptorSetLayoutCreateInfo maskLayoutInfo{};
-        maskLayoutInfo.bindingCount = 1;
-        maskLayoutInfo.pBindings = &maskBinding;
-        denoisedMaskSamplerLayout = vkDevice.createDescriptorSetLayout(maskLayoutInfo);
+        denoisedMaskSamplerLayout = createDenoisedMaskLayout(vkDevice);
     }
 
     void RTLayeredShadowDenoiser::createDescriptorPools()

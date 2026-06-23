@@ -11,7 +11,7 @@ namespace core
     class CoroutineManager
     {
     public:
-        enum class WaitType { Seconds, Frames, FixedUpdate };
+        enum class WaitType { Seconds, RealSeconds, Frames, FixedUpdate };
 
         struct PendingWait
         {
@@ -27,10 +27,11 @@ namespace core
         ~CoroutineManager() = default;
 
         value::Value waitForSeconds(uint64_t instanceId, double seconds);
+        value::Value waitForRealSeconds(uint64_t instanceId, double seconds);
         value::Value waitForFrames(uint64_t instanceId, int frames);
         value::Value waitForFixedUpdate(uint64_t instanceId);
 
-        void tickFrame(double deltaTime);
+        void tickFrame(double scaledDelta, double unscaledDelta);
         void tickFixedUpdate();
 
         void removeAllForInstance(uint64_t instanceId);
@@ -38,7 +39,8 @@ namespace core
 
     private:
         std::vector<PendingWait> pendingWaits;
-        double elapsedTime = 0.0;
+        double scaledElapsed = 0.0;
+        double unscaledElapsed = 0.0;
         uint64_t nextWaitId = 1;
     };
 }

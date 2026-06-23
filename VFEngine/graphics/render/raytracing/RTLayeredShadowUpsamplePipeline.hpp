@@ -1,17 +1,15 @@
 #pragma once
 
+#include "UpsampleCore.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
 #include "../../core/GraphicsConstants.hpp"
 #include "../lighting/GPULightTypes.hpp"
 #include <vulkan/vulkan.hpp>
-#include <glm/glm.hpp>
-#include <memory>
 #include <vector>
 
 namespace core
 {
     class Device;
-    class Shader;
 }
 
 namespace render::raytracing
@@ -30,6 +28,9 @@ namespace render::raytracing
     // combined image sampler, fragment stage, e2DArray view), so the set-15 / set-16 producer swap is
     // a clean vkCopyDescriptorSets repoint in the VK-1398 ring. The renderer owns one instance per
     // light type (spot/point), as it does for the layered pipeline + denoiser.
+    //
+    // VK-1431: the byte-identical pipeline/layout/pool/sampler machinery shared with the directional
+    // variant lives in UpsampleCore (by value); only the 2D-array output + per-slice dispatch are here.
     class RTLayeredShadowUpsamplePipeline
     {
     public:
@@ -63,19 +64,15 @@ namespace render::raytracing
 
     private:
         core::Device& device;
+        UpsampleCore upsampleCore;          // shared pipeline/layout/pool/samplers (VK-1431)
         bool initialized = false;
         bool firstDispatch = true;
         uint32_t outputWidth = 0;
         uint32_t outputHeight = 0;
 
-        vk::Pipeline computePipeline;
-        vk::PipelineLayout pipelineLayout;
-        std::unique_ptr<core::Shader> shader;
-
         // Compute set: half mask array (binding0) + full depth (1) + full normal (2) + output array
         // storage (3). Per-frame * per-slice to avoid descriptor-update races within one frame.
-        vk::DescriptorSetLayout computeLayout;
-        vk::DescriptorPool computePool;
+        // Allocated from upsampleCore's pool/layout.
         vk::DescriptorSet computeDescSet[core::MAX_FRAMES_IN_FLIGHT][MAX_SLICES];
 
         // Full-res output (R16Sfloat array, one layer per slice).
@@ -88,16 +85,12 @@ namespace render::raytracing
         vk::DescriptorSetLayout outputSamplerLayout;
         vk::DescriptorPool outputSamplerPool;
         vk::DescriptorSet outputSamplerDescSet;
-        vk::Sampler outputSampler;  // linear, matches denoised-mask sampler
-        vk::Sampler guideSampler;   // nearest, for depth/normal/half-mask guide reads
 
         void createOutputImage(uint32_t w, uint32_t h);
         void destroyOutputImage();
-        void createSamplers();
         void createDescriptorLayouts();
         void createDescriptorPools();
         void allocateDescriptorSets();
-        void createComputePipeline();
         void createOutputSamplerDescriptor();
         vk::ImageView makeLayerView(vk::Image image, vk::Format format, uint32_t layer);
     };

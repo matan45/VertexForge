@@ -31,6 +31,24 @@ namespace events::scene {
         std::string_view getName() const override { return "CancelPendingSceneLoads"; }
     };
 
+    // Play/Stop in-memory snapshot (Phase 3). On Play the editor captures the
+    // pristine, possibly-unsaved scene into an in-memory snapshot; on Stop it
+    // restores from that snapshot instead of re-reading the .vfScene from disk —
+    // faster, and it preserves unsaved editor edits that a disk reload would drop.
+    struct CaptureSceneSnapshotCommand : ICommand<bool> {
+        std::string_view getName() const override { return "CaptureSceneSnapshot"; }
+    };
+
+    // Returns true if a snapshot was armed for restore; false if none was held, so
+    // the caller can fall back to a disk reload instead of leaving the scene live.
+    struct RestoreSceneSnapshotCommand : ICommand<bool> {
+        std::string_view getName() const override { return "RestoreSceneSnapshot"; }
+    };
+
+    struct DiscardSceneSnapshotCommand : ICommand<void> {
+        std::string_view getName() const override { return "DiscardSceneSnapshot"; }
+    };
+
     struct SavePrefabCommand : ICommand<bool> {
         services::EntityHandle entity;
         std::string filePath;
