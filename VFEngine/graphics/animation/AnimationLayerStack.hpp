@@ -107,6 +107,19 @@ namespace animation
         std::string getCurrentStateName() const;
         float getNormalizedTime() const;
 
+        // Seconds-per-frame of the base layer's current clip (one source frame). Falls back to
+        // 1/30s. Used by the prefab-rig preview frame-step scrub (VK-1433). Does not advance time.
+        float getCurrentClipFrameDuration() const;
+
+        // Duration (seconds) of the base layer's current state clip (0 if unresolvable). Used by
+        // the prefab-rig preview to convert a frame step into a normalized seek (VK-1433).
+        float getCurrentStateDuration() const;
+
+        // Editor-only absolute seek (VK-1433 prefab-rig preview scrub). Seeks the base layer's
+        // state machine to clamp(t,0,1) of its current state, then recomposes finalBoneMatrices
+        // via blendLayers(). update()/Play behavior is unchanged (this is a separate path).
+        void setNormalizedTime(float t);
+
         bool forceTransitionTo(const std::string& stateName, float blendDuration = 0.25f);
 
         // Root motion (base layer only)

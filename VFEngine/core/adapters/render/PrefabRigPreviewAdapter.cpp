@@ -228,6 +228,59 @@ namespace core
         return controller && controller->isPaused();
     }
 
+    void PrefabRigPreviewAdapter::stepPrefabRigFrame(services::PreviewInstanceId instanceId, size_t part,
+                                                     int frames)
+    {
+        auto* controller = getController(instanceId);
+        if (controller)
+        {
+            controller->stepFrame(part, frames);
+        }
+    }
+
+    void PrefabRigPreviewAdapter::setPrefabRigNormalizedTime(services::PreviewInstanceId instanceId,
+                                                             size_t part, float t)
+    {
+        auto* controller = getController(instanceId);
+        if (controller)
+        {
+            controller->setNormalizedTime(part, t);
+        }
+    }
+
+    float PrefabRigPreviewAdapter::getPrefabRigNormalizedTime(services::PreviewInstanceId instanceId,
+                                                              size_t part) const
+    {
+        auto* controller = getController(instanceId);
+        return controller ? controller->normalizedTime(part) : 0.0f;
+    }
+
+    void PrefabRigPreviewAdapter::setPrefabRigPartPreviewTransform(services::PreviewInstanceId instanceId,
+                                                                   size_t part, const glm::mat4& transform)
+    {
+        auto* controller = getController(instanceId);
+        if (controller)
+        {
+            controller->setPartPreviewTransform(part, transform);
+        }
+    }
+
+    void PrefabRigPreviewAdapter::resetPrefabRigPreviewTransforms(services::PreviewInstanceId instanceId)
+    {
+        auto* controller = getController(instanceId);
+        if (controller)
+        {
+            controller->resetPreviewTransforms();
+        }
+    }
+
+    glm::mat4 PrefabRigPreviewAdapter::getPrefabRigPartWorld(services::PreviewInstanceId instanceId,
+                                                             size_t part) const
+    {
+        auto* controller = getController(instanceId);
+        return controller ? controller->partWorld(part) : glm::mat4(1.0f);
+    }
+
     std::vector<animator::SocketDefinition> PrefabRigPreviewAdapter::getPrefabRigSockets(
         services::PreviewInstanceId instanceId, size_t part) const
     {

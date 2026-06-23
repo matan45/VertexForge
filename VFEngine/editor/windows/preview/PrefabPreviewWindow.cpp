@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "PrefabPreviewWindow.hpp"
+#include "PrefabTransformWriter.hpp"
 #include "PreviewInputHandler.hpp"
 #include "PreviewToolbar.hpp"
 #include "../../camera/OrbitCamera.hpp"
@@ -10,7 +11,9 @@
 #include "events/EventDispatcher.hpp"
 #include "events/render/PrefabRigPreviewEvents.hpp"
 #include "events/physics/SocketEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include <nlohmann/json.hpp>
+#include <set>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <filesystem>
@@ -439,6 +442,10 @@ namespace windows
     {
         if (!previewInitialized || rigDesc.parts.empty()) return;
 
+        // A rebuild reconstructs the assembly's parts (preview transforms reset to identity there),
+        // so drop the window's mirror copy too — the gizmo must not re-apply a stale transform.
+        previewTransforms.clear();
+
         services::events::prefabrigpreview::BuildPrefabRigPreviewCommand cmd;
         cmd.instanceId = getInstanceId();
         cmd.desc = rigDesc;
@@ -547,7 +554,7 @@ namespace windows
         if (textureHandle.imguiDescriptorSet)
         {
             ImGui::Image(textureHandle.imguiDescriptorSet, ImVec2(width, height));
-            drawSocketGizmo();
+            drawGizmos();
         }
         else
         {
@@ -555,6 +562,82 @@ namespace windows
         }
 
         (void)regionHeight;
+    }
+
+    glm::mat4 PrefabPreviewWindow::partWorldLive(int part) const
+    {
+        if (part < 0) return glm::mat4(1.0f);
+        services::events::prefabrigpreview::GetPrefabRigPartWorldQuery q;
+        q.instanceId = getInstanceId();
+        q.part = static_cast<size_t>(part);
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    void PrefabPreviewWindow::drawGizmos()
+    {
+        // Exactly ONE gizmo is drawn per frame (gated by gizmoMode) so they never fight over the
+        // mouse. Bone-socket + IK modes have no viewport gizmo (bone sockets ride the live pose;
+        // IK is panel-driven), so only Transform and StaticSocket draw here.
+        switch (gizmoMode)
+        {
+        case GizmoMode::Transform:    drawTransformGizmo(); break;
+        case GizmoMode::StaticSocket: drawSocketGizmo();    break;
+        case GizmoMode::BoneSocket:
+        case GizmoMode::IK:           break;
+        }
+    }
+
+    glm::mat4 PrefabPreviewWindow::currentPartPreviewTransform(int part) const
+    {
+        auto it = previewTransforms.find(part);
+        return (it != previewTransforms.end()) ? it->second : glm::mat4(1.0f);
+    }
+
+    void PrefabPreviewWindow::drawTransformGizmo()
+    {
+        // VK-1433 — TRS gizmo on the selected part's EDITOR-TRANSIENT preview transform. Root part
+        // -> moves the whole rig; child part -> moves that part (descendants follow because the
+        // assembly composes each child off its parent's partWorld). Never serialized.
+        if (selectedPart < 0) return;
+
+        ImVec2 imgMin = ImGui::GetItemRectMin();
+        ImVec2 imgSz = ImGui::GetItemRectSize();
+        if (imgSz.x <= 0.0f || imgSz.y <= 0.0f) return;
+
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetDrawlist();
+        ImGuizmo::SetRect(imgMin.x, imgMin.y, imgSz.x, imgSz.y);
+
+        // Undo Vulkan Y-flip for ImGuizmo (expects OpenGL-style projection).
+        glm::mat4 view = camera->getViewMatrix();
+        glm::mat4 proj = camera->getProjectionMatrix();
+        proj[1][1] *= -1.0f;
+
+        // The assembly composes partWorld = base * previewTransform, where `base` is the turntable/
+        // attachment-chain world (independent of the preview transform). Anchor the gizmo at the
+        // LIVE partWorld (which already includes the current preview), and recover `base` from our
+        // window-authoritative preview copy:  base = liveWorld * inverse(currentPreview).
+        // The identity liveWorld == base * currentPreview holds every frame (the assembly enforces
+        // it), so recomputing base each frame is self-consistent even mid-drag.
+        const glm::mat4 liveWorld = partWorldLive(selectedPart);
+        const glm::mat4 currentPreview = currentPartPreviewTransform(selectedPart);
+        const glm::mat4 base = liveWorld * glm::inverse(currentPreview);
+
+        glm::mat4 objectMatrix = liveWorld;
+
+        if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
+                                 transformGizmoOp, ImGuizmo::WORLD, glm::value_ptr(objectMatrix)))
+        {
+            // newWorld = base * newPreview  =>  newPreview = inverse(base) * newWorld.
+            const glm::mat4 newPreview = glm::inverse(base) * objectMatrix;
+            previewTransforms[selectedPart] = newPreview;
+
+            services::events::prefabrigpreview::SetPrefabRigPartPreviewTransformCommand cmd;
+            cmd.instanceId = getInstanceId();
+            cmd.part = static_cast<size_t>(selectedPart);
+            cmd.transform = newPreview;
+            events::EventDispatcher::instance().execute(cmd);
+        }
     }
 
     void PrefabPreviewWindow::drawSocketGizmo()
@@ -576,12 +659,11 @@ namespace windows
         glm::mat4 proj = camera->getProjectionMatrix();
         proj[1][1] *= -1.0f;
 
-        // NOTE: the static part rides its parent's socket at runtime, but the gizmo here edits
-        // the part's OWN socket offsets (e.g. grip/muzzle) in the part's local space. We anchor
-        // the gizmo at the turntable model * local offset (the part-world contribution from the
-        // attachment chain is not folded in, matching the bone-mesh editor's local-space intent).
+        // VK-1433 F1 fix: anchor at the part's LIVE composed world (where the part actually renders
+        // after the attachment chain), not the turntable-local matrix. The gizmo still edits the
+        // part's OWN socket offset, so we transform between socket-local and world through partWorld.
         auto& socket = editSockets[selectedSocketIndex];
-        glm::mat4 model = glm::mat4_cast(previewRotation);
+        glm::mat4 model = partWorldLive(selectedPart);
         glm::mat4 objectMatrix = model * socket.getLocalOffsetMatrix();
 
         if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
@@ -755,8 +837,19 @@ namespace windows
 
         ImGui::Separator();
 
+        // VK-1433 gizmo-mode toolbar — exactly one viewport gizmo is active (never fight).
+        drawGizmoModeToolbar();
+
+        ImGui::Separator();
+
         if (ImGui::BeginTabBar("##authoringTabs"))
         {
+            if (ImGui::BeginTabItem("Transform"))
+            {
+                if (ImGui::IsItemActivated()) gizmoMode = GizmoMode::Transform;
+                drawTransformPanel();
+                ImGui::EndTabItem();
+            }
             if (ImGui::BeginTabItem("State"))
             {
                 drawStatePicker();
@@ -764,21 +857,186 @@ namespace windows
             }
             if (ImGui::BeginTabItem("Bone Socket"))
             {
+                if (ImGui::IsItemActivated()) gizmoMode = GizmoMode::BoneSocket;
                 drawBoneSocketPanel();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Static Socket"))
             {
+                if (ImGui::IsItemActivated()) gizmoMode = GizmoMode::StaticSocket;
                 drawStaticSocketPanel();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("IK"))
             {
+                if (ImGui::IsItemActivated()) gizmoMode = GizmoMode::IK;
                 drawIKPanel();
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
         }
+    }
+
+    void PrefabPreviewWindow::drawGizmoModeToolbar()
+    {
+        ImGui::TextDisabled("Gizmo:");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Transform", gizmoMode == GizmoMode::Transform))
+            gizmoMode = GizmoMode::Transform;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Bone##gm", gizmoMode == GizmoMode::BoneSocket))
+            gizmoMode = GizmoMode::BoneSocket;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Static##gm", gizmoMode == GizmoMode::StaticSocket))
+            gizmoMode = GizmoMode::StaticSocket;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("IK##gm", gizmoMode == GizmoMode::IK))
+            gizmoMode = GizmoMode::IK;
+    }
+
+    void PrefabPreviewWindow::drawTransformPanel()
+    {
+        if (selectedPart < 0)
+        {
+            ImGui::TextDisabled("Select a part to transform.");
+            return;
+        }
+
+        const bool isRoot = (selectedPart >= 0 && selectedPart < static_cast<int>(rigDesc.parts.size()))
+                                ? rigDesc.parts[selectedPart].parentPartIndex < 0
+                                : false;
+        if (isRoot)
+            ImGui::TextDisabled("Root part — moves the whole rig.");
+        else
+            ImGui::TextDisabled("Child part — moves this part (children follow).");
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Operation");
+        if (ImGui::RadioButton("Move##tr", transformGizmoOp == ImGuizmo::TRANSLATE))
+            transformGizmoOp = ImGuizmo::TRANSLATE;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Rotate##tr", transformGizmoOp == ImGuizmo::ROTATE))
+            transformGizmoOp = ImGuizmo::ROTATE;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Scale##tr", transformGizmoOp == ImGuizmo::SCALE))
+            transformGizmoOp = ImGuizmo::SCALE;
+
+        ImGui::Spacing();
+        if (ImGui::Button("Reset Transform"))
+        {
+            previewTransforms[selectedPart] = glm::mat4(1.0f);
+            services::events::prefabrigpreview::SetPrefabRigPartPreviewTransformCommand cmd;
+            cmd.instanceId = getInstanceId();
+            cmd.part = static_cast<size_t>(selectedPart);
+            cmd.transform = glm::mat4(1.0f);
+            events::EventDispatcher::instance().execute(cmd);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset All"))
+        {
+            previewTransforms.clear();
+            services::events::prefabrigpreview::ResetPrefabRigPreviewTransformsCommand cmd;
+            cmd.instanceId = getInstanceId();
+            events::EventDispatcher::instance().execute(cmd);
+        }
+
+        ImGui::Spacing();
+        ImGui::TextWrapped("Live preview by default — not saved unless you click below.");
+
+        ImGui::Separator();
+        if (transformSaveTimer > 0.0f) transformSaveTimer -= ImGui::GetIO().DeltaTime;
+
+        ImGui::Checkbox("Include root (whole-rig)", &includeRootInSave);
+
+        // Disable Save when no part has actually been moved (every previewTransform is identity).
+        bool anyMoved = false;
+        for (const auto& [part, m] : previewTransforms)
+        {
+            if (m != glm::mat4(1.0f)) { anyMoved = true; break; }
+        }
+        if (!anyMoved) ImGui::BeginDisabled();
+        if (ImGui::Button("Save Transforms to Prefab"))
+        {
+            saveTransformsToPrefab();
+        }
+        if (!anyMoved) ImGui::EndDisabled();
+
+        if (transformSaveTimer > 0.0f)
+        {
+            ImGui::SameLine();
+            if (transformSaveSuccess)
+                ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1), "Saved %d", transformSaveCount);
+            else
+                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Failed");
+        }
+        ImGui::TextWrapped("Writes part transforms into the .vfPrefab (children by default; "
+                           "root only if checked).");
+    }
+
+    void PrefabPreviewWindow::saveTransformsToPrefab()
+    {
+        transformSaveTimer = 3.0f;
+        transformSaveSuccess = false;
+        transformSaveCount = 0;
+
+        // Parts to skip: every ROOT part (parentPartIndex < 0) unless the user opted in. A root
+        // gizmo edit means "frame the whole rig", not a local node transform.
+        std::set<int> skipParts;
+        if (!includeRootInSave)
+        {
+            for (int p = 0; p < static_cast<int>(rigDesc.parts.size()); ++p)
+            {
+                if (rigDesc.parts[p].parentPartIndex < 0)
+                    skipParts.insert(p);
+            }
+        }
+
+        // Load -> mutate ONLY the targeted transforms -> dump back (round-trip preserves all other
+        // fields). entt-free: no PrefabSerialization, no EntityRegistry touched.
+        json prefabJson;
+        try
+        {
+            std::ifstream in(prefabPath);
+            if (!in.is_open())
+            {
+                vfLogError("Save Transforms to Prefab: cannot open '{}'", prefabPath);
+                return;
+            }
+            prefabJson = json::parse(in);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Save Transforms to Prefab: parse error in '{}': {}", prefabPath, e.what());
+            return;
+        }
+
+        const int written = prefabtransform::applyPreviewTransforms(prefabJson, previewTransforms, skipParts);
+
+        try
+        {
+            std::ofstream out(prefabPath, std::ios::trunc);
+            if (!out.is_open())
+            {
+                vfLogError("Save Transforms to Prefab: cannot write '{}'", prefabPath);
+                return;
+            }
+            out << prefabJson.dump(2);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Save Transforms to Prefab: write error in '{}': {}", prefabPath, e.what());
+            return;
+        }
+
+        transformSaveSuccess = true;
+        transformSaveCount = written;
+
+        // Refresh the editor/content browser the way other asset saves do.
+        events::resource::AssetSavedNotification notif;
+        notif.filePath = prefabPath;
+        events::EventDispatcher::instance().publish(notif);
+
+        vfLogInfo("Save Transforms to Prefab: wrote {} part transform(s) to '{}'", written, prefabPath);
     }
 
     void PrefabPreviewWindow::drawStatePicker()
@@ -803,6 +1061,9 @@ namespace windows
                 events::EventDispatcher::instance().execute(cmd);
             }
         }
+
+        // VK-1433 frame-by-frame scrub (needs a skeletal part selected).
+        drawFrameScrub();
 
         ImGui::Separator();
 
@@ -898,6 +1159,50 @@ namespace windows
             cmd.instanceId = getInstanceId();
             cmd.part = static_cast<size_t>(selectedPart);
             cmd.name = paramName;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+    }
+
+    void PrefabPreviewWindow::drawFrameScrub()
+    {
+        if (selectedPart < 0 || !partIsSkeletal(selectedPart))
+            return; // scrub applies to a skeletal part's animator
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Frame scrub (part %d)", selectedPart);
+
+        // Step ±1 frame even while paused (stepFrame advances the layer stack by one source frame).
+        if (ImGui::Button("|< Prev"))
+        {
+            services::events::prefabrigpreview::StepPrefabRigFrameCommand cmd;
+            cmd.instanceId = getInstanceId();
+            cmd.part = static_cast<size_t>(selectedPart);
+            cmd.frames = -1;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Next >|"))
+        {
+            services::events::prefabrigpreview::StepPrefabRigFrameCommand cmd;
+            cmd.instanceId = getInstanceId();
+            cmd.part = static_cast<size_t>(selectedPart);
+            cmd.frames = 1;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+
+        // Absolute scrub slider: read the current normalized time, seek on edit.
+        services::events::prefabrigpreview::GetPrefabRigNormalizedTimeQuery q;
+        q.instanceId = getInstanceId();
+        q.part = static_cast<size_t>(selectedPart);
+        float normalized = events::EventDispatcher::instance().query(q);
+
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::SliderFloat("##prefabScrub", &normalized, 0.0f, 1.0f, "t = %.3f"))
+        {
+            services::events::prefabrigpreview::SetPrefabRigNormalizedTimeCommand cmd;
+            cmd.instanceId = getInstanceId();
+            cmd.part = static_cast<size_t>(selectedPart);
+            cmd.t = normalized;
             events::EventDispatcher::instance().execute(cmd);
         }
     }

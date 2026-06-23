@@ -90,6 +90,21 @@ namespace windows
         int selectedChainIndex = -1;  // chain index for the IK panel
         ImGuizmo::OPERATION socketGizmoOp = ImGuizmo::TRANSLATE;
 
+        // VK-1433 — exactly one gizmo is active at a time so they never fight. Transform drives the
+        // part preview transform (editor-transient); StaticSocket edits a static part's own socket
+        // offsets. Bone/IK have no direct gizmo (they ride bones / are panel-driven) — selecting
+        // them simply suppresses the viewport gizmo.
+        enum class GizmoMode { Transform, BoneSocket, StaticSocket, IK };
+        GizmoMode gizmoMode = GizmoMode::Transform;
+        ImGuizmo::OPERATION transformGizmoOp = ImGuizmo::TRANSLATE; // TRS toggle for the part gizmo
+
+        // Window-authoritative editor-transient preview transforms (part -> matrix). The assembly
+        // also holds these (it folds them into partWorld), but the window keeps its own copy so it
+        // can recover the gizmo's base anchor (world without the preview) each frame. Reset on
+        // rebuild/close; NEVER serialized. Absent entry == identity.
+        std::map<int, glm::mat4> previewTransforms;
+        glm::mat4 currentPartPreviewTransform(int part) const;
+
         // Editable copies pulled from the controller, pushed back on change.
         std::vector<animator::SocketDefinition> editSockets;  // for selectedPart
         std::vector<animator::ik::IKChainConfig> editChains;
@@ -98,6 +113,14 @@ namespace windows
         bool socketSaveSuccess = false;
         float ikSaveTimer = 0.0f;
         bool ikSaveSuccess = false;
+
+        // VK-1433 "Save Transforms to Prefab": bake the gizmo previewTransforms into the .vfPrefab
+        // JSON's per-entity transforms (entt-free, direct JSON round-trip). Root is skipped by
+        // default (its gizmo = whole-rig framing); the user can opt in.
+        float transformSaveTimer = 0.0f;
+        bool transformSaveSuccess = false;
+        int transformSaveCount = 0;
+        bool includeRootInSave = false;
 
         services::PreviewInstanceId getInstanceId() const
         {
@@ -123,7 +146,12 @@ namespace windows
         void buildPreviewFromDesc();
         void cleanUpPreviewRenderer();
         void drawViewport(float regionWidth, float regionHeight, float deltaTime);
-        void drawSocketGizmo();
+        void drawGizmos();        // dispatches to exactly one gizmo per gizmoMode
+        void drawTransformGizmo(); // VK-1433 part preview transform (TRS)
+        void drawSocketGizmo();    // static-socket offset (anchored at live part world)
+
+        // Live composed world of a part (gizmo anchor); identity if unavailable.
+        glm::mat4 partWorldLive(int part) const;
 
         // Panels.
         void drawInfoPanel();
@@ -131,7 +159,11 @@ namespace windows
         void drawEntityNode(const PrefabEntityNode& node, const std::string& path);
         void drawLoadingIndicator();
         void drawAuthoringPanel();
+        void drawGizmoModeToolbar(); // VK-1433 Transform / Bone Socket / Static Socket / IK
         void drawStatePicker();
+        void drawTransformPanel();   // VK-1433 TRS op toggle + Reset Transform + Save to Prefab
+        void saveTransformsToPrefab(); // VK-1433 bake previewTransforms into the .vfPrefab JSON
+        void drawFrameScrub();       // VK-1433 Prev/Next frame + normalized scrub slider
         void drawBoneSocketPanel();
         void drawStaticSocketPanel();
         void drawIKPanel();

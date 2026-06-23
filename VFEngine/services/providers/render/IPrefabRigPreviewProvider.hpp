@@ -70,6 +70,20 @@ namespace services
         virtual void pausePrefabRig(PreviewInstanceId instanceId) = 0;
         virtual bool isPrefabRigPaused(PreviewInstanceId instanceId) const = 0;
 
+        // Frame-by-frame scrub (VK-1433): step a skeletal part by ±frames (even while paused), seek
+        // it to a normalized [0,1] position, or read its current normalized time. Editor-transient.
+        virtual void stepPrefabRigFrame(PreviewInstanceId instanceId, size_t part, int frames) = 0;
+        virtual void setPrefabRigNormalizedTime(PreviewInstanceId instanceId, size_t part, float t) = 0;
+        virtual float getPrefabRigNormalizedTime(PreviewInstanceId instanceId, size_t part) const = 0;
+
+        // Transform gizmo (VK-1433, EDITOR-TRANSIENT, never serialized): set a part's preview
+        // transform (root part moves the whole rig), reset all to identity, and read the part's
+        // LIVE composed world matrix to anchor the gizmo (also used by the static-socket gizmo).
+        virtual void setPrefabRigPartPreviewTransform(PreviewInstanceId instanceId, size_t part,
+                                                      const glm::mat4& transform) = 0;
+        virtual void resetPrefabRigPreviewTransforms(PreviewInstanceId instanceId) = 0;
+        virtual glm::mat4 getPrefabRigPartWorld(PreviewInstanceId instanceId, size_t part) const = 0;
+
         // (Skeletal-vs-static and mesh path are known to the window from the DTO it built,
         //  so they are not re-queried across the boundary.)
 

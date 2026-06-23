@@ -327,6 +327,15 @@ namespace controllers
                 part.stack->update(dt);
         }
 
+        // --- 2-4. resolve attachments + feed/apply IK (shared with the scrub paths) -------
+        resolveAttachmentsAndIK();
+    }
+
+    void PrefabRigAssembly::resolveAttachmentsAndIK()
+    {
+        if (!built)
+            return;
+
         // --- 2. resolve the attachment chain (topological, parent-before-child) ----------
         for (size_t idx : topoOrder)
         {
@@ -334,8 +343,9 @@ namespace controllers
 
             if (part.parentIndex < 0 || part.parentIndex >= static_cast<int>(parts.size()))
             {
-                // Root part: world = preview/turntable model matrix.
-                part.partWorld = rootModelMatrix;
+                // Root part: world = preview/turntable model matrix, then the editor-transient
+                // gizmo transform (so a root gizmo edit moves the WHOLE rig, descendants included).
+                part.partWorld = rootModelMatrix * part.previewTransform;
                 continue;
             }
 
@@ -361,7 +371,10 @@ namespace controllers
             }
 
             const glm::mat4 socketWorld = parent.partWorld * parentSocketModel;
-            part.partWorld = prefabrig::composeChildWorld(socketWorld, part.attachRotationDeg, part.attachScale);
+            // Attachment compose, then the part's editor-transient gizmo transform in its own local
+            // space (descendants compose off this partWorld, so they follow the gizmo edit too).
+            part.partWorld = prefabrig::composeChildWorld(socketWorld, part.attachRotationDeg, part.attachScale)
+                             * part.previewTransform;
         }
 
         // --- 3. feed each IK chain's runtime target from its bound grip socket ------------
@@ -532,5 +545,81 @@ namespace controllers
     void PrefabRigAssembly::pause()
     {
         paused = true;
+    }
+
+    // ----------------------------------------------------------------------
+    // Frame-by-frame scrub (VK-1433)
+    // ----------------------------------------------------------------------
+
+    void PrefabRigAssembly::stepFrame(size_t part, int frames)
+    {
+        if (part >= parts.size() || !parts[part].stack || frames == 0)
+            return;
+
+        animation::AnimationLayerStack* stack = parts[part].stack.get();
+        const float frameDt = stack->getCurrentClipFrameDuration(); // seconds per source frame
+
+        if (frames > 0)
+        {
+            // Forward: advance the animator by frames * frameDt seconds. The stack's internal state
+            // machine stays "playing" (pause() only flips our `paused` gate, not the stack), so this
+            // is exactly the Play update — just applied while the rig preview is paused, firing the
+            // same transitions/events a real step would.
+            stack->update(static_cast<float>(frames) * frameDt);
+        }
+        else
+        {
+            // Backward: update() cannot take a negative dt, so seek. Convert the negative seconds
+            // step to a normalized delta via the current state duration and re-seek (clamped to 0).
+            const float durationSec = stack->getCurrentStateDuration();
+            const float current = stack->getNormalizedTime();
+            const float normDelta = (durationSec > 0.0f)
+                                        ? (static_cast<float>(frames) * frameDt / durationSec)
+                                        : 0.0f;
+            stack->setNormalizedTime(std::max(0.0f, current + normDelta));
+        }
+
+        // Re-resolve so attached parts and IK follow the new pose immediately.
+        resolveAttachmentsAndIK();
+    }
+
+    void PrefabRigAssembly::setNormalizedTime(size_t part, float t)
+    {
+        if (part >= parts.size() || !parts[part].stack)
+            return;
+
+        parts[part].stack->setNormalizedTime(t);
+        resolveAttachmentsAndIK();
+    }
+
+    float PrefabRigAssembly::normalizedTime(size_t part) const
+    {
+        if (part >= parts.size() || !parts[part].stack)
+            return 0.0f;
+        return parts[part].stack->getNormalizedTime();
+    }
+
+    // ----------------------------------------------------------------------
+    // Preview transform (editor-transient)
+    // ----------------------------------------------------------------------
+
+    void PrefabRigAssembly::setPartPreviewTransform(size_t part, const glm::mat4& m)
+    {
+        if (part < parts.size())
+            parts[part].previewTransform = m;
+    }
+
+    const glm::mat4& PrefabRigAssembly::partPreviewTransform(size_t part) const
+    {
+        static const glm::mat4 identity(1.0f);
+        if (part >= parts.size())
+            return identity;
+        return parts[part].previewTransform;
+    }
+
+    void PrefabRigAssembly::resetPreviewTransforms()
+    {
+        for (Part& part : parts)
+            part.previewTransform = glm::mat4(1.0f);
     }
 }

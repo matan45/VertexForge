@@ -227,4 +227,123 @@ TEST_SUITE("PrefabRigAssemblyClass")
         CHECK(rig.partCount() == 0);
         rig.update(0.016f);        // still a no-op, no crash
     }
+
+    // -----------------------------------------------------------------------
+    // VK-1433 — preview transform on a PARENT propagates to a child's partWorld.
+    // The root's preview transform pre-multiplies into its partWorld and the child
+    // composes off the parent's partWorld, so editing the root moves the child too.
+    // -----------------------------------------------------------------------
+    TEST_CASE("root preview transform affects all parts (propagates to a static child)")
+    {
+        PrefabRigDesc desc;
+        desc.parts.push_back(staticPart("__vk1433_pt_root.vfMesh"));
+        desc.parts.push_back(staticPart("__vk1433_pt_child.vfMesh",
+                                        /*parentIndex*/ 0, /*parentSocket*/ "Mount"));
+
+        PrefabRigAssembly rig;
+        REQUIRE(rig.build(desc));
+        REQUIRE(rig.partCount() == 2);
+
+        // Root preview = translate(+10,0,0). rootModelMatrix stays identity (default).
+        rig.setPartPreviewTransform(0, glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f)));
+        rig.update(0.0f);
+
+        // Root world == rootModelMatrix(identity) * preview => translation (10,0,0).
+        CHECK(translationOf(rig.partWorld(0)).x == doctest::Approx(10.0f));
+        // Child rides the parent's world (identity socket + identity child preview) => same (10,0,0).
+        CHECK(translationOf(rig.partWorld(1)).x == doctest::Approx(10.0f));
+    }
+
+    // -----------------------------------------------------------------------
+    // VK-1433 — a CHILD's own preview transform stacks on top of the inherited
+    // parent world (parent preview propagates; child preview adds in local space).
+    // -----------------------------------------------------------------------
+    TEST_CASE("child preview transform stacks on top of the inherited parent world")
+    {
+        PrefabRigDesc desc;
+        desc.parts.push_back(staticPart("__vk1433_pt2_root.vfMesh"));
+        desc.parts.push_back(staticPart("__vk1433_pt2_child.vfMesh",
+                                        /*parentIndex*/ 0, /*parentSocket*/ "Mount"));
+
+        PrefabRigAssembly rig;
+        REQUIRE(rig.build(desc));
+
+        rig.setPartPreviewTransform(0, glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f)));
+        rig.setPartPreviewTransform(1, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 5.0f, 0.0f)));
+        rig.update(0.0f);
+
+        // Child world = parentWorld(10,0,0) * childPreview(0,5,0) => (10,5,0).
+        CHECK(translationOf(rig.partWorld(1)).x == doctest::Approx(10.0f));
+        CHECK(translationOf(rig.partWorld(1)).y == doctest::Approx(5.0f));
+        // Parent itself is unaffected by the child's preview.
+        CHECK(translationOf(rig.partWorld(0)).y == doctest::Approx(0.0f));
+    }
+
+    // -----------------------------------------------------------------------
+    // VK-1433 — setPartPreviewTransform / partPreviewTransform round-trip + reset.
+    // -----------------------------------------------------------------------
+    TEST_CASE("preview transform accessor round-trips and resetPreviewTransforms clears it")
+    {
+        PrefabRigDesc desc;
+        desc.parts.push_back(staticPart("__vk1433_pt3.vfMesh"));
+
+        PrefabRigAssembly rig;
+        REQUIRE(rig.build(desc));
+
+        const glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 2.0f, 3.0f));
+        rig.setPartPreviewTransform(0, m);
+        CHECK(rig.partPreviewTransform(0) == m);
+
+        rig.resetPreviewTransforms();
+        CHECK(rig.partPreviewTransform(0) == glm::mat4(1.0f));
+
+        // Out-of-range accessor returns identity and the setter is a safe no-op.
+        CHECK(rig.partPreviewTransform(999) == glm::mat4(1.0f));
+        rig.setPartPreviewTransform(999, m); // no crash
+    }
+
+    // -----------------------------------------------------------------------
+    // VK-1433 — a rebuild resets preview transforms to identity (parts reconstructed).
+    // -----------------------------------------------------------------------
+    TEST_CASE("rebuild resets preview transforms to identity")
+    {
+        PrefabRigAssembly rig;
+
+        PrefabRigDesc desc;
+        desc.parts.push_back(staticPart("__vk1433_pt4.vfMesh"));
+        REQUIRE(rig.build(desc));
+
+        rig.setPartPreviewTransform(0, glm::translate(glm::mat4(1.0f), glm::vec3(9.0f, 0.0f, 0.0f)));
+        CHECK(translationOf(rig.partPreviewTransform(0)).x == doctest::Approx(9.0f));
+
+        REQUIRE(rig.build(desc)); // rebuild from scratch
+        CHECK(rig.partPreviewTransform(0) == glm::mat4(1.0f));
+    }
+
+    // -----------------------------------------------------------------------
+    // VK-1433 — frame-step / seek are safe no-ops on STATIC and out-of-range parts
+    // (they require an AnimationLayerStack, which static parts do not have). The
+    // deterministic time-advance / clamp behavior over a real skeletal animator is
+    // covered at the state-machine level (test_animator_state_machine_seek.cpp) and
+    // by in-editor GPU verification (Layer B).
+    // -----------------------------------------------------------------------
+    TEST_CASE("stepFrame / setNormalizedTime / normalizedTime are safe on static + OOR parts")
+    {
+        PrefabRigDesc desc;
+        desc.parts.push_back(staticPart("__vk1433_scrub_static.vfMesh"));
+
+        PrefabRigAssembly rig;
+        REQUIRE(rig.build(desc));
+
+        // Static part has no stack: all scrub ops are no-ops, normalizedTime reads 0.
+        rig.stepFrame(0, 1);
+        rig.stepFrame(0, -3);
+        rig.setNormalizedTime(0, 0.5f);
+        CHECK(rig.normalizedTime(0) == doctest::Approx(0.0f));
+
+        // Out-of-range indices never crash.
+        rig.stepFrame(999, 1);
+        rig.setNormalizedTime(999, 0.5f);
+        CHECK(rig.normalizedTime(999) == doctest::Approx(0.0f));
+    }
 }

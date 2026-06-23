@@ -114,6 +114,30 @@ namespace services
                 setPrefabRigChains(cmd.instanceId, cmd.chains);
             });
 
+        dispatcher.registerCommandHandler<StepPrefabRigFrameCommand>(
+            [this](const StepPrefabRigFrameCommand& cmd)
+            {
+                stepPrefabRigFrame(cmd.instanceId, cmd.part, cmd.frames);
+            });
+
+        dispatcher.registerCommandHandler<SetPrefabRigNormalizedTimeCommand>(
+            [this](const SetPrefabRigNormalizedTimeCommand& cmd)
+            {
+                setPrefabRigNormalizedTime(cmd.instanceId, cmd.part, cmd.t);
+            });
+
+        dispatcher.registerCommandHandler<SetPrefabRigPartPreviewTransformCommand>(
+            [this](const SetPrefabRigPartPreviewTransformCommand& cmd)
+            {
+                setPrefabRigPartPreviewTransform(cmd.instanceId, cmd.part, cmd.transform);
+            });
+
+        dispatcher.registerCommandHandler<ResetPrefabRigPreviewTransformsCommand>(
+            [this](const ResetPrefabRigPreviewTransformsCommand& cmd)
+            {
+                resetPrefabRigPreviewTransforms(cmd.instanceId);
+            });
+
         dispatcher.registerQueryHandler<RenderPrefabRigPreviewQuery>(
             [this](const RenderPrefabRigPreviewQuery& query)
             {
@@ -154,6 +178,18 @@ namespace services
             [this](const GetPrefabRigChainsQuery& query)
             {
                 return getPrefabRigChains(query.instanceId);
+            });
+
+        dispatcher.registerQueryHandler<GetPrefabRigNormalizedTimeQuery>(
+            [this](const GetPrefabRigNormalizedTimeQuery& query)
+            {
+                return getPrefabRigNormalizedTime(query.instanceId, query.part);
+            });
+
+        dispatcher.registerQueryHandler<GetPrefabRigPartWorldQuery>(
+            [this](const GetPrefabRigPartWorldQuery& query)
+            {
+                return getPrefabRigPartWorld(query.instanceId, query.part);
             });
     }
 
@@ -277,6 +313,42 @@ namespace services
     bool PreviewServiceImpl::isPrefabRigPaused(PreviewInstanceId instanceId) const
     {
         return prefabRigProvider ? prefabRigProvider->isPrefabRigPaused(instanceId) : false;
+    }
+
+    void PreviewServiceImpl::stepPrefabRigFrame(PreviewInstanceId instanceId, size_t part, int frames)
+    {
+        if (prefabRigProvider)
+            prefabRigProvider->stepPrefabRigFrame(instanceId, part, frames);
+    }
+
+    void PreviewServiceImpl::setPrefabRigNormalizedTime(PreviewInstanceId instanceId, size_t part, float t)
+    {
+        if (prefabRigProvider)
+            prefabRigProvider->setPrefabRigNormalizedTime(instanceId, part, t);
+    }
+
+    float PreviewServiceImpl::getPrefabRigNormalizedTime(PreviewInstanceId instanceId, size_t part) const
+    {
+        return prefabRigProvider ? prefabRigProvider->getPrefabRigNormalizedTime(instanceId, part) : 0.0f;
+    }
+
+    void PreviewServiceImpl::setPrefabRigPartPreviewTransform(PreviewInstanceId instanceId, size_t part,
+                                                              const glm::mat4& transform)
+    {
+        if (prefabRigProvider)
+            prefabRigProvider->setPrefabRigPartPreviewTransform(instanceId, part, transform);
+    }
+
+    void PreviewServiceImpl::resetPrefabRigPreviewTransforms(PreviewInstanceId instanceId)
+    {
+        if (prefabRigProvider)
+            prefabRigProvider->resetPrefabRigPreviewTransforms(instanceId);
+    }
+
+    glm::mat4 PreviewServiceImpl::getPrefabRigPartWorld(PreviewInstanceId instanceId, size_t part) const
+    {
+        return prefabRigProvider ? prefabRigProvider->getPrefabRigPartWorld(instanceId, part)
+                                 : glm::mat4(1.0f);
     }
 
     std::vector<animator::SocketDefinition> PreviewServiceImpl::getPrefabRigSockets(PreviewInstanceId instanceId,

@@ -138,6 +138,38 @@ namespace services::events::prefabrigpreview
         std::string_view getName() const override { return "SetPrefabRigChains"; }
     };
 
+    // VK-1433 — frame-by-frame scrub (skeletal part, editor-transient).
+    struct StepPrefabRigFrameCommand : ::events::ICommand<void>
+    {
+        PreviewInstanceId instanceId;
+        size_t part = 0;
+        int frames = 0; // +/- step count
+        std::string_view getName() const override { return "StepPrefabRigFrame"; }
+    };
+
+    struct SetPrefabRigNormalizedTimeCommand : ::events::ICommand<void>
+    {
+        PreviewInstanceId instanceId;
+        size_t part = 0;
+        float t = 0.0f; // normalized [0,1]
+        std::string_view getName() const override { return "SetPrefabRigNormalizedTime"; }
+    };
+
+    // VK-1433 — transform gizmo (editor-transient, never serialized).
+    struct SetPrefabRigPartPreviewTransformCommand : ::events::ICommand<void>
+    {
+        PreviewInstanceId instanceId;
+        size_t part = 0;
+        glm::mat4 transform{1.0f};
+        std::string_view getName() const override { return "SetPrefabRigPartPreviewTransform"; }
+    };
+
+    struct ResetPrefabRigPreviewTransformsCommand : ::events::ICommand<void>
+    {
+        PreviewInstanceId instanceId;
+        std::string_view getName() const override { return "ResetPrefabRigPreviewTransforms"; }
+    };
+
     // ---- Queries ----
 
     struct RenderPrefabRigPreviewQuery : ::events::IQuery<ViewportTextureHandle>
@@ -182,5 +214,21 @@ namespace services::events::prefabrigpreview
     {
         PreviewInstanceId instanceId;
         std::string_view getName() const override { return "GetPrefabRigChains"; }
+    };
+
+    // VK-1433 — current normalized time [0,1) of a skeletal part's base state (scrub readout).
+    struct GetPrefabRigNormalizedTimeQuery : ::events::IQuery<float>
+    {
+        PreviewInstanceId instanceId;
+        size_t part = 0;
+        std::string_view getName() const override { return "GetPrefabRigNormalizedTime"; }
+    };
+
+    // VK-1433 — live composed world matrix of a part (anchors the transform + socket gizmos).
+    struct GetPrefabRigPartWorldQuery : ::events::IQuery<glm::mat4>
+    {
+        PreviewInstanceId instanceId;
+        size_t part = 0;
+        std::string_view getName() const override { return "GetPrefabRigPartWorld"; }
     };
 }

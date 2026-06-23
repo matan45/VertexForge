@@ -98,6 +98,18 @@ namespace controllers
         void pause();
         bool isPaused() const;
 
+        // Frame-by-frame scrub (VK-1433): step / seek one skeletal part, even while paused.
+        void stepFrame(size_t part, int frames);
+        void setNormalizedTime(size_t part, float t);
+        float normalizedTime(size_t part) const;
+
+        // Editor-transient gizmo transform per part (VK-1433); folded into partWorld each update().
+        // Never serialized. partWorld() exposes the LIVE composed world for the gizmo anchor.
+        void setPartPreviewTransform(size_t part, const glm::mat4& m);
+        const glm::mat4& partPreviewTransform(size_t part) const;
+        void resetPreviewTransforms();
+        glm::mat4 partWorld(size_t part) const;
+
         std::vector<animator::SocketDefinition>& editableSockets(size_t part);
         const std::vector<animator::SocketDefinition>& editableSockets(size_t part) const;
         std::vector<animator::ik::IKChainConfig>& editableChains();

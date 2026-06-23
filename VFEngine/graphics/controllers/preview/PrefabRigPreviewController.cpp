@@ -468,6 +468,53 @@ namespace controllers
     void PrefabRigPreviewController::pause() { assembly.pause(); }
     bool PrefabRigPreviewController::isPaused() const { return assembly.isPaused(); }
 
+    void PrefabRigPreviewController::stepFrame(size_t part, int frames)
+    {
+        assembly.stepFrame(part, frames);
+        // Push the freshly re-resolved bone matrices to the affected pipelines so the paused frame
+        // shows the stepped pose without waiting for the next update().
+        for (size_t i = 0; i < pipelines.size(); ++i)
+        {
+            if (pipelines[i])
+                pipelines[i]->updateBoneMatrices(assembly.boneMatrices(i));
+        }
+    }
+
+    void PrefabRigPreviewController::setNormalizedTime(size_t part, float t)
+    {
+        assembly.setNormalizedTime(part, t);
+        for (size_t i = 0; i < pipelines.size(); ++i)
+        {
+            if (pipelines[i])
+                pipelines[i]->updateBoneMatrices(assembly.boneMatrices(i));
+        }
+    }
+
+    float PrefabRigPreviewController::normalizedTime(size_t part) const
+    {
+        return assembly.normalizedTime(part);
+    }
+
+    void PrefabRigPreviewController::setPartPreviewTransform(size_t part, const glm::mat4& m)
+    {
+        assembly.setPartPreviewTransform(part, m);
+    }
+
+    const glm::mat4& PrefabRigPreviewController::partPreviewTransform(size_t part) const
+    {
+        return assembly.partPreviewTransform(part);
+    }
+
+    void PrefabRigPreviewController::resetPreviewTransforms()
+    {
+        assembly.resetPreviewTransforms();
+    }
+
+    glm::mat4 PrefabRigPreviewController::partWorld(size_t part) const
+    {
+        return assembly.partWorld(part);
+    }
+
     std::vector<animator::SocketDefinition>& PrefabRigPreviewController::editableSockets(size_t part)
     {
         return assembly.editableSockets(part);

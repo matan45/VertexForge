@@ -175,6 +175,28 @@ namespace controllers
         void pause();
         bool isPaused() const { return paused; }
 
+        // --- Frame-by-frame scrub (VK-1433, skeletal parts) -----------------
+        // Advance ONE skeletal part's animator by frames * frameDt seconds (frameDt derived from
+        // the part's current clip; ±frames step forward/back), even while the rig is paused, then
+        // re-resolve attachments + IK so attached parts follow. No-op on static / out-of-range
+        // parts. Play behavior is unaffected (this drives the same AnimationLayerStack::update).
+        void stepFrame(size_t part, int frames);
+        // Absolute seek of ONE skeletal part's animator to normalized [0,1] of its current state,
+        // then re-resolve attachments + IK. No-op on static / out-of-range parts.
+        void setNormalizedTime(size_t part, float t);
+        // Current normalized time [0,1) of a skeletal part's base state (0 for static/out-of-range).
+        float normalizedTime(size_t part) const;
+
+        // --- Preview transform (VK-1433, EDITOR-TRANSIENT) ------------------
+        // Per-part gizmo transform folded into the composed partWorld each update(), so editing a
+        // parent moves its descendants too. NEVER serialized / written to the prefab/mesh/sockets;
+        // it is reset to identity on rebuild and read back for the gizmo anchor. Root part's
+        // preview transform moves the whole rig (it pre-multiplies rootModelMatrix).
+        void setPartPreviewTransform(size_t part, const glm::mat4& m);
+        const glm::mat4& partPreviewTransform(size_t part) const;
+        // Resets every part's preview transform to identity (Reset Transform / rebuild / close).
+        void resetPreviewTransforms();
+
         // Root (turntable) model matrix applied to root parts; propagates through the
         // attachment chain so a non-identity preview rotation still feeds IK correctly.
         void setRootModelMatrix(const glm::mat4& m) { rootModelMatrix = m; }
@@ -202,6 +224,10 @@ namespace controllers
             glm::vec3 attachRotationDeg{0.0f};
             glm::vec3 attachScale{1.0f};
 
+            // Editor-transient gizmo transform (VK-1433). Folded into partWorld each update() so it
+            // propagates to children. Default identity; reset on rebuild. NOT serialized.
+            glm::mat4 previewTransform{1.0f};
+
             glm::mat4 partWorld{1.0f};
 
             // Identity bone set for static parts (Layer B feeds this to the skinned pipeline).
@@ -219,6 +245,9 @@ namespace controllers
 
         void clear();
         void resolveTopologicalOrder();
+        // Resolve the attachment chain (topological) then feed + apply IK. Shared by update() and
+        // the frame-step / seek paths (which advance one animator, then re-resolve the rig).
+        void resolveAttachmentsAndIK();
         // Builds a RetargetContext for a skeletal part from a .vfretarget map path. Mirrors
         // RuntimeAnimatorSystem::buildEntityRetargetContext. nullptr if unavailable/empty.
         std::unique_ptr<animation::RetargetContext> buildRetargetForPart(const Part& part,

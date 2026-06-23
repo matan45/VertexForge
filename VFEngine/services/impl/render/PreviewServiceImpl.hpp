@@ -134,6 +134,15 @@ namespace services
         void pausePrefabRig(PreviewInstanceId instanceId) override;
         [[nodiscard]] bool isPrefabRigPaused(PreviewInstanceId instanceId) const override;
 
+        void stepPrefabRigFrame(PreviewInstanceId instanceId, size_t part, int frames) override;
+        void setPrefabRigNormalizedTime(PreviewInstanceId instanceId, size_t part, float t) override;
+        [[nodiscard]] float getPrefabRigNormalizedTime(PreviewInstanceId instanceId, size_t part) const override;
+
+        void setPrefabRigPartPreviewTransform(PreviewInstanceId instanceId, size_t part,
+                                              const glm::mat4& transform) override;
+        void resetPrefabRigPreviewTransforms(PreviewInstanceId instanceId) override;
+        [[nodiscard]] glm::mat4 getPrefabRigPartWorld(PreviewInstanceId instanceId, size_t part) const override;
+
         [[nodiscard]] std::vector<animator::SocketDefinition>
         getPrefabRigSockets(PreviewInstanceId instanceId, size_t part) const override;
         void setPrefabRigSockets(PreviewInstanceId instanceId, size_t part,

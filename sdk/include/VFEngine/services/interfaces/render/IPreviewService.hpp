@@ -135,6 +135,17 @@ namespace services
         virtual void pausePrefabRig(PreviewInstanceId instanceId) = 0;
         [[nodiscard]] virtual bool isPrefabRigPaused(PreviewInstanceId instanceId) const = 0;
 
+        // VK-1433 — frame-by-frame scrub (editor-transient).
+        virtual void stepPrefabRigFrame(PreviewInstanceId instanceId, size_t part, int frames) = 0;
+        virtual void setPrefabRigNormalizedTime(PreviewInstanceId instanceId, size_t part, float t) = 0;
+        [[nodiscard]] virtual float getPrefabRigNormalizedTime(PreviewInstanceId instanceId, size_t part) const = 0;
+
+        // VK-1433 — transform gizmo (editor-transient, never serialized) + live part-world anchor.
+        virtual void setPrefabRigPartPreviewTransform(PreviewInstanceId instanceId, size_t part,
+                                                      const glm::mat4& transform) = 0;
+        virtual void resetPrefabRigPreviewTransforms(PreviewInstanceId instanceId) = 0;
+        [[nodiscard]] virtual glm::mat4 getPrefabRigPartWorld(PreviewInstanceId instanceId, size_t part) const = 0;
+
         [[nodiscard]] virtual std::vector<animator::SocketDefinition>
         getPrefabRigSockets(PreviewInstanceId instanceId, size_t part) const = 0;
         virtual void setPrefabRigSockets(PreviewInstanceId instanceId, size_t part,
