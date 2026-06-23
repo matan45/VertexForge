@@ -876,7 +876,7 @@ project "Terrain"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllimport)", "VF_TERRAIN_BUILD_DLL" }
 
-   links { "Utilities", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading" }
+   links { "Utilities", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }
 
    buildoptions { "/bigobj" }
 
@@ -971,7 +971,7 @@ project "Serialization"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_SERIALIZATION_BUILD_DLL" }
 
-   links { "Utilities", "ECSRegistry", "AssetDB", "Threading" }
+   links { "Utilities", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }
 
    buildoptions { "/bigobj" }
 
@@ -1031,7 +1031,7 @@ project "World"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_WORLD_BUILD_DLL" }
 
-   links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading" }
+   links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }
 
    postbuildcommands {
       "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
@@ -1081,7 +1081,7 @@ project "Animation"
 
    -- Services: EventDispatcher used by RuntimeAnimatorSystem
    -- Terrain: transitive dep from Utilities.lib (ResourceManager references TerrainMaterialAsset)
-   links { "Utilities", "Services", "Terrain", "ECSRegistry", "AssetDB", "Threading" }
+   links { "Utilities", "Services", "Terrain", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
    postbuildcommands {
@@ -1165,7 +1165,7 @@ project "GameExport"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_GAMEEXPORT_BUILD_DLL" }
 
-   links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib", "AssetDB", "Threading" }
+   links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib", "AssetDB", "Threading", "CpuMemory" }
 
    postbuildcommands {
       "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
