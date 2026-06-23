@@ -21,9 +21,16 @@ public class Coroutine {
     public constructor() {
     }
 
-    // Wait for the specified number of seconds before continuing
+    // Wait for the specified number of seconds before continuing.
+    // Affected by Time::setScale / Time::freeze (game-time / slow-motion).
     public static function async waitForSeconds(float seconds): Promise<void> {
         await _native_coroutine_waitForSeconds(seconds);
+    }
+
+    // Wait for the specified number of real (unscaled) seconds before continuing.
+    // Ignores Time::setScale and Time::freeze (wall-clock time).
+    public static function async waitForRealSeconds(float seconds): Promise<void> {
+        await _native_coroutine_waitForRealSeconds(seconds);
     }
 
     // Wait for the specified number of frames before continuing

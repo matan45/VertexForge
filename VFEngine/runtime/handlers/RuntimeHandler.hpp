@@ -24,6 +24,7 @@
 #include "interfaces/input/IRuntimePickerService.hpp"
 #include "interfaces/render/IPluginTextureService.hpp"
 #include "interfaces/weather/IWeatherService.hpp"
+#include "interfaces/time/ITimeService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace services {
@@ -81,6 +82,7 @@ namespace handlers {
         std::shared_ptr<services::IRuntimePickerService> runtimePickerService;
         std::shared_ptr<services::IPluginTextureService> pluginTextureService;
         std::shared_ptr<services::IWeatherService> weatherService;
+        std::shared_ptr<services::ITimeService> timeService;
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 

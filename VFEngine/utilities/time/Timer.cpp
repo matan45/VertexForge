@@ -16,11 +16,18 @@ namespace engineTime {
 		lastTime = currentTime;
 
 		// Derive the gameplay delta from the raw frame delta (Phase 2).
-		gameDeltaTime = computeGameDelta(deltaTime, timeScale, gamePaused, stepRequested);
+		gameDeltaTime = computeGameDelta(deltaTime, timeScale, gamePaused, gameFrozen, stepRequested);
+
+		// Advance the scaled gameplay clock by this frame's gameplay delta (VK-992).
+		scaledElapsedTime += gameDeltaTime;
 	}
 
-	double Timer::computeGameDelta(double rawDelta, double scale, bool paused, bool& step)
+	double Timer::computeGameDelta(double rawDelta, double scale, bool paused, bool frozen, bool& step)
 	{
+		if (frozen)
+		{
+			return 0.0;
+		}
 		if (!paused)
 		{
 			return rawDelta * scale;
@@ -91,6 +98,33 @@ namespace engineTime {
 		gamePaused = false;
 		stepRequested = false;
 		gameDeltaTime = 0.0;
+		gameFrozen = false;
+		scaledElapsedTime = 0.0;
+	}
+
+	double Timer::getTimeScale()
+	{
+		return timeScale;
+	}
+
+	double Timer::getScaledElapsedTime()
+	{
+		return scaledElapsedTime;
+	}
+
+	void Timer::freeze()
+	{
+		gameFrozen = true;
+	}
+
+	void Timer::unfreeze()
+	{
+		gameFrozen = false;
+	}
+
+	bool Timer::isFrozen()
+	{
+		return gameFrozen;
 	}
 
 }

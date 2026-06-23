@@ -158,7 +158,9 @@ namespace controllers::offscreen
                     animatorSystem.setCullingContext(frustum, glm::vec3(invView[3]));
                 }
                 animatorSystem.syncWithRegistry();
-                animatorSystem.updateAll(ctx.deltaTime);
+                // VK-992: animator playback advances on scaled gameplay delta (0 when frozen
+                // → holds pose), not raw ctx.deltaTime which UI systems still use.
+                animatorSystem.updateAll(ctx.gameplayDeltaTime);
             }
             else
             {

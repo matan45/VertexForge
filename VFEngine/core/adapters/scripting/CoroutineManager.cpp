@@ -12,7 +12,22 @@ namespace core
         wait.scriptInstanceId = instanceId;
         wait.promise = promise;
         wait.type = WaitType::Seconds;
-        wait.resolveTime = elapsedTime + seconds;
+        wait.resolveTime = scaledElapsed + seconds;
+
+        pendingWaits.push_back(std::move(wait));
+        return value::Value(std::static_pointer_cast<value::PromiseValue>(promise));
+    }
+
+    value::Value CoroutineManager::waitForRealSeconds(uint64_t instanceId, double seconds)
+    {
+        auto promise = std::make_shared<value::AsyncPromiseValue>();
+
+        PendingWait wait;
+        wait.id = nextWaitId++;
+        wait.scriptInstanceId = instanceId;
+        wait.promise = promise;
+        wait.type = WaitType::RealSeconds;
+        wait.resolveTime = unscaledElapsed + seconds;
 
         pendingWaits.push_back(std::move(wait));
         return value::Value(std::static_pointer_cast<value::PromiseValue>(promise));
@@ -47,9 +62,10 @@ namespace core
         return value::Value(std::static_pointer_cast<value::PromiseValue>(promise));
     }
 
-    void CoroutineManager::tickFrame(double deltaTime)
+    void CoroutineManager::tickFrame(double scaledDelta, double unscaledDelta)
     {
-        elapsedTime += deltaTime;
+        scaledElapsed += scaledDelta;
+        unscaledElapsed += unscaledDelta;
 
         auto it = pendingWaits.begin();
         while (it != pendingWaits.end())
@@ -59,7 +75,10 @@ namespace core
             switch (it->type)
             {
             case WaitType::Seconds:
-                resolve = (elapsedTime >= it->resolveTime);
+                resolve = (scaledElapsed >= it->resolveTime);
+                break;
+            case WaitType::RealSeconds:
+                resolve = (unscaledElapsed >= it->resolveTime);
                 break;
             case WaitType::Frames:
                 it->framesRemaining--;
@@ -110,6 +129,7 @@ namespace core
     void CoroutineManager::clear()
     {
         pendingWaits.clear();
-        elapsedTime = 0.0;
+        scaledElapsed = 0.0;
+        unscaledElapsed = 0.0;
     }
 }

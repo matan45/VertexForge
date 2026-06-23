@@ -55,6 +55,9 @@ namespace core::audio
         while (running.load(std::memory_order_relaxed))
         {
             auto now = std::chrono::steady_clock::now();
+            // VK-992: audio runs on real (unscaled) wall-clock by design — UI sounds,
+            // music, and SFX stay real-time during slow-mo / freeze. Scaled/pitched
+            // gameplay SFX is a deferred follow-up (needs per-voice gameplay-vs-UI tagging).
             float deltaTime = std::chrono::duration<float>(now - lastUpdateTime).count();
             lastUpdateTime = now;
 

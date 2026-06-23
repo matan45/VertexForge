@@ -30,6 +30,7 @@
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/input/RuntimePickerServiceImpl.hpp"
+#include "impl/time/TimeServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -340,6 +341,11 @@ namespace handlers {
             bootstrap->getPluginTextureProvider()
         );
 
+        // Gameplay-time authority (VK-992): scripts drive global time scale / freeze
+        // through this CQRS facade in the shipped game. Pure CPU state forwarding to
+        // the engineTime::Timer statics — no provider/adapter needed.
+        timeService = std::make_shared<services::TimeServiceImpl>();
+
         if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
         {
             behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
@@ -396,6 +402,7 @@ namespace handlers {
         behaviorTreeService->registerEventHandlers();
         runtimePickerService->registerEventHandlers();
         pluginTextureService->registerEventHandlers();
+        timeService->registerEventHandlers();
         if (ikComponentService)
         {
             ikComponentService->registerEventHandlers();
@@ -450,23 +457,27 @@ namespace handlers {
             if (windowStateService) windowStateService->update();
         });
 
+        // VK-992: gameplay tasks gate on isGameTimeActive() (false when time-scale is
+        // 0 or frozen) and use getGameDeltaTime() so slow-mo / freeze scales gameplay
+        // without touching input/window/camera/render pacing. Runtime is always in
+        // play mode, so the gate is just isGameTimeActive() (no isPlayMode check).
         frameTaskGraph->addTask("PhysicsKick", [this]() {
-            if (physicsPlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (engineTime::Timer::isGameTimeActive() && physicsPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 physicsPlayModeHandler->kickUpdate(dt);
             }
         });
 
         frameTaskGraph->addTask("PhysicsSync", [this]() {
-            if (physicsPlayModeHandler) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (engineTime::Timer::isGameTimeActive() && physicsPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 physicsPlayModeHandler->syncUpdate(dt);
             }
         });
 
         frameTaskGraph->addTask("Scripts", [this]() {
-            if (scriptingService) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (engineTime::Timer::isGameTimeActive() && scriptingService) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 // Safety net: a catchable mType (interpreter) error in any script
                 // is logged and the game continues. Native JIT faults still go to
                 // the crash handler (see CrashHandler).
@@ -476,23 +487,25 @@ namespace handlers {
         });
 
         frameTaskGraph->addTask("Controllers", [this]() {
-            if (controllerService) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (engineTime::Timer::isGameTimeActive() && controllerService) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 controllerService->applyControllerMovement(dt);
             }
         });
 
         frameTaskGraph->addTask("BehaviorTrees", [this]() {
-            if (behaviorTreeService) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (engineTime::Timer::isGameTimeActive() && behaviorTreeService) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 behaviorTreeService->updateAll(dt);
             }
         });
 
         frameTaskGraph->addTask("Navmesh", [this]() {
             if (navmeshService) {
+                // Streaming/bake run on raw dt; only agent simulation is gameplay-gated,
+                // so it follows isGameTimeActive() (slow-mo / freeze). Mirrors editor.
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                navmeshService->update(dt, true);
+                navmeshService->update(dt, engineTime::Timer::isGameTimeActive());
             }
         });
 
@@ -533,7 +546,8 @@ namespace handlers {
 
         frameTaskGraph->addTask("Plugins", [this]() {
             if (pluginManager) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                // VK-992: plugin update delta defaults to scaled gameplay time.
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 pluginManager->updateAll(dt);
             }
         });
@@ -563,9 +577,9 @@ namespace handlers {
         // runtime equivalent of the editor's main-thread ViewPort camera prep. With
         // per-layer barriers removed (VK-1385) this would otherwise run on a worker.
         frameTaskGraph->addTask("PostUpdate", [this]() {
-            // Late scripts
-            if (scriptingService) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            // Late scripts (VK-992: scaled gameplay delta, paused on freeze — mirrors editor)
+            if (engineTime::Timer::isGameTimeActive() && scriptingService) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 try { scriptingService->lateUpdateScripts(dt); }
                 catch (const std::exception& e) { vfLogError("[Script] lateUpdateScripts threw: {}", e.what()); }
             }
@@ -615,7 +629,10 @@ namespace handlers {
                 meshCameraCmd.viewMatrix = camComp.viewMatrix;
                 meshCameraCmd.projectionMatrix = camComp.projectionMatrix;
                 meshCameraCmd.cameraPosition = cameraPos;
-                meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
+                // VK-992: scaled elapsed so gameplay shader time (VFX uv-scroll via
+                // cameraUBO.time, ocean wave-evolution via the shared currentTime) slows
+                // with timeScale. Equals raw elapsed at scale 1 (behavior-identical).
+                meshCameraCmd.time = static_cast<float>(engineTime::Timer::getScaledElapsedTime());
                 events::EventDispatcher::instance().execute(meshCameraCmd);
 
                 events::render::CameraPositionUpdatedNotification camPosNotif;

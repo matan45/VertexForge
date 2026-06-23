@@ -72,6 +72,9 @@ namespace controllers
         ctx.showBillboardIcons = showBillboardIcons;
         ctx.showGrid = showGrid;
         ctx.deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+        // VK-992: separate scaled gameplay delta for animator playback (0 when frozen);
+        // ctx.deltaTime stays raw for UI systems (caret blink, tooltips, transitions).
+        ctx.gameplayDeltaTime = static_cast<float>(engineTime::Timer::getGameDeltaTime());
 
         framePreparation->prepareSceneData(ctx);
     }

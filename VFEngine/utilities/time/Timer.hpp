@@ -20,11 +20,19 @@ namespace engineTime {
 		inline static bool stepRequested = false;
 		inline static double gameDeltaTime = 0.0;
 
+		// Hard freeze (VK-992): halts gameplay time independently of gamePaused /
+		// timeScale. When set, computeGameDelta() returns 0 regardless of scale.
+		inline static bool gameFrozen = false;
+		// Accumulated gameplay clock (sum of gameDeltaTime). Feeds scaled shader time
+		// (water/VFX) so slow-mo/freeze are visible without retroactively rescaling
+		// past time the way rawElapsed * currentScale would.
+		inline static double scaledElapsedTime = 0.0;
+
 	public:
 		// Pure arithmetic for the gameplay delta, factored out of update() so it can
 		// be unit-tested deterministically (update() reads the wall clock). Public so
 		// the CPU test suite can exercise it directly.
-		static double computeGameDelta(double rawDelta, double scale, bool paused, bool& step);
+		static double computeGameDelta(double rawDelta, double scale, bool paused, bool frozen, bool& step);
 
 		static void initialize();
 		static void update();
@@ -40,6 +48,13 @@ namespace engineTime {
 		static void setGamePaused(bool paused);
 		static void requestStep();
 		static void resetGameTime();
+
+		// Scaled-time accessors (VK-992).
+		static double getTimeScale();
+		static double getScaledElapsedTime();
+		static void freeze();
+		static void unfreeze();
+		static bool isFrozen();
 	};
 }
 

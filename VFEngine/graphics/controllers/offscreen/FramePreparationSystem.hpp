@@ -36,7 +36,8 @@ namespace controllers::offscreen
         bool showGrid = true;
         bool showPhysicsDebug = false;
         bool showClusterDebug = false;
-        float deltaTime = 0.0f;
+        float deltaTime = 0.0f;          // raw/unscaled — UI systems (caret blink, tooltips, transitions)
+        float gameplayDeltaTime = 0.0f;  // VK-992: scaled gameplay delta — animator playback (0 when frozen)
         uint32_t viewportWidth = 0;
         uint32_t viewportHeight = 0;
         glm::vec2 mousePosition{0.0f, 0.0f};
