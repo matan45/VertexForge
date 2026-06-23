@@ -1,12 +1,33 @@
 #include "TextureCompressor.hpp"
 #include "print/Log.hpp"
 
+#include "cpumem/CpuMemoryManager.hpp"
+#include "cpumem/CpuMemoryCategories.hpp"
+
 #include <ispc_texcomp.h>
 #define BCDEC_IMPLEMENTATION
 #include <bcdec.h>
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+
+namespace
+{
+    // Category id for the padding scratch: resolved once and reused lock-free.
+    memory::CategoryId compressCategory()
+    {
+        static const memory::CategoryId id =
+            memory::CpuMemoryManager::instance().registerCategory(
+                memory::categories::ImportTextureCompress, memory::CategoryKind::Transient);
+        return id;
+    }
+
+    // Grow-only thread-local scratch for padToBlockSize. Import decodes run on
+    // worker threads so thread_local gives each thread its own buffer with zero
+    // contention. The buffer is never shrunk: once it grows to the largest mip it
+    // will handle, subsequent calls of equal or smaller size reuse it in-place.
+    thread_local std::vector<uint8_t> gPadScratch;
+}
 
 namespace types
 {
@@ -70,14 +91,37 @@ namespace types
         paddedWidth = ((width + blockX - 1) / blockX) * blockX;
         paddedHeight = ((height + blockY - 1) / blockY) * blockY;
 
+        const size_t requiredBytes = static_cast<size_t>(paddedWidth) * paddedHeight * bpp;
+
+        // No padding needed: copy source into a fresh vector (unchanged behaviour).
         if (paddedWidth == width && paddedHeight == height)
         {
-            // No padding needed
-            return std::vector<unsigned char>(data, data + static_cast<size_t>(width) * height * bpp);
+            return std::vector<unsigned char>(data, data + requiredBytes);
         }
 
-        std::vector<unsigned char> padded(static_cast<size_t>(paddedWidth) * paddedHeight * bpp, 0);
+        // Grow-only pool: resize the thread-local scratch up but never shrink.
+        // Record any capacity increase so the diagnostics window reflects the
+        // per-thread high-water mark held by this scratch.
+        const uint64_t prevCapacity = static_cast<uint64_t>(gPadScratch.capacity());
+        if (requiredBytes > gPadScratch.capacity())
+        {
+            gPadScratch.reserve(requiredBytes);
+        }
+        gPadScratch.resize(requiredBytes, 0);
 
+        const uint64_t newCapacity = static_cast<uint64_t>(gPadScratch.capacity());
+        if (newCapacity > prevCapacity)
+        {
+            // Capacity grew: record the delta against the Transient compress category.
+            // addUsage only (no matching subUsage) because the scratch is
+            // thread-lifetime, not call-scoped. The category accumulates the
+            // per-thread high-water mark; subUsage is never called by design.
+            memory::CpuMemoryManager::instance().addUsage(
+                compressCategory(), newCapacity - prevCapacity);
+        }
+
+        // Fill the padded buffer
+        std::memset(gPadScratch.data(), 0, requiredBytes);
         for (uint32_t y = 0; y < paddedHeight; ++y)
         {
             uint32_t srcY = std::min(y, height - 1);
@@ -85,13 +129,15 @@ namespace types
             {
                 uint32_t srcX = std::min(x, width - 1);
                 std::memcpy(
-                    padded.data() + (static_cast<size_t>(y) * paddedWidth + x) * bpp,
+                    gPadScratch.data() + (static_cast<size_t>(y) * paddedWidth + x) * bpp,
                     data + (static_cast<size_t>(srcY) * width + srcX) * bpp,
                     bpp);
             }
         }
 
-        return padded;
+        // Return a copy from the pool (callers own the returned buffer; the pool
+        // retains its capacity for the next call on this thread).
+        return std::vector<unsigned char>(gPadScratch.data(), gPadScratch.data() + requiredBytes);
     }
 
     std::vector<unsigned char> TextureCompressor::compressBC7(

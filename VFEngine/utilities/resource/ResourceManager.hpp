@@ -24,6 +24,7 @@ namespace fs = std::filesystem;
 #include "ResourceLoadTypes.hpp"
 #include "CancellationToken.hpp"
 #include "ResourceLoadScheduler.hpp"
+#include "ResourceLoadEstimate.hpp"
 
 namespace resource {
 	template <typename Key, typename T, typename Hash = std::hash<Key>>
@@ -182,6 +183,11 @@ namespace resource {
 		request.cancellation = cancellation;
 		request.progress = LoadProgress::create();
 		request.computedPriority = ResourceLoadScheduler::computePriority(hint, {0.0f, 0.0f, 0.0f});
+		// VK-1434: tag the request for the CPU pre-load memory gate. Computed here
+		// (path still valid before the move below); the estimate is throttle-only —
+		// the real decoded size is recorded by AssetLifecycleManager after decode.
+		request.assetType = assetType;
+		request.estimatedBytes = estimatePreDecodeBytes(assetType, path);
 		request.executeLoad = [path = std::move(path), guid, loader, &cache, &pendingLoads,
 			assetType, memEstimator, sharedPromise, sharedResultPromise, cancel = cancellation,
 			progress = request.progress]() mutable {

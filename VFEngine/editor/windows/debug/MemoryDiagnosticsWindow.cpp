@@ -1,6 +1,11 @@
 #include "MemoryDiagnosticsWindow.hpp"
+#include "ProcessMemoryProbe.hpp"
 #include "memory/MemoryDiagnostics.hpp"
 #include "memory/GpuAllocationStats.hpp"
+#include "cpumem/CpuMemoryManager.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/lifecycle/AssetLifecycleEvents.hpp"
+#include "events/memory/CpuMemoryEvents.hpp"
 #include "print/Log.hpp"
 #include <imgui.h>
 #include <algorithm>
@@ -48,24 +53,39 @@ namespace windows
             sample();
         }
 
-        ImGui::SetNextWindowSize(ImVec2(640, 620), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(640, 680), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Memory Diagnostics", &visible))
         {
-            drawBudgetBar();
-            ImGui::Separator();
-            drawGpuAllocationPanel();
-            ImGui::Separator();
-            drawGpuBlocksPanel();
-            ImGui::Separator();
-            drawTimeSeriesPanel();
-            ImGui::Separator();
-            drawFragmentationMapPanel();
-            ImGui::Separator();
-            drawStagingPanel();
-            ImGui::Separator();
-            drawPoolConfigPanel();
-            ImGui::Separator();
-            drawLeakDetectionPanel();
+            if (ImGui::BeginTabBar("##MemDiagTabs"))
+            {
+                if (ImGui::BeginTabItem("GPU"))
+                {
+                    drawBudgetBar();
+                    ImGui::Separator();
+                    drawGpuAllocationPanel();
+                    ImGui::Separator();
+                    drawGpuBlocksPanel();
+                    ImGui::Separator();
+                    drawTimeSeriesPanel();
+                    ImGui::Separator();
+                    drawFragmentationMapPanel();
+                    ImGui::Separator();
+                    drawStagingPanel();
+                    ImGui::Separator();
+                    drawPoolConfigPanel();
+                    ImGui::Separator();
+                    drawLeakDetectionPanel();
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("CPU"))
+                {
+                    drawCpuTab();
+                    ImGui::EndTabItem();
+                }
+
+                ImGui::EndTabBar();
+            }
         }
         ImGui::End();
     }
@@ -78,6 +98,10 @@ namespace windows
         deviceFragPct.push(static_cast<float>(Stats::deviceLocalFragPercent.load(std::memory_order_relaxed)) / 100.0f);
 
         snapshot = memory::GpuMemorySnapshot::read();
+
+        // CPU sampling — cold path snapshot from CpuMemoryManager.
+        cpuSnapshot = memory::CpuMemoryManager::instance().snapshot();
+        cpuTrackedMB.push(toMB(cpuSnapshot.totalTrackedBytes));
     }
 
     void MemoryDiagnosticsWindow::drawBudgetBar()
@@ -469,5 +493,246 @@ namespace windows
         out.close();
         lastExportPath = path;
         vfLogInfo("MemoryDiagnostics: exported snapshot to {}", path);
+    }
+
+    // -----------------------------------------------------------------------
+    // CPU tab — reads directly from CpuMemoryManager (Editor links CpuMemory).
+    // -----------------------------------------------------------------------
+
+    void MemoryDiagnosticsWindow::drawCpuTab()
+    {
+        drawCpuBudgetBar();
+        ImGui::Separator();
+        drawCpuProcessMemoryPanel();
+        ImGui::Separator();
+        drawGateStatePanel();
+        ImGui::Separator();
+        drawCpuCategoryTable();
+        ImGui::Separator();
+        drawCpuTimeSeriesPanel();
+    }
+
+    void MemoryDiagnosticsWindow::drawCpuProcessMemoryPanel()
+    {
+        if (!ImGui::CollapsingHeader("Process Memory (OS)", ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+
+        const ProcessMemoryInfo os = queryProcessMemory();
+
+        // Tracked = authoritative decoded assets (AssetLifecycleManager) + CpuMemory's
+        // own categories (transient + staging). Reservations are pre-decode estimates,
+        // not extra real RAM, so they are intentionally excluded here.
+        uint64_t decodedBytes = 0;
+        try
+        {
+            auto status = events::EventDispatcher::instance().query(
+                events::lifecycle::QueryMemoryBudgetQuery{});
+            decodedBytes = static_cast<uint64_t>(status.trackedBytes);
+        }
+        catch (const std::exception&) {}
+
+        const uint64_t tracked   = decodedBytes + cpuSnapshot.totalTrackedBytes;
+        const uint64_t untracked = os.workingSetBytes > tracked ? (os.workingSetBytes - tracked) : 0;
+
+        if (os.workingSetBytes == 0)
+        {
+            ImGui::TextDisabled("Process memory query unavailable on this platform.");
+            return;
+        }
+
+        ImGui::Text("Process working set (RSS): %.2f GB", static_cast<float>(os.workingSetBytes) / GB);
+        ImGui::Text("  Tracked (assets + CPU categories): %.2f GB", static_cast<float>(tracked) / GB);
+        ImGui::TextDisabled("  Untracked (3rd-party / small heap / frag): %.2f GB",
+            static_cast<float>(untracked) / GB);
+        if (os.systemTotalBytes > 0)
+        {
+            ImGui::TextDisabled("System RAM: %.1f GB available / %.1f GB total",
+                static_cast<float>(os.systemAvailBytes) / GB,
+                static_cast<float>(os.systemTotalBytes) / GB);
+        }
+    }
+
+    void MemoryDiagnosticsWindow::drawCpuBudgetBar()
+    {
+        // Decoded bytes come from the asset lifecycle manager (authoritative source).
+        // Transient + staging are tracked by CpuMemoryManager directly.
+        uint64_t decodedBytes = 0;
+        try
+        {
+            auto status = events::EventDispatcher::instance().query(
+                events::lifecycle::QueryMemoryBudgetQuery{});
+            decodedBytes = static_cast<uint64_t>(status.trackedBytes);
+        }
+        catch (const std::exception&) {}
+
+        const uint64_t reservedBytes = cpuSnapshot.totalReservedBytes;
+        const uint64_t usedBytes     = decodedBytes + reservedBytes;
+        const uint64_t budgetBytes   = cpuSnapshot.budgetBytes;
+
+        ImGui::TextUnformatted("CPU RAM");
+
+        if (budgetBytes == 0)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("advisory (disabled)");
+            char info[128];
+            std::snprintf(info, sizeof(info), "decoded %.2f GB  |  reserved %.2f MB",
+                static_cast<float>(decodedBytes) / GB,
+                static_cast<float>(reservedBytes) / MB);
+            ImGui::TextDisabled("%s", info);
+            return;
+        }
+
+        float rawFrac = budgetBytes > 0
+            ? static_cast<float>(usedBytes) / static_cast<float>(budgetBytes)
+            : 0.0f;
+        float frac = std::clamp(rawFrac, 0.0f, 1.0f);
+        float headroomGB = std::max(0.0f, static_cast<float>(budgetBytes - usedBytes) / GB);
+
+        char overlay[96];
+        std::snprintf(overlay, sizeof(overlay), "%.2f / %.2f GB (%.0f%%)  headroom %.2f GB",
+            static_cast<float>(usedBytes) / GB,
+            static_cast<float>(budgetBytes) / GB,
+            rawFrac * 100.0f,
+            headroomGB);
+
+        // Turn red when over budget.
+        ImVec4 barColor = rawFrac > 1.0f ? ImVec4(0.9f, 0.25f, 0.25f, 1.0f)
+                        : rawFrac > 0.85f ? ImVec4(0.9f, 0.7f, 0.2f, 1.0f)
+                        : ImVec4(0.3f, 0.85f, 0.5f, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
+        ImGui::ProgressBar(frac, ImVec2(-1, 0), overlay);
+        ImGui::PopStyleColor();
+
+        ImGui::TextDisabled("decoded %.2f GB  |  reserved %.2f MB",
+            static_cast<float>(decodedBytes) / GB,
+            static_cast<float>(reservedBytes) / MB);
+
+        // Budget slider (in MB) — fires SetCpuMemoryBudgetCommand which sets + persists.
+        ImGui::Spacing();
+        static int budgetMB = 0;
+        // Sync the slider to the live budget value on the first draw and whenever it
+        // changes from outside (e.g. settings reload).
+        int liveMB = static_cast<int>(budgetBytes / (1024 * 1024));
+        if (budgetMB != liveMB) budgetMB = liveMB;
+
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 80.0f);
+        if (ImGui::SliderInt("Budget (MB)", &budgetMB, 0, 65536))
+        {
+            events::memory::SetCpuMemoryBudgetCommand cmd;
+            cmd.budgetBytes = static_cast<uint64_t>(budgetMB) * 1024 * 1024;
+            try { events::EventDispatcher::instance().execute(cmd); }
+            catch (const std::exception&) {}
+        }
+        ImGui::SetItemTooltip("0 = advisory (gate disabled). Default = 8192 MB (8 GiB).");
+    }
+
+    void MemoryDiagnosticsWindow::drawCpuCategoryTable()
+    {
+        if (!ImGui::CollapsingHeader("CPU Memory Categories", ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+
+        // Sort a local copy largest-first.
+        std::vector<memory::CategoryView> sorted = cpuSnapshot.categories;
+        std::sort(sorted.begin(), sorted.end(),
+            [](const memory::CategoryView& a, const memory::CategoryView& b) { return a.bytes > b.bytes; });
+
+        if (sorted.empty())
+        {
+            ImGui::TextDisabled("No categories registered yet.");
+            return;
+        }
+
+        if (ImGui::BeginTable("##CpuCats", 4,
+            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+            ImVec2(0, std::min(200.0f, 24.0f + sorted.size() * 20.0f))))
+        {
+            ImGui::TableSetupColumn("Name");
+            ImGui::TableSetupColumn("Kind",    ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("MB",      ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("Peak MB", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableHeadersRow();
+
+            for (const auto& cat : sorted)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(cat.name.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("%s", memory::categoryKindName(cat.kind));
+                ImGui::TableNextColumn();
+                ImGui::Text("%.2f", toMB(cat.bytes));
+                ImGui::TableNextColumn();
+                ImGui::Text("%.2f", toMB(cat.peak));
+            }
+
+            ImGui::EndTable();
+        }
+    }
+
+    void MemoryDiagnosticsWindow::drawCpuTimeSeriesPanel()
+    {
+        if (!ImGui::CollapsingHeader("CPU History", ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+
+        auto maxOf = [](const SampleRing& r) {
+            float m = 0.0f;
+            for (float v : r.values) m = std::max(m, v);
+            return m;
+        };
+        auto last = [](const SampleRing& r) {
+            return r.values[(r.head - 1 + SAMPLE_COUNT) % SAMPLE_COUNT];
+        };
+
+        char overlay[48];
+        std::snprintf(overlay, sizeof(overlay), "%.1f MB", last(cpuTrackedMB));
+        ImGui::TextUnformatted("CPU Tracked (MB)");
+        ImGui::PlotLines("##cpuTracked", cpuTrackedMB.values, SAMPLE_COUNT, cpuTrackedMB.head,
+            overlay, 0.0f, std::max(1.0f, maxOf(cpuTrackedMB) * 1.1f), ImVec2(-1, 60));
+    }
+
+    void MemoryDiagnosticsWindow::drawGateStatePanel()
+    {
+        if (!ImGui::CollapsingHeader("Gate State", ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+
+        const memory::GateState gs = cpuSnapshot.gateState;
+        ImVec4 stateColor;
+        switch (gs)
+        {
+        case memory::GateState::Open:
+            stateColor = ImVec4(0.3f, 1.0f, 0.3f, 1.0f);
+            break;
+        case memory::GateState::Closed:
+            stateColor = ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
+            break;
+        case memory::GateState::CriticalOverage:
+            stateColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+            break;
+        default:
+            stateColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+            break;
+        }
+
+        ImGui::Text("Gate:");
+        ImGui::SameLine();
+        ImGui::TextColored(stateColor, "%s", memory::gateStateName(gs));
+
+        ImGui::Text("Budget: %.2f GB",
+            static_cast<float>(cpuSnapshot.budgetBytes) / GB);
+        ImGui::Text("Tracked (transient+staging): %.2f MB",
+            toMB(cpuSnapshot.totalTrackedBytes));
+        ImGui::Text("Reserved (in-flight loads): %.2f MB",
+            toMB(cpuSnapshot.totalReservedBytes));
+
+        if (cpuSnapshot.deferredLoadCount > 0)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+                "Deferred loads: %u", cpuSnapshot.deferredLoadCount);
+        }
+        else
+        {
+            ImGui::Text("Deferred loads: 0");
+        }
     }
 }

@@ -4,6 +4,11 @@
 #include "resource/EndianUtils.hpp"
 #include "resource/VorbisDecoder.hpp"
 
+#include "cpumem/CpuMemoryManager.hpp"
+#include "cpumem/CpuMemoryCategories.hpp"
+#include "cpumem/ScopedCpuMemory.hpp"
+
+#include <semaphore>
 #include <vector>
 #include <fstream>
 #include <filesystem>
@@ -13,6 +18,31 @@
 #define DR_WAV_IMPLEMENTATION
 #include <dr_wav.h>
 
+namespace
+{
+    // Maximum number of concurrent heavy audio PCM decodes within the Import
+    // module. Kept separate from the texture/mesh semaphore because audio decodes
+    // run independently and their scratch size profile differs.
+    constexpr int kAudioDecodeConcurrency = 2;
+    std::counting_semaphore<kAudioDecodeConcurrency> gAudioDecodeSem{kAudioDecodeConcurrency};
+
+    struct AudioDecodeLock
+    {
+        AudioDecodeLock()  { gAudioDecodeSem.acquire(); }
+        ~AudioDecodeLock() { gAudioDecodeSem.release(); }
+        AudioDecodeLock(const AudioDecodeLock&) = delete;
+        AudioDecodeLock& operator=(const AudioDecodeLock&) = delete;
+    };
+
+    memory::CategoryId audioDecodeCategory()
+    {
+        static const memory::CategoryId id =
+            memory::CpuMemoryManager::instance().registerCategory(
+                memory::categories::ImportAudioDecode, memory::CategoryKind::Transient);
+        return id;
+    }
+}
+
 
 namespace types
 {
@@ -21,6 +51,17 @@ namespace types
                                      AudioProgressCallback progressCallback) const
     {
         if (progressCallback) progressCallback(0.0f);
+
+        // Acquire the concurrency slot BEFORE the decode call so the cap bounds the
+        // actual PCM allocation. Compressed audio expands significantly: OGG/MP3
+        // compressed files expand ~10-12× to PCM; ×12 is a safe upper bound.
+        std::error_code sizeEc;
+        const auto rawAudioBytes = std::filesystem::file_size(file.path.data(), sizeEc);
+        const uint64_t decodeEstimate = (!sizeEc && rawAudioBytes > 0)
+            ? static_cast<uint64_t>(rawAudioBytes) * 12u
+            : 0u;
+        AudioDecodeLock decodeLock;
+        memory::ScopedCpuMemory decodeGuard(audioDecodeCategory(), decodeEstimate);
 
         DecodedAudio decoded;
 

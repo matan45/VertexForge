@@ -55,6 +55,12 @@ namespace config
         std::map<std::string, glm::vec2> lastSizes;
     };
 
+    struct MemorySettings
+    {
+        // Default = 8 GiB.  0 = advisory/disabled (gate always admits).
+        uint64_t cpuMemoryBudgetBytes = 8ull * 1024 * 1024 * 1024;
+    };
+
     struct EditorPreferences
     {
         AppearanceSettings appearance;
@@ -62,6 +68,7 @@ namespace config
         WindowLayoutSettings windowLayout;
         ExportSettings exportSettings;
         PreviewWindowSettings previewWindows;
+        MemorySettings memory;
 
         static EditorPreferences createDefault()
         {

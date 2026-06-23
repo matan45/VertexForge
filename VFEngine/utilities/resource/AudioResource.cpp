@@ -3,6 +3,10 @@
 #include "../print/Log.hpp"
 #include "EndianUtils.hpp"
 
+#include "../cpumem/CpuMemoryManager.hpp"
+#include "../cpumem/CpuMemoryCategories.hpp"
+#include "../cpumem/ScopedCpuMemory.hpp"
+
 #include <fstream>
 #include <algorithm>
 
@@ -345,7 +349,21 @@ namespace resource
                 vfLogError("Failed to decode Vorbis audio: {}", path);
                 return {};
             }
-            // Decoded PCM is now in audioData.data — callers see PCM as before
+
+            // Account for the decoded PCM buffer now held in audioData.data.
+            // We don't gate with a semaphore here (runtime loads are single-shot
+            // by design); recording is enough to make the peak visible.
+            {
+                static const memory::CategoryId cat =
+                    memory::CpuMemoryManager::instance().registerCategory(
+                        memory::categories::ImportAudioDecode, memory::CategoryKind::Transient);
+                const uint64_t pcmBytes =
+                    static_cast<uint64_t>(audioData.data.size()) * sizeof(short);
+                memory::ScopedCpuMemory pcmGuard(cat, pcmBytes);
+                // Decoded PCM is now in audioData.data — callers see PCM as before.
+                // pcmGuard releases when this block exits; the bytes are then
+                // owned by the returned AudioData (not tracked further).
+            }
         }
         else
         {

@@ -1,5 +1,7 @@
 #include "ResourceLoadScheduler.hpp"
+#include "AssetLifecycleManager.hpp"
 #include "../threading/JobSystem.hpp"
+#include "../cpumem/CpuMemoryManager.hpp"
 #include "../print/Log.hpp"
 #include <algorithm>
 #include <cmath>
@@ -75,6 +77,9 @@ namespace resource {
 				load.future.wait_for(std::chrono::seconds(5));
 			}
 		}
+		// VK-1434: drop any outstanding CPU memory reservations for in-flight loads.
+		for (auto& load : inFlightLoads)
+			memory::CpuMemoryManager::instance().releaseReservation(load.requestId);
 		inFlightLoads.clear();
 
 		vfLogInfo("ResourceLoadScheduler shut down");
@@ -348,7 +353,12 @@ namespace resource {
 		pollCompletions();
 
 		if (pendingRequests.empty())
+		{
+			// Nothing queued -> the gate is not deferring anything; keep the
+			// diagnostics CPU tab fresh (the budget bar still shows real pressure).
+			memory::CpuMemoryManager::instance().setGateState(memory::GateState::Open, 0);
 			return;
+		}
 
 		// Build priority queue from pending requests
 		std::priority_queue<LoadRequest> queue;
@@ -358,6 +368,13 @@ namespace resource {
 		}
 
 		auto& jobSystem = threading::JobSystem::instance();
+
+		// VK-1434: cache the authoritative decoded total (AssetLifecycleManager)
+		// once per pass; the gate denominator is this + live reservations.
+		auto& cpuMem = memory::CpuMemoryManager::instance();
+		const uint64_t decodedTotal = AssetLifecycleManager::instance().getTotalTrackedBytes();
+		uint32_t gateDeferred = 0;
+		bool criticalOverBudget = false;
 
 		while (!queue.empty())
 		{
@@ -386,6 +403,31 @@ namespace resource {
 				pendingRequests.erase(it);
 				++cancelledThisFrame;
 				continue;
+			}
+
+			// --- VK-1434 CPU memory pre-load gate ---
+			// Reserve the estimated RAM for this load. Critical loads bypass the
+			// gate (callers may block on them from the main thread with no update()
+			// pump, so deferring would deadlock) but still record their reservation
+			// for truthful accounting. A non-Critical load whose admission would
+			// push the projected total (decoded truth + outstanding reservations +
+			// this estimate) over budget is DEFERRED: left in pendingRequests and
+			// retried next dispatch — never dropped. The reservation is released by
+			// requestId in pollCompletions when the load reaches a terminal state.
+			if (request.estimatedBytes > 0)
+			{
+				if (request.hint.importance == LoadImportance::Critical)
+				{
+					cpuMem.reserveUnconditional(reqId, request.estimatedBytes);
+					const uint64_t budget = cpuMem.budget();
+					if (budget > 0 && decodedTotal + cpuMem.outstandingReservations() > budget)
+						criticalOverBudget = true;
+				}
+				else if (!cpuMem.reserve(reqId, request.estimatedBytes, decodedTotal))
+				{
+					++gateDeferred;
+					continue; // gate closed — leave pending, retry next dispatch
+				}
 			}
 
 			// Move the execute function out before erasing
@@ -423,6 +465,18 @@ namespace resource {
 			load.future = std::move(future);
 			inFlightLoads.push_back(std::move(load));
 		}
+
+		// VK-1434: publish the gate state for the diagnostics CPU tab.
+		const uint64_t budget = cpuMem.budget();
+		memory::GateState gs = memory::GateState::Open;
+		if (budget > 0)
+		{
+			if (criticalOverBudget)
+				gs = memory::GateState::CriticalOverage;
+			else if (gateDeferred > 0 || decodedTotal + cpuMem.outstandingReservations() > budget)
+				gs = memory::GateState::Closed;
+		}
+		cpuMem.setGateState(gs, gateDeferred);
 	}
 
 	void ResourceLoadScheduler::pollCompletions()
@@ -477,6 +531,11 @@ namespace resource {
 				record.loadMs = msSince(it->dispatchTime);
 				record.bytes = it->progress ? it->progress->bytes() : 0;
 				recordCompletion(std::move(record));
+
+				// VK-1434: release this load's CPU memory reservation (no-op if it never
+				// reserved — e.g. an estimate==0 load). Keyed by requestId so it is robust
+				// to GUID collisions between concurrent loads.
+				memory::CpuMemoryManager::instance().releaseReservation(it->requestId);
 
 				it = inFlightLoads.erase(it);
 			}
