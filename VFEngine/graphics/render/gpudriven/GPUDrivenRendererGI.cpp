@@ -18,6 +18,79 @@
 
 namespace render::gpudriven
 {
+    namespace
+    {
+        // VK-1431: the full-res RT-shadow mask producer the fragment shader samples, selected
+        // identically for layout AND descriptor set so the two can never desync (a set-13/15/16
+        // layout-vs-set mismatch is a Vulkan validation error at draw). Precedence: half-mode
+        // upsample > denoiser > raw pipeline > none. All three pipeline families (directional
+        // RTShadow* and layered RTLayered*) expose the same getter names, so one template binds all.
+        struct RTMaskBinding
+        {
+            vk::DescriptorSetLayout layout = nullptr;
+            vk::DescriptorSet set = nullptr;
+        };
+
+        template <class Pipe, class Den, class Up>
+        RTMaskBinding selectActiveRTMask(bool half, const Pipe* pipe, const Den* den, const Up* up)
+        {
+            if (!pipe || !pipe->isInitialized())
+                return {};
+            if (half && up && up->isInitialized())
+                return {up->getOutputSamplerLayout(), up->getOutputSamplerDescriptorSet()};
+            if (den && den->isInitialized())
+                return {den->getDenoisedMaskSamplerLayout(), den->getDenoisedMaskSamplerDescriptorSet()};
+            return {pipe->getShadowMaskSamplerLayout(), pipe->getShadowMaskSamplerDescriptorSet()};
+        }
+
+        // VK-1431: the depth/normal SHADER_READ transition + compute->compute mask barrier + restore
+        // dance shared by the directional and layered Half-mode upsample paths. The ordering
+        // (transitions -> compute->compute barrier -> dispatch -> restore) is fixed here so every
+        // upsample site is byte-identical; the only per-site difference is the dispatch callable.
+        template <class DispatchFn>
+        void withUpsampleGuides(vk::CommandBuffer cmd, occlusion::DepthPrepass& depthPrepass,
+                                DispatchFn&& doDispatch)
+        {
+            // The denoiser left depth in attachment + normal in color-attachment layout; transition
+            // both to SHADER_READ for the upsample guide reads, then restore so downstream passes see
+            // the legacy (attachment) state.
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass.getDepthImage(),
+                vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eDepth);
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass.getNormalImage(),
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            // VK-1430: make the denoiser's compute write to the denoised mask visible to the upsample's
+            // compute read. The denoiser's final transition only scoped that write to the FRAGMENT
+            // stage (eGeneral->eShaderReadOnlyOptimal); the upsample reads it in COMPUTE, so without
+            // this compute->compute dependency it is a RAW hazard. The image is already in
+            // eShaderReadOnlyOptimal, so a plain memory barrier (no layout change) suffices.
+            {
+                vk::MemoryBarrier maskBarrier{};
+                maskBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+                maskBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, 1, &maskBarrier, 0, nullptr, 0, nullptr);
+            }
+
+            doDispatch();
+
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass.getDepthImage(),
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                vk::ImageAspectFlagBits::eDepth);
+            core::ImageUtilities::transitionImageLayout(cmd, depthPrepass.getNormalImage(),
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+    }
+
     void GPUDrivenRenderer::dispatchGIProbeUpdate(vk::CommandBuffer cmd)
     {
         if (!giCascadeManager || !giCascadeManager->isInitialized() ||
@@ -503,48 +576,31 @@ namespace render::gpudriven
                lightBufferManager && lightBufferManager->getDirectionalLightCount() > 0;
     }
 
+    // VK-1431: all six getActive*RTShadowMask{Layout,DescriptorSet} accessors share the same Half-mode
+    // producer ladder (upsample > denoiser > raw). selectActiveRTMask picks the producer once and
+    // returns both its layout and set, so the layout/set pair is always in lockstep by construction.
     vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTShadowMaskLayout() const
     {
-        if (!rtShadowPipeline || !rtShadowPipeline->isInitialized()) return nullptr;
-        // VK-1430: in Half mode the full-res producer the fragment shader samples is the upsample,
-        // not the (half-res) denoiser. Its sampler set/layout mirror the denoiser's exactly, so the
-        // set-13 vkCopyDescriptorSets repoint stays validation-clean.
-        if (rtShadowHalfResolution && rtShadowUpsample && rtShadowUpsample->isInitialized())
-            return rtShadowUpsample->getOutputSamplerLayout();
-        // Same denoised-vs-raw selection as the mesh/terrain pipelines (see dispatchRTShadow).
-        return (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
-            ? rtShadowDenoiser->getDenoisedMaskSamplerLayout()
-            : rtShadowPipeline->getShadowMaskSamplerLayout();
+        return selectActiveRTMask(rtShadowHalfResolution, rtShadowPipeline.get(),
+                                  rtShadowDenoiser.get(), rtShadowUpsample.get()).layout;
     }
 
     vk::DescriptorSet GPUDrivenRenderer::getActiveRTShadowMaskDescriptorSet() const
     {
-        if (!rtShadowPipeline || !rtShadowPipeline->isInitialized()) return nullptr;
-        if (rtShadowHalfResolution && rtShadowUpsample && rtShadowUpsample->isInitialized())
-            return rtShadowUpsample->getOutputSamplerDescriptorSet();
-        return (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
-            ? rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
-            : rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
+        return selectActiveRTMask(rtShadowHalfResolution, rtShadowPipeline.get(),
+                                  rtShadowDenoiser.get(), rtShadowUpsample.get()).set;
     }
 
     vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTSpotShadowMaskLayout() const
     {
-        if (!rtSpotShadowPipeline || !rtSpotShadowPipeline->isInitialized()) return nullptr;
-        if (rtShadowHalfResolution && rtSpotShadowUpsample && rtSpotShadowUpsample->isInitialized())
-            return rtSpotShadowUpsample->getOutputSamplerLayout();
-        return (rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized())
-            ? rtSpotShadowDenoiser->getDenoisedMaskSamplerLayout()
-            : rtSpotShadowPipeline->getShadowMaskSamplerLayout();
+        return selectActiveRTMask(rtShadowHalfResolution, rtSpotShadowPipeline.get(),
+                                  rtSpotShadowDenoiser.get(), rtSpotShadowUpsample.get()).layout;
     }
 
     vk::DescriptorSet GPUDrivenRenderer::getActiveRTSpotShadowMaskDescriptorSet() const
     {
-        if (!rtSpotShadowPipeline || !rtSpotShadowPipeline->isInitialized()) return nullptr;
-        if (rtShadowHalfResolution && rtSpotShadowUpsample && rtSpotShadowUpsample->isInitialized())
-            return rtSpotShadowUpsample->getOutputSamplerDescriptorSet();
-        return (rtSpotShadowDenoiser && rtSpotShadowDenoiser->isInitialized())
-            ? rtSpotShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
-            : rtSpotShadowPipeline->getShadowMaskSamplerDescriptorSet();
+        return selectActiveRTMask(rtShadowHalfResolution, rtSpotShadowPipeline.get(),
+                                  rtSpotShadowDenoiser.get(), rtSpotShadowUpsample.get()).set;
     }
 
     bool GPUDrivenRenderer::hasBoundDescriptorSetCapacity(uint32_t requiredSetCount) const
@@ -577,22 +633,14 @@ namespace render::gpudriven
 
     vk::DescriptorSetLayout GPUDrivenRenderer::getActiveRTPointShadowMaskLayout() const
     {
-        if (!rtPointShadowPipeline || !rtPointShadowPipeline->isInitialized()) return nullptr;
-        if (rtShadowHalfResolution && rtPointShadowUpsample && rtPointShadowUpsample->isInitialized())
-            return rtPointShadowUpsample->getOutputSamplerLayout();
-        return (rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized())
-            ? rtPointShadowDenoiser->getDenoisedMaskSamplerLayout()
-            : rtPointShadowPipeline->getShadowMaskSamplerLayout();
+        return selectActiveRTMask(rtShadowHalfResolution, rtPointShadowPipeline.get(),
+                                  rtPointShadowDenoiser.get(), rtPointShadowUpsample.get()).layout;
     }
 
     vk::DescriptorSet GPUDrivenRenderer::getActiveRTPointShadowMaskDescriptorSet() const
     {
-        if (!rtPointShadowPipeline || !rtPointShadowPipeline->isInitialized()) return nullptr;
-        if (rtShadowHalfResolution && rtPointShadowUpsample && rtPointShadowUpsample->isInitialized())
-            return rtPointShadowUpsample->getOutputSamplerDescriptorSet();
-        return (rtPointShadowDenoiser && rtPointShadowDenoiser->isInitialized())
-            ? rtPointShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
-            : rtPointShadowPipeline->getShadowMaskSamplerDescriptorSet();
+        return selectActiveRTMask(rtShadowHalfResolution, rtPointShadowPipeline.get(),
+                                  rtPointShadowDenoiser.get(), rtPointShadowUpsample.get()).set;
     }
 
     void GPUDrivenRenderer::upsampleLayeredRTShadow(vk::CommandBuffer cmd,
@@ -615,47 +663,15 @@ namespace render::gpudriven
             upsampleList.push_back(ui);
         }
 
-        // The denoiser left depth in attachment + normal in color-attachment layout; transition both
-        // to SHADER_READ for the upsample guide reads, then restore so downstream passes see the
-        // legacy (attachment) state — identical to the directional path's dance.
-        core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDepthImage(),
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eDepth);
-        core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        // VK-1430: make the layered denoiser's compute write to the denoised mask array visible to
-        // the upsample's compute reads. Its final transition (eGeneral->eShaderReadOnlyOptimal) only
-        // scoped the write to the FRAGMENT stage, so the compute reads below would be a RAW hazard
-        // without this compute->compute dependency. One global memory barrier covers every slice; the
-        // array is already in eShaderReadOnlyOptimal so no layout change is needed.
-        {
-            vk::MemoryBarrier maskBarrier{};
-            maskBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
-            maskBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-            cmd.pipelineBarrier(
-                vk::PipelineStageFlagBits::eComputeShader,
-                vk::PipelineStageFlagBits::eComputeShader,
-                {}, 1, &maskBarrier, 0, nullptr, 0, nullptr);
-        }
-
-        upsample.dispatch(cmd, upsampleList,
-            depthPrepass->getDepthImageView(), depthPrepass->getNormalImageView(),
-            traceW, traceH, fullW, fullH,
-            rtShadowUpsampleDepthThreshold, rtShadowUpsampleNormalExp,
-            frameIndex);
-
-        core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDepthImage(),
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageAspectFlagBits::eDepth);
-        core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageAspectFlagBits::eColor);
+        // VK-1431: the depth/normal SHADER_READ transition + compute->compute mask barrier + restore
+        // dance is shared with the directional path via withUpsampleGuides; only the dispatch differs.
+        withUpsampleGuides(cmd, *depthPrepass, [&] {
+            upsample.dispatch(cmd, upsampleList,
+                depthPrepass->getDepthImageView(), depthPrepass->getNormalImageView(),
+                traceW, traceH, fullW, fullH,
+                rtShadowUpsampleDepthThreshold, rtShadowUpsampleNormalExp,
+                frameIndex);
+        });
     }
 
     bool GPUDrivenRenderer::isRTPointShadowReady() const
@@ -1159,48 +1175,19 @@ namespace render::gpudriven
             // restore depth/normal to attachment layout so downstream passes see the legacy state.
             if (rtShadowHalfResolution && rtShadowUpsample && rtShadowUpsample->isInitialized())
             {
-                core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDepthImage(),
-                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
-                    vk::ImageLayout::eShaderReadOnlyOptimal,
-                    vk::ImageAspectFlagBits::eDepth);
-                core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
-                    vk::ImageLayout::eColorAttachmentOptimal,
-                    vk::ImageLayout::eShaderReadOnlyOptimal,
-                    vk::ImageAspectFlagBits::eColor);
-
-                // VK-1430: make the denoiser's compute write to the denoised mask visible to the
-                // upsample's compute read. The denoiser's final layout transition only scoped that
-                // write to the FRAGMENT stage (eGeneral->eShaderReadOnlyOptimal); the upsample reads
-                // the same image in COMPUTE, so without this compute->compute dependency it is a RAW
-                // hazard. The image is already in eShaderReadOnlyOptimal, so a plain memory barrier
-                // (no layout change) suffices.
-                {
-                    vk::MemoryBarrier maskBarrier{};
-                    maskBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
-                    maskBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-                    cmd.pipelineBarrier(
-                        vk::PipelineStageFlagBits::eComputeShader,
-                        vk::PipelineStageFlagBits::eComputeShader,
-                        {}, 1, &maskBarrier, 0, nullptr, 0, nullptr);
-                }
-
-                rtShadowUpsample->dispatch(cmd,
-                    rtShadowDenoiser->getDenoisedMaskSamplerImageView(),
-                    depthPrepass->getDepthImageView(),
-                    depthPrepass->getNormalImageView(),
-                    tw, th, w, h,
-                    rtShadowUpsampleDepthThreshold,
-                    rtShadowUpsampleNormalExp,
-                    fi);
-
-                core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getDepthImage(),
-                    vk::ImageLayout::eShaderReadOnlyOptimal,
-                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
-                    vk::ImageAspectFlagBits::eDepth);
-                core::ImageUtilities::transitionImageLayout(cmd, depthPrepass->getNormalImage(),
-                    vk::ImageLayout::eShaderReadOnlyOptimal,
-                    vk::ImageLayout::eColorAttachmentOptimal,
-                    vk::ImageAspectFlagBits::eColor);
+                // VK-1431: the depth/normal SHADER_READ transition + compute->compute mask barrier +
+                // restore dance is shared with the layered path via withUpsampleGuides; only the
+                // dispatch (a single 2D denoised view here) differs.
+                withUpsampleGuides(cmd, *depthPrepass, [&] {
+                    rtShadowUpsample->dispatch(cmd,
+                        rtShadowDenoiser->getDenoisedMaskSamplerImageView(),
+                        depthPrepass->getDepthImageView(),
+                        depthPrepass->getNormalImageView(),
+                        tw, th, w, h,
+                        rtShadowUpsampleDepthThreshold,
+                        rtShadowUpsampleNormalExp,
+                        fi);
+                });
             }
         }
 
