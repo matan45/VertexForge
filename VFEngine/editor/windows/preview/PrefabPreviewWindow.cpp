@@ -921,6 +921,34 @@ namespace windows
         if (ImGui::RadioButton("Scale##tr", transformGizmoOp == ImGuizmo::SCALE))
             transformGizmoOp = ImGuizmo::SCALE;
 
+        // Numeric transform fields (parallel to the inspector's Transform component). They edit the
+        // SAME per-part previewTransform offset the gizmo drives, so typing and dragging stay in sync.
+        // Identity offset reads Position 0 / Rotation 0 / Scale 1; rotation is Euler degrees (matches
+        // the gizmo + the prefab schema).
+        ImGui::Spacing();
+        ImGui::TextDisabled("Transform (offset)");
+        {
+            glm::mat4 m = currentPartPreviewTransform(selectedPart);
+            float t[3], r[3], s[3];
+            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(m), t, r, s);
+            bool changed = false;
+            ImGui::PushItemWidth(-70.0f);
+            changed |= ImGui::DragFloat3("Position##trnum", t, 0.01f);
+            changed |= ImGui::DragFloat3("Rotation##trnum", r, 0.1f);
+            changed |= ImGui::DragFloat3("Scale##trnum", s, 0.01f);
+            ImGui::PopItemWidth();
+            if (changed)
+            {
+                ImGuizmo::RecomposeMatrixFromComponents(t, r, s, glm::value_ptr(m));
+                previewTransforms[selectedPart] = m;
+                services::events::prefabrigpreview::SetPrefabRigPartPreviewTransformCommand cmd;
+                cmd.instanceId = getInstanceId();
+                cmd.part = static_cast<size_t>(selectedPart);
+                cmd.transform = m;
+                events::EventDispatcher::instance().execute(cmd);
+            }
+        }
+
         ImGui::Spacing();
         if (ImGui::Button("Reset Transform"))
         {
