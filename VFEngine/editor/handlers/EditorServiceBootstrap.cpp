@@ -71,6 +71,7 @@
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
+#include "events/editor/EditorSettingsEvents.hpp"
 #include "cpumem/CpuMemoryManager.hpp"
 #include "impl/editor/EditorKeybindingServiceImpl.hpp"
 #include "impl/terrain/SplineTerrainServiceImpl.hpp"
