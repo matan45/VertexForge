@@ -106,6 +106,18 @@ namespace windows
                 handleAssetDrop(vp, vs);
             }
 
+            // Play-mode feedback: outline the viewport so it is obvious the editor is running
+            // the game. Green while playing, amber while paused (VK Play/Pause/Stop Phase 1).
+            if (isPlayMode)
+            {
+                bool isPaused = dispatcher.query(events::editor::IsEditorPausedQuery{});
+                ImU32 borderColor = isPaused ? IM_COL32(230, 180, 60, 255) : IM_COL32(80, 200, 120, 255);
+                ImGui::GetWindowDrawList()->AddRect(
+                    viewportPos,
+                    ImVec2(viewportPos.x + viewportPanelSize.x, viewportPos.y + viewportPanelSize.y),
+                    borderColor, 0.0f, 0, 3.0f);
+            }
+
             overlay.draw(gizmo);
             gizmo.draw(*editorCamera);
 

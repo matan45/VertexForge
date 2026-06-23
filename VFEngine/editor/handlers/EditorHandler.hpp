@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <string>
+#include <atomic>
 #include "WindowImguiHandler.hpp"
 
 #include "interfaces/project/ISceneService.hpp"
@@ -176,6 +177,14 @@ namespace handlers {
 
 		events::SubscriptionToken resizeSubscription;
 		events::SubscriptionToken displaySettingsSubscription;
+
+		// Phase 4c: set by the fixedUpdateScripts callback when a script throws a
+		// fatal (catchable) error. The callback can run on a worker thread (the
+		// PhysicsSync task is not pinned to the main thread), so we cannot dispatch a
+		// mode change from inside it; instead we flag here and request a safe Stop on
+		// the main thread after the frame task graph completes. True SEH/JIT faults
+		// are not catchable here and still route to the crash handler.
+		std::atomic<bool> playFatalErrorRequested{false};
 
 	public:
 		explicit EditorHandler();

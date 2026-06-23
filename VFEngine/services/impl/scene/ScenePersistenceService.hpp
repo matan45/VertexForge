@@ -31,6 +31,11 @@ namespace services
     class EntityStateService;
     class StreamingZoneManager;
 
+    // Wrapper that keeps nlohmann::json out of this header (defined in the .cpp,
+    // mirroring how IncrementalLoadState is forward-declared above). Holds the
+    // Play-time scene snapshot used by the Play/Stop in-memory restore (Phase 3).
+    struct PieSnapshotState;
+
     class ScenePersistenceService
     {
     private:
@@ -61,6 +66,13 @@ namespace services
         std::string incrementalFilePath;
         std::unique_ptr<serialization::IncrementalLoadState> incrementalState;
 
+        // Play/Stop in-memory snapshot (Phase 3). captureSnapshot() stores the
+        // pristine pre-play scene here; restoreSnapshot() arms pendingSnapshotRestore
+        // so the heavy restore runs in update() (off the frame where the render
+        // thread may be reading the registry), mirroring pendingLoadPath.
+        std::unique_ptr<PieSnapshotState> pieSnapshot;
+        bool pendingSnapshotRestore = false;
+
     public:
         explicit ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
                                          EntityStateService* entityStateService);
@@ -75,6 +87,11 @@ namespace services
         void setIncrementalLoadBudget(int entitiesPerFrame);
 
         void cancelPendingLoads();
+
+        // Play/Stop in-memory snapshot (Phase 3).
+        bool captureSnapshot();   // capture current scene; false if nothing captured
+        bool restoreSnapshot();   // arm a deferred restore; false if no snapshot held
+        void discardSnapshot();   // drop the snapshot
 
         bool newScene();
         bool saveScene(const std::string& filePath);
@@ -111,6 +128,10 @@ namespace services
 
     private:
         void performDeferredLoad(const std::string& filePath);
+        // Deferred Play/Stop snapshot restore (Phase 3). Runs the same prologue as
+        // performDeferredLoad, deserializes the in-memory snapshot, then calls
+        // finishLoad() so all post-load subsystem wiring fires identically.
+        void performDeferredSnapshotRestore();
         // Post-deserialization finalization (completed notification + IBL/navmesh/
         // terrain/settings application + clears sceneTransitioning). Shared by the
         // synchronous and incremental load paths.

@@ -14,6 +14,24 @@ namespace engineTime {
 		Duration frameTime = std::chrono::duration_cast<Duration>(currentTime - lastTime);
 		deltaTime = frameTime.count();  // Get deltaTime in seconds
 		lastTime = currentTime;
+
+		// Derive the gameplay delta from the raw frame delta (Phase 2).
+		gameDeltaTime = computeGameDelta(deltaTime, timeScale, gamePaused, stepRequested);
+	}
+
+	double Timer::computeGameDelta(double rawDelta, double scale, bool paused, bool& step)
+	{
+		if (!paused)
+		{
+			return rawDelta * scale;
+		}
+		if (step)
+		{
+			// Reproducible single-step advance, independent of the editor's frame rate.
+			step = false;
+			return (1.0 / 60.0) * scale;
+		}
+		return 0.0;
 	}
 
 	double Timer::getDeltaTime()
@@ -40,6 +58,39 @@ namespace engineTime {
 		startTime = Clock::now();
 		lastTime = startTime;
 		currentTime = startTime;
+	}
+
+	double Timer::getGameDeltaTime()
+	{
+		return gameDeltaTime;
+	}
+
+	bool Timer::isGameTimeActive()
+	{
+		return gameDeltaTime > 0.0;
+	}
+
+	void Timer::setTimeScale(double scale)
+	{
+		timeScale = scale;
+	}
+
+	void Timer::setGamePaused(bool paused)
+	{
+		gamePaused = paused;
+	}
+
+	void Timer::requestStep()
+	{
+		stepRequested = true;
+	}
+
+	void Timer::resetGameTime()
+	{
+		timeScale = 1.0;
+		gamePaused = false;
+		stepRequested = false;
+		gameDeltaTime = 0.0;
 	}
 
 }

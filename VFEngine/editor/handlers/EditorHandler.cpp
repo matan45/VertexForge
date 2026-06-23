@@ -18,6 +18,7 @@
 #include "../../core/audio/AudioSceneUpdater.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/editor/EditorModeEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
@@ -79,6 +80,20 @@ namespace handlers
         bootstrap->setFrameCallback([this]()
         {
             frameTaskGraph->execute();
+
+            // Phase 4c: execute() blocks until every task (including the worker that
+            // ran the physics post-step / fixedUpdateScripts) has joined, so here we
+            // are back on the main thread with no graph task in flight — the safe
+            // point to apply a script-fatal-triggered Stop. Dispatching the mode
+            // change here (rather than from inside the off-thread callback) avoids
+            // re-entrancy and off-main-thread scene mutation.
+            if (playFatalErrorRequested.exchange(false, std::memory_order_relaxed) &&
+                editorModeService && editorModeService->isPlayMode())
+            {
+                events::editor::SetEditorModeCommand stopCmd;
+                stopCmd.mode = services::EditorMode::Edit;
+                events::EventDispatcher::instance().execute(stopCmd);
+            }
         });
 
         editorRenderServiceImpl = dynamic_cast<services::EditorRenderServiceImpl*>(renderService.get());
@@ -102,7 +117,22 @@ namespace handlers
         {
             physicsPlayModeHandler->setScriptFixedUpdateCallback([this](float fixedDt)
             {
-                scriptingService->fixedUpdateScripts(fixedDt);
+                // Phase 4c: this is the one script path not already guarded by the
+                // frame task graph's per-task try/catch — it runs from the physics
+                // post-step callback (PhysicsSync task, which may execute off the main
+                // thread). Catch interpreter-level errors so a bad script can't crash
+                // the editor, and request a safe Stop (applied next on the main thread
+                // after the frame completes, never dispatched from here). SEH/JIT
+                // faults remain uncatchable and go to the crash handler.
+                try
+                {
+                    scriptingService->fixedUpdateScripts(fixedDt);
+                }
+                catch (const std::exception& e)
+                {
+                    vfLogError("[Script] fixedUpdateScripts threw: {} — stopping play mode", e.what());
+                    playFatalErrorRequested.store(true, std::memory_order_relaxed);
+                }
             });
         }
 
