@@ -16,6 +16,18 @@ namespace render::mesh
         alignas(4) uint32_t padding[3] = {0, 0, 0}; // Pad to 16-byte alignment
     };
 
+    // VK-1433: per-slot material texture index sentinel. A slot set to NONE means "no
+    // texture bound for this slot" — the shader then falls back to the scalar PBR value.
+    // The default state (all slots NONE) makes the skinned shader byte-identical to its
+    // original scalar-only behavior, so callers that never bind material textures
+    // (AnimatedMeshPreviewController) are unaffected.
+    inline constexpr uint8_t SKINNED_TEXTURE_INDEX_NONE = 255;
+
+    // The skinned-mesh shader's set 1 holds 16 combined-image-samplers; slot order matches
+    // the static mesh shader / MaterialTexturePaths (0=albedo,1=normal,2=ORM,3=metallic,
+    // 4=roughness,5=ao,6=emission,7=height).
+    inline constexpr uint32_t SKINNED_MATERIAL_TEXTURE_SLOTS = 16;
+
     struct SkinnedMeshRenderData
     {
         glm::mat4 modelMatrix{1.0f};
@@ -24,6 +36,11 @@ namespace render::mesh
         float roughness = 0.5f;
         float ao = 1.0f;
         float emission = 0.0f;
+
+        // Packed per-slot texture indices, 4 bytes per uint (16 slots). Initialized to
+        // all-NONE so the shader samples nothing unless a caller opts in via the pipeline's
+        // loadMaterial() (which sets these to the matching slot index, e.g. 0 for albedo).
+        std::array<uint32_t, 4> textureIndicesPacked{0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu};
     };
 
     struct SkinnedMeshPushConstants
@@ -34,6 +51,9 @@ namespace render::mesh
         float roughness;
         float ao;
         float emission;
+        // Matches the GLSL push-constant tail (set in recordCommandBuffer from
+        // SkinnedMeshRenderData::textureIndicesPacked; default all-NONE => no sampling).
+        std::array<uint32_t, 4> textureIndicesPacked{0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu};
     };
 
     struct SkinnedMeshVertexInput

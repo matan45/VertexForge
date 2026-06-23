@@ -1,4 +1,6 @@
 #include "SkinnedMeshPipeline.hpp"
+#include "../material/MaterialTextureCache.hpp"
+#include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
@@ -7,6 +9,7 @@
 #include "resource/MeshStreamHandle.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <array>
 
 namespace render::mesh
 {
@@ -66,6 +69,87 @@ namespace render::mesh
 
         destroyMeshGPUBuffers();
         loadedMesh.reset();
+    }
+
+    void SkinnedMeshPipeline::loadMaterial(const ExtractedPBRValues& pbr)
+    {
+        // Lazily stand up a per-pipeline material texture cache. We only use its loader and
+        // its 1x1-white default texture — the textures are written into THIS pipeline's own
+        // set 1 (textureDescriptorSet), not into the cache's descriptor set.
+        if (!materialTextureCache)
+        {
+            materialTextureCache = std::make_unique<MaterialTextureCache>(device);
+            materialTextureCache->init(device.getStagingCommandPool());
+        }
+
+        // Slot order mirrors the static mesh shader / MaterialTexturePaths:
+        //   0=albedo 1=normal 2=ORM 3=metallic 4=roughness 5=ao 6=emission 7=height.
+        // The skinned shader samples 0..6 (height is unused in IBL lighting, kept for parity).
+        struct SlotPath { const std::string& path; bool srgb; };
+        const std::array<SlotPath, 8> slots = {{
+            {pbr.albedoTexturePath,    true},   // 0
+            {pbr.normalTexturePath,    false},  // 1
+            {pbr.ormTexturePath,       false},  // 2
+            {pbr.metallicTexturePath,  false},  // 3
+            {pbr.roughnessTexturePath, false},  // 4
+            {pbr.aoTexturePath,        false},  // 5
+            {pbr.emissionTexturePath,  true},   // 6
+            {pbr.heightTexturePath,    false},  // 7
+        }};
+
+        // Load each present texture; record per-slot index (slot number when bound, else NONE).
+        std::array<uint8_t, 16> perSlotIndex;
+        perSlotIndex.fill(SKINNED_TEXTURE_INDEX_NONE);
+        for (uint8_t i = 0; i < static_cast<uint8_t>(slots.size()); ++i)
+        {
+            const auto& s = slots[i];
+            if (s.path.empty()) continue;
+            vk::Format fmt = s.srgb ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
+            if (materialTextureCache->loadTexture(s.path, fmt))
+            {
+                perSlotIndex[i] = i;
+            }
+        }
+
+        // Rewrite this pipeline's set 1: bound slots get their real view/sampler, every other
+        // slot (and any failed load) stays on the default white texture so the array is fully
+        // populated (UPDATE_AFTER_BIND is not used here — all 16 must be valid).
+        std::array<vk::DescriptorImageInfo, SKINNED_MATERIAL_TEXTURE_SLOTS> imageInfos{};
+        for (uint32_t i = 0; i < SKINNED_MATERIAL_TEXTURE_SLOTS; ++i)
+        {
+            const std::string& path = (i < slots.size() && perSlotIndex[i] != SKINNED_TEXTURE_INDEX_NONE)
+                ? slots[i].path
+                : std::string{};
+            imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            imageInfos[i].imageView = materialTextureCache->getViewForPath(path);
+            imageInfos[i].sampler = materialTextureCache->getSamplerForPath(path);
+        }
+
+        vk::WriteDescriptorSet textureWrite{};
+        textureWrite.dstSet = textureDescriptorSet;
+        textureWrite.dstBinding = 0;
+        textureWrite.dstArrayElement = 0;
+        textureWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        textureWrite.descriptorCount = SKINNED_MATERIAL_TEXTURE_SLOTS;
+        textureWrite.pImageInfo = imageInfos.data();
+
+        device.getLogicalDevice().waitIdle(); // set may be in use by a prior frame's submit
+        device.getLogicalDevice().updateDescriptorSets(textureWrite, nullptr);
+
+        materialTextureIndices = {
+            render::mesh::packTextureIndices(perSlotIndex[0], perSlotIndex[1], perSlotIndex[2], perSlotIndex[3]),
+            render::mesh::packTextureIndices(perSlotIndex[4], perSlotIndex[5], perSlotIndex[6], perSlotIndex[7]),
+            render::mesh::packTextureIndices(perSlotIndex[8], perSlotIndex[9], perSlotIndex[10], perSlotIndex[11]),
+            render::mesh::packTextureIndices(perSlotIndex[12], perSlotIndex[13], perSlotIndex[14], perSlotIndex[15]),
+        };
+        materialTexturesActive = true;
+    }
+
+    void SkinnedMeshPipeline::clearMaterial()
+    {
+        materialTextureIndices = {0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu};
+        materialTexturesActive = false;
+        // Leave textureDescriptorSet as-is: with all-NONE indices the shader never samples it.
     }
 
     void SkinnedMeshPipeline::createMeshGPUBuffers(const resource::MeshesData& meshesData)
@@ -349,6 +433,9 @@ namespace render::mesh
         pc.roughness = renderData.roughness;
         pc.ao = renderData.ao;
         pc.emission = renderData.emission;
+        // All-NONE by default (see SkinnedMeshRenderData) => shader samples no material
+        // textures and the output matches the original scalar-only pipeline byte-for-byte.
+        pc.textureIndicesPacked = renderData.textureIndicesPacked;
 
         commandBuffer.pushConstants(pipelineLayout,
                                     vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,

@@ -3,14 +3,17 @@
 #include "../../providers/render/IMeshPreviewProvider.hpp"
 #include "../../providers/animation/IAnimationPreviewProvider.hpp"
 #include "../../providers/vfx/IVFXPreviewProvider.hpp"
+#include "../../providers/render/IPrefabRigPreviewProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include <cassert>
 
 namespace services
 {
     PreviewServiceImpl::PreviewServiceImpl(IMaterialPreviewProvider* materialProv, IMeshPreviewProvider* meshProv,
-                                           IAnimationPreviewProvider* animProv, IVFXPreviewProvider* vfxProv)
-        : materialProvider(materialProv), meshProvider(meshProv), animationProvider(animProv), vfxProvider(vfxProv)
+                                           IAnimationPreviewProvider* animProv, IVFXPreviewProvider* vfxProv,
+                                           IPrefabRigPreviewProvider* prefabRigProv)
+        : materialProvider(materialProv), meshProvider(meshProv), animationProvider(animProv), vfxProvider(vfxProv),
+          prefabRigProvider(prefabRigProv)
     {
         assert(materialProvider != nullptr && "PreviewServiceImpl requires a valid IMaterialPreviewProvider");
         assert(meshProvider != nullptr && "PreviewServiceImpl requires a valid IMeshPreviewProvider");
@@ -26,6 +29,7 @@ namespace services
         registerMeshPreviewHandlers(dispatcher);
         registerAnimationPreviewHandlers(dispatcher);
         registerVFXPreviewHandlers(dispatcher);
+        registerPrefabRigPreviewHandlers(dispatcher);
     }
 
     void PreviewServiceImpl::registerMaterialPreviewHandlers(::events::EventDispatcher& dispatcher)

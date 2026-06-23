@@ -1,9 +1,22 @@
 #include "print/Log.hpp"
 #include "PrefabPreviewWindow.hpp"
+#include "PreviewInputHandler.hpp"
+#include "PreviewToolbar.hpp"
+#include "../../camera/OrbitCamera.hpp"
+#include "MeshSocketWriter.hpp"
+#include "MeshIKChainWriter.hpp"
 #include "imgui.h"
+#include "ImGuizmo.h"
+#include "events/EventDispatcher.hpp"
+#include "events/render/PrefabRigPreviewEvents.hpp"
+#include "events/physics/SocketEvents.hpp"
 #include <nlohmann/json.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
+#include <cstring>
 #include <cmath>
 
 using json = nlohmann::json;
@@ -12,6 +25,82 @@ namespace windows
 {
     namespace
     {
+        glm::vec3 parseVec3(const json& j, float dx, float dy, float dz)
+        {
+            if (j.is_array() && j.size() >= 3)
+                return {j[0].get<float>(), j[1].get<float>(), j[2].get<float>()};
+            if (j.is_object())
+                return {j.value("x", dx), j.value("y", dy), j.value("z", dz)};
+            return {dx, dy, dz};
+        }
+
+        // Reads an AssetRef *resolved path* the way writeAssetRef stores it: the GUID lives in
+        // "<key>" and the resolved disk path in "<key>Path". For a standalone (no AssetDatabase)
+        // parse the path variant is the robust one; fall back to the bare value if it looks like
+        // a path (legacy / cold-DB scenes).
+        std::string readRefPath(const json& components, const std::string& key)
+        {
+            const std::string pathKey = key + "Path";
+            if (auto it = components.find(pathKey); it != components.end() && it->is_string())
+            {
+                return it->get<std::string>();
+            }
+            if (auto it = components.find(key); it != components.end() && it->is_string())
+            {
+                std::string val = it->get<std::string>();
+                const bool looksLikePath = val.find('.') != std::string::npos ||
+                                           val.find('/') != std::string::npos ||
+                                           val.find('\\') != std::string::npos;
+                if (looksLikePath) return val;
+            }
+            return {};
+        }
+
+        animator::ik::JointConstraint parseConstraint(const json& j)
+        {
+            animator::ik::JointConstraint c;
+            if (auto it = j.find("type"); it != j.end() && it->is_string())
+                c.type = animator::ik::stringToConstraintType(it->get<std::string>());
+
+            if (auto it = j.find("hingeAxis"); it != j.end() && it->is_array() && it->size() >= 3)
+                c.hingeAxis = parseVec3(*it, 0, 1, 0);
+            if (auto it = j.find("coneAngle"); it != j.end() && it->is_number())
+                c.coneAngle = it->get<float>();
+            if (auto it = j.find("swingAngle"); it != j.end() && it->is_number())
+                c.swingAngle = it->get<float>();
+            if (auto it = j.find("twistMin"); it != j.end() && it->is_number())
+                c.twistMin = it->get<float>();
+            if (auto it = j.find("twistMax"); it != j.end() && it->is_number())
+                c.twistMax = it->get<float>();
+            return c;
+        }
+
+        void parseIKChains(const json& ikTarget, std::vector<animator::ik::IKChainConfig>& out)
+        {
+            if (!ikTarget.contains("chains") || !ikTarget["chains"].is_array()) return;
+            for (const auto& chainJ : ikTarget["chains"])
+            {
+                animator::ik::IKChainConfig chain;
+                chain.chainName = chainJ.value("chainName", "");
+                chain.tipBoneName = chainJ.value("tipBoneName", "");
+                if (auto it = chainJ.find("weight"); it != chainJ.end() && it->is_number())
+                    chain.weight = it->get<float>();
+                if (auto it = chainJ.find("enabled"); it != chainJ.end() && it->is_boolean())
+                    chain.enabled = it->get<bool>();
+                if (chainJ.contains("chainBoneNames") && chainJ["chainBoneNames"].is_array())
+                {
+                    for (const auto& b : chainJ["chainBoneNames"])
+                        if (b.is_string()) chain.chainBoneNames.push_back(b.get<std::string>());
+                }
+                if (chainJ.contains("constraints") && chainJ["constraints"].is_array())
+                {
+                    for (const auto& cJ : chainJ["constraints"])
+                        chain.constraints.push_back(parseConstraint(cJ));
+                }
+                out.push_back(std::move(chain));
+            }
+        }
+
         PrefabEntityNode parseEntityFromJson(const json& entityJson, ComponentStats& stats)
         {
             PrefabEntityNode node;
@@ -19,13 +108,8 @@ namespace windows
 
             node.name = entityJson.value("name", "Entity");
 
-            auto parseVec3 = [](const json& j, float dx, float dy, float dz) -> glm::vec3 {
-                if (j.is_array() && j.size() >= 3) return {j[0].get<float>(), j[1].get<float>(), j[2].get<float>()};
-                if (j.is_object()) return {j.value("x", dx), j.value("y", dy), j.value("z", dz)};
-                return {dx, dy, dz};
-            };
-
-            if (entityJson.contains("transform")) {
+            if (entityJson.contains("transform"))
+            {
                 const auto& t = entityJson["transform"];
                 if (t.contains("position")) node.position = parseVec3(t["position"], 0, 0, 0);
                 if (t.contains("rotation")) node.rotation = parseVec3(t["rotation"], 0, 0, 0);
@@ -34,56 +118,81 @@ namespace windows
 
             if (entityJson.contains("components"))
             {
-                const auto& componentsJson = entityJson["components"];
+                const auto& c = entityJson["components"];
 
                 static const std::vector<std::pair<std::string, std::string>> componentMap = {
-                    {"camera", "Camera"},
-                    {"ibl", "IBL"},
-                    {"mesh", "Mesh"},
-                    {"material", "Material"},
-                    {"billboard", "Billboard"},
-                    {"audioSource2D", "AudioSource2D"},
-                    {"audioSource3D", "AudioSource3D"},
-                    {"collider", "Collider"},
-                    {"rigidBody", "RigidBody"},
-                    {"script", "Script"},
-                    {"navmeshAgent", "NavmeshAgent"},
-                    {"navmeshObstacle", "NavmeshObstacle"},
-                    {"vfx", "VFX"},
-                    {"socketAttachment", "SocketAttachment"},
-                    {"socketOverride", "SocketOverride"},
-                    {"directionalLight", "DirectionalLight"},
-                    {"pointLight", "PointLight"},
-                    {"spotLight", "SpotLight"},
-                    {"controller", "Controller"},
-                    {"behaviorTree", "BehaviorTree"},
-                    {"prefabInstance", "PrefabInstance"}
+                    {"camera", "Camera"}, {"ibl", "IBL"}, {"mesh", "Mesh"}, {"material", "Material"},
+                    {"billboard", "Billboard"}, {"audioSource2D", "AudioSource2D"},
+                    {"audioSource3D", "AudioSource3D"}, {"collider", "Collider"}, {"rigidBody", "RigidBody"},
+                    {"script", "Script"}, {"navmeshAgent", "NavmeshAgent"}, {"navmeshObstacle", "NavmeshObstacle"},
+                    {"vfx", "VFX"}, {"socketAttachment", "SocketAttachment"}, {"socketOverride", "SocketOverride"},
+                    {"directionalLight", "DirectionalLight"}, {"pointLight", "PointLight"},
+                    {"spotLight", "SpotLight"}, {"controller", "Controller"}, {"behaviorTree", "BehaviorTree"},
+                    {"prefabInstance", "PrefabInstance"}, {"ikTarget", "IKTarget"}
                 };
-
                 for (const auto& [key, displayName] : componentMap)
                 {
-                    if (componentsJson.contains(key))
+                    if (c.contains(key))
                     {
                         node.componentTypes.push_back(displayName);
                         stats.counts[displayName]++;
                     }
                 }
 
-                if (componentsJson.contains("mesh"))
+                // MeshComponent: writeAssetRef stores meshRef / meshRefPath (+ animatorRef[Path],
+                // retargetRef[Path]). The standalone parse reads the resolved-path variant.
+                if (c.contains("mesh"))
                 {
-                    node.meshPath = componentsJson["mesh"].value("meshPath", "");
+                    node.meshPath = readRefPath(c["mesh"], "meshRef");
+                    node.animatorPath = readRefPath(c["mesh"], "animatorRef");
+                    node.retargetPath = readRefPath(c["mesh"], "retargetRef");
                 }
-                if (componentsJson.contains("material"))
+
+                // MaterialComponent: defaultMaterialRef[Path] + per-submesh subMeshMaterials[name].ref[Path].
+                if (c.contains("material"))
                 {
-                    node.materialPath = componentsJson["material"].value("defaultMaterial", "");
+                    const auto& m = c["material"];
+                    node.defaultMaterialPath = readRefPath(m, "defaultMaterialRef");
+                    if (auto it = m.find("subMeshMaterials"); it != m.end() && it->is_object())
+                    {
+                        for (auto& [submeshName, value] : it->items())
+                        {
+                            if (value.is_object())
+                            {
+                                std::string p = readRefPath(value, "ref");
+                                if (!p.empty()) node.subMeshMaterials[submeshName] = p;
+                            }
+                            else if (value.is_string())
+                            {
+                                std::string val = value.get<std::string>();
+                                const bool looksLikePath = val.find('.') != std::string::npos ||
+                                                           val.find('/') != std::string::npos ||
+                                                           val.find('\\') != std::string::npos;
+                                if (looksLikePath) node.subMeshMaterials[submeshName] = val;
+                            }
+                        }
+                    }
                 }
-                if (componentsJson.contains("audioSource2D"))
+
+                // AudioSourceComponent: audioRef[Path] (was wrongly read as audioSource2D.filePath).
+                if (c.contains("audioSource2D"))
+                    node.audioPath = readRefPath(c["audioSource2D"], "audioRef");
+                else if (c.contains("audioSource3D"))
+                    node.audioPath = readRefPath(c["audioSource3D"], "audioRef");
+
+                // SocketAttachmentComponent: parentEntityName / socketName / isActive.
+                if (c.contains("socketAttachment"))
                 {
-                    node.audioPath = componentsJson["audioSource2D"].value("filePath", "");
+                    const auto& s = c["socketAttachment"];
+                    node.hasSocketAttachment = true;
+                    node.attachParentEntityName = s.value("parentEntityName", "");
+                    node.attachSocketName = s.value("socketName", "");
                 }
-                else if (componentsJson.contains("audioSource3D"))
+
+                // IKTargetComponent chains.
+                if (c.contains("ikTarget"))
                 {
-                    node.audioPath = componentsJson["audioSource3D"].value("filePath", "");
+                    parseIKChains(c["ikTarget"], node.ikChains);
                 }
             }
 
@@ -92,9 +201,7 @@ namespace windows
                 for (const auto& childJson : entityJson["children"])
                 {
                     if (childJson.is_object())
-                    {
                         node.children.push_back(parseEntityFromJson(childJson, stats));
-                    }
                 }
             }
 
@@ -102,8 +209,12 @@ namespace windows
         }
     } // anonymous namespace
 
+    // The prefab-tree -> PrefabRigDescDTO conversion (buildPrefabRigDescDTO) lives header-only in
+    // PrefabRigDescBuilder.hpp so the Tests project can exercise it without linking the Editor.
+
     PrefabPreviewWindow::PrefabPreviewWindow(const std::string& filePath)
         : prefabPath(filePath)
+        , camera(std::make_unique<editor::OrbitCamera>())
     {
         std::filesystem::path path(filePath);
         windowTitle = "Prefab Preview: " + path.filename().string();
@@ -116,12 +227,17 @@ namespace windows
         {
             loadFuture.wait();
         }
+        cleanUpPreviewRenderer();
     }
 
     void PrefabPreviewWindow::draw()
     {
         if (!isOpen)
         {
+            if (!previewCleanedUp)
+            {
+                cleanUpPreviewRenderer();
+            }
             return;
         }
 
@@ -133,9 +249,13 @@ namespace windows
 
         updateAsyncLoading();
 
+        float currentTime = static_cast<float>(ImGui::GetTime());
+        float deltaTime = lastFrameTime > 0.0f ? (currentTime - lastFrameTime) : 0.0f;
+        lastFrameTime = currentTime;
+
         if (initialSize.x <= 0.0f)
         {
-            initialSize = editor::preview::initialWindowSize("PrefabPreview", ImVec2(800, 550));
+            initialSize = editor::preview::initialWindowSize("PrefabPreview", ImVec2(1100, 650));
         }
         ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
         maximizer.preBegin();
@@ -146,24 +266,18 @@ namespace windows
             {
                 maximizer.drawButton();
 
-                static float panelWidth = 150.0f;
+                static float leftWidth = 160.0f;
+                static float rightWidth = 280.0f;
                 const float splitterThickness = 5.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
-                panelWidth = std::clamp(panelWidth, 120.0f,
-                                        std::max(120.0f, contentSize.x - 250.0f - splitterThickness));
-                float treeWidth = contentSize.x - panelWidth - splitterThickness;
+                leftWidth = std::clamp(leftWidth, 130.0f, std::max(130.0f, contentSize.x * 0.35f));
+                rightWidth = std::clamp(rightWidth, 220.0f, std::max(220.0f, contentSize.x * 0.45f));
+                float middleWidth = contentSize.x - leftWidth - rightWidth - splitterThickness * 2.0f;
 
-                ImGui::BeginChild("InfoPanel", ImVec2(panelWidth, contentSize.y), true);
+                // --- Left: info + tree ---
+                ImGui::BeginChild("InfoPanel", ImVec2(leftWidth, contentSize.y), true);
                 drawInfoPanel();
-                ImGui::EndChild();
-
-                ImGui::SameLine(0.0f, 0.0f);
-                editor::preview::splitterV("##prefabSplit", splitterThickness, &panelWidth,
-                                           &treeWidth, 120.0f, 250.0f, contentSize.y);
-                ImGui::SameLine(0.0f, 0.0f);
-
-                ImGui::BeginChild("EntityTreePanel", ImVec2(treeWidth, contentSize.y), true);
-
+                ImGui::Separator();
                 if (loadingInProgress.load())
                 {
                     drawLoadingIndicator();
@@ -172,7 +286,27 @@ namespace windows
                 {
                     drawEntityTreePanel();
                 }
+                ImGui::EndChild();
 
+                ImGui::SameLine(0.0f, 0.0f);
+                editor::preview::splitterV("##prefabSplitL", splitterThickness, &leftWidth,
+                                           &middleWidth, 130.0f, 300.0f, contentSize.y);
+                ImGui::SameLine(0.0f, 0.0f);
+
+                // --- Middle: 3D viewport ---
+                ImGui::BeginChild("ViewportPanel", ImVec2(middleWidth, contentSize.y), true,
+                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                drawViewport(middleWidth, contentSize.y, deltaTime);
+                ImGui::EndChild();
+
+                ImGui::SameLine(0.0f, 0.0f);
+                editor::preview::splitterV("##prefabSplitR", splitterThickness, &middleWidth,
+                                           &rightWidth, 300.0f, 220.0f, contentSize.y);
+                ImGui::SameLine(0.0f, 0.0f);
+
+                // --- Right: authoring ---
+                ImGui::BeginChild("AuthoringPanel", ImVec2(rightWidth, contentSize.y), true);
+                drawAuthoringPanel();
                 ImGui::EndChild();
             }
         }
@@ -185,6 +319,9 @@ namespace windows
         }
     }
 
+    // ----------------------------------------------------------------------
+    // Async load
+    // ----------------------------------------------------------------------
     void PrefabPreviewWindow::startAsyncLoad()
     {
         loadingInProgress.store(true);
@@ -215,6 +352,12 @@ namespace windows
                 rootEntity = std::move(result.rootEntity);
                 componentStats = std::move(result.stats);
                 prefabLoaded = true;
+
+                rigDesc = buildPrefabRigDescDTO(rootEntity);
+
+                // Lazily init the renderer, then build from the description.
+                initPreviewRenderer();
+                buildPreviewFromDesc();
             }
             else
             {
@@ -262,9 +405,7 @@ namespace windows
 
             result.version = prefabJson.value("version", "unknown");
             result.prefabName = prefabJson["prefab"].value("name", "Unnamed");
-
             result.rootEntity = parseEntityFromJson(prefabJson["prefab"]["entity"], result.stats);
-
             result.success = true;
         }
         catch (const json::parse_error& e)
@@ -281,11 +422,185 @@ namespace windows
         return result;
     }
 
+    // ----------------------------------------------------------------------
+    // Rig preview lifecycle (service boundary)
+    // ----------------------------------------------------------------------
+    void PrefabPreviewWindow::initPreviewRenderer()
+    {
+        if (previewInitialized) return;
+
+        services::events::prefabrigpreview::InitPrefabRigPreviewCommand cmd;
+        cmd.instanceId = getInstanceId();
+        events::EventDispatcher::instance().execute(cmd);
+        previewInitialized = true;
+    }
+
+    void PrefabPreviewWindow::buildPreviewFromDesc()
+    {
+        if (!previewInitialized || rigDesc.parts.empty()) return;
+
+        services::events::prefabrigpreview::BuildPrefabRigPreviewCommand cmd;
+        cmd.instanceId = getInstanceId();
+        cmd.desc = rigDesc;
+        previewBuilt = events::EventDispatcher::instance().execute(cmd);
+
+        if (!previewBuilt)
+        {
+            vfLogWarning("Prefab rig preview build produced no parts for: {}", prefabPath);
+        }
+    }
+
+    void PrefabPreviewWindow::cleanUpPreviewRenderer()
+    {
+        if (previewCleanedUp) return;
+
+        if (previewInitialized)
+        {
+            services::events::prefabrigpreview::CleanUpPrefabRigPreviewCommand cmd;
+            cmd.instanceId = getInstanceId();
+            events::EventDispatcher::instance().execute(cmd);
+        }
+        previewCleanedUp = true;
+    }
+
+    // ----------------------------------------------------------------------
+    // Viewport
+    // ----------------------------------------------------------------------
+    void PrefabPreviewWindow::drawViewport(float regionWidth, float regionHeight, float deltaTime)
+    {
+        (void)regionWidth;
+
+        if (!prefabLoaded)
+        {
+            ImGui::TextDisabled("Loading prefab...");
+            return;
+        }
+        if (!previewBuilt)
+        {
+            ImGui::TextDisabled("Prefab has no renderable rig parts.");
+            return;
+        }
+
+        // Toolbar (environment + camera framing).
+        editor::preview::PreviewToolbar::draw(environment, camera.get());
+
+        ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+        float width = viewportSize.x;
+        float height = viewportSize.y;
+        if (width <= 0.0f || height <= 0.0f) return;
+
+        camera->setAspectRatio(width / height);
+
+        // Don't let the orbit camera fight the socket gizmo while it is being dragged.
+        if (!ImGuizmo::IsUsing())
+        {
+            editor::preview::PreviewInputHandler::handleInput(camera.get(), isDraggingOrbit, isDraggingPan);
+        }
+
+        // Advance the assembly first, then push camera + environment.
+        {
+            services::events::prefabrigpreview::UpdatePrefabRigPreviewCommand updateCmd;
+            updateCmd.instanceId = getInstanceId();
+            updateCmd.deltaTime = deltaTime;
+            events::EventDispatcher::instance().execute(updateCmd);
+        }
+
+        {
+            services::events::prefabrigpreview::SetPrefabRigRootMatrixCommand rootCmd;
+            rootCmd.instanceId = getInstanceId();
+            rootCmd.model = glm::mat4_cast(previewRotation);
+            events::EventDispatcher::instance().execute(rootCmd);
+        }
+
+        {
+            services::PreviewEnvironmentParams envParams;
+            envParams.backgroundMode =
+                static_cast<uint8_t>(environment.backgroundMode == editor::preview::BackgroundMode::Gradient ? 1 : 0);
+            envParams.backgroundColor = environment.backgroundColor;
+            envParams.gradientTopColor = environment.gradientTopColor;
+            envParams.gradientBottomColor = environment.gradientBottomColor;
+            envParams.showGrid = environment.showGrid;
+            envParams.lightingMode =
+                static_cast<uint8_t>(environment.lightingMode == editor::preview::LightingMode::ThreePoint ? 1 : 0);
+            envParams.lightingIntensity = environment.lightingIntensity;
+
+            services::events::prefabrigpreview::SetPrefabRigEnvironmentCommand envCmd;
+            envCmd.instanceId = getInstanceId();
+            envCmd.params = envParams;
+            events::EventDispatcher::instance().execute(envCmd);
+        }
+
+        {
+            services::events::prefabrigpreview::UpdatePrefabRigCameraCommand camCmd;
+            camCmd.instanceId = getInstanceId();
+            camCmd.view = camera->getViewMatrix();
+            camCmd.projection = camera->getProjectionMatrix();
+            camCmd.cameraPos = camera->getPosition();
+            events::EventDispatcher::instance().execute(camCmd);
+        }
+
+        // Render query (update happened BEFORE Image, per editor-tool gotcha).
+        services::events::prefabrigpreview::RenderPrefabRigPreviewQuery renderQuery;
+        renderQuery.instanceId = getInstanceId();
+        auto textureHandle = events::EventDispatcher::instance().query(renderQuery);
+
+        if (textureHandle.imguiDescriptorSet)
+        {
+            ImGui::Image(textureHandle.imguiDescriptorSet, ImVec2(width, height));
+            drawSocketGizmo();
+        }
+        else
+        {
+            ImGui::Dummy(ImVec2(width, height));
+        }
+
+        (void)regionHeight;
+    }
+
+    void PrefabPreviewWindow::drawSocketGizmo()
+    {
+        // Only when authoring a STATIC part's socket (skeletal sockets ride bones; no gizmo).
+        if (selectedPart < 0 || partIsSkeletal(selectedPart)) return;
+        if (selectedSocketIndex < 0 || selectedSocketIndex >= static_cast<int>(editSockets.size())) return;
+
+        ImVec2 imgMin = ImGui::GetItemRectMin();
+        ImVec2 imgSz = ImGui::GetItemRectSize();
+        if (imgSz.x <= 0.0f || imgSz.y <= 0.0f) return;
+
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetDrawlist();
+        ImGuizmo::SetRect(imgMin.x, imgMin.y, imgSz.x, imgSz.y);
+
+        // Undo Vulkan Y-flip for ImGuizmo (expects OpenGL-style projection).
+        glm::mat4 view = camera->getViewMatrix();
+        glm::mat4 proj = camera->getProjectionMatrix();
+        proj[1][1] *= -1.0f;
+
+        // NOTE: the static part rides its parent's socket at runtime, but the gizmo here edits
+        // the part's OWN socket offsets (e.g. grip/muzzle) in the part's local space. We anchor
+        // the gizmo at the turntable model * local offset (the part-world contribution from the
+        // attachment chain is not folded in, matching the bone-mesh editor's local-space intent).
+        auto& socket = editSockets[selectedSocketIndex];
+        glm::mat4 model = glm::mat4_cast(previewRotation);
+        glm::mat4 objectMatrix = model * socket.getLocalOffsetMatrix();
+
+        if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
+                                 socketGizmoOp, ImGuizmo::LOCAL, glm::value_ptr(objectMatrix)))
+        {
+            glm::mat4 localMatrix = glm::inverse(model) * objectMatrix;
+            float translation[3], rotation[3], scale[3];
+            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMatrix), translation, rotation, scale);
+            socket.localPosition = glm::vec3(translation[0], translation[1], translation[2]);
+            socket.localRotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
+            pushEditSocketsForPart(selectedPart); // live: next update() re-resolves
+        }
+    }
+
+    // ----------------------------------------------------------------------
+    // Info / tree panels
+    // ----------------------------------------------------------------------
     void PrefabPreviewWindow::drawInfoPanel()
     {
-        ImGui::Text("Info");
-        ImGui::Separator();
-
         if (loadFailed)
         {
             ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Failed to load");
@@ -303,102 +618,21 @@ namespace windows
             return;
         }
 
-        ImGui::Text("Name:"); ImGui::TextWrapped("  %s", prefabName.c_str()); ImGui::Spacing();
+        ImGui::Text("Name:"); ImGui::TextWrapped("  %s", prefabName.c_str());
         ImGui::Text("Version: %s", prefabVersion.c_str());
-        ImGui::Separator(); ImGui::Spacing();
         ImGui::Text("Entities: %u", componentStats.totalEntities);
-        ImGui::Separator(); ImGui::Spacing();
-
-        if (ImGui::CollapsingHeader("Components", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            if (componentStats.counts.empty())
-            {
-                ImGui::TextDisabled("No components");
-            }
-            else
-            {
-                for (const auto& [typeName, count] : componentStats.counts)
-                {
-                    ImGui::Text("  %s: %u", typeName.c_str(), count);
-                }
-            }
-        }
-
-        if (selectedEntityPath.has_value() && prefabLoaded)
-        {
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (ImGui::CollapsingHeader("Selected", ImGuiTreeNodeFlags_DefaultOpen))
-            {
-                const PrefabEntityNode* selectedNode = findNodeByPath(*selectedEntityPath);
-                if (selectedNode)
-                {
-                    ImGui::Text("Name: %s", selectedNode->name.c_str());
-                    ImGui::Spacing();
-
-                    ImGui::Text("Position:");
-                    ImGui::Text("  %.2f, %.2f, %.2f",
-                                selectedNode->position.x,
-                                selectedNode->position.y,
-                                selectedNode->position.z);
-
-                    ImGui::Text("Rotation:");
-                    ImGui::Text("  %.2f, %.2f, %.2f",
-                                selectedNode->rotation.x,
-                                selectedNode->rotation.y,
-                                selectedNode->rotation.z);
-
-                    ImGui::Text("Scale:");
-                    ImGui::Text("  %.2f, %.2f, %.2f",
-                                selectedNode->scale.x,
-                                selectedNode->scale.y,
-                                selectedNode->scale.z);
-
-                    if (!selectedNode->componentTypes.empty())
-                    {
-                        ImGui::Spacing();
-                        ImGui::Text("Components:");
-                        for (const auto& comp : selectedNode->componentTypes)
-                        {
-                            ImGui::Text("  - %s", comp.c_str());
-                        }
-                    }
-
-                    if (!selectedNode->meshPath.empty())
-                    {
-                        ImGui::Spacing();
-                        ImGui::Text("Mesh:");
-                        ImGui::TextWrapped("  %s", selectedNode->meshPath.c_str());
-                    }
-                    if (!selectedNode->materialPath.empty())
-                    {
-                        ImGui::Spacing();
-                        ImGui::Text("Material:");
-                        ImGui::TextWrapped("  %s", selectedNode->materialPath.c_str());
-                    }
-                    if (!selectedNode->audioPath.empty())
-                    {
-                        ImGui::Spacing();
-                        ImGui::Text("Audio:");
-                        ImGui::TextWrapped("  %s", selectedNode->audioPath.c_str());
-                    }
-                }
-            }
-        }
+        ImGui::Text("Rig parts: %zu", rigDesc.parts.size());
+        ImGui::Text("IK chains: %zu", rigDesc.ik.size());
     }
 
     void PrefabPreviewWindow::drawEntityTreePanel()
     {
-        ImGui::Text("Entity Hierarchy");
-        ImGui::Separator();
-
+        ImGui::TextDisabled("Hierarchy");
         if (loadFailed || !prefabLoaded)
         {
             ImGui::TextDisabled("No data");
             return;
         }
-
         drawEntityNode(rootEntity, rootEntity.name);
     }
 
@@ -407,52 +641,23 @@ namespace windows
         ImGui::PushID(path.c_str());
 
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
-
         if (selectedEntityPath.has_value() && *selectedEntityPath == path)
-        {
             flags |= ImGuiTreeNodeFlags_Selected;
-        }
-
         if (node.children.empty())
-        {
             flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-        }
 
         std::string label = node.name;
-        if (!node.componentTypes.empty())
-        {
-            label += " [";
-            for (size_t i = 0; i < node.componentTypes.size(); ++i)
-            {
-                if (i > 0) label += ", ";
-                label += node.componentTypes[i];
-            }
-            label += "]";
-        }
+        if (node.hasMesh()) label += node.isSkeletal() ? " [skel]" : " [static]";
 
         bool nodeOpen = ImGui::TreeNodeEx(path.c_str(), flags, "%s", label.c_str());
 
         if (ImGui::IsItemClicked())
-        {
             selectedEntityPath = path;
-        }
-
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("Position: (%.2f, %.2f, %.2f)", node.position.x, node.position.y, node.position.z);
-            ImGui::Text("Rotation: (%.2f, %.2f, %.2f)", node.rotation.x, node.rotation.y, node.rotation.z);
-            ImGui::Text("Scale: (%.2f, %.2f, %.2f)", node.scale.x, node.scale.y, node.scale.z);
-            ImGui::EndTooltip();
-        }
 
         if (nodeOpen && !node.children.empty())
         {
             for (const auto& child : node.children)
-            {
-                std::string childPath = path + "/" + child.name;
-                drawEntityNode(child, childPath);
-            }
+                drawEntityNode(child, path + "/" + child.name);
             ImGui::TreePop();
         }
 
@@ -461,55 +666,534 @@ namespace windows
 
     void PrefabPreviewWindow::drawLoadingIndicator()
     {
-        ImVec2 availSize = ImGui::GetContentRegionAvail();
-        ImVec2 windowPos = ImGui::GetCursorScreenPos();
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(windowPos, ImVec2(windowPos.x + availSize.x, windowPos.y + availSize.y), IM_COL32(30, 30, 30, 255));
-
-        float centerX = windowPos.x + (availSize.x - 200.0f) * 0.5f;
-        float centerY = windowPos.y + (availSize.y - 80.0f) * 0.5f;
-        ImVec2 center(centerX + 100.0f, centerY + 20.0f);
-        float startAngle = static_cast<float>(ImGui::GetTime()) * 4.0f, arcLength = 3.14159f * 1.3f;
-
-        for (int i = 0; i < 24; ++i) {
-            float t1 = static_cast<float>(i) / 24.0f, t2 = static_cast<float>(i + 1) / 24.0f;
-            float a1 = startAngle + t1 * arcLength, a2 = startAngle + t2 * arcLength;
-            ImU32 col = IM_COL32(100, 180, 255, static_cast<int>(255 * (1.0f - t1 * 0.7f)));
-            drawList->AddLine(ImVec2(center.x + cosf(a1) * 16.0f, center.y + sinf(a1) * 16.0f),
-                              ImVec2(center.x + cosf(a2) * 16.0f, center.y + sinf(a2) * 16.0f), col, 3.0f);
-        }
-
-        const char* statusText = loadingStatus.c_str();
-        ImVec2 textSize = ImGui::CalcTextSize(statusText);
-        drawList->AddText(ImVec2(centerX + (200.0f - textSize.x) * 0.5f, centerY + 50.0f), IM_COL32(200, 200, 200, 255), statusText);
-        ImGui::Dummy(availSize);
+        ImGui::TextDisabled("%s", loadingStatus.c_str());
     }
 
-    const PrefabEntityNode* PrefabPreviewWindow::findNodeByPath(const std::string& path) const
+    // ----------------------------------------------------------------------
+    // Authoring
+    // ----------------------------------------------------------------------
+    bool PrefabPreviewWindow::partIsSkeletal(int part) const
     {
-        return findNodeByPathRecursive(rootEntity, rootEntity.name, path);
+        if (part < 0 || part >= static_cast<int>(rigDesc.parts.size())) return false;
+        return !rigDesc.parts[part].animatorPath.empty();
     }
 
-    const PrefabEntityNode* PrefabPreviewWindow::findNodeByPathRecursive(
-        const PrefabEntityNode& node,
-        const std::string& currentPath,
-        const std::string& targetPath) const
+    const std::string& PrefabPreviewWindow::partMeshPath(int part) const
     {
-        if (currentPath == targetPath)
+        static const std::string empty;
+        if (part < 0 || part >= static_cast<int>(rigDesc.parts.size())) return empty;
+        return rigDesc.parts[part].meshPath;
+    }
+
+    void PrefabPreviewWindow::pullEditSocketsForPart(int part)
+    {
+        editSockets.clear();
+        selectedSocketIndex = -1;
+        if (part < 0) return;
+
+        services::events::prefabrigpreview::GetPrefabRigSocketsQuery query;
+        query.instanceId = getInstanceId();
+        query.part = static_cast<size_t>(part);
+        editSockets = events::EventDispatcher::instance().query(query);
+    }
+
+    void PrefabPreviewWindow::pushEditSocketsForPart(int part)
+    {
+        if (part < 0) return;
+        services::events::prefabrigpreview::SetPrefabRigSocketsCommand cmd;
+        cmd.instanceId = getInstanceId();
+        cmd.part = static_cast<size_t>(part);
+        cmd.sockets = editSockets;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PrefabPreviewWindow::pullEditChains()
+    {
+        services::events::prefabrigpreview::GetPrefabRigChainsQuery query;
+        query.instanceId = getInstanceId();
+        editChains = events::EventDispatcher::instance().query(query);
+    }
+
+    void PrefabPreviewWindow::pushEditChains()
+    {
+        services::events::prefabrigpreview::SetPrefabRigChainsCommand cmd;
+        cmd.instanceId = getInstanceId();
+        cmd.chains = editChains;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PrefabPreviewWindow::drawAuthoringPanel()
+    {
+        if (!previewBuilt)
         {
-            return &node;
+            ImGui::TextDisabled("Authoring available once the rig is built.");
+            return;
         }
 
-        for (const auto& child : node.children)
+        // Part picker (drives socket panels).
+        ImGui::TextDisabled("Part");
+        const char* preview = (selectedPart >= 0 && selectedPart < static_cast<int>(rigDesc.parts.size()))
+                                  ? rigDesc.parts[selectedPart].meshPath.c_str()
+                                  : "Select part...";
+        if (ImGui::BeginCombo("##part", preview))
         {
-            std::string childPath = currentPath + "/" + child.name;
-            const PrefabEntityNode* found = findNodeByPathRecursive(child, childPath, targetPath);
-            if (found)
+            for (int p = 0; p < static_cast<int>(rigDesc.parts.size()); ++p)
             {
-                return found;
+                std::string label = std::to_string(p) + ": " +
+                    std::filesystem::path(rigDesc.parts[p].meshPath).filename().string() +
+                    (partIsSkeletal(p) ? " [skel]" : " [static]");
+                bool selected = (selectedPart == p);
+                if (ImGui::Selectable(label.c_str(), selected))
+                {
+                    selectedPart = p;
+                    pullEditSocketsForPart(selectedPart);
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::BeginTabBar("##authoringTabs"))
+        {
+            if (ImGui::BeginTabItem("State"))
+            {
+                drawStatePicker();
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Bone Socket"))
+            {
+                drawBoneSocketPanel();
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Static Socket"))
+            {
+                drawStaticSocketPanel();
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("IK"))
+            {
+                drawIKPanel();
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
+    }
+
+    void PrefabPreviewWindow::drawStatePicker()
+    {
+        // Play / pause.
+        services::events::prefabrigpreview::IsPrefabRigPausedQuery pausedQuery;
+        pausedQuery.instanceId = getInstanceId();
+        bool paused = events::EventDispatcher::instance().query(pausedQuery);
+
+        if (ImGui::Button(paused ? "Play" : "Pause"))
+        {
+            if (paused)
+            {
+                services::events::prefabrigpreview::PlayPrefabRigCommand cmd;
+                cmd.instanceId = getInstanceId();
+                events::EventDispatcher::instance().execute(cmd);
+            }
+            else
+            {
+                services::events::prefabrigpreview::PausePrefabRigCommand cmd;
+                cmd.instanceId = getInstanceId();
+                events::EventDispatcher::instance().execute(cmd);
             }
         }
 
-        return nullptr;
+        ImGui::Separator();
+
+        if (selectedPart < 0)
+        {
+            ImGui::TextDisabled("Select a part.");
+            return;
+        }
+        if (!partIsSkeletal(selectedPart))
+        {
+            ImGui::TextDisabled("Static part — no animator states.");
+            return;
+        }
+
+        services::events::prefabrigpreview::GetPrefabRigStatesQuery statesQuery;
+        statesQuery.instanceId = getInstanceId();
+        statesQuery.part = static_cast<size_t>(selectedPart);
+        auto states = events::EventDispatcher::instance().query(statesQuery);
+
+        if (states.empty())
+        {
+            ImGui::TextDisabled("No states.");
+        }
+        else
+        {
+            ImGui::TextDisabled("States");
+            for (const auto& state : states)
+            {
+                if (ImGui::Button(state.name.c_str(), ImVec2(-1, 0)))
+                {
+                    services::events::prefabrigpreview::SetPrefabRigStateCommand cmd;
+                    cmd.instanceId = getInstanceId();
+                    cmd.part = static_cast<size_t>(selectedPart);
+                    cmd.stateName = state.name;
+                    cmd.blendDuration = 0.25f;
+                    events::EventDispatcher::instance().execute(cmd);
+                }
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::TextDisabled("Parameters");
+
+        // Lightweight named-parameter drivers (the common idle/run/fire knobs). These are
+        // generic by name; the user types the parameter the animator graph expects.
+        static char paramName[64] = "";
+        ImGui::InputText("Name##param", paramName, sizeof(paramName));
+        static float floatVal = 0.0f;
+        static bool boolVal = false;
+        static int intVal = 0;
+
+        if (ImGui::Button("Set Bool"))
+        {
+            services::events::prefabrigpreview::SetPrefabRigBoolCommand cmd;
+            cmd.instanceId = getInstanceId();
+            cmd.part = static_cast<size_t>(selectedPart);
+            cmd.name = paramName;
+            cmd.value = boolVal;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("##boolVal", &boolVal);
+
+        if (ImGui::Button("Set Float"))
+        {
+            services::events::prefabrigpreview::SetPrefabRigFloatCommand cmd;
+            cmd.instanceId = getInstanceId();
+            cmd.part = static_cast<size_t>(selectedPart);
+            cmd.name = paramName;
+            cmd.value = floatVal;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80.0f);
+        ImGui::DragFloat("##floatVal", &floatVal, 0.01f);
+
+        if (ImGui::Button("Set Int"))
+        {
+            services::events::prefabrigpreview::SetPrefabRigIntCommand cmd;
+            cmd.instanceId = getInstanceId();
+            cmd.part = static_cast<size_t>(selectedPart);
+            cmd.name = paramName;
+            cmd.value = intVal;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80.0f);
+        ImGui::DragInt("##intVal", &intVal);
+
+        if (ImGui::Button("Trigger"))
+        {
+            services::events::prefabrigpreview::SetPrefabRigTriggerCommand cmd;
+            cmd.instanceId = getInstanceId();
+            cmd.part = static_cast<size_t>(selectedPart);
+            cmd.name = paramName;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+    }
+
+    void PrefabPreviewWindow::drawBoneSocketPanel()
+    {
+        if (selectedPart < 0 || !partIsSkeletal(selectedPart))
+        {
+            ImGui::TextDisabled("Select a skeletal part.");
+            return;
+        }
+
+        ImGui::TextDisabled("Bone sockets (%zu)", editSockets.size());
+        ImGui::Separator();
+
+        for (int i = 0; i < static_cast<int>(editSockets.size()); ++i)
+        {
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (selectedSocketIndex == i) flags |= ImGuiTreeNodeFlags_Selected;
+            bool open = ImGui::TreeNodeEx(editSockets[i].name.c_str(), flags);
+            if (ImGui::IsItemClicked()) selectedSocketIndex = i;
+            if (open) ImGui::TreePop();
+        }
+
+        if (selectedSocketIndex >= 0 && selectedSocketIndex < static_cast<int>(editSockets.size()))
+        {
+            auto& socket = editSockets[selectedSocketIndex];
+            ImGui::Separator();
+            ImGui::Text("Target bone: %s", socket.targetBoneName.c_str());
+
+            float pos[3] = {socket.localPosition.x, socket.localPosition.y, socket.localPosition.z};
+            if (ImGui::DragFloat3("Position##bone", pos, 0.01f))
+            {
+                socket.localPosition = glm::vec3(pos[0], pos[1], pos[2]);
+                pushEditSocketsForPart(selectedPart);
+            }
+            glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(socket.localRotation));
+            float rot[3] = {eulerDeg.x, eulerDeg.y, eulerDeg.z};
+            if (ImGui::DragFloat3("Rotation##bone", rot, 0.5f))
+            {
+                socket.localRotation = glm::quat(glm::radians(glm::vec3(rot[0], rot[1], rot[2])));
+                pushEditSocketsForPart(selectedPart);
+            }
+        }
+
+        ImGui::Separator();
+        if (socketSaveTimer > 0.0f) socketSaveTimer -= ImGui::GetIO().DeltaTime;
+        bool canSave = !partMeshPath(selectedPart).empty();
+        if (!canSave) ImGui::BeginDisabled();
+        if (ImGui::Button("Save Sockets to Mesh"))
+        {
+            socketSaveSuccess =
+                types::MeshSocketWriter::saveSocketsToMesh(partMeshPath(selectedPart), editSockets);
+            socketSaveTimer = 3.0f;
+            if (socketSaveSuccess)
+            {
+                events::socket::SocketDataSavedNotification notif;
+                notif.meshPath = partMeshPath(selectedPart);
+                events::EventDispatcher::instance().publish(notif);
+            }
+        }
+        if (!canSave) ImGui::EndDisabled();
+        if (socketSaveTimer > 0.0f)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(socketSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
+                               socketSaveSuccess ? "Saved" : "Failed");
+        }
+    }
+
+    void PrefabPreviewWindow::drawStaticSocketPanel()
+    {
+        if (selectedPart < 0 || partIsSkeletal(selectedPart))
+        {
+            ImGui::TextDisabled("Select a static part (e.g. weapon).");
+            return;
+        }
+
+        // Create.
+        static char newName[128] = "";
+        ImGui::InputText("Name##newStatic", newName, sizeof(newName));
+        ImGui::SameLine();
+        if (ImGui::Button("Add") && std::strlen(newName) > 0)
+        {
+            animator::SocketDefinition s;
+            s.name = newName;
+            editSockets.push_back(s);
+            selectedSocketIndex = static_cast<int>(editSockets.size()) - 1;
+            newName[0] = '\0';
+            pushEditSocketsForPart(selectedPart);
+        }
+
+        ImGui::TextDisabled("Static sockets (%zu)", editSockets.size());
+        ImGui::Separator();
+
+        for (int i = 0; i < static_cast<int>(editSockets.size()); ++i)
+        {
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (selectedSocketIndex == i) flags |= ImGuiTreeNodeFlags_Selected;
+            bool open = ImGui::TreeNodeEx(editSockets[i].name.c_str(), flags);
+            if (ImGui::IsItemClicked()) selectedSocketIndex = i;
+            if (open) ImGui::TreePop();
+        }
+
+        if (selectedSocketIndex >= 0 && selectedSocketIndex < static_cast<int>(editSockets.size()))
+        {
+            auto& socket = editSockets[selectedSocketIndex];
+            ImGui::Separator();
+
+            float pos[3] = {socket.localPosition.x, socket.localPosition.y, socket.localPosition.z};
+            if (ImGui::DragFloat3("Position##static", pos, 0.01f))
+            {
+                socket.localPosition = glm::vec3(pos[0], pos[1], pos[2]);
+                pushEditSocketsForPart(selectedPart);
+            }
+            glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(socket.localRotation));
+            float rot[3] = {eulerDeg.x, eulerDeg.y, eulerDeg.z};
+            if (ImGui::DragFloat3("Rotation##static", rot, 0.5f))
+            {
+                socket.localRotation = glm::quat(glm::radians(glm::vec3(rot[0], rot[1], rot[2])));
+                pushEditSocketsForPart(selectedPart);
+            }
+
+            ImGui::TextDisabled("Gizmo:");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Move", socketGizmoOp == ImGuizmo::TRANSLATE))
+                socketGizmoOp = ImGuizmo::TRANSLATE;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Rotate", socketGizmoOp == ImGuizmo::ROTATE))
+                socketGizmoOp = ImGuizmo::ROTATE;
+
+            if (ImGui::Button("Delete Socket"))
+            {
+                editSockets.erase(editSockets.begin() + selectedSocketIndex);
+                selectedSocketIndex = -1;
+                pushEditSocketsForPart(selectedPart);
+            }
+        }
+
+        ImGui::Separator();
+        if (socketSaveTimer > 0.0f) socketSaveTimer -= ImGui::GetIO().DeltaTime;
+        bool canSave = !partMeshPath(selectedPart).empty() && !editSockets.empty();
+        if (!canSave) ImGui::BeginDisabled();
+        if (ImGui::Button("Save Sockets to Mesh##static"))
+        {
+            socketSaveSuccess =
+                types::MeshSocketWriter::saveSocketsToMesh(partMeshPath(selectedPart), editSockets);
+            socketSaveTimer = 3.0f;
+            if (socketSaveSuccess)
+            {
+                events::socket::SocketDataSavedNotification notif;
+                notif.meshPath = partMeshPath(selectedPart);
+                events::EventDispatcher::instance().publish(notif);
+            }
+        }
+        if (!canSave) ImGui::EndDisabled();
+        if (socketSaveTimer > 0.0f)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(socketSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
+                               socketSaveSuccess ? "Saved" : "Failed");
+        }
+    }
+
+    void PrefabPreviewWindow::drawIKPanel()
+    {
+        if (!chainsLoaded)
+        {
+            // Pull the controller's chain copies once (so an empty prefab doesn't re-query
+            // every frame). Subsequent edits stay in editChains and are pushed back.
+            pullEditChains();
+            chainsLoaded = true;
+        }
+
+        if (editChains.empty())
+        {
+            ImGui::TextDisabled("No IK chains in this prefab.");
+            return;
+        }
+
+        bool configChanged = false;  // weight/enabled — cheap live push, no rebuild
+        bool bindingChanged = false; // target part/socket — needs a re-resolve (rebuild)
+
+        for (int i = 0; i < static_cast<int>(editChains.size()); ++i)
+        {
+            auto& chain = editChains[i];
+            ImGui::PushID(i);
+
+            if (ImGui::TreeNodeEx(chain.chainName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Text("Tip: %s", chain.tipBoneName.c_str());
+                if (ImGui::SliderFloat("Weight", &chain.weight, 0.0f, 1.0f, "%.2f")) configChanged = true;
+                if (ImGui::Checkbox("Enabled", &chain.enabled)) configChanged = true;
+
+                if (ImGui::TreeNode("Chain Bones"))
+                {
+                    for (size_t b = 0; b < chain.chainBoneNames.size(); ++b)
+                        ImGui::BulletText("%s", chain.chainBoneNames[b].c_str());
+                    ImGui::TreePop();
+                }
+
+                // Editor-transient target binding override (matches rigDesc.ik[i]).
+                if (i < static_cast<int>(rigDesc.ik.size()))
+                {
+                    auto& ik = rigDesc.ik[i];
+                    ImGui::Separator();
+                    ImGui::TextDisabled("Target binding (transient)");
+
+                    const char* partPreview = (ik.targetPartIndex >= 0 &&
+                                               ik.targetPartIndex < static_cast<int>(rigDesc.parts.size()))
+                        ? rigDesc.parts[ik.targetPartIndex].meshPath.c_str()
+                        : "None";
+                    if (ImGui::BeginCombo("Target part", partPreview))
+                    {
+                        for (int p = 0; p < static_cast<int>(rigDesc.parts.size()); ++p)
+                        {
+                            if (p == ik.bodyPartIndex) continue;
+                            std::string label = std::filesystem::path(rigDesc.parts[p].meshPath).filename().string();
+                            if (ImGui::Selectable(label.c_str(), ik.targetPartIndex == p))
+                            {
+                                ik.targetPartIndex = p;
+                                ik.targetSocketName.clear();
+                                bindingChanged = true;
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+
+                    // Target socket dropdown: the target part's static sockets.
+                    if (ik.targetPartIndex >= 0)
+                    {
+                        services::events::prefabrigpreview::GetPrefabRigSocketsQuery q;
+                        q.instanceId = getInstanceId();
+                        q.part = static_cast<size_t>(ik.targetPartIndex);
+                        auto targetSockets = events::EventDispatcher::instance().query(q);
+
+                        const char* sockPreview = ik.targetSocketName.empty() ? "Select socket..."
+                                                                              : ik.targetSocketName.c_str();
+                        if (ImGui::BeginCombo("Target socket", sockPreview))
+                        {
+                            for (const auto& s : targetSockets)
+                            {
+                                if (ImGui::Selectable(s.name.c_str(), s.name == ik.targetSocketName))
+                                {
+                                    ik.targetSocketName = s.name;
+                                    bindingChanged = true;
+                                }
+                            }
+                            ImGui::EndCombo();
+                        }
+                    }
+                }
+
+                ImGui::TreePop();
+            }
+
+            ImGui::PopID();
+        }
+
+        // Config edits (weight/enabled) flow live to editableChains() without a rebuild.
+        if (configChanged)
+        {
+            pushEditChains();
+        }
+
+        // A target-binding change must re-resolve the assembly. Rebuilding reloads sockets from
+        // disk, so first push the current chain configs AND re-apply any in-memory socket edits
+        // for the selected part, then rebuild, so nothing the user already tweaked is lost.
+        if (bindingChanged)
+        {
+            buildPreviewFromDesc();      // re-assembles with the new rigDesc.ik bindings
+            pushEditChains();            // restore live chain configs onto the fresh assembly
+            if (selectedPart >= 0 && !editSockets.empty())
+            {
+                pushEditSocketsForPart(selectedPart);
+            }
+        }
+
+        ImGui::Separator();
+        if (ikSaveTimer > 0.0f) ikSaveTimer -= ImGui::GetIO().DeltaTime;
+
+        // Save chain CONFIG to the skeletal (body) part's mesh. The per-frame target stays transient.
+        int bodyPart = (!rigDesc.ik.empty()) ? rigDesc.ik.front().bodyPartIndex : -1;
+        bool canSave = bodyPart >= 0 && !partMeshPath(bodyPart).empty();
+        if (!canSave) ImGui::BeginDisabled();
+        if (ImGui::Button("Save IK Chains to Mesh"))
+        {
+            ikSaveSuccess = types::MeshIKChainWriter::saveIKChainsToMesh(partMeshPath(bodyPart), editChains);
+            ikSaveTimer = 3.0f;
+        }
+        if (!canSave) ImGui::EndDisabled();
+        if (ikSaveTimer > 0.0f)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ikSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
+                               ikSaveSuccess ? "Saved" : "Failed");
+        }
     }
 }

@@ -9,6 +9,7 @@ namespace services
     class IMaterialPreviewProvider;
     class IMeshPreviewProvider;
     class IAnimationPreviewProvider;
+    class IPrefabRigPreviewProvider;
     class IVFXPreviewProvider;
     class IVFXRuntimeProvider;
     class IAudioProvider;
@@ -69,6 +70,7 @@ namespace core
     class MeshPreviewAdapter;
     class ThumbnailRenderAdapter;
     class AnimationPreviewAdapter;
+    class PrefabRigPreviewAdapter;
     class VFXPreviewAdapter;
     class VFXRuntimeAdapter;
     class AudioAdapter;
@@ -114,6 +116,7 @@ namespace core
         std::unique_ptr<MeshPreviewAdapter> meshPreviewAdapter;
         std::unique_ptr<ThumbnailRenderAdapter> thumbnailRenderAdapter;
         std::unique_ptr<AnimationPreviewAdapter> animationPreviewAdapter;
+        std::unique_ptr<PrefabRigPreviewAdapter> prefabRigPreviewAdapter;
         std::unique_ptr<VFXPreviewAdapter> vfxPreviewAdapter;
         std::unique_ptr<VFXRuntimeAdapter> vfxRuntimeAdapter;
         std::unique_ptr<AudioAdapter> audioAdapter;
@@ -167,6 +170,8 @@ namespace core
         services::IMeshPreviewProvider* getMeshPreviewProvider();
 
         services::IAnimationPreviewProvider* getAnimationPreviewProvider();
+
+        services::IPrefabRigPreviewProvider* getPrefabRigPreviewProvider();
 
         services::IVFXPreviewProvider* getVFXPreviewProvider();
 

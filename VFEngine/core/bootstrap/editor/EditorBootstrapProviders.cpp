@@ -4,6 +4,7 @@
 #include "../../adapters/render/MaterialPreviewAdapter.hpp"
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
 #include "../../adapters/animation/AnimationPreviewAdapter.hpp"
+#include "../../adapters/render/PrefabRigPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
 #include "../../adapters/audio/AudioAdapter.hpp"
@@ -56,6 +57,11 @@ namespace core
     services::IAnimationPreviewProvider* EditorBootstrap::getAnimationPreviewProvider()
     {
         return animationPreviewAdapter.get();
+    }
+
+    services::IPrefabRigPreviewProvider* EditorBootstrap::getPrefabRigPreviewProvider()
+    {
+        return prefabRigPreviewAdapter.get();
     }
 
     services::IVFXPreviewProvider* EditorBootstrap::getVFXPreviewProvider()

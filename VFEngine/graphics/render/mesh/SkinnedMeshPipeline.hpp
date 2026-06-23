@@ -4,6 +4,7 @@
 #include "SkinnedMeshTypes.hpp"
 #include "../ibl/IBLTypes.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
+#include <array>
 #include <memory>
 #include <vector>
 #include <string>
@@ -24,6 +25,12 @@ namespace resource
 namespace render::ibl
 {
     class DefaultIBLTextureFactory;
+}
+
+namespace render::mesh
+{
+    class MaterialTextureCache;
+    struct ExtractedPBRValues;
 }
 
 namespace render::mesh
@@ -76,6 +83,16 @@ namespace render::mesh
         bool usingDefaultTextures = false;
         std::unique_ptr<ibl::DefaultIBLTextureFactory> defaultIBLFactory;
 
+        // VK-1433: optional real-material texture binding for the prefab rig preview.
+        // Created lazily on the first loadMaterial() call. When present, its loaded textures
+        // are written into textureDescriptorSet (set 1) and materialTextureIndices is packed
+        // so the shader samples them; otherwise the set stays bound to the default BRDF-LUT
+        // and the indices stay all-NONE (original scalar-only behavior).
+        std::unique_ptr<MaterialTextureCache> materialTextureCache;
+        std::array<uint32_t, 4> materialTextureIndices{
+            0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu};
+        bool materialTexturesActive = false;
+
 
     public:
         explicit SkinnedMeshPipeline(core::Device& device, core::SwapChain& swapChain,
@@ -87,6 +104,17 @@ namespace render::mesh
 
         bool loadMeshFromFile(const std::string& meshPath);
         void unloadMesh();
+
+        // VK-1433: bind a material's real PBR textures into set 1 so the skinned shader
+        // samples them (albedo/normal/ORM-or-MRA/emission), lit by the default IBL. Empty
+        // texture slots fall back to the matching scalar PBR value. Idempotent: re-call to
+        // switch materials. Default callers never invoke this, so their output is unchanged.
+        void loadMaterial(const ExtractedPBRValues& pbr);
+        // Clears any bound material textures and returns the set to its default state.
+        void clearMaterial();
+        // Packed per-slot texture indices for the currently bound material (all-NONE if
+        // none). The owning controller copies this into SkinnedMeshRenderData before render.
+        const std::array<uint32_t, 4>& getMaterialTextureIndices() const { return materialTextureIndices; }
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time = 0.0f) const;

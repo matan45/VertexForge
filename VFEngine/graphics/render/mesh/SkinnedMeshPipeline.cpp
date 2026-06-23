@@ -1,5 +1,6 @@
 #include "SkinnedMeshPipeline.hpp"
 #include "../ibl/DefaultIBLTextureFactory.hpp"
+#include "../material/MaterialTextureCache.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -54,6 +55,10 @@ namespace render::mesh
         auto logicalDevice = device.getLogicalDevice();
 
         logicalDevice.waitIdle();
+
+        // Owns its own textures + descriptor pool; release before the pipeline's own pools.
+        materialTextureCache.reset();
+        materialTexturesActive = false;
 
         destroyMeshGPUBuffers();
         loadedMesh.reset();
