@@ -129,6 +129,7 @@ TEST_CASE("VK-55 embedded texture: raw BGRA uncompressed round-trips to .vfImage
     CHECK(texel[1] == 20);  // G
     CHECK(texel[2] == 30);  // R
     CHECK(texel[3] == 255); // A
+    in.close();
 
     std::filesystem::remove_all(dir);
 }
