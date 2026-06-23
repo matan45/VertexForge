@@ -111,7 +111,15 @@ namespace import::builtin
                 };
             }
 
-            meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
+            // The model may contain several meshes; each is written to its own
+            // .vfMesh. Surface every produced file so the controller creates a
+            // .vfmeta and an ImportFileResult per asset.
+            std::vector<std::string> writtenMeshes;
+            meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress,
+                                       &writtenMeshes);
+
+            for (auto& path : writtenMeshes)
+                context.outputFiles.push_back(std::move(path));
         }
 
         types::AnimationProgressCallback animProgress = nullptr;

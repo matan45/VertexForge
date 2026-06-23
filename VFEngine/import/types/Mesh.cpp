@@ -12,6 +12,7 @@
 #include <fstream>
 #include <filesystem>
 #include <unordered_set>
+#include <cctype>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -352,12 +353,68 @@ namespace
 
         resource::endian::writeLE<uint32_t>(outFile, resource::LOD_LEVEL_COUNT);
     }
+
+    // Strips characters illegal in Windows file names and trims awkward
+    // leading/trailing spaces and dots. Returns an empty string if nothing
+    // usable remains.
+    std::string sanitizeFileStem(std::string_view name)
+    {
+        std::string out;
+        out.reserve(name.size());
+        for (char c : name)
+        {
+            const auto uc = static_cast<unsigned char>(c);
+            if (uc < 0x20 || c == '<' || c == '>' || c == ':' || c == '"' ||
+                c == '/' || c == '\\' || c == '|' || c == '?' || c == '*')
+                out.push_back('_');
+            else
+                out.push_back(c);
+        }
+
+        const size_t start = out.find_first_not_of(" .");
+        if (start == std::string::npos)
+            return {};
+        const size_t end = out.find_last_not_of(" .");
+        return out.substr(start, end - start + 1);
+    }
+
+    std::string toLowerCopy(std::string s)
+    {
+        for (char& c : s)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    }
+
+    // Per-mesh output stem. A single-mesh model keeps the bare file name
+    // (preserves existing references); multi-mesh models append the (sanitized)
+    // mesh name, falling back to the index when empty, and dedup collisions
+    // case-insensitively so no two files share a path on Windows.
+    std::string makeUniqueMeshFileStem(std::string_view baseName, const aiMesh* mesh,
+                                       unsigned int index, unsigned int totalMeshes,
+                                       std::unordered_set<std::string>& usedLower)
+    {
+        if (totalMeshes <= 1)
+            return std::string(baseName);
+
+        const std::string meshName = sanitizeFileStem(mesh->mName.C_Str());
+        const std::string candidate = meshName.empty()
+                                          ? std::string(baseName) + "_" + std::to_string(index)
+                                          : std::string(baseName) + "_" + meshName;
+
+        std::string unique = candidate;
+        unsigned int counter = 0;
+        while (!usedLower.insert(toLowerCopy(unique)).second)
+            unique = candidate + "_" + std::to_string(counter++);
+
+        return unique;
+    }
 }
 
 namespace types
 {
     void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
-                            std::string_view location, MeshProgressCallback progressCallback) const
+                            std::string_view location, MeshProgressCallback progressCallback,
+                            std::vector<std::string>* outWrittenFiles) const
     {
         if (progressCallback) progressCallback(0.0f);
 
@@ -374,7 +431,7 @@ namespace types
 
         if (progressCallback) progressCallback(0.2f);
 
-        saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback);
+        saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback, outWrittenFiles);
 
         if (file.config.meshConfig.fractureConfig.generateFractureData)
         {
@@ -426,29 +483,42 @@ namespace types
 
     void Mesh::saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
                                           const aiScene* scene, const importConfig::ImportConfig& config,
-                                          MeshProgressCallback progressCallback) const
+                                          MeshProgressCallback progressCallback,
+                                          std::vector<std::string>* outWrittenFiles) const
     {
-        std::filesystem::path newFileLocation = std::filesystem::path(location) / (std::string(fileName) + "." +
-            FileExtension::mesh);
-        std::ofstream outFile(newFileLocation, std::ios::binary);
-
-        if (!outFile)
+        if (scene->mNumMeshes == 0)
         {
-            vfLogError("Failed to open file for writing: {}", newFileLocation.string());
+            vfLogWarning("No meshes found in '{}'; nothing to write", fileName);
             return;
         }
 
+        // The skeleton is scene-wide; extract once and write a copy into each
+        // per-mesh file so every .vfMesh stays self-contained.
         ExtractedSkeleton skeleton = extractSkeleton(scene);
 
-        writeFileHeader(outFile, scene->mNumMeshes);
-
-        vfLogDebug("Generating LODs and meshlets for {} submeshes...", scene->mNumMeshes);
+        vfLogDebug("Generating LODs and meshlets for {} mesh(es) (one .vfMesh each)...", scene->mNumMeshes);
 
         MeshLODGenerator lodGen;
         MeshSerializer serializer;
 
+        std::unordered_set<std::string> usedStems;
+
         for (unsigned int i = 0; i < scene->mNumMeshes; ++i)
         {
+            const std::string stem = makeUniqueMeshFileStem(fileName, scene->mMeshes[i], i,
+                                                            scene->mNumMeshes, usedStems);
+            const std::filesystem::path newFileLocation =
+                std::filesystem::path(location) / (stem + "." + FileExtension::mesh);
+
+            std::ofstream outFile(newFileLocation, std::ios::binary);
+            if (!outFile)
+            {
+                vfLogError("Failed to open file for writing: {}", newFileLocation.string());
+                continue;
+            }
+
+            // One mesh per file => numMeshes == 1.
+            writeFileHeader(outFile, 1);
             writeSubmeshHeader(outFile, scene->mMeshes[i]);
 
             LODMeshData lod0 = convertAssimpMesh(scene->mMeshes[i], skeleton);
@@ -467,17 +537,21 @@ namespace types
             resource::ConvexDecompositionData convexData = lodGen.generateConvexDecomposition(lod0, config.meshConfig);
             serializer.writeConvexDecompositionData(outFile, convexData);
 
+            serializer.writeSkeletonData(outFile, skeleton);
+
+            outFile.close();
+
+            if (outWrittenFiles)
+                outWrittenFiles->push_back(newFileLocation.string());
+
+            vfLogDebug("Mesh with LOD, meshlets and skeleton saved to: {}", newFileLocation.string());
+
             if (progressCallback)
             {
                 float progress = 0.2f + (static_cast<float>(i + 1) / scene->mNumMeshes) * 0.75f;
                 progressCallback(progress);
             }
         }
-
-        MeshSerializer{}.writeSkeletonData(outFile, skeleton);
-
-        outFile.close();
-        vfLogDebug("Mesh with LOD, meshlets and skeleton reference saved to: {}", newFileLocation.string());
     }
 
     void Mesh::generateAndSaveFracturedMesh(std::string_view location, std::string_view fileName,

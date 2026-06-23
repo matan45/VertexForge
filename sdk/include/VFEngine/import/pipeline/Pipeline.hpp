@@ -31,6 +31,11 @@ namespace pipeline
         uint32_t totalFiles = 0;
         controllers::ImportProgressCallback progressCallback;
 
+        // Engine assets written by the importer's process(). Empty => the
+        // controller falls back to the single deriveOutputPath(). Lets one
+        // input file emit N outputs (e.g. one .vfMesh per mesh in the model).
+        std::vector<std::string> outputFiles;
+
         // Constructor with file and location (required since ImportFiles has explicit constructor)
         ImportContext(const importConfig::ImportFiles& f, std::string_view loc)
             : file(f), location(loc) {}

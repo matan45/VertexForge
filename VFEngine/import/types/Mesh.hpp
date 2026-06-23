@@ -43,15 +43,21 @@ namespace types
     class Mesh
     {
     public:
+        // outWrittenFiles, when non-null, receives the absolute path of every
+        // .vfMesh written (one per mesh in the model). Lets the importer surface
+        // all produced assets so each gets its own .vfmeta / asset registration.
         void loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
-                          std::string_view location, MeshProgressCallback progressCallback = nullptr) const;
+                          std::string_view location, MeshProgressCallback progressCallback = nullptr,
+                          std::vector<std::string>* outWrittenFiles = nullptr) const;
 
     private:
         static constexpr uint32_t MAX_BONES_PER_VERTEX = 4;
 
+        // Writes one .vfMesh per mesh in the scene (each with numMeshes == 1).
         void saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
                                         const aiScene* scene, const importConfig::ImportConfig& config,
-                                        MeshProgressCallback progressCallback) const;
+                                        MeshProgressCallback progressCallback,
+                                        std::vector<std::string>* outWrittenFiles) const;
 
         void generateAndSaveFracturedMesh(std::string_view location, std::string_view fileName,
                                           const aiScene* scene, const importConfig::ImportConfig& config,

@@ -82,29 +82,49 @@ namespace controllers
             asset::AssetMetadataSerializer::save(metadata, metaPath);
         }
 
-        ImportFileResult handleFileSuccess(const pipeline::ImportContext& ctx,
-                                           ImportProgressCallback& progressCallback,
-                                           uint32_t completed, uint32_t totalFiles)
+        std::vector<ImportFileResult> handleFileSuccess(const pipeline::ImportContext& ctx,
+                                                        ImportProgressCallback& progressCallback,
+                                                        uint32_t completed, uint32_t totalFiles)
         {
-            ImportFileResult fileResult;
-            fileResult.success = true;
-            fileResult.fileName = ctx.fileName;
-            fileResult.sourcePath = ctx.file.path;
-            fileResult.outputPath = deriveOutputPath(ctx);
-            fileResult.fileType = ctx.fileType;
             vfLogInfo("Successfully processed: {}", ctx.file.path);
 
-            // Create .vfmeta sidecar with importSource and importTimestamp.
-            // Existence guard: config-dependent outputs (e.g. animation-only
-            // mesh import of a file without animations) may not be written.
-            if (!fileResult.outputPath.empty() && std::filesystem::exists(fileResult.outputPath))
-            {
-                resource::AssetType assetType = assetTypeForContext(ctx);
+            const resource::AssetType assetType = assetTypeForContext(ctx);
 
-                if (assetType != resource::AssetType::COUNT)
+            std::vector<ImportFileResult> results;
+
+            auto addResult = [&](const std::string& outputPath)
+            {
+                ImportFileResult fileResult;
+                fileResult.success = true;
+                fileResult.fileName = outputPath.empty()
+                                          ? ctx.fileName
+                                          : std::filesystem::path(outputPath).stem().string();
+                fileResult.sourcePath = ctx.file.path;
+                fileResult.outputPath = outputPath;
+                fileResult.fileType = ctx.fileType;
+
+                // Create .vfmeta sidecar with importSource and importTimestamp.
+                // Existence guard: config-dependent outputs (e.g. animation-only
+                // mesh import of a file without animations) may not be written.
+                if (!outputPath.empty() && std::filesystem::exists(outputPath) &&
+                    assetType != resource::AssetType::COUNT)
                 {
-                    createVfMeta(fileResult.outputPath, ctx.file.path, assetType);
+                    createVfMeta(outputPath, ctx.file.path, assetType);
                 }
+
+                results.push_back(std::move(fileResult));
+            };
+
+            if (!ctx.outputFiles.empty())
+            {
+                // One input file emitted multiple engine assets (e.g. one
+                // .vfMesh per mesh in the model): a .vfmeta and a result each.
+                for (const auto& outputPath : ctx.outputFiles)
+                    addResult(outputPath);
+            }
+            else
+            {
+                addResult(deriveOutputPath(ctx));
             }
 
             if (progressCallback)
@@ -112,7 +132,7 @@ namespace controllers
                 progressCallback(ctx.fileName, completed, totalFiles, 1.0f);
             }
 
-            return fileResult;
+            return results;
         }
 
         ImportFileResult handleFileFailure(ImportProgressCallback& progressCallback,
@@ -299,8 +319,7 @@ namespace controllers
 
         for (size_t i = 0; i < futures.size(); ++i)
         {
-            ImportFileResult fileResult;
-            fileResult.sourcePath = (i < originalPaths.size()) ? originalPaths[i].path : "";
+            const std::string sourcePath = (i < originalPaths.size()) ? originalPaths[i].path : "";
 
             try
             {
@@ -309,24 +328,33 @@ namespace controllers
 
                 if (futureResult.has_value())
                 {
-                    fileResult = handleFileSuccess(*futureResult, progressCallback, completed, totalFiles);
-                    result.successCount++;
+                    // A single input file may now yield several output assets
+                    // (one .vfMesh per mesh), so success produces N results.
+                    auto successResults = handleFileSuccess(*futureResult, progressCallback,
+                                                            completed, totalFiles);
+                    result.successCount += successResults.size();
+                    for (auto& r : successResults)
+                    {
+                        r.sourcePath = sourcePath;
+                        result.fileResults.push_back(std::move(r));
+                    }
                 }
                 else
                 {
-                    fileResult = handleFileFailure(progressCallback, completed, totalFiles);
+                    ImportFileResult fileResult = handleFileFailure(progressCallback, completed, totalFiles);
+                    fileResult.sourcePath = sourcePath;
                     result.failureCount++;
+                    result.fileResults.push_back(std::move(fileResult));
                 }
             }
             catch (const std::exception& e)
             {
                 completed++;
-                fileResult = handleFileException(e, progressCallback, completed, totalFiles);
+                ImportFileResult fileResult = handleFileException(e, progressCallback, completed, totalFiles);
+                fileResult.sourcePath = sourcePath;
                 result.failureCount++;
+                result.fileResults.push_back(std::move(fileResult));
             }
-
-            fileResult.sourcePath = (i < originalPaths.size()) ? originalPaths[i].path : "";
-            result.fileResults.push_back(std::move(fileResult));
         }
 
         vfLogInfo("Import completed: {} successful, {} failed", result.successCount, result.failureCount);
