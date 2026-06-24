@@ -921,16 +921,36 @@ namespace windows
         if (ImGui::RadioButton("Scale##tr", transformGizmoOp == ImGuizmo::SCALE))
             transformGizmoOp = ImGuizmo::SCALE;
 
-        // Numeric transform fields (parallel to the inspector's Transform component). They edit the
-        // SAME per-part previewTransform offset the gizmo drives, so typing and dragging stay in sync.
-        // Identity offset reads Position 0 / Rotation 0 / Scale 1; rotation is Euler degrees (matches
-        // the gizmo + the prefab schema).
+        // Numeric transform fields (parallel to the inspector's Transform component). They show the
+        // part's EFFECTIVE local transform = base(read from the prefab) * previewTransform(gizmo
+        // offset). On OPEN (offset identity) they read the prefab's stored Position/Rotation/Scale;
+        // dragging the gizmo updates them live, and editing a field drives the gizmo — both feed the
+        // same previewTransform, and the shown values equal what "Save Transforms to Prefab" writes
+        // (math::composeMatrix == the prefab / TransformComponent schema; rotation = Euler XYZ deg).
         ImGui::Spacing();
-        ImGui::TextDisabled("Transform (offset)");
+        ImGui::TextDisabled("Transform");
         {
-            glm::mat4 m = currentPartPreviewTransform(selectedPart);
-            float t[3], r[3], s[3];
-            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(m), t, r, s);
+            // Part's base local transform from the parsed prefab tree (DFS pre-order, k-th
+            // mesh-bearing node = part k — the same mapping buildPrefabRigDescDTO / the writer use).
+            const glm::mat4 base = [this](int part) -> glm::mat4 {
+                std::vector<const PrefabEntityNode*> nodes;
+                detail::flattenNodes(rootEntity, nodes);
+                int k = 0;
+                for (const PrefabEntityNode* n : nodes)
+                {
+                    if (!n->hasMesh()) continue;
+                    if (k == part) return math::composeMatrix(n->position, n->rotation, n->scale);
+                    ++k;
+                }
+                return glm::mat4(1.0f);
+            }(selectedPart);
+
+            const glm::mat4 effective = base * currentPartPreviewTransform(selectedPart);
+            const math::DecomposedTransform d = math::decomposeMatrix(effective);
+            float t[3] = {d.position.x, d.position.y, d.position.z};
+            float r[3] = {d.rotation.x, d.rotation.y, d.rotation.z};
+            float s[3] = {d.scale.x, d.scale.y, d.scale.z};
+
             bool changed = false;
             ImGui::PushItemWidth(-70.0f);
             changed |= ImGui::DragFloat3("Position##trnum", t, 0.01f);
@@ -939,12 +959,14 @@ namespace windows
             ImGui::PopItemWidth();
             if (changed)
             {
-                ImGuizmo::RecomposeMatrixFromComponents(t, r, s, glm::value_ptr(m));
-                previewTransforms[selectedPart] = m;
+                const glm::mat4 newEffective = math::composeMatrix(
+                    glm::vec3(t[0], t[1], t[2]), glm::vec3(r[0], r[1], r[2]), glm::vec3(s[0], s[1], s[2]));
+                const glm::mat4 newPreview = glm::inverse(base) * newEffective;
+                previewTransforms[selectedPart] = newPreview;
                 services::events::prefabrigpreview::SetPrefabRigPartPreviewTransformCommand cmd;
                 cmd.instanceId = getInstanceId();
                 cmd.part = static_cast<size_t>(selectedPart);
-                cmd.transform = m;
+                cmd.transform = newPreview;
                 events::EventDispatcher::instance().execute(cmd);
             }
         }
