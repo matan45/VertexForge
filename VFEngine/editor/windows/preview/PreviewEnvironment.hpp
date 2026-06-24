@@ -32,6 +32,13 @@ namespace editor::preview
         bool showSockets = false;
         bool showIKTargets = false;
 
+        // VK-1433 Phase 1c — currently-selected socket for the highlight halo (part, socket index
+        // within that part); -1/-1 = none. The prefab preview window populates these from its live
+        // selection only while a socket tab is active; maps to
+        // PreviewEnvironmentParams::highlightedSocket{Part,Index}.
+        int highlightedSocketPart = -1;
+        int highlightedSocketIndex = -1;
+
         // VK-1433 Phase 3 — prefab rig debug shading selection (the prefab window's "Shading:"
         // dropdown). 0=Lit 1=Clay 2=Normals 3=UVs 4=Albedo-unlit 5=Wireframe. Only the prefab
         // preview window surfaces this; it maps to PreviewEnvironmentParams::shadingMode.

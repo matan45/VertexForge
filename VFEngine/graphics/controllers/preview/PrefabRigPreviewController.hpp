@@ -22,6 +22,7 @@
 
 #include <glm/glm.hpp>
 #include "../../../services/providers/render/IMeshPreviewProvider.hpp"
+#include "../../../services/providers/render/IPrefabRigPreviewProvider.hpp" // services::PrefabRigJoint
 #include "../../render/mesh/SkinnedMeshTypes.hpp" // pulls <vulkan/vulkan.hpp> (vk::Sampler/Fence)
 #include "../../render/tools/ImmediateDebugTypes.hpp"
 #include "PrefabRigAssembly.hpp"
@@ -111,6 +112,11 @@ namespace controllers
         const glm::mat4& partPreviewTransform(size_t part) const;
         void resetPreviewTransforms();
         glm::mat4 partWorld(size_t part) const;
+
+        // VK-1433 Phase 1b — world-space joints of a skeletal part for editor bone-picking. Built
+        // from the live assembly with the SAME formula the skeleton overlay draws; one entry per
+        // valid bone. Empty for static / out-of-range parts. Pure CPU read-back (no GPU work).
+        std::vector<services::PrefabRigJoint> jointWorlds(size_t part) const;
 
         std::vector<animator::SocketDefinition>& editableSockets(size_t part);
         const std::vector<animator::SocketDefinition>& editableSockets(size_t part) const;

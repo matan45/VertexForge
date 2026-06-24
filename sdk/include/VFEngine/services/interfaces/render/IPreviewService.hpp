@@ -148,6 +148,10 @@ namespace services
         virtual void resetPrefabRigPreviewTransforms(PreviewInstanceId instanceId) = 0;
         [[nodiscard]] virtual glm::mat4 getPrefabRigPartWorld(PreviewInstanceId instanceId, size_t part) const = 0;
 
+        // VK-1433 Phase 1b — world-space joints of a skeletal part (editor bone-picking).
+        [[nodiscard]] virtual std::vector<PrefabRigJoint>
+        getPrefabRigJointWorlds(PreviewInstanceId instanceId, size_t part) const = 0;
+
         [[nodiscard]] virtual std::vector<animator::SocketDefinition>
         getPrefabRigSockets(PreviewInstanceId instanceId, size_t part) const = 0;
         virtual void setPrefabRigSockets(PreviewInstanceId instanceId, size_t part,

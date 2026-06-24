@@ -34,6 +34,8 @@ namespace core
                              bool enabled) override;
 
         [[nodiscard]] std::vector<std::string> getChainNames(services::EntityHandle entity) const override;
+        [[nodiscard]] std::vector<animator::ik::IKChainConfig> getChainConfigs(
+            services::EntityHandle entity) const override;
         [[nodiscard]] float getChainWeight(services::EntityHandle entity,
                                             const std::string& chainName) const override;
         [[nodiscard]] bool isChainEnabled(services::EntityHandle entity,

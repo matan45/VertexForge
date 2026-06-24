@@ -19,6 +19,17 @@
 
 namespace components
 {
+    // VK-1433 Phase 4 — marks the Prefab Rig Preview window's transient editing sandbox root.
+    // Mirrors UIPreviewTagComponent: the sandbox subtree is editor-only — the scene serializer
+    // skips it (so it never bakes into the user's saved scene) and the .vfPrefab serializer
+    // normalizes a tagged root back to isActive=true (the window holds the root inactive so the
+    // main passes ignore it, but a saved prefab must instantiate visible). Never serialized;
+    // lives only while a Prefab Rig Preview window is open, and gives the window an exact
+    // teardown handle on close.
+    struct PreviewSandboxTagComponent
+    {
+    };
+
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,

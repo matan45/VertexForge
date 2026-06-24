@@ -21,6 +21,10 @@ namespace controllers::prefabrigoverlay
     // A short distinct palette so each part's skeleton (body vs weapon) reads differently.
     glm::vec4 partColor(size_t partIndex);
 
+    // VK-1433 Phase 1c — the highlight color for the currently-selected socket's halo marker. A
+    // bright opaque white that reads against the per-axis triad colors and the part palette.
+    glm::vec4 selectedSocketColor();
+
     // Single colored segment a->b.
     void addLine(render::mesh::ImmediateDebugDrawList& out,
                  const glm::vec3& a, const glm::vec3& b, const glm::vec4& color);

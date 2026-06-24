@@ -110,6 +110,122 @@ TEST_CASE("socketModelTransform returns identity for an out-of-range bone index"
     CHECK(out == glm::mat4(1.0f));
 }
 
+// VK-1433 Phase 1c — locks the "socket-not-where-the-bone-is" not-a-bug invariant: a socket with
+// localPosition (0,0,0) and identity localRotation lands EXACTLY on its bone joint. This is what
+// the overlay's socket triad and the skeleton overlay's joint cross both draw, so a zero-offset
+// socket coincides with its joint. Any future drift in socketModelTransform that breaks this would
+// reintroduce the (incorrect) "the socket is misplaced" report — pin it here.
+TEST_CASE("socketModelTransform: a zero-offset, identity-rotation socket lands exactly on its joint")
+{
+    std::vector<glm::mat4> boneMatrices = makeArmBoneMatrices(); // bone 1 at world (0,1,0)
+    std::vector<glm::mat4> bindPoses(3, glm::mat4(1.0f));
+
+    for (int32_t b = 0; b < 3; ++b)
+    {
+        animator::SocketDefinition socket;
+        socket.boneIndex = b;
+        socket.localPosition = glm::vec3(0.0f);
+        socket.localRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // identity
+
+        // The socket frame's origin (model space) must equal the bone joint's model-space position
+        // (== boneMatrices[b] * bindPoses[b] * origin), the exact formula the skeleton overlay draws.
+        const glm::vec4 socketOrigin =
+            socketModelTransform(boneMatrices, bindPoses, socket) * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        const glm::vec4 jointPos =
+            boneMatrices[b] * bindPoses[b] * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+        CHECK(socketOrigin.x == doctest::Approx(jointPos.x));
+        CHECK(socketOrigin.y == doctest::Approx(jointPos.y));
+        CHECK(socketOrigin.z == doctest::Approx(jointPos.z));
+        CHECK(socketOrigin.w == doctest::Approx(jointPos.w));
+    }
+}
+
+// VK-1433 Phase 1c (P1cTest gap) — the rotation-doesn't-move-the-origin proof. socketModelTransform
+// is translate(joint + localPosition) * mat4_cast(localRotation); rotation acts AFTER the translate
+// and a rotation fixes the origin (R*(0,0,0,1) == (0,0,0,1)), so ONLY localPosition can move the
+// socket origin off its joint. A NON-identity localRotation must therefore leave a zero-offset socket
+// exactly on the joint. This is the formal form of the Bug #1 "the socket isn't misplaced" claim.
+TEST_CASE("socketModelTransform: a NON-identity localRotation does NOT move a zero-offset socket origin")
+{
+    std::vector<glm::mat4> boneMatrices = makeArmBoneMatrices(); // bone 1 at model (0,1,0)
+    std::vector<glm::mat4> bindPoses(3, glm::mat4(1.0f));
+
+    animator::SocketDefinition socket;
+    socket.boneIndex = 1;
+    socket.localPosition = glm::vec3(0.0f);
+    // A deliberately non-trivial rotation about an off-axis vector.
+    socket.localRotation = glm::angleAxis(glm::radians(57.0f), glm::normalize(glm::vec3(1, 2, 3)));
+
+    const glm::mat4 model = socketModelTransform(boneMatrices, bindPoses, socket);
+    const glm::vec3 origin = glm::vec3(model * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+
+    // Origin pinned to the joint (0,1,0) despite the rotation; the rotation only spins the triad axes.
+    CHECK(origin.x == doctest::Approx(0.0f));
+    CHECK(origin.y == doctest::Approx(1.0f));
+    CHECK(origin.z == doctest::Approx(0.0f));
+
+    // And the triad axes ARE rotated (the basis differs from identity) — so the overlay still shows
+    // the orientation; it just doesn't displace the origin.
+    const glm::vec3 xAxis = glm::vec3(model[0]);
+    CHECK(glm::length(xAxis - glm::vec3(1.0f, 0.0f, 0.0f)) > 1e-3f);
+}
+
+// The world-space form the overlay actually draws: jointWorld = partWorld * joint, socketWorld =
+// partWorld * socketModel. For a zero-offset socket the two coincide under ANY partWorld (the
+// linear part maps the same model origin). Pin it under a non-identity (rotation+translation) part.
+TEST_CASE("socketModelTransform: zero-offset socket coincides with its joint under a NON-identity partWorld")
+{
+    std::vector<glm::mat4> boneMatrices = makeArmBoneMatrices();
+    std::vector<glm::mat4> bindPoses(3, glm::mat4(1.0f));
+
+    glm::mat4 partWorld = glm::rotate(glm::mat4(1.0f), glm::radians(40.0f), glm::vec3(0, 1, 0));
+    partWorld[3] = glm::vec4(7.0f, -2.0f, 3.0f, 1.0f); // add a translation
+
+    for (int32_t b = 0; b < 3; ++b)
+    {
+        animator::SocketDefinition socket;
+        socket.boneIndex = b;
+        socket.localPosition = glm::vec3(0.0f);
+        socket.localRotation = glm::angleAxis(glm::radians(20.0f * b), glm::vec3(0, 0, 1)); // varied, still origin-fixing
+
+        const glm::vec3 socketWorld = glm::vec3(
+            partWorld * socketModelTransform(boneMatrices, bindPoses, socket) * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+        const glm::vec3 jointWorld = glm::vec3(
+            partWorld * boneMatrices[b] * bindPoses[b] * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+
+        CHECK(socketWorld.x == doctest::Approx(jointWorld.x));
+        CHECK(socketWorld.y == doctest::Approx(jointWorld.y));
+        CHECK(socketWorld.z == doctest::Approx(jointWorld.z));
+    }
+}
+
+// The complement: a NON-zero localPosition offsets the socket origin from its joint by EXACTLY that
+// vector (in model space). This is the connector's intended length — the attach distance the overlay
+// draws. (The connector's world-space length under a rigid partWorld is locked in test_prefab_rig_overlay.)
+TEST_CASE("socketModelTransform: a non-zero localPosition offsets the origin from the joint by exactly that vector")
+{
+    std::vector<glm::mat4> boneMatrices = makeArmBoneMatrices();
+    std::vector<glm::mat4> bindPoses(3, glm::mat4(1.0f));
+
+    animator::SocketDefinition socket;
+    socket.boneIndex = 1; // joint at model (0,1,0)
+    socket.localPosition = glm::vec3(0.3f, -0.4f, 0.2f);
+    socket.localRotation = glm::angleAxis(glm::radians(25.0f), glm::vec3(0, 0, 1)); // must not affect the origin
+
+    const glm::vec3 socketOrigin = glm::vec3(
+        socketModelTransform(boneMatrices, bindPoses, socket) * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+    const glm::vec3 jointPos = glm::vec3(
+        boneMatrices[1] * bindPoses[1] * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+
+    const glm::vec3 offset = socketOrigin - jointPos;
+    CHECK(offset.x == doctest::Approx(socket.localPosition.x));
+    CHECK(offset.y == doctest::Approx(socket.localPosition.y));
+    CHECK(offset.z == doctest::Approx(socket.localPosition.z));
+    // The attach distance == |localPosition| (what the dim connector segment measures).
+    CHECK(glm::length(offset) == doctest::Approx(glm::length(socket.localPosition)));
+}
+
 // ---------------------------------------------------------------------------
 // 2. Attachment composition == applyModelOffset (translation dropped), and a
 //    depth>=2 nested chain converges in a single pass given topological order.

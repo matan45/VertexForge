@@ -3,16 +3,18 @@
 // Phase 2 (Prefab Rig Preview editing safety) — CPU coverage for the header-only seams:
 //   * windows::prefabrigval::validatePartRefs  (injected fake fs::exists predicate)
 //   * windows::prefabrigval::childHasDroppedTranslation + sourcePositionForPart
-//   * windows::prefabtransform::zeroPartTranslation  (JSON round-trip, only the target position zeroed)
 //   * windows::prefabrigedit equality + snapshot DATA logic (the separable part of the undo command)
 //
-// All four are pure / dependency-injected so they run with no imgui, no Graphics, no real filesystem,
+// All three are pure / dependency-injected so they run with no imgui, no Graphics, no real filesystem,
 // no EventDispatcher.
+//
+// VK-1433 Phase 4c retired the JSON writers (PrefabTransformWriter / PrefabRefWriter): the part
+// Transform gizmo and the drag-swap now edit the source ENTITY directly (persisted by SavePrefab),
+// so the prefabtransform::zeroPartTranslation / prefabref::applyRefEdits suites that lived here are
+// gone with the headers. The entity-driven save spine is covered by test_prefab_rig_live_builder.cpp.
 
 #include "windows/preview/PrefabRigValidation.hpp"
 #include "windows/preview/PrefabRigEditUndo.hpp"
-#include "windows/preview/PrefabTransformWriter.hpp"
-#include "windows/preview/PrefabRefWriter.hpp"
 #include "windows/preview/PrefabRigDescBuilder.hpp"
 
 #include <nlohmann/json.hpp>
@@ -147,162 +149,6 @@ TEST_SUITE("PrefabRigPhase2.TranslateDrop")
         CHECK(windows::prefabrigval::sourcePositionForPart(body, 0) == glm::vec3(0.0f));
         CHECK(windows::prefabrigval::sourcePositionForPart(body, 1) == glm::vec3(1.0f, 2.0f, 3.0f));
         CHECK(windows::prefabrigval::sourcePositionForPart(body, 5) == glm::vec3(0.0f)); // OOB
-    }
-}
-
-TEST_SUITE("PrefabRigPhase2.ZeroTranslation")
-{
-    json makeTwoPart()
-    {
-        json weapon = {
-            {"name", "Weapon"},
-            {"transform", {
-                {"position", {1.0f, 2.0f, 3.0f}},
-                {"rotation", {10.0f, 0.0f, 0.0f}},
-                {"scale", {2.0f, 2.0f, 2.0f}},
-                {"isStatic", true}
-            }},
-            {"components", {{"mesh", {{"meshRefPath", "weapon.vfMesh"}}}}},
-            {"children", json::array()}
-        };
-        json body = {
-            {"name", "Body"},
-            {"transform", {{"position", {4.0f, 0.0f, 0.0f}}, {"rotation", {0.0f, 0.0f, 0.0f}}, {"scale", {1.0f, 1.0f, 1.0f}}}},
-            {"components", {{"mesh", {{"meshRefPath", "body.vfMesh"}}}}},
-            {"children", json::array({weapon})}
-        };
-        return json{{"version", "1.0"}, {"prefab", {{"name", "Rig"}, {"entity", body}}}};
-    }
-
-    TEST_CASE("zeroPartTranslation: zeroes only the target part's position; rotation/scale + others kept")
-    {
-        json prefab = makeTwoPart();
-        const json before = prefab; // deep copy for untouched-field comparison
-
-        CHECK(windows::prefabtransform::zeroPartTranslation(prefab, 1)); // child
-
-        const json& child = prefab["prefab"]["entity"]["children"][0];
-        CHECK(child["transform"]["position"][0].get<float>() == doctest::Approx(0.0f));
-        CHECK(child["transform"]["position"][1].get<float>() == doctest::Approx(0.0f));
-        CHECK(child["transform"]["position"][2].get<float>() == doctest::Approx(0.0f));
-        // Rotation + scale preserved.
-        CHECK(child["transform"]["rotation"][0].get<float>() == doctest::Approx(10.0f));
-        CHECK(child["transform"]["scale"][0].get<float>() == doctest::Approx(2.0f));
-        // Untouched: isStatic flag, components, version, sibling root position.
-        CHECK(child["transform"]["isStatic"].get<bool>() == true);
-        CHECK(child["components"]["mesh"]["meshRefPath"].get<std::string>() == "weapon.vfMesh");
-        CHECK(prefab["version"] == before["version"]);
-        CHECK(prefab["prefab"]["entity"]["transform"]["position"][0].get<float>() == doctest::Approx(4.0f));
-    }
-
-    TEST_CASE("zeroPartTranslation: out-of-range part is a no-op returning false")
-    {
-        json prefab = makeTwoPart();
-        const json before = prefab;
-        CHECK_FALSE(windows::prefabtransform::zeroPartTranslation(prefab, 7));
-        CHECK(prefab == before);
-    }
-}
-
-TEST_SUITE("PrefabRigPhase2.RefWriter")
-{
-    json makeRefPrefab()
-    {
-        json weapon = {
-            {"name", "Weapon"},
-            {"transform", {{"position", {0.0f, 0.0f, 0.0f}}, {"rotation", {0.0f, 0.0f, 0.0f}}, {"scale", {1.0f, 1.0f, 1.0f}}}},
-            {"components", {
-                {"mesh", {{"meshRef", "OLDGUID-weapon"}, {"meshRefPath", "old_weapon.vfMesh"}}},
-                {"socketAttachment", {{"parentEntityName", "Body"}, {"socketName", "Hand"}}}
-            }},
-            {"children", json::array()}
-        };
-        json body = {
-            {"name", "Body"},
-            {"transform", {{"position", {0.0f, 0.0f, 0.0f}}, {"rotation", {0.0f, 0.0f, 0.0f}}, {"scale", {1.0f, 1.0f, 1.0f}}}},
-            {"components", {
-                {"mesh", {{"meshRef", "OLDGUID-body"}, {"meshRefPath", "old_body.vfMesh"}}}
-            }},
-            {"children", json::array({weapon})}
-        };
-        return json{{"version", "1.0"}, {"prefab", {{"name", "Rig"}, {"entity", body}}}};
-    }
-
-    TEST_CASE("applyRefEdits: swaps the target part's mesh ref pair (GUID + path), keeps the rest")
-    {
-        json prefab = makeRefPrefab();
-        const json before = prefab;
-
-        std::vector<windows::prefabref::PartRefEdit> edits;
-        windows::prefabref::PartRefEdit e;
-        e.part = 1; // weapon
-        e.meshPath = "new_weapon.vfMesh";
-        edits.push_back(e);
-
-        // Fake resolver: a known path -> a known GUID.
-        auto resolver = [](const std::string& p) -> std::string {
-            return p == "new_weapon.vfMesh" ? "NEWGUID-weapon" : std::string();
-        };
-
-        const int applied = windows::prefabref::applyRefEdits(prefab, edits, resolver);
-        CHECK(applied == 1);
-
-        const json& weaponMesh = prefab["prefab"]["entity"]["children"][0]["components"]["mesh"];
-        CHECK(weaponMesh["meshRefPath"].get<std::string>() == "new_weapon.vfMesh");
-        CHECK(weaponMesh["meshRef"].get<std::string>() == "NEWGUID-weapon");
-
-        // Body (part 0) ref pair is untouched, and the socketAttachment survives.
-        const json& bodyMesh = prefab["prefab"]["entity"]["components"]["mesh"];
-        CHECK(bodyMesh["meshRef"].get<std::string>() == "OLDGUID-body");
-        CHECK(bodyMesh["meshRefPath"].get<std::string>() == "old_body.vfMesh");
-        CHECK(prefab["prefab"]["entity"]["children"][0]["components"]["socketAttachment"]["socketName"].get<std::string>() == "Hand");
-        CHECK(prefab["version"] == before["version"]);
-    }
-
-    TEST_CASE("applyRefEdits: an unresolvable GUID overwrites both keys with the new path")
-    {
-        json prefab = makeRefPrefab();
-
-        std::vector<windows::prefabref::PartRefEdit> edits;
-        windows::prefabref::PartRefEdit e;
-        e.part = 1;
-        e.meshPath = "cold_db.vfMesh";
-        edits.push_back(e);
-
-        // No resolver (cold DB / fake): the writer must write the NEW path into BOTH keys — never the
-        // OLD asset's GUID, and never erase/zero the key. readAssetRef only consults <key>Path when
-        // <key> holds a VALID-but-unresolvable GUID; an absent or invalid GUID never reads the path,
-        // so the recoverable form is a path-shaped <key> (triggers the reader's fromPath branch).
-        const int applied = windows::prefabref::applyRefEdits(prefab, edits, {});
-        CHECK(applied == 1);
-
-        const json& weaponMesh = prefab["prefab"]["entity"]["children"][0]["components"]["mesh"];
-        CHECK(weaponMesh["meshRefPath"].get<std::string>() == "cold_db.vfMesh");
-        REQUIRE(weaponMesh.contains("meshRef"));
-        // <key> carries the NEW path (path-shaped, so the loader resolves the NEW asset) — NOT the
-        // old GUID ("OLDGUID-weapon") and NOT an empty/zero GUID.
-        CHECK(weaponMesh["meshRef"].get<std::string>() == "cold_db.vfMesh");
-        CHECK(weaponMesh["meshRef"].get<std::string>() != "OLDGUID-weapon");
-    }
-
-    TEST_CASE("applyRefEdits: a default-material swap adds the material component if absent")
-    {
-        json prefab = makeRefPrefab(); // weapon has no material component
-
-        std::vector<windows::prefabref::PartRefEdit> edits;
-        windows::prefabref::PartRefEdit e;
-        e.part = 1;
-        e.defaultMaterialPath = "new.vfmaterial";
-        edits.push_back(e);
-
-        const int applied = windows::prefabref::applyRefEdits(prefab, edits, {});
-        CHECK(applied == 1);
-
-        const json& weaponComps = prefab["prefab"]["entity"]["children"][0]["components"];
-        REQUIRE(weaponComps.contains("material"));
-        CHECK(weaponComps["material"]["defaultMaterialRefPath"].get<std::string>() == "new.vfmaterial");
-        // Mesh ref pair untouched (no meshPath in this edit).
-        CHECK(weaponComps["mesh"]["meshRef"].get<std::string>() == "OLDGUID-weapon");
     }
 }
 

@@ -231,4 +231,12 @@ namespace services::events::prefabrigpreview
         size_t part = 0;
         std::string_view getName() const override { return "GetPrefabRigPartWorld"; }
     };
+
+    // VK-1433 Phase 1b — world-space joints of a skeletal part for editor bone-picking.
+    struct GetPrefabRigJointWorldsQuery : ::events::IQuery<std::vector<PrefabRigJoint>>
+    {
+        PreviewInstanceId instanceId;
+        size_t part = 0;
+        std::string_view getName() const override { return "GetPrefabRigJointWorlds"; }
+    };
 }

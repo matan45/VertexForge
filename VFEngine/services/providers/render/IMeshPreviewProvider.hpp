@@ -24,6 +24,13 @@ namespace services {
         bool showSockets = false;
         bool showIKTargets = false;
 
+        // VK-1433 Phase 1c — the socket the editor currently has selected, so the overlay can draw
+        // it distinctly (a highlight halo) and the user can tell which triad they are editing.
+        // (part index, socket index within that part); -1/-1 = none. Only read by
+        // PrefabRigPreviewController's socket overlay loop; other preview controllers ignore them.
+        int highlightedSocketPart = -1;
+        int highlightedSocketIndex = -1;
+
         // VK-1433 Phase 3 — debug shading mode for the prefab rig preview. 0=none (unchanged PBR),
         // 1=clay, 2=normals, 3=UVs, 4=albedo-unlit, 5=wireframe. Read only by
         // PrefabRigPreviewController; default 0 keeps every other preview controller unchanged.

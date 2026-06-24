@@ -42,6 +42,10 @@ namespace services
         std::string getEntityName(EntityHandle entity) const;
         void setEntityActive(EntityHandle entity, bool isActive);
 
+        // VK-1433 Phase 4 — tag/untag a Prefab Rig Preview editing-sandbox root. Returns false
+        // for an invalid handle. Mirrors UIComponentService::markUIPreviewSandbox.
+        bool markPreviewSandbox(EntityHandle entity, bool tagged);
+
         // Static state
         bool setEntityStatic(EntityHandle entity, bool isStatic);
         bool isEntityStatic(EntityHandle entity) const;

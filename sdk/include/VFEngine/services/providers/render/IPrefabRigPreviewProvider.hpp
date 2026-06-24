@@ -28,6 +28,18 @@ namespace services
         std::string name;
     };
 
+    // VK-1433 Phase 1b — one skeletal joint exposed for editor bone-picking. `world` is the joint's
+    // world-space origin (the SAME formula the skeleton overlay draws:
+    //   partWorld * boneMatrices[boneIndex] * bindPoses[boneIndex] * (0,0,0,1)), `boneName`/`boneIndex`
+    // are taken straight from the part's SkeletonData so the window can prefill a SocketDefinition
+    // after a screen-space pick. Editor-safe (glm + std::string only); no Graphics types cross.
+    struct PrefabRigJoint
+    {
+        glm::vec3 world{0.0f};
+        std::string boneName;
+        int32_t boneIndex = -1;
+    };
+
     class IPrefabRigPreviewProvider
     {
     public:
@@ -83,6 +95,12 @@ namespace services
                                                       const glm::mat4& transform) = 0;
         virtual void resetPrefabRigPreviewTransforms(PreviewInstanceId instanceId) = 0;
         virtual glm::mat4 getPrefabRigPartWorld(PreviewInstanceId instanceId, size_t part) const = 0;
+
+        // VK-1433 Phase 1b — world-space joints of a skeletal part for editor bone-picking. One
+        // entry per valid bone (skeletal parts only); empty for static / out-of-range parts. The
+        // window projects these to screen and hit-tests a click to prefill a bone socket.
+        virtual std::vector<PrefabRigJoint> getPrefabRigJointWorlds(PreviewInstanceId instanceId,
+                                                                    size_t part) const = 0;
 
         // (Skeletal-vs-static and mesh path are known to the window from the DTO it built,
         //  so they are not re-queried across the boundary.)

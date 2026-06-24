@@ -143,6 +143,14 @@ namespace windows
 
         void draw() override;
 
+        // VK-1433 Phase 4 — reusable inline component inspector for an arbitrary entity (no
+        // ImGui::Begin window, no name/active/prefab header). Draws the FULL per-component drawer
+        // stack (edit + per-header Remove) followed by the multi-section Add Component popup, exactly
+        // like drawDetails() does for the global selection. The Prefab Rig Preview window embeds this
+        // for its selected sandbox entity so it gets the shared inspector without re-listing every
+        // drawer. Caller owns the surrounding layout (child region, separators).
+        void drawComponentSection(services::EntityHandle handle);
+
     private:
         void drawDetails(services::EntityHandle handle);
         void drawEntityName(services::EntityHandle handle, const std::string& currentName);

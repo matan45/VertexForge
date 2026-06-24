@@ -282,6 +282,14 @@ namespace core
         return controller ? controller->partWorld(part) : glm::mat4(1.0f);
     }
 
+    std::vector<services::PrefabRigJoint> PrefabRigPreviewAdapter::getPrefabRigJointWorlds(
+        services::PreviewInstanceId instanceId, size_t part) const
+    {
+        auto* controller = getController(instanceId);
+        if (!controller) return {};
+        return controller->jointWorlds(part);
+    }
+
     std::vector<animator::SocketDefinition> PrefabRigPreviewAdapter::getPrefabRigSockets(
         services::PreviewInstanceId instanceId, size_t part) const
     {

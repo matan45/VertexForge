@@ -71,6 +71,11 @@ namespace services
         return ikProvider->getChainNames(entity);
     }
 
+    std::vector<animator::ik::IKChainConfig> IKComponentService::getChainConfigs(EntityHandle entity) const
+    {
+        return ikProvider->getChainConfigs(entity);
+    }
+
     float IKComponentService::getChainWeight(EntityHandle entity,
                                               const std::string& chainName) const
     {
@@ -132,6 +137,12 @@ namespace services
         dispatcher.registerQueryHandler<events::ik::GetIKChainNamesQuery>(
             [this](const events::ik::GetIKChainNamesQuery& q) -> std::vector<std::string> {
                 return getChainNames(q.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ik::GetIKChainConfigsQuery>(
+            [this](const events::ik::GetIKChainConfigsQuery& q)
+                -> std::vector<animator::ik::IKChainConfig> {
+                return getChainConfigs(q.entity);
             });
 
         dispatcher.registerQueryHandler<events::ik::GetIKChainWeightQuery>(

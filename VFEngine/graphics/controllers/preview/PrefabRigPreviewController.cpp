@@ -246,15 +246,43 @@ namespace controllers
             if (wantSockets)
             {
                 const std::vector<animator::SocketDefinition>& sockets = assembly.editableSockets(i);
-                for (const animator::SocketDefinition& socket : sockets)
+                for (size_t socketIdx = 0; socketIdx < sockets.size(); ++socketIdx)
                 {
+                    const animator::SocketDefinition& socket = sockets[socketIdx];
+
                     // Skeletal: bone-relative model transform from the live pose; static: the
                     // socket's own local-offset matrix IS the model transform (mirrors the
                     // assembly's resolveAttachmentsAndIK socket branch).
                     const glm::mat4 socketModel = skeletal
                         ? controllers::prefabrig::socketModelTransform(bones, skel.bindPoses, socket)
                         : socket.getLocalOffsetMatrix();
-                    ov::addAxisTriad(overlayLines, partWorld * socketModel, 0.06f);
+                    const glm::mat4 socketWorld = partWorld * socketModel;
+                    const glm::vec3 socketOrigin = glm::vec3(socketWorld[3]);
+
+                    ov::addAxisTriad(overlayLines, socketWorld, 0.06f);
+
+                    // Bug #1 UX clarity (no math change): a thin dim connector from the socket
+                    // triad back to its anchor (skeletal -> the bone joint cross; static -> the
+                    // part origin) so the intentional localPosition offset reads as the attach
+                    // distance, not a misplaced triad. Skip when ~coincident (degenerate segment).
+                    const bool boneInRange =
+                        skeletal && socket.boneIndex >= 0 &&
+                        static_cast<size_t>(socket.boneIndex) < bones.size() &&
+                        static_cast<size_t>(socket.boneIndex) < skel.bindPoses.size();
+                    const glm::vec3 anchor = boneInRange
+                        ? jointWorld(static_cast<size_t>(socket.boneIndex))
+                        : glm::vec3(partWorld[3]);
+                    constexpr float kCoincidentEps2 = 1e-8f;
+                    const glm::vec3 connector = socketOrigin - anchor;
+                    if (glm::dot(connector, connector) > kCoincidentEps2)
+                        ov::addLine(overlayLines, socketOrigin, anchor,
+                                    glm::vec4(0.55f, 0.55f, 0.55f, 1.0f));
+
+                    // Bug #4: distinctly highlight the editor-selected socket with a bright halo
+                    // marker so the user can tell which triad they are editing.
+                    if (static_cast<int>(i) == environmentParams.highlightedSocketPart &&
+                        static_cast<int>(socketIdx) == environmentParams.highlightedSocketIndex)
+                        ov::addMarker(overlayLines, socketOrigin, 0.09f, ov::selectedSocketColor());
                 }
             }
         }
@@ -626,6 +654,32 @@ namespace controllers
     glm::mat4 PrefabRigPreviewController::partWorld(size_t part) const
     {
         return assembly.partWorld(part);
+    }
+
+    std::vector<services::PrefabRigJoint> PrefabRigPreviewController::jointWorlds(size_t part) const
+    {
+        std::vector<services::PrefabRigJoint> out;
+        if (!assembly.isSkeletalPart(part))
+            return out; // static / out-of-range parts have no joints to pick
+
+        const glm::mat4 world = assembly.partWorld(part);
+        const std::vector<glm::mat4>& bones = assembly.boneMatrices(part);
+        const resource::SkeletonData& skel = assembly.skeleton(part);
+
+        // Same joint formula + valid range as buildOverlayLines():
+        //   jointWorld(b) = partWorld * boneMatrices[b] * bindPoses[b] * (0,0,0,1)
+        // iterated over the bones that have BOTH a matrix and a bind pose (and a skeleton entry).
+        const size_t boneCount = std::min(bones.size(), skel.bindPoses.size());
+        out.reserve(std::min(boneCount, skel.bones.size()));
+        for (size_t b = 0; b < boneCount && b < skel.bones.size(); ++b)
+        {
+            services::PrefabRigJoint joint;
+            joint.world = glm::vec3(world * bones[b] * skel.bindPoses[b] * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+            joint.boneName = skel.bones[b].name;
+            joint.boneIndex = static_cast<int32_t>(b);
+            out.push_back(std::move(joint));
+        }
+        return out;
     }
 
     std::vector<animator::SocketDefinition>& PrefabRigPreviewController::editableSockets(size_t part)

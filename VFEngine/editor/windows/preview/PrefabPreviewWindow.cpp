@@ -1,7 +1,5 @@
 #include "print/Log.hpp"
 #include "PrefabPreviewWindow.hpp"
-#include "PrefabTransformWriter.hpp"
-#include "PrefabRefWriter.hpp"
 #include "asset/AssetRef.hpp"
 #include "PreviewInputHandler.hpp"
 #include "PreviewToolbar.hpp"
@@ -11,11 +9,17 @@
 #include "../../dragdrop/AssetDropTarget.hpp"
 #include "imgui.h"
 #include "ImGuizmo.h"
+#include <IconsFontAwesome6.h>                      // eye / eye-slash hide toggle
 #include "events/EventDispatcher.hpp"
 #include "events/render/PrefabRigPreviewEvents.hpp"
+#include "events/render/MaterialEvents.hpp"        // SetDefaultMaterialCommand (Phase 4c drag-swap)
 #include "events/physics/SocketEvents.hpp"
 #include "events/project/ResourceEvents.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp" // LoadPrefab/SavePrefabCommand
+#include "events/scene/EntityTransformEvents.hpp"  // Create/Delete/Get/Select/Reparent/Reorder/Name/SetTransform
+#include "events/scene/ComponentMediaEvents.hpp"   // SetMeshDataCommand (Phase 4c drag-swap)
+#include "math/TransformUtils.hpp"
 #include <nlohmann/json.hpp>
 #include <set>
 #include <glm/gtc/quaternion.hpp>
@@ -37,193 +41,12 @@ namespace windows
         // De-hardcoded UI timings (formerly literal 3.0f / 0.25f sprinkled through the panels).
         constexpr float kSaveFeedbackSeconds = 3.0f;   // how long "Saved/Failed" stays on screen
         constexpr float kDefaultStateBlendSeconds = 0.25f; // default animator state-transition blend
-
-        glm::vec3 parseVec3(const json& j, float dx, float dy, float dz)
-        {
-            if (j.is_array() && j.size() >= 3)
-                return {j[0].get<float>(), j[1].get<float>(), j[2].get<float>()};
-            if (j.is_object())
-                return {j.value("x", dx), j.value("y", dy), j.value("z", dz)};
-            return {dx, dy, dz};
-        }
-
-        // Reads an AssetRef *resolved path* the way writeAssetRef stores it: the GUID lives in
-        // "<key>" and the resolved disk path in "<key>Path". For a standalone (no AssetDatabase)
-        // parse the path variant is the robust one; fall back to the bare value if it looks like
-        // a path (legacy / cold-DB scenes).
-        std::string readRefPath(const json& components, const std::string& key)
-        {
-            const std::string pathKey = key + "Path";
-            if (auto it = components.find(pathKey); it != components.end() && it->is_string())
-            {
-                return it->get<std::string>();
-            }
-            if (auto it = components.find(key); it != components.end() && it->is_string())
-            {
-                std::string val = it->get<std::string>();
-                const bool looksLikePath = val.find('.') != std::string::npos ||
-                                           val.find('/') != std::string::npos ||
-                                           val.find('\\') != std::string::npos;
-                if (looksLikePath) return val;
-            }
-            return {};
-        }
-
-        animator::ik::JointConstraint parseConstraint(const json& j)
-        {
-            animator::ik::JointConstraint c;
-            if (auto it = j.find("type"); it != j.end() && it->is_string())
-                c.type = animator::ik::stringToConstraintType(it->get<std::string>());
-
-            if (auto it = j.find("hingeAxis"); it != j.end() && it->is_array() && it->size() >= 3)
-                c.hingeAxis = parseVec3(*it, 0, 1, 0);
-            if (auto it = j.find("coneAngle"); it != j.end() && it->is_number())
-                c.coneAngle = it->get<float>();
-            if (auto it = j.find("swingAngle"); it != j.end() && it->is_number())
-                c.swingAngle = it->get<float>();
-            if (auto it = j.find("twistMin"); it != j.end() && it->is_number())
-                c.twistMin = it->get<float>();
-            if (auto it = j.find("twistMax"); it != j.end() && it->is_number())
-                c.twistMax = it->get<float>();
-            return c;
-        }
-
-        void parseIKChains(const json& ikTarget, std::vector<animator::ik::IKChainConfig>& out)
-        {
-            if (!ikTarget.contains("chains") || !ikTarget["chains"].is_array()) return;
-            for (const auto& chainJ : ikTarget["chains"])
-            {
-                animator::ik::IKChainConfig chain;
-                chain.chainName = chainJ.value("chainName", "");
-                chain.tipBoneName = chainJ.value("tipBoneName", "");
-                if (auto it = chainJ.find("weight"); it != chainJ.end() && it->is_number())
-                    chain.weight = it->get<float>();
-                if (auto it = chainJ.find("enabled"); it != chainJ.end() && it->is_boolean())
-                    chain.enabled = it->get<bool>();
-                if (chainJ.contains("chainBoneNames") && chainJ["chainBoneNames"].is_array())
-                {
-                    for (const auto& b : chainJ["chainBoneNames"])
-                        if (b.is_string()) chain.chainBoneNames.push_back(b.get<std::string>());
-                }
-                if (chainJ.contains("constraints") && chainJ["constraints"].is_array())
-                {
-                    for (const auto& cJ : chainJ["constraints"])
-                        chain.constraints.push_back(parseConstraint(cJ));
-                }
-                out.push_back(std::move(chain));
-            }
-        }
-
-        PrefabEntityNode parseEntityFromJson(const json& entityJson, ComponentStats& stats)
-        {
-            PrefabEntityNode node;
-            stats.totalEntities++;
-
-            node.name = entityJson.value("name", "Entity");
-
-            if (entityJson.contains("transform"))
-            {
-                const auto& t = entityJson["transform"];
-                if (t.contains("position")) node.position = parseVec3(t["position"], 0, 0, 0);
-                if (t.contains("rotation")) node.rotation = parseVec3(t["rotation"], 0, 0, 0);
-                if (t.contains("scale"))    node.scale = parseVec3(t["scale"], 1, 1, 1);
-            }
-
-            if (entityJson.contains("components"))
-            {
-                const auto& c = entityJson["components"];
-
-                static const std::vector<std::pair<std::string, std::string>> componentMap = {
-                    {"camera", "Camera"}, {"ibl", "IBL"}, {"mesh", "Mesh"}, {"material", "Material"},
-                    {"billboard", "Billboard"}, {"audioSource2D", "AudioSource2D"},
-                    {"audioSource3D", "AudioSource3D"}, {"collider", "Collider"}, {"rigidBody", "RigidBody"},
-                    {"script", "Script"}, {"navmeshAgent", "NavmeshAgent"}, {"navmeshObstacle", "NavmeshObstacle"},
-                    {"vfx", "VFX"}, {"socketAttachment", "SocketAttachment"}, {"socketOverride", "SocketOverride"},
-                    {"directionalLight", "DirectionalLight"}, {"pointLight", "PointLight"},
-                    {"spotLight", "SpotLight"}, {"controller", "Controller"}, {"behaviorTree", "BehaviorTree"},
-                    {"prefabInstance", "PrefabInstance"}, {"ikTarget", "IKTarget"}
-                };
-                for (const auto& [key, displayName] : componentMap)
-                {
-                    if (c.contains(key))
-                    {
-                        node.componentTypes.push_back(displayName);
-                        stats.counts[displayName]++;
-                    }
-                }
-
-                // MeshComponent: writeAssetRef stores meshRef / meshRefPath (+ animatorRef[Path],
-                // retargetRef[Path]). The standalone parse reads the resolved-path variant.
-                if (c.contains("mesh"))
-                {
-                    node.meshPath = readRefPath(c["mesh"], "meshRef");
-                    node.animatorPath = readRefPath(c["mesh"], "animatorRef");
-                    node.retargetPath = readRefPath(c["mesh"], "retargetRef");
-                }
-
-                // MaterialComponent: defaultMaterialRef[Path] + per-submesh subMeshMaterials[name].ref[Path].
-                if (c.contains("material"))
-                {
-                    const auto& m = c["material"];
-                    node.defaultMaterialPath = readRefPath(m, "defaultMaterialRef");
-                    if (auto it = m.find("subMeshMaterials"); it != m.end() && it->is_object())
-                    {
-                        for (auto& [submeshName, value] : it->items())
-                        {
-                            if (value.is_object())
-                            {
-                                std::string p = readRefPath(value, "ref");
-                                if (!p.empty()) node.subMeshMaterials[submeshName] = p;
-                            }
-                            else if (value.is_string())
-                            {
-                                std::string val = value.get<std::string>();
-                                const bool looksLikePath = val.find('.') != std::string::npos ||
-                                                           val.find('/') != std::string::npos ||
-                                                           val.find('\\') != std::string::npos;
-                                if (looksLikePath) node.subMeshMaterials[submeshName] = val;
-                            }
-                        }
-                    }
-                }
-
-                // AudioSourceComponent: audioRef[Path] (was wrongly read as audioSource2D.filePath).
-                if (c.contains("audioSource2D"))
-                    node.audioPath = readRefPath(c["audioSource2D"], "audioRef");
-                else if (c.contains("audioSource3D"))
-                    node.audioPath = readRefPath(c["audioSource3D"], "audioRef");
-
-                // SocketAttachmentComponent: parentEntityName / socketName / isActive.
-                if (c.contains("socketAttachment"))
-                {
-                    const auto& s = c["socketAttachment"];
-                    node.hasSocketAttachment = true;
-                    node.attachParentEntityName = s.value("parentEntityName", "");
-                    node.attachSocketName = s.value("socketName", "");
-                }
-
-                // IKTargetComponent chains.
-                if (c.contains("ikTarget"))
-                {
-                    parseIKChains(c["ikTarget"], node.ikChains);
-                }
-            }
-
-            if (entityJson.contains("children") && entityJson["children"].is_array())
-            {
-                for (const auto& childJson : entityJson["children"])
-                {
-                    if (childJson.is_object())
-                        node.children.push_back(parseEntityFromJson(childJson, stats));
-                }
-            }
-
-            return node;
-        }
     } // anonymous namespace
 
-    // The prefab-tree -> PrefabRigDescDTO conversion (buildPrefabRigDescDTO) lives header-only in
-    // PrefabRigDescBuilder.hpp so the Tests project can exercise it without linking the Editor.
+    // VK-1433 Phase 4 — the rig description is now re-derived from the live sandbox subtree via
+    // buildPrefabRigDescFromEntity (PrefabRigLiveDescBuilder.hpp), not parsed from the prefab JSON.
+    // The JSON-tree builder (buildPrefabRigDescDTO) is retained header-only for the Tests parity
+    // suite, but the window no longer parses the prefab itself.
 
     std::unordered_map<std::uintptr_t, PrefabPreviewWindow*>& PrefabPreviewWindow::liveWindows()
     {
@@ -244,11 +67,9 @@ namespace windows
     void PrefabPreviewWindow::applyMirrorSnapshot(const prefabrigedit::PrefabRigEditSnapshot& snap)
     {
         // Restore only the mirror fields the snapshot engaged. The controller was already updated by
-        // applyPrefabRigSnapshot (CQRS) BEFORE this runs; this keeps the window's panels + gizmo base
-        // anchor in sync.
-        if (snap.previewTransforms.has_value())
-            previewTransforms = *snap.previewTransforms;
-
+        // applyPrefabRigSnapshot (CQRS) BEFORE this runs; this keeps the window's panels in sync.
+        // (VK-1433 Phase 4c: the previewTransforms mirror is retired — the part Transform gizmo now
+        // edits the source ENTITY directly, so snap.previewTransforms is never engaged here.)
         if (snap.chains.has_value())
             editChains = *snap.chains;
 
@@ -309,32 +130,31 @@ namespace windows
         // rather than a half-destroyed object.
         liveWindows().erase(getInstanceId().raw());
 
-        loadingCancelled.store(true);
-        if (loadFuture.valid())
-        {
-            loadFuture.wait();
-        }
-        cleanUpPreviewRenderer();
+        // VK-1433 Phase 4 — intentionally NOT calling closeSandbox() here. In-session teardown is
+        // explicit: the title-bar X flips isOpen, and draw()'s !isOpen branch runs closeSandbox()
+        // (DeleteEntity + renderer cleanup) while the engine still lives. The dtor can run during
+        // editor shutdown after the scene registry / EventDispatcher are gone, so dispatching
+        // DeleteEntity / CleanUp then would be unsafe; the sandbox entity dies with the registry and
+        // the preview controller is owned (and cleared) by the Core adapter. Mirrors the
+        // UILayerBuilderWindow dtor note.
     }
 
     void PrefabPreviewWindow::draw()
     {
         if (!isOpen)
         {
-            if (!previewCleanedUp)
-            {
-                cleanUpPreviewRenderer();
-            }
+            // VK-1433 Phase 4 — explicit in-session teardown: delete the sandbox subtree and tear
+            // down the renderer while the engine is still alive. Guarded idempotent (closeSandbox
+            // no-ops once the renderer is cleaned and the sandbox is gone).
+            closeSandbox();
             return;
         }
 
         if (needsInit)
         {
-            startAsyncLoad();
+            openSandbox();
             needsInit = false;
         }
-
-        updateAsyncLoading();
 
         float currentTime = static_cast<float>(ImGui::GetTime());
         float deltaTime = lastFrameTime > 0.0f ? (currentTime - lastFrameTime) : 0.0f;
@@ -353,6 +173,25 @@ namespace windows
             {
                 maximizer.drawButton();
 
+                // VK-1433 Phase 4c — Save / Save As + unsaved badge. Saving persists the whole live
+                // sandbox edit (hierarchy + transforms + refs) back to the .vfPrefab.
+                if (prefabSaveTimer > 0.0f) prefabSaveTimer -= ImGui::GetIO().DeltaTime;
+                ImGui::SameLine();
+                if (ImGui::Button("Save")) savePrefab(false);
+                ImGui::SameLine();
+                if (ImGui::Button("Save As...")) savePrefab(true);
+                if (dirty)
+                {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "(unsaved)");
+                }
+                if (prefabSaveTimer > 0.0f)
+                {
+                    ImGui::SameLine();
+                    ImGui::TextColored(prefabSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
+                                       prefabSaveSuccess ? "Saved" : "Failed");
+                }
+
                 static float leftWidth = 160.0f;
                 static float rightWidth = 280.0f;
                 const float splitterThickness = 5.0f;
@@ -365,14 +204,7 @@ namespace windows
                 ImGui::BeginChild("InfoPanel", ImVec2(leftWidth, contentSize.y), true);
                 drawInfoPanel();
                 ImGui::Separator();
-                if (loadingInProgress.load())
-                {
-                    drawLoadingIndicator();
-                }
-                else
-                {
-                    drawEntityTreePanel();
-                }
+                drawEntityTreePanel();
                 ImGui::EndChild();
 
                 ImGui::SameLine(0.0f, 0.0f);
@@ -391,123 +223,185 @@ namespace windows
                                            &rightWidth, 300.0f, 220.0f, contentSize.y);
                 ImGui::SameLine(0.0f, 0.0f);
 
-                // --- Right: authoring ---
+                // --- Right: authoring + embedded entity inspector ---
                 ImGui::BeginChild("AuthoringPanel", ImVec2(rightWidth, contentSize.y), true);
                 drawAuthoringPanel();
+                ImGui::Separator();
+                // VK-1433 Phase 4b — full embedded component inspector for the selected sandbox
+                // entity (O1). Drawn after the rig authoring tabs so a component add/remove here
+                // doesn't fold into the tab edit state.
+                if (ImGui::CollapsingHeader("Entity Inspector", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    drawEntityInspector();
+                }
                 ImGui::EndChild();
             }
         }
         ImGui::End();
 
-        if (!isOpen && !sizeSaved)
+        // VK-1433 Phase 4b — detect a structural component change made through the embedded inspector
+        // (Add/Remove) — or any create/delete that didn't already rebuild — by diffing the sandbox
+        // structure signature against last frame's. A change re-derives the rig. (Mutations issued by
+        // the tree itself already call rebuildRigFromSandbox(), so this only fires for the inspector's
+        // add/remove, which dispatch their own commands.)
+        if (isOpen && sandboxRoot.isValid())
         {
-            editor::preview::rememberWindowSize("PrefabPreview", maximizer.effectiveSize());
-            sizeSaved = true;
+            std::vector<uint64_t> sig = sandboxStructureSignature();
+            if (sig != lastStructureSignature)
+            {
+                const bool firstFrame = lastStructureSignature.empty();
+                lastStructureSignature = std::move(sig);
+                if (!firstFrame)
+                {
+                    dirty = true;
+                    rebuildRigFromSandbox();
+                }
+            }
+        }
+
+        // VK-1433 Phase 4 — the title-bar X flips isOpen=false DURING this Begin/End, and
+        // ImguiWindowHandler::draw() erases shouldClose() windows the SAME frame (so a follow-up
+        // draw() with the !isOpen branch never runs). Tear the sandbox down HERE, this frame, while
+        // the engine is still alive — closeSandbox() is idempotent and ImguiWindowHandler waitIdle's
+        // before the erase, so the CQRS DeleteEntity + renderer cleanup are safe.
+        if (!isOpen)
+        {
+            closeSandbox();
+            if (!sizeSaved)
+            {
+                editor::preview::rememberWindowSize("PrefabPreview", maximizer.effectiveSize());
+                sizeSaved = true;
+            }
         }
     }
 
     // ----------------------------------------------------------------------
-    // Async load
+    // VK-1433 Phase 4 — sandbox lifecycle (replaces the JSON-parse spine)
     // ----------------------------------------------------------------------
-    void PrefabPreviewWindow::startAsyncLoad()
+    namespace
     {
-        loadingInProgress.store(true);
-        loadingCancelled.store(false);
-        loadingStatus = "Loading prefab...";
-
-        loadFuture = std::async(std::launch::async, [this]()
+        // Count the entities in a (visible) sandbox subtree for the info panel, pruning hidden
+        // nodes the same way the live builder does. CQRS-only (entt-free), cheap (only on rebuild).
+        uint32_t countSandboxEntities(services::EntityHandle entity,
+                                      const std::unordered_set<uint64_t>& hidden)
         {
-            return loadPrefabBackground(prefabPath);
-        });
-    }
-
-    void PrefabPreviewWindow::updateAsyncLoading()
-    {
-        if (!loadingInProgress.load() || !loadFuture.valid())
-        {
-            return;
-        }
-
-        if (loadFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
-        {
-            PrefabLoadResult result = loadFuture.get();
-
-            if (result.success)
-            {
-                prefabName = std::move(result.prefabName);
-                prefabVersion = std::move(result.version);
-                rootEntity = std::move(result.rootEntity);
-                componentStats = std::move(result.stats);
-                prefabLoaded = true;
-
-                rigDesc = buildPrefabRigDescDTO(rootEntity);
-                revalidateRefs();
-
-                // Lazily init the renderer, then build from the description.
-                initPreviewRenderer();
-                buildPreviewFromDesc();
-            }
-            else
-            {
-                errorMessage = std::move(result.errorMessage);
-                loadFailed = true;
-            }
-
-            loadingInProgress.store(false);
+            if (!entity.isValid() || hidden.count(entity.id) > 0) return 0;
+            events::scene::GetEntityQuery q;
+            q.entity = entity;
+            auto data = events::EventDispatcher::instance().query(q);
+            if (!data.has_value()) return 0;
+            uint32_t n = 1;
+            for (const services::EntityHandle& child : data->children)
+                n += countSandboxEntities(child, hidden);
+            return n;
         }
     }
 
-    PrefabLoadResult PrefabPreviewWindow::loadPrefabBackground(const std::string& path)
+    void PrefabPreviewWindow::readPrefabHeader()
     {
-        PrefabLoadResult result;
-
+        // Only the prefab's display name / version come from the JSON header now; the entity
+        // hierarchy is the LoadPrefab'd sandbox subtree. A missing header is non-fatal.
+        prefabName = "Unnamed";
+        prefabVersion = "unknown";
         try
         {
-            if (loadingCancelled.load())
-            {
-                result.errorMessage = "Cancelled";
-                return result;
-            }
-
-            std::ifstream file(path);
-            if (!file.is_open())
-            {
-                result.errorMessage = "Failed to open file";
-                return result;
-            }
-
+            std::ifstream file(prefabPath);
+            if (!file.is_open()) return;
             json prefabJson = json::parse(file);
-            file.close();
-
-            if (loadingCancelled.load())
-            {
-                result.errorMessage = "Cancelled";
-                return result;
-            }
-
-            if (!prefabJson.contains("prefab") || !prefabJson["prefab"].contains("entity"))
-            {
-                result.errorMessage = "Invalid prefab format";
-                return result;
-            }
-
-            result.version = prefabJson.value("version", "unknown");
-            result.prefabName = prefabJson["prefab"].value("name", "Unnamed");
-            result.rootEntity = parseEntityFromJson(prefabJson["prefab"]["entity"], result.stats);
-            result.success = true;
-        }
-        catch (const json::parse_error& e)
-        {
-            result.errorMessage = std::string("JSON parse error: ") + e.what();
-            vfLogError("Prefab preview JSON parse error: {}", e.what());
+            prefabVersion = prefabJson.value("version", "unknown");
+            if (auto it = prefabJson.find("prefab"); it != prefabJson.end() && it->is_object())
+                prefabName = it->value("name", "Unnamed");
         }
         catch (const std::exception& e)
         {
-            result.errorMessage = e.what();
-            vfLogError("Prefab preview error: {}", e.what());
+            vfLogWarning("Prefab preview header read failed for '{}': {}", prefabPath, e.what());
         }
+    }
 
-        return result;
+    void PrefabPreviewWindow::openSandbox()
+    {
+        readPrefabHeader();
+        initPreviewRenderer();
+
+        // LoadPrefab into an isolated sandbox subtree (parent = scene root), then tag it so it is
+        // excluded from the main passes + the scene serializer (mirrors UILayerBuilderWindow).
+        events::scene::LoadPrefabCommand loadCmd;
+        loadCmd.filePath = prefabPath;
+        loadCmd.parent = std::nullopt;
+        auto loaded = events::EventDispatcher::instance().execute(loadCmd);
+        if (!loaded.has_value() || !loaded->isValid())
+        {
+            errorMessage = "Failed to load prefab";
+            loadFailed = true;
+            return;
+        }
+        sandboxRoot = *loaded;
+
+        events::scene::MarkPreviewSandboxCommand markCmd;
+        markCmd.entity = sandboxRoot;
+        markCmd.tagged = true;
+        events::EventDispatcher::instance().execute(markCmd);
+
+        prefabLoaded = true;
+        rebuildRigFromSandbox();
+
+        // Initial selection: the first mesh part if there is one (so the authoring panels are
+        // immediately usable), otherwise the sandbox root.
+        if (!partEntities.empty())
+            selectPart(0);
+        else
+            selectEntity(sandboxRoot);
+    }
+
+    void PrefabPreviewWindow::closeSandbox()
+    {
+        cleanUpPreviewRenderer();
+
+        if (sandboxRoot.isValid())
+        {
+            // Destroy the whole tagged sandbox subtree. No untag needed — it's gone.
+            events::scene::DeleteEntityCommand del;
+            del.entity = sandboxRoot;
+            events::EventDispatcher::instance().execute(del);
+            sandboxRoot = services::EntityHandle::invalid();
+        }
+        partEntities.clear();
+        hiddenEntities.clear();
+        renamingEntity = services::EntityHandle::invalid();
+        renameFocusPending = false;
+        lastStructureSignature.clear();
+    }
+
+    void PrefabPreviewWindow::rebuildRigFromSandbox()
+    {
+        // Re-derive the rig description (and the parallel source entities) from the live sandbox
+        // subtree, then rebuild the preview. Called on open and after every structural edit.
+        LiveRigBuildResult built = buildPrefabRigDescFromEntity(sandboxRoot, hiddenEntities);
+        rigDesc = std::move(built.desc);
+        partEntities = std::move(built.partEntities);
+        sandboxEntityCount = countSandboxEntities(sandboxRoot, hiddenEntities);
+
+        revalidateRefs();
+        buildPreviewFromDesc();
+
+        // The assembly was rebuilt from the fresh desc.ik, so the IK panel must re-pull its chain
+        // copies on next draw (it caches them once via chainsLoaded).
+        chainsLoaded = false;
+
+        // VK-1433 Phase 4b — a structural edit (reparent/reorder/create/delete/hide) can shuffle the
+        // DFS-pre-order part indices, so re-map the selected part FROM the live selection (which is an
+        // entity, stable across the rebuild). If the selection is no longer a part (or was deleted),
+        // fall back to re-clamping into range. selectPart() re-pulls the part's sockets.
+        const int mapped = partForEntity(selectedEntity());
+        if (mapped >= 0)
+        {
+            selectedPart = mapped;
+            pullEditSocketsForPart(selectedPart);
+        }
+        else if (selectedPart >= static_cast<int>(rigDesc.parts.size()))
+        {
+            selectedPart = rigDesc.parts.empty() ? -1 : static_cast<int>(rigDesc.parts.size()) - 1;
+        }
     }
 
     // ----------------------------------------------------------------------
@@ -526,10 +420,6 @@ namespace windows
     void PrefabPreviewWindow::buildPreviewFromDesc()
     {
         if (!previewInitialized || rigDesc.parts.empty()) return;
-
-        // A rebuild reconstructs the assembly's parts (preview transforms reset to identity there),
-        // so drop the window's mirror copy too — the gizmo must not re-apply a stale transform.
-        previewTransforms.clear();
 
         services::events::prefabrigpreview::BuildPrefabRigPreviewCommand cmd;
         cmd.instanceId = getInstanceId();
@@ -571,107 +461,51 @@ namespace windows
 
     void PrefabPreviewWindow::applyAssetDropToPart(int part, const std::string& assetPath)
     {
-        if (part < 0 || part >= static_cast<int>(rigDesc.parts.size())) return;
+        if (part < 0 || part >= static_cast<int>(partEntities.size())) return;
+        const services::EntityHandle entity = partEntities[part];
+        if (!entity.isValid()) return;
 
         std::string ext = std::filesystem::path(assetPath).extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-        services::PrefabRigPartDTO& p = rigDesc.parts[part];
-        if (ext == ".vfmesh")
-            p.meshPath = assetPath;
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // VK-1433 Phase 4c — the part's SOURCE ENTITY is the source of truth (SavePrefab persists it),
+        // so a drag-swap dispatches the persistent component command rather than mutating rigDesc.
+        // .vfMesh / .vfAnim resolve onto the existing MeshData (preserving the other ref); .vfMaterial
+        // re-points the default material. The rebuild re-derives the rig from the mutated entity.
+        if (ext == ".vfmesh" || ext == ".vfanim")
+        {
+            // Read the current MeshData so we keep the unchanged ref (a .vfMesh drop preserves the
+            // animator, a .vfAnim drop preserves the mesh + makes a static part skeletal).
+            events::scene::GetMeshDataQuery mq;
+            mq.entity = entity;
+            services::MeshData meshData = dispatcher.query(mq).value_or(services::MeshData{});
+
+            const asset::AssetRef ref = asset::AssetRef::fromPath(assetPath);
+            if (ext == ".vfmesh") meshData.meshRef = ref;
+            else                  meshData.animatorRef = ref;
+
+            events::scene::SetMeshDataCommand cmd;
+            cmd.entity = entity;
+            cmd.meshData = meshData;
+            dispatcher.execute(cmd);
+        }
         else if (ext == ".vfmaterial")
-            p.defaultMaterialPath = assetPath;
-        else if (ext == ".vfanim")
-            p.animatorPath = assetPath; // makes a static part skeletal / re-points the animator
+        {
+            // SetDefaultMaterialCommand takes a path directly (resolves + assigns the default slot).
+            events::material::SetDefaultMaterialCommand cmd;
+            cmd.entity = entity;
+            cmd.materialPath = assetPath;
+            dispatcher.execute(cmd);
+        }
         else
+        {
             return; // unknown extension — leave untouched
-
-        hasUnsavedRefSwap = true;
-        swappedParts.insert(part);
-
-        // Transient swap: the whole desc round-trips on rebuild (zero new CQRS). Revalidate so a
-        // freshly-dropped (and possibly missing) ref updates the badges, then rebuild the preview.
-        revalidateRefs();
-        buildPreviewFromDesc();
-
-        // The selected part's sockets came from the OLD mesh; re-pull from the rebuilt assembly so
-        // the socket panels reflect the swapped part.
-        pullEditSocketsForPart(part);
-        chainsLoaded = false; // re-pull chains lazily on next IK-panel draw
-    }
-
-    void PrefabPreviewWindow::saveRefSwapsToPrefab()
-    {
-        refSaveTimer = kSaveFeedbackSeconds;
-        refSaveSuccess = false;
-        if (swappedParts.empty()) return;
-
-        // Build the ref edits from the live (swapped) rigDesc for the parts the user actually
-        // changed. Only non-empty fields are rewritten by the writer.
-        std::vector<prefabref::PartRefEdit> edits;
-        for (int part : swappedParts)
-        {
-            if (part < 0 || part >= static_cast<int>(rigDesc.parts.size())) continue;
-            const services::PrefabRigPartDTO& p = rigDesc.parts[part];
-            prefabref::PartRefEdit e;
-            e.part = part;
-            e.meshPath = p.meshPath;
-            e.animatorPath = p.animatorPath;
-            e.defaultMaterialPath = p.defaultMaterialPath;
-            edits.push_back(std::move(e));
         }
 
-        json prefabJson;
-        try
-        {
-            std::ifstream in(prefabPath);
-            if (!in.is_open())
-            {
-                vfLogError("Save Refs: cannot open '{}'", prefabPath);
-                return;
-            }
-            prefabJson = json::parse(in);
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Save Refs: parse error in '{}': {}", prefabPath, e.what());
-            return;
-        }
-
-        // Inject the real path -> GUID resolver (AssetDatabase-backed; editor links AssetDB). If the
-        // DB cannot resolve a path the writer writes the new path into BOTH ref keys, so the loader's
-        // path-shaped fallback resolves the new asset (never the stale GUID).
-        const int applied = prefabref::applyRefEdits(prefabJson, edits, [](const std::string& path)
-        {
-            auto ref = asset::AssetRef::fromPath(path);
-            return ref.isValid() ? ref.toHexString() : std::string();
-        });
-
-        try
-        {
-            std::ofstream out(prefabPath, std::ios::trunc);
-            if (!out.is_open())
-            {
-                vfLogError("Save Refs: cannot write '{}'", prefabPath);
-                return;
-            }
-            out << prefabJson.dump(2);
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Save Refs: write error in '{}': {}", prefabPath, e.what());
-            return;
-        }
-
-        refSaveSuccess = true;
-        hasUnsavedRefSwap = false;
-        swappedParts.clear();
-
-        events::resource::AssetSavedNotification notif;
-        notif.filePath = prefabPath;
-        events::EventDispatcher::instance().publish(notif);
-
-        vfLogInfo("Save Refs: persisted {} swapped part ref(s) to '{}'", applied, prefabPath);
+        dirty = true;
+        rebuildRigFromSandbox();
     }
 
     // ----------------------------------------------------------------------
@@ -699,13 +533,6 @@ namespace windows
         prefabrigedit::PrefabRigEditSnapshot snap;
         snap.chains = editChains;
         snap.ikBindings = snapshotIKBindings(); // carry the transient target bindings too
-        return snap;
-    }
-
-    prefabrigedit::PrefabRigEditSnapshot PrefabPreviewWindow::snapshotTransforms() const
-    {
-        prefabrigedit::PrefabRigEditSnapshot snap;
-        snap.previewTransforms = previewTransforms;
         return snap;
     }
 
@@ -769,26 +596,45 @@ namespace windows
         events::EventDispatcher::instance().execute(push);
     }
 
-    void PrefabPreviewWindow::pushTransformUndo(prefabrigedit::PrefabRigEditSnapshot before)
+    // ----------------------------------------------------------------------
+    // VK-1433 Phase 4c — prefab save
+    // ----------------------------------------------------------------------
+    void PrefabPreviewWindow::savePrefab(bool saveAs)
     {
-        prefabrigedit::PrefabRigEditSnapshot after = snapshotTransforms();
-        if (before.previewTransforms == after.previewTransforms)
-            return;
+        if (!sandboxRoot.isValid()) return;
 
-        const services::PreviewInstanceId id = getInstanceId();
-        // Capture ONLY the id (value). applyPrefabRigSnapshot restores the controller; resyncMirror
-        // restores the window's previewTransforms mirror (no-op if the window has been closed) so the
-        // gizmo base anchor stays consistent.
-        auto cmd = std::make_shared<prefabrigedit::PrefabRigEditUndoCommand>(
-            id, std::move(before), std::move(after), "Edit part transform",
-            [id](const prefabrigedit::PrefabRigEditSnapshot& snap)
-            {
-                PrefabPreviewWindow::resyncMirror(id, snap);
-            });
+        std::string path = prefabPath;
+        if (saveAs || path.empty())
+        {
+            path = fileDialog.saveFileDialog({{L"VF Prefab (*.vfPrefab)", L"*.vfPrefab"}}, L"vfPrefab");
+            if (path.empty()) return; // user cancelled
+        }
 
-        events::undoredo::PushUndoableCommand push;
-        push.command = std::make_shared<services::SharedUndoCommand>(std::move(cmd));
-        events::EventDispatcher::instance().execute(push);
+        prefabSaveTimer = kSaveFeedbackSeconds;
+
+        // Save the whole tagged sandbox subtree. PrefabSerialization strips PreviewSandboxTagComponent
+        // and normalizes the root's isActive back to true, so the .vfPrefab round-trips in its real
+        // (active, untagged) form. Mirrors UILayerBuilderWindow::saveLayer.
+        events::scene::SavePrefabCommand cmd;
+        cmd.entity = sandboxRoot;
+        cmd.filePath = path;
+        prefabSaveSuccess = events::EventDispatcher::instance().execute(cmd);
+
+        if (prefabSaveSuccess)
+        {
+            prefabPath = path;
+            dirty = false;
+
+            events::resource::AssetSavedNotification notif;
+            notif.filePath = path;
+            events::EventDispatcher::instance().publish(notif);
+
+            vfLogInfo("Prefab preview: saved sandbox to '{}'", path);
+        }
+        else
+        {
+            vfLogError("Prefab preview: SavePrefab failed for '{}'", path);
+        }
     }
 
     // ----------------------------------------------------------------------
@@ -902,6 +748,15 @@ namespace windows
             envParams.showSkeleton = environment.showSkeleton;
             envParams.showSockets = environment.showSockets;
             envParams.showIKTargets = environment.showIKTargets;
+
+            // VK-1433 Phase 1c — highlight the selected socket only while a socket tab is active (so
+            // the selection is meaningful); otherwise leave -1/-1 (no highlight). Mirrors the
+            // window's live selection into the overlay; the controller's socket loop draws a halo.
+            const bool socketTabActive =
+                gizmoMode == GizmoMode::BoneSocket || gizmoMode == GizmoMode::StaticSocket;
+            envParams.highlightedSocketPart = socketTabActive ? selectedPart : -1;
+            envParams.highlightedSocketIndex = socketTabActive ? selectedSocketIndex : -1;
+
             envParams.shadingMode = environment.shadingMode;
             envParams.lightAzimuth = environment.lightAzimuth;
             envParams.lightElevation = environment.lightElevation;
@@ -929,7 +784,27 @@ namespace windows
         if (textureHandle.imguiDescriptorSet)
         {
             ImGui::Image(textureHandle.imguiDescriptorSet, ImVec2(width, height));
+
+            // The rendered Image's screen rect is the gizmo/pick viewport (== ImGuizmo::SetRect args).
+            const ImVec2 imgMin = ImGui::GetItemRectMin();
+            const ImVec2 imgSz = ImGui::GetItemRectSize();
+            const bool imageHovered = ImGui::IsItemHovered();
+
             drawGizmos();
+
+            // An armed pick belongs to the Bone Socket tab's "Click a joint..." affordance; disarm
+            // if the user has moved to another tab (mirrors the disarm-on-part-switch) so a stale
+            // armed pick can't fire from a tab where that affordance isn't shown.
+            if (gizmoMode != GizmoMode::BoneSocket)
+                bonePickArmed = false;
+
+            // VK-1433 Phase 1b — bone pick. After drawGizmos() so ImGuizmo::IsUsing() is current; a
+            // click that the gizmo consumed must not also create a socket.
+            if (bonePickArmed && imageHovered && !ImGuizmo::IsUsing() &&
+                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                tryBonePick(imgMin, imgSz);
+            }
         }
         else
         {
@@ -962,18 +837,14 @@ namespace windows
         }
     }
 
-    glm::mat4 PrefabPreviewWindow::currentPartPreviewTransform(int part) const
-    {
-        auto it = previewTransforms.find(part);
-        return (it != previewTransforms.end()) ? it->second : glm::mat4(1.0f);
-    }
-
     void PrefabPreviewWindow::drawTransformGizmo()
     {
-        // VK-1433 — TRS gizmo on the selected part's EDITOR-TRANSIENT preview transform. Root part
-        // -> moves the whole rig; child part -> moves that part (descendants follow because the
-        // assembly composes each child off its parent's partWorld). Never serialized.
-        if (selectedPart < 0) return;
+        // VK-1433 Phase 4c — TRS gizmo on the selected part's SOURCE ENTITY transform (Q5). Dragging
+        // the gizmo edits the entity's OWN local transform (SetTransformCommand), so the change is
+        // persisted by Save Prefab. Root part -> moves the whole rig; a socket-attached child's
+        // translation is dropped at instantiation (the Transform panel warns about this), but
+        // rotation/scale carry — consistent with attachChildRotation/attachChildScale.
+        if (selectedPart < 0 || selectedPart >= static_cast<int>(partEntities.size())) return;
 
         ImVec2 imgMin = ImGui::GetItemRectMin();
         ImVec2 imgSz = ImGui::GetItemRectSize();
@@ -988,46 +859,38 @@ namespace windows
         glm::mat4 proj = camera->getProjectionMatrix();
         proj[1][1] *= -1.0f;
 
-        // The assembly composes partWorld = base * previewTransform, where `base` is the turntable/
-        // attachment-chain world (independent of the preview transform). Anchor the gizmo at the
-        // LIVE partWorld (which already includes the current preview), and recover `base` from our
-        // window-authoritative preview copy:  base = liveWorld * inverse(currentPreview).
-        // The identity liveWorld == base * currentPreview holds every frame (the assembly enforces
-        // it), so recomputing base each frame is self-consistent even mid-drag.
+        // The assembly composes the live partWorld from the part's parent chain folded together with
+        // the part's OWN local transform. Treat that own-local matrix as the editable factor: recover
+        // its containing frame `base = liveWorld * inverse(compose(ownLocal))`, then a manipulated
+        // world maps back to the new own-local via `inverse(base) * newWorld`. This is the same
+        // base/inverse(base) pattern the old preview gizmo used, but the editable factor is now the
+        // persisted entity transform rather than the retired transient preview offset.
+        const services::TransformData ownLocal = partSourceLocalTransform(selectedPart);
+        const glm::mat4 ownLocalMat = math::composeMatrix(ownLocal.position, ownLocal.rotation, ownLocal.scale);
         const glm::mat4 liveWorld = partWorldLive(selectedPart);
-        const glm::mat4 currentPreview = currentPartPreviewTransform(selectedPart);
-        const glm::mat4 base = liveWorld * glm::inverse(currentPreview);
+        const glm::mat4 base = liveWorld * glm::inverse(ownLocalMat);
 
         glm::mat4 objectMatrix = liveWorld;
-
-        // Undo bracket: snapshot the whole previewTransforms map on the IsUsing() rising edge
-        // (drag start), push one coalesced entry on release. Anchoring on the drag boundaries (not
-        // per-Manipulate-frame) makes a full drag undo to its pre-drag state in one Ctrl+Z.
-        const bool usingGizmo = ImGuizmo::IsUsing();
-        if (usingGizmo && !gizmoEditActive)
-        {
-            gizmoEditActive = true;
-            gizmoEditBefore = snapshotTransforms();
-        }
 
         if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
                                  transformGizmoOp, ImGuizmo::WORLD, glm::value_ptr(objectMatrix)))
         {
-            // newWorld = base * newPreview  =>  newPreview = inverse(base) * newWorld.
-            const glm::mat4 newPreview = glm::inverse(base) * objectMatrix;
-            previewTransforms[selectedPart] = newPreview;
+            // newWorld = base * newOwnLocal  =>  newOwnLocal = inverse(base) * newWorld.
+            const glm::mat4 newOwnLocal = glm::inverse(base) * objectMatrix;
+            const math::DecomposedTransform d = math::decomposeMatrix(newOwnLocal);
 
-            services::events::prefabrigpreview::SetPrefabRigPartPreviewTransformCommand cmd;
-            cmd.instanceId = getInstanceId();
-            cmd.part = static_cast<size_t>(selectedPart);
-            cmd.transform = newPreview;
+            services::TransformData t;
+            t.position = d.position;
+            t.rotation = d.rotation; // Euler XYZ degrees == TransformComponent schema
+            t.scale = d.scale;
+
+            events::scene::SetTransformCommand cmd;
+            cmd.entity = partEntities[selectedPart];
+            cmd.transform = t;
             events::EventDispatcher::instance().execute(cmd);
-        }
 
-        if (!usingGizmo && gizmoEditActive)
-        {
-            gizmoEditActive = false;
-            pushTransformUndo(std::move(gizmoEditBefore));
+            dirty = true;
+            rebuildRigFromSandbox(); // re-derive the rig so the preview tracks the entity edit
         }
     }
 
@@ -1085,6 +948,68 @@ namespace windows
         }
     }
 
+    void PrefabPreviewWindow::tryBonePick(const ImVec2& viewportMin, const ImVec2& viewportSize)
+    {
+        // Guard: only meaningful for a skeletal part with the skeleton overlay visible (the joints the
+        // user is clicking are the overlay's markers). The caller already gated on the arm flag + a
+        // non-gizmo click inside the Image.
+        if (selectedPart < 0 || !partIsSkeletal(selectedPart) || !environment.showSkeleton)
+            return;
+
+        // World-space joints for the part (queried across the preview boundary; entt-free).
+        services::events::prefabrigpreview::GetPrefabRigJointWorldsQuery jq;
+        jq.instanceId = getInstanceId();
+        jq.part = static_cast<size_t>(selectedPart);
+        const std::vector<services::PrefabRigJoint> joints =
+            events::EventDispatcher::instance().query(jq);
+        if (joints.empty())
+            return;
+
+        std::vector<glm::vec3> jointWorlds;
+        jointWorlds.reserve(joints.size());
+        for (const services::PrefabRigJoint& j : joints)
+            jointWorlds.push_back(j.world);
+
+        // Same camera matrices the gizmo path uses (the helper applies the Vulkan-Y flip itself).
+        const glm::mat4 view = camera->getViewMatrix();
+        const glm::mat4 proj = camera->getProjectionMatrix();
+
+        const ImVec2 mouse = ImGui::GetMousePos();
+        constexpr float kPickPixelThreshold = 18.0f; // generous click radius around a joint marker
+        const prefabrigpick::JointPickResult pick = prefabrigpick::nearestJointToScreenPoint(
+            jointWorlds, view, proj,
+            glm::vec2(viewportMin.x, viewportMin.y), glm::vec2(viewportSize.x, viewportSize.y),
+            glm::vec2(mouse.x, mouse.y), kPickPixelThreshold);
+        if (!pick.hit())
+            return; // clicked empty space — no-op
+
+        const services::PrefabRigJoint& hitJoint = joints[static_cast<size_t>(pick.index)];
+
+        // Phase-2 undo bracket: adding a socket is a STRUCTURAL edit, so snapshot the sockets before
+        // the add and push one coalesced entry after (mirrors pushSocketUndo's before/after contract).
+        prefabrigedit::PrefabRigEditSnapshot before = snapshotSockets();
+
+        // Prefill the new bone socket: ride the picked bone, identity local offset (the user fine-tunes
+        // it with the existing gizmo/fields). De-dup the default name against the live sockets.
+        animator::SocketDefinition s;
+        s.targetBoneName = hitJoint.boneName;
+        s.boneIndex = hitJoint.boneIndex;
+        const std::string baseName =
+            (hitJoint.boneName.empty() ? std::string("bone") : hitJoint.boneName) + "_socket";
+        std::string candidate = baseName;
+        for (int suffix = 2; animator::indexOfSocket(editSockets, candidate) >= 0; ++suffix)
+            candidate = baseName + "_" + std::to_string(suffix);
+        s.name = candidate;
+
+        editSockets.push_back(std::move(s));
+        selectedSocketIndex = static_cast<int>(editSockets.size()) - 1;
+        pushEditSocketsForPart(selectedPart); // live: next update() re-resolves with the new socket
+
+        pushSocketUndo(std::move(before));
+
+        bonePickArmed = false; // one pick per arm — make the disarm obvious in the panel
+    }
+
     // ----------------------------------------------------------------------
     // Info / tree panels
     // ----------------------------------------------------------------------
@@ -1109,7 +1034,7 @@ namespace windows
 
         ImGui::Text("Name:"); ImGui::TextWrapped("  %s", prefabName.c_str());
         ImGui::Text("Version: %s", prefabVersion.c_str());
-        ImGui::Text("Entities: %u", componentStats.totalEntities);
+        ImGui::Text("Entities: %u", sandboxEntityCount);
         ImGui::Text("Rig parts: %zu", rigDesc.parts.size());
         ImGui::Text("IK chains: %zu", rigDesc.ik.size());
 
@@ -1121,16 +1046,97 @@ namespace windows
         }
     }
 
+    namespace
+    {
+        constexpr const char* kPrefabSceneEntityPayload = "DND_SCENE_ENTITY"; // shared with SceneHierarchyPanel
+
+        // Is `ancestor` an ancestor of (or equal to) `node` within the sandbox subtree? Used to guard
+        // a reparent/reorder that would create a cycle (drop a node onto its own descendant). CQRS-only.
+        bool isAncestorOrSelf(services::EntityHandle ancestor, services::EntityHandle node)
+        {
+            services::EntityHandle cur = node;
+            while (cur.isValid())
+            {
+                if (cur == ancestor) return true;
+                events::scene::GetEntityQuery q;
+                q.entity = cur;
+                auto data = events::EventDispatcher::instance().query(q);
+                if (!data.has_value() || !data->parent.has_value()) break;
+                cur = *data->parent;
+            }
+            return false;
+        }
+
+        // Is an entity-hierarchy drag currently in flight? (mirror SceneHierarchyPanel) — gates the
+        // between-siblings reorder drop zones so they only appear mid-drag.
+        bool isPrefabEntityDragActive()
+        {
+            const ImGuiPayload* payload = ImGui::GetDragDropPayload();
+            return payload != nullptr && payload->IsDataType(kPrefabSceneEntityPayload);
+        }
+    }
+
     void PrefabPreviewWindow::drawEntityTreePanel()
     {
         ImGui::TextDisabled("Hierarchy");
-        if (loadFailed || !prefabLoaded)
+        ImGui::SameLine();
+        // "+" adds a child under the current selection (or the sandbox root). Mirrors UILayerBuilder's
+        // addWidget affordance.
+        if (ImGui::SmallButton("+##addEntity"))
+        {
+            const services::EntityHandle parent =
+                selectedEntity().isValid() ? selectedEntity() : sandboxRoot;
+            events::scene::CreateEntityCommand cmd;
+            cmd.name = "Entity";
+            cmd.parent = parent;
+            const services::EntityHandle created = events::EventDispatcher::instance().execute(cmd);
+            if (created.isValid())
+            {
+                selectEntity(created);
+                dirty = true;
+                rebuildRigFromSandbox();
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Add a child entity under the selection (or the root)");
+
+        if (loadFailed || !prefabLoaded || !sandboxRoot.isValid())
         {
             ImGui::TextDisabled("No data");
             return;
         }
-        int partCounter = 0; // DFS pre-order mesh-bearing index == part index (matches build)
-        drawEntityNode(rootEntity, rootEntity.name, partCounter);
+        // VK-1433 Phase 4b — CQRS-recursive tree over the live sandbox subtree with add/remove/
+        // rename/reparent/reorder/hide. Drag a node onto another to reparent; onto a between-siblings
+        // zone to reorder; double-click to rename; the eye toggles editor-only preview hide.
+        drawEntityNode(sandboxRoot, 0);
+    }
+
+    void PrefabPreviewWindow::drawReorderDropZone(services::EntityHandle parent, size_t index)
+    {
+        ImGui::PushID(static_cast<int>(index));
+        const float width = std::max(ImGui::GetContentRegionAvail().x, 10.0f);
+        ImGui::InvisibleButton("##reorderZone", ImVec2(width, 4.0f));
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kPrefabSceneEntityPayload))
+            {
+                const services::EntityHandle dragged =
+                    *static_cast<const services::EntityHandle*>(payload->Data);
+                // Guard: a node can't be reordered under itself or any of its own descendants.
+                if (dragged.isValid() && dragged != parent && !isAncestorOrSelf(dragged, parent))
+                {
+                    events::scene::ReorderEntityCommand cmd;
+                    cmd.entity = dragged;
+                    cmd.newParent = parent;
+                    cmd.insertIndex = static_cast<int>(index);
+                    events::EventDispatcher::instance().execute(cmd);
+                    dirty = true;
+                    rebuildRigFromSandbox();
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+        ImGui::PopID();
     }
 
     std::string PrefabPreviewWindow::missingRefTooltip(int part) const
@@ -1158,57 +1164,261 @@ namespace windows
         return out;
     }
 
-    void PrefabPreviewWindow::drawEntityNode(const PrefabEntityNode& node, const std::string& path,
-                                             int& partCounter)
+    void PrefabPreviewWindow::drawEntityNode(services::EntityHandle entity, int depth)
     {
-        ImGui::PushID(path.c_str());
+        if (!entity.isValid()) return;
 
-        // A mesh-bearing node becomes part `partCounter`; consume the index in DFS pre-order so it
-        // lines up with buildPrefabRigDescDTO / the broken-ref report.
-        const int thisPart = node.hasMesh() ? partCounter++ : -1;
+        events::scene::GetEntityQuery q;
+        q.entity = entity;
+        auto data = events::EventDispatcher::instance().query(q);
+        if (!data.has_value()) return;
+
+        ImGui::PushID(static_cast<int>(entity.id));
+
+        // A mesh-bearing entity maps to a rig part (partEntities is the live builder's parallel
+        // source-entity vector); use it for the [skel]/[static] badge and the broken-ref tint.
+        const int thisPart = partForEntity(entity);
         const std::string tooltip = (thisPart >= 0) ? missingRefTooltip(thisPart) : std::string();
         const bool missing = !tooltip.empty();
 
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
-        if (selectedEntityPath.has_value() && *selectedEntityPath == path)
-            flags |= ImGuiTreeNodeFlags_Selected;
-        if (node.children.empty())
-            flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+        const bool isSelected = (selectedEntity() == entity);
+        const bool hasChildren = !data->children.empty();
+        const bool isRoot = (entity == sandboxRoot);
+        const bool isRenaming = (renamingEntity == entity);
+        const bool isHidden = hiddenEntities.count(entity.id) > 0;
 
-        std::string label = node.name;
-        if (node.hasMesh()) label += node.isSkeletal() ? " [skel]" : " [static]";
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen
+                                   | ImGuiTreeNodeFlags_SpanAvailWidth;
+        if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
+        if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf;
 
-        bool nodeOpen;
-        if (missing)
+        std::string label = data->name.empty() ? "(unnamed)" : data->name;
+        if (thisPart >= 0) label += partIsSkeletal(thisPart) ? " [skel]" : " [static]";
+        if (isHidden) label += " (hidden)";
+
+        // A hidden node (editor-only preview hide) is dimmed; a broken-ref node is tinted red.
+        bool pushedColor = false;
+        if (missing) { ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f)); pushedColor = true; }
+        else if (isHidden) { ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.0f)); pushedColor = true; }
+
+        const bool nodeOpen = ImGui::TreeNodeEx("##node", flags, "%s%s",
+                                                isRenaming ? "" : label.c_str(),
+                                                (missing && !isRenaming) ? "  (!)" : "");
+        if (pushedColor) ImGui::PopStyleColor();
+        if (missing && !isRenaming && ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tooltip.c_str());
+
+        if (!isRenaming)
         {
-            // Tint the broken-ref node red so it stands out in the tree.
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-            nodeOpen = ImGui::TreeNodeEx(path.c_str(), flags, "%s  (!)", label.c_str());
+            // Select on click; double-click begins an inline rename (the root included — it's the
+            // saved subtree's own node).
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            {
+                selectEntity(entity);
+                if (thisPart >= 0) selectPart(thisPart);
+            }
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                renamingEntity = entity;
+                renameFocusPending = true;
+                snprintf(renameBuf, sizeof(renameBuf), "%s", data->name.c_str());
+            }
+
+            // Drag source (right after TreeNodeEx, before any SameLine widgets). The sandbox root is
+            // not draggable (it has no parent to reparent under).
+            if (!isRoot && ImGui::BeginDragDropSource())
+            {
+                services::EntityHandle payload = entity;
+                ImGui::SetDragDropPayload(kPrefabSceneEntityPayload, &payload, sizeof(services::EntityHandle));
+                ImGui::Text("Move %s", data->name.empty() ? "(unnamed)" : data->name.c_str());
+                ImGui::EndDragDropSource();
+            }
+
+            // Drop target: reparent the dragged node under this one (guarded against cycles).
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kPrefabSceneEntityPayload))
+                {
+                    const services::EntityHandle dragged =
+                        *static_cast<const services::EntityHandle*>(payload->Data);
+                    if (dragged.isValid() && dragged != entity && !isAncestorOrSelf(dragged, entity))
+                    {
+                        events::scene::ReparentEntityCommand cmd;
+                        cmd.entity = dragged;
+                        cmd.newParent = entity; // handler also enforces its own cycle-check
+                        events::EventDispatcher::instance().execute(cmd);
+                        dirty = true;
+                        rebuildRigFromSandbox();
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            // Eye toggle (editor-only preview hide) — right-aligned. Toggles the hiddenEntities SET
+            // ONLY; isActive is never touched, so a hidden node stays active in the real game.
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            if (ImGui::SmallButton(isHidden ? ICON_FA_EYE_SLASH : ICON_FA_EYE))
+            {
+                if (isHidden) hiddenEntities.erase(entity.id);
+                else          hiddenEntities.insert(entity.id);
+                rebuildRigFromSandbox(); // re-derive: hidden subtrees are pruned from the DTO
+            }
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", tooltip.c_str());
+                ImGui::SetTooltip("Preview-only hide (does not change the saved Active state)");
+
+            // Context menu: delete (never the sandbox root — that's the saved subtree's top).
+            if (!isRoot && ImGui::BeginPopupContextItem())
+            {
+                if (ImGui::MenuItem("Add Child"))
+                {
+                    events::scene::CreateEntityCommand cmd;
+                    cmd.name = "Entity";
+                    cmd.parent = entity;
+                    const services::EntityHandle created = events::EventDispatcher::instance().execute(cmd);
+                    if (created.isValid())
+                    {
+                        selectEntity(created);
+                        dirty = true;
+                        rebuildRigFromSandbox();
+                    }
+                }
+                if (ImGui::MenuItem("Delete"))
+                {
+                    events::scene::DeleteEntityCommand del;
+                    del.entity = entity;
+                    events::EventDispatcher::instance().execute(del);
+                    if (isSelected) selectEntity(sandboxRoot);
+                    hiddenEntities.erase(entity.id);
+                    dirty = true;
+                    rebuildRigFromSandbox();
+                    ImGui::EndPopup();
+                    ImGui::PopID();
+                    return; // the entity is gone — don't recurse into its (also-deleted) children
+                }
+                ImGui::EndPopup();
+            }
         }
         else
         {
-            nodeOpen = ImGui::TreeNodeEx(path.c_str(), flags, "%s", label.c_str());
+            // Inline rename editor (replaces the node's interactions for this frame).
+            ImGui::SameLine();
+            if (renameFocusPending)
+            {
+                ImGui::SetKeyboardFocusHere();
+                renameFocusPending = false;
+            }
+            ImGui::SetNextItemWidth(std::max(ImGui::GetContentRegionAvail().x - 10.0f, 80.0f));
+            const bool committed = ImGui::InputText("##rename", renameBuf, sizeof(renameBuf),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue
+                                                        | ImGuiInputTextFlags_AutoSelectAll);
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+            {
+                renamingEntity = services::EntityHandle::invalid();
+            }
+            else if (committed || ImGui::IsItemDeactivated())
+            {
+                if (renameBuf[0] != '\0' && renameBuf != data->name)
+                {
+                    // O2: a socket attachment resolves its parent BY NAME (subtree-scoped), so
+                    // renaming an entity that is some child's attach-parent drops that child's link to
+                    // root on the next re-derive. WARN (non-destructive, no cascade) and proceed.
+                    if (renameWouldOrphanAttachment(data->name))
+                    {
+                        vfLogWarning("Prefab preview: renaming '{}' breaks a socket attachment that "
+                                     "resolves to it by name; the attached child will fall back to "
+                                     "the root until you re-point its socket parent.", data->name);
+                    }
+                    events::scene::SetEntityNameCommand cmd;
+                    cmd.entity = entity;
+                    cmd.newName = renameBuf;
+                    events::EventDispatcher::instance().execute(cmd);
+                    dirty = true;
+                    rebuildRigFromSandbox();
+                }
+                renamingEntity = services::EntityHandle::invalid();
+            }
         }
 
-        if (ImGui::IsItemClicked())
-            selectedEntityPath = path;
-
-        if (nodeOpen && !node.children.empty())
+        if (nodeOpen && hasChildren)
         {
-            for (const auto& child : node.children)
-                drawEntityNode(child, path + "/" + child.name, partCounter);
+            const bool dragActive = isPrefabEntityDragActive();
+            const auto& children = data->children;
+            for (size_t i = 0; i < children.size(); ++i)
+            {
+                if (dragActive) drawReorderDropZone(entity, i);
+                drawEntityNode(children[i], depth + 1);
+            }
+            if (dragActive) drawReorderDropZone(entity, children.size());
+            ImGui::TreePop();
+        }
+        else if (nodeOpen)
+        {
+            // Leaf nodes still TreePush unless NoTreePushOnOpen; we did NOT set that flag (so DnD +
+            // SameLine widgets attach correctly), so balance the push here.
             ImGui::TreePop();
         }
 
         ImGui::PopID();
     }
 
-    void PrefabPreviewWindow::drawLoadingIndicator()
+    bool PrefabPreviewWindow::renameWouldOrphanAttachment(const std::string& oldName) const
     {
-        ImGui::TextDisabled("%s", loadingStatus.c_str());
+        if (oldName.empty()) return false;
+        // Scan the live parts' source entities for a socket attachment whose parentEntityName equals
+        // the about-to-be-renamed name. If one exists, that link resolves by name and will drop.
+        for (const services::EntityHandle& part : partEntities)
+        {
+            events::socket::GetSocketAttachmentDataQuery sq;
+            sq.entity = part;
+            auto attach = events::EventDispatcher::instance().query(sq);
+            if (attach.has_value() && attach->parentEntityName == oldName)
+                return true;
+        }
+        return false;
+    }
+
+    std::vector<uint64_t> PrefabPreviewWindow::sandboxStructureSignature() const
+    {
+        // DFS over the visible sandbox subtree, emitting each entity id followed by its component
+        // type-id list (a separator sentinel between entities). A change (component add/remove via the
+        // embedded inspector, a create/delete) shifts this vector, which the caller uses to re-derive
+        // the rig without coupling to any specific Add/Remove command.
+        std::vector<uint64_t> sig;
+        if (!sandboxRoot.isValid()) return sig;
+
+        std::function<void(services::EntityHandle)> walk = [&](services::EntityHandle e)
+        {
+            if (!e.isValid()) return;
+            events::scene::GetEntityQuery q;
+            q.entity = e;
+            auto data = events::EventDispatcher::instance().query(q);
+            if (!data.has_value()) return;
+            sig.push_back(e.id);
+            for (services::ComponentTypeId c : data->components)
+                sig.push_back(static_cast<uint64_t>(c));
+            sig.push_back(~0ull); // entity separator sentinel
+            for (const services::EntityHandle& child : data->children)
+                walk(child);
+        };
+        walk(sandboxRoot);
+        return sig;
+    }
+
+    void PrefabPreviewWindow::drawEntityInspector()
+    {
+        const services::EntityHandle sel = selectedEntity();
+        if (!sel.isValid())
+        {
+            ImGui::TextDisabled("Select an entity in the hierarchy.");
+            return;
+        }
+
+        // Embedded shared inspector: full per-component edit + Remove + Add Component (O1). A
+        // structural component change (add/remove) shifts the structure signature, which we detect
+        // on the next frame to re-derive the rig.
+        entityInspector.drawComponentSection(sel);
     }
 
     // ----------------------------------------------------------------------
@@ -1231,6 +1441,7 @@ namespace windows
     {
         editSockets.clear();
         selectedSocketIndex = -1;
+        bonePickArmed = false; // an armed pick targets the previously-selected part; clear on switch
         if (part < 0) return;
 
         services::events::prefabrigpreview::GetPrefabRigSocketsQuery query;
@@ -1264,6 +1475,57 @@ namespace windows
         events::EventDispatcher::instance().execute(cmd);
     }
 
+    // ----------------------------------------------------------------------
+    // VK-1433 Phase 4 — selection link (hierarchy <-> part-indexed panels)
+    // ----------------------------------------------------------------------
+    services::EntityHandle PrefabPreviewWindow::selectedEntity() const
+    {
+        events::scene::GetSelectedEntityQuery q;
+        auto sel = events::EventDispatcher::instance().query(q);
+        return sel.value_or(services::EntityHandle::invalid());
+    }
+
+    void PrefabPreviewWindow::selectEntity(services::EntityHandle entity)
+    {
+        events::scene::SelectEntityCommand cmd;
+        if (entity.isValid()) cmd.entity = entity;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    int PrefabPreviewWindow::partForEntity(services::EntityHandle entity) const
+    {
+        if (!entity.isValid()) return -1;
+        for (size_t i = 0; i < partEntities.size(); ++i)
+        {
+            if (partEntities[i] == entity)
+                return static_cast<int>(i);
+        }
+        return -1;
+    }
+
+    void PrefabPreviewWindow::selectPart(int part)
+    {
+        if (part < 0 || part >= static_cast<int>(rigDesc.parts.size()))
+        {
+            selectedPart = -1;
+            pullEditSocketsForPart(-1);
+            return;
+        }
+        selectedPart = part;
+        pullEditSocketsForPart(selectedPart);
+    }
+
+    services::TransformData PrefabPreviewWindow::partSourceLocalTransform(int part) const
+    {
+        services::TransformData t; // identity defaults
+        if (part < 0 || part >= static_cast<int>(partEntities.size())) return t;
+        events::scene::GetEntityQuery q;
+        q.entity = partEntities[part];
+        auto data = events::EventDispatcher::instance().query(q);
+        if (data.has_value()) return data->localTransform;
+        return t;
+    }
+
     void PrefabPreviewWindow::drawAuthoringPanel()
     {
         if (!previewBuilt)
@@ -1291,8 +1553,11 @@ namespace windows
                 if (partMissing) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
                 if (ImGui::Selectable(label.c_str(), selected))
                 {
-                    selectedPart = p;
-                    pullEditSocketsForPart(selectedPart);
+                    // Part combo -> select the part AND its source entity (keeps the hierarchy tree
+                    // selection in sync with the authoring panels). selectPart pulls the sockets.
+                    selectPart(p);
+                    if (p >= 0 && p < static_cast<int>(partEntities.size()))
+                        selectEntity(partEntities[p]);
                 }
                 if (partMissing)
                 {
@@ -1305,32 +1570,15 @@ namespace windows
             ImGui::EndCombo();
         }
 
-        // Drag-drop a .vfMesh / .vfMaterial / .vfAnim from the content browser onto the part combo
-        // to swap that ref on the selected part and rebuild live (transient until saved).
+        // VK-1433 Phase 4c — drag a .vfMesh / .vfMaterial / .vfAnim onto the part combo to swap that
+        // ref on the selected part's SOURCE ENTITY (persistent — Save Prefab writes it). The rig
+        // re-derives from the mutated entity.
         if (selectedPart >= 0)
         {
             if (auto dropped = acceptAssetDropOnLastItem("##partDrop", {".vfMesh", ".vfMaterial", ".vfAnim"}))
             {
                 applyAssetDropToPart(selectedPart, *dropped);
             }
-        }
-        if (refSaveTimer > 0.0f) refSaveTimer -= ImGui::GetIO().DeltaTime;
-        if (hasUnsavedRefSwap)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "(unsaved)");
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Part refs were swapped via drag-drop. The change is preview-only "
-                                  "until persisted to the .vfPrefab.");
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Save Refs"))
-                saveRefSwapsToPrefab();
-        }
-        if (refSaveTimer > 0.0f)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(refSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
-                               refSaveSuccess ? "Saved" : "Failed");
         }
 
         ImGui::Separator();
@@ -1396,22 +1644,9 @@ namespace windows
     {
         if (selectedPart < 0)
         {
-            // NIT #4: if the part deselected MID-edit, close the bracket here (push the in-flight
-            // edit against its captured `before`) and clear the flag, so the next session does not
-            // coalesce against a stale snapshot. pushTransformUndo no-ops if nothing actually changed.
-            if (transformPanelEditActive)
-            {
-                transformPanelEditActive = false;
-                pushTransformUndo(std::move(transformPanelBefore));
-            }
             ImGui::TextDisabled("Select a part to transform.");
             return;
         }
-
-        // Undo bracket for the numeric Transform fields + Reset buttons (the viewport gizmo has its
-        // own bracket in drawTransformGizmo). Snapshot the whole previewTransforms map before edits.
-        if (!transformPanelEditActive)
-            transformPanelBefore = snapshotTransforms();
 
         const bool isRoot = (selectedPart >= 0 && selectedPart < static_cast<int>(rigDesc.parts.size()))
                                 ? rigDesc.parts[selectedPart].parentPartIndex < 0
@@ -1421,15 +1656,19 @@ namespace windows
         else
             ImGui::TextDisabled("Child part — moves this part (children follow).");
 
+        // VK-1433 Phase 4c — the gizmo + these numeric fields now edit the part's SOURCE ENTITY
+        // transform directly (SetTransformCommand), persisted by Save Prefab.
+        ImGui::TextWrapped("Edits the source entity transform — Save Prefab persists it.");
+
         // Socket-attached-child TRANSLATE-drop warning. SocketAttachmentUpdater::applyModelOffset
         // builds entityLocal = rot*scale, DROPPING translation — so a non-zero source position on a
         // socketed child will NOT reproduce at instantiation (rotation/scale will). Warn loudly and
-        // offer a one-click bake-to-zero through the same JSON round-trip the transform save uses.
+        // offer a one-click bake-to-zero (writes the entity transform position to 0).
         if (!isRoot)
         {
             const int parentPart = (selectedPart < static_cast<int>(rigDesc.parts.size()))
                                        ? rigDesc.parts[selectedPart].parentPartIndex : -1;
-            const glm::vec3 srcPos = prefabrigval::sourcePositionForPart(rootEntity, selectedPart);
+            const glm::vec3 srcPos = partSourceLocalTransform(selectedPart).position;
             if (prefabrigval::childHasDroppedTranslation(parentPart, srcPos))
             {
                 ImGui::Spacing();
@@ -1456,35 +1695,16 @@ namespace windows
         if (ImGui::RadioButton("Scale##tr", transformGizmoOp == ImGuizmo::SCALE))
             transformGizmoOp = ImGuizmo::SCALE;
 
-        // Numeric transform fields (parallel to the inspector's Transform component). They show the
-        // part's EFFECTIVE local transform = base(read from the prefab) * previewTransform(gizmo
-        // offset). On OPEN (offset identity) they read the prefab's stored Position/Rotation/Scale;
-        // dragging the gizmo updates them live, and editing a field drives the gizmo — both feed the
-        // same previewTransform, and the shown values equal what "Save Transforms to Prefab" writes
-        // (math::composeMatrix == the prefab / TransformComponent schema; rotation = Euler XYZ deg).
+        // Numeric transform fields — the part's source entity LOCAL transform (Euler XYZ degrees ==
+        // TransformComponent schema). Editing a field dispatches SetTransformCommand and re-derives
+        // the rig; the gizmo drives the same entity transform.
         ImGui::Spacing();
         ImGui::TextDisabled("Transform");
         {
-            // Part's base local transform from the parsed prefab tree (DFS pre-order, k-th
-            // mesh-bearing node = part k — the same mapping buildPrefabRigDescDTO / the writer use).
-            const glm::mat4 base = [this](int part) -> glm::mat4 {
-                std::vector<const PrefabEntityNode*> nodes;
-                detail::flattenNodes(rootEntity, nodes);
-                int k = 0;
-                for (const PrefabEntityNode* n : nodes)
-                {
-                    if (!n->hasMesh()) continue;
-                    if (k == part) return math::composeMatrix(n->position, n->rotation, n->scale);
-                    ++k;
-                }
-                return glm::mat4(1.0f);
-            }(selectedPart);
-
-            const glm::mat4 effective = base * currentPartPreviewTransform(selectedPart);
-            const math::DecomposedTransform d = math::decomposeMatrix(effective);
-            float t[3] = {d.position.x, d.position.y, d.position.z};
-            float r[3] = {d.rotation.x, d.rotation.y, d.rotation.z};
-            float s[3] = {d.scale.x, d.scale.y, d.scale.z};
+            const services::TransformData src = partSourceLocalTransform(selectedPart);
+            float t[3] = {src.position.x, src.position.y, src.position.z};
+            float r[3] = {src.rotation.x, src.rotation.y, src.rotation.z};
+            float s[3] = {src.scale.x, src.scale.y, src.scale.z};
 
             bool changed = false;
             ImGui::PushItemWidth(-70.0f);
@@ -1494,218 +1714,39 @@ namespace windows
             ImGui::PopItemWidth();
             if (changed)
             {
-                const glm::mat4 newEffective = math::composeMatrix(
-                    glm::vec3(t[0], t[1], t[2]), glm::vec3(r[0], r[1], r[2]), glm::vec3(s[0], s[1], s[2]));
-                const glm::mat4 newPreview = glm::inverse(base) * newEffective;
-                previewTransforms[selectedPart] = newPreview;
-                services::events::prefabrigpreview::SetPrefabRigPartPreviewTransformCommand cmd;
-                cmd.instanceId = getInstanceId();
-                cmd.part = static_cast<size_t>(selectedPart);
-                cmd.transform = newPreview;
+                services::TransformData nt;
+                nt.position = glm::vec3(t[0], t[1], t[2]);
+                nt.rotation = glm::vec3(r[0], r[1], r[2]);
+                nt.scale = glm::vec3(s[0], s[1], s[2]);
+                events::scene::SetTransformCommand cmd;
+                cmd.entity = partEntities[selectedPart];
+                cmd.transform = nt;
                 events::EventDispatcher::instance().execute(cmd);
+                dirty = true;
+                rebuildRigFromSandbox();
             }
         }
-
-        ImGui::Spacing();
-        if (ImGui::Button("Reset Transform"))
-        {
-            previewTransforms[selectedPart] = glm::mat4(1.0f);
-            services::events::prefabrigpreview::SetPrefabRigPartPreviewTransformCommand cmd;
-            cmd.instanceId = getInstanceId();
-            cmd.part = static_cast<size_t>(selectedPart);
-            cmd.transform = glm::mat4(1.0f);
-            events::EventDispatcher::instance().execute(cmd);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Reset All"))
-        {
-            previewTransforms.clear();
-            services::events::prefabrigpreview::ResetPrefabRigPreviewTransformsCommand cmd;
-            cmd.instanceId = getInstanceId();
-            events::EventDispatcher::instance().execute(cmd);
-        }
-
-        ImGui::Spacing();
-        ImGui::TextWrapped("Live preview by default — not saved unless you click below.");
-
-        ImGui::Separator();
-        if (transformSaveTimer > 0.0f) transformSaveTimer -= ImGui::GetIO().DeltaTime;
-
-        ImGui::Checkbox("Include root (whole-rig)", &includeRootInSave);
-
-        // Disable Save when no part has actually been moved (every previewTransform is identity).
-        bool anyMoved = false;
-        for (const auto& [part, m] : previewTransforms)
-        {
-            if (m != glm::mat4(1.0f)) { anyMoved = true; break; }
-        }
-        if (!anyMoved) ImGui::BeginDisabled();
-        if (ImGui::Button("Save Transforms to Prefab"))
-        {
-            saveTransformsToPrefab();
-        }
-        if (!anyMoved) ImGui::EndDisabled();
-
-        if (transformSaveTimer > 0.0f)
-        {
-            ImGui::SameLine();
-            if (transformSaveSuccess)
-                ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1), "Saved %d", transformSaveCount);
-            else
-                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Failed");
-        }
-        ImGui::TextWrapped("Writes part transforms into the .vfPrefab (children by default; "
-                           "root only if checked).");
-
-        // Close the transform-panel undo bracket: coalesce a numeric-field drag or a Reset click
-        // into ONE entry (the viewport gizmo brackets itself separately in drawTransformGizmo).
-        const bool anyItemActive = ImGui::IsAnyItemActive();
-        if (anyItemActive)
-        {
-            transformPanelEditActive = true;
-        }
-        else if (transformPanelEditActive)
-        {
-            transformPanelEditActive = false;
-            pushTransformUndo(std::move(transformPanelBefore));
-        }
-    }
-
-    void PrefabPreviewWindow::saveTransformsToPrefab()
-    {
-        transformSaveTimer = kSaveFeedbackSeconds;
-        transformSaveSuccess = false;
-        transformSaveCount = 0;
-
-        // Parts to skip: every ROOT part (parentPartIndex < 0) unless the user opted in. A root
-        // gizmo edit means "frame the whole rig", not a local node transform.
-        std::set<int> skipParts;
-        if (!includeRootInSave)
-        {
-            for (int p = 0; p < static_cast<int>(rigDesc.parts.size()); ++p)
-            {
-                if (rigDesc.parts[p].parentPartIndex < 0)
-                    skipParts.insert(p);
-            }
-        }
-
-        // Load -> mutate ONLY the targeted transforms -> dump back (round-trip preserves all other
-        // fields). entt-free: no PrefabSerialization, no EntityRegistry touched.
-        json prefabJson;
-        try
-        {
-            std::ifstream in(prefabPath);
-            if (!in.is_open())
-            {
-                vfLogError("Save Transforms to Prefab: cannot open '{}'", prefabPath);
-                return;
-            }
-            prefabJson = json::parse(in);
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Save Transforms to Prefab: parse error in '{}': {}", prefabPath, e.what());
-            return;
-        }
-
-        const int written = prefabtransform::applyPreviewTransforms(prefabJson, previewTransforms, skipParts);
-
-        try
-        {
-            std::ofstream out(prefabPath, std::ios::trunc);
-            if (!out.is_open())
-            {
-                vfLogError("Save Transforms to Prefab: cannot write '{}'", prefabPath);
-                return;
-            }
-            out << prefabJson.dump(2);
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Save Transforms to Prefab: write error in '{}': {}", prefabPath, e.what());
-            return;
-        }
-
-        transformSaveSuccess = true;
-        transformSaveCount = written;
-
-        // Refresh the editor/content browser the way other asset saves do.
-        events::resource::AssetSavedNotification notif;
-        notif.filePath = prefabPath;
-        events::EventDispatcher::instance().publish(notif);
-
-        vfLogInfo("Save Transforms to Prefab: wrote {} part transform(s) to '{}'", written, prefabPath);
     }
 
     void PrefabPreviewWindow::zeroSourceTranslationForPart(int part)
     {
-        // Same entt-free JSON round-trip as saveTransformsToPrefab: load -> zero ONLY this node's
-        // position -> dump. Every other field round-trips untouched.
-        json prefabJson;
-        try
-        {
-            std::ifstream in(prefabPath);
-            if (!in.is_open())
-            {
-                vfLogError("Zero translation: cannot open '{}'", prefabPath);
-                return;
-            }
-            prefabJson = json::parse(in);
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Zero translation: parse error in '{}': {}", prefabPath, e.what());
-            return;
-        }
+        // VK-1433 Phase 4c — zero the part's source ENTITY position (SetTransformCommand) and
+        // re-derive the rig so the preview matches and the warning clears. The change is persisted by
+        // Save Prefab (the entity is the source of truth — the old JSON round-trip is retired).
+        if (part < 0 || part >= static_cast<int>(partEntities.size())) return;
 
-        if (!prefabtransform::zeroPartTranslation(prefabJson, part))
-        {
-            vfLogWarning("Zero translation: part {} not found in '{}'", part, prefabPath);
-            return;
-        }
+        services::TransformData t = partSourceLocalTransform(part);
+        t.position = glm::vec3(0.0f);
 
-        try
-        {
-            std::ofstream out(prefabPath, std::ios::trunc);
-            if (!out.is_open())
-            {
-                vfLogError("Zero translation: cannot write '{}'", prefabPath);
-                return;
-            }
-            out << prefabJson.dump(2);
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Zero translation: write error in '{}': {}", prefabPath, e.what());
-            return;
-        }
+        events::scene::SetTransformCommand cmd;
+        cmd.entity = partEntities[part];
+        cmd.transform = t;
+        events::EventDispatcher::instance().execute(cmd);
 
-        // The on-disk source position is now zero; re-parse so the warning clears and the preview
-        // matches. Re-running the full async parse would be heavy, so just refresh the rig desc by
-        // reloading the node tree synchronously is unnecessary — mutate the in-memory mirror.
-        // sourcePositionForPart reads rootEntity, so zero it there too (k-th mesh-bearing node).
-        {
-            std::vector<PrefabEntityNode*> mnodes;
-            std::function<void(PrefabEntityNode&)> collect = [&](PrefabEntityNode& n)
-            {
-                mnodes.push_back(&n);
-                for (auto& c : n.children) collect(c);
-            };
-            collect(rootEntity);
-            int k = 0;
-            for (PrefabEntityNode* n : mnodes)
-            {
-                if (!n->hasMesh()) continue;
-                if (k == part) { n->position = glm::vec3(0.0f); break; }
-                ++k;
-            }
-        }
+        dirty = true;
+        rebuildRigFromSandbox();
 
-        events::resource::AssetSavedNotification notif;
-        notif.filePath = prefabPath;
-        events::EventDispatcher::instance().publish(notif);
-
-        vfLogInfo("Zero translation: zeroed part {} source position in '{}'", part, prefabPath);
+        vfLogInfo("Prefab preview: zeroed part {} source entity translation", part);
     }
 
     void PrefabPreviewWindow::drawStatePicker()
@@ -1893,6 +1934,33 @@ namespace windows
         if (!socketEditActive)
             socketEditBefore = snapshotSockets();
 
+        // VK-1433 Phase 1b — bone-pick socket creation. Arm, then click a skeleton joint in the
+        // viewport to prefill a new bone socket on the picked bone (identity offset; fine-tune below
+        // or with the existing fields, then "Save Sockets to Mesh"). Requires the Skeleton overlay so
+        // the user can see the joints they are clicking.
+        if (!environment.showSkeleton)
+        {
+            bonePickArmed = false; // can't aim at joints that aren't drawn
+            ImGui::BeginDisabled();
+            ImGui::Button("Pick bone (click joint)");
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::TextDisabled("(enable the Skeleton overlay)");
+        }
+        else if (!bonePickArmed)
+        {
+            if (ImGui::Button("Pick bone (click joint)"))
+                bonePickArmed = true;
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Click a joint in the viewport...");
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel##bonePick"))
+                bonePickArmed = false;
+        }
+        ImGui::Separator();
+
         ImGui::TextDisabled("Bone sockets (%zu)", editSockets.size());
         ImGui::Separator();
 
@@ -1912,9 +1980,15 @@ namespace windows
             ImGui::Text("Target bone: %s", socket.targetBoneName.c_str());
 
             float pos[3] = {socket.localPosition.x, socket.localPosition.y, socket.localPosition.z};
-            if (ImGui::DragFloat3("Position##bone", pos, 0.01f))
+            if (ImGui::DragFloat3("Local Position##bone", pos, 0.01f))
             {
                 socket.localPosition = glm::vec3(pos[0], pos[1], pos[2]);
+                pushEditSocketsForPart(selectedPart);
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("0##bonePos"))
+            {
+                socket.localPosition = glm::vec3(0.0f); // a zero-offset socket lands exactly on its joint
                 pushEditSocketsForPart(selectedPart);
             }
             glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(socket.localRotation));
@@ -2008,9 +2082,15 @@ namespace windows
             ImGui::Separator();
 
             float pos[3] = {socket.localPosition.x, socket.localPosition.y, socket.localPosition.z};
-            if (ImGui::DragFloat3("Position##static", pos, 0.01f))
+            if (ImGui::DragFloat3("Local Position##static", pos, 0.01f))
             {
                 socket.localPosition = glm::vec3(pos[0], pos[1], pos[2]);
+                pushEditSocketsForPart(selectedPart);
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("0##staticPos"))
+            {
+                socket.localPosition = glm::vec3(0.0f); // a zero-offset socket lands at the part origin
                 pushEditSocketsForPart(selectedPart);
             }
             glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(socket.localRotation));

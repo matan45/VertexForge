@@ -18,6 +18,11 @@ namespace controllers::prefabrigoverlay
         return palette[partIndex % palette.size()];
     }
 
+    glm::vec4 selectedSocketColor()
+    {
+        return glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // bright opaque white
+    }
+
     void addLine(render::mesh::ImmediateDebugDrawList& out,
                  const glm::vec3& a, const glm::vec3& b, const glm::vec4& color)
     {

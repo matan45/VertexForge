@@ -191,6 +191,12 @@ namespace services
             {
                 return getPrefabRigPartWorld(query.instanceId, query.part);
             });
+
+        dispatcher.registerQueryHandler<GetPrefabRigJointWorldsQuery>(
+            [this](const GetPrefabRigJointWorldsQuery& query)
+            {
+                return getPrefabRigJointWorlds(query.instanceId, query.part);
+            });
     }
 
     // ---- Delegating method bodies ----
@@ -349,6 +355,13 @@ namespace services
     {
         return prefabRigProvider ? prefabRigProvider->getPrefabRigPartWorld(instanceId, part)
                                  : glm::mat4(1.0f);
+    }
+
+    std::vector<PrefabRigJoint> PreviewServiceImpl::getPrefabRigJointWorlds(PreviewInstanceId instanceId,
+                                                                            size_t part) const
+    {
+        return prefabRigProvider ? prefabRigProvider->getPrefabRigJointWorlds(instanceId, part)
+                                 : std::vector<PrefabRigJoint>{};
     }
 
     std::vector<animator::SocketDefinition> PreviewServiceImpl::getPrefabRigSockets(PreviewInstanceId instanceId,

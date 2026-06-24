@@ -69,6 +69,11 @@ namespace windows
         drawPrefabControls(handle);
         ImGui::Separator();
 
+        drawComponentSection(handle);
+    }
+
+    void EntityDetailsPanel::drawComponentSection(services::EntityHandle handle)
+    {
         transformDrawer.draw(handle);
         bool hasCamera = cameraDrawer.draw(handle);
         iblDrawer.draw(handle);

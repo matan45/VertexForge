@@ -146,6 +146,8 @@ namespace services
                                               const glm::mat4& transform) override;
         void resetPrefabRigPreviewTransforms(PreviewInstanceId instanceId) override;
         [[nodiscard]] glm::mat4 getPrefabRigPartWorld(PreviewInstanceId instanceId, size_t part) const override;
+        [[nodiscard]] std::vector<PrefabRigJoint>
+        getPrefabRigJointWorlds(PreviewInstanceId instanceId, size_t part) const override;
 
         [[nodiscard]] std::vector<animator::SocketDefinition>
         getPrefabRigSockets(PreviewInstanceId instanceId, size_t part) const override;
