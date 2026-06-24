@@ -11,9 +11,10 @@ namespace services
 {
     PreviewServiceImpl::PreviewServiceImpl(IMaterialPreviewProvider* materialProv, IMeshPreviewProvider* meshProv,
                                            IAnimationPreviewProvider* animProv, IVFXPreviewProvider* vfxProv,
-                                           IPrefabRigPreviewProvider* prefabRigProv)
+                                           IPrefabRigPreviewProvider* prefabRigProv,
+                                           IUILayerPreviewProvider* uiLayerProv)
         : materialProvider(materialProv), meshProvider(meshProv), animationProvider(animProv), vfxProvider(vfxProv),
-          prefabRigProvider(prefabRigProv)
+          prefabRigProvider(prefabRigProv), uiLayerProvider(uiLayerProv)
     {
         assert(materialProvider != nullptr && "PreviewServiceImpl requires a valid IMaterialPreviewProvider");
         assert(meshProvider != nullptr && "PreviewServiceImpl requires a valid IMeshPreviewProvider");
@@ -30,6 +31,7 @@ namespace services
         registerAnimationPreviewHandlers(dispatcher);
         registerVFXPreviewHandlers(dispatcher);
         registerPrefabRigPreviewHandlers(dispatcher);
+        registerUILayerPreviewHandlers(dispatcher);
     }
 
     void PreviewServiceImpl::registerMaterialPreviewHandlers(::events::EventDispatcher& dispatcher)

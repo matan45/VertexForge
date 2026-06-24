@@ -2,6 +2,7 @@
 #include "../../interfaces/render/IPreviewService.hpp"
 #include "../../events/render/PreviewEvents.hpp"
 #include "../../events/render/PrefabRigPreviewEvents.hpp"
+#include "../../events/render/UILayerPreviewEvents.hpp"
 #include "../../events/animation/AnimationPreviewEvents.hpp"
 #include "../../events/vfx/VFXPreviewEvents.hpp"
 
@@ -17,6 +18,7 @@ namespace services
     class IAnimationPreviewProvider;
     class IVFXPreviewProvider;
     class IPrefabRigPreviewProvider;
+    class IUILayerPreviewProvider;
 
 
     class PreviewServiceImpl : public IPreviewService
@@ -27,12 +29,14 @@ namespace services
         IAnimationPreviewProvider* animationProvider;
         IVFXPreviewProvider* vfxProvider;
         IPrefabRigPreviewProvider* prefabRigProvider;
+        IUILayerPreviewProvider* uiLayerProvider;
 
     public:
         explicit PreviewServiceImpl(IMaterialPreviewProvider* materialProvider, IMeshPreviewProvider* meshProvider,
                                     IAnimationPreviewProvider* animationProvider = nullptr,
                                     IVFXPreviewProvider* vfxProvider = nullptr,
-                                    IPrefabRigPreviewProvider* prefabRigProvider = nullptr);
+                                    IPrefabRigPreviewProvider* prefabRigProvider = nullptr,
+                                    IUILayerPreviewProvider* uiLayerProvider = nullptr);
         ~PreviewServiceImpl() override;
 
         void registerEventHandlers() override;
@@ -152,11 +156,29 @@ namespace services
         void setPrefabRigChains(PreviewInstanceId instanceId,
                                 const std::vector<animator::ik::IKChainConfig>& chains) override;
 
+        // UI Layer Builder Preview (VK-1435)
+        void initUILayerPreview(PreviewInstanceId instanceId) override;
+        bool buildUILayerPreview(PreviewInstanceId instanceId, EntityHandle canvasRoot,
+                                 uint32_t refWidth, uint32_t refHeight) override;
+        void cleanUpUILayerPreview(PreviewInstanceId instanceId) override;
+        [[nodiscard]] bool isUILayerPreviewBuilt(PreviewInstanceId instanceId) const override;
+
+        void setUILayerReferenceResolution(PreviewInstanceId instanceId,
+                                           uint32_t refWidth, uint32_t refHeight) override;
+
+        [[nodiscard]] ViewportTextureHandle renderUILayerPreview(PreviewInstanceId instanceId) override;
+
+        [[nodiscard]] EntityHandle pickUILayerElementAt(PreviewInstanceId instanceId,
+                                                        glm::vec2 refPx) const override;
+        [[nodiscard]] std::optional<UIResolvedRectData>
+        getUILayerResolvedRect(PreviewInstanceId instanceId, EntityHandle entity) const override;
+
     private:
         void registerMaterialPreviewHandlers(::events::EventDispatcher& dispatcher);
         void registerMeshPreviewHandlers(::events::EventDispatcher& dispatcher);
         void registerAnimationPreviewHandlers(::events::EventDispatcher& dispatcher);
         void registerVFXPreviewHandlers(::events::EventDispatcher& dispatcher);
         void registerPrefabRigPreviewHandlers(::events::EventDispatcher& dispatcher);
+        void registerUILayerPreviewHandlers(::events::EventDispatcher& dispatcher);
     };
 }

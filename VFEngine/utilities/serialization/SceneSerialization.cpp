@@ -52,6 +52,10 @@ namespace serialization
             {
                 if (child.hasComponent<components::UIListItemComponent>())
                     continue;
+                // VK-1435 — the UI Layer Builder's tagged sandbox subtree is editor-only and
+                // must never bake into the user's saved scene.
+                if (child.hasComponent<components::UIPreviewTagComponent>())
+                    continue;
                 futures.push_back(threading::JobSystem::instance().submit(
                     [child]() mutable -> json { return serializeEntity(child); },
                     threading::JobPriority::NORMAL));
@@ -64,6 +68,10 @@ namespace serialization
             for (auto& child : children)
             {
                 if (child.hasComponent<components::UIListItemComponent>())
+                    continue;
+                // VK-1435 — the UI Layer Builder's tagged sandbox subtree is editor-only and
+                // must never bake into the user's saved scene.
+                if (child.hasComponent<components::UIPreviewTagComponent>())
                     continue;
                 childrenJson.push_back(serializeEntity(child));
             }

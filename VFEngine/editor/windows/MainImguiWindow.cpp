@@ -41,6 +41,7 @@ namespace windows
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
         menuBar.setThemeEditorWindow(&themeEditorWindow);
+        menuBar.setUILayerBuilderWindow(&uiLayerBuilderWindow);
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
         menuBar.setRTTDebugWindow(&rttDebugWindow);
         menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
@@ -219,6 +220,7 @@ namespace windows
             heightmapGeneratorWindow.draw();
             backgroundRemovalWindow.draw();
             themeEditorWindow.draw();
+            uiLayerBuilderWindow.draw();
             memoryDiagnosticsWindow.draw();
             rttDebugWindow.draw();
             editorPreferencesWindow.draw();

@@ -7,6 +7,8 @@
 #include "../../data/PrefabRigDescDTO.hpp"
 #include "../../data/AsyncLoadingTypes.hpp"
 #include <math/Frustum.hpp>
+#include <glm/glm.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -154,5 +156,25 @@ namespace services
         getPrefabRigChains(PreviewInstanceId instanceId) const = 0;
         virtual void setPrefabRigChains(PreviewInstanceId instanceId,
                                         const std::vector<animator::ik::IKChainConfig>& chains) = 0;
+
+        // UI Layer Builder Preview (VK-1435) — offscreen WYSIWYG canvas preview. Element
+        // edits do NOT go through here; the builder authors live entities via the existing
+        // UIComponentService CQRS. These cover only the offscreen render + reference-extent
+        // hit-test / resolved-rect.
+        virtual void initUILayerPreview(PreviewInstanceId instanceId) = 0;
+        virtual bool buildUILayerPreview(PreviewInstanceId instanceId, EntityHandle canvasRoot,
+                                         uint32_t refWidth, uint32_t refHeight) = 0;
+        virtual void cleanUpUILayerPreview(PreviewInstanceId instanceId) = 0;
+        [[nodiscard]] virtual bool isUILayerPreviewBuilt(PreviewInstanceId instanceId) const = 0;
+
+        virtual void setUILayerReferenceResolution(PreviewInstanceId instanceId,
+                                                   uint32_t refWidth, uint32_t refHeight) = 0;
+
+        [[nodiscard]] virtual ViewportTextureHandle renderUILayerPreview(PreviewInstanceId instanceId) = 0;
+
+        [[nodiscard]] virtual EntityHandle pickUILayerElementAt(PreviewInstanceId instanceId,
+                                                                glm::vec2 refPx) const = 0;
+        [[nodiscard]] virtual std::optional<UIResolvedRectData>
+        getUILayerResolvedRect(PreviewInstanceId instanceId, EntityHandle entity) const = 0;
     };
 }

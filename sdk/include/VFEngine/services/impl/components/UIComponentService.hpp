@@ -34,6 +34,10 @@ namespace services {
         std::optional<UICanvasData> getUICanvasData(EntityHandle entity) const;
         bool setUICanvasData(EntityHandle entity, const UICanvasData& canvasData);
 
+        // VK-1435 — tag/untag an entity as a UI Layer Builder preview sandbox root (adds/
+        // removes UIPreviewTagComponent) so it is skipped by the serializer + main UI pass.
+        bool markUIPreviewSandbox(EntityHandle entity, bool tagged);
+
         // UI Rect Operations
         bool addUIRectComponent(EntityHandle entity);
         bool removeUIRectComponent(EntityHandle entity);

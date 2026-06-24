@@ -82,8 +82,15 @@ namespace render::ui
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         // overlayPass=false records main UI text; overlayPass=true records
         // overlay text (tooltips, modal windows) after the overlay image pass.
+        // Forwards to the extent-parameterized overload at the swapchain display extent, so the
+        // main UI swapchain path is byte-identical.
         void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
                                              bool overlayPass = false) const;
+        // VK-1435 — extent-parameterized record for offscreen UI text at a non-display resolution
+        // (UI Layer Builder preview). targetExtent drives render area, dynamic viewport,
+        // viewportSize push constant, and the full-pass scissor fallback.
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                             vk::Extent2D targetExtent, bool overlayPass) const;
 
         bool isInitialized() const { return initialized; }
 

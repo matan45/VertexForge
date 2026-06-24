@@ -331,10 +331,16 @@ namespace serialization
 
         entityJson["name"] = entity.getName();
 
-        // Active state
+        // Active state. VK-1435: the UI Layer Builder sandbox root is held inactive in the live
+        // registry (so the main UI passes skip it); that inactive flag is a sandbox-only artifact
+        // and must not bake into the saved .vfPrefab, or the canvas would instantiate invisible.
+        // The tag is editor-only and not serialized, so normalize a tagged entity back to active.
         if (entity.hasComponent<components::NameComponent>())
         {
-            entityJson["isActive"] = entity.getComponent<components::NameComponent>().isActive;
+            const bool active = entity.hasComponent<components::UIPreviewTagComponent>()
+                ? true
+                : entity.getComponent<components::NameComponent>().isActive;
+            entityJson["isActive"] = active;
         }
 
         if (entity.hasComponent<components::TransformComponent>())

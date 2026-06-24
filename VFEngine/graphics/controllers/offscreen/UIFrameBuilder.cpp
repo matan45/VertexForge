@@ -1,5 +1,6 @@
 #include "UIFrameBuilder.hpp"
 #include "UICommon.hpp"
+#include "UIFrameBuilderScopedLabels.hpp"
 #include "FramePreparationSystem.hpp"
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/mesh/MeshTypes.hpp"
@@ -90,21 +91,29 @@ namespace controllers::offscreen
             return depth;
         }
 
+        // VK-1435: scopedCanvas defaults to entt::null (runtime behavior unchanged). When set
+        // (the UI Layer Builder preview), only labels whose owning canvas == scopedCanvas are
+        // emitted, under the scoped active check (the sandbox root may be intentionally inactive).
         void emitLabelEntities(
             entt::registry& registry,
             std::vector<render::ui::UITextRenderData>& drawList,
             float viewportW, float viewportH,
-            const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers)
+            const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers,
+            entt::entity scopedCanvas = entt::null)
         {
             auto view = registry.view<components::UILabelComponent, components::UIRectComponent>();
 
             for (auto entity : view)
             {
-                if (!isEntityActive(registry, entity))
+                if (!isEffectivelyActiveWithin(registry, entity, scopedCanvas))
                     continue;
 
                 const auto& labelComp = view.get<components::UILabelComponent>(entity);
                 if (labelComp.text.empty() || !labelComp.fontRef.isValid())
+                    continue;
+
+                if (scopedCanvas != entt::null &&
+                    findCanvasWithEntity(registry, entity).canvasEntity != scopedCanvas)
                     continue;
 
                 const auto* canvas = findCanvasForEntity(registry, entity);
@@ -172,16 +181,21 @@ namespace controllers::offscreen
             entt::registry& registry,
             std::vector<render::ui::UITextRenderData>& drawList,
             float viewportW, float viewportH,
-            const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers)
+            const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers,
+            entt::entity scopedCanvas = entt::null)
         {
             auto textInputView = registry.view<components::UITextInputComponent, components::UIRectComponent>();
             for (auto entity : textInputView)
             {
-                if (!isEntityActive(registry, entity))
+                if (!isEffectivelyActiveWithin(registry, entity, scopedCanvas))
                     continue;
 
                 const auto& tiComp = registry.get<components::UITextInputComponent>(entity);
                 if (!tiComp.fontRef.isValid())
+                    continue;
+
+                if (scopedCanvas != entt::null &&
+                    findCanvasWithEntity(registry, entity).canvasEntity != scopedCanvas)
                     continue;
 
                 bool showPlaceholder = tiComp.text.empty()
@@ -270,7 +284,8 @@ namespace controllers::offscreen
         void emitDropdownOptionLabels(
             entt::registry& registry,
             std::vector<render::ui::UITextRenderData>& drawList,
-            float viewportW, float viewportH)
+            float viewportW, float viewportH,
+            entt::entity scopedCanvas = entt::null)
         {
             auto dropdownView = registry.view<components::UIDropdownComponent, components::UIRectComponent>();
             for (auto dropdownEntity : dropdownView)
@@ -278,7 +293,11 @@ namespace controllers::offscreen
                 auto& comp = registry.get<components::UIDropdownComponent>(dropdownEntity);
                 if (!comp.isOpen || comp.options.empty())
                     continue;
-                if (!isEntityActive(registry, dropdownEntity))
+                if (!isEffectivelyActiveWithin(registry, dropdownEntity, scopedCanvas))
+                    continue;
+
+                if (scopedCanvas != entt::null &&
+                    findCanvasWithEntity(registry, dropdownEntity).canvasEntity != scopedCanvas)
                     continue;
 
                 const auto* canvas = findCanvasForEntity(registry, dropdownEntity);
@@ -330,16 +349,21 @@ namespace controllers::offscreen
         void emitWindowTitleLabels(
             entt::registry& registry,
             std::vector<render::ui::UITextRenderData>& drawList,
-            float viewportW, float viewportH)
+            float viewportW, float viewportH,
+            entt::entity scopedCanvas = entt::null)
         {
             auto view = registry.view<components::UIWindowComponent, components::UIRectComponent>();
             for (auto entity : view)
             {
-                if (!isEntityActive(registry, entity))
+                if (!isEffectivelyActiveWithin(registry, entity, scopedCanvas))
                     continue;
 
                 const auto& window = view.get<components::UIWindowComponent>(entity);
                 if (!window.showTitleBar || !window.fontRef.isValid())
+                    continue;
+
+                if (scopedCanvas != entt::null &&
+                    findCanvasWithEntity(registry, entity).canvasEntity != scopedCanvas)
                     continue;
 
                 const auto* canvas = findCanvasForEntity(registry, entity);
@@ -451,6 +475,11 @@ namespace controllers::offscreen
             auto canvasInfo = findCanvasWithEntity(registry, entity);
             if (!canvasInfo.canvas || canvasInfo.canvasEntity == entt::null)
                 continue;
+            // VK-1435: a builder sandbox canvas (tagged UIPreviewTagComponent) renders
+            // only through UILayerPreviewController's offscreen target — never as a
+            // stray world-space quad in the scene viewport.
+            if (registry.all_of<components::UIPreviewTagComponent>(canvasInfo.canvasEntity))
+                continue;
             if (!registry.all_of<components::WorldTransformComponent>(canvasInfo.canvasEntity))
                 continue;
 
@@ -546,6 +575,9 @@ namespace controllers::offscreen
             auto canvasInfo = findCanvasWithEntity(registry, entity);
             if (!canvasInfo.canvas || canvasInfo.canvasEntity == entt::null)
                 continue;
+            // VK-1435: skip builder sandbox canvases (see prepareUIImagesWorldSpace).
+            if (registry.all_of<components::UIPreviewTagComponent>(canvasInfo.canvasEntity))
+                continue;
             if (!registry.all_of<components::WorldTransformComponent>(canvasInfo.canvasEntity))
                 continue;
 
@@ -640,6 +672,27 @@ namespace controllers::offscreen
         }
 
         renderHandler->setUITextDrawList(std::move(drawList));
+    }
+
+    // =================================================================
+    // VK-1435 — scoped label emit for the UI Layer Builder offscreen preview
+    // =================================================================
+
+    void emitScopedCanvasLabels(
+        entt::registry& registry,
+        std::vector<render::ui::UITextRenderData>& out,
+        float viewportW, float viewportH,
+        entt::entity scopedCanvas)
+    {
+        if (scopedCanvas == entt::null)
+            return;
+
+        auto scrollContainers = buildScrollContainerMap(registry, viewportW, viewportH);
+
+        emitLabelEntities(registry, out, viewportW, viewportH, scrollContainers, scopedCanvas);
+        emitTextInputLabels(registry, out, viewportW, viewportH, scrollContainers, scopedCanvas);
+        emitDropdownOptionLabels(registry, out, viewportW, viewportH, scopedCanvas);
+        emitWindowTitleLabels(registry, out, viewportW, viewportH, scopedCanvas);
     }
 
 } // namespace controllers::offscreen

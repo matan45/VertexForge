@@ -114,7 +114,8 @@ namespace handlers
             bootstrap->getMeshPreviewProvider(),
             bootstrap->getAnimationPreviewProvider(),
             bootstrap->getVFXPreviewProvider(),
-            bootstrap->getPrefabRigPreviewProvider()
+            bootstrap->getPrefabRigPreviewProvider(),
+            bootstrap->getUILayerPreviewProvider()
         );
         editorModeService = std::make_shared<services::EditorModeServiceImpl>(bootstrap->getSceneGraphSystem());
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();

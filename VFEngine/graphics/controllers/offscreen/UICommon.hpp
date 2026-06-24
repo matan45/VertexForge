@@ -37,6 +37,35 @@ namespace controllers::offscreen::ui_common
     using utilities::ui::computeCanvasImageModelMatrix;
     using utilities::ui::computeCanvasSubRectModelMatrix;
 
+    // VK-1435 — scoped active check used only by the UI Layer Builder's offscreen preview.
+    // Identical to scene::Entity::isEffectivelyActive EXCEPT the walk up the parent chain stops
+    // at (and treats as active) `scopeRoot`: the builder sandbox canvas root is intentionally
+    // inactive so the main UI passes skip it, but its descendants must still render in the
+    // preview by their own (and intermediate parents') active flags. With scopeRoot == entt::null
+    // this is byte-identical to the engine-wide effective-active test, so the runtime emit paths
+    // that pass nothing keep their exact behavior.
+    inline bool isEffectivelyActiveWithin(entt::registry& registry, entt::entity entity,
+                                          entt::entity scopeRoot)
+    {
+        if (scopeRoot == entt::null)
+            return scene::Entity::isEffectivelyActive(registry, entity);
+
+        entt::entity current = entity;
+        while (current != entt::null && registry.valid(current))
+        {
+            if (current == scopeRoot)
+                return true; // reached the sandbox root — treat it as active, stop walking up
+            if (registry.all_of<components::NameComponent>(current) &&
+                !registry.get<components::NameComponent>(current).isActive)
+                return false;
+            if (registry.all_of<components::ParentComponent>(current))
+                current = registry.get<components::ParentComponent>(current).parent;
+            else
+                break;
+        }
+        return true;
+    }
+
     inline std::pair<services::EntityHandle, std::string> makeEntityPayload(
         entt::registry& registry, entt::entity entity)
     {

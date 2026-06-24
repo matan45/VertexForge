@@ -33,6 +33,7 @@
 #include "animation/RetargetingEditorWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "theme/ThemeEditorWindow.hpp"
+#include "uilayer/UILayerBuilderWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
 #include "debug/RTTDebugWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
@@ -224,6 +225,7 @@ namespace windows
         if (ImGui::MenuItem("Animation Retargeting"))
             controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<RetargetingEditorWindow>(""));
         if (ImGui::MenuItem("UI Theme Editor") && themeEditorWindow) themeEditorWindow->show();
+        if (ImGui::MenuItem("UI Layer Builder") && uiLayerBuilderWindow) uiLayerBuilderWindow->show();
         ImGui::EndMenu();
     }
 

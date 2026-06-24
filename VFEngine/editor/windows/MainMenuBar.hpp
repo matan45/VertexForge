@@ -35,6 +35,7 @@ namespace windows
     class HeightmapGeneratorWindow;
     class BackgroundRemovalWindow;
     class ThemeEditorWindow;
+    class UILayerBuilderWindow;
     class MemoryDiagnosticsWindow;
     class RTTDebugWindow;
     class EditorPreferencesWindow;
@@ -78,6 +79,7 @@ namespace windows
         HeightmapGeneratorWindow* heightmapGeneratorWindow = nullptr;
         BackgroundRemovalWindow* backgroundRemovalWindow = nullptr;
         ThemeEditorWindow* themeEditorWindow = nullptr;
+        UILayerBuilderWindow* uiLayerBuilderWindow = nullptr;
         MemoryDiagnosticsWindow* memoryDiagnosticsWindow = nullptr;
         RTTDebugWindow* rttDebugWindow = nullptr;
         EditorPreferencesWindow* editorPreferencesWindow = nullptr;
@@ -215,6 +217,11 @@ namespace windows
         void setThemeEditorWindow(ThemeEditorWindow* window)
         {
             themeEditorWindow = window;
+        }
+
+        void setUILayerBuilderWindow(UILayerBuilderWindow* window)
+        {
+            uiLayerBuilderWindow = window;
         }
 
         void setMemoryDiagnosticsWindow(MemoryDiagnosticsWindow* window)

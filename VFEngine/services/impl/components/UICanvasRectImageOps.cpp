@@ -102,6 +102,35 @@ namespace services {
         return true;
     }
 
+    // VK-1435 — tag/untag the UI Layer Builder sandbox root. Tagging adds the marker AND marks
+    // the root inactive: the serializer skips a tagged child without recursing, and an inactive
+    // root makes scene::Entity::isEffectivelyActive false for the whole subtree so EVERY main-pass
+    // UI emitter (images, labels, widget sub-draws, window chrome — most of which iterate component
+    // views, not canvas roots) excludes it in both edit and play mode. The offscreen preview still
+    // renders it because UILayerPreviewController's scoped path uses isEffectivelyActiveWithin,
+    // which treats the sandbox root as active. Untagging restores the active flag. No descendant
+    // propagation is required (isEffectivelyActive walks up to the root).
+    bool UIComponentService::markUIPreviewSandbox(EntityHandle entity, bool tagged) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        entt::entity ent = internal::fromHandle(entity);
+        if (tagged) {
+            registry.emplace_or_replace<components::UIPreviewTagComponent>(ent);
+            if (registry.all_of<components::NameComponent>(ent)) {
+                registry.get<components::NameComponent>(ent).isActive = false;
+            }
+        } else {
+            registry.remove<components::UIPreviewTagComponent>(ent);
+            if (registry.all_of<components::NameComponent>(ent)) {
+                registry.get<components::NameComponent>(ent).isActive = true;
+            }
+        }
+        return true;
+    }
+
     // ========== UI Rect Operations ==========
 
     bool UIComponentService::addUIRectComponent(EntityHandle entity) {
@@ -383,6 +412,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::ui::SetUICanvasDataCommand>(
             [this](const events::ui::SetUICanvasDataCommand& cmd) {
                 return setUICanvasData(cmd.entity, cmd.canvasData);
+            });
+
+        dispatcher.registerCommandHandler<events::ui::MarkUIPreviewSandboxCommand>(
+            [this](const events::ui::MarkUIPreviewSandboxCommand& cmd) {
+                return markUIPreviewSandbox(cmd.entity, cmd.tagged);
             });
 
         dispatcher.registerQueryHandler<events::ui::HasUICanvasComponentQuery>(

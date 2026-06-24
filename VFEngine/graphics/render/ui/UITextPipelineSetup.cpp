@@ -136,7 +136,10 @@ namespace render::ui
             .depthTestEnable = false,
             .depthWriteEnable = false,
             .blendEnable = true,
-            .dynamicStates = { vk::DynamicState::eScissor }
+            // VK-1435: dynamic viewport so this pipeline records into the main swapchain target
+            // AND the UI Layer Builder's offscreen target at its reference resolution (the main
+            // path sets the display extent at record time, so it stays behavior-preserving).
+            .dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor }
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
@@ -158,7 +161,7 @@ namespace render::ui
         stencilConfig.stencilTestEnable = true;
         stencilConfig.stencilFront = stencilTestOp;
         stencilConfig.stencilBack = stencilTestOp;
-        stencilConfig.dynamicStates = { vk::DynamicState::eScissor, vk::DynamicState::eStencilReference };
+        stencilConfig.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eStencilReference };
 
         auto stencilResult = core::PipelineUtilities::createGraphicsPipeline(stencilConfig);
         pipelineStencilTest = stencilResult.pipeline;
