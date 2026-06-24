@@ -5,6 +5,7 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <fstream>
 #include <cstring>
@@ -209,7 +210,7 @@ namespace windows::details
     {
         bool changed = false;
 
-        if (ImGui::ColorEdit4("Color##UILabel", &data.color.x))
+        if (ColorEditRow("Color##UILabel", &data.color.x))
         {
             changed = true;
         }

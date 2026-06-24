@@ -5,6 +5,7 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -241,22 +242,22 @@ namespace windows::details
 
             ImGui::Spacing();
 
-            if (ImGui::ColorEdit4("Handle Normal##UISlider", &data.handleNormalColor.x))
+            if (ColorEditRow("Handle Normal##UISlider", &data.handleNormalColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Handle Hovered##UISlider", &data.handleHoveredColor.x))
+            if (ColorEditRow("Handle Hovered##UISlider", &data.handleHoveredColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Handle Pressed##UISlider", &data.handlePressedColor.x))
+            if (ColorEditRow("Handle Pressed##UISlider", &data.handlePressedColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Handle Disabled##UISlider", &data.handleDisabledColor.x))
+            if (ColorEditRow("Handle Disabled##UISlider", &data.handleDisabledColor.x))
             {
                 changed = true;
             }
@@ -283,7 +284,7 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("Fill Appearance##UISlider", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::ColorEdit4("Fill Color##UISlider", &data.fillColor.x))
+            if (ColorEditRow("Fill Color##UISlider", &data.fillColor.x))
             {
                 changed = true;
             }

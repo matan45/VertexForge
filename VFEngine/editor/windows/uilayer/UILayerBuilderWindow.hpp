@@ -38,9 +38,22 @@
 #include "../details/UISliderDrawer.hpp"
 #include "../details/UIProgressBarDrawer.hpp"
 #include "../details/UIStyleDrawer.hpp"
+#include "../details/UIAnimationDrawer.hpp"
+#include "../details/UIListViewDrawer.hpp"
+#include "../details/UIWindowDrawer.hpp"
+#include "../details/UITooltipDrawer.hpp"
+#include "../details/UIMaskDrawer.hpp"
+#include "../details/UIDraggableDrawer.hpp"
+#include "../details/UIDropTargetDrawer.hpp"
+
+// Add-Component popup (UI-only section) for the inspector, and the shared preview-window
+// chrome (one-click maximize / remembered size) for the window shell.
+#include "../details/AddComponentPopup.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 
 #include <glm/glm.hpp>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -81,6 +94,7 @@ namespace windows
         void drawHierarchyPane();
         void drawCanvasPane();
         void drawInspectorPane();
+        void drawAddComponentMenu(services::EntityHandle sel); // UI-only Add-Component popup
 
         // ---- Canvas interaction (handles + click-select) -----------------------
         void drawCanvasImageAndHandles(glm::vec2 regionOrigin, glm::vec2 regionSize);
@@ -123,6 +137,11 @@ namespace windows
         // ====================================================================
         bool visible = false;
         nfd::FileDialog fileDialog;
+
+        // One-click maximize/restore + remembered window size (shared preview chrome).
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0, 0};
+        bool sizeSaved = false;
 
         // Per-window preview instance id (the controller/adapter key). Uses 'this'.
         services::PreviewInstanceId instanceId() const
@@ -169,6 +188,27 @@ namespace windows
         uilayer::UIComponentSnapshot inspectorSnapshotBefore{};
         bool inspectorEditActive = false;
 
+        // Inspector "Add Component" popup (UI-only section). The popup dispatches the
+        // AddUI*ComponentCommand itself; the inspector marks dirty + rebuilds after it runs.
+        details::AddComponentPopup addComponentPopup;
+
+        // Inline rename in the hierarchy (double-click a node). Mirrors SceneHierarchyPanel.
+        services::EntityHandle renamingEntity = services::EntityHandle::invalid();
+        char renameBuf[128] = {};
+        bool renameFocusPending = false;
+
+        // Hierarchy reveal: expanded-node set (entity ids) drives SetNextItemOpen, kept in sync
+        // with user toggles. On a selection change the selected entity's ancestors are expanded
+        // and the node is scrolled into view. `seenNodes` makes nodes default-open on first
+        // sight (preserving the original DefaultOpen UX) while still honoring later collapses.
+        std::set<uint64_t> expandedNodes;
+        std::set<uint64_t> seenNodes;
+        services::EntityHandle lastRevealSel = services::EntityHandle::invalid();
+        bool revealScroll = false;
+
+        // Drag-drop reparent payload id for the hierarchy.
+        static constexpr const char* kHierarchyDragPayload = "DND_UILAYER_ENTITY";
+
         // Theme picker.
         std::string themePath;
 
@@ -187,5 +227,12 @@ namespace windows
         details::UISliderDrawer uiSliderDrawer;
         details::UIProgressBarDrawer uiProgressBarDrawer;
         details::UIStyleDrawer uiStyleDrawer;
+        details::UIAnimationDrawer uiAnimationDrawer;
+        details::UIListViewDrawer uiListViewDrawer;
+        details::UIWindowDrawer uiWindowDrawer;
+        details::UITooltipDrawer uiTooltipDrawer;
+        details::UIMaskDrawer uiMaskDrawer;
+        details::UIDraggableDrawer uiDraggableDrawer;
+        details::UIDropTargetDrawer uiDropTargetDrawer;
     };
 }

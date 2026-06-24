@@ -5,6 +5,7 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -110,22 +111,22 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("State Colors", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::ColorEdit4("Normal Color##UIButton", &data.normalColor.x))
+            if (ColorEditRow("Normal Color##UIButton", &data.normalColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Hovered Color##UIButton", &data.hoveredColor.x))
+            if (ColorEditRow("Hovered Color##UIButton", &data.hoveredColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Pressed Color##UIButton", &data.pressedColor.x))
+            if (ColorEditRow("Pressed Color##UIButton", &data.pressedColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Disabled Color##UIButton", &data.disabledColor.x))
+            if (ColorEditRow("Disabled Color##UIButton", &data.disabledColor.x))
             {
                 changed = true;
             }

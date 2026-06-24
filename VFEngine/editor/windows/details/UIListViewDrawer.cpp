@@ -4,6 +4,7 @@
 #include "events/ui/UIListViewEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -87,7 +88,7 @@ namespace windows::details
             changed |= ImGui::Checkbox("Selectable##UIListView", &data.selectable);
             if (data.selectable)
             {
-                changed |= ImGui::ColorEdit4("Selected Tint##UIListView", &data.selectedTint.x);
+                changed |= ColorEditRow("Selected Tint##UIListView", &data.selectedTint.x);
                 ImGui::TextDisabled("Selected: %d", data.selectedIndex);
             }
 

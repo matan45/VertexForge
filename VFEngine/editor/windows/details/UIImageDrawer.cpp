@@ -6,6 +6,7 @@
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "../../dragdrop/AssetDropTarget.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -188,7 +189,7 @@ namespace windows::details
     {
         bool changed = false;
 
-        if (ImGui::ColorEdit4("Color Tint##UIImage", &data.colorTint.x))
+        if (ColorEditRow("Color Tint##UIImage", &data.colorTint.x))
         {
             changed = true;
         }

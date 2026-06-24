@@ -10,6 +10,7 @@
 #include "events/ui/UISliderProgressEvents.hpp"
 #include "events/ui/UIListViewEvents.hpp"
 #include "events/ui/UIThemeEvents.hpp"
+#include "events/ui/UIEvents.hpp" // aggregator: all HasUI*ComponentQuery for the Add-Component presence
 #include "events/render/UILayerPreviewEvents.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
 #include "events/project/ResourceEvents.hpp"
@@ -17,6 +18,7 @@
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <memory>
 
 namespace windows
@@ -88,6 +90,7 @@ namespace windows
     void UILayerBuilderWindow::show()
     {
         visible = true;
+        sizeSaved = false; // re-arm the on-close size persistence for this open session
     }
 
     void UILayerBuilderWindow::openFromContentBrowser(const std::string& path)
@@ -263,6 +266,15 @@ namespace windows
         contentRoot = services::EntityHandle::invalid();
         dragging = false;
         dragEntity = services::EntityHandle::invalid();
+
+        // Reset per-layer hierarchy UI state so a recycled entity id can't inherit stale
+        // open/seen state, and rename/reveal don't dangle across New/Open.
+        renamingEntity = services::EntityHandle::invalid();
+        renameFocusPending = false;
+        expandedNodes.clear();
+        seenNodes.clear();
+        lastRevealSel = services::EntityHandle::invalid();
+        revealScroll = false;
     }
 
     void UILayerBuilderWindow::saveLayer(bool saveAs)
@@ -545,7 +557,13 @@ namespace windows
     {
         if (!visible) return;
 
-        ImGui::SetNextWindowSize(ImVec2(1100, 720), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = editor::preview::initialWindowSize("UILayerBuilder", ImVec2(1200, 700));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
+
         std::string title = "UI Layer Builder";
         if (!layerPath.empty())
         {
@@ -564,6 +582,7 @@ namespace windows
         bool wasVisible = visible;
         if (ImGui::Begin(title.c_str(), &visible))
         {
+            maximizer.drawButton();
             drawToolbar();
             ImGui::Separator();
 
@@ -601,9 +620,14 @@ namespace windows
         }
         ImGui::End();
 
-        // Closed via the title-bar X: tear down the sandbox + preview.
+        // Closed via the title-bar X: persist the window size, then tear down sandbox + preview.
         if (wasVisible && !visible)
         {
+            if (!sizeSaved)
+            {
+                editor::preview::rememberWindowSize("UILayerBuilder", maximizer.effectiveSize());
+                sizeSaved = true;
+            }
             closeLayer();
         }
     }
@@ -778,9 +802,61 @@ namespace windows
         ImGui::SeparatorText("Hierarchy");
         if (!hasLayer()) return;
 
+        // Reveal: when the selection changes (canvas-click or tree-click), expand the selected
+        // entity's ancestors and request a one-shot scroll-into-view for its node.
+        services::EntityHandle sel = selectedEntity();
+        if (sel.isValid() && sel != lastRevealSel)
+        {
+            lastRevealSel = sel;
+            revealScroll = true;
+
+            // Walk up the parent chain, expanding each ancestor (without collapsing others).
+            services::EntityHandle current = sel;
+            while (current.isValid())
+            {
+                events::scene::GetEntityQuery q;
+                q.entity = current;
+                auto data = Dispatcher::instance().query(q);
+                if (!data.has_value() || !data->parent.has_value() || !data->parent->isValid())
+                    break;
+                expandedNodes.insert(data->parent->id);
+                current = *data->parent;
+            }
+        }
+        else if (!sel.isValid())
+        {
+            lastRevealSel = services::EntityHandle::invalid();
+        }
+
         if (ImGui::BeginChild("HierTree", ImVec2(0, 0)))
         {
             drawHierarchyNode(contentRoot, 0);
+
+            // Empty space below the tree is a top-level drop zone: dropping here reparents the
+            // dragged entity directly under contentRoot ("outside / move to top level").
+            ImVec2 remaining = ImGui::GetContentRegionAvail();
+            if (remaining.y > 0.0f)
+            {
+                ImGui::Dummy(ImVec2(std::max(remaining.x, 1.0f), remaining.y));
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kHierarchyDragPayload))
+                    {
+                        services::EntityHandle dragged =
+                            *static_cast<const services::EntityHandle*>(p->Data);
+                        if (dragged.isValid() && contentRoot.isValid() && dragged.id != contentRoot.id)
+                        {
+                            events::scene::ReparentEntityCommand reparent;
+                            reparent.entity = dragged;
+                            reparent.newParent = contentRoot;
+                            Dispatcher::instance().execute(reparent);
+                            dirty = true;
+                            rebuildPreview();
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+            }
         }
         ImGui::EndChild();
     }
@@ -796,17 +872,112 @@ namespace windows
 
         const bool isSelected = (selectedEntity() == entity);
         const bool hasChildren = !data->children.empty();
+        const bool isRenaming = (renamingEntity == entity);
 
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth
-            | ImGuiTreeNodeFlags_DefaultOpen;
+        // Default-open on first sight (preserves the original DefaultOpen UX); thereafter the
+        // expandedNodes set is authoritative and tracks user collapses + reveal expansions.
+        if (seenNodes.insert(entity.id).second)
+        {
+            expandedNodes.insert(entity.id);
+        }
+
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
         if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
         if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf;
 
         ImGui::PushID(static_cast<int>(entity.id));
+        ImGui::SetNextItemOpen(expandedNodes.count(entity.id) > 0, ImGuiCond_Always);
         bool open = ImGui::TreeNodeEx(data->name.empty() ? "(unnamed)" : data->name.c_str(), flags);
-        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+
+        // Keep the expanded set in sync with user arrow toggles.
+        if (ImGui::IsItemToggledOpen())
         {
-            selectEntity(entity);
+            if (open) expandedNodes.insert(entity.id);
+            else      expandedNodes.erase(entity.id);
+        }
+
+        // Scroll the freshly-revealed selection into view (one-shot).
+        if (isSelected && revealScroll)
+        {
+            ImGui::SetScrollHereY(0.5f);
+            revealScroll = false;
+        }
+
+        if (!isRenaming)
+        {
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            {
+                selectEntity(entity);
+            }
+
+            // Double-click begins an inline rename (the content root is the layer top — still
+            // renameable, since it's the saved subtree's own node).
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                renamingEntity = entity;
+                renameFocusPending = true;
+                snprintf(renameBuf, sizeof(renameBuf), "%s", data->name.c_str());
+            }
+
+            // Drag source: this node can be reparented onto another. Must come right after the
+            // tree node (before any SameLine widgets).
+            if (ImGui::BeginDragDropSource())
+            {
+                services::EntityHandle payload = entity;
+                ImGui::SetDragDropPayload(kHierarchyDragPayload, &payload, sizeof(services::EntityHandle));
+                ImGui::Text("Move %s", data->name.empty() ? "(unnamed)" : data->name.c_str());
+                ImGui::EndDragDropSource();
+            }
+        }
+
+        // Drop target: reparent the dragged entity under this node.
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kHierarchyDragPayload))
+            {
+                services::EntityHandle dragged = *static_cast<const services::EntityHandle*>(p->Data);
+                if (dragged.isValid() && dragged.id != entity.id)
+                {
+                    events::scene::ReparentEntityCommand reparent;
+                    reparent.entity = dragged;
+                    reparent.newParent = entity; // handler enforces the ancestor cycle-check
+                    Dispatcher::instance().execute(reparent);
+                    dirty = true;
+                    rebuildPreview();
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        // Inline rename editor (replaces the node's normal interactions for this frame).
+        if (isRenaming)
+        {
+            ImGui::SameLine();
+            if (renameFocusPending)
+            {
+                ImGui::SetKeyboardFocusHere();
+                renameFocusPending = false;
+            }
+            ImGui::SetNextItemWidth(std::max(ImGui::GetContentRegionAvail().x - 10.0f, 80.0f));
+            bool committed = ImGui::InputText("##rename", renameBuf, sizeof(renameBuf),
+                                              ImGuiInputTextFlags_EnterReturnsTrue
+                                                  | ImGuiInputTextFlags_AutoSelectAll);
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+            {
+                renamingEntity = services::EntityHandle::invalid();
+            }
+            else if (committed || ImGui::IsItemDeactivated())
+            {
+                if (renameBuf[0] != '\0')
+                {
+                    events::scene::SetEntityNameCommand cmd;
+                    cmd.entity = entity;
+                    cmd.newName = renameBuf;
+                    Dispatcher::instance().execute(cmd);
+                    dirty = true;
+                }
+                renamingEntity = services::EntityHandle::invalid();
+            }
         }
 
         // Delete (not the content root — that's the layer's top).
@@ -1095,6 +1266,13 @@ namespace windows
         uiSliderDrawer.draw(sel);
         uiProgressBarDrawer.draw(sel);
         uiStyleDrawer.draw(sel);
+        uiAnimationDrawer.draw(sel);
+        uiListViewDrawer.draw(sel);
+        uiWindowDrawer.draw(sel);
+        uiTooltipDrawer.draw(sel);
+        uiMaskDrawer.draw(sel);
+        uiDraggableDrawer.draw(sel);
+        uiDropTargetDrawer.draw(sel);
 
         // Track an in-flight edit session and push ONE undo entry when it ends. ImGui has no
         // "any item deactivated after edit" query, so detect the session end as the transition
@@ -1124,6 +1302,87 @@ namespace windows
         // tracks the change.
         if (anyItemActive || editJustEnded)
         {
+            rebuildPreview();
+        }
+
+        // Add Component (UI-only menu). Drawn after the edit-coalescing logic so the popup's
+        // own active state doesn't fold into the inspector edit session. The popup's selectables
+        // dispatch the AddUI*ComponentCommand themselves; we mark dirty + rebuild after they run.
+        drawAddComponentMenu(sel);
+    }
+
+    void UILayerBuilderWindow::drawAddComponentMenu(services::EntityHandle sel)
+    {
+        if (!sel.isValid()) return;
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Build the presence flags so the popup hides already-present UI components. Counting
+        // the present flags before/after the popup body lets us detect an add deterministically
+        // (the popup's selectables dispatch the AddUI*ComponentCommand synchronously on click).
+        auto buildPresence = [&]() {
+            details::ComponentPresence p;
+            p.handle = sel;
+            auto has = [&](auto query) -> bool {
+                query.entity = sel;
+                return Dispatcher::instance().query(query);
+            };
+            p.hasUICanvas      = has(events::ui::HasUICanvasComponentQuery{});
+            p.hasUIRect        = has(events::ui::HasUIRectComponentQuery{});
+            p.hasUIImage       = has(events::ui::HasUIImageComponentQuery{});
+            p.hasUILabel       = has(events::ui::HasUILabelComponentQuery{});
+            p.hasUIScroll      = has(events::ui::HasUIScrollComponentQuery{});
+            p.hasUILayoutGroup = has(events::ui::HasUILayoutGroupComponentQuery{});
+            p.hasUIButton      = has(events::ui::HasUIButtonComponentQuery{});
+            p.hasUITextInput   = has(events::ui::HasUITextInputComponentQuery{});
+            p.hasUICheckbox    = has(events::ui::HasUICheckboxComponentQuery{});
+            p.hasUIDropdown    = has(events::ui::HasUIDropdownComponentQuery{});
+            p.hasUITabs        = has(events::ui::HasUITabsComponentQuery{});
+            p.hasUISlider      = has(events::ui::HasUISliderComponentQuery{});
+            p.hasUIProgressBar = has(events::ui::HasUIProgressBarComponentQuery{});
+            p.hasUIAnimation   = has(events::ui::HasUIAnimationComponentQuery{});
+            p.hasUIStyle       = has(events::ui::HasUIStyleComponentQuery{});
+            p.hasUIListView    = has(events::ui::HasUIListViewComponentQuery{});
+            p.hasUIWindow      = has(events::ui::HasUIWindowComponentQuery{});
+            p.hasUITooltip     = has(events::ui::HasUITooltipComponentQuery{});
+            p.hasUIMask        = has(events::ui::HasUIMaskComponentQuery{});
+            p.hasUIDraggable   = has(events::ui::HasUIDraggableComponentQuery{});
+            p.hasUIDropTarget  = has(events::ui::HasUIDropTargetComponentQuery{});
+            return p;
+        };
+        auto presentCount = [](const details::ComponentPresence& p) {
+            return int(p.hasUICanvas) + int(p.hasUIRect) + int(p.hasUIImage) + int(p.hasUILabel)
+                 + int(p.hasUIScroll) + int(p.hasUILayoutGroup) + int(p.hasUIButton)
+                 + int(p.hasUITextInput) + int(p.hasUICheckbox) + int(p.hasUIDropdown)
+                 + int(p.hasUITabs) + int(p.hasUISlider) + int(p.hasUIProgressBar)
+                 + int(p.hasUIAnimation) + int(p.hasUIStyle) + int(p.hasUIListView)
+                 + int(p.hasUIWindow) + int(p.hasUITooltip) + int(p.hasUIMask)
+                 + int(p.hasUIDraggable) + int(p.hasUIDropTarget);
+        };
+
+        details::ComponentPresence presence = buildPresence();
+
+        if (ImGui::Button("Add Component", ImVec2(-1, 0)))
+        {
+            ImGui::OpenPopup("UILayerAddComponent");
+        }
+
+        bool addedSomething = false;
+        if (ImGui::BeginPopup("UILayerAddComponent"))
+        {
+            const int before = presentCount(presence);
+            addComponentPopup.drawUISection(presence);
+            // Re-query after the body: a clicked selectable already dispatched its Add command.
+            if (presentCount(buildPresence()) != before)
+                addedSomething = true;
+            ImGui::EndPopup();
+        }
+
+        if (addedSomething)
+        {
+            dirty = true;
             rebuildPreview();
         }
     }

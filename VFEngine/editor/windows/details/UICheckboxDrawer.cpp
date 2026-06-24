@@ -5,6 +5,7 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -170,22 +171,22 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("State Colors##UICheckbox", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::ColorEdit4("Unchecked Color##UICheckbox", &data.uncheckedColor.x))
+            if (ColorEditRow("Unchecked Color##UICheckbox", &data.uncheckedColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Checked Color##UICheckbox", &data.checkedColor.x))
+            if (ColorEditRow("Checked Color##UICheckbox", &data.checkedColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Hovered Color##UICheckbox", &data.hoveredColor.x))
+            if (ColorEditRow("Hovered Color##UICheckbox", &data.hoveredColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Disabled Color##UICheckbox", &data.disabledColor.x))
+            if (ColorEditRow("Disabled Color##UICheckbox", &data.disabledColor.x))
             {
                 changed = true;
             }

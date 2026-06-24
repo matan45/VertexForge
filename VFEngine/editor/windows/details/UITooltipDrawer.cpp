@@ -4,6 +4,7 @@
 #include "events/ui/UITooltipEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <cstring>
 
@@ -77,11 +78,11 @@ namespace windows::details
                 {
                     changed = true;
                 }
-                if (ImGui::ColorEdit4("Background##UITooltip", &data.backgroundColor.x))
+                if (ColorEditRow("Background##UITooltip", &data.backgroundColor.x))
                 {
                     changed = true;
                 }
-                if (ImGui::ColorEdit4("Text Color##UITooltip", &data.textColor.x))
+                if (ColorEditRow("Text Color##UITooltip", &data.textColor.x))
                 {
                     changed = true;
                 }

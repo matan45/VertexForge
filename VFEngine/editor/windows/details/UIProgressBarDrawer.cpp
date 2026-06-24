@@ -5,6 +5,7 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -221,7 +222,7 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("Track Appearance##UIProgressBar", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::ColorEdit4("Track Color##UIProgressBar", &data.trackColor.x))
+            if (ColorEditRow("Track Color##UIProgressBar", &data.trackColor.x))
             {
                 changed = true;
             }
@@ -244,7 +245,7 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("Fill Appearance##UIProgressBar", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::ColorEdit4("Fill Color##UIProgressBar", &data.fillColor.x))
+            if (ColorEditRow("Fill Color##UIProgressBar", &data.fillColor.x))
             {
                 changed = true;
             }

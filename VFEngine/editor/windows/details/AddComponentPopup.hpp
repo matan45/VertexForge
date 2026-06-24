@@ -64,6 +64,12 @@ namespace windows::details {
     public:
         void draw(const ComponentPresence& components);
 
+        // Emits the UI-component Add selectables for the given entity (each guarded by the
+        // matching has-flag). Public so the UI Layer Builder can host the UI-only add menu
+        // inside its own popup without the full multi-section AddComponentPopup::draw().
+        // Must be called between ImGui::BeginPopup/EndMenu and EndPopup/EndMenu by the caller.
+        void drawUISection(const ComponentPresence& c, const char* filter = nullptr);
+
     private:
         char searchBuffer[128] = {};
 
@@ -71,7 +77,6 @@ namespace windows::details {
         void drawPhysicsSection(const ComponentPresence& c, const char* filter = nullptr);
         void drawAnimationSection(const ComponentPresence& c, const char* filter = nullptr);
         void drawLightingSection(const ComponentPresence& c, const char* filter = nullptr);
-        void drawUISection(const ComponentPresence& c, const char* filter = nullptr);
         void drawPluginSection(const ComponentPresence& c, const char* filter = nullptr);
 
         static bool matchesFilter(const char* label, const char* filter);
