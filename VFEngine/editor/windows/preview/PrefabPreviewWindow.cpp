@@ -433,8 +433,12 @@ namespace windows
 
     void PrefabPreviewWindow::buildPreviewFromDesc()
     {
-        if (!previewInitialized || rigDesc.parts.empty()) return;
+        if (!previewInitialized) return;
 
+        // Always (re)dispatch the build, even when rigDesc has zero parts (hide-all). An empty desc
+        // is a VALID empty preview: the controller's buildFromDesc destroys its pipelines, clears the
+        // assembly and reports built=true, so render() clears the offscreen image to the background.
+        // Bailing on an empty desc here would leave the previous (still-animating) build on screen.
         services::events::prefabrigpreview::BuildPrefabRigPreviewCommand cmd;
         cmd.instanceId = getInstanceId();
         cmd.desc = rigDesc;
