@@ -182,19 +182,21 @@ TEST_SUITE("PrefabRigPhase2Gaps.UndoData")
         CHECK(chainsEqual({}, {}));
     }
 
-    TEST_CASE("snapshot: a transform-only snapshot engages only previewTransforms")
+    // VK-1433 Phase 4d: the previewTransforms snapshot field + its transform-only-engagement test were
+    // removed — the part Transform gizmo now edits the source ENTITY transform (replayed by
+    // PrefabRigEntityTransformUndoCommand, which captures TransformData by value), not a transient
+    // preview-offset map. An IK-binding-only snapshot still engages just ikBindings.
+    TEST_CASE("snapshot: an ik-binding-only snapshot engages only ikBindings")
     {
         using namespace windows::prefabrigedit;
         PrefabRigEditSnapshot snap;
-        std::map<int, glm::mat4> m;
-        m[0] = glm::mat4(1.0f);            // identity entry (reset covers it on replay)
-        m[2] = glm::translate(glm::mat4(1.0f), glm::vec3(3.0f, 0.0f, 0.0f));
-        snap.previewTransforms = m;
+        snap.ikBindings = std::vector<IKBindingSnapshot>{IKBindingSnapshot{2, "muzzle"}};
 
-        CHECK(snap.previewTransforms.has_value());
+        CHECK(snap.ikBindings.has_value());
         CHECK_FALSE(snap.socketPart.has_value());
         CHECK_FALSE(snap.chains.has_value());
-        CHECK((*snap.previewTransforms).size() == 2);
-        CHECK((*snap.previewTransforms)[0] == glm::mat4(1.0f));
+        CHECK((*snap.ikBindings).size() == 1);
+        CHECK((*snap.ikBindings)[0].targetPartIndex == 2);
+        CHECK((*snap.ikBindings)[0].targetSocketName == "muzzle");
     }
 }

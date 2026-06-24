@@ -187,24 +187,25 @@ TEST_SUITE("PrefabRigPhase2.UndoData")
     {
         using namespace windows::prefabrigedit;
 
-        // A sockets snapshot built by hand (mirrors snapshotSockets): socketPart engaged, others not.
+        // A sockets snapshot built by hand (mirrors snapshotSockets): socketPart engaged, chains not.
         PrefabRigEditSnapshot socketsSnap;
         socketsSnap.socketPart = 2;
         socketsSnap.sockets = {animator::SocketDefinition{}};
         CHECK(socketsSnap.socketPart.has_value());
         CHECK_FALSE(socketsSnap.chains.has_value());
-        CHECK_FALSE(socketsSnap.previewTransforms.has_value());
 
         PrefabRigEditSnapshot chainsSnap;
         chainsSnap.chains = std::vector<animator::ik::IKChainConfig>{};
         CHECK_FALSE(chainsSnap.socketPart.has_value());
         CHECK(chainsSnap.chains.has_value());
 
-        PrefabRigEditSnapshot xformSnap;
-        std::map<int, glm::mat4> m;
-        m[1] = glm::mat4(2.0f);
-        xformSnap.previewTransforms = m;
-        CHECK(xformSnap.previewTransforms.has_value());
-        CHECK((*xformSnap.previewTransforms)[1] == glm::mat4(2.0f));
+        // VK-1433 Phase 4d: the previewTransforms field was removed (the Transform gizmo now edits the
+        // source ENTITY transform; its undo is PrefabRigEntityTransformUndoCommand). An IK-binding-only
+        // snapshot engages just ikBindings.
+        PrefabRigEditSnapshot bindingSnap;
+        bindingSnap.ikBindings = std::vector<IKBindingSnapshot>{IKBindingSnapshot{1, "grip"}};
+        CHECK_FALSE(bindingSnap.socketPart.has_value());
+        CHECK_FALSE(bindingSnap.chains.has_value());
+        CHECK(bindingSnap.ikBindings.has_value());
     }
 }

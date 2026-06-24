@@ -68,8 +68,9 @@ namespace windows
     {
         // Restore only the mirror fields the snapshot engaged. The controller was already updated by
         // applyPrefabRigSnapshot (CQRS) BEFORE this runs; this keeps the window's panels in sync.
-        // (VK-1433 Phase 4c: the previewTransforms mirror is retired — the part Transform gizmo now
-        // edits the source ENTITY directly, so snap.previewTransforms is never engaged here.)
+        // (VK-1433 Phase 4c/4d: the part Transform gizmo edits the source ENTITY transform directly;
+        // its undo is the separate PrefabRigEntityTransformUndoCommand, so this socket/chain-mirror
+        // path never handles transforms — the retired previewTransforms snapshot field is gone.)
         if (snap.chains.has_value())
             editChains = *snap.chains;
 
@@ -232,9 +233,22 @@ namespace windows
                 // doesn't fold into the tab edit state.
                 if (ImGui::CollapsingHeader("Entity Inspector", ImGuiTreeNodeFlags_DefaultOpen))
                 {
+                    // VK-1433 Phase 4d — isolate the embedded inspector's ID scope. Without this, the
+                    // inspector's CollapsingHeader("Transform") hashes to the SAME id as the gizmo
+                    // toolbar's RadioButton("Transform") (both at the AuthoringPanel window-root scope,
+                    // the toolbar being outside the tab bar), which ImGui flags as a conflicting-ID
+                    // error. PushID re-bases every inspector widget so no inspector label can collide
+                    // with an authoring-panel label drawn at the same level.
+                    ImGui::PushID("entityInspector");
                     drawEntityInspector();
+                    ImGui::PopID();
                 }
                 ImGui::EndChild();
+
+                // VK-1433 Phase 4d — confirm-on-delete modal. Drawn at the window-root scope (not in a
+                // child) so OpenPopup/BeginPopupModal share the same popup-stack ID; the three delete
+                // affordances only set the open flag (via requestDeleteEntity), this issues the popup.
+                drawDeleteConfirmPopup();
             }
         }
         ImGui::End();
@@ -596,6 +610,35 @@ namespace windows
         events::EventDispatcher::instance().execute(push);
     }
 
+    void PrefabPreviewWindow::resyncRebuild(services::PreviewInstanceId id)
+    {
+        auto& windows = liveWindows();
+        auto it = windows.find(id.raw());
+        if (it != windows.end() && it->second)
+            it->second->rebuildRigFromSandbox();
+        // else: the window was closed — the SetTransformCommand replay already no-op'd on the dead
+        // (deleted) entity; nothing to rebuild.
+    }
+
+    void PrefabPreviewWindow::pushTransformUndo(services::EntityHandle entity,
+                                                const services::TransformData& before,
+                                                const services::TransformData& after)
+    {
+        if (!entity.isValid() || before == after)
+            return; // nothing actually changed — don't pollute the stack
+
+        const services::PreviewInstanceId id = getInstanceId();
+        // Capture ONLY the id (a value) — never `this`. resyncRebuild looks the window up by id and
+        // no-ops if it has been closed, so the command is safe on the process-global undo stack.
+        auto cmd = std::make_shared<prefabrigedit::PrefabRigEntityTransformUndoCommand>(
+            entity, before, after, "Edit part transform",
+            [id]() { PrefabPreviewWindow::resyncRebuild(id); });
+
+        events::undoredo::PushUndoableCommand push;
+        push.command = std::make_shared<services::SharedUndoCommand>(std::move(cmd));
+        events::EventDispatcher::instance().execute(push);
+    }
+
     // ----------------------------------------------------------------------
     // VK-1433 Phase 4c — prefab save
     // ----------------------------------------------------------------------
@@ -872,6 +915,17 @@ namespace windows
 
         glm::mat4 objectMatrix = liveWorld;
 
+        // VK-1433 Phase 4d — undo bracket. ImGuizmo drags do NOT register as ImGui items, so snapshot
+        // the entity's pre-drag transform on the IsUsing() rising edge (ownLocal is read BEFORE the
+        // Manipulate below, so it's the pristine state even on the first drag frame), then push ONE
+        // coalesced entity-transform undo on release.
+        const bool usingGizmo = ImGuizmo::IsUsing();
+        if (usingGizmo && !transformGizmoEditActive)
+        {
+            transformGizmoEditActive = true;
+            transformGizmoBefore = ownLocal;
+        }
+
         if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
                                  transformGizmoOp, ImGuizmo::WORLD, glm::value_ptr(objectMatrix)))
         {
@@ -891,6 +945,14 @@ namespace windows
 
             dirty = true;
             rebuildRigFromSandbox(); // re-derive the rig so the preview tracks the entity edit
+        }
+
+        if (!usingGizmo && transformGizmoEditActive)
+        {
+            transformGizmoEditActive = false;
+            // after = the entity transform as it stands now (post-drag). No-op-gated inside.
+            pushTransformUndo(partEntities[selectedPart], transformGizmoBefore,
+                              partSourceLocalTransform(selectedPart));
         }
     }
 
@@ -1076,29 +1138,123 @@ namespace windows
         }
     }
 
+    services::EntityHandle PrefabPreviewWindow::createChildEntity(services::EntityHandle parent)
+    {
+        if (!parent.isValid()) parent = sandboxRoot;
+        if (!parent.isValid()) return services::EntityHandle::invalid();
+
+        events::scene::CreateEntityCommand cmd;
+        cmd.name = "Entity";
+        cmd.parent = parent;
+        const services::EntityHandle created = events::EventDispatcher::instance().execute(cmd);
+        if (created.isValid())
+        {
+            selectEntity(created);
+            dirty = true;
+            rebuildRigFromSandbox();
+        }
+        return created;
+    }
+
+    void PrefabPreviewWindow::requestDeleteEntity(services::EntityHandle entity)
+    {
+        // VK-1433 Phase 4d — stage the delete + open the confirm modal instead of deleting now. Never
+        // the sandbox root. The actual DeleteEntityCommand runs in deleteEntity() on confirm.
+        if (!entity.isValid() || entity == sandboxRoot) return;
+
+        pendingDeleteEntity = entity;
+        // Capture the name now (for the modal message) — the entity still exists at request time.
+        events::scene::GetEntityQuery q;
+        q.entity = entity;
+        auto data = events::EventDispatcher::instance().query(q);
+        pendingDeleteName = (data.has_value() && !data->name.empty()) ? data->name : "(unnamed)";
+        openDeleteConfirmPopup = true; // consumed by drawDeleteConfirmPopup() this frame
+    }
+
+    bool PrefabPreviewWindow::deleteEntity(services::EntityHandle entity)
+    {
+        // Never the sandbox root — that's the saved subtree's top (the prefab itself).
+        if (!entity.isValid() || entity == sandboxRoot) return false;
+
+        const bool wasSelected = (selectedEntity() == entity);
+        events::scene::DeleteEntityCommand del;
+        del.entity = entity;
+        events::EventDispatcher::instance().execute(del);
+        if (wasSelected) selectEntity(sandboxRoot);
+        hiddenEntities.erase(entity.id);
+        dirty = true;
+        rebuildRigFromSandbox();
+        return true;
+    }
+
+    void PrefabPreviewWindow::drawDeleteConfirmPopup()
+    {
+        // VK-1433 Phase 4d — confirm-on-delete modal shared by all three delete affordances. Opened by
+        // requestDeleteEntity (sets openDeleteConfirmPopup); Delete runs DeleteEntityCommand via
+        // deleteEntity, Cancel is a no-op. The popup is defined at the window-root ID scope (called once
+        // per frame from draw(), outside the hierarchy recursion).
+        if (openDeleteConfirmPopup)
+        {
+            ImGui::OpenPopup("Delete Entity?##prefabDelete");
+            openDeleteConfirmPopup = false;
+        }
+
+        // Center the modal over the window.
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Delete Entity?##prefabDelete", nullptr,
+                                   ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Delete '%s' and its children?", pendingDeleteName.c_str());
+            ImGui::TextDisabled("This removes the entity (and its descendants) from the prefab and "
+                                "cannot be undone.");
+            ImGui::Spacing();
+            if (ImGui::Button("Delete", ImVec2(120, 0)))
+            {
+                deleteEntity(pendingDeleteEntity);
+                pendingDeleteEntity = services::EntityHandle::invalid();
+                pendingDeleteName.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                pendingDeleteEntity = services::EntityHandle::invalid();
+                pendingDeleteName.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SetItemDefaultFocus();
+            ImGui::EndPopup();
+        }
+    }
+
     void PrefabPreviewWindow::drawEntityTreePanel()
     {
+        // VK-1433 Phase 4d — Hierarchy header toolbar: "+ Add" (child under selection/root) and a
+        // trash "Delete" (enabled only for a non-root selection). Both share createChildEntity /
+        // deleteEntity with the per-node context menu and the Delete-key shortcut.
         ImGui::TextDisabled("Hierarchy");
         ImGui::SameLine();
-        // "+" adds a child under the current selection (or the sandbox root). Mirrors UILayerBuilder's
-        // addWidget affordance.
-        if (ImGui::SmallButton("+##addEntity"))
+        if (ImGui::SmallButton(ICON_FA_PLUS " Add##addEntity"))
         {
-            const services::EntityHandle parent =
-                selectedEntity().isValid() ? selectedEntity() : sandboxRoot;
-            events::scene::CreateEntityCommand cmd;
-            cmd.name = "Entity";
-            cmd.parent = parent;
-            const services::EntityHandle created = events::EventDispatcher::instance().execute(cmd);
-            if (created.isValid())
-            {
-                selectEntity(created);
-                dirty = true;
-                rebuildRigFromSandbox();
-            }
+            createChildEntity(selectedEntity().isValid() ? selectedEntity() : sandboxRoot);
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Add a child entity under the selection (or the root)");
+
+        ImGui::SameLine();
+        const services::EntityHandle sel = selectedEntity();
+        const bool canDelete = sel.isValid() && sel != sandboxRoot;
+        ImGui::BeginDisabled(!canDelete);
+        if (ImGui::SmallButton(ICON_FA_TRASH " Delete##delEntity"))
+        {
+            requestDeleteEntity(sel); // confirm modal; actual delete on confirm
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip(canDelete ? "Delete the selected entity (Del)"
+                                        : "Select a non-root entity to delete (Del)");
 
         if (loadFailed || !prefabLoaded || !sandboxRoot.isValid())
         {
@@ -1109,6 +1265,17 @@ namespace windows
         // rename/reparent/reorder/hide. Drag a node onto another to reparent; onto a between-siblings
         // zone to reorder; double-click to rename; the eye toggles editor-only preview hide.
         drawEntityNode(sandboxRoot, 0);
+
+        // VK-1433 Phase 4d — Delete-key shortcut: when this hierarchy panel (or any of its children) is
+        // focused and no inline rename / text field is active, Del removes the selected non-root entity
+        // via the same deleteEntity path. IsWindowFocused(RootAndChildWindows) covers the InfoPanel
+        // child the tree lives in; the rename guard avoids stealing Del from the rename InputText.
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+            !renamingEntity.isValid() && !ImGui::IsAnyItemActive() &&
+            ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+        {
+            requestDeleteEntity(selectedEntity()); // confirm modal; actual delete on confirm
+        }
     }
 
     void PrefabPreviewWindow::drawReorderDropZone(services::EntityHandle parent, size_t index)
@@ -1188,7 +1355,8 @@ namespace windows
         const bool isHidden = hiddenEntities.count(entity.id) > 0;
 
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen
-                                   | ImGuiTreeNodeFlags_SpanAvailWidth;
+                                   | ImGuiTreeNodeFlags_SpanAvailWidth
+                                   | ImGuiTreeNodeFlags_AllowOverlap; // let the right-aligned eye button take its own clicks
         if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
         if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf;
 
@@ -1254,11 +1422,15 @@ namespace windows
                 ImGui::EndDragDropTarget();
             }
 
-            // Eye toggle (editor-only preview hide) — right-aligned. Toggles the hiddenEntities SET
-            // ONLY; isActive is never touched, so a hidden node stays active in the real game.
+            // VK-1433 Phase 4d — eye toggle (editor-only preview hide), right-aligned and ALWAYS
+            // visible. Toggles the hiddenEntities SET ONLY; isActive is never touched, so a hidden node
+            // stays active in the real game. The icon is clearly colored (a bright eye when visible, a
+            // dimmed orange eye-slash when hidden) instead of a transparent button so the preview-hide
+            // state reads at a glance; the row label is also dimmed for hidden nodes (above).
             ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-            if (ImGui::SmallButton(isHidden ? ICON_FA_EYE_SLASH : ICON_FA_EYE))
+            ImGui::PushStyleColor(ImGuiCol_Text, isHidden ? ImVec4(0.95f, 0.6f, 0.2f, 1.0f)
+                                                          : ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
+            if (ImGui::SmallButton(isHidden ? ICON_FA_EYE_SLASH "##hide" : ICON_FA_EYE "##hide"))
             {
                 if (isHidden) hiddenEntities.erase(entity.id);
                 else          hiddenEntities.insert(entity.id);
@@ -1266,36 +1438,22 @@ namespace windows
             }
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Preview-only hide (does not change the saved Active state)");
+                ImGui::SetTooltip(isHidden ? "Hidden in preview — click to show (saved Active state unchanged)"
+                                           : "Preview-only hide (does not change the saved Active state)");
 
-            // Context menu: delete (never the sandbox root — that's the saved subtree's top).
+            // Context menu: add child / delete (never the sandbox root — that's the saved subtree's
+            // top). Shares createChildEntity / deleteEntity with the header toolbar + Delete key.
             if (!isRoot && ImGui::BeginPopupContextItem())
             {
                 if (ImGui::MenuItem("Add Child"))
                 {
-                    events::scene::CreateEntityCommand cmd;
-                    cmd.name = "Entity";
-                    cmd.parent = entity;
-                    const services::EntityHandle created = events::EventDispatcher::instance().execute(cmd);
-                    if (created.isValid())
-                    {
-                        selectEntity(created);
-                        dirty = true;
-                        rebuildRigFromSandbox();
-                    }
+                    createChildEntity(entity);
                 }
                 if (ImGui::MenuItem("Delete"))
                 {
-                    events::scene::DeleteEntityCommand del;
-                    del.entity = entity;
-                    events::EventDispatcher::instance().execute(del);
-                    if (isSelected) selectEntity(sandboxRoot);
-                    hiddenEntities.erase(entity.id);
-                    dirty = true;
-                    rebuildRigFromSandbox();
-                    ImGui::EndPopup();
-                    ImGui::PopID();
-                    return; // the entity is gone — don't recurse into its (also-deleted) children
+                    // Phase 4d — defer to the confirm modal. The entity still exists this frame (the
+                    // actual delete runs on confirm), so the old abort-recursion early-return is gone.
+                    requestDeleteEntity(entity);
                 }
                 ImGui::EndPopup();
             }
@@ -1656,9 +1814,11 @@ namespace windows
         else
             ImGui::TextDisabled("Child part — moves this part (children follow).");
 
-        // VK-1433 Phase 4c — the gizmo + these numeric fields now edit the part's SOURCE ENTITY
-        // transform directly (SetTransformCommand), persisted by Save Prefab.
-        ImGui::TextWrapped("Edits the source entity transform — Save Prefab persists it.");
+        // VK-1433 Phase 4c — the viewport gizmo edits the part's SOURCE ENTITY transform directly
+        // (SetTransformCommand), persisted by Save Prefab. Phase 4d — the duplicate numeric fields are
+        // retired; edit exact numbers in Entity Inspector → Transform (the embedded inspector below).
+        ImGui::TextWrapped("Drag the 3D gizmo to move this part — Save Prefab persists it. For exact "
+                           "numbers, use Entity Inspector \xE2\x86\x92 Transform.");
 
         // Socket-attached-child TRANSLATE-drop warning. SocketAttachmentUpdater::applyModelOffset
         // builds entityLocal = rot*scale, DROPPING translation — so a non-zero source position on a
@@ -1684,8 +1844,12 @@ namespace windows
             }
         }
 
+        // The Move/Rotate/Scale toggle drives the viewport gizmo's operation (transformGizmoOp, read by
+        // drawTransformGizmo). VK-1433 Phase 4d — the duplicate numeric Position/Rotation/Scale block is
+        // removed; numeric editing lives in Entity Inspector → Transform (which dispatches the same
+        // SetTransformCommand on this entity). Keeping only the gizmo-operation toggle here.
         ImGui::Spacing();
-        ImGui::TextDisabled("Operation");
+        ImGui::TextDisabled("Gizmo operation");
         if (ImGui::RadioButton("Move##tr", transformGizmoOp == ImGuizmo::TRANSLATE))
             transformGizmoOp = ImGuizmo::TRANSLATE;
         ImGui::SameLine();
@@ -1694,38 +1858,6 @@ namespace windows
         ImGui::SameLine();
         if (ImGui::RadioButton("Scale##tr", transformGizmoOp == ImGuizmo::SCALE))
             transformGizmoOp = ImGuizmo::SCALE;
-
-        // Numeric transform fields — the part's source entity LOCAL transform (Euler XYZ degrees ==
-        // TransformComponent schema). Editing a field dispatches SetTransformCommand and re-derives
-        // the rig; the gizmo drives the same entity transform.
-        ImGui::Spacing();
-        ImGui::TextDisabled("Transform");
-        {
-            const services::TransformData src = partSourceLocalTransform(selectedPart);
-            float t[3] = {src.position.x, src.position.y, src.position.z};
-            float r[3] = {src.rotation.x, src.rotation.y, src.rotation.z};
-            float s[3] = {src.scale.x, src.scale.y, src.scale.z};
-
-            bool changed = false;
-            ImGui::PushItemWidth(-70.0f);
-            changed |= ImGui::DragFloat3("Position##trnum", t, 0.01f);
-            changed |= ImGui::DragFloat3("Rotation##trnum", r, 0.1f);
-            changed |= ImGui::DragFloat3("Scale##trnum", s, 0.01f);
-            ImGui::PopItemWidth();
-            if (changed)
-            {
-                services::TransformData nt;
-                nt.position = glm::vec3(t[0], t[1], t[2]);
-                nt.rotation = glm::vec3(r[0], r[1], r[2]);
-                nt.scale = glm::vec3(s[0], s[1], s[2]);
-                events::scene::SetTransformCommand cmd;
-                cmd.entity = partEntities[selectedPart];
-                cmd.transform = nt;
-                events::EventDispatcher::instance().execute(cmd);
-                dirty = true;
-                rebuildRigFromSandbox();
-            }
-        }
     }
 
     void PrefabPreviewWindow::zeroSourceTranslationForPart(int part)
@@ -1735,7 +1867,8 @@ namespace windows
         // Save Prefab (the entity is the source of truth — the old JSON round-trip is retired).
         if (part < 0 || part >= static_cast<int>(partEntities.size())) return;
 
-        services::TransformData t = partSourceLocalTransform(part);
+        const services::TransformData before = partSourceLocalTransform(part);
+        services::TransformData t = before;
         t.position = glm::vec3(0.0f);
 
         events::scene::SetTransformCommand cmd;
@@ -1745,6 +1878,10 @@ namespace windows
 
         dirty = true;
         rebuildRigFromSandbox();
+
+        // VK-1433 Phase 4d — make the bake undoable too (same entity-transform replay path as the
+        // Transform gizmo). No-op-gated, so a part already at zero translation pushes nothing.
+        pushTransformUndo(partEntities[part], before, t);
 
         vfLogInfo("Prefab preview: zeroed part {} source entity translation", part);
     }

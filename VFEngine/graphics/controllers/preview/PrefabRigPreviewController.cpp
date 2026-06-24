@@ -32,13 +32,24 @@ namespace controllers
 
     PrefabRigPreviewController::~PrefabRigPreviewController()
     {
-        device.getLogicalDevice().waitIdle();
+        // If cleanUp() already ran (the controlled editor-shutdown path resets this adapter
+        // while the Device is alive), there is nothing live to wait on — skip the waitIdle so
+        // a late destruction (after the Device/Streamline interposer is gone) does not jump
+        // into freed code. cleanUp() below is then a no-op via the same guard.
+        if (!previewCleanedUp)
+        {
+            device.getLogicalDevice().waitIdle();
+        }
         cleanUp();
     }
 
     void PrefabRigPreviewController::init()
     {
         if (initialized) return;
+
+        // About to create device resources — mark the controller live so a subsequent
+        // cleanUp() (including the catch-block rollback below) actually frees them.
+        previewCleanedUp = false;
 
         try
         {
@@ -78,6 +89,10 @@ namespace controllers
 
     void PrefabRigPreviewController::cleanUp()
     {
+        // Already torn down (or never had live resources): a second call — or a call after
+        // the Device has been destroyed — must do nothing rather than re-issue waitIdle.
+        if (previewCleanedUp) return;
+
         device.getLogicalDevice().waitIdle();
 
         // Pipelines hold Vulkan resources; the assembly is entt-free CPU state with no GPU
@@ -147,6 +162,7 @@ namespace controllers
         }
 
         initialized = false;
+        previewCleanedUp = true;
     }
 
     void PrefabRigPreviewController::barrierBetweenParts(const vk::CommandBuffer& commandBuffer,

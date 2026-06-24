@@ -158,6 +158,22 @@ namespace windows
         prefabrigedit::PrefabRigEditSnapshot chainEditBefore;
         prefabrigedit::PrefabRigEditSnapshot gizmoEditBefore;
 
+        // VK-1433 Phase 4d — TRANSFORM gizmo drag bracket. The Transform gizmo edits the part's source
+        // ENTITY transform every Manipulate frame (live preview); we snapshot that entity transform on
+        // the IsUsing() rising edge and push ONE coalesced entity-transform undo on release.
+        bool transformGizmoEditActive = false;
+        services::TransformData transformGizmoBefore; // entity local transform at drag start
+        // Push a PrefabRigEntityTransformUndoCommand for `entity` (no-op if before == after). The
+        // command captures only the handle + transforms by value + a rebuild-by-id callback, so it is
+        // safe on the process-global undo stack after the window closes (replay no-ops on a dead
+        // entity; the rebuild callback no-ops when no live window matches the id).
+        void pushTransformUndo(services::EntityHandle entity,
+                               const services::TransformData& before,
+                               const services::TransformData& after);
+        // Rebuild-by-id hook for the entity-transform undo command (analogue of resyncMirror): looks
+        // up the live window by id and re-derives its rig, or no-ops if it has been closed.
+        static void resyncRebuild(services::PreviewInstanceId id);
+
         // Build a snapshot of the data a given edit kind touches (engages only the relevant fields).
         prefabrigedit::PrefabRigEditSnapshot snapshotSockets() const;   // editSockets for selectedPart
         prefabrigedit::PrefabRigEditSnapshot snapshotChains() const;    // editChains + IK bindings
@@ -233,6 +249,19 @@ namespace windows
         void drawEntityTreePanel();
         void drawEntityNode(services::EntityHandle entity, int depth);
         void drawReorderDropZone(services::EntityHandle parent, size_t index); // between-siblings insert
+        // VK-1433 Phase 4d — shared create/delete used by the Hierarchy header toolbar, the per-node
+        // context menu, and the Delete-key shortcut (so all three follow the same select/dirty/rebuild
+        // path). createChildEntity adds an "Entity" child under `parent` and selects it.
+        services::EntityHandle createChildEntity(services::EntityHandle parent);
+        // requestDeleteEntity stages a delete + opens the confirm modal (all three delete affordances
+        // route through it); the actual DeleteEntityCommand + reselect/rebuild runs in deleteEntity
+        // ONLY on confirm. deleteEntity returns false if entity is invalid / the sandbox root.
+        void requestDeleteEntity(services::EntityHandle entity);
+        bool deleteEntity(services::EntityHandle entity);
+        void drawDeleteConfirmPopup();            // "Delete '<name>' and its children?" modal
+        services::EntityHandle pendingDeleteEntity = services::EntityHandle::invalid();
+        std::string pendingDeleteName;            // captured at request time for the modal message
+        bool openDeleteConfirmPopup = false;      // set by requestDeleteEntity, consumed in draw()
         // O2: would renaming the entity currently named `oldName` orphan a socket attachment that
         // resolves to it by name? Used to WARN (non-destructive) before a rename.
         bool renameWouldOrphanAttachment(const std::string& oldName) const;

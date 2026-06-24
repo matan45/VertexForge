@@ -23,6 +23,9 @@
 #include "windows/preview/PrefabRigDescBuilder.hpp"     // buildPrefabRigDescDTO + PrefabEntityNode
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "scene/Entity.hpp"               // VK-1433 Phase 4c: real sandbox subtree for the save roundtrip
+#include "scene/SceneGraphSystem.hpp"     // LoadPrefab target
+#include "serialization/PrefabSerialization.hpp" // real savePrefab/loadPrefab (== Save/LoadPrefabCommand body)
 #include "data/EntityConversion.hpp"
 #include "asset/AssetDatabase.hpp"
 #include "asset/AssetRef.hpp"
@@ -37,7 +40,10 @@
 
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
+#include <nlohmann/json.hpp>
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <optional>
@@ -107,16 +113,48 @@ namespace
         registered = true;
         auto& d = events::EventDispatcher::instance();
 
+        // VK-1433 Phase 4c (P4bcdTest): the five rig queries below read the FAKE store first, and
+        // fall back to the REAL EntityRegistry when the id is NOT in the store. Every makeNode()/
+        // fake-CreateEntity id is always in the store, so the existing store-driven cases hit the
+        // store branch unchanged; the registry fallback fires only for entities that exist purely
+        // in the registry — the entities a REAL PrefabSerialization save->reload re-instantiates
+        // (fresh entt ids, never registered in the store). This lets the 4c real-roundtrip suite
+        // re-derive the rig from the reloaded sandbox via buildPrefabRigDescFromEntity, exactly as
+        // the window does after LoadPrefab.
         d.registerQueryHandler<events::scene::GetEntityQuery>(
             [](const events::scene::GetEntityQuery& q) -> std::optional<services::EntityData>
             {
                 auto it = store().nodes.find(q.entity.id);
-                if (it == store().nodes.end()) return std::nullopt;
+                if (it != store().nodes.end())
+                {
+                    services::EntityData data;
+                    data.handle = q.entity;
+                    data.name = it->second.name;
+                    data.localTransform = it->second.localTransform;
+                    data.children = it->second.children;
+                    return data;
+                }
+                // Registry fallback (reloaded real entities).
+                auto& registry = scene::EntityRegistry::getRegistry();
+                const entt::entity e = services::internal::fromHandle(q.entity);
+                if (!registry.valid(e)) return std::nullopt;
                 services::EntityData data;
                 data.handle = q.entity;
-                data.name = it->second.name;
-                data.localTransform = it->second.localTransform;
-                data.children = it->second.children;
+                if (const auto* name = registry.try_get<components::NameComponent>(e))
+                {
+                    data.name = name->name;
+                    data.isActive = name->isActive;
+                }
+                if (const auto* xf = registry.try_get<components::TransformComponent>(e))
+                {
+                    data.localTransform.position = xf->position;
+                    data.localTransform.rotation = xf->rotation;
+                    data.localTransform.scale = xf->scale;
+                }
+                if (const auto* kids = registry.try_get<components::ChildrenComponent>(e))
+                    for (entt::entity child : kids->children)
+                        if (registry.valid(child))
+                            data.children.push_back(services::internal::toHandle(child));
                 return data;
             });
 
@@ -124,12 +162,27 @@ namespace
             [](const events::scene::GetMeshDataQuery& q) -> std::optional<services::MeshData>
             {
                 auto it = store().nodes.find(q.entity.id);
-                if (it == store().nodes.end() || !it->second.mesh.has_value()) return std::nullopt;
-                const FakeMesh& m = *it->second.mesh;
+                if (it != store().nodes.end())
+                {
+                    if (!it->second.mesh.has_value()) return std::nullopt;
+                    const FakeMesh& m = *it->second.mesh;
+                    services::MeshData data;
+                    data.meshRef = refFor(m.meshPath, resource::AssetType::Mesh);
+                    data.animatorRef = refFor(m.animatorPath, resource::AssetType::Animator);
+                    data.retargetRef = refFor(m.retargetPath, resource::AssetType::RetargetMap);
+                    return data;
+                }
+                // Registry fallback: read the MeshComponent refs verbatim (the live builder resolves
+                // them, so GUID->path resolution matches the pre-save derivation).
+                auto& registry = scene::EntityRegistry::getRegistry();
+                const entt::entity e = services::internal::fromHandle(q.entity);
+                const auto* mesh = registry.valid(e)
+                    ? registry.try_get<components::MeshComponent>(e) : nullptr;
+                if (!mesh) return std::nullopt;
                 services::MeshData data;
-                data.meshRef = refFor(m.meshPath, resource::AssetType::Mesh);
-                data.animatorRef = refFor(m.animatorPath, resource::AssetType::Animator);
-                data.retargetRef = refFor(m.retargetPath, resource::AssetType::RetargetMap);
+                data.meshRef = mesh->meshRef;
+                data.animatorRef = mesh->animatorRef;
+                data.retargetRef = mesh->retargetRef;
                 return data;
             });
 
@@ -137,15 +190,30 @@ namespace
             [](const events::material::GetMaterialDataQuery& q) -> std::optional<services::MaterialData>
             {
                 auto it = store().nodes.find(q.entity.id);
-                if (it == store().nodes.end()) return std::nullopt;
-                const FakeNode& n = it->second;
-                if (!n.defaultMaterialPath.has_value() && n.subMeshMaterials.empty())
+                if (it != store().nodes.end())
+                {
+                    const FakeNode& n = it->second;
+                    if (!n.defaultMaterialPath.has_value() && n.subMeshMaterials.empty())
+                        return std::nullopt;
+                    services::MaterialData data;
+                    if (n.defaultMaterialPath.has_value())
+                        data.defaultMaterialRef = refFor(*n.defaultMaterialPath, resource::AssetType::Material);
+                    for (const auto& [submeshName, path] : n.subMeshMaterials)
+                        data.subMeshMaterials[submeshName] = refFor(path, resource::AssetType::Material);
+                    return data;
+                }
+                // Registry fallback: read the MaterialComponent refs verbatim.
+                auto& registry = scene::EntityRegistry::getRegistry();
+                const entt::entity e = services::internal::fromHandle(q.entity);
+                const auto* mat = registry.valid(e)
+                    ? registry.try_get<components::MaterialComponent>(e) : nullptr;
+                if (!mat) return std::nullopt;
+                if (!mat->defaultMaterialRef.isValid() && mat->subMeshMaterials.empty())
                     return std::nullopt;
                 services::MaterialData data;
-                if (n.defaultMaterialPath.has_value())
-                    data.defaultMaterialRef = refFor(*n.defaultMaterialPath, resource::AssetType::Material);
-                for (const auto& [submeshName, path] : n.subMeshMaterials)
-                    data.subMeshMaterials[submeshName] = refFor(path, resource::AssetType::Material);
+                data.defaultMaterialRef = mat->defaultMaterialRef;
+                for (const auto& [submeshName, ref] : mat->subMeshMaterials)
+                    data.subMeshMaterials[submeshName] = ref;
                 return data;
             });
 
@@ -154,10 +222,23 @@ namespace
                 -> std::optional<events::socket::SocketAttachmentData>
             {
                 auto it = store().nodes.find(q.entity.id);
-                if (it == store().nodes.end() || !it->second.socket.has_value()) return std::nullopt;
+                if (it != store().nodes.end())
+                {
+                    if (!it->second.socket.has_value()) return std::nullopt;
+                    events::socket::SocketAttachmentData data;
+                    data.parentEntityName = it->second.socket->parentEntityName;
+                    data.socketName = it->second.socket->socketName;
+                    return data;
+                }
+                // Registry fallback.
+                auto& registry = scene::EntityRegistry::getRegistry();
+                const entt::entity e = services::internal::fromHandle(q.entity);
+                const auto* socket = registry.valid(e)
+                    ? registry.try_get<components::SocketAttachmentComponent>(e) : nullptr;
+                if (!socket) return std::nullopt;
                 events::socket::SocketAttachmentData data;
-                data.parentEntityName = it->second.socket->parentEntityName;
-                data.socketName = it->second.socket->socketName;
+                data.parentEntityName = socket->parentEntityName;
+                data.socketName = socket->socketName;
                 return data;
             });
 
@@ -166,8 +247,14 @@ namespace
                 -> std::vector<animator::ik::IKChainConfig>
             {
                 auto it = store().nodes.find(q.entity.id);
-                if (it == store().nodes.end()) return {};
-                return it->second.ikChains;
+                if (it != store().nodes.end()) return it->second.ikChains;
+                // Registry fallback.
+                auto& registry = scene::EntityRegistry::getRegistry();
+                const entt::entity e = services::internal::fromHandle(q.entity);
+                const auto* ik = registry.valid(e)
+                    ? registry.try_get<components::IKTargetComponent>(e) : nullptr;
+                if (!ik) return {};
+                return ik->chains;
             });
 
         // ---- VK-1433 Phase 4b/4c: fake MUTATION command handlers ---------------------------------
@@ -1376,3 +1463,260 @@ TEST_CASE("4c: entity-driven edits survive a save->reload re-derive (DTO equalit
 }
 
 } // TEST_SUITE("PrefabRigLiveDescBuilder")
+
+// =================================================================================================
+// VK-1433 Phase 4c (P4bcdTest) — the REAL save->file->reload roundtrip through the production
+// serializer (serialization::PrefabSerialization::savePrefab / loadPrefab — the exact body the
+// window's SavePrefabCommand / LoadPrefabCommand handlers call). Distinct from the 4c case above,
+// which only DEEP-COPIES the fake store into fresh ids. Here we:
+//   1. build a REAL scene::Entity sandbox subtree in the live registry (mesh + socket + IK + xform),
+//   2. tag the root PreviewSandboxTagComponent and hold it INACTIVE (exactly the window's isolation),
+//   3. re-derive the pre-save DTO via buildPrefabRigDescFromEntity (registry-fallback handlers),
+//   4. savePrefab to a temp .vfPrefab, then assert ON THE SAVED FILE that the spine normalization
+//      held: the PreviewSandboxTag is ABSENT (editor-only, never serialized) and the root's
+//      isActive is normalized to TRUE (PrefabSerialization.cpp:339-346 — a sandbox-inactive root must
+//      not bake invisible),
+//   5. loadPrefab the file back into a fresh SceneGraphSystem and re-derive on the reloaded root,
+//      asserting the DTO is field-equal to pre-save AND the reloaded root is active with no tag.
+// This is the strongest spine regression for the hybrid-B save path — it pins the actual serializer,
+// not a hand-rolled copy.
+// =================================================================================================
+namespace
+{
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+
+    fs::path roundtripTestDir()
+    {
+        return fs::temp_directory_path() / "vf_prefab_rig_save_roundtrip_tests";
+    }
+
+    // Build a real scene::Entity with Name/Transform set; optionally tag it as the sandbox root and
+    // hold it inactive (mirrors MarkPreviewSandboxCommand). Caller wires children via addChild.
+    scene::Entity makeRealNode(const std::string& name, const services::TransformData& xf,
+                               bool sandboxRoot = false)
+    {
+        scene::Entity e(name);
+        auto& t = e.getComponent<components::TransformComponent>();
+        t.position = xf.position;
+        t.rotation = xf.rotation;
+        t.scale = xf.scale;
+        if (sandboxRoot)
+        {
+            // PreviewSandboxTagComponent is an empty tag; Entity::addComponent can't bind a void&
+            // for a fields-less type, so emplace via the registry directly (mirrors how
+            // test_ui_preview_isolation.cpp tags UIPreviewTagComponent).
+            scene::EntityRegistry::getRegistry().emplace<components::PreviewSandboxTagComponent>(e.getHandle());
+            e.getComponent<components::NameComponent>().isActive = false; // isolation: main passes skip it
+        }
+        return e;
+    }
+
+    void setRealMesh(scene::Entity& e, const std::string& mesh, const std::string& animator = {})
+    {
+        auto& m = e.addComponent<components::MeshComponent>();
+        m.meshRef = refFor(mesh, resource::AssetType::Mesh);
+        if (!animator.empty())
+            m.animatorRef = refFor(animator, resource::AssetType::Animator);
+    }
+
+    void setRealSocket(scene::Entity& e, const std::string& parentName, const std::string& socketName)
+    {
+        auto& s = e.addComponent<components::SocketAttachmentComponent>();
+        s.parentEntityName = parentName;
+        s.socketName = socketName;
+    }
+
+    // Recursively destroy a real subtree (registry hygiene — the registry is a process singleton).
+    void destroyRealSubtree(scene::Entity e)
+    {
+        if (!e.isAlive()) return;
+        for (scene::Entity child : e.getChildren())
+            destroyRealSubtree(child);
+        scene::EntityRegistry::getRegistry().destroy(e.getHandle());
+    }
+
+    // Collect every "name" anywhere in a serialized entity-JSON subtree (the prefab "entity" payload).
+    void collectPrefabNames(const json& node, std::vector<std::string>& out)
+    {
+        if (node.contains("name") && node["name"].is_string())
+            out.push_back(node["name"].get<std::string>());
+        if (node.contains("children") && node["children"].is_array())
+            for (const auto& child : node["children"])
+                collectPrefabNames(child, out);
+    }
+}
+
+TEST_SUITE("PrefabRigSaveRoundtrip")
+{
+
+TEST_CASE("4c: REAL savePrefab->loadPrefab re-derive equals pre-save DTO; tag stripped + isActive normalized")
+{
+    store().clear();
+    ensureFakeHandlers();
+    asset::AssetDatabase::instance().clear();
+    std::error_code ec;
+    fs::create_directories(roundtripTestDir(), ec);
+
+    // --- Real sandbox subtree: Body(skeletal, sandbox root, held inactive) -> Sword(static, socketed)
+    scene::Entity body = makeRealNode("Body", makeXf({0, 0, 0}, {0, 90, 0}, {1, 1, 1}), /*sandboxRoot*/ true);
+    setRealMesh(body, "assets/body.vfMesh", "assets/body.vfAnimator");
+    {
+        auto& mat = body.addComponent<components::MaterialComponent>();
+        mat.defaultMaterialRef = refFor("assets/skin.vfMaterial", resource::AssetType::Material);
+    }
+
+    scene::Entity sword = makeRealNode("Sword", makeXf({0, 0, 0}, {0, 0, 45}, {2, 2, 2}));
+    setRealMesh(sword, "assets/sword.vfMesh"); // static (no animator)
+    setRealSocket(sword, "Body", "RightHandGrip");
+    // An IK chain on the body so desc.ik is exercised through the real roundtrip.
+    {
+        auto& ik = body.addComponent<components::IKTargetComponent>();
+        ik.chains.push_back(makeChain("LeftArm", "Hand", {"Shoulder", "Elbow"}, 0.8f, true));
+    }
+    body.addChildren(sword);
+
+    // Pre-save DTO from the LIVE (tagged, inactive) sandbox — derived exactly as the open window does.
+    windows::LiveRigBuildResult preSave = windows::buildPrefabRigDescFromEntity(
+        services::internal::toHandle(body.getHandle()));
+    REQUIRE(preSave.desc.parts.size() == 2);
+    CHECK(preSave.desc.parts[0].meshPath == "assets/body.vfMesh");
+    CHECK(preSave.desc.parts[1].meshPath == "assets/sword.vfMesh");
+    CHECK(preSave.desc.parts[1].parentPartIndex == 0);
+    CHECK(preSave.desc.parts[1].attachParentSocket == "RightHandGrip");
+    REQUIRE(preSave.desc.ik.size() == 1);
+    CHECK(preSave.desc.ik[0].chain.chainName == "LeftArm");
+
+    // Sanity: the live sandbox root really is inactive + tagged before save (the isolation state).
+    CHECK_FALSE(body.getComponent<components::NameComponent>().isActive);
+    CHECK(body.hasComponent<components::PreviewSandboxTagComponent>());
+
+    // --- REAL save through the production serializer (== SavePrefabCommand body). ---
+    const fs::path prefabPath = roundtripTestDir() / "RigRoundtrip.vfPrefab";
+    REQUIRE(serialization::PrefabSerialization::savePrefab(body, prefabPath.string()));
+
+    // Assert ON THE SAVED FILE: the editor-only sandbox tag never bakes, and the inactive sandbox
+    // root is NORMALIZED to isActive=true (PrefabSerialization.cpp:339-346) so it instantiates visible.
+    {
+        std::ifstream file(prefabPath);
+        REQUIRE(file.is_open());
+        json prefabJson;
+        file >> prefabJson;
+        REQUIRE(prefabJson.contains("prefab"));
+        REQUIRE(prefabJson["prefab"].contains("entity"));
+        const json& rootJson = prefabJson["prefab"]["entity"];
+
+        // (a) isActive normalized to true on the saved root despite the live inactive flag.
+        REQUIRE(rootJson.contains("isActive"));
+        CHECK(rootJson["isActive"].get<bool>() == true);
+
+        // (b) the PreviewSandboxTag is editor-only — no component key for it anywhere in the payload.
+        const std::string dumped = prefabJson.dump();
+        CHECK(dumped.find("PreviewSandboxTag") == std::string::npos);
+        CHECK(dumped.find("previewSandbox") == std::string::npos);
+
+        // The rig nodes themselves persisted (Body + Sword).
+        std::vector<std::string> names;
+        collectPrefabNames(rootJson, names);
+        CHECK(std::find(names.begin(), names.end(), "Body") != names.end());
+        CHECK(std::find(names.begin(), names.end(), "Sword") != names.end());
+    }
+
+    // --- REAL load back into a fresh SceneGraphSystem (== LoadPrefabCommand body). ---
+    scene::SceneGraphSystem scene;
+    scene::Entity& sceneRoot = scene.GetRoot();
+    auto reloadedOpt = serialization::PrefabSerialization::loadPrefab(
+        prefabPath.string(), sceneRoot, scene);
+    REQUIRE(reloadedOpt.has_value());
+    scene::Entity reloaded = *reloadedOpt;
+    REQUIRE(reloaded.isAlive());
+
+    // The reloaded root is a FRESH entt id (not in the fake store) -> the registry-fallback handlers
+    // serve it, so buildPrefabRigDescFromEntity re-derives the rig the same way the window does after
+    // LoadPrefab.
+    windows::LiveRigBuildResult postReload = windows::buildPrefabRigDescFromEntity(
+        services::internal::toHandle(reloaded.getHandle()));
+
+    // DTO equality: same parts, field-for-field (paths/links/attach) + equal accumulated transforms.
+    REQUIRE(postReload.desc.parts.size() == preSave.desc.parts.size());
+    for (size_t i = 0; i < preSave.desc.parts.size(); ++i)
+    {
+        CAPTURE(i);
+        CHECK(dtoPartsFieldEqual(postReload.desc.parts[i], preSave.desc.parts[i]));
+        CHECK(matEq(postReload.desc.parts[i].localTransform, preSave.desc.parts[i].localTransform));
+    }
+    // IK round-tripped through the real serializer.
+    REQUIRE(postReload.desc.ik.size() == preSave.desc.ik.size());
+    CHECK(postReload.desc.ik[0].chain.chainName == preSave.desc.ik[0].chain.chainName);
+    CHECK(postReload.desc.ik[0].chain.tipBoneName == preSave.desc.ik[0].chain.tipBoneName);
+    CHECK(postReload.desc.ik[0].chain.chainBoneNames == preSave.desc.ik[0].chain.chainBoneNames);
+    CHECK(postReload.desc.ik[0].chain.weight == doctest::Approx(preSave.desc.ik[0].chain.weight));
+    CHECK(postReload.desc.ik[0].bodyPartIndex == preSave.desc.ik[0].bodyPartIndex);
+    CHECK(postReload.desc.ik[0].targetPartIndex == preSave.desc.ik[0].targetPartIndex);
+
+    // The reloaded TREE carries the normalization: root is active and has NO sandbox tag (the tag is
+    // a per-window live artifact, never instantiated).
+    CHECK(reloaded.getComponent<components::NameComponent>().isActive == true);
+    CHECK_FALSE(reloaded.hasComponent<components::PreviewSandboxTagComponent>());
+
+    // Cleanup (registry singleton hygiene + temp file).
+    destroyRealSubtree(body);
+    destroyRealSubtree(reloaded);
+    fs::remove_all(roundtripTestDir(), ec);
+    asset::AssetDatabase::instance().clear();
+    store().clear();
+}
+
+// Negative control: the isActive normalization is GATED on the sandbox tag. An UNtagged inactive
+// entity must keep isActive=false through the save (proving the normalization is the tag's doing,
+// not a blanket "force active" — a real authored-inactive prefab node must stay inactive).
+TEST_CASE("4c: untagged inactive node keeps isActive=false on save (normalization is tag-gated)")
+{
+    store().clear();
+    asset::AssetDatabase::instance().clear();
+    std::error_code ec;
+    fs::create_directories(roundtripTestDir(), ec);
+
+    // Two children under a (savable, non-root) parent: one tagged+inactive, one untagged+inactive.
+    scene::Entity parent = makeRealNode("Parent", makeXf({0, 0, 0}), /*sandboxRoot*/ true); // tagged, inactive
+    setRealMesh(parent, "assets/parent.vfMesh", "assets/parent.vfAnimator");
+
+    scene::Entity plain = makeRealNode("PlainInactive", makeXf({1, 0, 0})); // NOT a sandbox root
+    plain.getComponent<components::NameComponent>().isActive = false;        // authored inactive
+    setRealMesh(plain, "assets/plain.vfMesh");
+    parent.addChildren(plain);
+
+    const fs::path prefabPath = roundtripTestDir() / "NormalizationGate.vfPrefab";
+    REQUIRE(serialization::PrefabSerialization::savePrefab(parent, prefabPath.string()));
+
+    std::ifstream file(prefabPath);
+    REQUIRE(file.is_open());
+    json prefabJson;
+    file >> prefabJson;
+    const json& rootJson = prefabJson["prefab"]["entity"];
+
+    // Tagged root -> normalized active.
+    REQUIRE(rootJson.contains("isActive"));
+    CHECK(rootJson["isActive"].get<bool>() == true);
+
+    // Find the untagged child node in the saved children and confirm it STAYED inactive.
+    REQUIRE(rootJson.contains("children"));
+    bool foundPlain = false;
+    for (const auto& child : rootJson["children"])
+    {
+        if (child.value("name", std::string{}) == "PlainInactive")
+        {
+            foundPlain = true;
+            REQUIRE(child.contains("isActive"));
+            CHECK(child["isActive"].get<bool>() == false); // untagged -> not normalized
+        }
+    }
+    CHECK(foundPlain);
+
+    destroyRealSubtree(parent);
+    fs::remove_all(roundtripTestDir(), ec);
+    asset::AssetDatabase::instance().clear();
+    store().clear();
+}
+
+} // TEST_SUITE("PrefabRigSaveRoundtrip")

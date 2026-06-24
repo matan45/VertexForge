@@ -2,11 +2,10 @@
 
 // Phase 2 — generic edit undo for the Prefab Rig Preview window.
 //
-// The window authors three editor-transient rig data sets, each pushed to the controller through
-// the existing prefab-rig CQRS:
+// The window authors two editor-transient rig data sets, each pushed to the controller through the
+// existing prefab-rig CQRS:
 //   * per-part bone/static SOCKETS  -> SetPrefabRigSocketsCommand (one part at a time)
 //   * IK CHAINS (weight/enabled)    -> SetPrefabRigChainsCommand  (whole vector)
-//   * per-part preview TRANSFORMS   -> SetPrefabRigPartPreviewTransformCommand (the gizmo offset)
 //
 // To make every such edit recoverable we snapshot the affected data BEFORE an edit session begins
 // and, when the session ends, push ONE IUndoableCommand holding the before/after snapshots. The
@@ -15,8 +14,14 @@
 //
 // Entt-free + no new CQRS events: it rides the same per-instance commands the window already sends,
 // keyed by the window's PreviewInstanceId, so the rig stays an isolated offscreen sandbox. The
-// command also restores the window's OWN mirror state (the previewTransforms map) via a callback so
-// the transform gizmo's base anchor stays consistent with the controller after an undo/redo.
+// command also restores the window's OWN mirror state (editSockets/editChains) via a callback so the
+// panels stay consistent with the controller after an undo/redo.
+//
+// VK-1433 Phase 4d: the part Transform gizmo no longer edits a transient per-part preview offset — it
+// edits the part's SOURCE ENTITY transform directly (SetTransformCommand, persisted by Save Prefab).
+// That edit's undo is PrefabRigEntityTransformUndoCommand below (entity replay, not the retired
+// preview-transform path), so the snapshot's old previewTransforms field + its replay branch were
+// dead and have been removed.
 //
 // IK-binding gotcha: changing an IK chain's target part/socket triggers a full buildPreviewFromDesc()
 // rebuild, which reloads sockets/chains from disk. A chains undo therefore re-applies the snapshot's
@@ -25,14 +30,16 @@
 
 #include "providers/PreviewInstanceId.hpp"
 #include "data/UndoTypes.hpp"
+#include "data/EntityHandle.hpp"                  // services::EntityHandle (entity-transform undo)
+#include "data/DTOs.hpp"                          // services::TransformData (entity-transform undo)
 #include "events/EventDispatcher.hpp"
 #include "events/render/PrefabRigPreviewEvents.hpp"
+#include "events/scene/EntityTransformEvents.hpp" // SetTransformCommand (entity-transform undo)
 #include "animator/SocketTypes.hpp"
 #include "animator/IKTypes.hpp"
 
-#include <glm/glm.hpp>
+#include <glm/glm.hpp>                            // glm vec/quat operator== used by socketEquals
 #include <functional>
-#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -86,9 +93,8 @@ namespace windows::prefabrigedit
 
     // A point-in-time snapshot of the rig data one edit session can touch. Each field is engaged
     // only if that kind of data participated in the session, so a socket-only edit never replays a
-    // (no-op) chains command and vice versa. previewTransforms snapshots the WHOLE map because the
-    // window keeps its mirror keyed by part and a transform edit restores both the controller and
-    // the mirror in one step.
+    // (no-op) chains command and vice versa. (The part Transform gizmo's undo is the separate
+    // PrefabRigEntityTransformUndoCommand — it replays the entity transform, not this snapshot.)
     struct PrefabRigEditSnapshot
     {
         // Sockets for a single part (the part the user was editing). Engaged on socket edits.
@@ -101,9 +107,6 @@ namespace windows::prefabrigedit
         // IK target bindings, parallel to the chains vector. Engaged when a re-target is undoable.
         // Restored WINDOW-side (onto PrefabRigDescDTO::ik) + a rebuild — there is no binding CQRS.
         std::optional<std::vector<IKBindingSnapshot>> ikBindings;
-
-        // Editor-transient per-part preview transforms (gizmo offsets). Engaged on transform edits.
-        std::optional<std::map<int, glm::mat4>> previewTransforms;
     };
 
     inline bool ikBindingsEqual(const std::vector<IKBindingSnapshot>& a,
@@ -134,32 +137,11 @@ namespace windows::prefabrigedit
             cmd.sockets = snap.sockets;
             ::events::EventDispatcher::instance().execute(cmd);
         }
-
-        if (snap.previewTransforms.has_value())
-        {
-            // Reset everything first so parts present in the OTHER snapshot (but absent here) return
-            // to identity, then push each captured offset. ResetPrefabRigPreviewTransforms clears
-            // the assembly's whole table.
-            services::events::prefabrigpreview::ResetPrefabRigPreviewTransformsCommand reset;
-            reset.instanceId = instanceId;
-            ::events::EventDispatcher::instance().execute(reset);
-
-            for (const auto& [part, m] : *snap.previewTransforms)
-            {
-                if (m == glm::mat4(1.0f)) continue; // identity == reset already covered it
-                services::events::prefabrigpreview::SetPrefabRigPartPreviewTransformCommand cmd;
-                cmd.instanceId = instanceId;
-                cmd.part = static_cast<size_t>(part);
-                cmd.transform = m;
-                ::events::EventDispatcher::instance().execute(cmd);
-            }
-        }
     }
 
     // Undoable command: restores `before` on undo(), `after` on execute()/redo(). The optional
-    // syncWindow callback lets the window re-sync its OWN mirror state (the previewTransforms map +
-    // the editSockets/editChains UI copies) to whichever snapshot was just applied, so the gizmo
-    // anchor and the panels reflect the restored data.
+    // syncWindow callback lets the window re-sync its OWN mirror state (the editSockets/editChains UI
+    // copies) to whichever snapshot was just applied, so the panels reflect the restored data.
     //
     // LIFETIME (critical): undo entries live on the process-global undo stack and OUTLIVE the window.
     // The callback must therefore capture ONLY values (e.g. the PreviewInstanceId), NEVER a window
@@ -200,5 +182,53 @@ namespace windows::prefabrigedit
         PrefabRigEditSnapshot after;
         std::string description;
         std::function<void(const PrefabRigEditSnapshot&)> syncWindow;
+    };
+
+    // VK-1433 Phase 4d — undo for the part Transform gizmo (and the "Zero translation" bake), which
+    // edit the part's SOURCE ENTITY transform via SetTransformCommand. Captures the entity handle +
+    // before/after TransformData BY VALUE; replaying SetTransformCommand is the whole edit.
+    //
+    // LIFETIME (critical, same lesson as PrefabRigEditUndoCommand): this lives on the process-global
+    // undo stack and OUTLIVES the window. It captures NO window pointer/`this` — only the handle +
+    // transforms by value + an optional rebuild callback that itself must capture only values (the
+    // window supplies one keyed by PreviewInstanceId that no-ops if the window has closed). A replay
+    // of SetTransformCommand on a now-dead entity (window closed -> sandbox deleted) safely no-ops:
+    // TransformComponentService::setTransform guards with isValidHandle and returns early.
+    class PrefabRigEntityTransformUndoCommand : public services::IUndoableCommand
+    {
+    public:
+        PrefabRigEntityTransformUndoCommand(services::EntityHandle entity,
+                                            services::TransformData before,
+                                            services::TransformData after,
+                                            std::string description,
+                                            std::function<void()> rebuild = {})
+            : entity(entity)
+            , before(before)
+            , after(after)
+            , description(std::move(description))
+            , rebuild(std::move(rebuild))
+        {
+        }
+
+        void execute() override { apply(after); }  // redo
+        void undo() override { apply(before); }
+
+        std::string getDescription() const override { return description; }
+
+    private:
+        void apply(const services::TransformData& t)
+        {
+            events::scene::SetTransformCommand cmd;
+            cmd.entity = entity;     // dead entity -> setTransform no-ops (isValidHandle guard)
+            cmd.transform = t;
+            ::events::EventDispatcher::instance().execute(cmd);
+            if (rebuild) rebuild();  // closed window -> no-op (callback resolves by id)
+        }
+
+        services::EntityHandle entity;
+        services::TransformData before;
+        services::TransformData after;
+        std::string description;
+        std::function<void()> rebuild;
     };
 }

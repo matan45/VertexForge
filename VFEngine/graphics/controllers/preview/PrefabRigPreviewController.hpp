@@ -186,5 +186,12 @@ namespace controllers
 
         bool initialized = false;
         bool built = false;
+
+        // Idempotency guard for cleanUp()/the destructor. Starts true (no live GPU
+        // resources to release), flipped to false the moment init() begins creating
+        // device resources, and flipped back to true once cleanUp() has torn them down.
+        // Lets cleanUp()/~PrefabRigPreviewController run safely twice — or after the
+        // Device has been destroyed — without re-issuing vkDeviceWaitIdle on dead state.
+        bool previewCleanedUp = true;
     };
 }
