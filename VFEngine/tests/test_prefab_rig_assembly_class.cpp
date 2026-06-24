@@ -229,6 +229,39 @@ TEST_SUITE("PrefabRigAssemblyClass")
     }
 
     // -----------------------------------------------------------------------
+    // Rebuilding a non-empty rig from an EMPTY desc must reset it to zero parts and
+    // zero IK chains (build() clear()s first). This is what stops the controller's
+    // per-frame overlay (skeleton/sockets/IK, driven by partCount()/editableChains())
+    // from drawing a stale "ghost" after the user hides every entity. The controller
+    // then treats this empty build as a valid empty preview (built so render() still
+    // runs its unconditional clear) — that branch itself needs Vulkan (GUI-verified).
+    // -----------------------------------------------------------------------
+    TEST_CASE("rebuilding from an empty desc clears all parts and chains")
+    {
+        PrefabRigAssembly rig;
+
+        PrefabRigDesc first;
+        first.parts.push_back(staticPart("__vk1433_clear_a.vfMesh"));
+        first.parts.push_back(staticPart("__vk1433_clear_b.vfMesh",
+                                         /*parentIndex*/ 0, /*parentSocket*/ "Mount"));
+        REQUIRE(rig.build(first));
+        REQUIRE(rig.partCount() == 2);
+
+        PrefabRigDesc empty; // hide-all -> zero parts
+        const bool ok = rig.build(empty);
+
+        CHECK_FALSE(ok);              // built = !parts.empty() -> false for an empty desc
+        CHECK_FALSE(rig.isBuilt());
+        CHECK(rig.partCount() == 0);  // the previous parts are gone (no stale overlay source)
+        CHECK(rig.editableChains().empty());
+
+        // Accessors over the now-empty rig stay safe, and update() is a no-op.
+        CHECK(rig.boneMatrices(0).empty());
+        CHECK(rig.partWorld(0) == glm::mat4(1.0f));
+        rig.update(0.016f);
+    }
+
+    // -----------------------------------------------------------------------
     // VK-1433 — preview transform on a PARENT propagates to a child's partWorld.
     // The root's preview transform pre-multiplies into its partWorld and the child
     // composes off the parent's partWorld, so editing the root moves the child too.

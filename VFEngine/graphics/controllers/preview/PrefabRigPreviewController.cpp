@@ -474,11 +474,29 @@ namespace controllers
 
         // Wait for any in-flight submits before tearing down the previous build's pipelines.
         device.getLogicalDevice().waitIdle();
-        destroyPipelines();
+        destroyPipelines(); // also clears pipelines + partMaterial
         built = false;
 
-        if (!assembly.build(desc))
+        // PrefabRigAssembly::build() clear()s the assembly up front, so this also resets the
+        // assembly (parts/sockets/IK chains -> 0) whether the desc is empty or not. That keeps
+        // the per-frame overlay (buildOverlayLines) from drawing stale skeleton/socket/IK lines.
+        const bool assemblyBuilt = assembly.build(desc);
+
+        if (!assemblyBuilt)
         {
+            if (desc.parts.empty())
+            {
+                // Hiding every entity prunes the desc to zero parts. This is a VALID empty
+                // preview, not an error: pipelines/partMaterial are already cleared above and
+                // the assembly is now empty, so render() runs its unconditional Step-1 clear and
+                // the parts loop is a no-op -> the viewport shows just the background/grid.
+                // Mark built so render() does NOT early-out (which would freeze the last frame).
+                built = true;
+                return true;
+            }
+
+            // Genuine failure: a non-empty desc that still produced no parts. Keep returning
+            // false (built stays false) as before.
             vfLogError("PrefabRigPreviewController: assembly build produced no parts");
             return false;
         }
