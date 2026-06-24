@@ -16,6 +16,7 @@
 #include "events/project/ResourceEvents.hpp"
 
 #include <imgui.h>
+#include <IconsFontAwesome6.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -881,13 +882,21 @@ namespace windows
             expandedNodes.insert(entity.id);
         }
 
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth
+            | ImGuiTreeNodeFlags_AllowOverlap; // let the right-aligned eye button take its own clicks
         if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
         if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf;
 
         ImGui::PushID(static_cast<int>(entity.id));
         ImGui::SetNextItemOpen(expandedNodes.count(entity.id) > 0, ImGuiCond_Always);
+        // Hidden (inactive) content nodes draw dimmed. The canvas root is held inactive for
+        // isolation (not by the user), so it's never treated as hidden.
+        const bool hidden = !data->isActive && entity != canvasRoot;
+        if (hidden)
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         bool open = ImGui::TreeNodeEx(data->name.empty() ? "(unnamed)" : data->name.c_str(), flags);
+        if (hidden)
+            ImGui::PopStyleColor();
 
         // Keep the expanded set in sync with user arrow toggles.
         if (ImGui::IsItemToggledOpen())
@@ -947,6 +956,27 @@ namespace windows
                 }
             }
             ImGui::EndDragDropTarget();
+        }
+
+        // Visibility toggle (eye icon), right-aligned. Flips the entity's isActive so the element
+        // shows/hides LIVE in the preview (descendants honor it via isEffectivelyActiveWithin).
+        // Skip the canvas root — its inactive state is an isolation artifact, not user visibility.
+        if (!isRenaming && entity != canvasRoot)
+        {
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 24.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+            if (ImGui::SmallButton(data->isActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH))
+            {
+                events::scene::SetEntityActiveCommand cmd;
+                cmd.entity = entity;
+                cmd.isActive = !data->isActive;
+                Dispatcher::instance().execute(cmd);
+                dirty = true;
+                rebuildPreview();
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(data->isActive ? "Hide" : "Show");
         }
 
         // Inline rename editor (replaces the node's normal interactions for this frame).
