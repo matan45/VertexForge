@@ -105,6 +105,11 @@ namespace windows
         std::optional<services::UIRectData> rectDataOf(services::EntityHandle entity) const;
         std::optional<uilayer::RefRect> resolvedRectOf(services::EntityHandle entity) const;
 
+        // True if `entity`'s parent has a UILayoutGroupComponent — its layout overwrites this
+        // element's position every frame, so the on-canvas move-drag is blocked (and the inspector
+        // position field disabled). Resize / re-anchor still apply and reflow the group.
+        bool isLayoutControlled(services::EntityHandle entity) const;
+
         // ---- Undo helpers -------------------------------------------------------
         void pushRectEditUndo(services::EntityHandle entity,
                               const services::UIRectData& before,

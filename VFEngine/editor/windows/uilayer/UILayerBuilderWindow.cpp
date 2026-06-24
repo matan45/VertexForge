@@ -354,6 +354,19 @@ namespace windows
         return uilayer::RefRect{r->x, r->y, r->w, r->h};
     }
 
+    bool UILayerBuilderWindow::isLayoutControlled(services::EntityHandle entity) const
+    {
+        if (!entity.isValid()) return false;
+        events::scene::GetEntityQuery entityQuery;
+        entityQuery.entity = entity;
+        auto data = Dispatcher::instance().query(entityQuery);
+        if (!data.has_value() || !data->parent.has_value() || !data->parent->isValid())
+            return false;
+        events::ui::HasUILayoutGroupComponentQuery layoutQuery;
+        layoutQuery.entity = *data->parent;
+        return Dispatcher::instance().query(layoutQuery);
+    }
+
     glm::vec2 UILayerBuilderWindow::canvasReferenceExtent() const
     {
         if (canvasRoot.isValid())
@@ -890,10 +903,18 @@ namespace windows
         glm::vec2 tl = map.refToScreen(glm::vec2(rect.x, rect.y));
         glm::vec2 br = map.refToScreen(glm::vec2(rect.right(), rect.bottom()));
 
-        // Selection outline.
-        dl->AddRect(ImVec2(tl.x, tl.y), ImVec2(br.x, br.y), IM_COL32(255, 180, 40, 255), 0.0f, 0, 1.5f);
+        // When the element's position is driven by a parent Layout Group, the move-drag is
+        // disabled (see handleCanvasInput) — signal it with a muted-blue outline + a badge.
+        const bool layoutControlled = isLayoutControlled(selectedEntity());
+        const ImU32 outlineCol = layoutControlled ? IM_COL32(110, 170, 255, 255)
+                                                   : IM_COL32(255, 180, 40, 255);
 
-        // 8 resize handles.
+        // Selection outline.
+        dl->AddRect(ImVec2(tl.x, tl.y), ImVec2(br.x, br.y), outlineCol, 0.0f, 0, 1.5f);
+        if (layoutControlled)
+            dl->AddText(ImVec2(tl.x + 3.0f, tl.y - 15.0f), outlineCol, "Layout-controlled");
+
+        // 8 resize handles (resize / re-anchor still apply even when layout-controlled).
         const float hs = 4.0f; // half-size in screen px
         auto positions = uilayer::handlePositions(rect);
         for (const auto& p : positions)
@@ -964,6 +985,10 @@ namespace windows
                 {
                     float grabHalfRef = (map.scale > 0.0f) ? (6.0f / map.scale) : 6.0f;
                     handle = uilayer::hitTestHandle(*rect, mouseRef, grabHalfRef);
+                    // A layout-group child's position is auto-set every frame; block the move
+                    // (body) drag so it doesn't fight the layout. Resize handles stay active.
+                    if (handle == uilayer::HandleKind::Body && isLayoutControlled(sel))
+                        handle = uilayer::HandleKind::None;
                     if (handle != uilayer::HandleKind::None)
                     {
                         if (auto before = rectDataOf(sel))
