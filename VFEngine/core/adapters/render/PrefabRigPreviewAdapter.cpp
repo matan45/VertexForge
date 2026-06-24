@@ -28,6 +28,7 @@ namespace core
             part.attachParentSocket = p.attachParentSocket;
             part.attachChildRotation = p.attachChildRotation;
             part.attachChildScale = p.attachChildScale;
+            part.localTransform = p.localTransform;
             part.defaultMaterialPath = p.defaultMaterialPath;
             part.subMeshMaterials = p.subMeshMaterials;
             desc.parts.push_back(std::move(part));

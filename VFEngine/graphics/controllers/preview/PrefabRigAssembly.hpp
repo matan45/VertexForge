@@ -55,6 +55,11 @@ namespace controllers
         glm::vec3 attachChildRotation{0.0f}; // degrees (Euler), as TransformComponent.rotation
         glm::vec3 attachChildScale{1.0f};
 
+        // The mesh node's accumulated LOCAL transform within the prefab (its own + ancestor
+        // TransformComponents). Applied to ROOT parts so the preview matches the scene viewport's
+        // authored rotation/scale/position. Socketed children ignore it (socket drives their world).
+        glm::mat4 localTransform{1.0f};
+
         // VK-1433 Layer B (rendering) material references, populated by the editor window
         // from the prefab's MaterialComponent. PrefabRigAssembly's simulation is material-
         // free and ignores these entirely; only the preview controller (Layer B) reads them.
@@ -223,6 +228,10 @@ namespace controllers
             int parentSocketIndex = -1;                             // index into parent.sockets, -1 if absent
             glm::vec3 attachRotationDeg{0.0f};
             glm::vec3 attachScale{1.0f};
+
+            // Accumulated local-to-prefab-root transform (authored TRS). Folded into a ROOT part's
+            // partWorld so the preview reflects the prefab's rotation/scale like the viewport.
+            glm::mat4 localTransform{1.0f};
 
             // Editor-transient gizmo transform (VK-1433). Folded into partWorld each update() so it
             // propagates to children. Default identity; reset on rebuild. NOT serialized.

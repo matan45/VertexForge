@@ -36,6 +36,13 @@ namespace services
         glm::vec3 attachChildRotation{0.0f}; // degrees (Euler), as TransformComponent.rotation
         glm::vec3 attachChildScale{1.0f};
 
+        // VK-1433 — the mesh node's accumulated LOCAL transform within the prefab (its own +
+        // ancestor TransformComponents, math::composeMatrix / TransformComponent convention).
+        // Applied to ROOT parts so the preview reflects the prefab's authored rotation / scale /
+        // position exactly like the scene viewport. Socketed children ignore it (their world
+        // comes from the parent's socket).
+        glm::mat4 localTransform{1.0f};
+
         // Material references from the prefab's MaterialComponent (read by Layer B only).
         std::string defaultMaterialPath;                     // whole-part material
         std::map<std::string, std::string> subMeshMaterials; // submesh name -> material path override

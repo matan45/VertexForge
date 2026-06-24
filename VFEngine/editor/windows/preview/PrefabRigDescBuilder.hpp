@@ -9,6 +9,7 @@
 
 #include "data/PrefabRigDescDTO.hpp"
 #include "animator/IKTypes.hpp"
+#include "math/TransformUtils.hpp" // math::composeMatrix (XYZ euler deg == TransformComponent)
 #include <glm/glm.hpp>
 #include <map>
 #include <string>
@@ -55,6 +56,22 @@ namespace windows
             for (const auto& child : node.children)
                 flattenNodes(child, out);
         }
+
+        // Depth-first flatten that ALSO accumulates each node's local-to-prefab-root world matrix
+        // (parentWorld * this node's composed TransformComponent), parallel to the node list. Lets
+        // a ROOT part carry the prefab's authored rotation/scale/position so the preview matches
+        // the scene viewport (which renders each mesh at its accumulated world transform).
+        inline void flattenNodesWithWorld(const PrefabEntityNode& node, const glm::mat4& parentWorld,
+                                          std::vector<const PrefabEntityNode*>& outNodes,
+                                          std::vector<glm::mat4>& outWorlds)
+        {
+            const glm::mat4 world = parentWorld
+                * math::composeMatrix(node.position, node.rotation, node.scale);
+            outNodes.push_back(&node);
+            outWorlds.push_back(world);
+            for (const auto& child : node.children)
+                flattenNodesWithWorld(child, world, outNodes, outWorlds);
+        }
     }
 
     // Flattens the parsed prefab tree into a rig description. Each mesh-bearing node becomes a
@@ -67,7 +84,8 @@ namespace windows
         services::PrefabRigDescDTO desc;
 
         std::vector<const PrefabEntityNode*> nodes;
-        detail::flattenNodes(root, nodes);
+        std::vector<glm::mat4> nodeWorlds; // each node's accumulated local-to-prefab-root transform
+        detail::flattenNodesWithWorld(root, glm::mat4(1.0f), nodes, nodeWorlds);
 
         // Mesh-bearing node -> part index; name -> part index for parent resolution.
         std::vector<int> nodePartIndex(nodes.size(), -1);
@@ -84,6 +102,7 @@ namespace windows
             part.retargetPath = n.retargetPath;
             part.defaultMaterialPath = n.defaultMaterialPath;
             part.subMeshMaterials = n.subMeshMaterials;
+            part.localTransform = nodeWorlds[i]; // authored TRS (root parts apply it; sockets ignore)
 
             const int partIndex = static_cast<int>(desc.parts.size());
             nodePartIndex[i] = partIndex;

@@ -107,6 +107,7 @@ namespace controllers
             part.parentIndex = src.parentPartIndex;
             part.attachRotationDeg = src.attachChildRotation;
             part.attachScale = src.attachChildScale;
+            part.localTransform = src.localTransform;
 
             // Skeleton (by value): a copy of the cache entry so it outlives the stack and so
             // editable sockets are independent of the shared cache copy.
@@ -344,8 +345,10 @@ namespace controllers
             if (part.parentIndex < 0 || part.parentIndex >= static_cast<int>(parts.size()))
             {
                 // Root part: world = preview/turntable model matrix, then the editor-transient
-                // gizmo transform (so a root gizmo edit moves the WHOLE rig, descendants included).
-                part.partWorld = rootModelMatrix * part.previewTransform;
+                // gizmo transform (so a root gizmo edit moves the WHOLE rig, descendants included),
+                // then the prefab's authored local transform (rotation/scale/position) so the
+                // preview matches the scene viewport.
+                part.partWorld = rootModelMatrix * part.previewTransform * part.localTransform;
                 continue;
             }
 
