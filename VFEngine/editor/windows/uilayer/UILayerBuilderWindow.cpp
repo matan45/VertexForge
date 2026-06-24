@@ -1011,16 +1011,21 @@ namespace windows
         uiProgressBarDrawer.draw(sel);
         uiStyleDrawer.draw(sel);
 
-        // Track an in-flight edit session; on edit-completion push ONE undo entry holding the
-        // before/after snapshots. IsAnyItemDeactivatedAfterEdit fires only on a real value
-        // change, so this never records a no-op entry (covers label text, colors, every field).
-        if (ImGui::IsAnyItemActive())
+        // Track an in-flight edit session and push ONE undo entry when it ends. ImGui has no
+        // "any item deactivated after edit" query, so detect the session end as the transition
+        // from "an item is active" to "none active" while we were mid-edit. (A no-op session —
+        // e.g. opening a drawer header — yields a before==after entry that undoes to itself:
+        // harmless; skipping equal snapshots is a follow-up.)
+        const bool anyItemActive = ImGui::IsAnyItemActive();
+        bool editJustEnded = false;
+        if (anyItemActive)
         {
             inspectorEditActive = true;
         }
-        if (ImGui::IsAnyItemDeactivatedAfterEdit())
+        else if (inspectorEditActive)
         {
             inspectorEditActive = false;
+            editJustEnded = true;
             uilayer::UIComponentSnapshot after = uilayer::captureUISnapshot(sel);
             auto cmd = std::make_shared<uilayer::UIComponentEditUndoCommand>(
                 sel, inspectorSnapshotBefore, std::move(after), "Edit UI element");
@@ -1030,8 +1035,9 @@ namespace windows
             dirty = true;
         }
 
-        // Rebuild every frame an edit is in flight so the WYSIWYG image tracks the change.
-        if (ImGui::IsAnyItemActive() || inspectorEditActive)
+        // Rebuild while an edit is in flight (and on the frame it ends) so the WYSIWYG image
+        // tracks the change.
+        if (anyItemActive || editJustEnded)
         {
             rebuildPreview();
         }
