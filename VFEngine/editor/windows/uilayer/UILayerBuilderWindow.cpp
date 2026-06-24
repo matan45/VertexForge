@@ -90,6 +90,12 @@ namespace windows
         visible = true;
     }
 
+    void UILayerBuilderWindow::openFromContentBrowser(const std::string& path)
+    {
+        show();
+        openLayer(path);
+    }
+
     // =========================================================================
     // Lifecycle / sandbox
     // =========================================================================
@@ -114,6 +120,7 @@ namespace windows
         createCmd.name = "UI Layer (Builder)";
         canvasRoot = Dispatcher::instance().execute(createCmd);
         if (!canvasRoot.isValid()) return;
+        contentRoot = canvasRoot; // a fresh layer is saved from its own canvas root
 
         events::ui::MarkUIPreviewSandboxCommand markCmd;
         markCmd.entity = canvasRoot;
@@ -150,7 +157,7 @@ namespace windows
         closeLayer();
         ensurePreviewInited();
 
-        // LoadPrefab into the scene (parent = root); the loaded root becomes the sandbox.
+        // LoadPrefab into the scene (parent = root).
         events::scene::LoadPrefabCommand loadCmd;
         loadCmd.filePath = path;
         auto loaded = Dispatcher::instance().execute(loadCmd);
@@ -158,32 +165,81 @@ namespace windows
         {
             return;
         }
-        canvasRoot = *loaded;
 
-        // Tag the loaded root so it is isolated like a fresh sandbox.
-        events::ui::MarkUIPreviewSandboxCommand markCmd;
-        markCmd.entity = canvasRoot;
-        markCmd.tagged = true;
-        Dispatcher::instance().execute(markCmd);
-
-        // Adopt the canvas's own reference resolution for the WYSIWYG extent.
+        // Is the loaded prefab UICanvas-rooted, or a canvas-less UI fragment (a panel/widget
+        // subtree, as HUD prefabs typically are)? The preview controller requires a UICanvas
+        // root, so a canvas-less prefab is WRAPPED in a synthetic sandbox canvas that supplies
+        // the layout context — exactly what the game's screen canvas provides at runtime.
         events::ui::GetUICanvasDataQuery canvasQuery;
-        canvasQuery.entity = canvasRoot;
-        if (auto canvasData = Dispatcher::instance().query(canvasQuery))
+        canvasQuery.entity = *loaded;
+        auto loadedCanvas = Dispatcher::instance().query(canvasQuery);
+
+        if (loadedCanvas.has_value())
         {
-            refWidth = static_cast<int>(canvasData->referenceWidth);
-            refHeight = static_cast<int>(canvasData->referenceHeight);
+            // Canvas-rooted: the loaded root is both the sandbox canvas and the saved content.
+            canvasRoot = *loaded;
+            contentRoot = *loaded;
+
+            // Adopt the canvas's own reference resolution for the WYSIWYG extent.
+            refWidth = static_cast<int>(loadedCanvas->referenceWidth);
+            refHeight = static_cast<int>(loadedCanvas->referenceHeight);
             refPreset = kCustomPresetIndex;
             for (int i = 0; i < kCustomPresetIndex; ++i)
             {
                 if (kResPresets[i].w == refWidth && kResPresets[i].h == refHeight) { refPreset = i; break; }
             }
         }
+        else
+        {
+            // Canvas-less fragment: build a synthetic sandbox canvas and reparent the loaded
+            // subtree under it. We SAVE the loaded subtree (contentRoot), not the wrapper, so the
+            // .vfPrefab round-trips in its original canvas-less form. The synthetic canvas adopts
+            // the window's current reference resolution (the fragment's own size is unknown).
+            events::scene::CreateEntityCommand createCmd;
+            createCmd.name = "UI Canvas (Builder)";
+            canvasRoot = Dispatcher::instance().execute(createCmd);
+            if (!canvasRoot.isValid())
+            {
+                contentRoot = services::EntityHandle::invalid();
+                return;
+            }
+
+            events::ui::AddUICanvasComponentCommand canvasCmd;
+            canvasCmd.entity = canvasRoot;
+            Dispatcher::instance().execute(canvasCmd);
+
+            events::ui::AddUIRectComponentCommand rectCmd;
+            rectCmd.entity = canvasRoot;
+            Dispatcher::instance().execute(rectCmd);
+
+            services::UICanvasData canvasData;
+            canvasData.referenceWidth = static_cast<float>(refWidth);
+            canvasData.referenceHeight = static_cast<float>(refHeight);
+            canvasData.scaleMode = 1; // ScaleWithScreenSize == WYSIWYG-friendly
+            events::ui::SetUICanvasDataCommand setCanvas;
+            setCanvas.entity = canvasRoot;
+            setCanvas.canvasData = canvasData;
+            Dispatcher::instance().execute(setCanvas);
+
+            events::scene::ReparentEntityCommand reparent;
+            reparent.entity = *loaded;
+            reparent.newParent = canvasRoot;
+            Dispatcher::instance().execute(reparent);
+
+            contentRoot = *loaded;
+        }
+
+        // Tag the sandbox canvas root so the whole subtree is isolated (skipped by the main UI
+        // passes + the scene serializer); the saved contentRoot subtree carries no tag.
+        events::ui::MarkUIPreviewSandboxCommand markCmd;
+        markCmd.entity = canvasRoot;
+        markCmd.tagged = true;
+        Dispatcher::instance().execute(markCmd);
 
         layerPath = path;
         dirty = false;
         rebuildPreview();
-        selectEntity(canvasRoot);
+        selectEntity(contentRoot);
     }
 
     void UILayerBuilderWindow::closeLayer()
@@ -204,6 +260,7 @@ namespace windows
             Dispatcher::instance().execute(del);
             canvasRoot = services::EntityHandle::invalid();
         }
+        contentRoot = services::EntityHandle::invalid();
         dragging = false;
         dragEntity = services::EntityHandle::invalid();
     }
@@ -219,8 +276,10 @@ namespace windows
             if (path.empty()) return;
         }
 
+        // Save the content subtree — for a wrapped canvas-less fragment this is the loaded prefab
+        // root, NOT the synthetic wrapper canvas, so the .vfPrefab round-trips in its original form.
         events::scene::SavePrefabCommand cmd;
-        cmd.entity = canvasRoot;
+        cmd.entity = contentRoot.isValid() ? contentRoot : canvasRoot;
         cmd.filePath = path;
         if (Dispatcher::instance().execute(cmd))
         {
@@ -333,9 +392,10 @@ namespace windows
     {
         if (!hasLayer()) return;
 
-        // Parent = current selection if it's part of the sandbox, else the canvas root.
+        // Parent = current selection if any, else the content root (so a widget added with
+        // nothing selected lands inside the SAVED subtree, not on the synthetic wrapper canvas).
         services::EntityHandle parent = selectedEntity();
-        if (!parent.isValid()) parent = canvasRoot;
+        if (!parent.isValid()) parent = contentRoot;
 
         const char* name = "UI Element";
         switch (type)
@@ -707,7 +767,7 @@ namespace windows
 
         if (ImGui::BeginChild("HierTree", ImVec2(0, 0)))
         {
-            drawHierarchyNode(canvasRoot, 0);
+            drawHierarchyNode(contentRoot, 0);
         }
         ImGui::EndChild();
     }
@@ -736,15 +796,15 @@ namespace windows
             selectEntity(entity);
         }
 
-        // Delete (not the canvas root).
-        if (entity != canvasRoot && ImGui::BeginPopupContextItem())
+        // Delete (not the content root — that's the layer's top).
+        if (entity != contentRoot && ImGui::BeginPopupContextItem())
         {
             if (ImGui::MenuItem("Delete"))
             {
                 events::scene::DeleteEntityCommand del;
                 del.entity = entity;
                 Dispatcher::instance().execute(del);
-                if (isSelected) selectEntity(canvasRoot);
+                if (isSelected) selectEntity(contentRoot);
                 dirty = true;
                 rebuildPreview();
             }
@@ -927,7 +987,7 @@ namespace windows
                 pick.instanceId = instanceId();
                 pick.refPx = mouseRef;
                 auto hit = Dispatcher::instance().query(pick);
-                selectEntity(hit.isValid() ? hit : canvasRoot);
+                selectEntity(hit.isValid() ? hit : contentRoot);
             }
         }
 

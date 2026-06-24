@@ -15,9 +15,44 @@
 #include "../animation/RetargetingEditorWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "string/StringUtil.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/project/ApplicationEvents.hpp"
+#include <nlohmann/json.hpp>
+#include <fstream>
 
 namespace windows
 {
+    namespace
+    {
+        // VK-1435 — cheap peek: is this .vfPrefab a UI layer? UI prefabs are authored either
+        // UICanvas-rooted OR as canvas-less fragments (a panel/widget subtree parented under the
+        // game's screen canvas at runtime) — both have a UIRect on the root. Either way it opens
+        // in the UI Layer Builder, not the mesh-only rig Prefab Preview. Hand-parses the JSON so
+        // the editor stays off utilities/serialization (same approach as PrefabTransformWriter).
+        bool prefabRootIsUI(const std::string& path)
+        {
+            try
+            {
+                std::ifstream f(path);
+                if (!f.is_open()) return false;
+                nlohmann::json j;
+                f >> j;
+                auto p = j.find("prefab");
+                if (p == j.end() || !p->is_object()) return false;
+                auto e = p->find("entity");
+                if (e == p->end() || !e->is_object()) return false;
+                auto c = e->find("components");
+                if (c == e->end() || !c->is_object()) return false;
+                // UIRect is the common denominator of every UI element (incl. a UICanvas root).
+                return c->contains("uiRect") || c->contains("uiCanvas");
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
+    }
+
     void PreviewWindowManager::cleanupExpired()
     {
         eraseExpired(openMeshPreviews);
@@ -208,6 +243,17 @@ namespace windows
 
     void PreviewWindowManager::openPrefabPreview(const std::string& path)
     {
+        // VK-1435: a UICanvas-rooted prefab is a UI layer, not a rig — route it to the UI Layer
+        // Builder (the rig Prefab Preview renders only 3D mesh parts, so it would be empty). The
+        // singleton builder is owned by MainImguiWindow, which handles this notification.
+        if (prefabRootIsUI(path))
+        {
+            events::application::OpenUILayerBuilderNotification note;
+            note.filePath = path;
+            events::EventDispatcher::instance().publish(note);
+            return;
+        }
+
         auto it = openPrefabPreviews.find(path);
         if (it == openPrefabPreviews.end() || it->second.expired())
         {

@@ -73,6 +73,7 @@ namespace windows
         dispatcher.unsubscribe(openInputMappingToken);
         dispatcher.unsubscribe(openProjectSettingsToken);
         dispatcher.unsubscribe(openBackgroundRemovalToken);
+        dispatcher.unsubscribe(openUILayerBuilderToken);
         dispatcher.unsubscribe(settingsChangedToken);
     }
 
@@ -124,6 +125,12 @@ namespace windows
             [this](const events::application::OpenBackgroundRemovalNotification& n)
             {
                 backgroundRemovalWindow.showWithFile(n.filePath);
+            });
+
+        openUILayerBuilderToken = dispatcher.subscribe<events::application::OpenUILayerBuilderNotification>(
+            [this](const events::application::OpenUILayerBuilderNotification& n)
+            {
+                uiLayerBuilderWindow.openFromContentBrowser(n.filePath);
             });
 
         settingsChangedToken = dispatcher.subscribe<events::editor::EditorSettingsChangedNotification>(

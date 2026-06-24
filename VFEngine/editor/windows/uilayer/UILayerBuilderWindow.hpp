@@ -57,6 +57,11 @@ namespace windows
         void draw();
         void show();
 
+        // Open a UICanvas-rooted .vfPrefab from the content browser: show the window and load
+        // the layer into the sandbox (replaces any current layer). Wired to the auto-routing of
+        // UI prefabs (PreviewWindowManager -> OpenUILayerBuilderNotification -> MainImguiWindow).
+        void openFromContentBrowser(const std::string& path);
+
     private:
         // ---- Lifecycle / sandbox ------------------------------------------------
         void ensurePreviewInited();          // lazy InitUILayerPreviewCommand (once)
@@ -121,8 +126,14 @@ namespace windows
         }
         bool previewInited = false;
 
-        // The sandbox canvas root (lives in the singleton registry, tagged preview).
+        // The sandbox canvas root (lives in the singleton registry, tagged preview). For a
+        // canvas-less UI prefab this is a SYNTHETIC canvas that wraps the loaded fragment.
         services::EntityHandle canvasRoot = services::EntityHandle::invalid();
+
+        // The entity that gets SAVED. Equals canvasRoot for a fresh / UICanvas-rooted layer, or
+        // the loaded prefab subtree when a canvas-less fragment was wrapped in a synthetic canvas
+        // (so the .vfPrefab round-trips in its original canvas-less form, without the wrapper).
+        services::EntityHandle contentRoot = services::EntityHandle::invalid();
 
         // Persistence state.
         std::string layerPath;   // .vfPrefab path (empty = unsaved/new)
