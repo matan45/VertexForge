@@ -13,8 +13,13 @@
 #include "../../render/ClearColor.hpp"
 #include "../../render/preview/PreviewBackgroundRenderer.hpp"
 #include "../../render/preview/PreviewGridRenderer.hpp"
+#include "../../render/preview/PreviewSkeletonOverlayRenderer.hpp"
+#include "PrefabRigOverlayGeometry.hpp"
+#include "animator/SocketTypes.hpp"
+#include "resource/Types.hpp"
 #include "print/Log.hpp"
 #include <imgui_impl_vulkan.h>
+#include <algorithm>
 
 namespace controllers
 {
@@ -58,6 +63,10 @@ namespace controllers
                 device, swapChain, *offscreenResources);
             previewGrid->init();
 
+            skeletonOverlay = std::make_unique<render::preview::PreviewSkeletonOverlayRenderer>(
+                device, swapChain, *offscreenResources);
+            skeletonOverlay->init();
+
             initialized = true;
         }
         catch (const std::exception& e)
@@ -76,6 +85,13 @@ namespace controllers
         // controller's destructor (or is rebuilt in place by the next buildFromDesc).
         destroyPipelines();
         built = false;
+
+        if (skeletonOverlay)
+        {
+            skeletonOverlay->cleanUpShader();
+            skeletonOverlay->cleanUp();
+            skeletonOverlay.reset();
+        }
 
         if (previewGrid)
         {
@@ -182,6 +198,103 @@ namespace controllers
         }
         pipelines.clear();
         partMaterial.clear();
+    }
+
+    void PrefabRigPreviewController::buildOverlayLines()
+    {
+        namespace ov = controllers::prefabrigoverlay;
+
+        overlayLines.clear();
+
+        const bool wantSkeleton = environmentParams.showSkeleton;
+        const bool wantSockets = environmentParams.showSockets;
+        const bool wantIK = environmentParams.showIKTargets;
+        if (!wantSkeleton && !wantSockets && !wantIK)
+            return;
+
+        const size_t count = assembly.partCount();
+
+        // --- Skeleton + sockets (per part) ---------------------------------------------
+        for (size_t i = 0; i < count; ++i)
+        {
+            const glm::mat4 partWorld = assembly.partWorld(i);
+            const bool skeletal = assembly.isSkeletalPart(i);
+            const std::vector<glm::mat4>& bones = assembly.boneMatrices(i);
+            const resource::SkeletonData& skel = assembly.skeleton(i);
+
+            // jointWorld = partWorld * boneMatrices[b] * bindPoses[b] * (0,0,0,1)
+            // (the same boneMeshPos formula as prefabrig::socketModelTransform, lifted to world).
+            auto jointWorld = [&](size_t b) -> glm::vec3 {
+                return glm::vec3(partWorld * bones[b] * skel.bindPoses[b] * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+            };
+
+            if (wantSkeleton && skeletal)
+            {
+                const size_t boneCount = std::min(bones.size(), skel.bindPoses.size());
+                const glm::vec4 color = ov::partColor(i);
+                for (size_t b = 0; b < boneCount && b < skel.bones.size(); ++b)
+                {
+                    const glm::vec3 jw = jointWorld(b);
+                    ov::addMarker(overlayLines, jw, 0.015f, color);
+
+                    const int parent = skel.bones[b].parentIndex;
+                    if (parent >= 0 && static_cast<size_t>(parent) < boneCount)
+                        ov::addLine(overlayLines, jw, jointWorld(static_cast<size_t>(parent)), color);
+                }
+            }
+
+            if (wantSockets)
+            {
+                const std::vector<animator::SocketDefinition>& sockets = assembly.editableSockets(i);
+                for (const animator::SocketDefinition& socket : sockets)
+                {
+                    // Skeletal: bone-relative model transform from the live pose; static: the
+                    // socket's own local-offset matrix IS the model transform (mirrors the
+                    // assembly's resolveAttachmentsAndIK socket branch).
+                    const glm::mat4 socketModel = skeletal
+                        ? controllers::prefabrig::socketModelTransform(bones, skel.bindPoses, socket)
+                        : socket.getLocalOffsetMatrix();
+                    ov::addAxisTriad(overlayLines, partWorld * socketModel, 0.06f);
+                }
+            }
+        }
+
+        // --- IK targets (per chain) ----------------------------------------------------
+        if (wantIK)
+        {
+            const std::vector<animator::ik::IKChainConfig>& chains = assembly.editableChains();
+            for (size_t c = 0; c < chains.size(); ++c)
+            {
+                if (!chains[c].enabled)
+                    continue;
+
+                const PrefabRigAssembly::IKOverlayInfo info = assembly.ikOverlayInfo(c);
+                if (!info.active)
+                    continue;
+
+                const glm::vec4 targetColor(1.0f, 0.85f, 0.1f, 1.0f);
+                ov::addMarker(overlayLines, info.targetPosition, 0.05f, targetColor);
+
+                // Line from the chain's resolved tip (current world) to the target, showing the
+                // IK pull. Only when the tip resolved on a valid skeletal body part.
+                if (info.bodyPartIndex >= 0 && static_cast<size_t>(info.bodyPartIndex) < count &&
+                    assembly.isSkeletalPart(static_cast<size_t>(info.bodyPartIndex)) &&
+                    info.resolvedTipIndex >= 0)
+                {
+                    const size_t body = static_cast<size_t>(info.bodyPartIndex);
+                    const std::vector<glm::mat4>& bones = assembly.boneMatrices(body);
+                    const resource::SkeletonData& skel = assembly.skeleton(body);
+                    const size_t tip = static_cast<size_t>(info.resolvedTipIndex);
+                    if (tip < bones.size() && tip < skel.bindPoses.size())
+                    {
+                        const glm::vec3 tipWorld = glm::vec3(
+                            assembly.partWorld(body) * bones[tip] * skel.bindPoses[tip] *
+                            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+                        ov::addLine(overlayLines, tipWorld, info.targetPosition, targetColor);
+                    }
+                }
+            }
+        }
     }
 
     void PrefabRigPreviewController::createSampler()
@@ -599,6 +712,18 @@ namespace controllers
                 (i < partMaterial.size()) ? partMaterial[i] : render::mesh::SkinnedMeshRenderData{};
             renderData.modelMatrix = assembly.partWorld(i);
 
+            // Phase 3: apply the window's debug-shading + analytic-lighting selection uniformly to
+            // every part. shadingMode defaults to 0 (Lit) and lightingMode to 0 (IBL-only), so an
+            // untouched env leaves the original output unchanged.
+            const render::mesh::ResolvedSkinnedShading shading =
+                render::mesh::resolveSkinnedShading(environmentParams.shadingMode);
+            renderData.debugMode = static_cast<uint32_t>(shading.debugMode);
+            renderData.wireframe = shading.wireframe;
+            renderData.lightingMode = environmentParams.lightingMode;
+            renderData.lightingIntensity = environmentParams.lightingIntensity;
+            renderData.keyLightDirection = render::mesh::keyLightDirectionFromSpherical(
+                environmentParams.lightAzimuth, environmentParams.lightElevation);
+
             pipelines[i]->recordCommandBuffer(commandBuffer, imageIndex, renderData,
                                               /*clearAttachments=*/false);
         }
@@ -616,6 +741,18 @@ namespace controllers
         if (previewGrid && previewGrid->isInitialized() && environmentParams.showGrid)
         {
             previewGrid->render(commandBuffer, imageIndex, currentView, currentProjection, true);
+        }
+
+        // Step 5: rig debug overlay (skeleton/sockets/IK targets). Built CPU-side from the live
+        // assembly each frame; depth test is OFF so it reads through the mesh. Like the grid it
+        // self-manages its layout transitions and ends in ShaderReadOnlyOptimal.
+        if (skeletonOverlay && skeletonOverlay->isInitialized())
+        {
+            buildOverlayLines();
+            if (!overlayLines.empty())
+            {
+                skeletonOverlay->render(commandBuffer, imageIndex, currentView, currentProjection, overlayLines);
+            }
         }
 
         commandBuffer.end();

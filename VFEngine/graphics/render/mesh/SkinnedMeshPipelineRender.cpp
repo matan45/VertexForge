@@ -416,7 +416,16 @@ namespace render::mesh
 
         core::beginDynamicRendering(commandBuffer, dynInfo);
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        // VK-1433 Phase 3: bind the lazily-built wireframe (PolygonMode::eLine) variant when the
+        // caller requests it; otherwise the original fill pipeline. The variant is built on demand
+        // here (host op — safe to do while recording), then reused for subsequent frames.
+        if (renderData.wireframe)
+        {
+            ensureWireframePipeline();
+        }
+        const bool useWireframe = renderData.wireframe && wireframePipeline;
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                   useWireframe ? wireframePipeline : graphicsPipeline);
 
         std::array<vk::DescriptorSet, 3> descriptorSets = {
             cameraIBLDescriptorSet,
@@ -436,6 +445,11 @@ namespace render::mesh
         // All-NONE by default (see SkinnedMeshRenderData) => shader samples no material
         // textures and the output matches the original scalar-only pipeline byte-for-byte.
         pc.textureIndicesPacked = renderData.textureIndicesPacked;
+        // Phase 3 debug-shading + analytic-lighting tail. All default to the no-op state, so a
+        // caller that leaves them untouched gets the original IBL-only output.
+        pc.debugMode = renderData.debugMode;
+        pc.lightingMode = renderData.lightingMode;
+        pc.keyLightDirIntensity = glm::vec4(renderData.keyLightDirection, renderData.lightingIntensity);
 
         commandBuffer.pushConstants(pipelineLayout,
                                     vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,

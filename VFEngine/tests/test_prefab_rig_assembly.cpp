@@ -283,4 +283,44 @@ TEST_CASE("editing a bone socket moves the attached child world by the same delt
     CHECK((after - before).z == doctest::Approx(delta.z));
 }
 
+// ---------------------------------------------------------------------------
+// VK-1433 Phase 1 — read-only overlay accessors never dangle on an unbuilt rig.
+// (A built rig needs disk assets + Vulkan, out of scope here; the empties are the
+//  contract the overlay relies on for static / out-of-range parts and chains.)
+// ---------------------------------------------------------------------------
+TEST_CASE("skeleton()/ikOverlayInfo() are safe on an unbuilt / out-of-range assembly")
+{
+    controllers::PrefabRigAssembly assembly;
+    CHECK(assembly.isBuilt() == false);
+    CHECK(assembly.partCount() == 0);
+
+    // Out-of-range part -> empty static skeleton (no bones / bind poses), no dangle.
+    const resource::SkeletonData& skel = assembly.skeleton(0);
+    CHECK(skel.bones.empty());
+    CHECK(skel.bindPoses.empty());
+
+    // Out-of-range chain -> default (inactive, unresolved) overlay info.
+    const auto info = assembly.ikOverlayInfo(0);
+    CHECK(info.active == false);
+    CHECK(info.bodyPartIndex == -1);
+    CHECK(info.resolvedTipIndex == -1);
+    // The overlay reads targetPosition only when active; the default must be a safe zero so a
+    // stale/garbage marker is never drawn for an unresolved chain.
+    CHECK(info.targetPosition.x == doctest::Approx(0.0f));
+    CHECK(info.targetPosition.y == doctest::Approx(0.0f));
+    CHECK(info.targetPosition.z == doctest::Approx(0.0f));
+}
+
+TEST_CASE("skeleton(): the empty static skeleton reference is reused and never dangles")
+{
+    controllers::PrefabRigAssembly assembly;
+    // Same stable reference for every out-of-range index (the emptySkeleton member).
+    const resource::SkeletonData& a = assembly.skeleton(0);
+    const resource::SkeletonData& b = assembly.skeleton(123);
+    CHECK(&a == &b);
+    CHECK(a.bones.empty());
+    CHECK(a.bindPoses.empty());
+    CHECK(a.inverseBindPoses.empty());
+}
+
 } // TEST_SUITE("PrefabRigAssembly")

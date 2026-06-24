@@ -8,6 +8,12 @@
 #include "events/ui/UISliderProgressEvents.hpp"
 #include "events/ui/UIDropdownTabsEvents.hpp"
 #include "events/ui/UIThemeEvents.hpp"
+#include "events/ui/UIAnimationEvents.hpp"
+#include "events/ui/UIListViewEvents.hpp"
+#include "events/ui/UIWindowEvents.hpp"
+#include "events/ui/UITooltipEvents.hpp"
+#include "events/ui/UIMaskEvents.hpp"
+#include "events/ui/UIDragDropEvents.hpp"
 
 namespace windows::uilayer
 {
@@ -44,6 +50,13 @@ namespace windows::uilayer
         s.slider = runQuery<events::ui::GetUISliderDataQuery>(entity);
         s.progressBar = runQuery<events::ui::GetUIProgressBarDataQuery>(entity);
         s.styleKey = runQuery<events::ui::GetUIStyleKeyQuery>(entity);
+        s.animation = runQuery<events::ui::GetUIAnimationDataQuery>(entity);
+        s.listView = runQuery<events::ui::GetUIListViewDataQuery>(entity);
+        s.window = runQuery<events::ui::GetUIWindowDataQuery>(entity);
+        s.tooltip = runQuery<events::ui::GetUITooltipDataQuery>(entity);
+        s.mask = runQuery<events::ui::GetUIMaskDataQuery>(entity);
+        s.draggable = runQuery<events::ui::GetUIDraggableDataQuery>(entity);
+        s.dropTarget = runQuery<events::ui::GetUIDropTargetDataQuery>(entity);
         return s;
     }
 
@@ -124,6 +137,45 @@ namespace windows::uilayer
         if (s.styleKey)
         {
             events::ui::SetUIStyleKeyCommand cmd; cmd.entity = entity; cmd.styleKey = *s.styleKey;
+            dispatcher.execute(cmd);
+        }
+        if (s.animation)
+        {
+            events::ui::SetUIAnimationDataCommand cmd; cmd.entity = entity;
+            cmd.animationData = *s.animation;
+            dispatcher.execute(cmd);
+        }
+        if (s.listView)
+        {
+            events::ui::SetUIListViewDataCommand cmd; cmd.entity = entity;
+            cmd.listViewData = *s.listView;
+            dispatcher.execute(cmd);
+        }
+        if (s.window)
+        {
+            events::ui::SetUIWindowDataCommand cmd; cmd.entity = entity; cmd.windowData = *s.window;
+            dispatcher.execute(cmd);
+        }
+        if (s.tooltip)
+        {
+            events::ui::SetUITooltipDataCommand cmd; cmd.entity = entity; cmd.tooltipData = *s.tooltip;
+            dispatcher.execute(cmd);
+        }
+        if (s.mask)
+        {
+            events::ui::SetUIMaskDataCommand cmd; cmd.entity = entity; cmd.maskData = *s.mask;
+            dispatcher.execute(cmd);
+        }
+        if (s.draggable)
+        {
+            events::ui::SetUIDraggableDataCommand cmd; cmd.entity = entity;
+            cmd.draggableData = *s.draggable;
+            dispatcher.execute(cmd);
+        }
+        if (s.dropTarget)
+        {
+            events::ui::SetUIDropTargetDataCommand cmd; cmd.entity = entity;
+            cmd.dropTargetData = *s.dropTarget;
             dispatcher.execute(cmd);
         }
     }

@@ -40,6 +40,13 @@ namespace windows::uilayer
         std::optional<services::UISliderData> slider;
         std::optional<services::UIProgressBarData> progressBar;
         std::optional<std::string> styleKey;
+        std::optional<services::UIAnimationData> animation;
+        std::optional<services::UIListViewData> listView;
+        std::optional<services::UIWindowData> window;
+        std::optional<services::UITooltipData> tooltip;
+        std::optional<services::UIMaskData> mask;
+        std::optional<services::UIDraggableData> draggable;
+        std::optional<services::UIDropTargetData> dropTarget;
     };
 
     // Capture the editable UI component data currently on `entity` (via Get*DataQuery / the

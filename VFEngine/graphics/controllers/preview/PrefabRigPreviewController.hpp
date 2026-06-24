@@ -23,6 +23,7 @@
 #include <glm/glm.hpp>
 #include "../../../services/providers/render/IMeshPreviewProvider.hpp"
 #include "../../render/mesh/SkinnedMeshTypes.hpp" // pulls <vulkan/vulkan.hpp> (vk::Sampler/Fence)
+#include "../../render/tools/ImmediateDebugTypes.hpp"
 #include "PrefabRigAssembly.hpp"
 #include <array>
 #include <memory>
@@ -46,6 +47,7 @@ namespace render::preview
 {
     class PreviewBackgroundRenderer;
     class PreviewGridRenderer;
+    class PreviewSkeletonOverlayRenderer;
 }
 
 namespace render::mesh
@@ -132,6 +134,10 @@ namespace controllers
 
         void destroyPipelines();
 
+        // Rebuilds `overlayLines` from the live assembly when any overlay toggle is on. Pure CPU
+        // (no GPU work); the resulting draw list is uploaded + drawn as render() "Step 5".
+        void buildOverlayLines();
+
         // Orders one part's color+depth attachment writes before the next part's load. Separate
         // dynamic-rendering instances writing the same attachment have NO implicit dependency,
         // so this barrier is required between consecutive part draws (color/depth stay in their
@@ -149,7 +155,11 @@ namespace controllers
         std::unique_ptr<render::ClearColor> clearColor;
         std::unique_ptr<render::preview::PreviewBackgroundRenderer> previewBackground;
         std::unique_ptr<render::preview::PreviewGridRenderer> previewGrid;
+        std::unique_ptr<render::preview::PreviewSkeletonOverlayRenderer> skeletonOverlay;
         services::PreviewEnvironmentParams environmentParams;
+
+        // Rebuilt each frame in render() from the live assembly (Phase 1 debug overlay).
+        render::mesh::ImmediateDebugDrawList overlayLines;
 
         PrefabRigAssembly assembly;
 

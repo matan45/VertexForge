@@ -68,6 +68,11 @@ namespace render::mesh
             logicalDevice.destroyPipeline(graphicsPipeline);
             graphicsPipeline = nullptr;
         }
+        if (wireframePipeline)
+        {
+            logicalDevice.destroyPipeline(wireframePipeline);
+            wireframePipeline = nullptr;
+        }
         if (pipelineLayout)
         {
             logicalDevice.destroyPipelineLayout(pipelineLayout);

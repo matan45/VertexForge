@@ -153,6 +153,13 @@ namespace controllers
         const std::string& meshPath(size_t part) const;
         bool isSkeletalPart(size_t part) const;
 
+        // Read-only skeleton (bind poses + per-bone parentIndex + bone names) for a skeletal
+        // part, so an editor overlay can draw the bone hierarchy. Combine with boneMatrices(part)
+        // and the prefabrig joint formula to place joints in world space. Returns a reference to
+        // an empty static SkeletonData for static parts or an out-of-range index (never dangles),
+        // matching the emptyMatrices / emptySockets idiom. Pure data; does not affect update().
+        const resource::SkeletonData& skeleton(size_t part) const;
+
         // --- Authoring accessors (live edit, no disk round-trip) ------------
         // Mutating these is reflected on the next update(): editable bone/static sockets
         // per part, and the IK chain configs. Returns a reference to an empty static
@@ -161,6 +168,21 @@ namespace controllers
         const std::vector<animator::SocketDefinition>& editableSockets(size_t part) const;
         std::vector<animator::ik::IKChainConfig>& editableChains();
         const std::vector<animator::ik::IKChainConfig>& editableChains() const;
+
+        // --- IK overlay state (read-only, populated by update()) ------------
+        // Resolved per-chain data for an editor overlay: which body part solves it, the resolved
+        // tip bone index on that part (-1 if unresolved), the world-space target position fed to
+        // the solver, and whether the chain currently has a valid bound target (drives whether
+        // the overlay should draw it). Parallel to editableChains(). Computed by the last
+        // update()/scrub; pure read-back, no behavior change.
+        struct IKOverlayInfo
+        {
+            int bodyPartIndex = -1;
+            int resolvedTipIndex = -1;
+            glm::vec3 targetPosition{0.0f};
+            bool active = false;
+        };
+        IKOverlayInfo ikOverlayInfo(size_t chainIndex) const;
 
         // --- State / parameter control (pass-throughs) ----------------------
         // Force a state on a skeletal part's animator (state picker). No-op if the part
@@ -278,5 +300,6 @@ namespace controllers
         // Returned for out-of-range accessors so callers never dangle.
         std::vector<glm::mat4> emptyMatrices;
         std::vector<animator::SocketDefinition> emptySockets;
+        resource::SkeletonData emptySkeleton;
     };
 }

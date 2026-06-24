@@ -475,6 +475,13 @@ namespace controllers
         return part < parts.size() && parts[part].skeletal;
     }
 
+    const resource::SkeletonData& PrefabRigAssembly::skeleton(size_t part) const
+    {
+        if (part >= parts.size())
+            return emptySkeleton;
+        return parts[part].skeleton;
+    }
+
     std::vector<animator::SocketDefinition>& PrefabRigAssembly::editableSockets(size_t part)
     {
         if (part >= parts.size())
@@ -497,6 +504,19 @@ namespace controllers
     const std::vector<animator::ik::IKChainConfig>& PrefabRigAssembly::editableChains() const
     {
         return chainConfigs;
+    }
+
+    PrefabRigAssembly::IKOverlayInfo PrefabRigAssembly::ikOverlayInfo(size_t chainIndex) const
+    {
+        IKOverlayInfo info;
+        if (chainIndex >= chains.size())
+            return info;
+        const Chain& c = chains[chainIndex];
+        info.bodyPartIndex = c.bodyPartIndex;
+        info.resolvedTipIndex = c.runtimeState.resolvedTipIndex;
+        info.targetPosition = c.runtimeState.targetPosition;
+        info.active = c.runtimeState.isActive;
+        return info;
     }
 
     bool PrefabRigAssembly::forceState(size_t part, const std::string& stateName, float blendDuration)

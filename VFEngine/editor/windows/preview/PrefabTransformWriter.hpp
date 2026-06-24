@@ -176,4 +176,41 @@ namespace windows::prefabtransform
 
         return written;
     }
+
+    // Phase 2 — zero the LOCAL translation of the node that became `part` (k-th mesh-bearing node in
+    // DFS pre-order, the same mapping as above). Used by the socket-attached-child TRANSLATE-drop
+    // "Zero translation" action: a socketed child's position is dropped at instantiation, so baking
+    // it to zero makes the prefab match runtime. Rotation/scale and every other field are preserved.
+    // Returns true iff the node was found and rewritten.
+    inline bool zeroPartTranslation(json& prefabJson, int part)
+    {
+        if (part < 0) return false;
+
+        auto pit = prefabJson.find("prefab");
+        if (pit == prefabJson.end() || !pit->is_object())
+            return false;
+        auto eit = pit->find("entity");
+        if (eit == pit->end() || !eit->is_object())
+            return false;
+
+        std::vector<json*> nodes;
+        detail::flatten(*eit, nodes);
+
+        int partIndex = 0;
+        for (json* nodePtr : nodes)
+        {
+            json& node = *nodePtr;
+            if (!nodeHasMesh(node))
+                continue;
+
+            if (partIndex++ != part)
+                continue;
+
+            math::DecomposedTransform t = readLocalTransform(node);
+            t.position = glm::vec3(0.0f);
+            writeLocalTransform(node, t);
+            return true;
+        }
+        return false;
+    }
 }

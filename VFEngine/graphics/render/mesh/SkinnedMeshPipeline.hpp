@@ -53,6 +53,10 @@ namespace render::mesh
         std::shared_ptr<core::Shader> skinnedMeshShader;
 
         vk::Pipeline graphicsPipeline;
+        // VK-1433 Phase 3: PolygonMode::eLine variant, sharing layout + shader with graphicsPipeline.
+        // Built lazily on the first wireframe draw (mutable so the const recordCommandBuffer can
+        // populate it); stays null until then so non-wireframe callers pay nothing.
+        mutable vk::Pipeline wireframePipeline;
         vk::PipelineLayout pipelineLayout;
 
         vk::DescriptorSetLayout cameraIBLDescriptorSetLayout;
@@ -143,6 +147,12 @@ namespace render::mesh
         void createBoneSSBO();
         void createPipelineLayout();
         void createGraphicsPipeline();
+        // Builds a graphics pipeline identical to graphicsPipeline except for polygonMode (used for
+        // the fill pipeline at init and the lazily-built wireframe variant). Shares layout + shader.
+        vk::Pipeline createPipelineVariant(vk::PolygonMode polygonMode) const;
+        // Ensures wireframePipeline exists (builds it on first call). Const + mutable so it can be
+        // invoked from the const recordCommandBuffer path.
+        void ensureWireframePipeline() const;
 
         void createMeshGPUBuffers(const resource::MeshesData& meshData);
         void destroyMeshGPUBuffers();

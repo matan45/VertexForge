@@ -15,8 +15,25 @@ namespace services {
         glm::vec4 gradientTopColor{ 0.165f, 0.184f, 0.271f, 1.0f };
         glm::vec4 gradientBottomColor{ 0.106f, 0.118f, 0.169f, 1.0f };
         bool showGrid = true;
-        uint8_t lightingMode = 0;     // 0=default, 1=three-point
+        uint8_t lightingMode = 0;     // 0=default/IBL-only, 1=three-point
         float lightingIntensity = 1.0f;
+
+        // VK-1433 Phase 1 — prefab rig debug overlays (skeleton/sockets/IK targets). Read only
+        // by PrefabRigPreviewController; other preview controllers ignore them.
+        bool showSkeleton = false;
+        bool showSockets = false;
+        bool showIKTargets = false;
+
+        // VK-1433 Phase 3 — debug shading mode for the prefab rig preview. 0=none (unchanged PBR),
+        // 1=clay, 2=normals, 3=UVs, 4=albedo-unlit, 5=wireframe. Read only by
+        // PrefabRigPreviewController; default 0 keeps every other preview controller unchanged.
+        uint8_t shadingMode = 0;
+
+        // VK-1433 Phase 3 — primary (key) light direction for three-point lighting, in spherical
+        // editor coordinates (radians). Azimuth around +Y, elevation above the XZ plane. Only read
+        // when lightingMode == 1. Default points down-and-forward, a flattering key angle.
+        float lightAzimuth = 0.6f;
+        float lightElevation = 0.6f;
     };
 
     struct MeshPreviewParams {

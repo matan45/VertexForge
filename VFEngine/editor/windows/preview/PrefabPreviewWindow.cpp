@@ -1,17 +1,21 @@
 #include "print/Log.hpp"
 #include "PrefabPreviewWindow.hpp"
 #include "PrefabTransformWriter.hpp"
+#include "PrefabRefWriter.hpp"
+#include "asset/AssetRef.hpp"
 #include "PreviewInputHandler.hpp"
 #include "PreviewToolbar.hpp"
 #include "../../camera/OrbitCamera.hpp"
 #include "MeshSocketWriter.hpp"
 #include "MeshIKChainWriter.hpp"
+#include "../../dragdrop/AssetDropTarget.hpp"
 #include "imgui.h"
 #include "ImGuizmo.h"
 #include "events/EventDispatcher.hpp"
 #include "events/render/PrefabRigPreviewEvents.hpp"
 #include "events/physics/SocketEvents.hpp"
 #include "events/project/ResourceEvents.hpp"
+#include "events/editor/UndoRedoEvents.hpp"
 #include <nlohmann/json.hpp>
 #include <set>
 #include <glm/gtc/quaternion.hpp>
@@ -21,6 +25,8 @@
 #include <algorithm>
 #include <cstring>
 #include <cmath>
+#include <memory>
+#include <functional>
 
 using json = nlohmann::json;
 
@@ -28,6 +34,10 @@ namespace windows
 {
     namespace
     {
+        // De-hardcoded UI timings (formerly literal 3.0f / 0.25f sprinkled through the panels).
+        constexpr float kSaveFeedbackSeconds = 3.0f;   // how long "Saved/Failed" stays on screen
+        constexpr float kDefaultStateBlendSeconds = 0.25f; // default animator state-transition blend
+
         glm::vec3 parseVec3(const json& j, float dx, float dy, float dz)
         {
             if (j.is_array() && j.size() >= 3)
@@ -215,16 +225,90 @@ namespace windows
     // The prefab-tree -> PrefabRigDescDTO conversion (buildPrefabRigDescDTO) lives header-only in
     // PrefabRigDescBuilder.hpp so the Tests project can exercise it without linking the Editor.
 
+    std::unordered_map<std::uintptr_t, PrefabPreviewWindow*>& PrefabPreviewWindow::liveWindows()
+    {
+        static std::unordered_map<std::uintptr_t, PrefabPreviewWindow*> windows;
+        return windows;
+    }
+
+    void PrefabPreviewWindow::resyncMirror(services::PreviewInstanceId id,
+                                           const prefabrigedit::PrefabRigEditSnapshot& snap)
+    {
+        auto& windows = liveWindows();
+        auto it = windows.find(id.raw());
+        if (it != windows.end() && it->second)
+            it->second->applyMirrorSnapshot(snap);
+        // else: the window was closed — the controller CQRS already no-op'd; nothing to mirror.
+    }
+
+    void PrefabPreviewWindow::applyMirrorSnapshot(const prefabrigedit::PrefabRigEditSnapshot& snap)
+    {
+        // Restore only the mirror fields the snapshot engaged. The controller was already updated by
+        // applyPrefabRigSnapshot (CQRS) BEFORE this runs; this keeps the window's panels + gizmo base
+        // anchor in sync.
+        if (snap.previewTransforms.has_value())
+            previewTransforms = *snap.previewTransforms;
+
+        if (snap.chains.has_value())
+            editChains = *snap.chains;
+
+        // Sockets are per-part: only adopt them if the snapshot's part is the one currently selected
+        // (otherwise the live editSockets belongs to a different part and must not be overwritten).
+        if (snap.socketPart.has_value() && *snap.socketPart == selectedPart)
+        {
+            editSockets = snap.sockets;
+            if (selectedSocketIndex >= static_cast<int>(editSockets.size()))
+                selectedSocketIndex = -1;
+        }
+
+        // SHOULD-FIX #2: restore the IK target bindings onto the DTO. A binding change can't be a pure
+        // CQRS push (no binding command); it requires re-resolving the assembly from the DTO. So if the
+        // restored bindings differ from the live ones, write them back and rebuild — mirroring the live
+        // bindingChanged path in drawIKPanel — then re-apply chains + sockets (the rebuild reloaded
+        // them from disk). applyPrefabRigSnapshot's controller pushes are superseded by this rebuild.
+        if (snap.ikBindings.has_value())
+        {
+            const auto& bindings = *snap.ikBindings;
+            bool bindingChanged = false;
+            for (size_t i = 0; i < rigDesc.ik.size() && i < bindings.size(); ++i)
+            {
+                if (rigDesc.ik[i].targetPartIndex != bindings[i].targetPartIndex ||
+                    rigDesc.ik[i].targetSocketName != bindings[i].targetSocketName)
+                {
+                    rigDesc.ik[i].targetPartIndex = bindings[i].targetPartIndex;
+                    rigDesc.ik[i].targetSocketName = bindings[i].targetSocketName;
+                    bindingChanged = true;
+                }
+            }
+            if (bindingChanged)
+            {
+                buildPreviewFromDesc();                 // re-resolve with the restored bindings
+                if (snap.chains.has_value())
+                    pushEditChains();                   // restore chain configs onto the fresh assembly
+                if (snap.socketPart.has_value() && *snap.socketPart == selectedPart && !editSockets.empty())
+                    pushEditSocketsForPart(selectedPart);
+            }
+        }
+    }
+
     PrefabPreviewWindow::PrefabPreviewWindow(const std::string& filePath)
         : prefabPath(filePath)
         , camera(std::make_unique<editor::OrbitCamera>())
     {
         std::filesystem::path path(filePath);
         windowTitle = "Prefab Preview: " + path.filename().string();
+
+        // Register in the live-window table so an undo command (which holds only our instanceId)
+        // can find us — or safely resolve to nullptr once we are destroyed.
+        liveWindows()[getInstanceId().raw()] = this;
     }
 
     PrefabPreviewWindow::~PrefabPreviewWindow()
     {
+        // Deregister BEFORE any member is torn down, so a concurrent/queued undo resolves to nullptr
+        // rather than a half-destroyed object.
+        liveWindows().erase(getInstanceId().raw());
+
         loadingCancelled.store(true);
         if (loadFuture.valid())
         {
@@ -357,6 +441,7 @@ namespace windows
                 prefabLoaded = true;
 
                 rigDesc = buildPrefabRigDescDTO(rootEntity);
+                revalidateRefs();
 
                 // Lazily init the renderer, then build from the description.
                 initPreviewRenderer();
@@ -471,6 +556,242 @@ namespace windows
     }
 
     // ----------------------------------------------------------------------
+    // Phase 2: broken-ref validation
+    // ----------------------------------------------------------------------
+    void PrefabPreviewWindow::revalidateRefs()
+    {
+        // Inject the real filesystem predicate; the free helper is unit-tested with a fake.
+        partRefStatuses = prefabrigval::validatePartRefs(rigDesc, [](const std::string& p)
+        {
+            std::error_code ec;
+            return std::filesystem::exists(p, ec);
+        });
+        missingRefCount = prefabrigval::countPartsWithMissingRefs(partRefStatuses);
+    }
+
+    void PrefabPreviewWindow::applyAssetDropToPart(int part, const std::string& assetPath)
+    {
+        if (part < 0 || part >= static_cast<int>(rigDesc.parts.size())) return;
+
+        std::string ext = std::filesystem::path(assetPath).extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+        services::PrefabRigPartDTO& p = rigDesc.parts[part];
+        if (ext == ".vfmesh")
+            p.meshPath = assetPath;
+        else if (ext == ".vfmaterial")
+            p.defaultMaterialPath = assetPath;
+        else if (ext == ".vfanim")
+            p.animatorPath = assetPath; // makes a static part skeletal / re-points the animator
+        else
+            return; // unknown extension — leave untouched
+
+        hasUnsavedRefSwap = true;
+        swappedParts.insert(part);
+
+        // Transient swap: the whole desc round-trips on rebuild (zero new CQRS). Revalidate so a
+        // freshly-dropped (and possibly missing) ref updates the badges, then rebuild the preview.
+        revalidateRefs();
+        buildPreviewFromDesc();
+
+        // The selected part's sockets came from the OLD mesh; re-pull from the rebuilt assembly so
+        // the socket panels reflect the swapped part.
+        pullEditSocketsForPart(part);
+        chainsLoaded = false; // re-pull chains lazily on next IK-panel draw
+    }
+
+    void PrefabPreviewWindow::saveRefSwapsToPrefab()
+    {
+        refSaveTimer = kSaveFeedbackSeconds;
+        refSaveSuccess = false;
+        if (swappedParts.empty()) return;
+
+        // Build the ref edits from the live (swapped) rigDesc for the parts the user actually
+        // changed. Only non-empty fields are rewritten by the writer.
+        std::vector<prefabref::PartRefEdit> edits;
+        for (int part : swappedParts)
+        {
+            if (part < 0 || part >= static_cast<int>(rigDesc.parts.size())) continue;
+            const services::PrefabRigPartDTO& p = rigDesc.parts[part];
+            prefabref::PartRefEdit e;
+            e.part = part;
+            e.meshPath = p.meshPath;
+            e.animatorPath = p.animatorPath;
+            e.defaultMaterialPath = p.defaultMaterialPath;
+            edits.push_back(std::move(e));
+        }
+
+        json prefabJson;
+        try
+        {
+            std::ifstream in(prefabPath);
+            if (!in.is_open())
+            {
+                vfLogError("Save Refs: cannot open '{}'", prefabPath);
+                return;
+            }
+            prefabJson = json::parse(in);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Save Refs: parse error in '{}': {}", prefabPath, e.what());
+            return;
+        }
+
+        // Inject the real path -> GUID resolver (AssetDatabase-backed; editor links AssetDB). If the
+        // DB cannot resolve a path the writer writes the new path into BOTH ref keys, so the loader's
+        // path-shaped fallback resolves the new asset (never the stale GUID).
+        const int applied = prefabref::applyRefEdits(prefabJson, edits, [](const std::string& path)
+        {
+            auto ref = asset::AssetRef::fromPath(path);
+            return ref.isValid() ? ref.toHexString() : std::string();
+        });
+
+        try
+        {
+            std::ofstream out(prefabPath, std::ios::trunc);
+            if (!out.is_open())
+            {
+                vfLogError("Save Refs: cannot write '{}'", prefabPath);
+                return;
+            }
+            out << prefabJson.dump(2);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Save Refs: write error in '{}': {}", prefabPath, e.what());
+            return;
+        }
+
+        refSaveSuccess = true;
+        hasUnsavedRefSwap = false;
+        swappedParts.clear();
+
+        events::resource::AssetSavedNotification notif;
+        notif.filePath = prefabPath;
+        events::EventDispatcher::instance().publish(notif);
+
+        vfLogInfo("Save Refs: persisted {} swapped part ref(s) to '{}'", applied, prefabPath);
+    }
+
+    // ----------------------------------------------------------------------
+    // Phase 2: edit-undo snapshot / push helpers
+    // ----------------------------------------------------------------------
+    prefabrigedit::PrefabRigEditSnapshot PrefabPreviewWindow::snapshotSockets() const
+    {
+        prefabrigedit::PrefabRigEditSnapshot snap;
+        snap.socketPart = selectedPart;
+        snap.sockets = editSockets;
+        return snap;
+    }
+
+    std::vector<prefabrigedit::IKBindingSnapshot> PrefabPreviewWindow::snapshotIKBindings() const
+    {
+        std::vector<prefabrigedit::IKBindingSnapshot> out;
+        out.reserve(rigDesc.ik.size());
+        for (const auto& ik : rigDesc.ik)
+            out.push_back({ik.targetPartIndex, ik.targetSocketName});
+        return out;
+    }
+
+    prefabrigedit::PrefabRigEditSnapshot PrefabPreviewWindow::snapshotChains() const
+    {
+        prefabrigedit::PrefabRigEditSnapshot snap;
+        snap.chains = editChains;
+        snap.ikBindings = snapshotIKBindings(); // carry the transient target bindings too
+        return snap;
+    }
+
+    prefabrigedit::PrefabRigEditSnapshot PrefabPreviewWindow::snapshotTransforms() const
+    {
+        prefabrigedit::PrefabRigEditSnapshot snap;
+        snap.previewTransforms = previewTransforms;
+        return snap;
+    }
+
+    void PrefabPreviewWindow::pushSocketUndo(prefabrigedit::PrefabRigEditSnapshot before)
+    {
+        prefabrigedit::PrefabRigEditSnapshot after = snapshotSockets();
+        if (before.socketPart == after.socketPart &&
+            prefabrigedit::socketsEqual(before.sockets, after.sockets))
+            return; // no actual change — don't pollute the stack
+
+        const services::PreviewInstanceId id = getInstanceId();
+        // Capture ONLY the id (a value) — never `this`. resyncMirror looks the window up by id and
+        // no-ops if it has been closed, so the command is safe on the process-global undo stack.
+        auto cmd = std::make_shared<prefabrigedit::PrefabRigEditUndoCommand>(
+            id, std::move(before), std::move(after), "Edit rig sockets",
+            [id](const prefabrigedit::PrefabRigEditSnapshot& snap)
+            {
+                PrefabPreviewWindow::resyncMirror(id, snap);
+            });
+
+        events::undoredo::PushUndoableCommand push;
+        push.command = std::make_shared<services::SharedUndoCommand>(std::move(cmd));
+        events::EventDispatcher::instance().execute(push);
+    }
+
+    void PrefabPreviewWindow::pushChainUndo(prefabrigedit::PrefabRigEditSnapshot before)
+    {
+        prefabrigedit::PrefabRigEditSnapshot after = snapshotChains();
+
+        // SHOULD-FIX #2: the IK target BINDING (rigDesc.ik[i].targetPartIndex/targetSocketName) is
+        // NOT part of IKChainConfig, so chainsEqual ignores it. snapshotChains() captures the bindings
+        // too (both before, at session start, and after here) so a re-target is undoable.
+        const bool chainsChanged = !(before.chains.has_value() && after.chains.has_value() &&
+                                     prefabrigedit::chainsEqual(*before.chains, *after.chains));
+        const bool bindingsChanged = !(before.ikBindings.has_value() && after.ikBindings.has_value() &&
+                                       prefabrigedit::ikBindingsEqual(*before.ikBindings, *after.ikBindings));
+        if (!chainsChanged && !bindingsChanged)
+            return; // nothing actually changed — don't pollute the stack
+
+        // A chain undo restores chains AND re-applies the currently selected part's sockets, because
+        // a target-binding change rebuilds the assembly (reloading sockets from disk). Carry the live
+        // sockets along so an undo/redo that touched a binding does not strand stale socket data.
+        if (selectedPart >= 0 && !editSockets.empty())
+        {
+            before.socketPart = selectedPart;
+            before.sockets = editSockets; // restored state mirrors what's live now
+            after.socketPart = selectedPart;
+            after.sockets = editSockets;
+        }
+
+        const services::PreviewInstanceId id = getInstanceId();
+        auto cmd = std::make_shared<prefabrigedit::PrefabRigEditUndoCommand>(
+            id, std::move(before), std::move(after), "Edit IK chains",
+            [id](const prefabrigedit::PrefabRigEditSnapshot& snap)
+            {
+                PrefabPreviewWindow::resyncMirror(id, snap);
+            });
+
+        events::undoredo::PushUndoableCommand push;
+        push.command = std::make_shared<services::SharedUndoCommand>(std::move(cmd));
+        events::EventDispatcher::instance().execute(push);
+    }
+
+    void PrefabPreviewWindow::pushTransformUndo(prefabrigedit::PrefabRigEditSnapshot before)
+    {
+        prefabrigedit::PrefabRigEditSnapshot after = snapshotTransforms();
+        if (before.previewTransforms == after.previewTransforms)
+            return;
+
+        const services::PreviewInstanceId id = getInstanceId();
+        // Capture ONLY the id (value). applyPrefabRigSnapshot restores the controller; resyncMirror
+        // restores the window's previewTransforms mirror (no-op if the window has been closed) so the
+        // gizmo base anchor stays consistent.
+        auto cmd = std::make_shared<prefabrigedit::PrefabRigEditUndoCommand>(
+            id, std::move(before), std::move(after), "Edit part transform",
+            [id](const prefabrigedit::PrefabRigEditSnapshot& snap)
+            {
+                PrefabPreviewWindow::resyncMirror(id, snap);
+            });
+
+        events::undoredo::PushUndoableCommand push;
+        push.command = std::make_shared<services::SharedUndoCommand>(std::move(cmd));
+        events::EventDispatcher::instance().execute(push);
+    }
+
+    // ----------------------------------------------------------------------
     // Viewport
     // ----------------------------------------------------------------------
     void PrefabPreviewWindow::drawViewport(float regionWidth, float regionHeight, float deltaTime)
@@ -491,6 +812,49 @@ namespace windows
         // Toolbar (environment + camera framing).
         editor::preview::PreviewToolbar::draw(environment, camera.get());
 
+        // Rig debug overlays (VK-1433 Phase 1). Prefab-specific, so they live here rather than in
+        // the shared PreviewToolbar. They ride the existing SetPrefabRigEnvironmentCommand channel.
+        ImGui::TextDisabled("Overlays:");
+        ImGui::SameLine();
+        ImGui::Checkbox("Skeleton", &environment.showSkeleton);
+        ImGui::SameLine();
+        ImGui::Checkbox("Sockets", &environment.showSockets);
+        ImGui::SameLine();
+        ImGui::Checkbox("IK Targets", &environment.showIKTargets);
+
+        // Debug shading + analytic lighting (VK-1433 Phase 3). Same prefab-specific channel; the
+        // shading dropdown folds in-shader debug modes AND the wireframe pipeline variant.
+        static const char* kShadingItems[] = {
+            "Lit", "Clay", "Normals", "UVs", "Albedo (unlit)", "Wireframe"};
+        ImGui::TextDisabled("Shading:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(140.0f);
+        int shadingIdx = static_cast<int>(environment.shadingMode);
+        if (ImGui::Combo("##PrefabShadingMode", &shadingIdx, kShadingItems, IM_ARRAYSIZE(kShadingItems)))
+        {
+            environment.shadingMode = static_cast<uint8_t>(shadingIdx);
+        }
+
+        ImGui::SameLine();
+        bool threePoint = (environment.lightingMode == editor::preview::LightingMode::ThreePoint);
+        if (ImGui::Checkbox("3-Point Light", &threePoint))
+        {
+            environment.lightingMode = threePoint ? editor::preview::LightingMode::ThreePoint
+                                                   : editor::preview::LightingMode::Default;
+        }
+        if (threePoint)
+        {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(90.0f);
+            ImGui::SliderFloat("Intensity", &environment.lightingIntensity, 0.0f, 4.0f, "%.2f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110.0f);
+            ImGui::SliderAngle("Azimuth", &environment.lightAzimuth, -180.0f, 180.0f);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110.0f);
+            ImGui::SliderAngle("Elevation", &environment.lightElevation, -89.0f, 89.0f);
+        }
+
         ImVec2 viewportSize = ImGui::GetContentRegionAvail();
         float width = viewportSize.x;
         float height = viewportSize.y;
@@ -503,6 +867,11 @@ namespace windows
         {
             editor::preview::PreviewInputHandler::handleInput(camera.get(), isDraggingOrbit, isDraggingPan);
         }
+
+        // TODO(Phase1-stretch): bone-pick socket creation. With the skeleton overlay on, project
+        // each joint world (assembly skeleton accessor + camera view/proj) to screen, nearest-joint
+        // hit-test on click, prefill a new SocketDefinition on editableSockets(part), then edit via
+        // the existing gizmo + save through SetPrefabRigSocketsCommand -> .vfMesh. CPU picking only.
 
         // Advance the assembly first, then push camera + environment.
         {
@@ -530,6 +899,12 @@ namespace windows
             envParams.lightingMode =
                 static_cast<uint8_t>(environment.lightingMode == editor::preview::LightingMode::ThreePoint ? 1 : 0);
             envParams.lightingIntensity = environment.lightingIntensity;
+            envParams.showSkeleton = environment.showSkeleton;
+            envParams.showSockets = environment.showSockets;
+            envParams.showIKTargets = environment.showIKTargets;
+            envParams.shadingMode = environment.shadingMode;
+            envParams.lightAzimuth = environment.lightAzimuth;
+            envParams.lightElevation = environment.lightElevation;
 
             services::events::prefabrigpreview::SetPrefabRigEnvironmentCommand envCmd;
             envCmd.instanceId = getInstanceId();
@@ -625,6 +1000,16 @@ namespace windows
 
         glm::mat4 objectMatrix = liveWorld;
 
+        // Undo bracket: snapshot the whole previewTransforms map on the IsUsing() rising edge
+        // (drag start), push one coalesced entry on release. Anchoring on the drag boundaries (not
+        // per-Manipulate-frame) makes a full drag undo to its pre-drag state in one Ctrl+Z.
+        const bool usingGizmo = ImGuizmo::IsUsing();
+        if (usingGizmo && !gizmoEditActive)
+        {
+            gizmoEditActive = true;
+            gizmoEditBefore = snapshotTransforms();
+        }
+
         if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
                                  transformGizmoOp, ImGuizmo::WORLD, glm::value_ptr(objectMatrix)))
         {
@@ -637,6 +1022,12 @@ namespace windows
             cmd.part = static_cast<size_t>(selectedPart);
             cmd.transform = newPreview;
             events::EventDispatcher::instance().execute(cmd);
+        }
+
+        if (!usingGizmo && gizmoEditActive)
+        {
+            gizmoEditActive = false;
+            pushTransformUndo(std::move(gizmoEditBefore));
         }
     }
 
@@ -666,6 +1057,16 @@ namespace windows
         glm::mat4 model = partWorldLive(selectedPart);
         glm::mat4 objectMatrix = model * socket.getLocalOffsetMatrix();
 
+        // Undo bracket on the gizmo drag (ImGuizmo drags do NOT register as ImGui items, so the
+        // socket-panel IsAnyItemActive bracket does not catch them). Snapshot on the IsUsing() rising
+        // edge, push a socket undo on release.
+        const bool usingGizmo = ImGuizmo::IsUsing();
+        if (usingGizmo && !gizmoEditActive)
+        {
+            gizmoEditActive = true;
+            gizmoEditBefore = snapshotSockets();
+        }
+
         if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
                                  socketGizmoOp, ImGuizmo::LOCAL, glm::value_ptr(objectMatrix)))
         {
@@ -675,6 +1076,12 @@ namespace windows
             socket.localPosition = glm::vec3(translation[0], translation[1], translation[2]);
             socket.localRotation = glm::quat(glm::radians(glm::vec3(rotation[0], rotation[1], rotation[2])));
             pushEditSocketsForPart(selectedPart); // live: next update() re-resolves
+        }
+
+        if (!usingGizmo && gizmoEditActive)
+        {
+            gizmoEditActive = false;
+            pushSocketUndo(std::move(gizmoEditBefore));
         }
     }
 
@@ -705,6 +1112,13 @@ namespace windows
         ImGui::Text("Entities: %u", componentStats.totalEntities);
         ImGui::Text("Rig parts: %zu", rigDesc.parts.size());
         ImGui::Text("IK chains: %zu", rigDesc.ik.size());
+
+        // Phase 2 — broken-asset-reference summary (computed once per build in revalidateRefs).
+        if (missingRefCount > 0)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%d missing ref%s",
+                               missingRefCount, missingRefCount == 1 ? "" : "s");
+        }
     }
 
     void PrefabPreviewWindow::drawEntityTreePanel()
@@ -715,12 +1129,45 @@ namespace windows
             ImGui::TextDisabled("No data");
             return;
         }
-        drawEntityNode(rootEntity, rootEntity.name);
+        int partCounter = 0; // DFS pre-order mesh-bearing index == part index (matches build)
+        drawEntityNode(rootEntity, rootEntity.name, partCounter);
     }
 
-    void PrefabPreviewWindow::drawEntityNode(const PrefabEntityNode& node, const std::string& path)
+    std::string PrefabPreviewWindow::missingRefTooltip(int part) const
+    {
+        if (part < 0 || part >= static_cast<int>(partRefStatuses.size())) return {};
+        const prefabrigval::PartRefStatus& s = partRefStatuses[part];
+        if (!s.anyMissing()) return {};
+
+        const services::PrefabRigPartDTO& p = rigDesc.parts[part];
+        std::string out;
+        auto addLine = [&out](const std::string& label, const std::string& path)
+        {
+            if (!out.empty()) out += "\n";
+            out += label + " not found: " + path;
+        };
+        if (s.meshMissing) addLine("Mesh", p.meshPath);
+        if (s.animatorMissing) addLine("Animator", p.animatorPath);
+        if (s.retargetMissing) addLine("Retarget", p.retargetPath);
+        if (s.defaultMaterialMissing) addLine("Material", p.defaultMaterialPath);
+        for (const auto& submesh : s.missingSubMeshMaterials)
+        {
+            auto it = p.subMeshMaterials.find(submesh);
+            addLine("Submesh material '" + submesh + "'", it != p.subMeshMaterials.end() ? it->second : "");
+        }
+        return out;
+    }
+
+    void PrefabPreviewWindow::drawEntityNode(const PrefabEntityNode& node, const std::string& path,
+                                             int& partCounter)
     {
         ImGui::PushID(path.c_str());
+
+        // A mesh-bearing node becomes part `partCounter`; consume the index in DFS pre-order so it
+        // lines up with buildPrefabRigDescDTO / the broken-ref report.
+        const int thisPart = node.hasMesh() ? partCounter++ : -1;
+        const std::string tooltip = (thisPart >= 0) ? missingRefTooltip(thisPart) : std::string();
+        const bool missing = !tooltip.empty();
 
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
         if (selectedEntityPath.has_value() && *selectedEntityPath == path)
@@ -731,7 +1178,20 @@ namespace windows
         std::string label = node.name;
         if (node.hasMesh()) label += node.isSkeletal() ? " [skel]" : " [static]";
 
-        bool nodeOpen = ImGui::TreeNodeEx(path.c_str(), flags, "%s", label.c_str());
+        bool nodeOpen;
+        if (missing)
+        {
+            // Tint the broken-ref node red so it stands out in the tree.
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+            nodeOpen = ImGui::TreeNodeEx(path.c_str(), flags, "%s  (!)", label.c_str());
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", tooltip.c_str());
+        }
+        else
+        {
+            nodeOpen = ImGui::TreeNodeEx(path.c_str(), flags, "%s", label.c_str());
+        }
 
         if (ImGui::IsItemClicked())
             selectedEntityPath = path;
@@ -739,7 +1199,7 @@ namespace windows
         if (nodeOpen && !node.children.empty())
         {
             for (const auto& child : node.children)
-                drawEntityNode(child, path + "/" + child.name);
+                drawEntityNode(child, path + "/" + child.name, partCounter);
             ImGui::TreePop();
         }
 
@@ -821,18 +1281,56 @@ namespace windows
         {
             for (int p = 0; p < static_cast<int>(rigDesc.parts.size()); ++p)
             {
+                const bool partMissing = (p < static_cast<int>(partRefStatuses.size())) &&
+                                         partRefStatuses[p].anyMissing();
                 std::string label = std::to_string(p) + ": " +
                     std::filesystem::path(rigDesc.parts[p].meshPath).filename().string() +
-                    (partIsSkeletal(p) ? " [skel]" : " [static]");
+                    (partIsSkeletal(p) ? " [skel]" : " [static]") +
+                    (partMissing ? " (!)" : "");
                 bool selected = (selectedPart == p);
+                if (partMissing) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
                 if (ImGui::Selectable(label.c_str(), selected))
                 {
                     selectedPart = p;
                     pullEditSocketsForPart(selectedPart);
                 }
+                if (partMissing)
+                {
+                    ImGui::PopStyleColor();
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", missingRefTooltip(p).c_str());
+                }
                 if (selected) ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
+        }
+
+        // Drag-drop a .vfMesh / .vfMaterial / .vfAnim from the content browser onto the part combo
+        // to swap that ref on the selected part and rebuild live (transient until saved).
+        if (selectedPart >= 0)
+        {
+            if (auto dropped = acceptAssetDropOnLastItem("##partDrop", {".vfMesh", ".vfMaterial", ".vfAnim"}))
+            {
+                applyAssetDropToPart(selectedPart, *dropped);
+            }
+        }
+        if (refSaveTimer > 0.0f) refSaveTimer -= ImGui::GetIO().DeltaTime;
+        if (hasUnsavedRefSwap)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "(unsaved)");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Part refs were swapped via drag-drop. The change is preview-only "
+                                  "until persisted to the .vfPrefab.");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Save Refs"))
+                saveRefSwapsToPrefab();
+        }
+        if (refSaveTimer > 0.0f)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(refSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
+                               refSaveSuccess ? "Saved" : "Failed");
         }
 
         ImGui::Separator();
@@ -898,9 +1396,22 @@ namespace windows
     {
         if (selectedPart < 0)
         {
+            // NIT #4: if the part deselected MID-edit, close the bracket here (push the in-flight
+            // edit against its captured `before`) and clear the flag, so the next session does not
+            // coalesce against a stale snapshot. pushTransformUndo no-ops if nothing actually changed.
+            if (transformPanelEditActive)
+            {
+                transformPanelEditActive = false;
+                pushTransformUndo(std::move(transformPanelBefore));
+            }
             ImGui::TextDisabled("Select a part to transform.");
             return;
         }
+
+        // Undo bracket for the numeric Transform fields + Reset buttons (the viewport gizmo has its
+        // own bracket in drawTransformGizmo). Snapshot the whole previewTransforms map before edits.
+        if (!transformPanelEditActive)
+            transformPanelBefore = snapshotTransforms();
 
         const bool isRoot = (selectedPart >= 0 && selectedPart < static_cast<int>(rigDesc.parts.size()))
                                 ? rigDesc.parts[selectedPart].parentPartIndex < 0
@@ -909,6 +1420,30 @@ namespace windows
             ImGui::TextDisabled("Root part — moves the whole rig.");
         else
             ImGui::TextDisabled("Child part — moves this part (children follow).");
+
+        // Socket-attached-child TRANSLATE-drop warning. SocketAttachmentUpdater::applyModelOffset
+        // builds entityLocal = rot*scale, DROPPING translation — so a non-zero source position on a
+        // socketed child will NOT reproduce at instantiation (rotation/scale will). Warn loudly and
+        // offer a one-click bake-to-zero through the same JSON round-trip the transform save uses.
+        if (!isRoot)
+        {
+            const int parentPart = (selectedPart < static_cast<int>(rigDesc.parts.size()))
+                                       ? rigDesc.parts[selectedPart].parentPartIndex : -1;
+            const glm::vec3 srcPos = prefabrigval::sourcePositionForPart(rootEntity, selectedPart);
+            if (prefabrigval::childHasDroppedTranslation(parentPart, srcPos))
+            {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f),
+                                   "Warning: socket-attached child translation (%.3f, %.3f, %.3f) is "
+                                   "dropped at instantiation.", srcPos.x, srcPos.y, srcPos.z);
+                ImGui::TextWrapped("Socketed children ride the socket origin; only rotation/scale "
+                                   "carry. Bake the translation to zero so the prefab matches runtime.");
+                if (ImGui::Button("Zero translation"))
+                {
+                    zeroSourceTranslationForPart(selectedPart);
+                }
+            }
+        }
 
         ImGui::Spacing();
         ImGui::TextDisabled("Operation");
@@ -1021,11 +1556,24 @@ namespace windows
         }
         ImGui::TextWrapped("Writes part transforms into the .vfPrefab (children by default; "
                            "root only if checked).");
+
+        // Close the transform-panel undo bracket: coalesce a numeric-field drag or a Reset click
+        // into ONE entry (the viewport gizmo brackets itself separately in drawTransformGizmo).
+        const bool anyItemActive = ImGui::IsAnyItemActive();
+        if (anyItemActive)
+        {
+            transformPanelEditActive = true;
+        }
+        else if (transformPanelEditActive)
+        {
+            transformPanelEditActive = false;
+            pushTransformUndo(std::move(transformPanelBefore));
+        }
     }
 
     void PrefabPreviewWindow::saveTransformsToPrefab()
     {
-        transformSaveTimer = 3.0f;
+        transformSaveTimer = kSaveFeedbackSeconds;
         transformSaveSuccess = false;
         transformSaveCount = 0;
 
@@ -1089,6 +1637,77 @@ namespace windows
         vfLogInfo("Save Transforms to Prefab: wrote {} part transform(s) to '{}'", written, prefabPath);
     }
 
+    void PrefabPreviewWindow::zeroSourceTranslationForPart(int part)
+    {
+        // Same entt-free JSON round-trip as saveTransformsToPrefab: load -> zero ONLY this node's
+        // position -> dump. Every other field round-trips untouched.
+        json prefabJson;
+        try
+        {
+            std::ifstream in(prefabPath);
+            if (!in.is_open())
+            {
+                vfLogError("Zero translation: cannot open '{}'", prefabPath);
+                return;
+            }
+            prefabJson = json::parse(in);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Zero translation: parse error in '{}': {}", prefabPath, e.what());
+            return;
+        }
+
+        if (!prefabtransform::zeroPartTranslation(prefabJson, part))
+        {
+            vfLogWarning("Zero translation: part {} not found in '{}'", part, prefabPath);
+            return;
+        }
+
+        try
+        {
+            std::ofstream out(prefabPath, std::ios::trunc);
+            if (!out.is_open())
+            {
+                vfLogError("Zero translation: cannot write '{}'", prefabPath);
+                return;
+            }
+            out << prefabJson.dump(2);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Zero translation: write error in '{}': {}", prefabPath, e.what());
+            return;
+        }
+
+        // The on-disk source position is now zero; re-parse so the warning clears and the preview
+        // matches. Re-running the full async parse would be heavy, so just refresh the rig desc by
+        // reloading the node tree synchronously is unnecessary — mutate the in-memory mirror.
+        // sourcePositionForPart reads rootEntity, so zero it there too (k-th mesh-bearing node).
+        {
+            std::vector<PrefabEntityNode*> mnodes;
+            std::function<void(PrefabEntityNode&)> collect = [&](PrefabEntityNode& n)
+            {
+                mnodes.push_back(&n);
+                for (auto& c : n.children) collect(c);
+            };
+            collect(rootEntity);
+            int k = 0;
+            for (PrefabEntityNode* n : mnodes)
+            {
+                if (!n->hasMesh()) continue;
+                if (k == part) { n->position = glm::vec3(0.0f); break; }
+                ++k;
+            }
+        }
+
+        events::resource::AssetSavedNotification notif;
+        notif.filePath = prefabPath;
+        events::EventDispatcher::instance().publish(notif);
+
+        vfLogInfo("Zero translation: zeroed part {} source position in '{}'", part, prefabPath);
+    }
+
     void PrefabPreviewWindow::drawStatePicker()
     {
         // Play / pause.
@@ -1139,6 +1758,10 @@ namespace windows
         }
         else
         {
+            // De-hardcoded transition blend (was a literal 0.25f); the user can tune it per session.
+            ImGui::SetNextItemWidth(120.0f);
+            ImGui::SliderFloat("Blend (s)", &stateBlendDuration, 0.0f, 1.0f, "%.2f");
+
             ImGui::TextDisabled("States");
             for (const auto& state : states)
             {
@@ -1148,7 +1771,7 @@ namespace windows
                     cmd.instanceId = getInstanceId();
                     cmd.part = static_cast<size_t>(selectedPart);
                     cmd.stateName = state.name;
-                    cmd.blendDuration = 0.25f;
+                    cmd.blendDuration = stateBlendDuration;
                     events::EventDispatcher::instance().execute(cmd);
                 }
             }
@@ -1265,6 +1888,11 @@ namespace windows
             return;
         }
 
+        // Undo bracket: snapshot the sockets BEFORE the controls run while no edit session is in
+        // flight; the matching push at the end of the panel coalesces a completed drag into ONE entry.
+        if (!socketEditActive)
+            socketEditBefore = snapshotSockets();
+
         ImGui::TextDisabled("Bone sockets (%zu)", editSockets.size());
         ImGui::Separator();
 
@@ -1306,7 +1934,7 @@ namespace windows
         {
             socketSaveSuccess =
                 types::MeshSocketWriter::saveSocketsToMesh(partMeshPath(selectedPart), editSockets);
-            socketSaveTimer = 3.0f;
+            socketSaveTimer = kSaveFeedbackSeconds;
             if (socketSaveSuccess)
             {
                 events::socket::SocketDataSavedNotification notif;
@@ -1321,6 +1949,19 @@ namespace windows
             ImGui::TextColored(socketSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
                                socketSaveSuccess ? "Saved" : "Failed");
         }
+
+        // Close the undo bracket: an edit session is "in flight" while any item is active; when it
+        // ends, push one coalesced entry against the snapshot taken at session start.
+        const bool anyItemActive = ImGui::IsAnyItemActive();
+        if (anyItemActive)
+        {
+            socketEditActive = true;
+        }
+        else if (socketEditActive)
+        {
+            socketEditActive = false;
+            pushSocketUndo(std::move(socketEditBefore));
+        }
     }
 
     void PrefabPreviewWindow::drawStaticSocketPanel()
@@ -1330,6 +1971,10 @@ namespace windows
             ImGui::TextDisabled("Select a static part (e.g. weapon).");
             return;
         }
+
+        // Undo bracket (see drawBoneSocketPanel): snapshot before edits while no session active.
+        if (!socketEditActive)
+            socketEditBefore = snapshotSockets();
 
         // Create.
         static char newName[128] = "";
@@ -1400,7 +2045,7 @@ namespace windows
         {
             socketSaveSuccess =
                 types::MeshSocketWriter::saveSocketsToMesh(partMeshPath(selectedPart), editSockets);
-            socketSaveTimer = 3.0f;
+            socketSaveTimer = kSaveFeedbackSeconds;
             if (socketSaveSuccess)
             {
                 events::socket::SocketDataSavedNotification notif;
@@ -1414,6 +2059,18 @@ namespace windows
             ImGui::SameLine();
             ImGui::TextColored(socketSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
                                socketSaveSuccess ? "Saved" : "Failed");
+        }
+
+        // Close the undo bracket (see drawBoneSocketPanel).
+        const bool anyItemActive = ImGui::IsAnyItemActive();
+        if (anyItemActive)
+        {
+            socketEditActive = true;
+        }
+        else if (socketEditActive)
+        {
+            socketEditActive = false;
+            pushSocketUndo(std::move(socketEditBefore));
         }
     }
 
@@ -1433,17 +2090,39 @@ namespace windows
             return;
         }
 
+        // Undo bracket: snapshot the chains BEFORE the controls run while no edit session is active.
+        if (!chainEditActive)
+            chainEditBefore = snapshotChains();
+
         bool configChanged = false;  // weight/enabled — cheap live push, no rebuild
         bool bindingChanged = false; // target part/socket — needs a re-resolve (rebuild)
+
+        int clickedChain = -1;       // per-chain selection (wires the dead selectedChainIndex)
 
         for (int i = 0; i < static_cast<int>(editChains.size()); ++i)
         {
             auto& chain = editChains[i];
             ImGui::PushID(i);
 
-            if (ImGui::TreeNodeEx(chain.chainName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+            // Per-chain selection: clicking a chain header makes it the active chain. The detail
+            // editor (weight/enabled/binding) only shows for the selected chain, so a multi-chain
+            // rig is no longer an undifferentiated wall of controls.
+            ImGuiTreeNodeFlags treeFlags = ImGuiTreeNodeFlags_DefaultOpen;
+            if (i == selectedChainIndex) treeFlags |= ImGuiTreeNodeFlags_Selected;
+            const bool chainOpen = ImGui::TreeNodeEx(chain.chainName.c_str(), treeFlags);
+            if (ImGui::IsItemClicked()) clickedChain = i;
+
+            if (chainOpen)
             {
                 ImGui::Text("Tip: %s", chain.tipBoneName.c_str());
+
+                const bool isSelectedChain = (i == selectedChainIndex);
+                if (!isSelectedChain)
+                {
+                    ImGui::TextDisabled("(click to edit this chain)");
+                }
+                else
+                {
                 if (ImGui::SliderFloat("Weight", &chain.weight, 0.0f, 1.0f, "%.2f")) configChanged = true;
                 if (ImGui::Checkbox("Enabled", &chain.enabled)) configChanged = true;
 
@@ -1505,12 +2184,17 @@ namespace windows
                         }
                     }
                 }
+                } // end: selected-chain detail editor
 
                 ImGui::TreePop();
             }
 
             ImGui::PopID();
         }
+
+        // Apply a per-chain selection click after the loop (so it survives this frame's tree state).
+        if (clickedChain >= 0)
+            selectedChainIndex = clickedChain;
 
         // Config edits (weight/enabled) flow live to editableChains() without a rebuild.
         if (configChanged)
@@ -1529,6 +2213,11 @@ namespace windows
             {
                 pushEditSocketsForPart(selectedPart);
             }
+            // A binding combo click is a single-frame event: by the next frame IsAnyItemActive()
+            // may already be false, so the bracket below could miss it. Engage the chains-undo
+            // session explicitly so the next frame's "active -> inactive" edge pushes the undo
+            // deterministically (chainEditBefore was captured at the top of this panel).
+            chainEditActive = true;
         }
 
         ImGui::Separator();
@@ -1541,7 +2230,7 @@ namespace windows
         if (ImGui::Button("Save IK Chains to Mesh"))
         {
             ikSaveSuccess = types::MeshIKChainWriter::saveIKChainsToMesh(partMeshPath(bodyPart), editChains);
-            ikSaveTimer = 3.0f;
+            ikSaveTimer = kSaveFeedbackSeconds;
         }
         if (!canSave) ImGui::EndDisabled();
         if (ikSaveTimer > 0.0f)
@@ -1549,6 +2238,20 @@ namespace windows
             ImGui::SameLine();
             ImGui::TextColored(ikSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
                                ikSaveSuccess ? "Saved" : "Failed");
+        }
+
+        // Close the chains undo bracket: coalesce a completed weight/enabled edit into one entry.
+        // (A target-binding change rebuilds the assembly; the chains-undo re-applies sockets to keep
+        // the rebuild's disk reload from stranding in-memory socket edits — see pushChainUndo.)
+        const bool anyItemActive = ImGui::IsAnyItemActive();
+        if (anyItemActive)
+        {
+            chainEditActive = true;
+        }
+        else if (chainEditActive)
+        {
+            chainEditActive = false;
+            pushChainUndo(std::move(chainEditBefore));
         }
     }
 }

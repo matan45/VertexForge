@@ -298,6 +298,19 @@ namespace render::mesh
 
     void SkinnedMeshPipeline::createGraphicsPipeline()
     {
+        graphicsPipeline = createPipelineVariant(vk::PolygonMode::eFill);
+    }
+
+    void SkinnedMeshPipeline::ensureWireframePipeline() const
+    {
+        if (wireframePipeline) return;
+        // Mirrors WaterPipeline / TerrainMeshShaderPipeline: a second pipeline differing only in
+        // polygonMode, sharing this pipeline's layout + shader. Built once on first wireframe use.
+        wireframePipeline = createPipelineVariant(vk::PolygonMode::eLine);
+    }
+
+    vk::Pipeline SkinnedMeshPipeline::createPipelineVariant(vk::PolygonMode polygonMode) const
+    {
         auto bindingDescription = SkinnedMeshVertexInput::getBindingDescription();
         auto attributeDescriptions = SkinnedMeshVertexInput::getAttributeDescriptions();
 
@@ -332,9 +345,12 @@ namespace render::mesh
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = vk::PolygonMode::eFill;
+        rasterizer.polygonMode = polygonMode;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = vk::CullModeFlagBits::eBack;
+        // A line-poly variant should not cull faces (so back edges of the wireframe still draw).
+        rasterizer.cullMode = (polygonMode == vk::PolygonMode::eLine)
+                                  ? vk::CullModeFlagBits::eNone
+                                  : vk::CullModeFlagBits::eBack;
         rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
         rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -382,6 +398,6 @@ namespace render::mesh
         renderingInfo.depthAttachmentFormat = depthFormat;
         pipelineInfo.pNext = &renderingInfo;
 
-        graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
+        return device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
 }
