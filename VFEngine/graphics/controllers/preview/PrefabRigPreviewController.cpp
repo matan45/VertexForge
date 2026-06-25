@@ -225,7 +225,15 @@ namespace controllers
         const bool wantSkeleton = environmentParams.showSkeleton;
         const bool wantSockets = environmentParams.showSockets;
         const bool wantIK = environmentParams.showIKTargets;
-        if (!wantSkeleton && !wantSockets && !wantIK)
+
+        // Even with the Sockets overlay OFF, draw the ONE socket the user is editing: when a Bone/
+        // Static Socket tab is active the window sets highlightedSocketPart/Index, and the user
+        // expects to see that socket in the viewport. The Sockets toggle still controls showing ALL
+        // sockets; this only force-draws the selected one.
+        const bool hasSocketHighlight =
+            environmentParams.highlightedSocketPart >= 0 && environmentParams.highlightedSocketIndex >= 0;
+
+        if (!wantSkeleton && !wantSockets && !wantIK && !hasSocketHighlight)
             return;
 
         const size_t count = assembly.partCount();
@@ -259,11 +267,21 @@ namespace controllers
                 }
             }
 
-            if (wantSockets)
+            const bool drawHighlightOnThisPart =
+                hasSocketHighlight && static_cast<int>(i) == environmentParams.highlightedSocketPart;
+            if (wantSockets || drawHighlightOnThisPart)
             {
                 const std::vector<animator::SocketDefinition>& sockets = assembly.editableSockets(i);
                 for (size_t socketIdx = 0; socketIdx < sockets.size(); ++socketIdx)
                 {
+                    const bool socketHighlighted =
+                        static_cast<int>(i) == environmentParams.highlightedSocketPart &&
+                        static_cast<int>(socketIdx) == environmentParams.highlightedSocketIndex;
+
+                    // Sockets overlay OFF -> draw ONLY the highlighted (selected) socket, skip the rest.
+                    if (!wantSockets && !socketHighlighted)
+                        continue;
+
                     const animator::SocketDefinition& socket = sockets[socketIdx];
 
                     // Skeletal: bone-relative model transform from the live pose; static: the
@@ -296,8 +314,7 @@ namespace controllers
 
                     // Bug #4: distinctly highlight the editor-selected socket with a bright halo
                     // marker so the user can tell which triad they are editing.
-                    if (static_cast<int>(i) == environmentParams.highlightedSocketPart &&
-                        static_cast<int>(socketIdx) == environmentParams.highlightedSocketIndex)
+                    if (socketHighlighted)
                         ov::addMarker(overlayLines, socketOrigin, 0.09f, ov::selectedSocketColor());
                 }
             }

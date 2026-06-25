@@ -564,55 +564,6 @@ namespace windows
         missingRefCount = prefabrigval::countPartsWithMissingRefs(partRefStatuses);
     }
 
-    void PrefabPreviewWindow::applyAssetDropToPart(int part, const std::string& assetPath)
-    {
-        if (part < 0 || part >= static_cast<int>(partEntities.size())) return;
-        const services::EntityHandle entity = partEntities[part];
-        if (!entity.isValid()) return;
-
-        std::string ext = std::filesystem::path(assetPath).extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        // VK-1433 Phase 4c — the part's SOURCE ENTITY is the source of truth (SavePrefab persists it),
-        // so a drag-swap dispatches the persistent component command rather than mutating rigDesc.
-        // .vfMesh / .vfAnim resolve onto the existing MeshData (preserving the other ref); .vfMaterial
-        // re-points the default material. The rebuild re-derives the rig from the mutated entity.
-        if (ext == ".vfmesh" || ext == ".vfanim")
-        {
-            // Read the current MeshData so we keep the unchanged ref (a .vfMesh drop preserves the
-            // animator, a .vfAnim drop preserves the mesh + makes a static part skeletal).
-            events::scene::GetMeshDataQuery mq;
-            mq.entity = entity;
-            services::MeshData meshData = dispatcher.query(mq).value_or(services::MeshData{});
-
-            const asset::AssetRef ref = asset::AssetRef::fromPath(assetPath);
-            if (ext == ".vfmesh") meshData.meshRef = ref;
-            else                  meshData.animatorRef = ref;
-
-            events::scene::SetMeshDataCommand cmd;
-            cmd.entity = entity;
-            cmd.meshData = meshData;
-            dispatcher.execute(cmd);
-        }
-        else if (ext == ".vfmaterial")
-        {
-            // SetDefaultMaterialCommand takes a path directly (resolves + assigns the default slot).
-            events::material::SetDefaultMaterialCommand cmd;
-            cmd.entity = entity;
-            cmd.materialPath = assetPath;
-            dispatcher.execute(cmd);
-        }
-        else
-        {
-            return; // unknown extension — leave untouched
-        }
-
-        dirty = true;
-        rebuildRigFromSandbox();
-    }
-
     // ----------------------------------------------------------------------
     // Phase 2: edit-undo snapshot / push helpers
     // ----------------------------------------------------------------------
@@ -1805,54 +1756,9 @@ namespace windows
             return;
         }
 
-        // Part picker (drives socket panels).
-        ImGui::TextDisabled("Part");
-        const char* preview = (selectedPart >= 0 && selectedPart < static_cast<int>(rigDesc.parts.size()))
-                                  ? rigDesc.parts[selectedPart].meshPath.c_str()
-                                  : "Select part...";
-        if (ImGui::BeginCombo("##part", preview))
-        {
-            for (int p = 0; p < static_cast<int>(rigDesc.parts.size()); ++p)
-            {
-                const bool partMissing = (p < static_cast<int>(partRefStatuses.size())) &&
-                                         partRefStatuses[p].anyMissing();
-                std::string label = std::to_string(p) + ": " +
-                    std::filesystem::path(rigDesc.parts[p].meshPath).filename().string() +
-                    (partIsSkeletal(p) ? " [skel]" : " [static]") +
-                    (partMissing ? " (!)" : "");
-                bool selected = (selectedPart == p);
-                if (partMissing) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-                if (ImGui::Selectable(label.c_str(), selected))
-                {
-                    // Part combo -> select the part AND its source entity (keeps the hierarchy tree
-                    // selection in sync with the authoring panels). selectPart pulls the sockets.
-                    selectPart(p);
-                    if (p >= 0 && p < static_cast<int>(partEntities.size()))
-                        selectEntity(partEntities[p]);
-                }
-                if (partMissing)
-                {
-                    ImGui::PopStyleColor();
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("%s", missingRefTooltip(p).c_str());
-                }
-                if (selected) ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-
-        // VK-1433 Phase 4c — drag a .vfMesh / .vfMaterial / .vfAnim onto the part combo to swap that
-        // ref on the selected part's SOURCE ENTITY (persistent — Save Prefab writes it). The rig
-        // re-derives from the mutated entity.
-        if (selectedPart >= 0)
-        {
-            if (auto dropped = acceptAssetDropOnLastItem("##partDrop", {".vfMesh", ".vfMaterial", ".vfAnim"}))
-            {
-                applyAssetDropToPart(selectedPart, *dropped);
-            }
-        }
-
-        ImGui::Separator();
+        // The authoring panels below act on the part selected in the Hierarchy tree (the tree click
+        // keeps selectedPart in sync via partForEntity). The old top-of-panel "Part" combo was a
+        // redundant second selector — removed; selection now lives only in the hierarchy.
 
         // VK-1433 gizmo-mode toolbar — exactly one viewport gizmo is active (never fight).
         drawGizmoModeToolbar();

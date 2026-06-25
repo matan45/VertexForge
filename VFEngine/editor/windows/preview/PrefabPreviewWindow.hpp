@@ -125,13 +125,6 @@ namespace windows
         int missingRefCount = 0;
         void revalidateRefs(); // fills partRefStatuses + missingRefCount from rigDesc on disk
 
-        // --- VK-1433 Phase 4c drag-drop part-ref swap (persistent) ------------
-        // Dropping a .vfMesh/.vfAnim onto the Part combo dispatches SetMeshDataCommand and a
-        // .vfMaterial dispatches SetDefaultMaterialCommand on the part's SOURCE ENTITY, then
-        // re-derives the rig. The entity is now the source of truth (SavePrefab persists it), so the
-        // Phase-2 transient swappedParts / restore-after-rebuild guard is retired.
-        void applyAssetDropToPart(int part, const std::string& assetPath); // by extension; rebuilds
-
         // --- VK-1433 Phase 4c prefab save -------------------------------------
         // SavePrefabCommand on the (tagged) sandbox root: the serializer strips the preview tag and
         // normalizes isActive=true (PrefabSerialization), so the saved .vfPrefab round-trips clean.
