@@ -4,6 +4,8 @@
 #include <physics/HitReactionState.hpp>
 #include <physics/PhysicsAnimationAsset.hpp>
 #include <nlohmann/json.hpp>
+#include <filesystem>
+#include <fstream>
 
 // ============================================================
 // VK-1093: Physics Animation unit tests
@@ -426,6 +428,265 @@ TEST_CASE("resolveEffectiveStrengths: clamps to [0,1]") {
     auto zeroed = physics::resolveEffectiveStrengths(profile, hits, -1.0f);
     CHECK(zeroed[0] == doctest::Approx(0.0f));
     CHECK(zeroed[1] == doctest::Approx(0.0f));
+}
+
+// ============================================================
+// PhysicsAnimationAsset: file + serializer round-trips
+// ============================================================
+
+namespace {
+    // Helper: a temp directory dedicated to these file-based cases.
+    std::filesystem::path physAnimTempDir() {
+        return std::filesystem::temp_directory_path() / "vf_physanim_test";
+    }
+
+    void removePhysAnimTemp(const std::filesystem::path& p) {
+        std::error_code ec;
+        std::filesystem::remove(p, ec);
+    }
+}
+
+TEST_CASE("PhysicsAnimationAsset: save/load round-trip through a real file") {
+    types::PhysicsAnimationConfig config;
+    config.defaultMode = types::PhysicsAnimationMode::PoweredRagdoll;
+    config.collisionLayer = 4;
+    config.kinematicToRagdollBlendTime = 0.33f;
+    config.defaultMotorStrength = 0.7f;
+    config.rootMotorStrength = 0.42f;
+    config.poweredBlendInTime = 0.22f;
+    config.settleFrameCount = 50;
+
+    types::BoneBodyMapping hips;
+    hips.boneName = "Hips";
+    hips.shape = types::ColliderShape::Box;
+    hips.size = glm::vec3(0.2f, 0.15f, 0.25f);
+    hips.mass = 6.0f;
+    config.boneBodyMappings.push_back(hips);
+
+    types::BoneBodyMapping spine;
+    spine.boneName = "Spine";
+    spine.shape = types::ColliderShape::Capsule;
+    spine.mass = 3.5f;
+    spine.friction = 0.4f;
+    config.boneBodyMappings.push_back(spine);
+
+    types::JointConstraintLimits spineLimit;
+    spineLimit.boneName = "Spine";
+    spineLimit.swingNormalHalfAngle = 0.5f;
+    spineLimit.maxFrictionTorque = 12.5f;
+    config.jointLimits.push_back(spineLimit);
+
+    types::BoneMotorSettings spineMotor;
+    spineMotor.boneName = "Spine";
+    spineMotor.strength = 0.65f;
+    spineMotor.frequency = 28.0f;
+    spineMotor.damping = 1.05f;
+    spineMotor.maxTorque = 360.0f;
+    config.boneMotors.push_back(spineMotor);
+
+    const auto dir = physAnimTempDir();
+    const auto path = dir / "roundtrip_save_load.vfPhysAnim";
+
+    REQUIRE(physics::PhysicsAnimationAsset::save(path.string(), config));
+
+    auto loaded = physics::PhysicsAnimationAsset::load(path.string());
+    REQUIRE(loaded.has_value());
+
+    CHECK(loaded->defaultMode == types::PhysicsAnimationMode::PoweredRagdoll);
+    CHECK(loaded->collisionLayer == 4);
+    CHECK(loaded->kinematicToRagdollBlendTime == doctest::Approx(0.33f));
+    CHECK(loaded->defaultMotorStrength == doctest::Approx(0.7f));
+    CHECK(loaded->rootMotorStrength == doctest::Approx(0.42f));
+    CHECK(loaded->poweredBlendInTime == doctest::Approx(0.22f));
+    CHECK(loaded->settleFrameCount == 50);
+
+    REQUIRE(loaded->boneBodyMappings.size() == 2);
+    const auto* loadedHips = loaded->findMapping("Hips");
+    REQUIRE(loadedHips != nullptr);
+    CHECK(loadedHips->shape == types::ColliderShape::Box);
+    CHECK(loadedHips->size.x == doctest::Approx(0.2f));
+    CHECK(loadedHips->size.z == doctest::Approx(0.25f));
+    CHECK(loadedHips->mass == doctest::Approx(6.0f));
+
+    REQUIRE(loaded->jointLimits.size() == 1);
+    const auto* loadedLimit = loaded->findJointLimits("Spine");
+    REQUIRE(loadedLimit != nullptr);
+    CHECK(loadedLimit->swingNormalHalfAngle == doctest::Approx(0.5f));
+    CHECK(loadedLimit->maxFrictionTorque == doctest::Approx(12.5f));
+
+    REQUIRE(loaded->boneMotors.size() == 1);
+    const auto* loadedMotor = loaded->findBoneMotor("Spine");
+    REQUIRE(loadedMotor != nullptr);
+    CHECK(loadedMotor->strength == doctest::Approx(0.65f));
+    CHECK(loadedMotor->frequency == doctest::Approx(28.0f));
+    CHECK(loadedMotor->damping == doctest::Approx(1.05f));
+    CHECK(loadedMotor->maxTorque == doctest::Approx(360.0f));
+
+    // Cleanup
+    removePhysAnimTemp(path);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
+TEST_CASE("PhysicsAnimationAsset: boneBodyMappings round-trip preserves all three shapes") {
+    types::PhysicsAnimationConfig config;
+
+    types::BoneBodyMapping boxMap;
+    boxMap.boneName = "BoxBone";
+    boxMap.shape = types::ColliderShape::Box;
+    boxMap.size = glm::vec3(0.3f, 0.4f, 0.5f);
+    boxMap.offset = glm::vec3(0.01f, 0.02f, 0.03f);
+    boxMap.rotationOffset = glm::quat(0.92388f, 0.38268f, 0.0f, 0.0f); // ~45deg about X
+    boxMap.mass = 2.0f;
+    boxMap.friction = 0.3f;
+    boxMap.restitution = 0.1f;
+    config.boneBodyMappings.push_back(boxMap);
+
+    types::BoneBodyMapping sphereMap;
+    sphereMap.boneName = "SphereBone";
+    sphereMap.shape = types::ColliderShape::Sphere;
+    sphereMap.size = glm::vec3(0.6f, 0.6f, 0.6f);
+    sphereMap.offset = glm::vec3(0.1f, 0.2f, 0.3f);
+    sphereMap.rotationOffset = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    sphereMap.mass = 1.5f;
+    sphereMap.friction = 0.6f;
+    sphereMap.restitution = 0.2f;
+    config.boneBodyMappings.push_back(sphereMap);
+
+    types::BoneBodyMapping capsuleMap;
+    capsuleMap.boneName = "CapsuleBone";
+    capsuleMap.shape = types::ColliderShape::Capsule;
+    capsuleMap.size = glm::vec3(0.05f, 0.7f, 0.05f);
+    capsuleMap.offset = glm::vec3(-0.1f, 0.0f, 0.0f);
+    capsuleMap.rotationOffset = glm::quat(0.70711f, 0.0f, 0.70711f, 0.0f); // ~90deg about Y
+    capsuleMap.mass = 4.0f;
+    capsuleMap.friction = 0.45f;
+    capsuleMap.restitution = 0.05f;
+    config.boneBodyMappings.push_back(capsuleMap);
+
+    auto j = physics::PhysicsAnimationAsset::serializeConfig(config);
+    auto restored = physics::PhysicsAnimationAsset::deserializeConfig(j);
+
+    REQUIRE(restored.boneBodyMappings.size() == 3);
+
+    const auto& rBox = restored.boneBodyMappings[0];
+    CHECK(rBox.boneName == "BoxBone");
+    CHECK(rBox.shape == types::ColliderShape::Box);
+    CHECK(rBox.size.y == doctest::Approx(0.4f));
+    CHECK(rBox.offset.z == doctest::Approx(0.03f));
+    CHECK(rBox.mass == doctest::Approx(2.0f));
+    CHECK(rBox.rotationOffset.w == doctest::Approx(0.92388f));
+    CHECK(rBox.rotationOffset.x == doctest::Approx(0.38268f));
+    CHECK(rBox.rotationOffset.y == doctest::Approx(0.0f));
+    CHECK(rBox.rotationOffset.z == doctest::Approx(0.0f));
+
+    const auto& rSphere = restored.boneBodyMappings[1];
+    CHECK(rSphere.boneName == "SphereBone");
+    CHECK(rSphere.shape == types::ColliderShape::Sphere);
+    CHECK(rSphere.friction == doctest::Approx(0.6f));
+    CHECK(rSphere.restitution == doctest::Approx(0.2f));
+
+    const auto& rCapsule = restored.boneBodyMappings[2];
+    CHECK(rCapsule.boneName == "CapsuleBone");
+    CHECK(rCapsule.shape == types::ColliderShape::Capsule);
+    CHECK(rCapsule.size.y == doctest::Approx(0.7f));
+    CHECK(rCapsule.mass == doctest::Approx(4.0f));
+    CHECK(rCapsule.rotationOffset.w == doctest::Approx(0.70711f));
+    CHECK(rCapsule.rotationOffset.y == doctest::Approx(0.70711f));
+}
+
+TEST_CASE("PhysicsAnimationAsset: jointLimits round-trip") {
+    types::PhysicsAnimationConfig config;
+
+    types::JointConstraintLimits a;
+    a.boneName = "LeftShoulder";
+    a.swingNormalHalfAngle = 1.0472f; // 60deg
+    a.swingPlaneHalfAngle = 0.5236f;  // 30deg
+    a.twistMinAngle = -0.2618f;       // -15deg
+    a.twistMaxAngle = 0.2618f;        // 15deg
+    a.maxFrictionTorque = 5.0f;
+    config.jointLimits.push_back(a);
+
+    types::JointConstraintLimits b;
+    b.boneName = "RightKnee";
+    b.swingNormalHalfAngle = 0.1745f; // 10deg
+    b.swingPlaneHalfAngle = 0.0873f;  // 5deg
+    b.twistMinAngle = 0.0f;
+    b.twistMaxAngle = 1.5708f;        // 90deg
+    b.maxFrictionTorque = 20.0f;
+    config.jointLimits.push_back(b);
+
+    auto j = physics::PhysicsAnimationAsset::serializeConfig(config);
+    auto restored = physics::PhysicsAnimationAsset::deserializeConfig(j);
+
+    REQUIRE(restored.jointLimits.size() == 2);
+
+    CHECK(restored.jointLimits[0].boneName == "LeftShoulder");
+    CHECK(restored.jointLimits[0].swingNormalHalfAngle == doctest::Approx(1.0472f));
+    CHECK(restored.jointLimits[0].swingPlaneHalfAngle == doctest::Approx(0.5236f));
+    CHECK(restored.jointLimits[0].twistMinAngle == doctest::Approx(-0.2618f));
+    CHECK(restored.jointLimits[0].twistMaxAngle == doctest::Approx(0.2618f));
+    CHECK(restored.jointLimits[0].maxFrictionTorque == doctest::Approx(5.0f));
+
+    CHECK(restored.jointLimits[1].boneName == "RightKnee");
+    CHECK(restored.jointLimits[1].swingNormalHalfAngle == doctest::Approx(0.1745f));
+    CHECK(restored.jointLimits[1].twistMaxAngle == doctest::Approx(1.5708f));
+    CHECK(restored.jointLimits[1].maxFrictionTorque == doctest::Approx(20.0f));
+}
+
+TEST_CASE("PhysicsAnimationAsset: per-bone collisionLayer 255 is treated as global") {
+    types::PhysicsAnimationConfig config;
+
+    types::BoneBodyMapping globalMap;
+    globalMap.boneName = "GlobalBone";
+    // collisionLayer left at its default 255
+    config.boneBodyMappings.push_back(globalMap);
+
+    types::BoneBodyMapping explicitMap;
+    explicitMap.boneName = "ExplicitBone";
+    explicitMap.collisionLayer = 3;
+    config.boneBodyMappings.push_back(explicitMap);
+
+    auto j = physics::PhysicsAnimationAsset::serializeConfig(config);
+
+    // The 255 (global) mapping must omit the "collisionLayer" key entirely.
+    REQUIRE(j.contains("boneBodyMappings"));
+    REQUIRE(j["boneBodyMappings"].size() == 2);
+    CHECK_FALSE(j["boneBodyMappings"][0].contains("collisionLayer"));
+    CHECK(j["boneBodyMappings"][1].contains("collisionLayer"));
+
+    auto restored = physics::PhysicsAnimationAsset::deserializeConfig(j);
+    REQUIRE(restored.boneBodyMappings.size() == 2);
+    CHECK(restored.boneBodyMappings[0].collisionLayer == 255);
+    CHECK(restored.boneBodyMappings[1].collisionLayer == 3);
+}
+
+TEST_CASE("PhysicsAnimationAsset: load returns nullopt for a missing file") {
+    const auto path = physAnimTempDir() / "this_file_does_not_exist_12345.vfPhysAnim";
+    std::error_code ec;
+    REQUIRE_FALSE(std::filesystem::exists(path, ec)); // sanity: truly absent
+
+    auto result = physics::PhysicsAnimationAsset::load(path.string());
+    CHECK_FALSE(result.has_value());
+}
+
+TEST_CASE("PhysicsAnimationAsset: load returns nullopt when config object is absent") {
+    const auto dir = physAnimTempDir();
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const auto path = dir / "no_config_object.vfPhysAnim";
+
+    {
+        std::ofstream out(path);
+        REQUIRE(out.is_open());
+        out << R"({"format":"VertexForge.PhysicsAnimationConfig","version":"1.1"})";
+    }
+
+    auto result = physics::PhysicsAnimationAsset::load(path.string());
+    CHECK_FALSE(result.has_value());
+
+    removePhysAnimTemp(path);
+    std::filesystem::remove_all(dir, ec);
 }
 
 } // TEST_SUITE

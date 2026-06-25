@@ -1,0 +1,386 @@
+{
+    "format": "VertexForge.PhysicsAnimationConfig",
+    "version": "1.1",
+    "config": {
+        "defaultMode": "animated",
+        "collisionLayer": 1,
+        "kinematicToRagdollBlendTime": 0.2,
+        "boneBodyMappings": [
+            {
+                "boneName": "Hips",
+                "shape": "capsule",
+                "size": [0.12, 0.22, 0.12],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 11.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "Spine",
+                "shape": "capsule",
+                "size": [0.11, 0.18, 0.11],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 8.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "Chest",
+                "shape": "capsule",
+                "size": [0.13, 0.20, 0.13],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 12.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "Neck",
+                "shape": "capsule",
+                "size": [0.05, 0.08, 0.05],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 2.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "Head",
+                "shape": "sphere",
+                "size": [0.10, 0.10, 0.10],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 5.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "LeftShoulder",
+                "shape": "capsule",
+                "size": [0.05, 0.12, 0.05],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 2.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "LeftUpperArm",
+                "shape": "capsule",
+                "size": [0.05, 0.28, 0.05],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 2.5,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "LeftLowerArm",
+                "shape": "capsule",
+                "size": [0.045, 0.26, 0.045],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 1.8,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "LeftHand",
+                "shape": "box",
+                "size": [0.04, 0.09, 0.02],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 0.5,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "RightShoulder",
+                "shape": "capsule",
+                "size": [0.05, 0.12, 0.05],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 2.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "RightUpperArm",
+                "shape": "capsule",
+                "size": [0.05, 0.28, 0.05],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 2.5,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "RightLowerArm",
+                "shape": "capsule",
+                "size": [0.045, 0.26, 0.045],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 1.8,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "RightHand",
+                "shape": "box",
+                "size": [0.04, 0.09, 0.02],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 0.5,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "LeftUpperLeg",
+                "shape": "capsule",
+                "size": [0.09, 0.42, 0.09],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 7.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "LeftLowerLeg",
+                "shape": "capsule",
+                "size": [0.07, 0.42, 0.07],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 4.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "LeftFoot",
+                "shape": "box",
+                "size": [0.05, 0.04, 0.12],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 1.2,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "RightUpperLeg",
+                "shape": "capsule",
+                "size": [0.09, 0.42, 0.09],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 7.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "RightLowerLeg",
+                "shape": "capsule",
+                "size": [0.07, 0.42, 0.07],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 4.0,
+                "friction": 0.5,
+                "restitution": 0.0
+            },
+            {
+                "boneName": "RightFoot",
+                "shape": "box",
+                "size": [0.05, 0.04, 0.12],
+                "offset": [0.0, 0.0, 0.0],
+                "rotationOffset": [1.0, 0.0, 0.0, 0.0],
+                "mass": 1.2,
+                "friction": 0.5,
+                "restitution": 0.0
+            }
+        ],
+        "jointLimits": [
+            {
+                "boneName": "Spine",
+                "swingNormalHalfAngle": 0.35,
+                "swingPlaneHalfAngle": 0.35,
+                "twistMinAngle": -0.26,
+                "twistMaxAngle": 0.26,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "Chest",
+                "swingNormalHalfAngle": 0.35,
+                "swingPlaneHalfAngle": 0.35,
+                "twistMinAngle": -0.26,
+                "twistMaxAngle": 0.26,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "Neck",
+                "swingNormalHalfAngle": 0.35,
+                "swingPlaneHalfAngle": 0.35,
+                "twistMinAngle": -0.26,
+                "twistMaxAngle": 0.26,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "Head",
+                "swingNormalHalfAngle": 0.5,
+                "swingPlaneHalfAngle": 0.5,
+                "twistMinAngle": -0.6,
+                "twistMaxAngle": 0.6,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "LeftShoulder",
+                "swingNormalHalfAngle": 0.4,
+                "swingPlaneHalfAngle": 0.4,
+                "twistMinAngle": -0.3,
+                "twistMaxAngle": 0.3,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "LeftUpperArm",
+                "swingNormalHalfAngle": 1.4,
+                "swingPlaneHalfAngle": 1.0,
+                "twistMinAngle": -0.6,
+                "twistMaxAngle": 0.6,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "LeftLowerArm",
+                "swingNormalHalfAngle": 0.05,
+                "swingPlaneHalfAngle": 1.3,
+                "twistMinAngle": -0.1,
+                "twistMaxAngle": 0.1,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "LeftHand",
+                "swingNormalHalfAngle": 0.4,
+                "swingPlaneHalfAngle": 0.4,
+                "twistMinAngle": -0.2,
+                "twistMaxAngle": 0.2,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "RightShoulder",
+                "swingNormalHalfAngle": 0.4,
+                "swingPlaneHalfAngle": 0.4,
+                "twistMinAngle": -0.3,
+                "twistMaxAngle": 0.3,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "RightUpperArm",
+                "swingNormalHalfAngle": 1.4,
+                "swingPlaneHalfAngle": 1.0,
+                "twistMinAngle": -0.6,
+                "twistMaxAngle": 0.6,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "RightLowerArm",
+                "swingNormalHalfAngle": 0.05,
+                "swingPlaneHalfAngle": 1.3,
+                "twistMinAngle": -0.1,
+                "twistMaxAngle": 0.1,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "RightHand",
+                "swingNormalHalfAngle": 0.4,
+                "swingPlaneHalfAngle": 0.4,
+                "twistMinAngle": -0.2,
+                "twistMaxAngle": 0.2,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "LeftUpperLeg",
+                "swingNormalHalfAngle": 1.0,
+                "swingPlaneHalfAngle": 0.6,
+                "twistMinAngle": -0.3,
+                "twistMaxAngle": 0.3,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "LeftLowerLeg",
+                "swingNormalHalfAngle": 0.05,
+                "swingPlaneHalfAngle": 1.3,
+                "twistMinAngle": -0.05,
+                "twistMaxAngle": 0.05,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "LeftFoot",
+                "swingNormalHalfAngle": 0.4,
+                "swingPlaneHalfAngle": 0.4,
+                "twistMinAngle": -0.2,
+                "twistMaxAngle": 0.2,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "RightUpperLeg",
+                "swingNormalHalfAngle": 1.0,
+                "swingPlaneHalfAngle": 0.6,
+                "twistMinAngle": -0.3,
+                "twistMaxAngle": 0.3,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "RightLowerLeg",
+                "swingNormalHalfAngle": 0.05,
+                "swingPlaneHalfAngle": 1.3,
+                "twistMinAngle": -0.05,
+                "twistMaxAngle": 0.05,
+                "maxFrictionTorque": 0.0
+            },
+            {
+                "boneName": "RightFoot",
+                "swingNormalHalfAngle": 0.4,
+                "swingPlaneHalfAngle": 0.4,
+                "twistMinAngle": -0.2,
+                "twistMaxAngle": 0.2,
+                "maxFrictionTorque": 0.0
+            }
+        ],
+        "boneMotors": [
+            {
+                "boneName": "Hips",
+                "strength": 1.0,
+                "frequency": 20.0,
+                "damping": 1.0,
+                "maxTorque": 400.0
+            },
+            {
+                "boneName": "Spine",
+                "strength": 1.0,
+                "frequency": 20.0,
+                "damping": 1.0,
+                "maxTorque": 350.0
+            },
+            {
+                "boneName": "Chest",
+                "strength": 1.0,
+                "frequency": 20.0,
+                "damping": 1.0,
+                "maxTorque": 350.0
+            }
+        ],
+        "defaultMotorStrength": 1.0,
+        "defaultMotorFrequency": 20.0,
+        "defaultMotorDamping": 1.0,
+        "defaultMotorMaxTorque": 150.0,
+        "rootMotorStrength": 1.0,
+        "poweredBlendInTime": 0.15,
+        "ragdollToAnimatedBlendTime": 0.3,
+        "hitReaction": {
+            "defaultRecoverTime": 0.6,
+            "strengthDip": 0.0,
+            "chainDepth": -1,
+            "chainFalloff": 1.0
+        },
+        "settleLinearVelocityThreshold": 0.05,
+        "settleAngularVelocityThreshold": 0.2,
+        "settleFrameCount": 30
+    }
+}
