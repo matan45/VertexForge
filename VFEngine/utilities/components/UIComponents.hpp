@@ -34,6 +34,17 @@ namespace components
         asset::AssetRef themeRef;
     };
 
+    // VK-1435 — editor-only marker placed on a UI Layer Builder sandbox canvas root.
+    // It isolates the builder's authoring subtree from the rest of the engine: the main
+    // edit-mode UI passes skip a canvas carrying it (so it never renders as a stray
+    // world-space quad in the scene viewport), the scene serializer skips it (so the
+    // sandbox never leaks into the user's saved scene), and it gives the builder an exact
+    // teardown set on window close. Never serialized; lives only while a builder window
+    // is open. The dedicated UILayerPreviewController renders the tagged subtree offscreen.
+    struct UIPreviewTagComponent
+    {
+    };
+
     // Marks a widget as themed: when the owning canvas has a themeRef, the
     // style with this key writes its properties into the widget's components.
     struct UIStyleComponent

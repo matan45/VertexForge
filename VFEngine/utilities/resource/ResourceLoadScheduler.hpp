@@ -1,5 +1,6 @@
 #pragma once
 #include "ResourceLoadTypes.hpp"
+#include "AssetTypes.hpp"
 #include "CancellationToken.hpp"
 #include "../asset/AssetGUID.hpp"
 #include <mutex>
@@ -28,6 +29,11 @@ namespace resource {
 		// asset loads resolve their name from the GUID in the UI
 		std::string debugName;
 		std::chrono::steady_clock::time_point submitTime;
+
+		// VK-1434: feeds the CPU pre-load memory gate in dispatchPending().
+		// estimatedBytes is a conservative pre-decode RAM estimate (0 => ungated).
+		AssetType assetType = AssetType::COUNT;
+		uint64_t estimatedBytes = 0;
 
 		bool operator<(const LoadRequest& other) const
 		{

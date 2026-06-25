@@ -38,5 +38,14 @@ namespace windows::animation
         void drawAllMappingsSummary(const types::PhysicsAnimationConfig& config,
                                     int& selectedChannel,
                                     const std::unordered_map<std::string, size_t>& boneNameToIndex);
+
+        // "Generate Bodies from Skeleton" — mirrors UE5 "Generate Bodies" / Godot
+        // "Create Physical Skeleton" / Unity Ragdoll Wizard. Auto-creates a default
+        // capsule body (aligned bone->child) plus a joint limit for every bone in the
+        // loaded skeleton, keyed by the skeleton's actual bone names.
+        bool drawGenerateFromSkeleton(types::PhysicsAnimationConfig& config,
+                                      const std::vector<services::EvaluatedBoneInfo>& evaluatedBones);
+        bool generateBodiesFromSkeleton(types::PhysicsAnimationConfig& config,
+                                        const std::vector<services::EvaluatedBoneInfo>& evaluatedBones);
     };
 }

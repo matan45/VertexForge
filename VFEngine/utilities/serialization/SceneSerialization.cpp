@@ -52,6 +52,11 @@ namespace serialization
             {
                 if (child.hasComponent<components::UIListItemComponent>())
                     continue;
+                // VK-1435 / VK-1433 Phase 4 — the UI Layer Builder's and Prefab Rig Preview's
+                // tagged sandbox subtrees are editor-only and must never bake into the saved scene.
+                if (child.hasComponent<components::UIPreviewTagComponent>() ||
+                    child.hasComponent<components::PreviewSandboxTagComponent>())
+                    continue;
                 futures.push_back(threading::JobSystem::instance().submit(
                     [child]() mutable -> json { return serializeEntity(child); },
                     threading::JobPriority::NORMAL));
@@ -64,6 +69,11 @@ namespace serialization
             for (auto& child : children)
             {
                 if (child.hasComponent<components::UIListItemComponent>())
+                    continue;
+                // VK-1435 / VK-1433 Phase 4 — the UI Layer Builder's and Prefab Rig Preview's
+                // tagged sandbox subtrees are editor-only and must never bake into the saved scene.
+                if (child.hasComponent<components::UIPreviewTagComponent>() ||
+                    child.hasComponent<components::PreviewSandboxTagComponent>())
                     continue;
                 childrenJson.push_back(serializeEntity(child));
             }

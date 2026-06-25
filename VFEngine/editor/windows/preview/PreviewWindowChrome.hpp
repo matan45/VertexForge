@@ -84,6 +84,16 @@ namespace editor::preview
 
         bool isMaximized() const { return maximized; }
 
+        // Flags to OR into the owning window's ImGui::Begin while maximized:
+        // pin it (NoMove) and drop the resize grips (NoResize) so a maximized
+        // preview is an immovable full-editor fill (VK-1436). Returns 0 when
+        // not maximized, so non-maximized behavior is byte-identical.
+        ImGuiWindowFlags windowFlags() const
+        {
+            return maximized ? (ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize)
+                             : ImGuiWindowFlags_None;
+        }
+
         // The size worth persisting: the pre-maximize size while maximized,
         // otherwise the current window size.
         ImVec2 effectiveSize() const { return maximized ? restoreSize : lastSize; }

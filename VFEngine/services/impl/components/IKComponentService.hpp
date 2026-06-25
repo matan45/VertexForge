@@ -41,6 +41,7 @@ namespace services
         void setChainEnabled(EntityHandle entity, const std::string& chainName, bool enabled);
 
         std::vector<std::string> getChainNames(EntityHandle entity) const;
+        std::vector<animator::ik::IKChainConfig> getChainConfigs(EntityHandle entity) const;
         float getChainWeight(EntityHandle entity, const std::string& chainName) const;
         bool isChainEnabled(EntityHandle entity, const std::string& chainName) const;
 

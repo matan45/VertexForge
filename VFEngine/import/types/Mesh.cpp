@@ -9,6 +9,11 @@
 #include "resource/EndianUtils.hpp"
 #include "resource/VertexQuantization.hpp"
 
+#include "cpumem/CpuMemoryManager.hpp"
+#include "cpumem/CpuMemoryCategories.hpp"
+#include "cpumem/ScopedCpuMemory.hpp"
+
+#include <semaphore>
 #include <vector>
 #include <fstream>
 #include <filesystem>
@@ -409,6 +414,30 @@ namespace
 
         return unique;
     }
+
+    // Mesh decode semaphore: separate from the texture/HDR semaphore in Texture.cpp.
+    // Both live in Import.dll but in different TUs, so they are independent permit
+    // pools (2+2 max concurrent). Move to a shared Import TU if a unified cap
+    // across all decode types is needed.
+    constexpr int kMeshDecodeConcurrency = 2;
+    std::counting_semaphore<kMeshDecodeConcurrency> gMeshDecodeSem{kMeshDecodeConcurrency};
+
+    struct MeshDecodeLock
+    {
+        MeshDecodeLock()  { gMeshDecodeSem.acquire(); }
+        ~MeshDecodeLock() { gMeshDecodeSem.release(); }
+        MeshDecodeLock(const MeshDecodeLock&) = delete;
+        MeshDecodeLock& operator=(const MeshDecodeLock&) = delete;
+    };
+
+    memory::CategoryId meshDecodeCategory()
+    {
+        static const memory::CategoryId id =
+            memory::CpuMemoryManager::instance().registerCategory(
+                memory::categories::ImportMeshDecode, memory::CategoryKind::Transient);
+        return id;
+    }
+
 }
 
 namespace types
@@ -419,6 +448,17 @@ namespace types
                             std::vector<std::string>* outWrittenTextures) const
     {
         if (progressCallback) progressCallback(0.0f);
+
+        // Acquire the concurrency slot BEFORE ReadFile so the cap bounds the actual
+        // Assimp parse+triangulate allocation. file_size × 4 is a conservative
+        // pre-decode upper bound (mesh data expands on triangulation + normal calc).
+        std::error_code sizeEc;
+        const auto rawMeshBytes = std::filesystem::file_size(file.path.data(), sizeEc);
+        const uint64_t decodeEstimate = (!sizeEc && rawMeshBytes > 0)
+            ? static_cast<uint64_t>(rawMeshBytes) * 4u
+            : 0u;
+        MeshDecodeLock decodeLock;
+        memory::ScopedCpuMemory decodeGuard(meshDecodeCategory(), decodeEstimate);
 
         Assimp::Importer importer;
         const aiScene* scene = importer.ReadFile(file.path.data(),
@@ -454,6 +494,7 @@ namespace types
             extractEmbeddedTextures(scene, location, fileName, file.config, *outWrittenTextures);
         }
 
+        // decodeGuard and decodeLock release here; then importer RAII frees aiScene.
         if (progressCallback) progressCallback(1.0f);
     }
 

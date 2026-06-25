@@ -2,10 +2,30 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
+#include "events/scene/EntityTransformEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
 {
+    namespace
+    {
+        // True if `handle`'s parent carries a UILayoutGroupComponent. That layout overwrites this
+        // element's anchoredPosition every frame, so manual position edits don't stick — the
+        // Anchored Position field is disabled to make that clear.
+        bool isLayoutControlled(services::EntityHandle handle)
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::scene::GetEntityQuery entityQuery;
+            entityQuery.entity = handle;
+            auto data = dispatcher.query(entityQuery);
+            if (!data.has_value() || !data->parent.has_value() || !data->parent->isValid())
+                return false;
+            events::ui::HasUILayoutGroupComponentQuery layoutQuery;
+            layoutQuery.entity = *data->parent;
+            return dispatcher.query(layoutQuery);
+        }
+    }
+
     bool UIRectDrawer::draw(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -49,7 +69,17 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawSizeDelta(data);
             ImGui::Spacing();
+
+            // A layout-group child's position is driven by the parent's layout every frame, so
+            // disable the field (manual edits would be overwritten) and say why.
+            const bool layoutControlled = isLayoutControlled(handle);
+            if (layoutControlled) ImGui::BeginDisabled();
             changed |= drawAnchoredPosition(data);
+            if (layoutControlled)
+            {
+                ImGui::EndDisabled();
+                ImGui::TextDisabled("Position set by parent Layout Group");
+            }
             ImGui::Spacing();
             changed |= drawBlocksRaycast(data);
 

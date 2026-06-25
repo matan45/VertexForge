@@ -42,6 +42,10 @@ namespace services
 
         // Queries
         [[nodiscard]] virtual std::vector<std::string> getChainNames(EntityHandle entity) const = 0;
+        // VK-1433 Phase 4 — full chain configs (the Prefab Rig live-desc builder needs the whole
+        // IKChainConfig, not just names, to reconstruct PrefabRigDescDTO.ik).
+        [[nodiscard]] virtual std::vector<animator::ik::IKChainConfig> getChainConfigs(
+            EntityHandle entity) const = 0;
         [[nodiscard]] virtual float getChainWeight(EntityHandle entity,
                                                     const std::string& chainName) const = 0;
         [[nodiscard]] virtual bool isChainEnabled(EntityHandle entity,

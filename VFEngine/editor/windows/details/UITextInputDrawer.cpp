@@ -4,6 +4,7 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -186,12 +187,12 @@ namespace windows::details
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Text Color##UITextInput", &data.textColor.x))
+            if (ColorEditRow("Text Color##UITextInput", &data.textColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Placeholder Color##UITextInput", &data.placeholderColor.x))
+            if (ColorEditRow("Placeholder Color##UITextInput", &data.placeholderColor.x))
             {
                 changed = true;
             }
@@ -208,13 +209,13 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("State Colors", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::ColorEdit4("Normal Color##UITextInput", &data.normalColor.x))
+            if (ColorEditRow("Normal Color##UITextInput", &data.normalColor.x))
                 changed = true;
-            if (ImGui::ColorEdit4("Hovered Color##UITextInput", &data.hoveredColor.x))
+            if (ColorEditRow("Hovered Color##UITextInput", &data.hoveredColor.x))
                 changed = true;
-            if (ImGui::ColorEdit4("Focused Color##UITextInput", &data.focusedColor.x))
+            if (ColorEditRow("Focused Color##UITextInput", &data.focusedColor.x))
                 changed = true;
-            if (ImGui::ColorEdit4("Disabled Color##UITextInput", &data.disabledColor.x))
+            if (ColorEditRow("Disabled Color##UITextInput", &data.disabledColor.x))
                 changed = true;
 
             ImGui::TreePop();
@@ -229,7 +230,7 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("Caret##UITextInput"))
         {
-            if (ImGui::ColorEdit4("Caret Color##UITextInput", &data.caretColor.x))
+            if (ColorEditRow("Caret Color##UITextInput", &data.caretColor.x))
                 changed = true;
             if (ImGui::DragFloat("Caret Width##UITextInput", &data.caretWidth, 0.1f, 0.5f, 10.0f, "%.1f"))
                 changed = true;
@@ -246,7 +247,7 @@ namespace windows::details
     {
         bool changed = false;
 
-        if (ImGui::ColorEdit4("Selection Color##UITextInput", &data.selectionColor.x))
+        if (ColorEditRow("Selection Color##UITextInput", &data.selectionColor.x))
             changed = true;
 
         return changed;

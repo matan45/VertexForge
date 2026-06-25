@@ -8,9 +8,38 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <filesystem>
+#include <cmath>
 
 namespace windows::animation
 {
+    namespace
+    {
+        // Shortest-arc quaternion rotating unit vector `from` onto unit vector `to`.
+        // Used to align a capsule's local +Y axis down a bone toward its child.
+        glm::quat quatFromTo(const glm::vec3& fromRaw, const glm::vec3& toRaw)
+        {
+            glm::vec3 from = glm::normalize(fromRaw);
+            glm::vec3 to = glm::normalize(toRaw);
+            float d = glm::dot(from, to);
+
+            if (d >= 1.0f - 1e-6f)
+                return glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // already aligned
+
+            if (d <= -1.0f + 1e-6f)
+            {
+                // Opposite vectors: rotate 180 degrees about any perpendicular axis.
+                glm::vec3 axis = glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), from);
+                if (glm::dot(axis, axis) < 1e-8f)
+                    axis = glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), from);
+                return glm::angleAxis(3.14159265358979323846f, glm::normalize(axis));
+            }
+
+            glm::vec3 axis = glm::normalize(glm::cross(from, to));
+            float angle = std::acos(glm::clamp(d, -1.0f, 1.0f));
+            return glm::angleAxis(angle, axis);
+        }
+    }
+
     bool AnimationPhysicsPanel::draw(types::PhysicsAnimationConfig& config,
                                       int& selectedChannel,
                                       const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
@@ -24,6 +53,9 @@ namespace windows::animation
         ImGui::Separator();
 
         drawFileBar(config, configPath);
+        ImGui::Spacing();
+
+        changed |= drawGenerateFromSkeleton(config, evaluatedBones);
         ImGui::Spacing();
 
         changed |= drawGlobalConfig(config, showColliderOverlay);
@@ -126,6 +158,143 @@ namespace windows::animation
             std::filesystem::path p(configPath);
             ImGui::TextDisabled("%s", p.filename().string().c_str());
         }
+    }
+
+    bool AnimationPhysicsPanel::drawGenerateFromSkeleton(
+        types::PhysicsAnimationConfig& config,
+        const std::vector<services::EvaluatedBoneInfo>& evaluatedBones)
+    {
+        bool changed = false;
+        const bool hasBones = !evaluatedBones.empty();
+
+        ImGui::BeginDisabled(!hasBones);
+        if (ImGui::Button("Generate Bodies from Skeleton", ImVec2(-1, 0)))
+        {
+            if (config.boneBodyMappings.empty() && config.jointLimits.empty())
+                changed |= generateBodiesFromSkeleton(config, evaluatedBones);
+            else
+                ImGui::OpenPopup("Generate Bodies?##physanim");
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Create a default capsule body (aligned to each bone) plus a "
+                              "joint limit for every bone in the loaded skeleton, using the "
+                              "skeleton's actual bone names.\nReplaces all current bodies and "
+                              "joint limits - tune sizes/limits afterward.");
+        }
+
+        if (ImGui::BeginPopupModal("Generate Bodies?##physanim", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("This replaces all %d body mappings and %d joint limits.",
+                        static_cast<int>(config.boneBodyMappings.size()),
+                        static_cast<int>(config.jointLimits.size()));
+            ImGui::TextDisabled("Bone motor overrides are kept.");
+            ImGui::Spacing();
+
+            if (ImGui::Button("Generate", ImVec2(120, 0)))
+            {
+                changed |= generateBodiesFromSkeleton(config, evaluatedBones);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+                ImGui::CloseCurrentPopup();
+
+            ImGui::EndPopup();
+        }
+
+        return changed;
+    }
+
+    bool AnimationPhysicsPanel::generateBodiesFromSkeleton(
+        types::PhysicsAnimationConfig& config,
+        const std::vector<services::EvaluatedBoneInfo>& evaluatedBones)
+    {
+        if (evaluatedBones.empty()) return false;
+
+        const size_t boneCount = evaluatedBones.size();
+
+        // First child of each bone (used to orient/size the capsule). Branching bones
+        // (pelvis/chest) just point at their first child; the user tunes those.
+        std::vector<int> firstChild(boneCount, -1);
+        for (size_t i = 0; i < boneCount; ++i)
+        {
+            int32_t parent = evaluatedBones[i].parentIndex;
+            if (parent >= 0 && static_cast<size_t>(parent) < boneCount && firstChild[parent] < 0)
+                firstChild[parent] = static_cast<int>(i);
+        }
+
+        config.boneBodyMappings.clear();
+        config.jointLimits.clear();
+        config.boneBodyMappings.reserve(boneCount);
+
+        constexpr float kPi = 3.14159265358979323846f;
+
+        for (size_t i = 0; i < boneCount; ++i)
+        {
+            const auto& bone = evaluatedBones[i];
+
+            types::BoneBodyMapping mapping;
+            mapping.boneName = bone.name;
+            mapping.friction = 0.5f;
+            mapping.restitution = 0.0f;
+            mapping.collisionLayer = 255; // inherit global
+
+            const glm::vec3 bonePos = glm::vec3(bone.worldTransform[3]);
+            const glm::quat boneRot = glm::normalize(glm::quat_cast(bone.worldTransform));
+
+            float boneLength = 0.0f;
+            glm::vec3 worldDir(0.0f);
+            if (firstChild[i] >= 0)
+            {
+                const glm::vec3 childPos = glm::vec3(evaluatedBones[firstChild[i]].worldTransform[3]);
+                worldDir = childPos - bonePos;
+                boneLength = glm::length(worldDir);
+            }
+
+            if (boneLength > 1e-4f)
+            {
+                // Capsule spanning bone -> child, oriented along its local +Y axis.
+                const float radius = glm::clamp(boneLength * 0.18f, 0.02f, 0.5f);
+                const float sizeY = glm::max(boneLength * 0.5f, radius + 0.001f);
+
+                const glm::quat invRot = glm::inverse(boneRot);
+                const glm::vec3 localDir = invRot * worldDir; // into bone-local space
+
+                mapping.shape = types::ColliderShape::Capsule;
+                mapping.size = glm::vec3(radius, sizeY, radius);
+                mapping.offset = invRot * (worldDir * 0.5f);     // midpoint, bone-local
+                mapping.rotationOffset = quatFromTo(glm::vec3(0.0f, 1.0f, 0.0f), localDir);
+                mapping.mass = glm::clamp(kPi * radius * radius * boneLength * 900.0f, 0.3f, 20.0f);
+            }
+            else
+            {
+                // Leaf bone (hand/foot/head tip) - a small sphere at the joint.
+                mapping.shape = types::ColliderShape::Sphere;
+                mapping.size = glm::vec3(0.05f, 0.05f, 0.05f);
+                mapping.offset = glm::vec3(0.0f);
+                mapping.rotationOffset = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+                mapping.mass = 0.5f;
+            }
+
+            config.boneBodyMappings.push_back(mapping);
+
+            // Joint limit for every non-root bone (a generic cone + mild twist to tune).
+            if (bone.parentIndex >= 0)
+            {
+                types::JointConstraintLimits limits;
+                limits.boneName = bone.name;
+                limits.swingNormalHalfAngle = 0.6f;
+                limits.swingPlaneHalfAngle = 0.6f;
+                limits.twistMinAngle = -0.4f;
+                limits.twistMaxAngle = 0.4f;
+                limits.maxFrictionTorque = 0.0f;
+                config.jointLimits.push_back(limits);
+            }
+        }
+
+        return true;
     }
 
     bool AnimationPhysicsPanel::drawGlobalConfig(types::PhysicsAnimationConfig& config, bool& showColliderOverlay)

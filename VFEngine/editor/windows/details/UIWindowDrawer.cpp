@@ -4,6 +4,7 @@
 #include "events/ui/UIWindowEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <cstring>
 
@@ -58,12 +59,12 @@ namespace windows::details
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Dim backdrop; blocks interaction with everything beneath");
 
-            changed |= ImGui::ColorEdit4("Background##UIWindow", &data.backgroundColor.x);
-            changed |= ImGui::ColorEdit4("Title Bar Color##UIWindow", &data.titleBarColor.x);
-            changed |= ImGui::ColorEdit4("Title Text##UIWindow", &data.titleTextColor.x);
+            changed |= ColorEditRow("Background##UIWindow", &data.backgroundColor.x);
+            changed |= ColorEditRow("Title Bar Color##UIWindow", &data.titleBarColor.x);
+            changed |= ColorEditRow("Title Text##UIWindow", &data.titleTextColor.x);
             if (data.modal)
             {
-                changed |= ImGui::ColorEdit4("Backdrop##UIWindow", &data.backdropColor.x);
+                changed |= ColorEditRow("Backdrop##UIWindow", &data.backdropColor.x);
             }
             changed |= ImGui::DragFloat("Title Font Size##UIWindow", &data.titleFontSize, 0.5f, 6.0f, 96.0f, "%.0f");
 

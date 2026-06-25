@@ -30,7 +30,8 @@ namespace controllers::offscreen::ui_screenspace
     void generateSliderDrawData(
         entt::registry& registry, const FrameContext& ctx,
         const ScrollContainerMap& scrollContainers,
-        std::vector<render::ui::UIImageRenderData>& drawList)
+        std::vector<render::ui::UIImageRenderData>& drawList,
+        entt::entity scopedCanvas)
     {
         const std::string whiteTex = "__white_1x1__";
         auto sliderDrawView = registry.view<components::UISliderComponent,
@@ -39,7 +40,7 @@ namespace controllers::offscreen::ui_screenspace
 
         for (auto sliderEntity : sliderDrawView)
         {
-            if (!scene::Entity::isEffectivelyActive(registry, sliderEntity))
+            if (!isEffectivelyActiveInScopedCanvas(registry, sliderEntity, scopedCanvas))
                 continue;
 
             size_t entryStart = drawList.size();
@@ -139,14 +140,15 @@ namespace controllers::offscreen::ui_screenspace
     void generateProgressBarDrawData(
         entt::registry& registry, const FrameContext& ctx,
         const ScrollContainerMap& scrollContainers,
-        std::vector<render::ui::UIImageRenderData>& drawList)
+        std::vector<render::ui::UIImageRenderData>& drawList,
+        entt::entity scopedCanvas)
     {
         const std::string whiteTex = "__white_1x1__";
         auto progressBarView = registry.view<components::UIProgressBarComponent, components::UIRectComponent>();
 
         for (auto pbEntity : progressBarView)
         {
-            if (!scene::Entity::isEffectivelyActive(registry, pbEntity))
+            if (!isEffectivelyActiveInScopedCanvas(registry, pbEntity, scopedCanvas))
                 continue;
 
             size_t entryStart = drawList.size();
@@ -238,7 +240,8 @@ namespace controllers::offscreen::ui_screenspace
 
     void generateScrollbarDrawData(
         entt::registry& registry, const FrameContext& ctx,
-        std::vector<render::ui::UIImageRenderData>& drawList)
+        std::vector<render::ui::UIImageRenderData>& drawList,
+        entt::entity scopedCanvas)
     {
         constexpr float SCROLLBAR_WIDTH = 8.0f;
         constexpr float SCROLLBAR_MIN_THUMB = 20.0f;
@@ -249,7 +252,7 @@ namespace controllers::offscreen::ui_screenspace
         auto scrollBarView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
         for (auto scrollEntity : scrollBarView)
         {
-            if (!scene::Entity::isEffectivelyActive(registry, scrollEntity))
+            if (!isEffectivelyActiveInScopedCanvas(registry, scrollEntity, scopedCanvas))
                 continue;
 
             size_t entryStart = drawList.size();
@@ -353,11 +356,17 @@ namespace controllers::offscreen::ui_screenspace
     void generateTextInputCaretDrawData(
         entt::registry& registry, const FrameContext& ctx,
         entt::entity focusedEntity,
-        std::vector<render::ui::UIImageRenderData>& drawList)
+        std::vector<render::ui::UIImageRenderData>& drawList,
+        entt::entity scopedCanvas)
     {
         if (focusedEntity == entt::null || !registry.valid(focusedEntity))
             return;
         if (!registry.all_of<components::UITextInputComponent, components::UIRectComponent>(focusedEntity))
+            return;
+        // Scoped preview: only the sandbox canvas's own focused input draws a caret. (The builder
+        // runs no interaction, so it usually passes focusedEntity == entt::null and returns above.)
+        if (scopedCanvas != entt::null &&
+            findCanvasWithEntity(registry, focusedEntity).canvasEntity != scopedCanvas)
             return;
 
         const auto& tiComp = registry.get<components::UITextInputComponent>(focusedEntity);
@@ -466,7 +475,8 @@ namespace controllers::offscreen::ui_screenspace
 
     void generateDropdownDrawData(
         entt::registry& registry, const FrameContext& ctx,
-        std::vector<render::ui::UIImageRenderData>& drawList)
+        std::vector<render::ui::UIImageRenderData>& drawList,
+        entt::entity scopedCanvas)
     {
         auto dropdownView = registry.view<components::UIDropdownComponent, components::UIRectComponent>();
         for (auto dropdownEntity : dropdownView)
@@ -475,7 +485,7 @@ namespace controllers::offscreen::ui_screenspace
             if (!comp.isOpen || comp.options.empty())
                 continue;
 
-            if (!scene::Entity::isEffectivelyActive(registry, dropdownEntity))
+            if (!isEffectivelyActiveInScopedCanvas(registry, dropdownEntity, scopedCanvas))
                 continue;
 
             size_t entryStart = drawList.size();
@@ -542,7 +552,8 @@ namespace controllers::offscreen::ui_screenspace
     void generateListSelectionDrawData(
         entt::registry& registry, const FrameContext& ctx,
         const ScrollContainerMap& scrollContainers,
-        std::vector<render::ui::UIImageRenderData>& drawList)
+        std::vector<render::ui::UIImageRenderData>& drawList,
+        entt::entity scopedCanvas)
     {
         auto listView = registry.view<components::UIListViewComponent>();
         for (auto listEntity : listView)
@@ -551,13 +562,13 @@ namespace controllers::offscreen::ui_screenspace
             if (!comp.selectable || comp.selectedIndex < 0 ||
                 comp.selectedIndex >= static_cast<int>(comp.itemInstances.size()))
                 continue;
-            if (!scene::Entity::isEffectivelyActive(registry, listEntity))
+            if (!isEffectivelyActiveInScopedCanvas(registry, listEntity, scopedCanvas))
                 continue;
 
             entt::entity item = comp.itemInstances[static_cast<size_t>(comp.selectedIndex)];
             if (!registry.valid(item) || !registry.all_of<components::UIRectComponent>(item))
                 continue;
-            if (!scene::Entity::isEffectivelyActive(registry, item))
+            if (!isEffectivelyActiveWithin(registry, item, scopedCanvas))
                 continue;
 
             const auto* canvas = findCanvasForEntity(registry, listEntity);
@@ -591,7 +602,8 @@ namespace controllers::offscreen::ui_screenspace
 
     void generateDragGhostDrawData(
         entt::registry& registry, const FrameContext& ctx,
-        std::vector<render::ui::UIImageRenderData>& drawList)
+        std::vector<render::ui::UIImageRenderData>& drawList,
+        entt::entity scopedCanvas)
     {
         if (components::UIDraggableComponent::activeDragEntity == entt::null)
             return;
@@ -599,6 +611,13 @@ namespace controllers::offscreen::ui_screenspace
         entt::entity dragEntity = components::UIDraggableComponent::activeDragEntity;
         if (!registry.valid(dragEntity)
             || !registry.all_of<components::UIDraggableComponent>(dragEntity))
+            return;
+
+        // Scoped preview: ignore a drag whose owning canvas isn't this sandbox. The global
+        // activeDragEntity is driven by main-viewport interaction the builder doesn't run, so this
+        // keeps a live main-viewport drag out of the preview's draw list.
+        if (scopedCanvas != entt::null &&
+            findCanvasWithEntity(registry, dragEntity).canvasEntity != scopedCanvas)
             return;
 
         const auto& dragComp = registry.get<components::UIDraggableComponent>(dragEntity);
@@ -612,7 +631,7 @@ namespace controllers::offscreen::ui_screenspace
         auto dropView = registry.view<components::UIDropTargetComponent, components::UIRectComponent>();
         for (auto targetEntity : dropView)
         {
-            if (!isEntityActive(registry, targetEntity))
+            if (!isEffectivelyActiveInScopedCanvas(registry, targetEntity, scopedCanvas))
                 continue;
 
             const auto& targetComp = registry.get<components::UIDropTargetComponent>(targetEntity);

@@ -52,6 +52,12 @@ namespace services
                 setEntityActive(cmd.entity, cmd.isActive);
             });
 
+        dispatcher.registerCommandHandler<events::scene::MarkPreviewSandboxCommand>(
+            [this](const events::scene::MarkPreviewSandboxCommand& cmd)
+            {
+                return markPreviewSandbox(cmd.entity, cmd.tagged);
+            });
+
         dispatcher.registerCommandHandler<events::scene::SetEntityStaticCommand>(
             [this](const events::scene::SetEntityStaticCommand& cmd)
             {
@@ -146,6 +152,39 @@ namespace services
         {
             sceneEntity.getComponent<components::NameComponent>().isActive = isActive;
         }
+    }
+
+    bool EntityStateService::markPreviewSandbox(EntityHandle entity, bool tagged)
+    {
+        // VK-1433 Phase 4 — mirror UIComponentService::markUIPreviewSandbox. Tagging adds the
+        // marker AND marks the root inactive: the scene serializer skips a tagged subtree, and an
+        // inactive root keeps the entity out of the main edit/play passes. The Prefab Rig Preview
+        // renders the entities directly (it does not gate on isActive), so the inactive flag never
+        // affects the offscreen preview. Untagging restores the active flag.
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        entt::entity ent = internal::fromHandle(entity);
+        if (tagged)
+        {
+            registry.emplace_or_replace<components::PreviewSandboxTagComponent>(ent);
+            if (registry.all_of<components::NameComponent>(ent))
+            {
+                registry.get<components::NameComponent>(ent).isActive = false;
+            }
+        }
+        else
+        {
+            registry.remove<components::PreviewSandboxTagComponent>(ent);
+            if (registry.all_of<components::NameComponent>(ent))
+            {
+                registry.get<components::NameComponent>(ent).isActive = true;
+            }
+        }
+        return true;
     }
 
     bool EntityStateService::setEntityStatic(EntityHandle entity, bool isStatic)

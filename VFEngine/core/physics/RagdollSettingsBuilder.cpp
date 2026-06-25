@@ -98,7 +98,10 @@ namespace core::physics
             uint8_t layer = (mapping->collisionLayer != 255) ? mapping->collisionLayer : config.collisionLayer;
             part.mObjectLayer = static_cast<JPH::ObjectLayer>(layer);
             part.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
-            part.mMassPropertiesOverride.mMass = mapping->mass;
+            // Guard malformed/zero-mass asset data: Jolt derives inertia from mass
+            // (CalculateInertia), so a non-positive mass yields a degenerate body. The editor UI
+            // clamps mass, but a hand-authored or deserialized .vfPhysAnim can still carry 0.
+            part.mMassPropertiesOverride.mMass = std::max(mapping->mass, 0.001f);
             part.mFriction = mapping->friction;
             part.mRestitution = mapping->restitution;
             part.mLinearDamping = 0.1f;

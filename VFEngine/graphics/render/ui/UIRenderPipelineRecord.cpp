@@ -256,6 +256,14 @@ namespace render::ui
 
         core::beginDynamicRendering(commandBuffer, info);
 
+        // The UI pipelines now use a dynamic viewport (VK-1435); set it here too so this
+        // (display-extent) path stays valid. Behavior-preserving: same extent as before.
+        vk::Viewport viewport{0.0f, 0.0f,
+                              static_cast<float>(swapChain.getDisplayExtent().width),
+                              static_cast<float>(swapChain.getDisplayExtent().height),
+                              0.0f, 1.0f};
+        commandBuffer.setViewport(0, 1, &viewport);
+
         vk::Pipeline currentPipeline = nullptr;
 
         vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
@@ -331,6 +339,14 @@ namespace render::ui
     void UIRenderPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
                                                            bool overlayPass) const
     {
+        // Main swapchain UI path: record at the display extent (byte-identical to the previous
+        // hardcoded behavior, now that the viewport is a dynamic state set to the same extent).
+        recordCommandBufferGraphManaged(commandBuffer, imageIndex, swapChain.getDisplayExtent(), overlayPass);
+    }
+
+    void UIRenderPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                                           vk::Extent2D targetExtent, bool overlayPass) const
+    {
         if (!initialized || totalInstanceCount == 0) return;
 
         bool anyGroupInPass = false;
@@ -347,11 +363,18 @@ namespace render::ui
         auto stencilAttach = core::stencilClear(offscreenResources.uiStencilImage.stencilImageView, 0);
 
         core::DynamicRenderingInfo info{};
-        info.extent = swapChain.getDisplayExtent();
+        info.extent = targetExtent;
         info.colorAttachments = {colorAttach};
         info.stencilAttachment = stencilAttach;
 
         core::beginDynamicRendering(commandBuffer, info);
+
+        // Dynamic viewport matches the render extent (full target, y-down). The main path passes
+        // the display extent, so this reproduces the previously-baked static viewport exactly.
+        vk::Viewport viewport{0.0f, 0.0f,
+                              static_cast<float>(targetExtent.width), static_cast<float>(targetExtent.height),
+                              0.0f, 1.0f};
+        commandBuffer.setViewport(0, 1, &viewport);
 
         vk::Pipeline currentPipeline = nullptr;
 
@@ -364,8 +387,8 @@ namespace render::ui
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
                                          uiBindless.getDescriptorSet(), nullptr);
 
-        glm::vec2 viewportSize(static_cast<float>(swapChain.getDisplayExtent().width),
-                               static_cast<float>(swapChain.getDisplayExtent().height));
+        glm::vec2 viewportSize(static_cast<float>(targetExtent.width),
+                               static_cast<float>(targetExtent.height));
 
         for (const auto& group : scissorGroups)
         {
@@ -382,7 +405,7 @@ namespace render::ui
             else
             {
                 scissor.offset = vk::Offset2D{0, 0};
-                scissor.extent = swapChain.getDisplayExtent();
+                scissor.extent = targetExtent;
             }
             commandBuffer.setScissor(0, 1, &scissor);
 

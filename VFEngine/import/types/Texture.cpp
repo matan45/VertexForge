@@ -5,6 +5,10 @@
 #include "config/Config.hpp"
 #include "resource/EndianUtils.hpp"
 
+#include "cpumem/CpuMemoryManager.hpp"
+#include "cpumem/CpuMemoryCategories.hpp"
+#include "cpumem/ScopedCpuMemory.hpp"
+
 #include <iostream>
 #define TINYEXR_USE_MINIZ 0
 #define TINYEXR_USE_STB_ZLIB 1
@@ -18,12 +22,48 @@
 #include <stb_image_write.h>
 
 
+#include <semaphore>
 #include <vector>
 #include <fstream>
 #include <bit>
 #include <filesystem>
 #include <algorithm>
 #include <cstring>
+
+namespace
+{
+    // Maximum number of concurrent heavy import decodes (texture + HDR + mesh)
+    // within the Import module. Default 2 so at most two big scratch buffers
+    // co-exist regardless of how many worker threads submit simultaneously.
+    constexpr int kImportDecodeConcurrency = 2;
+    std::counting_semaphore<kImportDecodeConcurrency> gImportDecodeSem{kImportDecodeConcurrency};
+
+    // RAII acquire/release guard for the import-decode concurrency semaphore.
+    struct ImportDecodeLock
+    {
+        ImportDecodeLock()  { gImportDecodeSem.acquire(); }
+        ~ImportDecodeLock() { gImportDecodeSem.release(); }
+        ImportDecodeLock(const ImportDecodeLock&) = delete;
+        ImportDecodeLock& operator=(const ImportDecodeLock&) = delete;
+    };
+
+    // Category ids: resolved once per module, then reused lock-free.
+    memory::CategoryId texDecodeCategory()
+    {
+        static const memory::CategoryId id =
+            memory::CpuMemoryManager::instance().registerCategory(
+                memory::categories::ImportTextureDecode, memory::CategoryKind::Transient);
+        return id;
+    }
+
+    memory::CategoryId hdrDecodeCategory()
+    {
+        static const memory::CategoryId id =
+            memory::CpuMemoryManager::instance().registerCategory(
+                memory::categories::ImportHdrDecode, memory::CategoryKind::Transient);
+        return id;
+    }
+}
 
 
 namespace types
@@ -38,11 +78,24 @@ namespace types
 			stbi_set_flip_vertically_on_load(true);
 		}
 
+		std::string filePath(file.path);
+
+		// Acquire the concurrency slot BEFORE stbi_load so the cap genuinely bounds
+		// concurrent raw decode allocations. Probe dimensions with stbi_info (header
+		// read only, no decode) for the pre-decode estimate. If stbi_info fails
+		// (corrupt / unrecognised), the guard size is 0 — the lock still blocks.
+		// ×2 covers base RGBA + mip pyramid (~4/3) with margin.
+		int infoW = 0, infoH = 0, infoC = 0;
+		stbi_info(filePath.c_str(), &infoW, &infoH, &infoC);
+		ImportDecodeLock decodeLock;
+		const uint64_t decodeEstimate = (infoW > 0 && infoH > 0)
+			? static_cast<uint64_t>(infoW) * static_cast<uint64_t>(infoH) * 4u * 2u
+			: 0u;
+		memory::ScopedCpuMemory decodeGuard(texDecodeCategory(), decodeEstimate);
+
 		int width;
 		int height;
 		int channels;
-
-		std::string filePath(file.path);
 		unsigned char* imageData = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
 
 		if (!imageData)
@@ -70,6 +123,7 @@ namespace types
 			static_cast<uint32_t>(channels),
 			file.config.compressionMode, file.config.compressionQuality);
 
+		// decodeGuard and decodeLock release here (end of function scope)
 		if (progressCallback) progressCallback(1.0f);
 	}
 
@@ -180,10 +234,22 @@ namespace types
 			stbi_set_flip_vertically_on_load(true);
 		}
 
+		std::string filePath(file.path);
+
+		// Acquire the concurrency slot BEFORE stbi_loadf so the cap bounds the raw
+		// float decode. stbi_info reads only the header — no pixel decode.
+		// ×2 covers float32 base level + mip pyramid (~4/3) with margin.
+		int infoW = 0, infoH = 0, infoC = 0;
+		stbi_info(filePath.c_str(), &infoW, &infoH, &infoC);
+		ImportDecodeLock decodeLock;
+		const uint64_t decodeEstimate = (infoW > 0 && infoH > 0)
+			? static_cast<uint64_t>(infoW) * static_cast<uint64_t>(infoH) * 4u * sizeof(float) * 2u
+			: 0u;
+		memory::ScopedCpuMemory decodeGuard(hdrDecodeCategory(), decodeEstimate);
+
 		int width;
 		int height;
 		int channels;
-		std::string filePath(file.path);
 		float* imageData = stbi_loadf(filePath.c_str(), &width, &height, &channels, 0);
 		if (!imageData)
 		{
@@ -221,6 +287,7 @@ namespace types
 
 		saveToFileHDRWithMips(fileName, location, hdrData);
 
+		// decodeGuard and decodeLock release here (end of their scope)
 		if (progressCallback) progressCallback(1.0f);
 	}
 
@@ -228,6 +295,19 @@ namespace types
 		std::string_view location, TextureProgressCallback progressCallback) const
 	{
 		std::string filePath(file.path);
+
+		// Acquire the concurrency slot BEFORE LoadEXR so the cap bounds the raw
+		// decode. EXR headers don't expose decoded dimensions without coupling to
+		// tinyexr internals, so size from filesystem::file_size × 8 — a conservative
+		// upper bound for RGBA float32 (compressed EXR expands substantially).
+		std::error_code sizeEc;
+		const auto rawFileBytes = std::filesystem::file_size(filePath, sizeEc);
+		const uint64_t decodeEstimate = (!sizeEc && rawFileBytes > 0)
+			? static_cast<uint64_t>(rawFileBytes) * 8u
+			: 0u;
+		ImportDecodeLock decodeLock;
+		memory::ScopedCpuMemory decodeGuard(hdrDecodeCategory(), decodeEstimate);
+
 		EXRVersion exrVersion;
 
 		int ret = ParseEXRVersionFromFile(&exrVersion, filePath.c_str());
@@ -316,6 +396,7 @@ namespace types
 
 		saveToFileHDRWithMips(fileName, location, hdrData);
 
+		// decodeGuard and decodeLock release here (end of function scope)
 		if (progressCallback) progressCallback(1.0f);
 	}
 

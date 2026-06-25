@@ -48,6 +48,7 @@
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
+#include "impl/memory/CpuMemoryServiceImpl.hpp"
 #include "impl/asset/AssetDatabaseServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/vegetation/GrassServiceImpl.hpp"
@@ -70,6 +71,9 @@
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
+#include "events/editor/EditorSettingsEvents.hpp"
+#include "events/lifecycle/AssetLifecycleEvents.hpp"
+#include "cpumem/CpuMemoryManager.hpp"
 #include "impl/editor/EditorKeybindingServiceImpl.hpp"
 #include "impl/terrain/SplineTerrainServiceImpl.hpp"
 
@@ -110,7 +114,9 @@ namespace handlers
             bootstrap->getMaterialPreviewProvider(),
             bootstrap->getMeshPreviewProvider(),
             bootstrap->getAnimationPreviewProvider(),
-            bootstrap->getVFXPreviewProvider()
+            bootstrap->getVFXPreviewProvider(),
+            bootstrap->getPrefabRigPreviewProvider(),
+            bootstrap->getUILayerPreviewProvider()
         );
         editorModeService = std::make_shared<services::EditorModeServiceImpl>(bootstrap->getSceneGraphSystem());
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
@@ -135,6 +141,7 @@ namespace handlers
         billboardRenderService = std::make_shared<services::BillboardRenderServiceImpl>(bootstrap->getBillboardRenderProvider());
         decalRenderService = std::make_shared<services::DecalRenderServiceImpl>(bootstrap->getDecalRenderProvider());
         assetLifecycleService = std::make_shared<services::AssetLifecycleServiceImpl>();
+        cpuMemoryService = std::make_shared<services::CpuMemoryServiceImpl>();
         lightStreamingService = std::make_shared<services::LightStreamingServiceImpl>(bootstrap->getLightStreamingProvider());
         objectStreamingService = std::make_shared<services::ObjectStreamingServiceImpl>(bootstrap->getObjectStreamingProvider());
         giService = std::make_shared<services::GIServiceImpl>(bootstrap->getGIProvider());
@@ -342,6 +349,7 @@ namespace handlers
         pluginTextureService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
         assetLifecycleService->registerEventHandlers();
+        cpuMemoryService->registerEventHandlers();
         worldSectorService->registerEventHandlers();
         grassService->registerEventHandlers();
         vegetationBrushService->registerEventHandlers();
@@ -362,6 +370,26 @@ namespace handlers
         editorSettingsService->registerEventHandlers(events::EventDispatcher::instance());
         editorKeybindingService->registerEventHandlers();
         splineTerrainService->registerEventHandlers();
+
+        // Apply the persisted CPU memory budget now that the settings service is
+        // registered and loadable.  Falls back to the 8 GiB default if the key is
+        // absent from the settings file (first run or old settings).
+        {
+            auto settings = events::EventDispatcher::instance().query(
+                events::editor::GetEditorSettingsQuery{});
+            ::memory::CpuMemoryManager::instance().setBudget(
+                settings.memory.cpuMemoryBudgetBytes);
+
+            // VK-1434 fix: activate AssetLifecycleManager eviction at the same ceiling so
+            // closing the gate sheds unreferenced (refCount==0) assets and reopens it
+            // (the gate only defers; eviction is what frees the decoded total). Kept in
+            // sync with the slider via CpuMemoryServiceImpl's SetCpuMemoryBudgetCommand.
+            {
+                events::lifecycle::SetMemoryBudgetCommand lifeCmd;
+                lifeCmd.totalBudgetBytes = static_cast<size_t>(settings.memory.cpuMemoryBudgetBytes);
+                events::EventDispatcher::instance().execute(lifeCmd);
+            }
+        }
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

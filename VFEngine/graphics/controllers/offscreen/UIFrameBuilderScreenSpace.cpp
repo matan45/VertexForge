@@ -1,5 +1,6 @@
 #include "UIFrameBuilder.hpp"
 #include "UICommon.hpp"
+#include "UIFrameBuilderScopedLabels.hpp"
 #include "UIInteractionSystem.hpp"
 #include "UIAnimationSystem.hpp"
 #include "UIScreenSpaceScroll.hpp"
@@ -84,7 +85,11 @@ namespace controllers::offscreen
             }
         }
 
-        void processLayoutGroups(entt::registry& registry, const FrameContext& ctx)
+        // VK-1435: activeScopeRoot defaults to entt::null (runtime behavior unchanged). When set,
+        // only layout groups belonging to that sandbox canvas are processed, under the scoped
+        // active check (so the intentionally-inactive sandbox root does not gate its descendants).
+        void processLayoutGroups(entt::registry& registry, const FrameContext& ctx,
+                                 entt::entity activeScopeRoot = entt::null)
         {
             auto layoutView = registry.view<components::UILayoutGroupComponent,
                                             components::ChildrenComponent,
@@ -95,7 +100,9 @@ namespace controllers::offscreen
 
             for (auto layoutEntity : layoutView)
             {
-                if (!scene::Entity::isEffectivelyActive(registry, layoutEntity))
+                // Scoped preview: restrict to the sandbox canvas's own layout groups, and
+                // honor the scoped active flags — both decided in a single parent-chain walk.
+                if (!isEffectivelyActiveInScopedCanvas(registry, layoutEntity, activeScopeRoot))
                     continue;
 
                 const auto* layoutCanvas = findCanvasForEntity(registry, layoutEntity);
@@ -123,7 +130,7 @@ namespace controllers::offscreen
                 {
                     if (!registry.valid(child) || !registry.all_of<components::UIRectComponent>(child))
                         continue;
-                    if (!scene::Entity::isEffectivelyActive(registry, child))
+                    if (!isEffectivelyActiveWithin(registry, child, activeScopeRoot))
                         continue;
 
                     auto& childRect = registry.get<components::UIRectComponent>(child);
@@ -285,7 +292,10 @@ namespace controllers::offscreen
             drawList.push_back(std::move(renderData));
         }
 
-        // Recursive depth-first traversal for stencil mask support
+        // Recursive depth-first traversal for stencil mask support.
+        // VK-1435: activeScopeRoot defaults to entt::null (runtime behavior unchanged). When set
+        // (the UI Layer Builder preview), the active check stops at that root and treats it as
+        // active, so an intentionally-inactive sandbox canvas still renders its active descendants.
         void traverseEntity(
             entt::registry& registry, entt::entity entity,
             entt::entity scrollAncestor,
@@ -293,12 +303,13 @@ namespace controllers::offscreen
             const FrameContext& ctx,
             const std::unordered_map<uint32_t, ScrollContainerInfo>& scrollContainers,
             std::vector<render::ui::UIImageRenderData>& drawList,
-            uint8_t stencilDepth)
+            uint8_t stencilDepth,
+            entt::entity activeScopeRoot = entt::null)
         {
             if (!registry.valid(entity))
                 return;
 
-            if (!scene::Entity::isEffectivelyActive(registry, entity))
+            if (!isEffectivelyActiveWithin(registry, entity, activeScopeRoot))
                 return;
 
             // Window subtrees render on the overlay layer (above the modal
@@ -344,7 +355,7 @@ namespace controllers::offscreen
                     for (auto child : registry.get<components::ChildrenComponent>(entity).children)
                     {
                         traverseEntity(registry, child, effectiveScrollAncestor, canvas, ctx,
-                            scrollContainers, drawList, newRef);
+                            scrollContainers, drawList, newRef, activeScopeRoot);
                     }
                 }
 
@@ -371,7 +382,7 @@ namespace controllers::offscreen
                     for (auto child : registry.get<components::ChildrenComponent>(entity).children)
                     {
                         traverseEntity(registry, child, effectiveScrollAncestor, canvas, ctx,
-                            scrollContainers, drawList, stencilDepth);
+                            scrollContainers, drawList, stencilDepth, activeScopeRoot);
                     }
                 }
             }
@@ -421,6 +432,11 @@ namespace controllers::offscreen
             sortedCanvases.reserve(canvasView.size());
             for (auto e : canvasView)
             {
+                // VK-1435 (defensive): a builder sandbox canvas tagged UIPreviewTagComponent
+                // is rendered only by UILayerPreviewController's scoped offscreen path, never
+                // by the main screen-space pass (it is intentionally inactive anyway).
+                if (registry.all_of<components::UIPreviewTagComponent>(e))
+                    continue;
                 if (isEntityActive(registry, e))
                     sortedCanvases.push_back(e);
             }
@@ -608,6 +624,68 @@ namespace controllers::offscreen
         }
 
         renderHandler->setUIImageDrawList(std::move(drawList));
+    }
+
+    // =================================================================
+    // VK-1435 — scoped offscreen UI emit (UI Layer Builder preview)
+    // =================================================================
+
+    void UIFrameBuilder::prepareUICanvasScoped(entt::entity canvasRoot, vk::Extent2D targetExtent,
+                                               UICanvasDrawLists& out)
+    {
+        out.images.clear();
+        out.labels.clear();
+
+        if (targetExtent.width == 0 || targetExtent.height == 0)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.valid(canvasRoot) ||
+            !registry.all_of<components::UICanvasComponent>(canvasRoot))
+            return;
+
+        // Resolve everything against the reference extent so a ScaleWithScreenSize canvas has
+        // scale == 1 (pixel-perfect WYSIWYG). renderHandler stays null: this path never records
+        // into the shared RenderPassHandler draw lists — results go straight into `out`.
+        FrameContext ctx{};
+        ctx.renderHandler = nullptr;
+        ctx.playModeActive = true; // force the screen-space layout/emit, regardless of editor state
+        ctx.viewportWidth = targetExtent.width;
+        ctx.viewportHeight = targetExtent.height;
+
+        const float vw = static_cast<float>(targetExtent.width);
+        const float vh = static_cast<float>(targetExtent.height);
+
+        // Lay out this sandbox canvas's layout groups (scoped + scope-active: the active check stops
+        // at canvasRoot and treats it as active, so the sandbox root's own flag never gates its
+        // descendants — robust whether the tagged root is left active or inactive).
+        processLayoutGroups(registry, ctx, canvasRoot);
+
+        // Compute scroll container data (content bounds, scissor, and the per-scroll runtime state
+        // the scrollbar/slider/progress/list generators read). Same call the main screen-space pass
+        // uses; it self-gates on isEffectivelyActive so it only touches active scroll containers.
+        auto scrollContainers = ui_screenspace::buildScrollContainerData(registry, ctx);
+
+        // Image pass: enter traverseEntity at the sandbox root with activeScopeRoot == canvasRoot
+        // (bypasses the ROOT active gate only; descendants keep their own active flags).
+        const auto* canvas = &registry.get<components::UICanvasComponent>(canvasRoot);
+        traverseEntity(registry, canvasRoot, entt::null, canvas, ctx,
+                       scrollContainers, out.images, 0, canvasRoot);
+
+        // Synthetic widget sub-draws (slider handle/fill, progress fill, scrollbar, dropdown-open
+        // list bg+items, list-selection highlight, drag ghost), each scoped to this sandbox canvas
+        // for true WYSIWYG. Caret needs a focused input (no interaction here) so it passes null and
+        // no-ops. Order mirrors the main screen-space pass.
+        ui_screenspace::generateSliderDrawData(registry, ctx, scrollContainers, out.images, canvasRoot);
+        ui_screenspace::generateProgressBarDrawData(registry, ctx, scrollContainers, out.images, canvasRoot);
+        ui_screenspace::generateScrollbarDrawData(registry, ctx, out.images, canvasRoot);
+        ui_screenspace::generateTextInputCaretDrawData(registry, ctx, entt::null, out.images, canvasRoot);
+        ui_screenspace::generateDropdownDrawData(registry, ctx, out.images, canvasRoot);
+        ui_screenspace::generateListSelectionDrawData(registry, ctx, scrollContainers, out.images, canvasRoot);
+        ui_screenspace::generateDragGhostDrawData(registry, ctx, out.images, canvasRoot);
+
+        // Label pass: the four screen-space label emitters, scoped to this canvas.
+        emitScopedCanvasLabels(registry, out.labels, vw, vh, canvasRoot);
     }
 
 } // namespace controllers::offscreen

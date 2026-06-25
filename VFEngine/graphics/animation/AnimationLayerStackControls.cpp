@@ -165,6 +165,32 @@ namespace animation
         return 0.0f;
     }
 
+    float AnimationLayerStack::getCurrentClipFrameDuration() const
+    {
+        if (!layers.empty() && layers[0].stateMachine)
+            return layers[0].stateMachine->getCurrentClipFrameDuration();
+        return 1.0f / 30.0f;
+    }
+
+    float AnimationLayerStack::getCurrentStateDuration() const
+    {
+        if (!layers.empty() && layers[0].stateMachine)
+            return layers[0].stateMachine->getCurrentStateDuration();
+        return 0.0f;
+    }
+
+    void AnimationLayerStack::setNormalizedTime(float t)
+    {
+        if (!initialized || layers.empty() || !layers[0].stateMachine)
+            return;
+
+        // Seek the base layer only (overlay/additive layers keep their evaluated pose). The state
+        // machine re-evaluates its own pose at the seeked time; blendLayers() then recomposes the
+        // final skinning matrices, mirroring the tail of update() without advancing time.
+        layers[0].stateMachine->setNormalizedStateTime(t);
+        blendLayers();
+    }
+
     bool AnimationLayerStack::forceTransitionTo(const std::string& stateName, float blendDuration)
     {
         if (!layers.empty() && layers[0].stateMachine)

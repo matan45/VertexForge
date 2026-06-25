@@ -19,6 +19,10 @@ namespace core
 		// Overflow fallback fields (only valid when isOverflow == true)
 		vk::Buffer overflowBuffer;
 		VulkanAllocation overflowAllocation;
+		// Bytes accounted to UploadStagingOverflow when this region was allocated.
+		// Stored so cleanupOverflow can subUsage the exact amount without re-reading
+		// the (already-zeroed) size field.
+		uint64_t overflowAccountedBytes = 0;
 	};
 
 	class StagingRingBuffer

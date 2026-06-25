@@ -74,7 +74,7 @@ namespace windows
         ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
         maximizer.preBegin();
 
-        if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
+        if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse | maximizer.windowFlags()))
         {
             if (isOpen)
             {

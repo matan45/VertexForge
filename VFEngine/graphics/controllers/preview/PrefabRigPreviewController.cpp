@@ -1,0 +1,892 @@
+#include "PrefabRigPreviewController.hpp"
+#include "../../core/VulkanContext.hpp"
+#include "../../core/Device.hpp"
+#include "../../core/SwapChain.hpp"
+#include "../../core/CommandPool.hpp"
+#include "../../core/OffScreen.hpp"
+#include "../../core/ImageUtilities.hpp"
+#include "../../core/Utilities.hpp"
+#include "../../core/RenderManager.hpp"
+#include "../../render/mesh/SkinnedMeshPipeline.hpp"
+#include "../../render/mesh/SkinnedMeshTypes.hpp"
+#include "../../render/material/MaterialPBRExtractor.hpp"
+#include "../../render/ClearColor.hpp"
+#include "../../render/preview/PreviewBackgroundRenderer.hpp"
+#include "../../render/preview/PreviewGridRenderer.hpp"
+#include "../../render/preview/PreviewSkeletonOverlayRenderer.hpp"
+#include "PrefabRigOverlayGeometry.hpp"
+#include "animator/SocketTypes.hpp"
+#include "resource/Types.hpp"
+#include "print/Log.hpp"
+#include <imgui_impl_vulkan.h>
+#include <algorithm>
+
+namespace controllers
+{
+    PrefabRigPreviewController::PrefabRigPreviewController()
+        : device{*core::VulkanContext::getDevice()}
+          , swapChain{*core::VulkanContext::getSwapChain()}
+          , commandPool{std::make_unique<core::CommandPool>(device, swapChain)}
+    {
+    }
+
+    PrefabRigPreviewController::~PrefabRigPreviewController()
+    {
+        // If cleanUp() already ran (the controlled editor-shutdown path resets this adapter
+        // while the Device is alive), there is nothing live to wait on — skip the waitIdle so
+        // a late destruction (after the Device/Streamline interposer is gone) does not jump
+        // into freed code. cleanUp() below is then a no-op via the same guard.
+        if (!previewCleanedUp)
+        {
+            device.getLogicalDevice().waitIdle();
+        }
+        cleanUp();
+    }
+
+    void PrefabRigPreviewController::init()
+    {
+        if (initialized) return;
+
+        // About to create device resources — mark the controller live so a subsequent
+        // cleanUp() (including the catch-block rollback below) actually frees them.
+        previewCleanedUp = false;
+
+        try
+        {
+            createSampler();
+            createOffscreenResources();
+
+            vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
+            inFlightFences.resize(swapChain.getImageCount());
+            for (auto& fence : inFlightFences)
+            {
+                fence = device.getLogicalDevice().createFence(fenceInfo);
+            }
+
+            clearColor = std::make_unique<render::ClearColor>(device, swapChain, *offscreenResources);
+            clearColor->init();
+
+            previewBackground = std::make_unique<render::preview::PreviewBackgroundRenderer>(
+                device, swapChain, *offscreenResources);
+            previewBackground->init();
+
+            previewGrid = std::make_unique<render::preview::PreviewGridRenderer>(
+                device, swapChain, *offscreenResources);
+            previewGrid->init();
+
+            skeletonOverlay = std::make_unique<render::preview::PreviewSkeletonOverlayRenderer>(
+                device, swapChain, *offscreenResources);
+            skeletonOverlay->init();
+
+            initialized = true;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to initialize PrefabRigPreviewController: {}", e.what());
+            cleanUp();
+        }
+    }
+
+    void PrefabRigPreviewController::cleanUp()
+    {
+        // Already torn down (or never had live resources): a second call — or a call after
+        // the Device has been destroyed — must do nothing rather than re-issue waitIdle.
+        if (previewCleanedUp) return;
+
+        device.getLogicalDevice().waitIdle();
+
+        // Pipelines hold Vulkan resources; the assembly is entt-free CPU state with no GPU
+        // handles, so we just drop the pipelines here. The assembly tears itself down in this
+        // controller's destructor (or is rebuilt in place by the next buildFromDesc).
+        destroyPipelines();
+        built = false;
+
+        if (skeletonOverlay)
+        {
+            skeletonOverlay->cleanUpShader();
+            skeletonOverlay->cleanUp();
+            skeletonOverlay.reset();
+        }
+
+        if (previewGrid)
+        {
+            previewGrid->cleanUpShader();
+            previewGrid->cleanUp();
+            previewGrid.reset();
+        }
+
+        if (previewBackground)
+        {
+            previewBackground->cleanUpShader();
+            previewBackground->cleanUp();
+            previewBackground.reset();
+        }
+
+        if (clearColor)
+        {
+            clearColor->cleanUp();
+            clearColor.reset();
+        }
+
+        for (auto& fence : inFlightFences)
+        {
+            if (fence)
+            {
+                device.getLogicalDevice().destroyFence(fence);
+            }
+        }
+        inFlightFences.clear();
+
+        if (offscreenResources)
+        {
+            for (auto const& resources : offscreenResources->colorImages)
+            {
+                if (resources.descriptorSet)
+                {
+                    ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+                }
+            }
+        }
+
+        if (sampler)
+        {
+            device.getLogicalDevice().destroySampler(sampler);
+            sampler = nullptr;
+        }
+
+        cleanupOffscreenResources();
+
+        if (commandPool)
+        {
+            commandPool->cleanUp();
+        }
+
+        initialized = false;
+        previewCleanedUp = true;
+    }
+
+    void PrefabRigPreviewController::barrierBetweenParts(const vk::CommandBuffer& commandBuffer,
+                                                         uint32_t imageIndex) const
+    {
+        std::array<vk::ImageMemoryBarrier2, 2> barriers{};
+
+        // Color: previous part's writes -> next part's load (read) + write. Stays COLOR_ATTACHMENT_OPTIMAL.
+        barriers[0].srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        barriers[0].srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+        barriers[0].dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        barriers[0].dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite |
+                                    vk::AccessFlagBits2::eColorAttachmentRead;
+        barriers[0].oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        barriers[0].newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        barriers[0].image = offscreenResources->colorImages[imageIndex].colorImage;
+        barriers[0].subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+
+        // Depth: previous part's depth writes -> next part's depth test (read) + write. Stays
+        // DEPTH_STENCIL_ATTACHMENT_OPTIMAL. Covers both early- and late-fragment-test stages.
+        barriers[1].srcStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                                   vk::PipelineStageFlagBits2::eLateFragmentTests;
+        barriers[1].srcAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+        barriers[1].dstStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                                   vk::PipelineStageFlagBits2::eLateFragmentTests;
+        barriers[1].dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite |
+                                    vk::AccessFlagBits2::eDepthStencilAttachmentRead;
+        barriers[1].oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        barriers[1].newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        barriers[1].image = offscreenResources->depthImage.depthImage;
+        barriers[1].subresourceRange = {
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil, 0, 1, 0, 1};
+
+        vk::DependencyInfo depInfo{};
+        depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
+        depInfo.pImageMemoryBarriers = barriers.data();
+        commandBuffer.pipelineBarrier2KHR(depInfo);
+    }
+
+    void PrefabRigPreviewController::destroyPipelines()
+    {
+        for (auto& pipeline : pipelines)
+        {
+            if (pipeline)
+            {
+                pipeline->cleanUp();
+                pipeline.reset();
+            }
+        }
+        pipelines.clear();
+        partMaterial.clear();
+    }
+
+    void PrefabRigPreviewController::buildOverlayLines()
+    {
+        namespace ov = controllers::prefabrigoverlay;
+
+        overlayLines.clear();
+
+        const bool wantSkeleton = environmentParams.showSkeleton;
+        const bool wantSockets = environmentParams.showSockets;
+        const bool wantIK = environmentParams.showIKTargets;
+
+        // Even with the Sockets overlay OFF, draw the ONE socket the user is editing: when a Bone/
+        // Static Socket tab is active the window sets highlightedSocketPart/Index, and the user
+        // expects to see that socket in the viewport. The Sockets toggle still controls showing ALL
+        // sockets; this only force-draws the selected one.
+        const bool hasSocketHighlight =
+            environmentParams.highlightedSocketPart >= 0 && environmentParams.highlightedSocketIndex >= 0;
+
+        if (!wantSkeleton && !wantSockets && !wantIK && !hasSocketHighlight)
+            return;
+
+        const size_t count = assembly.partCount();
+
+        // --- Skeleton + sockets (per part) ---------------------------------------------
+        for (size_t i = 0; i < count; ++i)
+        {
+            const glm::mat4 partWorld = assembly.partWorld(i);
+            const bool skeletal = assembly.isSkeletalPart(i);
+            const std::vector<glm::mat4>& bones = assembly.boneMatrices(i);
+            const resource::SkeletonData& skel = assembly.skeleton(i);
+
+            // jointWorld = partWorld * boneMatrices[b] * bindPoses[b] * (0,0,0,1)
+            // (the same boneMeshPos formula as prefabrig::socketModelTransform, lifted to world).
+            auto jointWorld = [&](size_t b) -> glm::vec3 {
+                return glm::vec3(partWorld * bones[b] * skel.bindPoses[b] * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+            };
+
+            if (wantSkeleton && skeletal)
+            {
+                const size_t boneCount = std::min(bones.size(), skel.bindPoses.size());
+                const glm::vec4 color = ov::partColor(i);
+                for (size_t b = 0; b < boneCount && b < skel.bones.size(); ++b)
+                {
+                    const glm::vec3 jw = jointWorld(b);
+                    ov::addMarker(overlayLines, jw, 0.015f, color);
+
+                    const int parent = skel.bones[b].parentIndex;
+                    if (parent >= 0 && static_cast<size_t>(parent) < boneCount)
+                        ov::addLine(overlayLines, jw, jointWorld(static_cast<size_t>(parent)), color);
+                }
+            }
+
+            const bool drawHighlightOnThisPart =
+                hasSocketHighlight && static_cast<int>(i) == environmentParams.highlightedSocketPart;
+            if (wantSockets || drawHighlightOnThisPart)
+            {
+                const std::vector<animator::SocketDefinition>& sockets = assembly.editableSockets(i);
+                for (size_t socketIdx = 0; socketIdx < sockets.size(); ++socketIdx)
+                {
+                    const bool socketHighlighted =
+                        static_cast<int>(i) == environmentParams.highlightedSocketPart &&
+                        static_cast<int>(socketIdx) == environmentParams.highlightedSocketIndex;
+
+                    // Sockets overlay OFF -> draw ONLY the highlighted (selected) socket, skip the rest.
+                    if (!wantSockets && !socketHighlighted)
+                        continue;
+
+                    const animator::SocketDefinition& socket = sockets[socketIdx];
+
+                    // Skeletal: bone-relative model transform from the live pose; static: the
+                    // socket's own local-offset matrix IS the model transform (mirrors the
+                    // assembly's resolveAttachmentsAndIK socket branch).
+                    const glm::mat4 socketModel = skeletal
+                        ? controllers::prefabrig::socketModelTransform(bones, skel.bindPoses, socket)
+                        : socket.getLocalOffsetMatrix();
+                    const glm::mat4 socketWorld = partWorld * socketModel;
+                    const glm::vec3 socketOrigin = glm::vec3(socketWorld[3]);
+
+                    ov::addAxisTriad(overlayLines, socketWorld, 0.06f);
+
+                    // Bug #1 UX clarity (no math change): a thin dim connector from the socket
+                    // triad back to its anchor (skeletal -> the bone joint cross; static -> the
+                    // part origin) so the intentional localPosition offset reads as the attach
+                    // distance, not a misplaced triad. Skip when ~coincident (degenerate segment).
+                    const bool boneInRange =
+                        skeletal && socket.boneIndex >= 0 &&
+                        static_cast<size_t>(socket.boneIndex) < bones.size() &&
+                        static_cast<size_t>(socket.boneIndex) < skel.bindPoses.size();
+                    const glm::vec3 anchor = boneInRange
+                        ? jointWorld(static_cast<size_t>(socket.boneIndex))
+                        : glm::vec3(partWorld[3]);
+                    constexpr float kCoincidentEps2 = 1e-8f;
+                    const glm::vec3 connector = socketOrigin - anchor;
+                    if (glm::dot(connector, connector) > kCoincidentEps2)
+                        ov::addLine(overlayLines, socketOrigin, anchor,
+                                    glm::vec4(0.55f, 0.55f, 0.55f, 1.0f));
+
+                    // Bug #4: distinctly highlight the editor-selected socket with a bright halo
+                    // marker so the user can tell which triad they are editing.
+                    if (socketHighlighted)
+                        ov::addMarker(overlayLines, socketOrigin, 0.09f, ov::selectedSocketColor());
+                }
+            }
+        }
+
+        // --- IK targets (per chain) ----------------------------------------------------
+        if (wantIK)
+        {
+            const std::vector<animator::ik::IKChainConfig>& chains = assembly.editableChains();
+            for (size_t c = 0; c < chains.size(); ++c)
+            {
+                if (!chains[c].enabled)
+                    continue;
+
+                const PrefabRigAssembly::IKOverlayInfo info = assembly.ikOverlayInfo(c);
+                if (!info.active)
+                    continue;
+
+                const glm::vec4 targetColor(1.0f, 0.85f, 0.1f, 1.0f);
+                ov::addMarker(overlayLines, info.targetPosition, 0.05f, targetColor);
+
+                // Line from the chain's resolved tip (current world) to the target, showing the
+                // IK pull. Only when the tip resolved on a valid skeletal body part.
+                if (info.bodyPartIndex >= 0 && static_cast<size_t>(info.bodyPartIndex) < count &&
+                    assembly.isSkeletalPart(static_cast<size_t>(info.bodyPartIndex)) &&
+                    info.resolvedTipIndex >= 0)
+                {
+                    const size_t body = static_cast<size_t>(info.bodyPartIndex);
+                    const std::vector<glm::mat4>& bones = assembly.boneMatrices(body);
+                    const resource::SkeletonData& skel = assembly.skeleton(body);
+                    const size_t tip = static_cast<size_t>(info.resolvedTipIndex);
+                    if (tip < bones.size() && tip < skel.bindPoses.size())
+                    {
+                        const glm::vec3 tipWorld = glm::vec3(
+                            assembly.partWorld(body) * bones[tip] * skel.bindPoses[tip] *
+                            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+                        ov::addLine(overlayLines, tipWorld, info.targetPosition, targetColor);
+                    }
+                }
+            }
+        }
+    }
+
+    void PrefabRigPreviewController::createSampler()
+    {
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+
+        vk::PhysicalDeviceProperties properties = device.getPhysicalDevice().getProperties();
+        float maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+
+        samplerInfo.anisotropyEnable = VK_TRUE;
+        samplerInfo.maxAnisotropy = maxAnisotropy;
+        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = vk::CompareOp::eAlways;
+
+        sampler = device.getLogicalDevice().createSampler(samplerInfo);
+    }
+
+    void PrefabRigPreviewController::createOffscreenResources()
+    {
+        offscreenResources = std::make_unique<core::OffscreenResources>();
+
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
+
+        core::ImageInfoRequest imageColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+        imageColorInfo.width = swapChain.getSwapchainExtent().width;
+        imageColorInfo.height = swapChain.getSwapchainExtent().height;
+        imageColorInfo.format = colorFormat;
+        imageColorInfo.tiling = vk::ImageTiling::eOptimal;
+        imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
+        imageColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+
+        core::ImageInfoRequest imageDepthInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+        imageDepthInfo.width = swapChain.getSwapchainExtent().width;
+        imageDepthInfo.height = swapChain.getSwapchainExtent().height;
+        imageDepthInfo.format = depthFormat;
+        imageDepthInfo.tiling = vk::ImageTiling::eOptimal;
+        imageDepthInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
+        imageDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+
+        core::DepthImage depth;
+        core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageAllocation,
+                                          device.getMemoryManager());
+
+        core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), depth.depthImage);
+        imageDepthRequest.format = depthFormat;
+        imageDepthRequest.aspectFlags = vk::ImageAspectFlagBits::eDepth;
+        core::ImageUtilities::createImageView(imageDepthRequest, depth.depthImageView);
+
+        vk::UniqueCommandBuffer transitionDepthImage = core::Utilities::beginSingleTimeCommands(
+            device.getLogicalDevice(), commandPool->getCommandPool());
+        core::ImageUtilities::transitionImageLayout(transitionDepthImage.get(), depth.depthImage,
+                                                    vk::ImageLayout::eUndefined,
+                                                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                                                    vk::ImageAspectFlagBits::eDepth |
+                                                    vk::ImageAspectFlagBits::eStencil);
+        core::Utilities::endSingleTimeCommands(device, transitionDepthImage);
+
+        offscreenResources->depthImage = std::move(depth);
+
+        offscreenResources->colorImages.reserve(swapChain.getImageCount());
+
+        for (size_t i = 0; i < swapChain.getImageCount(); i++)
+        {
+            core::ColorImage color;
+            core::ImageUtilities::createImage(imageColorInfo, color.colorImage, color.colorImageAllocation,
+                                              device.getMemoryManager());
+
+            core::ImageViewInfoRequest imageColorViewRequest(device.getLogicalDevice(), color.colorImage);
+            imageColorViewRequest.format = colorFormat;
+            core::ImageUtilities::createImageView(imageColorViewRequest, color.colorImageView);
+
+            vk::UniqueCommandBuffer transitionColorImage = core::Utilities::beginSingleTimeCommands(
+                device.getLogicalDevice(), commandPool->getCommandPool());
+            core::ImageUtilities::transitionImageLayout(transitionColorImage.get(), color.colorImage,
+                                                        vk::ImageLayout::eUndefined,
+                                                        vk::ImageLayout::eShaderReadOnlyOptimal,
+                                                        vk::ImageAspectFlagBits::eColor);
+            core::Utilities::endSingleTimeCommands(device, transitionColorImage);
+
+            updateDescriptorSet(color.descriptorSet, color.colorImageView);
+
+            offscreenResources->colorImages.push_back(std::move(color));
+        }
+    }
+
+    void PrefabRigPreviewController::cleanupOffscreenResources()
+    {
+        if (!offscreenResources) return;
+
+        for (auto const& resources : offscreenResources->colorImages)
+        {
+            device.getLogicalDevice().destroyImageView(resources.colorImageView);
+            device.getLogicalDevice().destroyImage(resources.colorImage);
+            device.getMemoryManager().free(resources.colorImageAllocation);
+        }
+        offscreenResources->colorImages.clear();
+
+        if (offscreenResources->depthImage.depthImageView)
+        {
+            device.getLogicalDevice().destroyImageView(offscreenResources->depthImage.depthImageView);
+        }
+        if (offscreenResources->depthImage.depthImage)
+        {
+            device.getLogicalDevice().destroyImage(offscreenResources->depthImage.depthImage);
+        }
+        if (offscreenResources->depthImage.depthImageAllocation)
+        {
+            device.getMemoryManager().free(offscreenResources->depthImage.depthImageAllocation);
+            offscreenResources->depthImage.depthImageAllocation = {};
+        }
+
+        offscreenResources.reset();
+    }
+
+    void PrefabRigPreviewController::updateDescriptorSet(vk::DescriptorSet& descriptorSet,
+                                                         const vk::ImageView& imageView) const
+    {
+        descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+
+    bool PrefabRigPreviewController::buildFromDesc(const PrefabRigDesc& desc)
+    {
+        if (!initialized) init();
+
+        // Wait for any in-flight submits before tearing down the previous build's pipelines.
+        device.getLogicalDevice().waitIdle();
+        destroyPipelines(); // also clears pipelines + partMaterial
+        built = false;
+
+        // PrefabRigAssembly::build() clear()s the assembly up front, so this also resets the
+        // assembly (parts/sockets/IK chains -> 0) whether the desc is empty or not. That keeps
+        // the per-frame overlay (buildOverlayLines) from drawing stale skeleton/socket/IK lines.
+        const bool assemblyBuilt = assembly.build(desc);
+
+        if (!assemblyBuilt)
+        {
+            if (desc.parts.empty())
+            {
+                // Hiding every entity prunes the desc to zero parts. This is a VALID empty
+                // preview, not an error: pipelines/partMaterial are already cleared above and
+                // the assembly is now empty, so render() runs its unconditional Step-1 clear and
+                // the parts loop is a no-op -> the viewport shows just the background/grid.
+                // Mark built so render() does NOT early-out (which would freeze the last frame).
+                built = true;
+                return true;
+            }
+
+            // Genuine failure: a non-empty desc that still produced no parts. Keep returning
+            // false (built stays false) as before.
+            vfLogError("PrefabRigPreviewController: assembly build produced no parts");
+            return false;
+        }
+
+        const size_t partCountN = assembly.partCount();
+        pipelines.resize(partCountN);
+        partMaterial.assign(partCountN, render::mesh::SkinnedMeshRenderData{}); // neutral defaults
+
+        bool anyRenderable = false;
+        for (size_t i = 0; i < partCountN && i < desc.parts.size(); ++i)
+        {
+            if (buildPartPipeline(i, desc.parts[i]))
+            {
+                anyRenderable = true;
+            }
+        }
+
+        if (!anyRenderable)
+        {
+            vfLogWarning("PrefabRigPreviewController: no part produced a renderable pipeline");
+        }
+
+        built = true;
+        return built;
+    }
+
+    bool PrefabRigPreviewController::updateTransformsFromDesc(const PrefabRigDesc& desc)
+    {
+        // Transform-only fast path: no waitIdle, no destroyPipelines, no buildPartPipeline — the
+        // pipelines/meshes/textures are untouched. The assembly applies the new transform fields in
+        // place; the per-frame update() (UpdatePrefabRigPreviewCommand) re-uploads bone matrices and
+        // the next render() shows the moved parts. Returns false on structural drift => caller
+        // rebuilds.
+        if (!built)
+            return false;
+        return assembly.updateTransformsFromDesc(desc);
+    }
+
+    bool PrefabRigPreviewController::buildPartPipeline(size_t partIndex, const PrefabRigPart& descPart)
+    {
+        auto pipeline = std::make_unique<render::mesh::SkinnedMeshPipeline>(
+            device, swapChain, *offscreenResources);
+        pipeline->init();
+
+        if (!pipeline->loadMeshFromFile(assembly.meshPath(partIndex)))
+        {
+            vfLogWarning("PrefabRigPreviewController: part {} failed to load mesh '{}'",
+                         partIndex, assembly.meshPath(partIndex));
+            pipeline->cleanUp();
+            return false; // leave pipelines[partIndex] null => skipped at render time
+        }
+
+        // Resolve a material for this part. The window populates defaultMaterialPath (and
+        // optional per-submesh overrides) from the prefab's MaterialComponent. We bind a
+        // single material per part (the default / first submesh override): the skinned
+        // pipeline pushes one material per draw, so per-submesh divergence within a part is
+        // out of scope here (the assembly is one .vfMesh per part).
+        std::string materialPath = descPart.defaultMaterialPath;
+        if (materialPath.empty() && !descPart.subMeshMaterials.empty())
+        {
+            materialPath = descPart.subMeshMaterials.begin()->second;
+        }
+
+        if (!materialPath.empty())
+        {
+            render::mesh::ExtractedPBRValues pbr =
+                render::mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath);
+
+            // Bind the real textures (rewrites the pipeline's set 1) ...
+            pipeline->loadMaterial(pbr);
+
+            // ... and cache the scalar PBR + packed texture indices in this part's render data.
+            // The shader uses the scalars for any empty texture slot, so a scalar-only material
+            // (no albedo/MRA textures) still shows its true color/roughness/etc.
+            render::mesh::SkinnedMeshRenderData& mat = partMaterial[partIndex];
+            mat.albedo = pbr.albedo;
+            mat.metallic = pbr.metallic;
+            mat.roughness = pbr.roughness;
+            mat.ao = pbr.ao;
+            mat.emission = pbr.emission;
+            mat.textureIndicesPacked = pipeline->getMaterialTextureIndices();
+        }
+
+        pipelines[partIndex] = std::move(pipeline);
+        return true;
+    }
+
+    void PrefabRigPreviewController::update(float deltaTime)
+    {
+        if (!built) return;
+
+        assembly.update(deltaTime);
+
+        // Push each renderable part's composed (post-IK) bone matrices to its pipeline. Static
+        // parts get the assembly's identity bone set, which the skinned shader treats as a
+        // pass-through (zeroed bone weights on a no-skin mesh).
+        for (size_t i = 0; i < pipelines.size(); ++i)
+        {
+            if (!pipelines[i]) continue;
+            pipelines[i]->updateBoneMatrices(assembly.boneMatrices(i));
+        }
+    }
+
+    void PrefabRigPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
+                                                  const glm::vec3& cameraPos)
+    {
+        currentView = view;
+        currentProjection = projection;
+        currentCameraPos = cameraPos;
+
+        for (auto& pipeline : pipelines)
+        {
+            if (pipeline)
+            {
+                pipeline->updateCameraUBO(view, projection, cameraPos);
+            }
+        }
+    }
+
+    void PrefabRigPreviewController::setRootModelMatrix(const glm::mat4& m)
+    {
+        assembly.setRootModelMatrix(m);
+    }
+
+    bool PrefabRigPreviewController::forceState(size_t part, const std::string& stateName, float blendDuration)
+    {
+        return assembly.forceState(part, stateName, blendDuration);
+    }
+
+    const animator::AnimatorData* PrefabRigPreviewController::animatorData(size_t part) const
+    {
+        return assembly.animatorData(part);
+    }
+
+    void PrefabRigPreviewController::setBool(size_t part, const std::string& name, bool value)
+    {
+        assembly.setBool(part, name, value);
+    }
+
+    void PrefabRigPreviewController::setFloat(size_t part, const std::string& name, float value)
+    {
+        assembly.setFloat(part, name, value);
+    }
+
+    void PrefabRigPreviewController::setInt(size_t part, const std::string& name, int32_t value)
+    {
+        assembly.setInt(part, name, value);
+    }
+
+    void PrefabRigPreviewController::setTrigger(size_t part, const std::string& name)
+    {
+        assembly.setTrigger(part, name);
+    }
+
+    void PrefabRigPreviewController::play() { assembly.play(); }
+    void PrefabRigPreviewController::pause() { assembly.pause(); }
+    bool PrefabRigPreviewController::isPaused() const { return assembly.isPaused(); }
+
+    void PrefabRigPreviewController::stepFrame(size_t part, int frames)
+    {
+        assembly.stepFrame(part, frames);
+        // Push the freshly re-resolved bone matrices to the affected pipelines so the paused frame
+        // shows the stepped pose without waiting for the next update().
+        for (size_t i = 0; i < pipelines.size(); ++i)
+        {
+            if (pipelines[i])
+                pipelines[i]->updateBoneMatrices(assembly.boneMatrices(i));
+        }
+    }
+
+    void PrefabRigPreviewController::setNormalizedTime(size_t part, float t)
+    {
+        assembly.setNormalizedTime(part, t);
+        for (size_t i = 0; i < pipelines.size(); ++i)
+        {
+            if (pipelines[i])
+                pipelines[i]->updateBoneMatrices(assembly.boneMatrices(i));
+        }
+    }
+
+    float PrefabRigPreviewController::normalizedTime(size_t part) const
+    {
+        return assembly.normalizedTime(part);
+    }
+
+    void PrefabRigPreviewController::setPartPreviewTransform(size_t part, const glm::mat4& m)
+    {
+        assembly.setPartPreviewTransform(part, m);
+    }
+
+    const glm::mat4& PrefabRigPreviewController::partPreviewTransform(size_t part) const
+    {
+        return assembly.partPreviewTransform(part);
+    }
+
+    void PrefabRigPreviewController::resetPreviewTransforms()
+    {
+        assembly.resetPreviewTransforms();
+    }
+
+    glm::mat4 PrefabRigPreviewController::partWorld(size_t part) const
+    {
+        return assembly.partWorld(part);
+    }
+
+    std::vector<services::PrefabRigJoint> PrefabRigPreviewController::jointWorlds(size_t part) const
+    {
+        std::vector<services::PrefabRigJoint> out;
+        if (!assembly.isSkeletalPart(part))
+            return out; // static / out-of-range parts have no joints to pick
+
+        const glm::mat4 world = assembly.partWorld(part);
+        const std::vector<glm::mat4>& bones = assembly.boneMatrices(part);
+        const resource::SkeletonData& skel = assembly.skeleton(part);
+
+        // Same joint formula + valid range as buildOverlayLines():
+        //   jointWorld(b) = partWorld * boneMatrices[b] * bindPoses[b] * (0,0,0,1)
+        // iterated over the bones that have BOTH a matrix and a bind pose (and a skeleton entry).
+        const size_t boneCount = std::min(bones.size(), skel.bindPoses.size());
+        out.reserve(std::min(boneCount, skel.bones.size()));
+        for (size_t b = 0; b < boneCount && b < skel.bones.size(); ++b)
+        {
+            services::PrefabRigJoint joint;
+            joint.world = glm::vec3(world * bones[b] * skel.bindPoses[b] * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+            joint.boneName = skel.bones[b].name;
+            joint.boneIndex = static_cast<int32_t>(b);
+            out.push_back(std::move(joint));
+        }
+        return out;
+    }
+
+    std::vector<animator::SocketDefinition>& PrefabRigPreviewController::editableSockets(size_t part)
+    {
+        return assembly.editableSockets(part);
+    }
+
+    const std::vector<animator::SocketDefinition>& PrefabRigPreviewController::editableSockets(size_t part) const
+    {
+        return assembly.editableSockets(part);
+    }
+
+    std::vector<animator::ik::IKChainConfig>& PrefabRigPreviewController::editableChains()
+    {
+        return assembly.editableChains();
+    }
+
+    const std::vector<animator::ik::IKChainConfig>& PrefabRigPreviewController::editableChains() const
+    {
+        return assembly.editableChains();
+    }
+
+    void PrefabRigPreviewController::reresolveSocketBindings()
+    {
+        assembly.reresolveSocketBindings();
+    }
+
+    size_t PrefabRigPreviewController::partCount() const { return assembly.partCount(); }
+
+    void* PrefabRigPreviewController::render()
+    {
+        if (!initialized || !built)
+        {
+            return nullptr;
+        }
+
+        uint32_t imageIndex = core::RenderManager::getImageIndex();
+
+        vk::Result result = device.getLogicalDevice().waitForFences(
+            1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+        result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
+        (void)result;
+
+        vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
+        commandBuffer.reset();
+        commandBuffer.begin(vk::CommandBufferBeginInfo{});
+
+        // Step 1: clear color + depth ONCE for the whole frame.
+        const glm::vec4 clearVal = (environmentParams.backgroundMode == 1)
+                                       ? environmentParams.gradientBottomColor
+                                       : environmentParams.backgroundColor;
+        clearColor->setClearColor(clearVal);
+        clearColor->recordCommandBuffer(commandBuffer, imageIndex);
+
+        // Step 2: gradient overlay (gradient mode only).
+        if (environmentParams.backgroundMode == 1 && previewBackground && previewBackground->isInitialized())
+        {
+            previewBackground->render(commandBuffer, imageIndex,
+                                      environmentParams.gradientTopColor,
+                                      environmentParams.gradientBottomColor);
+        }
+
+        // Step 3: each renderable part, loading existing color+depth (depth is NEVER re-cleared
+        // between parts — every part composites into the one cleared target).
+        bool anyDrawn = false;
+        for (size_t i = 0; i < pipelines.size(); ++i)
+        {
+            if (!pipelines[i]) continue;
+
+            if (!anyDrawn)
+            {
+                // First part: transition color SHADER_READ_ONLY -> COLOR_ATTACHMENT once.
+                core::ImageUtilities::transitionImageLayout(commandBuffer,
+                    offscreenResources->colorImages[imageIndex].colorImage,
+                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::ImageLayout::eColorAttachmentOptimal,
+                    vk::ImageAspectFlagBits::eColor);
+                anyDrawn = true;
+            }
+            else
+            {
+                // Order the previous part's color+depth writes before this part's load.
+                barrierBetweenParts(commandBuffer, imageIndex);
+            }
+
+            // Start from this part's cached material (scalars + texture indices), then update
+            // only the per-frame model matrix from the assembly's resolved part world.
+            render::mesh::SkinnedMeshRenderData renderData =
+                (i < partMaterial.size()) ? partMaterial[i] : render::mesh::SkinnedMeshRenderData{};
+            renderData.modelMatrix = assembly.partWorld(i);
+
+            // Phase 3: apply the window's debug-shading + analytic-lighting selection uniformly to
+            // every part. shadingMode defaults to 0 (Lit) and lightingMode to 0 (IBL-only), so an
+            // untouched env leaves the original output unchanged.
+            const render::mesh::ResolvedSkinnedShading shading =
+                render::mesh::resolveSkinnedShading(environmentParams.shadingMode);
+            renderData.debugMode = static_cast<uint32_t>(shading.debugMode);
+            renderData.wireframe = shading.wireframe;
+            renderData.lightingMode = environmentParams.lightingMode;
+            renderData.lightingIntensity = environmentParams.lightingIntensity;
+            renderData.keyLightDirection = render::mesh::keyLightDirectionFromSpherical(
+                environmentParams.lightAzimuth, environmentParams.lightElevation);
+
+            pipelines[i]->recordCommandBuffer(commandBuffer, imageIndex, renderData,
+                                              /*clearAttachments=*/false);
+        }
+
+        if (anyDrawn)
+        {
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources->colorImages[imageIndex].colorImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+
+        // Step 4: grid overlay (handles its own transitions; ends in ShaderReadOnlyOptimal).
+        if (previewGrid && previewGrid->isInitialized() && environmentParams.showGrid)
+        {
+            previewGrid->render(commandBuffer, imageIndex, currentView, currentProjection, true);
+        }
+
+        // Step 5: rig debug overlay (skeleton/sockets/IK targets). Built CPU-side from the live
+        // assembly each frame; depth test is OFF so it reads through the mesh. Like the grid it
+        // self-manages its layout transitions and ends in ShaderReadOnlyOptimal.
+        if (skeletonOverlay && skeletonOverlay->isInitialized())
+        {
+            buildOverlayLines();
+            if (!overlayLines.empty())
+            {
+                skeletonOverlay->render(commandBuffer, imageIndex, currentView, currentProjection, overlayLines);
+            }
+        }
+
+        commandBuffer.end();
+
+        vk::SubmitInfo submitInfo(
+            0, nullptr, nullptr,
+            1, &commandBuffer,
+            0, nullptr
+        );
+
+        device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
+
+        return static_cast<void*>(offscreenResources->colorImages[imageIndex].descriptorSet);
+    }
+}

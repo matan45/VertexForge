@@ -111,6 +111,16 @@ namespace animation
         float getCurrentStateDuration() const;
         float getNormalizedStateTime() const;
 
+        // Seconds-per-frame of the current state's clip (1 / ticksPerSecond, i.e. one source
+        // animation frame). Falls back to 1/30s when no clip is resolvable. Used by the prefab-
+        // rig preview's frame-step scrub (VK-1433); does NOT advance time.
+        float getCurrentClipFrameDuration() const;
+
+        // Editor-only absolute seek (VK-1433 prefab-rig preview scrub). Sets the current state's
+        // stateTime to clamp(t,0,1)*duration, cancels any in-progress blend, and re-evaluates the
+        // pose at that time — WITHOUT firing transitions/events. Play (update()) is unchanged.
+        void setNormalizedStateTime(float t);
+
         void forceTransitionTo(uint32_t stateId, float blendDuration = 0.25f);
         void forceTransitionTo(const std::string& stateName, float blendDuration = 0.25f);
 

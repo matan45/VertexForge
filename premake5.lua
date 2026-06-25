@@ -98,6 +98,7 @@ project "Editor"
 	  "ECSRegistry",                    -- Shared ECS registry singleton DLL
 	  "AssetDB",                        -- Shared asset database singleton DLL
 	  "Threading"                       -- Shared JobSystem/TaskGraph singleton DLL (sole enkiTS owner)
+	  , "CpuMemory"                     -- Shared CPU RAM ownership + asset-load gate (VK-1434)
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -234,7 +235,7 @@ project "Import"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
-   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp", "AssetDB", "Threading" }
+   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp", "AssetDB", "Threading", "CpuMemory" }
 
    -- Copy DLLs to Editor output directory (Import is Editor-only)
    postbuildcommands {
@@ -363,7 +364,7 @@ project "Runtime"
       -- NOTE: NO VFEngine/core/controllers, NO VFEngine/graphics/controllers
    }
 
-   links { "Services", "Core", "Plugin", "ECSRegistry", "AssetDB", "Threading" }  -- Core linked for RuntimeBootstrap, not direct access
+   links { "Services", "Core", "Plugin", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }  -- Core linked for RuntimeBootstrap, not direct access
 
    -- Delay-load shaderc: exported builds ship pre-compiled SPIR-V,
    -- so shaderc_shared.dll is not needed and never loaded at runtime
@@ -431,6 +432,7 @@ project "Utilities"
       "VFEngine/utilities/procedural/**",
       "VFEngine/utilities/imageprocessing/**",
       "VFEngine/utilities/memory/**",
+      "VFEngine/utilities/cpumem/**",                 -- compiled by CpuMemory DLL (VK-1434)
       "VFEngine/utilities/weather/**",
       "VFEngine/utilities/destruction/**",
       "VFEngine/utilities/threading/**",              -- compiled by Threading DLL (sole enkiTS owner)
@@ -703,7 +705,7 @@ project "Audio"
 
    -- Services: EventDispatcher used by AudioSceneUpdater
    -- Animation, Terrain: transitive deps from Utilities.lib (ResourceManager references AnimatorAsset/TerrainMaterialAsset)
-   links { "Utilities", "Services", "Animation", "Terrain", "ECSRegistry", "AssetDB", "Threading" }
+   links { "Utilities", "Services", "Animation", "Terrain", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
    links { "OpenAL32.lib" }
@@ -766,6 +768,41 @@ project "Memory"
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   vfStandardConfigs()
+
+
+-- CpuMemory subsystem (VK-1434): owns the process-wide CpuMemoryManager singleton
+-- (named CPU RAM categories + the asset-load budget gate). SharedLib/DLL so the
+-- singleton resolves to ONE instance across every module that records or queries
+-- CPU RAM. Mirrors ECSRegistry / Threading / AssetDB.
+-- RULE: any DLL/exe that records CPU usage (Import, Audio), reads the stats
+-- (Editor) or runs the gate (Editor/Runtime via the Utilities scheduler) MUST
+-- link "CpuMemory" + copy the DLL. Leaf: links only spdLog, no engine deps.
+project "CpuMemory"
+   kind "SharedLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/utilities/cpumem/**.hpp", "VFEngine/utilities/cpumem/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_CPUMEMORY_BUILD_DLL" }
+
+   links { "spdLog" }
+
+   postbuildcommands {
+      "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
+      "{MKDIR} ../../bin/Runtime/%{cfg.buildcfg}/x64",
+      "{COPY} ../../bin/CpuMemory/%{cfg.buildcfg}/x64/CpuMemory.dll ../../bin/Editor/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/CpuMemory/%{cfg.buildcfg}/x64/CpuMemory.dll ../../bin/Runtime/%{cfg.buildcfg}/x64/"
+   }
 
    vfStandardConfigs()
 
@@ -839,7 +876,7 @@ project "Terrain"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllimport)", "VF_TERRAIN_BUILD_DLL" }
 
-   links { "Utilities", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading" }
+   links { "Utilities", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }
 
    buildoptions { "/bigobj" }
 
@@ -934,7 +971,7 @@ project "Serialization"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_SERIALIZATION_BUILD_DLL" }
 
-   links { "Utilities", "ECSRegistry", "AssetDB", "Threading" }
+   links { "Utilities", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }
 
    buildoptions { "/bigobj" }
 
@@ -994,7 +1031,7 @@ project "World"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_WORLD_BUILD_DLL" }
 
-   links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading" }
+   links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }
 
    postbuildcommands {
       "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
@@ -1044,7 +1081,7 @@ project "Animation"
 
    -- Services: EventDispatcher used by RuntimeAnimatorSystem
    -- Terrain: transitive dep from Utilities.lib (ResourceManager references TerrainMaterialAsset)
-   links { "Utilities", "Services", "Terrain", "ECSRegistry", "AssetDB", "Threading" }
+   links { "Utilities", "Services", "Terrain", "ECSRegistry", "AssetDB", "Threading", "CpuMemory" }
    linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
    postbuildcommands {
@@ -1128,7 +1165,7 @@ project "GameExport"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_GAMEEXPORT_BUILD_DLL" }
 
-   links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib", "AssetDB", "Threading" }
+   links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib", "AssetDB", "Threading", "CpuMemory" }
 
    postbuildcommands {
       "{MKDIR} ../../bin/Editor/%{cfg.buildcfg}/x64",
@@ -1183,7 +1220,7 @@ project "Tests"
    }
 
    links {
-      "Utilities", "Memory", "Destruction", "Terrain", "World", "Serialization",
+      "Utilities", "Memory", "CpuMemory", "Destruction", "Terrain", "World", "Serialization",
       "Animation", "ECSRegistry", "AssetDB", "Threading", "Services", "Import",
       "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW", "GameExport",
       "spdLog", "meshoptimizer", "lz4", "recast",
@@ -1212,6 +1249,7 @@ project "Tests"
       "{COPY} ../../bin/meshoptimizer/%{cfg.buildcfg}/x64/meshoptimizer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/GameExport/%{cfg.buildcfg}/x64/GameExport.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/Import/%{cfg.buildcfg}/x64/Import.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/CpuMemory/%{cfg.buildcfg}/x64/CpuMemory.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
    }
 

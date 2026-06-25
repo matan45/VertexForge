@@ -4,6 +4,7 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -333,13 +334,13 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("Header State Colors", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::ColorEdit4("Normal Color##UIDropdownHeader", &data.normalColor.x))
+            if (ColorEditRow("Normal Color##UIDropdownHeader", &data.normalColor.x))
                 changed = true;
-            if (ImGui::ColorEdit4("Hovered Color##UIDropdownHeader", &data.hoveredColor.x))
+            if (ColorEditRow("Hovered Color##UIDropdownHeader", &data.hoveredColor.x))
                 changed = true;
-            if (ImGui::ColorEdit4("Open Color##UIDropdownHeader", &data.openColor.x))
+            if (ColorEditRow("Open Color##UIDropdownHeader", &data.openColor.x))
                 changed = true;
-            if (ImGui::ColorEdit4("Disabled Color##UIDropdownHeader", &data.disabledColor.x))
+            if (ColorEditRow("Disabled Color##UIDropdownHeader", &data.disabledColor.x))
                 changed = true;
 
             ImGui::TreePop();
@@ -354,11 +355,11 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("List Colors", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::ColorEdit4("Background##UIDropdownList", &data.listBackgroundColor.x))
+            if (ColorEditRow("Background##UIDropdownList", &data.listBackgroundColor.x))
                 changed = true;
-            if (ImGui::ColorEdit4("Item Normal##UIDropdownList", &data.itemNormalColor.x))
+            if (ColorEditRow("Item Normal##UIDropdownList", &data.itemNormalColor.x))
                 changed = true;
-            if (ImGui::ColorEdit4("Item Hovered##UIDropdownList", &data.itemHoveredColor.x))
+            if (ColorEditRow("Item Hovered##UIDropdownList", &data.itemHoveredColor.x))
                 changed = true;
 
             ImGui::TreePop();

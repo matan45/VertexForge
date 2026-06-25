@@ -2,6 +2,7 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
+#include "DrawerHelpers.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -53,7 +54,7 @@ namespace windows::details
             ImGui::Spacing();
 
             float color[4] = {data.highlightColor.r, data.highlightColor.g, data.highlightColor.b, data.highlightColor.a};
-            if (ImGui::ColorEdit4("Highlight Color##UIDropTarget", color))
+            if (ColorEditRow("Highlight Color##UIDropTarget", color))
             {
                 data.highlightColor = glm::vec4(color[0], color[1], color[2], color[3]);
                 changed = true;
@@ -62,7 +63,7 @@ namespace windows::details
                 ImGui::SetTooltip("Overlay color when a compatible draggable hovers over this target");
 
             float rejColor[4] = {data.rejectColor.r, data.rejectColor.g, data.rejectColor.b, data.rejectColor.a};
-            if (ImGui::ColorEdit4("Reject Color##UIDropTarget", rejColor))
+            if (ColorEditRow("Reject Color##UIDropTarget", rejColor))
             {
                 data.rejectColor = glm::vec4(rejColor[0], rejColor[1], rejColor[2], rejColor[3]);
                 changed = true;

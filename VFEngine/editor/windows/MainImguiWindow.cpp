@@ -41,6 +41,7 @@ namespace windows
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
         menuBar.setThemeEditorWindow(&themeEditorWindow);
+        menuBar.setUILayerBuilderWindow(&uiLayerBuilderWindow);
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
         menuBar.setRTTDebugWindow(&rttDebugWindow);
         menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
@@ -72,6 +73,7 @@ namespace windows
         dispatcher.unsubscribe(openInputMappingToken);
         dispatcher.unsubscribe(openProjectSettingsToken);
         dispatcher.unsubscribe(openBackgroundRemovalToken);
+        dispatcher.unsubscribe(openUILayerBuilderToken);
         dispatcher.unsubscribe(settingsChangedToken);
     }
 
@@ -123,6 +125,12 @@ namespace windows
             [this](const events::application::OpenBackgroundRemovalNotification& n)
             {
                 backgroundRemovalWindow.showWithFile(n.filePath);
+            });
+
+        openUILayerBuilderToken = dispatcher.subscribe<events::application::OpenUILayerBuilderNotification>(
+            [this](const events::application::OpenUILayerBuilderNotification& n)
+            {
+                uiLayerBuilderWindow.openFromContentBrowser(n.filePath);
             });
 
         settingsChangedToken = dispatcher.subscribe<events::editor::EditorSettingsChangedNotification>(
@@ -219,6 +227,7 @@ namespace windows
             heightmapGeneratorWindow.draw();
             backgroundRemovalWindow.draw();
             themeEditorWindow.draw();
+            uiLayerBuilderWindow.draw();
             memoryDiagnosticsWindow.draw();
             rttDebugWindow.draw();
             editorPreferencesWindow.draw();

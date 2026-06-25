@@ -258,6 +258,21 @@ namespace core
         return names;
     }
 
+    std::vector<animator::ik::IKChainConfig> IKAdapter::getChainConfigs(
+        services::EntityHandle entity) const
+    {
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return {};
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::IKTargetComponent>(*resolved))
+            return {};
+
+        // The full configs (tip/chainBones/constraints/weight/enabled) as authored on the
+        // component — the Prefab Rig live-desc builder rebuilds PrefabRigDescDTO.ik from these.
+        return registry.get<components::IKTargetComponent>(*resolved).chains;
+    }
+
     float IKAdapter::getChainWeight(services::EntityHandle entity,
                                      const std::string& chainName) const
     {

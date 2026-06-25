@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include "memory/GpuMemorySnapshot.hpp"
+#include "cpumem/CpuMemorySnapshot.hpp"
 
 namespace windows
 {
@@ -29,13 +30,21 @@ namespace windows
         };
 
         float refreshTimer = 0.0f;
+
+        // --- GPU sampling ---
         SampleRing deviceUsedMB;
         SampleRing hostUsedMB;
         SampleRing deviceFragPct;
         memory::GpuMemorySnapshot snapshot; // refreshed on the sample tick
         std::string lastExportPath;
 
+        // --- CPU sampling ---
+        SampleRing cpuTrackedMB;
+        memory::CpuMemorySnapshotData cpuSnapshot; // refreshed on the sample tick
+
         void sample();
+
+        // GPU draw methods
         void drawBudgetBar();
         void drawGpuAllocationPanel();
         void drawGpuBlocksPanel();
@@ -45,5 +54,13 @@ namespace windows
         void drawPoolConfigPanel();
         void drawLeakDetectionPanel();
         void exportSnapshotToCsv();
+
+        // CPU draw methods
+        void drawCpuTab();
+        void drawCpuBudgetBar();
+        void drawCpuProcessMemoryPanel();
+        void drawCpuCategoryTable();
+        void drawCpuTimeSeriesPanel();
+        void drawGateStatePanel();
     };
 }

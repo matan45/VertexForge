@@ -37,6 +37,112 @@ namespace controllers::offscreen::ui_common
     using utilities::ui::computeCanvasImageModelMatrix;
     using utilities::ui::computeCanvasSubRectModelMatrix;
 
+    // VK-1435 — scoped active check used only by the UI Layer Builder's offscreen preview.
+    // Identical to scene::Entity::isEffectivelyActive EXCEPT the walk up the parent chain stops
+    // at (and treats as active) `scopeRoot`: the builder sandbox canvas root is intentionally
+    // inactive so the main UI passes skip it, but its descendants must still render in the
+    // preview by their own (and intermediate parents') active flags. With scopeRoot == entt::null
+    // this is byte-identical to the engine-wide effective-active test, so the runtime emit paths
+    // that pass nothing keep their exact behavior.
+    inline bool isEffectivelyActiveWithin(entt::registry& registry, entt::entity entity,
+                                          entt::entity scopeRoot)
+    {
+        if (scopeRoot == entt::null)
+            return scene::Entity::isEffectivelyActive(registry, entity);
+
+        entt::entity current = entity;
+        while (current != entt::null && registry.valid(current))
+        {
+            if (current == scopeRoot)
+                return true; // reached the sandbox root — treat it as active, stop walking up
+            if (registry.all_of<components::NameComponent>(current) &&
+                !registry.get<components::NameComponent>(current).isActive)
+                return false;
+            if (registry.all_of<components::ParentComponent>(current))
+                current = registry.get<components::ParentComponent>(current).parent;
+            else
+                break;
+        }
+        return true;
+    }
+
+    // VK-1435 — combined scoped gate for the UI Layer Builder's offscreen preview. The widget
+    // emitters previously walked the parent chain twice on the scoped path: once via
+    // isEffectivelyActiveWithin (active flags up to scopeRoot) and again via
+    // findCanvasWithEntity (nearest canvas ancestor, compared to scopeRoot). This walks the chain
+    // once and yields both, returning true only when the entity is effectively active within the
+    // scope AND its owning canvas is scopeRoot. With scopeRoot == entt::null it is byte-identical
+    // to isEffectivelyActiveWithin alone (the canvas check the emitters guard with
+    // `scopeRoot != entt::null` was skipped there), so the runtime emit paths are unchanged.
+    inline bool isEffectivelyActiveInScopedCanvas(entt::registry& registry, entt::entity entity,
+                                                  entt::entity scopeRoot)
+    {
+        if (scopeRoot == entt::null)
+            return scene::Entity::isEffectivelyActive(registry, entity);
+
+        // Active decision (mirrors isEffectivelyActiveWithin) and nearest-canvas-ancestor lookup
+        // (mirrors findCanvasWithEntity) computed in a single upward traversal.
+        bool active = true;          // default-true, matching isEffectivelyActiveWithin
+        bool activeDecided = false;
+        entt::entity canvasEntity = entt::null;
+        bool canvasDecided = false;
+
+        entt::entity current = entity;
+        while (current != entt::null && registry.valid(current))
+        {
+            // isEffectivelyActiveWithin per-node logic, evaluated on `current`.
+            if (!activeDecided)
+            {
+                if (current == scopeRoot)
+                {
+                    active = true;       // reached the sandbox root — treat as active
+                    activeDecided = true;
+                }
+                else if (registry.all_of<components::NameComponent>(current) &&
+                         !registry.get<components::NameComponent>(current).isActive)
+                {
+                    active = false;
+                    activeDecided = true;
+                }
+            }
+
+            // findCanvasWithEntity inspects the *parent* for a canvas before descending; the
+            // entity itself is only a canvas-match fallback once the chain is exhausted.
+            entt::entity parent = entt::null;
+            bool hasParent = registry.all_of<components::ParentComponent>(current);
+            if (hasParent)
+            {
+                parent = registry.get<components::ParentComponent>(current).parent;
+                if (parent == entt::null || !registry.valid(parent))
+                    hasParent = false;
+            }
+
+            if (!canvasDecided && hasParent &&
+                registry.all_of<components::UICanvasComponent>(parent))
+            {
+                canvasEntity = parent; // nearest canvas ancestor
+                canvasDecided = true;
+            }
+
+            if (activeDecided && canvasDecided)
+                break;
+
+            if (hasParent)
+                current = parent;
+            else
+                break;
+        }
+
+        // Self is the canvas only if no canvas ancestor was found (findCanvasWithEntity fallback).
+        if (!canvasDecided &&
+            registry.all_of<components::UICanvasComponent>(entity))
+        {
+            canvasEntity = entity;
+        }
+
+        return active && (canvasEntity == scopeRoot);
+    }
+
     inline std::pair<services::EntityHandle, std::string> makeEntityPayload(
         entt::registry& registry, entt::entity entity)
     {

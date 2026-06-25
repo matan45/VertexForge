@@ -102,4 +102,12 @@ namespace events::application {
         std::string_view getName() const override { return "OpenBackgroundRemoval"; }
     };
 
+    // VK-1435 — a UICanvas-rooted .vfPrefab was opened from the content browser. It is a UI
+    // layer (Label/Image/List/...), not a character rig, so it opens in the UI Layer Builder
+    // instead of the mesh-only rig Prefab Preview (which would show "no renderable rig parts").
+    struct OpenUILayerBuilderNotification : INotification {
+        std::string filePath;
+        std::string_view getName() const override { return "OpenUILayerBuilder"; }
+    };
+
 }

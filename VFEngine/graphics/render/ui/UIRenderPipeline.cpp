@@ -109,7 +109,10 @@ namespace render::ui
             .pushConstantSize = sizeof(UIPushConstants),
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eNone, .depthTestEnable = false, .depthWriteEnable = false,
-            .blendEnable = true, .dynamicStates = { vk::DynamicState::eScissor }
+            // VK-1435: viewport is dynamic so the same pipeline records into the main swapchain
+            // target AND the UI Layer Builder's offscreen target at its reference resolution. The
+            // main path sets the display extent at record time, so it is behavior-preserving.
+            .blendEnable = true, .dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor }
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
@@ -123,7 +126,7 @@ namespace render::ui
         vk::StencilOpState stencilDecOp{vk::StencilOp::eKeep, vk::StencilOp::eDecrementAndClamp,
             vk::StencilOp::eKeep, vk::CompareOp::eAlways, 0xFF, 0xFF, 0};
 
-        std::vector<vk::DynamicState> stencilDynStates = {vk::DynamicState::eScissor, vk::DynamicState::eStencilReference};
+        std::vector<vk::DynamicState> stencilDynStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eStencilReference};
 
         auto makeStencilPipeline = [&](vk::StencilOpState op, bool colorWrite) -> vk::Pipeline {
             core::GraphicsPipelineConfig cfg = config;

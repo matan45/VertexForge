@@ -148,6 +148,23 @@ namespace config
     }
 
     // ============================================
+    // MemorySettings
+    // ============================================
+
+    inline void to_json(json& j, const MemorySettings& s)
+    {
+        j = json{
+            {"cpuMemoryBudgetBytes", s.cpuMemoryBudgetBytes}
+        };
+    }
+
+    inline void from_json(const json& j, MemorySettings& s)
+    {
+        MemorySettings defaults;
+        s.cpuMemoryBudgetBytes = j.value("cpuMemoryBudgetBytes", defaults.cpuMemoryBudgetBytes);
+    }
+
+    // ============================================
     // EditorPreferences (master struct)
     // ============================================
 
@@ -159,7 +176,8 @@ namespace config
             {"debug", prefs.debug},
             {"windowLayout", prefs.windowLayout},
             {"export", prefs.exportSettings},
-            {"previewWindows", prefs.previewWindows}
+            {"previewWindows", prefs.previewWindows},
+            {"memory", prefs.memory}
         };
     }
 
@@ -179,5 +197,9 @@ namespace config
 
         if (j.contains("previewWindows") && j["previewWindows"].is_object())
             prefs.previewWindows = j["previewWindows"].get<PreviewWindowSettings>();
+
+        // Guard with a default so old settings files (without the memory key) still load.
+        if (j.contains("memory") && j["memory"].is_object())
+            prefs.memory = j["memory"].get<MemorySettings>();
     }
 }

@@ -5,6 +5,8 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
+#include "UIDrawerCommon.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -110,84 +112,28 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("State Colors", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::ColorEdit4("Normal Color##UIButton", &data.normalColor.x))
+            if (ColorEditRow("Normal Color##UIButton", &data.normalColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Hovered Color##UIButton", &data.hoveredColor.x))
+            if (ColorEditRow("Hovered Color##UIButton", &data.hoveredColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Pressed Color##UIButton", &data.pressedColor.x))
+            if (ColorEditRow("Pressed Color##UIButton", &data.pressedColor.x))
             {
                 changed = true;
             }
 
-            if (ImGui::ColorEdit4("Disabled Color##UIButton", &data.disabledColor.x))
+            if (ColorEditRow("Disabled Color##UIButton", &data.disabledColor.x))
             {
                 changed = true;
             }
 
             ImGui::TreePop();
         }
-
-        return changed;
-    }
-
-    static bool drawTextureSlot(const char* label, asset::AssetRef& textureRef, const char* uniqueId)
-    {
-        bool changed = false;
-
-        ImGui::Text("%s", label);
-
-        if (textureRef.isValid())
-        {
-            std::string filename = textureRef.resolve();
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-            {
-                filename = filename.substr(lastSlash + 1);
-            }
-            ImGui::SameLine();
-            ImGui::TextDisabled("%s", filename.c_str());
-        }
-
-        char selectId[64];
-        std::snprintf(selectId, sizeof(selectId), "Select##UIBtn_%s", uniqueId);
-        if (ImGui::Button(selectId))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
-            if (!path.empty())
-            {
-                std::ifstream file(path);
-                if (file.good())
-                {
-                    file.close();
-                    textureRef = asset::AssetRef::fromPath(path);
-                    changed = true;
-                }
-                else
-                {
-                    vfLogError("Selected texture file does not exist or cannot be read: {}", path);
-                }
-            }
-        }
-
-        ImGui::SameLine();
-        bool wasEmpty = !textureRef.isValid();
-        if (wasEmpty) ImGui::BeginDisabled();
-        char clearId[64];
-        std::snprintf(clearId, sizeof(clearId), "Clear##UIBtn_%s", uniqueId);
-        if (ImGui::Button(clearId))
-        {
-            textureRef = asset::AssetRef::invalid();
-            changed = true;
-        }
-        if (wasEmpty) ImGui::EndDisabled();
 
         return changed;
     }
@@ -201,10 +147,10 @@ namespace windows::details
             ImGui::TextDisabled("Empty = color only mode");
             ImGui::Spacing();
 
-            changed |= drawTextureSlot("Normal", data.normalTextureRef, "normal");
-            changed |= drawTextureSlot("Hover", data.hoverTextureRef, "hover");
-            changed |= drawTextureSlot("Pressed", data.pressedTextureRef, "pressed");
-            changed |= drawTextureSlot("Disabled", data.disabledTextureRef, "disabled");
+            changed |= drawUITextureSlot("Normal", data.normalTextureRef, "UIBtn_normal");
+            changed |= drawUITextureSlot("Hover", data.hoverTextureRef, "UIBtn_hover");
+            changed |= drawUITextureSlot("Pressed", data.pressedTextureRef, "UIBtn_pressed");
+            changed |= drawUITextureSlot("Disabled", data.disabledTextureRef, "UIBtn_disabled");
 
             ImGui::TreePop();
         }

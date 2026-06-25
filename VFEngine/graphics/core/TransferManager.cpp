@@ -48,6 +48,18 @@ namespace core {
 
 		// Use ring buffer for staging instead of per-transfer allocation
 		auto staging = ringBuffer->allocate(size);
+
+		// An overflow region carries CPU-memory accounting that is only released by
+		// cleanupOverflow. Guard the local region so the bytes can't leak if anything
+		// below throws or early-returns before ownership is handed to a pendingTransfer.
+		// Dismissed once the operation is queued (cleanupTransfer then owns the cleanup).
+		struct OverflowGuard {
+			StagingRingBuffer* ring;
+			StagingRegion* region;
+			~OverflowGuard() { if (ring && region) ring->cleanupOverflow(*region); }
+			void dismiss() { ring = nullptr; }
+		} overflowGuard{staging.isOverflow ? ringBuffer.get() : nullptr, &staging};
+
 		std::memcpy(staging.mappedPtr, srcData, static_cast<size_t>(size));
 
 		vk::CommandBufferAllocateInfo allocInfo{};
@@ -79,6 +91,9 @@ namespace core {
 		}
 
 		pendingTransfers.push_back(op);
+		// Ownership of the overflow region (and its accounting) now lives in the queued
+		// op; cleanupTransfer will release it. Dismiss so the guard doesn't double-free.
+		overflowGuard.dismiss();
 		memory::GpuAllocationStats::stagingPendingTransfers.store(
 			static_cast<uint32_t>(pendingTransfers.size()), std::memory_order_relaxed);
 	}

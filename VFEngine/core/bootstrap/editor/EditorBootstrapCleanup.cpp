@@ -11,6 +11,8 @@
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
 #include "../../adapters/render/ThumbnailRenderAdapter.hpp"
 #include "../../adapters/animation/AnimationPreviewAdapter.hpp"
+#include "../../adapters/render/PrefabRigPreviewAdapter.hpp"
+#include "../../adapters/render/UILayerPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
 #include "../../adapters/animation/AnimatorAdapter.hpp"
@@ -60,6 +62,13 @@ namespace core
 
         vfxRuntimeAdapter.reset();
         vfxPreviewAdapter.reset();
+        // Reset the prefab-rig and UI-layer preview adapters here, while the Device and the
+        // Streamline interposer are still alive. Their controllers call
+        // device.getLogicalDevice().waitIdle() in cleanUp()/the destructor; if they instead
+        // survived to ~EditorBootstrap (after coreInterface->cleanUp() tears down the Device
+        // and sl.interposer.dll) the waitIdle would jump into freed code (shutdown crash).
+        prefabRigPreviewAdapter.reset();
+        uiLayerPreviewAdapter.reset();
         animationPreviewAdapter.reset();
         thumbnailRenderAdapter.reset();
         meshPreviewAdapter.reset();

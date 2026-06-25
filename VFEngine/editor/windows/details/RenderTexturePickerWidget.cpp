@@ -27,6 +27,18 @@ namespace windows::details
 
         ImGui::PushID(imguiId);
 
+        // Keep the combo + its label + the Refresh button on one line even in a narrow pane
+        // (e.g. the UI Layer Builder's inspector): shrink the combo to leave room for the label
+        // and button so "Refresh" isn't clipped. Responsive — no change in a wide panel.
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const float refreshWidth = ImGui::CalcTextSize("Refresh").x + style.FramePadding.x * 2.0f;
+        const float labelWidth = (comboLabel && comboLabel[0] != '\0')
+            ? ImGui::CalcTextSize(comboLabel, nullptr, true).x + style.ItemInnerSpacing.x
+            : 0.0f;
+        float comboWidth = ImGui::GetContentRegionAvail().x - labelWidth - style.ItemSpacing.x - refreshWidth;
+        if (comboWidth < 80.0f) comboWidth = 80.0f;
+        ImGui::SetNextItemWidth(comboWidth);
+
         if (ImGui::BeginCombo(comboLabel, preview))
         {
             // "None" option

@@ -86,6 +86,18 @@ namespace events::scene {
         std::string_view getName() const override { return "SetEntityActive"; }
     };
 
+    // VK-1433 Phase 4 — tag/untag an entity as the Prefab Rig Preview editing sandbox root.
+    // Mirrors MarkUIPreviewSandboxCommand: tagging adds PreviewSandboxTagComponent AND marks the
+    // root inactive (so the scene serializer skips it and the main passes ignore the subtree);
+    // untagging removes the tag and restores isActive=true. The offscreen prefab-rig preview reads
+    // the entities directly, so the inactive flag never affects what the window renders.
+    struct MarkPreviewSandboxCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        bool tagged = true;
+
+        std::string_view getName() const override { return "MarkPreviewSandbox"; }
+    };
+
     struct SelectEntityCommand : ICommand<> {
         std::optional<services::EntityHandle> entity;
 

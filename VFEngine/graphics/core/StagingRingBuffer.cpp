@@ -3,10 +3,33 @@
 #include "Device.hpp"
 #include "memory/GpuAllocationStats.hpp"
 #include "print/Log.hpp"
+#include "cpumem/CpuMemoryManager.hpp"
+#include "cpumem/CpuMemoryCategories.hpp"
 
 namespace core
 {
 	static constexpr vk::DeviceSize FALLBACK_RING_SIZE = 64ull * 1024 * 1024;
+
+	// Resolve both staging category ids exactly once per process lifetime.
+	// Function-local statics are initialised the first time updateGlobalStats or
+	// allocate (overflow path) is reached — well after CpuMemoryManager::instance()
+	// is live.  Both are lock-free after the one-time init (the init itself is
+	// thread-safe under C++11 magic-static rules).
+	static memory::CategoryId stagingRingCategoryId()
+	{
+		static const memory::CategoryId id =
+			memory::CpuMemoryManager::instance().registerCategory(
+				memory::categories::UploadStagingRing, memory::CategoryKind::Staging);
+		return id;
+	}
+
+	static memory::CategoryId stagingOverflowCategoryId()
+	{
+		static const memory::CategoryId id =
+			memory::CpuMemoryManager::instance().registerCategory(
+				memory::categories::UploadStagingOverflow, memory::CategoryKind::Staging);
+		return id;
+	}
 
 	StagingRingBuffer::StagingRingBuffer(Device& device, vk::DeviceSize ringSize)
 		: ownerDevice(device)
@@ -97,6 +120,12 @@ namespace core
 		region.mappedPtr = region.overflowAllocation.mappedPtr;
 		region.offset = 0;
 
+		// Account for the overflow buffer in the CPU memory manager.  Store the
+		// size on the region so cleanupOverflow can subtract the exact amount even
+		// after region.size could theoretically be zeroed by a reset.
+		region.overflowAccountedBytes = static_cast<uint64_t>(size);
+		memory::CpuMemoryManager::instance().addUsage(stagingOverflowCategoryId(), region.overflowAccountedBytes);
+
 		return region;
 	}
 
@@ -113,6 +142,14 @@ namespace core
 		}
 		auto& memManager = ownerDevice.getMemoryManager();
 		BufferUtilities::destroyBuffer(device, region.overflowBuffer, region.overflowAllocation, memManager);
+
+		// Read the accounted size before the region is zeroed, then subtract.
+		// This is the only subUsage site for overflow — one add in allocate, one
+		// sub here, so the accounting is exactly balanced.
+		if (region.overflowAccountedBytes > 0) {
+			memory::CpuMemoryManager::instance().subUsage(stagingOverflowCategoryId(), region.overflowAccountedBytes);
+		}
+
 		region = {};
 	}
 
@@ -135,5 +172,10 @@ namespace core
 		// stagingPendingTransfers is owned/published by TransferManager (it tracks the
 		// in-flight operations), so it is intentionally not written here.
 		memory::GpuAllocationStats::stagingOverflowCount.store(overflowCount.load(std::memory_order_relaxed), std::memory_order_relaxed);
+
+		// Publish ring usage to the CPU memory manager (lock-free atomic write —
+		// setUsage does NOT take any CpuMemory mutex, so holding ringMutex here is
+		// safe; there is no lock-order edge introduced).
+		memory::CpuMemoryManager::instance().setUsage(stagingRingCategoryId(), static_cast<uint64_t>(used));
 	}
 }

@@ -86,6 +86,15 @@ namespace events::ik
         std::string_view getName() const override { return "GetIKChainNames"; }
     };
 
+    // VK-1433 Phase 4 — full IK chain configs (tip/chainBones/constraints/weight/enabled) for an
+    // entity's IKTargetComponent. The Prefab Rig live-desc builder needs the whole config (not just
+    // names) to populate PrefabRigDescDTO.ik, the way the JSON builder read IKTargetComponent.chains.
+    struct GetIKChainConfigsQuery : ::events::IQuery<std::vector<animator::ik::IKChainConfig>>
+    {
+        ::services::EntityHandle entity;
+        std::string_view getName() const override { return "GetIKChainConfigs"; }
+    };
+
     struct GetIKChainWeightQuery : ::events::IQuery<float>
     {
         ::services::EntityHandle entity;

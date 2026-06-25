@@ -29,6 +29,22 @@ namespace events::ui {
         std::string_view getName() const override { return "SetUICanvasData"; }
     };
 
+    // VK-1435 — tag/untag an entity as a UI Layer Builder preview sandbox by
+    // adding/removing UIPreviewTagComponent. The serializer skips a tagged child (and does
+    // not recurse into it) and the main-pass UI enumeration skips a tagged canvas root, so
+    // the builder's authoring subtree (which lives in the one singleton registry) never
+    // renders in the main viewport nor bakes into the user's scene. The editor stays
+    // entt-free and cannot add this engine-internal marker itself, so it issues this command
+    // on the sandbox CANVAS ROOT right after creating/loading it (before the first preview
+    // build/render). Teardown is a recursive DeleteEntityCommand on the root, so untag
+    // (tagged=false) exists only for completeness.
+    struct MarkUIPreviewSandboxCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        bool tagged = true;
+
+        std::string_view getName() const override { return "MarkUIPreviewSandbox"; }
+    };
+
     // ============================================
     // UI Canvas Queries
     // ============================================

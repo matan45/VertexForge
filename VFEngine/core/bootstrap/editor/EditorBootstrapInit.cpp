@@ -8,6 +8,8 @@
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
 #include "../../adapters/render/ThumbnailRenderAdapter.hpp"
 #include "../../adapters/animation/AnimationPreviewAdapter.hpp"
+#include "../../adapters/render/PrefabRigPreviewAdapter.hpp"
+#include "../../adapters/render/UILayerPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXPreviewAdapter.hpp"
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
 #include "../../adapters/audio/AudioAdapter.hpp"
@@ -59,6 +61,8 @@ namespace core
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
         thumbnailRenderAdapter = std::make_unique<ThumbnailRenderAdapter>();
         animationPreviewAdapter = std::make_unique<AnimationPreviewAdapter>();
+        prefabRigPreviewAdapter = std::make_unique<PrefabRigPreviewAdapter>();
+        uiLayerPreviewAdapter = std::make_unique<UILayerPreviewAdapter>();
         vfxPreviewAdapter = std::make_unique<VFXPreviewAdapter>();
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
         audioAdapter = std::make_unique<AudioAdapter>();

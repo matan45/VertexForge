@@ -1,5 +1,7 @@
 #include "AnimatorStateMachine.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
+#include <cmath>
 
 namespace animation
 {
@@ -16,6 +18,68 @@ namespace animation
             return std::fmod(state.stateTime / duration, 1.0f);
         }
         return 0.0f;
+    }
+
+    float AnimatorStateMachine::getCurrentClipFrameDuration() const
+    {
+        // One source frame = one tick, so seconds-per-frame = 1 / ticksPerSecond. Mirror the
+        // tps fallback (24.0f) used by getAnimationDuration for blend-tree / single-clip states,
+        // but expose the per-frame step in the same seconds unit as state.stateTime.
+        if (activeGraph)
+        {
+            const animator::AnimatorState* animState = activeGraph->findStateById(state.currentStateId);
+            if (animState && animState->blendTree.has_value() && !animState->blendTree->entries.empty())
+            {
+                for (const auto& entry : animState->blendTree->entries)
+                {
+                    if (entry.animationRef.isValid() && animationLoadCallback)
+                    {
+                        const resource::AnimationData* data = animationLoadCallback(entry.animationRef.resolve());
+                        if (data)
+                        {
+                            float tps = data->ticksPerSecond > 0.0f ? data->ticksPerSecond : 24.0f;
+                            return 1.0f / tps;
+                        }
+                    }
+                }
+            }
+        }
+
+        auto it = loadedAnimations.find(state.currentStateId);
+        if (it != loadedAnimations.end() && it->second)
+        {
+            float tps = it->second->ticksPerSecond > 0.0f ? it->second->ticksPerSecond : 24.0f;
+            return 1.0f / tps;
+        }
+
+        // No resolvable clip (e.g. a state with no animation): fall back to 30 FPS.
+        return 1.0f / 30.0f;
+    }
+
+    void AnimatorStateMachine::setNormalizedStateTime(float t)
+    {
+        if (!initialized || !activeGraph)
+            return;
+
+        const float clamped = std::clamp(t, 0.0f, 1.0f);
+        const float duration = getCurrentStateDuration();
+
+        // Cancel any in-progress blend so the seek maps to the current state alone (a settled
+        // state). This mirrors the post-blend resting state without advancing time.
+        state.isBlending = false;
+        state.blendWeight = 0.0f;
+        state.blendDuration = 0.0f;
+        state.blendElapsed = 0.0f;
+
+        // duration is in seconds (data->duration / ticksPerSecond); stateTime is seconds too.
+        state.stateTime = (duration > 0.0f) ? clamped * duration : 0.0f;
+
+        // Keep the loop/event bookkeeping consistent with a non-wrapping playhead at this time so
+        // a later update() does not see a spurious wrap.
+        state.previousNormalizedTime = clamped;
+
+        // Re-evaluate the current pose at the seeked time WITHOUT firing transitions/events.
+        evaluateCurrentPose();
     }
 
     const animator::AnimatorState* AnimatorStateMachine::getCurrentAnimatorState() const

@@ -35,6 +35,7 @@
 #include "procedural/HeightmapGeneratorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
 #include "theme/ThemeEditorWindow.hpp"
+#include "uilayer/UILayerBuilderWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
 #include "debug/RTTDebugWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
@@ -95,6 +96,7 @@ namespace windows
         HeightmapGeneratorWindow heightmapGeneratorWindow;
         BackgroundRemovalWindow backgroundRemovalWindow;
         ThemeEditorWindow themeEditorWindow;
+        UILayerBuilderWindow uiLayerBuilderWindow;
         MemoryDiagnosticsWindow memoryDiagnosticsWindow;
         RTTDebugWindow rttDebugWindow;
         EditorPreferencesWindow editorPreferencesWindow;
@@ -112,6 +114,7 @@ namespace windows
         events::SubscriptionToken openInputMappingToken;
         events::SubscriptionToken openProjectSettingsToken;
         events::SubscriptionToken openBackgroundRemovalToken;
+        events::SubscriptionToken openUILayerBuilderToken;
         events::SubscriptionToken settingsChangedToken;
 
     public:

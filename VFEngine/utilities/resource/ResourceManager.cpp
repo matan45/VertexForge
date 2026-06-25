@@ -340,7 +340,17 @@ namespace resource
             pendingAnimationLoads,
             [](const std::string& p) { return AnimationResource::loadAnimation(p); },
             AssetType::Animation,
-            nullptr,
+            [](const AnimationData& anim) -> size_t {
+                size_t total = 0;
+                for (const auto& ch : anim.channels) {
+                    total += ch.boneName.capacity();
+                    total += ch.positionKeys.size() * sizeof(PositionKey);
+                    total += ch.rotationKeys.size() * sizeof(RotationKey);
+                    total += ch.scalingKeys.size() * sizeof(ScaleKey);
+                }
+                total += anim.events.size() * sizeof(animator::AnimationEvent);
+                return total;
+            },
             hint, std::move(cancellation));
     }
 

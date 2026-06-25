@@ -2,8 +2,14 @@
 #include "Audio.hpp"
 #include "VorbisEncoder.hpp"
 #include "resource/EndianUtils.hpp"
+#include "resource/VfAudioHeader.hpp"
 #include "resource/VorbisDecoder.hpp"
 
+#include "cpumem/CpuMemoryManager.hpp"
+#include "cpumem/CpuMemoryCategories.hpp"
+#include "cpumem/ScopedCpuMemory.hpp"
+
+#include <semaphore>
 #include <vector>
 #include <fstream>
 #include <filesystem>
@@ -13,6 +19,31 @@
 #define DR_WAV_IMPLEMENTATION
 #include <dr_wav.h>
 
+namespace
+{
+    // Maximum number of concurrent heavy audio PCM decodes within the Import
+    // module. Kept separate from the texture/mesh semaphore because audio decodes
+    // run independently and their scratch size profile differs.
+    constexpr int kAudioDecodeConcurrency = 2;
+    std::counting_semaphore<kAudioDecodeConcurrency> gAudioDecodeSem{kAudioDecodeConcurrency};
+
+    struct AudioDecodeLock
+    {
+        AudioDecodeLock()  { gAudioDecodeSem.acquire(); }
+        ~AudioDecodeLock() { gAudioDecodeSem.release(); }
+        AudioDecodeLock(const AudioDecodeLock&) = delete;
+        AudioDecodeLock& operator=(const AudioDecodeLock&) = delete;
+    };
+
+    memory::CategoryId audioDecodeCategory()
+    {
+        static const memory::CategoryId id =
+            memory::CpuMemoryManager::instance().registerCategory(
+                memory::categories::ImportAudioDecode, memory::CategoryKind::Transient);
+        return id;
+    }
+}
+
 
 namespace types
 {
@@ -21,6 +52,17 @@ namespace types
                                      AudioProgressCallback progressCallback) const
     {
         if (progressCallback) progressCallback(0.0f);
+
+        // Acquire the concurrency slot BEFORE the decode call so the cap bounds the
+        // actual PCM allocation. Compressed audio expands significantly: OGG/MP3
+        // compressed files expand ~10-12× to PCM; ×12 is a safe upper bound.
+        std::error_code sizeEc;
+        const auto rawAudioBytes = std::filesystem::file_size(file.path.data(), sizeEc);
+        const uint64_t decodeEstimate = (!sizeEc && rawAudioBytes > 0)
+            ? static_cast<uint64_t>(rawAudioBytes) * 12u
+            : 0u;
+        AudioDecodeLock decodeLock;
+        memory::ScopedCpuMemory decodeGuard(audioDecodeCategory(), decodeEstimate);
 
         DecodedAudio decoded;
 
@@ -203,32 +245,33 @@ namespace types
             return;
         }
 
-        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.headerFileType));
-        resource::endian::writeLE<uint32_t>(outFile, Version::major);
-        resource::endian::writeLE<uint32_t>(outFile, Version::minor);
-        resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+        const bool isVorbis = (audioData.compressionFormat == resource::AudioCompressionFormat::Vorbis);
 
-        // New fields: compression format and load type
-        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.compressionFormat));
-        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.loadType));
+        resource::VfAudioHeader header;
+        header.fileType = static_cast<uint8_t>(audioData.headerFileType);
+        header.versionMajor = Version::major;
+        header.versionMinor = Version::minor;
+        header.versionPatch = Version::patch;
+        header.compressionFormat = static_cast<uint8_t>(audioData.compressionFormat);
+        header.loadType = static_cast<uint8_t>(audioData.loadType);
+        header.sampleRate = audioData.sampleRate;
+        header.channels = audioData.channels;
+        header.frames = audioData.frames;
+        header.totalDurationSeconds = audioData.totalDurationInSeconds;
+        header.dataSize = isVorbis
+            ? static_cast<uint32_t>(audioData.compressedData.size())
+            : static_cast<uint32_t>(audioData.data.size() * sizeof(short));
 
-        resource::endian::writeLE<uint32_t>(outFile, audioData.sampleRate);
-        resource::endian::writeLE<uint32_t>(outFile, audioData.channels);
-        resource::endian::writeLE<uint32_t>(outFile, audioData.frames);
-        resource::endian::writeLE<uint32_t>(outFile, audioData.totalDurationInSeconds);
+        resource::writeVfAudioHeader(outFile, header);
 
-        if (audioData.compressionFormat == resource::AudioCompressionFormat::Vorbis)
+        if (isVorbis)
         {
             // Write compressed Vorbis data as raw bytes (opaque blob)
-            auto dataSize = static_cast<uint32_t>(audioData.compressedData.size());
-            resource::endian::writeLE<uint32_t>(outFile, dataSize);
-            outFile.write(reinterpret_cast<const char*>(audioData.compressedData.data()), dataSize);
+            outFile.write(reinterpret_cast<const char*>(audioData.compressedData.data()), header.dataSize);
         }
         else
         {
             // Write PCM data with endian conversion
-            auto dataSize = static_cast<uint32_t>(audioData.data.size() * sizeof(short));
-            resource::endian::writeLE<uint32_t>(outFile, dataSize);
             resource::endian::writeVectorLE<short>(outFile, audioData.data);
         }
 
