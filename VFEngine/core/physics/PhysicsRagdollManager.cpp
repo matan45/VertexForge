@@ -3,6 +3,7 @@
 #include "PhysicsBodyRegistry.hpp"
 #include "RagdollSettingsBuilder.hpp"
 #include "JoltConversions.hpp"
+#include "physics/RagdollSafety.hpp"
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/GroupFilterTable.h>
@@ -216,16 +217,11 @@ namespace core::physics
             JPH::BodyID bodyId = ragdoll->GetBodyID(i);
             if (bodyId.IsInvalid()) continue;
 
-            JPH::Vec3 linear = bodyInterface.GetLinearVelocity(bodyId);
-            JPH::Vec3 angular = bodyInterface.GetAngularVelocity(bodyId);
-
-            if (linear.IsNaN()) linear = JPH::Vec3::sZero();
-            else { float len = linear.Length(); if (len > kMaxLinear) linear = linear * (kMaxLinear / len); }
-
-            if (angular.IsNaN()) angular = JPH::Vec3::sZero();
-            else { float len = angular.Length(); if (len > kMaxAngular) angular = angular * (kMaxAngular / len); }
-
-            bodyInterface.SetLinearAndAngularVelocity(bodyId, linear, angular);
+            glm::vec3 linear = ::physics::clampVelocityMagnitude(
+                toGlm(bodyInterface.GetLinearVelocity(bodyId)), kMaxLinear);
+            glm::vec3 angular = ::physics::clampVelocityMagnitude(
+                toGlm(bodyInterface.GetAngularVelocity(bodyId)), kMaxAngular);
+            bodyInterface.SetLinearAndAngularVelocity(bodyId, toJolt(linear), toJolt(angular));
         }
     }
 
