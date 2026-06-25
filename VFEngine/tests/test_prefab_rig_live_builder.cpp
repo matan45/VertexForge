@@ -10,9 +10,9 @@
 //      parentPartIndex, attachParentSocket, attachChildRotation/Scale) — so the two builders agree
 //      and the DFS-pre-order k-th-mesh-bearing part mapping is identical.
 //   2. partEntities[k] maps to the source entity of part k.
-//   3. EDITOR-ONLY hide: passing a node id in hiddenEntities prunes it + its descendants and
-//      compacts the part indices; removing it restores them. Hiding NEVER changes isActive, and
-//      visibility ignores isActive entirely (an inactive sandbox root still yields all its parts).
+//   3. Authored hide: inactive non-root entities prune their descendants and compact part indices,
+//      while an inactive sandbox root still yields its active children because that flag is only
+//      preview isolation.
 //
 // The real scene/material/socket CQRS handlers (HierarchyService, MaterialService, SocketService,
 // ...) are not constructed in the CPU-only test runner, so this TU registers minimal fakes that
@@ -49,7 +49,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace
@@ -71,6 +70,7 @@ namespace
         std::string name;
         services::TransformData localTransform;
         std::vector<services::EntityHandle> children;
+        bool isActive = true;
         std::optional<FakeMesh> mesh;
         std::optional<std::string> defaultMaterialPath; // resolved by AssetDatabase below
         std::map<std::string, std::string> subMeshMaterials; // submesh name -> material path
@@ -130,6 +130,7 @@ namespace
                     services::EntityData data;
                     data.handle = q.entity;
                     data.name = it->second.name;
+                    data.isActive = it->second.isActive;
                     data.localTransform = it->second.localTransform;
                     data.children = it->second.children;
                     return data;
@@ -331,6 +332,18 @@ namespace
                 if (it != store().nodes.end()) it->second.name = c.newName;
             });
 
+        d.registerCommandHandler<events::scene::SetEntityActiveCommand>(
+            [](const events::scene::SetEntityActiveCommand& c)
+            {
+                auto it = store().nodes.find(c.entity.id);
+                if (it != store().nodes.end()) it->second.isActive = c.isActive;
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                const entt::entity e = services::internal::fromHandle(c.entity);
+                if (registry.valid(e) && registry.all_of<components::NameComponent>(e))
+                    registry.get<components::NameComponent>(e).isActive = c.isActive;
+            });
+
         d.registerCommandHandler<events::scene::SetTransformCommand>(
             [](const events::scene::SetTransformCommand& c)
             {
@@ -377,6 +390,17 @@ namespace
         node.localTransform = xf;
         store().nodes[h.id] = node;
         return h;
+    }
+
+    void setActive(services::EntityHandle h, bool active)
+    {
+        auto it = store().nodes.find(h.id);
+        if (it != store().nodes.end()) it->second.isActive = active;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity e = services::internal::fromHandle(h);
+        if (registry.valid(e) && registry.all_of<components::NameComponent>(e))
+            registry.get<components::NameComponent>(e).isActive = active;
     }
 
     void setParentChild(services::EntityHandle parent, services::EntityHandle child)
@@ -610,18 +634,20 @@ TEST_CASE("live builder reconstructs desc.ik from IKTargetComponent chains (pari
     CHECK(lik.targetPartIndex == jik.targetPartIndex);
     CHECK(lik.targetSocketName.empty());
 
-    // Hiding the body (its chain owner) drops the IK entry — IK rides the mesh-bearing visible node.
-    windows::LiveRigBuildResult hiddenBody =
-        windows::buildPrefabRigDescFromEntity(body, {body.id});
-    CHECK(hiddenBody.desc.ik.empty());
-    CHECK(hiddenBody.desc.parts.empty()); // body is the root, so the whole subtree prunes
+    // Hiding the static target leaves the body chain but removes the default target part.
+    setActive(sword, false);
+    windows::LiveRigBuildResult hiddenTarget = windows::buildPrefabRigDescFromEntity(body);
+    REQUIRE(hiddenTarget.desc.parts.size() == 1);
+    REQUIRE(hiddenTarget.desc.ik.size() == 1);
+    CHECK(hiddenTarget.desc.ik[0].bodyPartIndex == 0);
+    CHECK(hiddenTarget.desc.ik[0].targetPartIndex == -1);
+    setActive(sword, true);
 }
 
-TEST_CASE("editor-only hide prunes a subtree, compacts indices, and never touches isActive")
+TEST_CASE("inactive non-root entity prunes a subtree, compacts indices, and restores on reactivation")
 {
     store().clear();
     ensureFakeHandlers();
-    auto& registry = scene::EntityRegistry::getRegistry();
 
     // root (skeletal) -> A (static) -> A_child (static); plus B (static) directly under root.
     services::EntityHandle root = makeNode("Root", makeXf({0, 0, 0}));
@@ -650,21 +676,10 @@ TEST_CASE("editor-only hide prunes a subtree, compacts indices, and never touche
         CHECK(r.desc.parts[3].meshPath == "assets/b.vfMesh");
     }
 
-    // Record isActive of every node BEFORE hiding (the eye toggle must never change them).
-    auto isActiveOf = [&](services::EntityHandle h)
+    // Hide A by authored active state: A AND its descendant AChild drop; indices compact to Root, B.
+    setActive(a, false);
     {
-        entt::entity e = services::internal::fromHandle(h);
-        return registry.get<components::NameComponent>(e).isActive;
-    };
-    const bool rootActiveBefore = isActiveOf(root);
-    const bool aActiveBefore = isActiveOf(a);
-    const bool aChildActiveBefore = isActiveOf(aChild);
-    const bool bActiveBefore = isActiveOf(b);
-
-    // Hide A: A AND its descendant AChild drop; indices compact to Root, B.
-    {
-        std::unordered_set<uint64_t> hidden{a.id};
-        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root, hidden);
+        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root);
         REQUIRE(r.desc.parts.size() == 2);
         CHECK(r.desc.parts[0].meshPath == "assets/root.vfMesh");
         CHECK(r.desc.parts[1].meshPath == "assets/b.vfMesh"); // B compacted up to index 1
@@ -673,25 +688,19 @@ TEST_CASE("editor-only hide prunes a subtree, compacts indices, and never touche
         CHECK(r.partEntities[1] == b);
     }
 
-    // Hiding is editor-only + non-persistent: isActive is unchanged for every node.
-    CHECK(isActiveOf(root) == rootActiveBefore);
-    CHECK(isActiveOf(a) == aActiveBefore);
-    CHECK(isActiveOf(aChild) == aChildActiveBefore);
-    CHECK(isActiveOf(b) == bActiveBefore);
-
-    // Removing A from the hidden set restores all 4 parts.
+    // Reactivating A restores all 4 parts.
+    setActive(a, true);
     {
-        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root, {});
+        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root);
         REQUIRE(r.desc.parts.size() == 4);
         CHECK(r.desc.parts[2].meshPath == "assets/achild.vfMesh");
     }
 }
 
-TEST_CASE("visibility ignores isActive: an inactive sandbox root still yields all parts")
+TEST_CASE("inactive sandbox root still yields active descendants")
 {
     store().clear();
     ensureFakeHandlers();
-    auto& registry = scene::EntityRegistry::getRegistry();
 
     services::EntityHandle root = makeNode("Root", makeXf({0, 0, 0}));
     setMesh(root, "assets/root.vfMesh", "assets/root.vfAnimator");
@@ -700,29 +709,22 @@ TEST_CASE("visibility ignores isActive: an inactive sandbox root still yields al
     setParentChild(root, child);
 
     // Mark the root inactive (this is exactly what MarkPreviewSandboxCommand does to the sandbox
-    // root for isolation). The builder keys visibility off the hidden SET, never off isActive, so
-    // every part must still be emitted.
-    {
-        entt::entity e = services::internal::fromHandle(root);
-        registry.get<components::NameComponent>(e).isActive = false;
-    }
+    // root for isolation). The builder treats only the sandbox root as active by scope.
+    setActive(root, false);
 
-    windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root); // empty hidden set
+    windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root);
     REQUIRE(r.desc.parts.size() == 2);
     CHECK(r.desc.parts[0].meshPath == "assets/root.vfMesh");
     CHECK(r.desc.parts[1].meshPath == "assets/child.vfMesh");
 
     // Restore for hygiene (other suites share the registry singleton).
-    {
-        entt::entity e = services::internal::fromHandle(root);
-        registry.get<components::NameComponent>(e).isActive = true;
-    }
+    setActive(root, true);
 }
 
 // ---------------------------------------------------------------------------------------------
-// P4aTest additions: deeper tree non-mesh-skip parity, name-resolved attach (incl. hidden parent
+// P4aTest additions: deeper tree non-mesh-skip parity, name-resolved attach (incl. inactive parent
 // fallback), multiple sockets, leaf vs mid-tree hide compaction, submesh-material parity, and the
-// child-inactive isActive-independence corner. Each derives its expected result from the two
+// active-state pruning corner. Each derives its expected result from the two
 // builders' code (PrefabRigLiveDescBuilder.hpp / PrefabRigDescBuilder.hpp) read above.
 // ---------------------------------------------------------------------------------------------
 
@@ -908,11 +910,11 @@ TEST_CASE("name-resolved socket attach: multiple parts + parent-without-a-part f
     }
 }
 
-// Hiding the socket-attach PARENT makes the child fall back to root: with the parent's mesh node
+// Inactivating the socket-attach PARENT makes the child fall back to root: with the parent's mesh node
 // pruned, it is absent from nameToPart, so the child's parentPartIndex resolves to -1 (matching the
 // JSON builder's behavior when a named parent has no part). Distinct from the no-part case above:
-// here the parent IS a mesh node, hidden only in the editor.
-TEST_CASE("hidden attach-parent: socketed child falls back to root (no parent part)")
+// here the parent IS a mesh node, inactive only in the authored hierarchy.
+TEST_CASE("inactive attach-parent: socketed child falls back to root (no parent part)")
 {
     store().clear();
     ensureFakeHandlers();
@@ -943,9 +945,9 @@ TEST_CASE("hidden attach-parent: socketed child falls back to root (no parent pa
     store().nodes[holder.id].children.clear(); // detach Gem from Holder
     setParentChild(root, gem);                 // Gem now a direct child of Root, still socketed to "Holder"
 
+    setActive(holder, false);
     {
-        std::unordered_set<uint64_t> hidden{holder.id};
-        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root, hidden);
+        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root);
         // Parts: Root(0), Gem(1). Holder pruned.
         REQUIRE(r.desc.parts.size() == 2);
         CHECK(r.desc.parts[0].meshPath == "assets/root.vfMesh");
@@ -958,8 +960,9 @@ TEST_CASE("hidden attach-parent: socketed child falls back to root (no parent pa
     // Unhide Holder: Gem re-resolves to Holder. (Holder is now visited AFTER Gem in pre-order
     // since Gem was reparented first; name resolution is a second pass over all parts, so order
     // does not matter — assert the link is restored.)
+    setActive(holder, true);
     {
-        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root, {});
+        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root);
         REQUIRE(r.desc.parts.size() == 3);
         // Find Gem + Holder part indices by mesh path (pre-order is Root, Holder?, Gem? — Gem was
         // reparented before Holder's subtree is gone, so order is Root, Gem, Holder).
@@ -1006,9 +1009,9 @@ TEST_CASE("hide a leaf mesh node: indices compact, partEntities stays parallel")
     }
 
     // Hide the LEAF M2 only: M1 (its parent) stays. Parts compact to Root, M1, M3.
+    setActive(m2, false);
     {
-        std::unordered_set<uint64_t> hidden{m2.id};
-        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root, hidden);
+        windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root);
         REQUIRE(r.desc.parts.size() == 3);
         CHECK(r.desc.parts[0].meshPath == "assets/root.vfMesh");
         CHECK(r.desc.parts[1].meshPath == "assets/m1.vfMesh");
@@ -1018,6 +1021,7 @@ TEST_CASE("hide a leaf mesh node: indices compact, partEntities stays parallel")
         CHECK(r.partEntities[1] == m1);
         CHECK(r.partEntities[2] == m3); // partEntities parallel to compacted parts
     }
+    setActive(m2, true);
 }
 
 // subMeshMaterials are read from the MaterialComponent and carried per-part exactly as the JSON
@@ -1053,13 +1057,12 @@ TEST_CASE("submesh material overrides are carried per-part (parity with JSON bui
     CHECK(part.subMeshMaterials == json.parts[0].subMeshMaterials);
 }
 
-// isActive-independence, child variant: BOTH the sandbox root AND an interior child marked inactive
-// must not change which parts are emitted (visibility is set-based, never isActive-based).
-TEST_CASE("visibility ignores isActive: inactive root AND inactive child still yield all parts")
+// Active-state visibility: the sandbox root's inactive flag is ignored, but an inactive interior
+// child prunes that child and its descendants.
+TEST_CASE("inactive root is scoped active but inactive child prunes its subtree")
 {
     store().clear();
     ensureFakeHandlers();
-    auto& registry = scene::EntityRegistry::getRegistry();
 
     services::EntityHandle root = makeNode("Root", makeXf({0, 0, 0}));
     setMesh(root, "assets/root.vfMesh", "assets/root.vfAnimator");
@@ -1070,19 +1073,12 @@ TEST_CASE("visibility ignores isActive: inactive root AND inactive child still y
     setParentChild(root, child);
     setParentChild(child, grand);
 
-    auto setActive = [&](services::EntityHandle h, bool v)
-    {
-        entt::entity e = services::internal::fromHandle(h);
-        registry.get<components::NameComponent>(e).isActive = v;
-    };
     setActive(root, false);
     setActive(child, false); // an interior node inactive too
 
-    windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root); // empty hidden set
-    REQUIRE(r.desc.parts.size() == 3);
+    windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root);
+    REQUIRE(r.desc.parts.size() == 1);
     CHECK(r.desc.parts[0].meshPath == "assets/root.vfMesh");
-    CHECK(r.desc.parts[1].meshPath == "assets/child.vfMesh");
-    CHECK(r.desc.parts[2].meshPath == "assets/grand.vfMesh");
 
     // Restore for hygiene.
     setActive(root, true);
@@ -1148,7 +1144,7 @@ TEST_CASE("duplicate part names: socket resolves to the last-visited part (parit
 // the exact commands the window issues against the fake store, then re-derive and assert the edit
 // landed: create + set-mesh, delete (subtree + index compaction), rename-of-attach-parent (link ->
 // root, the documented O2 behavior), reparent + reorder (DFS index remap + partEntities parallel),
-// editor-only hide (isActive untouched), and the entity-driven save roundtrip (4c spine regression).
+// active-state hide, and the entity-driven save roundtrip (4c spine regression).
 // =============================================================================================
 
 namespace
@@ -1358,11 +1354,10 @@ TEST_CASE("4b: reparent + reorder remap DFS part indices, partEntities stays par
     }
 }
 
-TEST_CASE("4b: hide via hiddenEntities prunes the part without changing isActive")
+TEST_CASE("4b: hide via SetEntityActiveCommand prunes the part and persists isActive")
 {
     store().clear();
     ensureFakeHandlers();
-    auto& registry = scene::EntityRegistry::getRegistry();
 
     services::EntityHandle root = makeNode("Root", makeXf({0, 0, 0}));
     setMesh(root, "assets/root.vfMesh", "assets/root.vfAnimator");
@@ -1370,22 +1365,23 @@ TEST_CASE("4b: hide via hiddenEntities prunes the part without changing isActive
     setMesh(a, "assets/a.vfMesh");
     setParentChild(root, a);
 
-    auto isActiveOf = [&](services::EntityHandle h)
-    {
-        entt::entity e = services::internal::fromHandle(h);
-        return registry.get<components::NameComponent>(e).isActive;
-    };
-    const bool aActiveBefore = isActiveOf(a);
+    // Hide A through the same CQRS command the prefab-view eye button issues.
+    events::scene::SetEntityActiveCommand hide;
+    hide.entity = a;
+    hide.isActive = false;
+    D::instance().execute(hide);
 
-    // Hide A (the editor-only set). A's part drops; isActive is untouched.
-    std::unordered_set<uint64_t> hidden{a.id};
-    windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root, hidden);
+    windows::LiveRigBuildResult r = windows::buildPrefabRigDescFromEntity(root);
     REQUIRE(r.desc.parts.size() == 1);
     CHECK(r.desc.parts[0].meshPath == "assets/root.vfMesh");
-    CHECK(isActiveOf(a) == aActiveBefore); // hide is non-persistent
 
     // Unhide restores it.
-    windows::LiveRigBuildResult r2 = windows::buildPrefabRigDescFromEntity(root, {});
+    events::scene::SetEntityActiveCommand show;
+    show.entity = a;
+    show.isActive = true;
+    D::instance().execute(show);
+
+    windows::LiveRigBuildResult r2 = windows::buildPrefabRigDescFromEntity(root);
     REQUIRE(r2.desc.parts.size() == 2);
 }
 

@@ -41,7 +41,6 @@
 #include <cstdint>
 #include <map>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace windows
@@ -69,21 +68,19 @@ namespace windows
         };
 
         // Depth-first flatten that accumulates each node's local-to-root world matrix, parallel to
-        // buildPrefabRigDescDTO's flattenNodesWithWorld. EDITOR-ONLY hide: a node is pruned (skipped
-        // with its whole subtree) iff it is in `hidden` — visibility keys off the SET, never off
-        // entityData.isActive (so the sandbox root's isolation-inactive flag is irrelevant here, and
-        // hiding never persists). Recurses children in order so the DFS pre-order index is stable.
+        // buildPrefabRigDescDTO's flattenNodesWithWorld. Authored visibility follows NameComponent
+        // isActive, except the sandbox root is treated as active because its inactive flag is a
+        // preview-isolation artifact. Recurses children in order so the DFS pre-order index is stable.
         inline void flattenLiveNodesWithWorld(services::EntityHandle entity, const glm::mat4& parentWorld,
-                                              const std::unordered_set<std::uint64_t>& hidden,
-                                              std::vector<LiveNode>& out)
+                                              services::EntityHandle sandboxRoot, std::vector<LiveNode>& out)
         {
             if (!entity.isValid()) return;
-            if (hidden.count(entity.id) > 0) return; // pruned: skip this node and its descendants
 
             events::scene::GetEntityQuery q;
             q.entity = entity;
             auto data = events::EventDispatcher::instance().query(q);
             if (!data.has_value()) return;
+            if (entity != sandboxRoot && !data->isActive) return;
 
             const glm::mat4 world = parentWorld
                 * math::composeMatrix(data->localTransform.position,
@@ -98,7 +95,7 @@ namespace windows
             out.push_back(std::move(node));
 
             for (const services::EntityHandle& child : data->children)
-                flattenLiveNodesWithWorld(child, world, hidden, out);
+                flattenLiveNodesWithWorld(child, world, sandboxRoot, out);
         }
 
         // Resolved asset paths of a mesh-bearing node (mesh / animator / retarget). Returns empty
@@ -132,13 +129,11 @@ namespace windows
         }
     }
 
-    // Re-derive the rig description from a live, isolated sandbox subtree. `hiddenEntities` is the
-    // window-side EDITOR-ONLY hide set: a node in the set (or any descendant of it) is pruned from
-    // the DTO, leaving its isActive flag untouched (hiding is non-persistent — a hidden entity stays
-    // active in the real game). Re-derive on every structural edit / hide toggle.
-    inline LiveRigBuildResult buildPrefabRigDescFromEntity(
-        services::EntityHandle sandboxRoot,
-        const std::unordered_set<std::uint64_t>& hiddenEntities = {})
+    // Re-derive the rig description from a live, isolated sandbox subtree. Non-root inactive nodes
+    // are pruned from the DTO, matching the authored Active state used by the canvas builder. The
+    // sandbox root itself is treated as active because MarkPreviewSandboxCommand holds it inactive
+    // only to keep the preview subtree out of the main scene passes.
+    inline LiveRigBuildResult buildPrefabRigDescFromEntity(services::EntityHandle sandboxRoot)
     {
         LiveRigBuildResult result;
         if (!sandboxRoot.isValid()) return result;
@@ -146,7 +141,7 @@ namespace windows
         services::PrefabRigDescDTO& desc = result.desc;
 
         std::vector<detail::LiveNode> nodes;
-        detail::flattenLiveNodesWithWorld(sandboxRoot, glm::mat4(1.0f), hiddenEntities, nodes);
+        detail::flattenLiveNodesWithWorld(sandboxRoot, glm::mat4(1.0f), sandboxRoot, nodes);
 
         // Mesh-bearing node -> part index; name -> part index for parent resolution (subtree-scoped).
         std::vector<int> nodePartIndex(nodes.size(), -1);

@@ -21,7 +21,6 @@
 #include <map>
 #include <set>
 #include <unordered_map>
-#include <unordered_set>
 #include <cstdint>
 #include <optional>
 #include <memory>
@@ -62,11 +61,6 @@ namespace windows
         // Source entity of each rig part, parallel to rigDesc.parts (so a selected entity maps to a
         // part and back). Re-derived with rigDesc on every structural edit.
         std::vector<services::EntityHandle> partEntities;
-        // EDITOR-ONLY, non-persistent preview-hide set (entity id). A node here (or any descendant)
-        // is pruned from the re-derived DTO; isActive is NEVER touched (4b populates this via an
-        // eye toggle — the builder consumes it).
-        std::unordered_set<uint64_t> hiddenEntities;
-
         // VK-1433 Phase 4b — inline-rename state (clone of UILayerBuilderWindow). renamingEntity is the
         // node whose label is currently an InputText; renameFocusPending grabs keyboard focus once.
         services::EntityHandle renamingEntity = services::EntityHandle::invalid();

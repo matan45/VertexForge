@@ -330,19 +330,21 @@ namespace windows
     // ----------------------------------------------------------------------
     namespace
     {
-        // Count the entities in a (visible) sandbox subtree for the info panel, pruning hidden
-        // nodes the same way the live builder does. CQRS-only (entt-free), cheap (only on rebuild).
+        // Count the entities in a visible sandbox subtree for the info panel, using the same
+        // active-state rules as the live builder. The sandbox root's inactive flag is preview
+        // isolation only, so it is always counted and its children are evaluated normally.
         uint32_t countSandboxEntities(services::EntityHandle entity,
-                                      const std::unordered_set<uint64_t>& hidden)
+                                      services::EntityHandle sandboxRoot)
         {
-            if (!entity.isValid() || hidden.count(entity.id) > 0) return 0;
+            if (!entity.isValid()) return 0;
             events::scene::GetEntityQuery q;
             q.entity = entity;
             auto data = events::EventDispatcher::instance().query(q);
             if (!data.has_value()) return 0;
+            if (entity != sandboxRoot && !data->isActive) return 0;
             uint32_t n = 1;
             for (const services::EntityHandle& child : data->children)
-                n += countSandboxEntities(child, hidden);
+                n += countSandboxEntities(child, sandboxRoot);
             return n;
         }
     }
@@ -440,7 +442,6 @@ namespace windows
             sandboxRoot = services::EntityHandle::invalid();
         }
         partEntities.clear();
-        hiddenEntities.clear();
         renamingEntity = services::EntityHandle::invalid();
         renameFocusPending = false;
         lastStructureSignature.clear();
@@ -450,10 +451,10 @@ namespace windows
     {
         // Re-derive the rig description (and the parallel source entities) from the live sandbox
         // subtree, then rebuild the preview. Called on open and after every structural edit.
-        LiveRigBuildResult built = buildPrefabRigDescFromEntity(sandboxRoot, hiddenEntities);
+        LiveRigBuildResult built = buildPrefabRigDescFromEntity(sandboxRoot);
         rigDesc = std::move(built.desc);
         partEntities = std::move(built.partEntities);
-        sandboxEntityCount = countSandboxEntities(sandboxRoot, hiddenEntities);
+        sandboxEntityCount = countSandboxEntities(sandboxRoot, sandboxRoot);
 
         revalidateRefs();
         buildPreviewFromDesc();
@@ -488,7 +489,7 @@ namespace windows
         if (!previewInitialized || !sandboxRoot.isValid())
             return;
 
-        LiveRigBuildResult built = buildPrefabRigDescFromEntity(sandboxRoot, hiddenEntities);
+        LiveRigBuildResult built = buildPrefabRigDescFromEntity(sandboxRoot);
         rigDesc = std::move(built.desc);
         partEntities = std::move(built.partEntities);
 
@@ -1291,7 +1292,6 @@ namespace windows
         del.entity = entity;
         events::EventDispatcher::instance().execute(del);
         if (wasSelected) selectEntity(sandboxRoot);
-        hiddenEntities.erase(entity.id);
         dirty = true;
         rebuildRigFromSandbox();
         return true;
@@ -1373,7 +1373,7 @@ namespace windows
         }
         // VK-1433 Phase 4b — CQRS-recursive tree over the live sandbox subtree with add/remove/
         // rename/reparent/reorder/hide. Drag a node onto another to reparent; onto a between-siblings
-        // zone to reorder; double-click to rename; the eye toggles editor-only preview hide.
+        // zone to reorder; double-click to rename; the eye toggles the saved Active state.
         drawEntityNode(sandboxRoot, 0);
 
         // VK-1433 Phase 4d — Delete-key shortcut: when this hierarchy panel (or any of its children) is
@@ -1462,7 +1462,7 @@ namespace windows
         const bool hasChildren = !data->children.empty();
         const bool isRoot = (entity == sandboxRoot);
         const bool isRenaming = (renamingEntity == entity);
-        const bool isHidden = hiddenEntities.count(entity.id) > 0;
+        const bool isHidden = !isRoot && !data->isActive;
 
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen
                                    | ImGuiTreeNodeFlags_SpanAvailWidth
@@ -1474,7 +1474,7 @@ namespace windows
         if (thisPart >= 0) label += partIsSkeletal(thisPart) ? " [skel]" : " [static]";
         if (isHidden) label += " (hidden)";
 
-        // A hidden node (editor-only preview hide) is dimmed; a broken-ref node is tinted red.
+        // A hidden node (inactive entity) is dimmed; a broken-ref node is tinted red.
         bool pushedColor = false;
         if (missing) { ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f)); pushedColor = true; }
         else if (isHidden) { ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.0f)); pushedColor = true; }
@@ -1532,24 +1532,27 @@ namespace windows
                 ImGui::EndDragDropTarget();
             }
 
-            // VK-1433 Phase 4d — eye toggle (editor-only preview hide), right-aligned and ALWAYS
-            // visible. Toggles the hiddenEntities SET ONLY; isActive is never touched, so a hidden node
-            // stays active in the real game. The icon is clearly colored (a bright eye when visible, a
-            // dimmed orange eye-slash when hidden) instead of a transparent button so the preview-hide
-            // state reads at a glance; the row label is also dimmed for hidden nodes (above).
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
-            ImGui::PushStyleColor(ImGuiCol_Text, isHidden ? ImVec4(0.95f, 0.6f, 0.2f, 1.0f)
-                                                          : ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
-            if (ImGui::SmallButton(isHidden ? ICON_FA_EYE_SLASH "##hide" : ICON_FA_EYE "##hide"))
+            // VK-1433 Phase 4d — eye toggle, right-aligned. Mirrors UILayerBuilderWindow:
+            // non-root nodes flip their authored Active state, so the preview updates immediately
+            // and SavePrefab persists the visibility.
+            if (!isRoot)
             {
-                if (isHidden) hiddenEntities.erase(entity.id);
-                else          hiddenEntities.insert(entity.id);
-                rebuildRigFromSandbox(); // re-derive: hidden subtrees are pruned from the DTO
+                ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, isHidden ? ImVec4(0.95f, 0.6f, 0.2f, 1.0f)
+                                                              : ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
+                if (ImGui::SmallButton(isHidden ? ICON_FA_EYE_SLASH "##hide" : ICON_FA_EYE "##hide"))
+                {
+                    events::scene::SetEntityActiveCommand cmd;
+                    cmd.entity = entity;
+                    cmd.isActive = !data->isActive;
+                    events::EventDispatcher::instance().execute(cmd);
+                    dirty = true;
+                    rebuildRigFromSandbox();
+                }
+                ImGui::PopStyleColor();
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip(isHidden ? "Show" : "Hide");
             }
-            ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(isHidden ? "Hidden in preview — click to show (saved Active state unchanged)"
-                                           : "Preview-only hide (does not change the saved Active state)");
 
             // Context menu: add child / delete (never the sandbox root — that's the saved subtree's
             // top). Shares createChildEntity / deleteEntity with the header toolbar + Delete key.
