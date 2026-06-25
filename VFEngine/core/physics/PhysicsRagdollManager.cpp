@@ -172,15 +172,16 @@ namespace core::physics
     void PhysicsRagdollManager::applyRagdollImpulse(uint64_t entityId, const glm::vec3& impulse)
     {
         auto it = entityRagdolls.find(entityId);
-        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+        if (it == entityRagdolls.end() || !it->second.ragdoll || !it->second.inSystem) return;
 
         it->second.ragdoll->AddImpulse(toJolt(impulse));
+        clampRagdollVelocities(entityId);
     }
 
     void PhysicsRagdollManager::applyRagdollBoneImpulse(uint64_t entityId, int physicsBoneIndex, const glm::vec3& impulse)
     {
         auto it = entityRagdolls.find(entityId);
-        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+        if (it == entityRagdolls.end() || !it->second.ragdoll || !it->second.inSystem) return;
 
         if (physicsBoneIndex < 0 || physicsBoneIndex >= static_cast<int>(it->second.ragdoll->GetBodyCount()))
         {
@@ -191,6 +192,40 @@ namespace core::physics
         if (!bodyId.IsInvalid())
         {
             ctx->getBodyInterface().AddImpulse(bodyId, toJolt(impulse));
+            clampRagdollVelocities(entityId);
+        }
+    }
+
+    void PhysicsRagdollManager::clampRagdollVelocities(uint64_t entityId)
+    {
+        if (!ctx || !ctx->physicsSystem) return;
+
+        auto it = entityRagdolls.find(entityId);
+        if (it == entityRagdolls.end() || !it->second.ragdoll || !it->second.inSystem) return;
+
+        // Bound knockback so an impulse can't reach escape velocity (which would integrate to a
+        // non-finite position and corrupt the broad phase on the next step). Mirrors the root-drive
+        // caps used in driveRagdollRoot.
+        constexpr float kMaxLinear = 30.0f;   // m/s
+        constexpr float kMaxAngular = 30.0f;  // rad/s
+
+        auto& bodyInterface = ctx->getBodyInterface();
+        JPH::Ragdoll* ragdoll = it->second.ragdoll;
+        for (int i = 0; i < static_cast<int>(ragdoll->GetBodyCount()); ++i)
+        {
+            JPH::BodyID bodyId = ragdoll->GetBodyID(i);
+            if (bodyId.IsInvalid()) continue;
+
+            JPH::Vec3 linear = bodyInterface.GetLinearVelocity(bodyId);
+            JPH::Vec3 angular = bodyInterface.GetAngularVelocity(bodyId);
+
+            if (linear.IsNaN()) linear = JPH::Vec3::sZero();
+            else { float len = linear.Length(); if (len > kMaxLinear) linear = linear * (kMaxLinear / len); }
+
+            if (angular.IsNaN()) angular = JPH::Vec3::sZero();
+            else { float len = angular.Length(); if (len > kMaxAngular) angular = angular * (kMaxAngular / len); }
+
+            bodyInterface.SetLinearAndAngularVelocity(bodyId, linear, angular);
         }
     }
 
