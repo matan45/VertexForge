@@ -69,6 +69,13 @@ namespace core::physics
                                  const ColliderCreateInfo& colliderInfo);
         void removeRigidBody(JPH::BodyID bodyId);
 
+        // VK-1437 fix #A: temporarily remove a body from the simulation (without destroying it) and
+        // restore it later. Used to suspend an entity's gameplay collider while it is ragdolling so
+        // the ragdoll bones don't fight it — mirrors UE disabling the capsule during ragdoll.
+        // Idempotent (gated on JPH::BodyInterface::IsAdded), so double suspend/resume is safe, and
+        // the keep-the-Body-alive contract means removeAndDestroyBody (IsAdded-guarded) still works.
+        void setBodyEnabled(JPH::BodyID bodyId, bool enabled);
+
         glm::vec3 getPosition(JPH::BodyID bodyId) const;
         glm::quat getRotation(JPH::BodyID bodyId) const;
         void setPosition(JPH::BodyID bodyId, const glm::vec3& position);

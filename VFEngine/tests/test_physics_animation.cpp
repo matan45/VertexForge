@@ -468,6 +468,36 @@ TEST_CASE("RagdollSafety: clampVelocityMagnitude keeps zero at zero (no divide-b
     CHECK(physics::clampVelocityMagnitude(glm::vec3(0.0f), 30.0f) == glm::vec3(0.0f));
 }
 
+// ---- VK-1437 fix #A: gameplay-collider suspend/restore decision ----
+
+TEST_CASE("RagdollSafety: usesRagdollBodies identifies the simulated modes") {
+    CHECK_FALSE(physics::usesRagdollBodies(types::PhysicsAnimationMode::Animated));
+    CHECK_FALSE(physics::usesRagdollBodies(types::PhysicsAnimationMode::Kinematic));
+    CHECK(physics::usesRagdollBodies(types::PhysicsAnimationMode::Ragdoll));
+    CHECK(physics::usesRagdollBodies(types::PhysicsAnimationMode::PoweredRagdoll));
+}
+
+TEST_CASE("RagdollSafety: colliderActionForModeChange suspends on enter, restores on leave") {
+    using physics::colliderActionForModeChange;
+    using Action = physics::GameplayColliderAction;
+    using Mode = types::PhysicsAnimationMode;
+
+    // Entering a ragdoll mode -> suspend the gameplay collider.
+    CHECK(colliderActionForModeChange(Mode::Animated, Mode::Ragdoll) == Action::Suspend);
+    CHECK(colliderActionForModeChange(Mode::Animated, Mode::PoweredRagdoll) == Action::Suspend);
+    CHECK(colliderActionForModeChange(Mode::Kinematic, Mode::Ragdoll) == Action::Suspend);
+
+    // Leaving a ragdoll mode -> restore the gameplay collider.
+    CHECK(colliderActionForModeChange(Mode::Ragdoll, Mode::Animated) == Action::Restore);
+    CHECK(colliderActionForModeChange(Mode::PoweredRagdoll, Mode::Kinematic) == Action::Restore);
+
+    // Staying on the same side (ragdoll<->powered, or animated<->kinematic) -> no change.
+    CHECK(colliderActionForModeChange(Mode::Ragdoll, Mode::PoweredRagdoll) == Action::None);
+    CHECK(colliderActionForModeChange(Mode::PoweredRagdoll, Mode::Ragdoll) == Action::None);
+    CHECK(colliderActionForModeChange(Mode::Animated, Mode::Kinematic) == Action::None);
+    CHECK(colliderActionForModeChange(Mode::Animated, Mode::Animated) == Action::None);
+}
+
 // ============================================================
 // PhysicsAnimationAsset: file + serializer round-trips
 // ============================================================

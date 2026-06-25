@@ -7,6 +7,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "components/PhysicsAnimationComponent.hpp"
 #include "components/Components.hpp"
+#include "physics/RagdollSafety.hpp"
 #include "scene/EntityRegistry.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -131,12 +132,18 @@ namespace core
 
     void PhysicsAdapter::activateRagdoll(services::EntityHandle entity)
     {
-        if (physicsWorld) physicsWorld->activateRagdoll(entity.id);
+        if (!physicsWorld) return;
+        physicsWorld->activateRagdoll(entity.id);
+        // VK-1437 fix #A: suspend the entity's gameplay collider while it ragdolls so the ragdoll
+        // bones don't fight a coexisting capsule (mirrors UE disabling the capsule during ragdoll).
+        physicsWorld->setEntityRigidBodyEnabled(entity.id, false);
     }
 
     void PhysicsAdapter::deactivateRagdoll(services::EntityHandle entity)
     {
-        if (physicsWorld) physicsWorld->deactivateRagdoll(entity.id);
+        if (!physicsWorld) return;
+        physicsWorld->deactivateRagdoll(entity.id);
+        physicsWorld->setEntityRigidBodyEnabled(entity.id, true); // VK-1437 fix #A: restore gameplay collider
     }
 
     bool PhysicsAdapter::isRagdollActive(services::EntityHandle entity) const
@@ -267,10 +274,8 @@ namespace core
         auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(enttEntity);
         const auto& conversion = state.buildResult.skeletonConversion;
 
-        bool oldUsesRagdollBodies = oldMode == types::PhysicsAnimationMode::Ragdoll ||
-                                    oldMode == types::PhysicsAnimationMode::PoweredRagdoll;
-        bool newUsesRagdollBodies = newMode == types::PhysicsAnimationMode::Ragdoll ||
-                                    newMode == types::PhysicsAnimationMode::PoweredRagdoll;
+        bool oldUsesRagdollBodies = ::physics::usesRagdollBodies(oldMode);
+        bool newUsesRagdollBodies = ::physics::usesRagdollBodies(newMode);
 
         if (!oldUsesRagdollBodies && newUsesRagdollBodies)
         {
@@ -314,6 +319,16 @@ namespace core
                 physicsWorld->createKinematicBoneBodies(entity.id, state.buildResult, entityPos);
             }
         }
+
+        // VK-1437 fix #A: suspend the entity's gameplay collider while it is in a ragdoll mode and
+        // restore it when leaving, so the ragdoll bones don't fight a coexisting capsule.
+        switch (::physics::colliderActionForModeChange(oldMode, newMode))
+        {
+        case ::physics::GameplayColliderAction::Suspend: physicsWorld->setEntityRigidBodyEnabled(entity.id, false); break;
+        case ::physics::GameplayColliderAction::Restore: physicsWorld->setEntityRigidBodyEnabled(entity.id, true); break;
+        case ::physics::GameplayColliderAction::None: break;
+        }
+
         // PoweredRagdoll <-> Ragdoll: bodies stay in place, only motors change below
 
         if (newMode == types::PhysicsAnimationMode::Ragdoll)

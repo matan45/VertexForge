@@ -204,6 +204,12 @@ namespace core::physics
         if (!bodyId.IsInvalid()) rigidBodyManager.removeRigidBody(bodyId);
     }
 
+    void PhysicsWorld::setEntityRigidBodyEnabled(uint64_t entityId, bool enabled)
+    {
+        JPH::BodyID bodyId = bodyRegistry.getBodyForEntity(entityId);
+        if (!bodyId.IsInvalid()) rigidBodyManager.setBodyEnabled(bodyId, enabled);
+    }
+
     glm::vec3 PhysicsWorld::getPosition(JPH::BodyID bodyId) const { return rigidBodyManager.getPosition(bodyId); }
     glm::quat PhysicsWorld::getRotation(JPH::BodyID bodyId) const { return rigidBodyManager.getRotation(bodyId); }
     void PhysicsWorld::setPosition(JPH::BodyID bodyId, const glm::vec3& position) { rigidBodyManager.setPosition(bodyId, position); }

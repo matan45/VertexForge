@@ -145,6 +145,23 @@ namespace core::physics
         removeAndDestroyBody(ctx->getBodyInterface(), bodyId);
     }
 
+    void PhysicsRigidBodyManager::setBodyEnabled(JPH::BodyID bodyId, bool enabled)
+    {
+        if (!ctx || !ctx->physicsSystem || bodyId.IsInvalid()) return;
+
+        auto& bodyInterface = ctx->getBodyInterface();
+        if (enabled)
+        {
+            if (!bodyInterface.IsAdded(bodyId))
+                bodyInterface.AddBody(bodyId, JPH::EActivation::Activate);
+        }
+        else
+        {
+            if (bodyInterface.IsAdded(bodyId))
+                bodyInterface.RemoveBody(bodyId);
+        }
+    }
+
     glm::vec3 PhysicsRigidBodyManager::getPosition(JPH::BodyID bodyId) const
     {
         if (!ctx || !ctx->physicsSystem || bodyId.IsInvalid()) return glm::vec3(0.0f);
