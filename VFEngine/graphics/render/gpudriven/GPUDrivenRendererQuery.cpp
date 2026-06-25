@@ -1,5 +1,9 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../occlusion/HiZBuffer.hpp"
+// VK-1443: full manager types (forward-declared in GPUDrivenRenderer.hpp) constructed /
+// dereferenced in this TU's init + query paths.
+#include "../occlusion/LightOcclusionCulling.hpp"
+#include "../volumetric/FogVolumeBufferManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "print/Log.hpp"

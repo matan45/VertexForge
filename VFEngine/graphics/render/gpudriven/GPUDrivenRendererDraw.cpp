@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "stats/FrameDrawStats.hpp" // VK-1443: was reached transitively before the header slim
 #include "../../core/SwapChain.hpp"
 #include "../gi/GIDebugRenderer.hpp"
 #include "../gi/RadianceCascadeManager.hpp"

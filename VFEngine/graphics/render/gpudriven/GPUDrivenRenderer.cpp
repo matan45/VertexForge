@@ -2,6 +2,21 @@
 #include "../occlusion/DepthPrepass.hpp"
 #include "../occlusion/DepthPrepassPipeline.hpp"
 #include "../occlusion/HiZBuffer.hpp"
+// VK-1443: these managers are now only forward-declared in GPUDrivenRenderer.hpp; the
+// out-of-line ~GPUDrivenRenderer() defined in this TU instantiates each unique_ptr
+// member's deleter, so every one needs its complete type here.
+#include "../occlusion/LightOcclusionCulling.hpp"
+#include "../volumetric/FogVolumeBufferManager.hpp"
+#include "../gi/ProbeTracePipeline.hpp"
+#include "../gi/ProbeUpdatePipeline.hpp"
+#include "../raytracing/AccelerationStructureManager.hpp"
+#include "../raytracing/RTShadowPipeline.hpp"
+#include "../raytracing/RTShadowDenoiser.hpp"
+#include "../raytracing/RTShadowProfiler.hpp"
+#include "../raytracing/RTLayeredShadowPipeline.hpp"
+#include "../raytracing/RTLayeredShadowDenoiser.hpp"
+#include "../raytracing/RTShadowUpsamplePipeline.hpp"
+#include "../raytracing/RTLayeredShadowUpsamplePipeline.hpp"
 #include "../mesh/MeshStreamManager.hpp"
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"

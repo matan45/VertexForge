@@ -1,4 +1,10 @@
 #include "GPUDrivenRenderer.hpp"
+// VK-1443: full manager types (forward-declared in GPUDrivenRenderer.hpp) dereferenced
+// by the compute dispatch paths in this TU.
+#include "../occlusion/LightOcclusionCulling.hpp"
+#include "../volumetric/FogVolumeBufferManager.hpp"
+#include "../raytracing/AccelerationStructureManager.hpp"
+#include "../raytracing/RTShadowProfiler.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
 #include "components/Components.hpp"

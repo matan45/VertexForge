@@ -1,5 +1,17 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../occlusion/DepthPrepass.hpp"
+// VK-1443: full manager types (forward-declared in GPUDrivenRenderer.hpp) needed here
+// because this TU dispatches GI probe + RT shadow work and defines upsampleLayeredRTShadow.
+#include "../gi/ProbeTracePipeline.hpp"
+#include "../gi/ProbeUpdatePipeline.hpp"
+#include "../raytracing/AccelerationStructureManager.hpp"
+#include "../raytracing/RTShadowPipeline.hpp"
+#include "../raytracing/RTShadowDenoiser.hpp"
+#include "../raytracing/RTShadowProfiler.hpp"
+#include "../raytracing/RTLayeredShadowPipeline.hpp"
+#include "../raytracing/RTLayeredShadowDenoiser.hpp"
+#include "../raytracing/RTShadowUpsamplePipeline.hpp"
+#include "../raytracing/RTLayeredShadowUpsamplePipeline.hpp"
 #include "../upscaling/UpscaleManager.hpp"
 #include "../custom/PluginTextureManager.hpp"
 #include "../../core/SwapChain.hpp"

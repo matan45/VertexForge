@@ -22,6 +22,8 @@
 #include "events/EventDispatcher.hpp"
 #include "UILayerCanvasHandles.hpp"
 #include "UILayerInspectorUndo.hpp"
+#include "UILayerHierarchyPane.hpp"
+#include "UILayerCanvasPane.hpp"
 
 // Embed the existing UI inspector drawers for the selection (same set EntityDetailsPanel uses).
 #include "../details/UICanvasDrawer.hpp"
@@ -63,6 +65,11 @@ namespace windows
 {
     class UILayerBuilderWindow
     {
+        // VK-1443 — the hierarchy + canvas panes are stateless sub-controllers that reach this
+        // window's private state + helper methods through friend access.
+        friend class uilayer::UILayerHierarchyPane;
+        friend class uilayer::UILayerCanvasPane;
+
     public:
         UILayerBuilderWindow();
         ~UILayerBuilderWindow();
@@ -91,19 +98,8 @@ namespace windows
         // ---- Panes --------------------------------------------------------------
         void drawToolbar();
         void drawPalettePane();
-        void drawHierarchyPane();
-        void drawCanvasPane();
         void drawInspectorPane();
         void drawAddComponentMenu(services::EntityHandle sel); // UI-only Add-Component popup
-
-        // ---- Canvas interaction (handles + click-select) -----------------------
-        void drawCanvasImageAndHandles(glm::vec2 regionOrigin, glm::vec2 regionSize);
-        void drawHandleOverlay(ImDrawList* dl, const uilayer::LetterboxMapping& map,
-                               const uilayer::RefRect& rect);
-        void handleCanvasInput(const uilayer::LetterboxMapping& map);
-
-        // ---- Hierarchy helpers --------------------------------------------------
-        void drawHierarchyNode(services::EntityHandle entity, int depth);
 
         // ---- Palette --------------------------------------------------------------
         enum class WidgetType
@@ -206,9 +202,6 @@ namespace windows
         services::EntityHandle lastRevealSel = services::EntityHandle::invalid();
         bool revealScroll = false;
 
-        // Drag-drop reparent payload id for the hierarchy.
-        static constexpr const char* kHierarchyDragPayload = "DND_UILAYER_ENTITY";
-
         // Theme picker.
         std::string themePath;
 
@@ -234,5 +227,10 @@ namespace windows
         details::UIMaskDrawer uiMaskDrawer;
         details::UIDraggableDrawer uiDraggableDrawer;
         details::UIDropTargetDrawer uiDropTargetDrawer;
+
+        // VK-1443 — stateless pane sub-controllers (each holds only a back-reference to this
+        // window; constructed with *this in the ctor init-list).
+        uilayer::UILayerHierarchyPane hierarchyPane;
+        uilayer::UILayerCanvasPane canvasPane;
     };
 }

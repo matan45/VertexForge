@@ -6,7 +6,11 @@
 #include "PrefabRigValidation.hpp"  // validatePartRefs + translate-drop detection (header-only)
 #include "PrefabRigBonePick.hpp"    // Phase 1b screen-space bone-pick math (header-only)
 #include "PrefabRigLiveDescBuilder.hpp" // VK-1433 Phase 4 live entity-tree -> DTO (header-only)
-#include "../scene/EntityDetailsPanel.hpp" // VK-1433 Phase 4b embedded component inspector
+#include "PrefabRigEditContext.hpp"  // VK-1443 shared edit-state view + hoisted GizmoMode
+#include "PrefabSandboxController.hpp"        // VK-1443 sandbox lifecycle + preview renderer
+#include "PrefabHierarchyPanel.hpp"           // VK-1443 hierarchy tree + inspector + selection
+#include "PrefabAuthoringPanels.hpp"          // VK-1443 viewport gizmos + authoring panels
+#include "PrefabRigEditUndoCoordinator.hpp"   // VK-1443 undo snapshot/push coordinator
 #include "nfd/FileDialog.hpp"        // VK-1433 Phase 4c Save-As dialog
 #include "data/PrefabRigDescDTO.hpp"
 #include "data/EntityHandle.hpp"
@@ -33,6 +37,13 @@ namespace windows
 {
     class PrefabPreviewWindow : public controllers::imguiHandler::ImguiWindow
     {
+        // VK-1443 — the four sub-controllers reach window-private non-ctx state (camera, environment,
+        // prefabPath, fileDialog, the undo statics, and the other controllers) through friend access.
+        friend class PrefabSandboxController;
+        friend class PrefabHierarchyPanel;
+        friend class PrefabAuthoringPanels;
+        friend class PrefabRigEditUndoCoordinator;
+
     private:
         std::string prefabPath;
         std::string windowTitle;
@@ -61,17 +72,6 @@ namespace windows
         // Source entity of each rig part, parallel to rigDesc.parts (so a selected entity maps to a
         // part and back). Re-derived with rigDesc on every structural edit.
         std::vector<services::EntityHandle> partEntities;
-        // VK-1433 Phase 4b — inline-rename state (clone of UILayerBuilderWindow). renamingEntity is the
-        // node whose label is currently an InputText; renameFocusPending grabs keyboard focus once.
-        services::EntityHandle renamingEntity = services::EntityHandle::invalid();
-        bool renameFocusPending = false;
-        char renameBuf[256] = {};
-
-        // VK-1433 Phase 4b — embedded shared component inspector (O1). Hosting an EntityDetailsPanel
-        // and calling its reusable drawComponentSection() gives the full per-component edit + Remove
-        // stack and the Add Component popup for the selected sandbox entity, without re-listing every
-        // drawer here. The window stays entt-free (the panel and its drawers are all CQRS-based).
-        EntityDetailsPanel entityInspector;
 
         // --- VK-1433 rig preview (viewport + authoring) ---------------------
         services::PrefabRigDescDTO rigDesc;          // re-derived from the sandbox subtree
@@ -80,7 +80,6 @@ namespace windows
 
         bool previewInitialized = false;             // controller init command sent
         bool previewBuilt = false;                   // buildFromDesc succeeded
-        bool previewCleanedUp = false;
         bool isDraggingOrbit = false;
         bool isDraggingPan = false;
         float lastFrameTime = 0.0f;
@@ -91,15 +90,14 @@ namespace windows
         int selectedPart = -1;        // part index for the socket panels
         int selectedSocketIndex = -1; // socket index within the selected part
         int selectedChainIndex = -1;  // chain index for the IK panel
-        ImGuizmo::OPERATION socketGizmoOp = ImGuizmo::TRANSLATE;
 
         // VK-1433 — exactly one gizmo is active at a time so they never fight. Transform drives the
         // part preview transform (editor-transient); StaticSocket edits a static part's own socket
         // offsets. Bone/IK have no direct gizmo (they ride bones / are panel-driven) — selecting
         // them simply suppresses the viewport gizmo.
-        enum class GizmoMode { Transform, BoneSocket, StaticSocket, IK };
+        // GizmoMode is hoisted to namespace windows (PrefabRigEditContext.hpp) so the context and the
+        // authoring sub-controller can name it too (a nested type would force a circular include).
         GizmoMode gizmoMode = GizmoMode::Transform;
-        ImGuizmo::OPERATION transformGizmoOp = ImGuizmo::TRANSLATE; // TRS toggle for the part gizmo
 
         // VK-1433 Phase 1b — bone-pick arm flag. Set from the Bone Socket panel; while armed, a
         // viewport left-click (not consumed by ImGuizmo) hit-tests the selected skeletal part's joints
@@ -110,20 +108,12 @@ namespace windows
         std::vector<animator::SocketDefinition> editSockets;  // for selectedPart
         std::vector<animator::ik::IKChainConfig> editChains;
         bool chainsLoaded = false;                            // editChains pulled once
-        float socketSaveTimer = 0.0f;
-        bool socketSaveSuccess = false;
-        float ikSaveTimer = 0.0f;
-        bool ikSaveSuccess = false;
-
-        // State-transition blend duration (seconds). Was hard-coded 0.25f; now a State-tab slider.
-        float stateBlendDuration = 0.25f; // == prefabrigedit kDefaultStateBlendSeconds
 
         // --- Phase 2 broken-ref validation -----------------------------------
         // Per-part broken-asset-reference report, recomputed once each time the rig description is
         // built (cheap fs::exists() over the parts; not per-frame). Parallel to rigDesc.parts.
         std::vector<prefabrigval::PartRefStatus> partRefStatuses;
         int missingRefCount = 0;
-        void revalidateRefs(); // fills partRefStatuses + missingRefCount from rigDesc on disk
 
         // --- VK-1433 Phase 4c prefab save -------------------------------------
         // SavePrefabCommand on the (tagged) sandbox root: the serializer strips the preview tag and
@@ -135,50 +125,11 @@ namespace windows
         void savePrefab(bool saveAs);
         nfd::FileDialog fileDialog;
 
-        // Transient "Saved/Failed" badge shared by the prefab / socket / static-socket / IK save
-        // buttons (each keeps its own timer + success flag; this only draws the badge). Green "Saved"
-        // on success, red "Failed" otherwise, on the same line as the preceding button. No-op when the
-        // timer has elapsed (timer <= 0).
-        void drawSaveBadge(float timer, bool success) const;
-
-        // --- Phase 2 edit undo ------------------------------------------------
-        // Snapshot/push brackets mirror UILayerBuilderWindow: capture a "before" snapshot while no
-        // edit session is active, push ONE undo command when the session ends. socketEditActive /
-        // chainEditActive track an in-flight panel edit; gizmoEditActive tracks an ImGuizmo drag.
-        bool socketEditActive = false;
-        bool chainEditActive = false;
-        bool gizmoEditActive = false;            // static-socket gizmo drag bracket
-        prefabrigedit::PrefabRigEditSnapshot socketEditBefore;
-        prefabrigedit::PrefabRigEditSnapshot chainEditBefore;
-        prefabrigedit::PrefabRigEditSnapshot gizmoEditBefore;
-
-        // VK-1433 Phase 4d — TRANSFORM gizmo drag bracket. The Transform gizmo edits the part's source
-        // ENTITY transform every Manipulate frame (live preview); we snapshot that entity transform on
-        // the IsUsing() rising edge and push ONE coalesced entity-transform undo on release.
-        bool transformGizmoEditActive = false;
-        services::TransformData transformGizmoBefore; // entity local transform at drag start
-        // Push a PrefabRigEntityTransformUndoCommand for `entity` (no-op if before == after). The
-        // command captures only the handle + transforms by value + a rebuild-by-id callback, so it is
-        // safe on the process-global undo stack after the window closes (replay no-ops on a dead
-        // entity; the rebuild callback no-ops when no live window matches the id).
-        void pushTransformUndo(services::EntityHandle entity,
-                               const services::TransformData& before,
-                               const services::TransformData& after);
+        // --- Phase 2 edit undo (VK-1443) --------------------------------------
         // Rebuild-by-id hook for the entity-transform undo command (analogue of resyncMirror): looks
-        // up the live window by id and re-derives its rig, or no-ops if it has been closed.
+        // up the live window by id and re-derives its rig, or no-ops if it has been closed. Stays on the
+        // window (lowest-risk replay path); the snapshot/push helpers moved to PrefabRigEditUndoCoordinator.
         static void resyncRebuild(services::PreviewInstanceId id);
-
-        // Build a snapshot of the data a given edit kind touches (engages only the relevant fields).
-        prefabrigedit::PrefabRigEditSnapshot snapshotSockets() const;   // editSockets for selectedPart
-        prefabrigedit::PrefabRigEditSnapshot snapshotChains() const;    // editChains + IK bindings
-        std::vector<prefabrigedit::IKBindingSnapshot> snapshotIKBindings() const; // rigDesc.ik bindings
-
-        // Push a single coalesced undo entry (no-op if before == after data). The pushed command
-        // holds ONLY the PreviewInstanceId (a value) + snapshots — never a window pointer — so it is
-        // safe to undo/redo after the window is closed (the command's CQRS replay no-ops on a dead
-        // instanceId, and the mirror re-sync below no-ops when no live window matches the id).
-        void pushSocketUndo(prefabrigedit::PrefabRigEditSnapshot before);
-        void pushChainUndo(prefabrigedit::PrefabRigEditSnapshot before);
 
         // Mirror re-sync hook for the undo command. The command captures ONLY the id (by value) and
         // calls this static after replaying the controller CQRS. It looks up the live window by id
@@ -209,124 +160,30 @@ namespace windows
         const std::string& getPrefabPath() const { return prefabPath; }
 
     private:
-        // VK-1433 Phase 4 — sandbox lifecycle (the JSON-parse spine is retired). openSandbox()
-        // LoadPrefabs the prefab into an isolated tagged subtree and re-derives the rig from it;
-        // closeSandbox() deletes that subtree + tears down the renderer. rebuildRigFromSandbox()
-        // re-runs the live builder after every structural edit and rebuilds the preview.
-        void openSandbox();
-        void closeSandbox();
-        void rebuildRigFromSandbox();
-        void readPrefabHeader(); // prefabName / prefabVersion from the .vfPrefab JSON header only
-
-        // Rig preview lifecycle (service boundary; no Graphics/Core includes).
-        void initPreviewRenderer();
-        void buildPreviewFromDesc();
-        void cleanUpPreviewRenderer();
+        // VK-1443 — the bulk of the panels/lifecycle/authoring/undo were split into four
+        // sub-controllers (see the friend decls + members below). The window keeps only draw(),
+        // the viewport (which calls into the authoring controller for gizmos/picks), the info panel,
+        // savePrefab, and the undo live-window registry + replay statics.
         void drawViewport(float regionWidth, float regionHeight, float deltaTime);
-        void drawGizmos();        // dispatches to exactly one gizmo per gizmoMode
-        void drawTransformGizmo(); // VK-1433 Phase 4c — part ENTITY transform (TRS), persisted by Save
-        void drawSocketGizmo();    // static-socket offset (anchored at live part world)
-
-        // VK-1433 Phase 1b — when armed, hit-test the selected skeletal part's joints against the
-        // viewport click and, on a hit, prefill + add a bone socket (with a Phase-2 undo entry).
-        // viewportMin/viewportSize are the rendered Image's screen rect (== ImGuizmo::SetRect args).
-        void tryBonePick(const ImVec2& viewportMin, const ImVec2& viewportSize);
-
-        // Live composed world of a part (gizmo anchor); identity if unavailable.
-        glm::mat4 partWorldLive(int part) const;
-
-        // Panels.
         void drawInfoPanel();
-        // VK-1433 Phase 4 — the hierarchy is now a CQRS-recursive tree over the live sandbox subtree
-        // (clone of UILayerBuilderWindow::drawHierarchyNode + SceneHierarchyPanel DnD/eye). 4b adds
-        // add/remove/rename/reparent/reorder/hide; depth threads through for the reorder drop zones.
-        void drawEntityTreePanel();
-        void drawEntityNode(services::EntityHandle entity, int depth);
-        void drawReorderDropZone(services::EntityHandle parent, size_t index); // between-siblings insert
-        // VK-1433 Phase 4d — shared create/delete used by the Hierarchy header toolbar, the per-node
-        // context menu, and the Delete-key shortcut (so all three follow the same select/dirty/rebuild
-        // path). createChildEntity adds an "Entity" child under `parent` and selects it.
-        services::EntityHandle createChildEntity(services::EntityHandle parent);
-        // requestDeleteEntity stages a delete + opens the confirm modal (all three delete affordances
-        // route through it); the actual DeleteEntityCommand + reselect/rebuild runs in deleteEntity
-        // ONLY on confirm. deleteEntity returns false if entity is invalid / the sandbox root.
-        void requestDeleteEntity(services::EntityHandle entity);
-        bool deleteEntity(services::EntityHandle entity);
-        void drawDeleteConfirmPopup();            // "Delete '<name>' and its children?" modal
-        services::EntityHandle pendingDeleteEntity = services::EntityHandle::invalid();
-        std::string pendingDeleteName;            // captured at request time for the modal message
-        bool openDeleteConfirmPopup = false;      // set by requestDeleteEntity, consumed in draw()
-        // O2: would renaming the entity currently named `oldName` orphan a socket attachment that
-        // resolves to it by name? Used to WARN (non-destructive) before a rename.
-        bool renameWouldOrphanAttachment(const std::string& oldName) const;
-        // Embedded full component inspector for the selected sandbox entity (4b, O1). Reuses the
-        // shared EntityDetailsPanel drawers (edit + per-header Remove) + Add Component popup; a
-        // structural component change re-derives the rig.
-        void drawEntityInspector();
-        // Tooltip text listing a part's missing references (empty if none / out of range).
-        std::string missingRefTooltip(int part) const;
-        void drawAuthoringPanel();
-        void drawGizmoModeToolbar(); // VK-1433 Transform / Bone Socket / Static Socket / IK
-        void drawStatePicker();
-        void drawTransformPanel();   // VK-1433 Phase 4c — TRS op toggle + numeric fields edit the entity
-        void zeroSourceTranslationForPart(int part); // Phase 2: bake a socketed child's position to 0
-        void drawFrameScrub();       // VK-1433 Prev/Next frame + normalized scrub slider
-        void drawBoneSocketPanel();
-        void drawStaticSocketPanel();
-        void drawIKPanel();
 
-        // VK-1433 Phase 4b — structure signature of the sandbox subtree (entity ids + their component
-        // type lists, DFS). A change between frames (a component add/remove via the embedded inspector,
-        // a create/delete) re-derives the rig. Cheap CQRS-only walk; computed once per frame.
-        std::vector<uint64_t> sandboxStructureSignature() const;
-        std::vector<uint64_t> lastStructureSignature;
-        // The signature walk issues per-node CQRS over the whole subtree, so running it every frame is
-        // wasteful for an idle window. Structural edits are user-driven (component add/remove,
-        // create/delete), so a few-frame detection latency is invisible — throttle the check to roughly
-        // every kStructureCheckInterval frames. (Tree-driven mutations rebuild immediately; this only
-        // catches the embedded inspector's Add/Remove, which can tolerate the latency.)
-        static constexpr int kStructureCheckInterval = 12;
-        int structureCheckCountdown = 0; // frames until the next signature check (0 == check this frame)
-
-        // Transform VALUE edits (embedded inspector, numeric fields, the gizmo, undo replay) do NOT
-        // shift the structure signature, so they are caught via a TransformChangedNotification
-        // subscription instead: the callback sets transformsDirty, and draw() applies a CHEAP
-        // transform-only sync (syncTransformsFromSandbox — no mesh reload) at end-of-frame, unless a
-        // full structural rebuild already ran that frame. This replaces the gizmo's old per-frame full
-        // rebuild (which reloaded the whole rig from disk every drag frame) and makes inspector edits
-        // actually move the mesh. Subscribed in openSandbox(), unsubscribed in closeSandbox() — never
-        // the dtor (it can run after the EventDispatcher is gone at shutdown).
-        bool transformsDirty = false;
-        events::SubscriptionToken transformChangedToken;
-        // Re-derive the rig DTO from the sandbox (cheap, CQRS-only — resolves mesh refs to PATHS, never
-        // loads geometry) and push a transform-ONLY update to the preview controller (no waitIdle /
-        // pipeline teardown / mesh reload). Falls back to a full rebuild if the structure drifted.
-        void syncTransformsFromSandbox();
-
-        // Selected-part helpers (the window knows part metadata from rigDesc).
-        bool partIsSkeletal(int part) const;
-        const std::string& partMeshPath(int part) const;
-        void pullEditSocketsForPart(int part);
-        void pushEditSocketsForPart(int part);
-        void pullEditChains();
-        void pushEditChains();
-
-        // VK-1433 Phase 4 — selection link between the live hierarchy and the part-indexed authoring
-        // panels. The selection is WINDOW-LOCAL: routing it through the global scene
-        // GetSelectedEntityQuery / SelectEntityCommand would leak a sandbox entity into the main Scene
-        // Hierarchy / Details panels (and a main-scene selection back into here, blanking this
-        // inspector). selectedEntity() returns this local handle; selectEntity() sets it.
+        // VK-1433 Phase 4 — window-local selection STORAGE (referenced by ctx.selectedSandboxEntity;
+        // read/written through the hierarchy controller's selectedEntity()/selectEntity()). Routing it
+        // through the global scene selection would leak a sandbox entity into the main Scene Hierarchy /
+        // Details panels (and a main-scene selection back into here, blanking this inspector).
         services::EntityHandle selectedSandboxEntity_ = services::EntityHandle::invalid();
-        services::EntityHandle selectedEntity() const;
-        void selectEntity(services::EntityHandle entity);
-        // Part index whose source entity == `entity` (linear search over partEntities); -1 if none.
-        int partForEntity(services::EntityHandle entity) const;
-        // Drive the authoring panels from a new selection (set selectedPart + pull its sockets).
-        void selectPart(int part);
 
-        // Source entity's OWN local transform (position/rotation-euler-deg/scale) for a part, read
-        // live via CQRS. Replaces the retired rootEntity reads in the Transform panel + the
-        // socket-attached-child translate-drop warning (entt-free).
-        services::TransformData partSourceLocalTransform(int part) const;
+        // VK-1443 — shared edit-state view bound to the fields above (storage stays in this window).
+        // Declared after the fields so its reference members bind to already-declared fields; each of
+        // the four sub-controllers takes a PrefabRigEditContext& to reach this shared state. instanceId
+        // is a value copy of getInstanceId() (== this), set in the ctor init list.
+        PrefabRigEditContext ctx;
+
+        // VK-1443 — the four sub-controllers. Declared AFTER ctx so each binds to a fully-initialized
+        // context (and *this). Each holds `PrefabRigEditContext& ctx` + `PrefabPreviewWindow& w`.
+        PrefabSandboxController sandboxController;
+        PrefabHierarchyPanel hierarchyPanel;
+        PrefabAuthoringPanels authoringController;
+        PrefabRigEditUndoCoordinator undoCoordinator;
     };
 }
