@@ -22,6 +22,11 @@ namespace core::physics
         JPH::Ref<JPH::Ragdoll> ragdoll;
         SkeletonConversionResult skeletonConversion;
         uint32_t collisionGroupId = 0;
+        // True only while the ragdoll's bodies+constraints are added to the Jolt physics system.
+        // A ragdoll is built (CreateRagdoll) but NOT added until activate/transition; calling
+        // RemoveFromPhysicsSystem() on a not-added ragdoll walks invalid constraint indices and
+        // crashes, so every removal site must gate on this flag.
+        bool inSystem = false;
     };
 
     class PhysicsRagdollManager

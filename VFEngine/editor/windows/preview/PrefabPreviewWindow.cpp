@@ -164,12 +164,11 @@ namespace windows
         {
             if (isOpen)
             {
-                maximizer.drawButton();
-
                 // VK-1433 Phase 4c — Save / Save As + unsaved badge. Saving persists the whole live
-                // sandbox edit (hierarchy + transforms + refs) back to the .vfPrefab.
+                // sandbox edit (hierarchy + transforms + refs) back to the .vfPrefab. These are drawn
+                // BEFORE maximizer.drawButton(): WindowMaximizer right-aligns the cursor to the window's
+                // right edge, so anything emitted after it on the same row gets clipped off-screen.
                 if (prefabSaveTimer > 0.0f) prefabSaveTimer -= ImGui::GetIO().DeltaTime;
-                ImGui::SameLine();
                 if (ImGui::Button("Save")) savePrefab(false);
                 ImGui::SameLine();
                 if (ImGui::Button("Save As...")) savePrefab(true);
@@ -179,6 +178,10 @@ namespace windows
                     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "(unsaved)");
                 }
                 prefabdetail::drawSaveBadge(prefabSaveTimer, prefabSaveSuccess);
+
+                // Maximize toggle last so it right-aligns on the same row as the Save controls.
+                ImGui::SameLine();
+                maximizer.drawButton();
 
                 static float leftWidth = 160.0f;
                 static float rightWidth = 280.0f;

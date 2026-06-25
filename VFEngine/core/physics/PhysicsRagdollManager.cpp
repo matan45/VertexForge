@@ -25,9 +25,10 @@ namespace core::physics
 
         for (auto& [entityId, ragdollData] : entityRagdolls)
         {
-            if (ragdollData.ragdoll)
+            if (ragdollData.ragdoll && ragdollData.inSystem)
             {
                 ragdollData.ragdoll->RemoveFromPhysicsSystem();
+                ragdollData.inSystem = false;
             }
         }
         entityRagdolls.clear();
@@ -102,7 +103,13 @@ namespace core::physics
                     bodyRegistry->unregisterBoneIndex(bodyId);
                 }
             }
-            ragdollData.ragdoll->RemoveFromPhysicsSystem();
+            // Only remove from the system if it was actually added (built-but-never-activated
+            // ragdolls, e.g. an Animated/Kinematic-default entity, are torn down here on Stop).
+            if (ragdollData.inSystem)
+            {
+                ragdollData.ragdoll->RemoveFromPhysicsSystem();
+                ragdollData.inSystem = false;
+            }
         }
 
         entityRagdolls.erase(it);
@@ -117,8 +124,10 @@ namespace core::physics
     {
         auto it = entityRagdolls.find(entityId);
         if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+        if (it->second.inSystem) return; // already added; a second AddToPhysicsSystem would corrupt Jolt
 
         it->second.ragdoll->AddToPhysicsSystem(JPH::EActivation::Activate);
+        it->second.inSystem = true;
 
         for (int i = 0; i < static_cast<int>(it->second.ragdoll->GetBodyCount()); ++i)
         {
@@ -135,6 +144,7 @@ namespace core::physics
     {
         auto it = entityRagdolls.find(entityId);
         if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+        if (!it->second.inSystem) return; // not added; nothing to remove
 
         for (int i = 0; i < static_cast<int>(it->second.ragdoll->GetBodyCount()); ++i)
         {
@@ -146,6 +156,7 @@ namespace core::physics
         }
 
         it->second.ragdoll->RemoveFromPhysicsSystem();
+        it->second.inSystem = false;
     }
 
     bool PhysicsRagdollManager::getRagdollPose(uint64_t entityId, JPH::SkeletonPose& outPose) const
@@ -406,7 +417,11 @@ namespace core::physics
         auto it = entityRagdolls.find(entityId);
         if (it != entityRagdolls.end() && it->second.ragdoll)
         {
-            it->second.ragdoll->AddToPhysicsSystem(JPH::EActivation::Activate);
+            if (!it->second.inSystem)
+            {
+                it->second.ragdoll->AddToPhysicsSystem(JPH::EActivation::Activate);
+                it->second.inSystem = true;
+            }
             it->second.ragdoll->SetPose(currentPose);
             it->second.ragdoll->ResetWarmStart();
         }
