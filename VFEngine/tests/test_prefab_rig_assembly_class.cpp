@@ -20,9 +20,11 @@
 #include <doctest.h>
 
 #include "controllers/preview/PrefabRigAssembly.hpp"
+#include "math/TransformUtils.hpp" // composeMatrix (NaN-guard premise test)
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cmath>
 
 using controllers::PrefabRigAssembly;
 using controllers::PrefabRigDesc;
@@ -378,5 +380,130 @@ TEST_SUITE("PrefabRigAssemblyClass")
         rig.stepFrame(999, 1);
         rig.setNormalizedTime(999, 0.5f);
         CHECK(rig.normalizedTime(999) == doctest::Approx(0.0f));
+    }
+
+    // -----------------------------------------------------------------------
+    // VK-1433 fix — updateTransformsFromDesc: the CHEAP transform-only refresh that
+    // replaces the per-edit full rebuild (which reloaded the whole rig from disk every
+    // gizmo drag frame). It applies a STRUCTURE-IDENTICAL desc's transform fields in
+    // place and returns false on any structural drift (caller then full-rebuilds).
+    // -----------------------------------------------------------------------
+    TEST_CASE("updateTransformsFromDesc returns false on a non-built assembly")
+    {
+        PrefabRigAssembly rig;
+        PrefabRigDesc desc;
+        desc.parts.push_back(staticPart("__vk1433_upd_nobuild.vfMesh"));
+        CHECK_FALSE(rig.updateTransformsFromDesc(desc)); // nothing built yet
+    }
+
+    TEST_CASE("updateTransformsFromDesc applies a root part's localTransform without rebuilding")
+    {
+        PrefabRigDesc desc;
+        desc.parts.push_back(staticPart("__vk1433_upd_root.vfMesh"));
+        desc.parts.push_back(staticPart("__vk1433_upd_child.vfMesh", 0, "Mount"));
+
+        PrefabRigAssembly rig;
+        REQUIRE(rig.build(desc));
+        rig.update(0.0f);
+        CHECK(translationOf(rig.partWorld(0)).x == doctest::Approx(0.0f));
+
+        // Same STRUCTURE, only the root's localTransform changes -> cheap path applies it in place.
+        PrefabRigDesc moved = desc;
+        moved.parts[0].localTransform = glm::translate(glm::mat4(1.0f), glm::vec3(5.0f, 0.0f, 0.0f));
+        CHECK(rig.updateTransformsFromDesc(moved));
+
+        rig.update(0.0f);
+        // Root world reflects the new localTransform; the child rides it (parent-before-child topo).
+        CHECK(translationOf(rig.partWorld(0)).x == doctest::Approx(5.0f));
+        CHECK(translationOf(rig.partWorld(1)).x == doctest::Approx(5.0f));
+        // Structure intact (no reload / part shuffle).
+        CHECK(rig.partCount() == 2);
+        CHECK(rig.meshPath(0) == "__vk1433_upd_root.vfMesh");
+    }
+
+    TEST_CASE("updateTransformsFromDesc applies a child's attach scale")
+    {
+        PrefabRigDesc desc;
+        desc.parts.push_back(staticPart("__vk1433_upd2_root.vfMesh"));
+        desc.parts.push_back(staticPart("__vk1433_upd2_child.vfMesh", 0, "Mount"));
+
+        PrefabRigAssembly rig;
+        REQUIRE(rig.build(desc));
+
+        PrefabRigDesc scaled = desc;
+        scaled.parts[1].attachChildScale = glm::vec3(2.0f);
+        CHECK(rig.updateTransformsFromDesc(scaled));
+
+        rig.update(0.0f);
+        // composeChildWorld(identity socket, rot=0, scale=2) -> the child's basis is scaled by 2.
+        CHECK(rig.partWorld(1)[0][0] == doctest::Approx(2.0f));
+    }
+
+    TEST_CASE("updateTransformsFromDesc returns false on structural drift and leaves the rig untouched")
+    {
+        PrefabRigDesc desc;
+        desc.parts.push_back(staticPart("__vk1433_drift_root.vfMesh"));
+        desc.parts.push_back(staticPart("__vk1433_drift_child.vfMesh", 0, "Mount"));
+
+        PrefabRigAssembly rig;
+        REQUIRE(rig.build(desc));
+        rig.update(0.0f);
+
+        SUBCASE("different part count")
+        {
+            PrefabRigDesc fewer;
+            fewer.parts.push_back(staticPart("__vk1433_drift_root.vfMesh"));
+            CHECK_FALSE(rig.updateTransformsFromDesc(fewer));
+        }
+        SUBCASE("changed mesh path")
+        {
+            PrefabRigDesc m = desc;
+            m.parts[1].meshPath = "__vk1433_drift_other.vfMesh";
+            CHECK_FALSE(rig.updateTransformsFromDesc(m));
+        }
+        SUBCASE("changed parent index")
+        {
+            PrefabRigDesc m = desc;
+            m.parts[1].parentPartIndex = -1; // re-root the child
+            CHECK_FALSE(rig.updateTransformsFromDesc(m));
+        }
+        SUBCASE("changed attach socket")
+        {
+            PrefabRigDesc m = desc;
+            m.parts[1].attachParentSocket = "DifferentMount";
+            CHECK_FALSE(rig.updateTransformsFromDesc(m));
+        }
+        SUBCASE("changed animator path")
+        {
+            PrefabRigDesc m = desc;
+            m.parts[0].animatorPath = "__vk1433_drift_anim.vfAnimator";
+            CHECK_FALSE(rig.updateTransformsFromDesc(m));
+        }
+
+        // After ANY rejected update the rig is unchanged (the drift check runs BEFORE any mutation).
+        CHECK(rig.partCount() == 2);
+        CHECK(rig.meshPath(0) == "__vk1433_drift_root.vfMesh");
+        CHECK(rig.meshPath(1) == "__vk1433_drift_child.vfMesh");
+    }
+
+    // -----------------------------------------------------------------------
+    // VK-1433 fix — documents the NaN failure mode the Transform-gizmo guard defends
+    // against. A degenerate (zero-axis) scale makes the part's own-local matrix singular,
+    // so inverting it (which the gizmo does to map a manipulated world back to own-local)
+    // yields non-finite values that, unguarded, get decomposed and persisted as a sticky
+    // NaN. The gizmo's minAbsComponent(scale) + isFinite guards skip exactly this case.
+    // -----------------------------------------------------------------------
+    TEST_CASE("inverting a zero-scale transform yields non-finite values (gizmo NaN guard premise)")
+    {
+        const glm::mat4 singular =
+            math::composeMatrix(glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 1.0f));
+        const glm::mat4 inv = glm::inverse(singular);
+
+        bool anyNonFinite = false;
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r)
+                if (!std::isfinite(inv[c][r]))
+                    anyNonFinite = true;
+        CHECK(anyNonFinite); // the guard skips this frame instead of writing it back
     }
 }

@@ -111,6 +111,8 @@ namespace services
         // Prefab Rig Preview (VK-1433)
         void initPrefabRigPreview(PreviewInstanceId instanceId) override;
         bool buildPrefabRigPreview(PreviewInstanceId instanceId, const PrefabRigDescDTO& desc) override;
+        bool updatePrefabRigPreviewTransforms(PreviewInstanceId instanceId,
+                                              const PrefabRigDescDTO& desc) override;
         void cleanUpPrefabRigPreview(PreviewInstanceId instanceId) override;
         [[nodiscard]] bool isPrefabRigPreviewBuilt(PreviewInstanceId instanceId) const override;
         [[nodiscard]] size_t getPrefabRigPartCount(PreviewInstanceId instanceId) const override;

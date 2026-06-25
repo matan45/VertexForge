@@ -50,6 +50,10 @@ namespace services
         // per-part pipelines. cleanUpPrefabRigPreview tears the whole instance down.
         virtual void initPrefabRigPreview(PreviewInstanceId instanceId) = 0;
         virtual bool buildPrefabRigPreview(PreviewInstanceId instanceId, const PrefabRigDescDTO& desc) = 0;
+        // Cheap transform-only update of an already-built preview (no mesh/skeleton/texture reload).
+        // Returns false on structural drift so the caller falls back to buildPrefabRigPreview.
+        virtual bool updatePrefabRigPreviewTransforms(PreviewInstanceId instanceId,
+                                                      const PrefabRigDescDTO& desc) = 0;
         virtual void cleanUpPrefabRigPreview(PreviewInstanceId instanceId) = 0;
         virtual bool isPrefabRigPreviewBuilt(PreviewInstanceId instanceId) const = 0;
         virtual size_t getPrefabRigPartCount(PreviewInstanceId instanceId) const = 0;

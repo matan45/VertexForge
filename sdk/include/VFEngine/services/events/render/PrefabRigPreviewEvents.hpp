@@ -31,6 +31,17 @@ namespace services::events::prefabrigpreview
         std::string_view getName() const override { return "BuildPrefabRigPreview"; }
     };
 
+    // Cheap transform-only update of an already-built preview. The desc must be STRUCTURE-IDENTICAL
+    // to the current build (same parts/meshes/parents/attach sockets); only the per-part transforms
+    // are applied, with NO mesh/skeleton/texture reload. Returns false if the structure drifted (or
+    // nothing is built), so the window falls back to a full BuildPrefabRigPreviewCommand.
+    struct UpdatePrefabRigPreviewTransformsCommand : ::events::ICommand<bool>
+    {
+        PreviewInstanceId instanceId;
+        PrefabRigDescDTO desc;
+        std::string_view getName() const override { return "UpdatePrefabRigPreviewTransforms"; }
+    };
+
     struct CleanUpPrefabRigPreviewCommand : ::events::ICommand<void>
     {
         PreviewInstanceId instanceId;

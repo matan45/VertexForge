@@ -27,6 +27,8 @@ namespace core
         void initPrefabRigPreview(services::PreviewInstanceId instanceId) override;
         bool buildPrefabRigPreview(services::PreviewInstanceId instanceId,
                                    const services::PrefabRigDescDTO& desc) override;
+        bool updatePrefabRigPreviewTransforms(services::PreviewInstanceId instanceId,
+                                              const services::PrefabRigDescDTO& desc) override;
         void cleanUpPrefabRigPreview(services::PreviewInstanceId instanceId) override;
         bool isPrefabRigPreviewBuilt(services::PreviewInstanceId instanceId) const override;
         size_t getPrefabRigPartCount(services::PreviewInstanceId instanceId) const override;

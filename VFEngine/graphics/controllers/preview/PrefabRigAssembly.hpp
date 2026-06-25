@@ -136,6 +136,14 @@ namespace controllers
         // Re-calling rebuilds from scratch.
         bool build(const PrefabRigDesc& desc);
 
+        // Cheap transform-only refresh: applies a STRUCTURE-IDENTICAL desc's transform fields
+        // (a root part's localTransform, a child part's attachRotationDeg/attachScale) in place,
+        // WITHOUT reloading any skeleton/animator/socket/mesh data — the disk+GPU cost a full
+        // build() pays. Returns false if the structure drifted (part count / mesh / animator /
+        // retarget / parent / attach socket / IK count changed) so the caller can fall back to a
+        // full build(). Folds the new transforms into partWorld immediately (resolveAttachmentsAndIK).
+        bool updateTransformsFromDesc(const PrefabRigDesc& desc);
+
         // Advances animators, resolves attachments (topological), feeds + applies IK.
         // Order identical to Play (see the .cpp). No-op if not built.
         void update(float dt);
@@ -237,6 +245,7 @@ namespace controllers
         {
             std::string meshPath;
             std::string animatorPath;
+            std::string retargetPath;       // cached from the desc for structure-drift detection
             bool skeletal = false;
 
             resource::SkeletonData skeleton;                        // by value — outlives stack
@@ -248,6 +257,7 @@ namespace controllers
 
             int parentIndex = -1;
             int parentSocketIndex = -1;                             // index into parent.sockets, -1 if absent
+            std::string attachParentSocket;                         // cached from the desc for structure-drift detection
             glm::vec3 attachRotationDeg{0.0f};
             glm::vec3 attachScale{1.0f};
 

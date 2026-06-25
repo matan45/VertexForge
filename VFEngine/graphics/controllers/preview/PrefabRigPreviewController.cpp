@@ -523,6 +523,18 @@ namespace controllers
         return built;
     }
 
+    bool PrefabRigPreviewController::updateTransformsFromDesc(const PrefabRigDesc& desc)
+    {
+        // Transform-only fast path: no waitIdle, no destroyPipelines, no buildPartPipeline — the
+        // pipelines/meshes/textures are untouched. The assembly applies the new transform fields in
+        // place; the per-frame update() (UpdatePrefabRigPreviewCommand) re-uploads bone matrices and
+        // the next render() shows the moved parts. Returns false on structural drift => caller
+        // rebuilds.
+        if (!built)
+            return false;
+        return assembly.updateTransformsFromDesc(desc);
+    }
+
     bool PrefabRigPreviewController::buildPartPipeline(size_t partIndex, const PrefabRigPart& descPart)
     {
         auto pipeline = std::make_unique<render::mesh::SkinnedMeshPipeline>(

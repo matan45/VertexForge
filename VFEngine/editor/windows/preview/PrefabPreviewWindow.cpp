@@ -41,6 +41,28 @@ namespace windows
         // De-hardcoded UI timings (formerly literal 3.0f / 0.25f sprinkled through the panels).
         constexpr float kSaveFeedbackSeconds = 3.0f;   // how long "Saved/Failed" stays on screen
         constexpr float kDefaultStateBlendSeconds = 0.25f; // default animator state-transition blend
+
+        // --- NaN guards for the transform gizmo (VK-1433) -------------------------------------
+        // The gizmo maps a manipulated WORLD matrix back to the part's own-local transform via two
+        // matrix inversions; a degenerate (near-zero) scale or a pre-existing NaN would produce
+        // inf/NaN that then gets persisted and fed back next frame (a sticky NaN). These let the
+        // gizmo skip a bad frame instead of writing garbage.
+        bool isFiniteVec(const glm::vec3& v)
+        {
+            return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+        }
+        bool isFiniteMat(const glm::mat4& m)
+        {
+            for (int c = 0; c < 4; ++c)
+                for (int r = 0; r < 4; ++r)
+                    if (!std::isfinite(m[c][r]))
+                        return false;
+            return true;
+        }
+        float minAbsComponent(const glm::vec3& v)
+        {
+            return std::min({std::abs(v.x), std::abs(v.y), std::abs(v.z)});
+        }
     } // anonymous namespace
 
     // VK-1433 Phase 4 — the rig description is now re-derived from the live sandbox subtree via
@@ -260,6 +282,7 @@ namespace windows
         // add/remove, which dispatch their own commands.)
         if (isOpen && sandboxRoot.isValid())
         {
+            bool rebuiltThisFrame = false;
             std::vector<uint64_t> sig = sandboxStructureSignature();
             if (sig != lastStructureSignature)
             {
@@ -269,7 +292,20 @@ namespace windows
                 {
                     dirty = true;
                     rebuildRigFromSandbox();
+                    rebuiltThisFrame = true;
                 }
+            }
+
+            // VK-1433 — transform VALUE edits don't shift the structure signature; the
+            // TransformChangedNotification subscription flags them here. Apply the CHEAP transform-only
+            // sync (no mesh reload) — but skip it if a full structural rebuild already ran this frame
+            // (that path captured the new transforms too). Consume the flag unconditionally so a
+            // structural rebuild never leaves it set for a redundant next-frame sync.
+            if (transformsDirty)
+            {
+                transformsDirty = false;
+                if (!rebuiltThisFrame)
+                    syncTransformsFromSandbox();
             }
         }
 
@@ -356,6 +392,21 @@ namespace windows
         markCmd.tagged = true;
         events::EventDispatcher::instance().execute(markCmd);
 
+        // Subscribe to transform edits so inspector/numeric/gizmo/undo edits drive a CHEAP transform
+        // sync (see the header). Setting a bool in the callback is safe even though it fires mid-draw
+        // during a SetTransformCommand: publish() snapshots subscribers and invokes them with its lock
+        // released. Engine is alive here; unsubscribe lives in closeSandbox(), never the dtor.
+        if (!transformChangedToken.isValid())
+        {
+            transformChangedToken =
+                events::EventDispatcher::instance().subscribe<events::scene::TransformChangedNotification>(
+                    [this](const events::scene::TransformChangedNotification&)
+                    {
+                        if (sandboxRoot.isValid())
+                            transformsDirty = true;
+                    });
+        }
+
         prefabLoaded = true;
         rebuildRigFromSandbox();
 
@@ -370,6 +421,15 @@ namespace windows
     void PrefabPreviewWindow::closeSandbox()
     {
         cleanUpPreviewRenderer();
+
+        // Unsubscribe here (engine alive) — NOT in the dtor, which can run after the EventDispatcher is
+        // gone at shutdown. Idempotent: guarded by isValid(), reset to the default (invalid) token.
+        if (transformChangedToken.isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(transformChangedToken);
+            transformChangedToken = {};
+        }
+        transformsDirty = false;
 
         if (sandboxRoot.isValid())
         {
@@ -416,6 +476,32 @@ namespace windows
         {
             selectedPart = rigDesc.parts.empty() ? -1 : static_cast<int>(rigDesc.parts.size()) - 1;
         }
+    }
+
+    void PrefabPreviewWindow::syncTransformsFromSandbox()
+    {
+        // CHEAP path for a transform VALUE edit (gizmo / inspector / numeric / undo replay). Re-derive
+        // the rig DTO from the live sandbox — CQRS only, resolves mesh refs to PATHS, never loads
+        // geometry — then push a transform-ONLY update to the controller (no waitIdle / pipeline
+        // teardown / mesh reload). This is the prefab-view analogue of UILayerBuilderWindow's
+        // rebuild-on-edit, which is cheap there only because UI elements don't reload from disk.
+        if (!previewInitialized || !sandboxRoot.isValid())
+            return;
+
+        LiveRigBuildResult built = buildPrefabRigDescFromEntity(sandboxRoot, hiddenEntities);
+        rigDesc = std::move(built.desc);
+        partEntities = std::move(built.partEntities);
+
+        services::events::prefabrigpreview::UpdatePrefabRigPreviewTransformsCommand cmd;
+        cmd.instanceId = getInstanceId();
+        cmd.desc = rigDesc;
+        const bool applied = events::EventDispatcher::instance().execute(cmd);
+
+        // Structure drifted out from under the cheap path (part count / mesh / parent / attach socket
+        // changed) — fall back to the full rebuild, which reloads + re-maps selection. NOT expected on
+        // a pure transform edit; this is the safety net.
+        if (!applied)
+            rebuildRigFromSandbox();
     }
 
     // ----------------------------------------------------------------------
@@ -915,7 +1001,19 @@ namespace windows
         const services::TransformData ownLocal = partSourceLocalTransform(selectedPart);
         const glm::mat4 ownLocalMat = math::composeMatrix(ownLocal.position, ownLocal.rotation, ownLocal.scale);
         const glm::mat4 liveWorld = partWorldLive(selectedPart);
+
+        // NaN guard (see the anonymous-namespace helpers): a degenerate (near-zero) scale makes
+        // ownLocalMat singular, so glm::inverse() below is inf/NaN; a pre-existing NaN could also be in
+        // liveWorld. Either way the base/inverse(base) chain would persist a non-finite transform via
+        // SetTransformCommand and feed it back next frame (sticky NaN). Skip the gizmo this frame if the
+        // own-local frame is non-invertible / non-finite — the inspector numeric fields (forward
+        // compose, no inverse) still work to recover a usable scale.
+        constexpr float kMinInvertibleScale = 1e-4f;
+        if (!isFiniteMat(liveWorld) || minAbsComponent(ownLocal.scale) < kMinInvertibleScale)
+            return;
         const glm::mat4 base = liveWorld * glm::inverse(ownLocalMat);
+        if (!isFiniteMat(base))
+            return;
 
         glm::mat4 objectMatrix = liveWorld;
 
@@ -937,18 +1035,26 @@ namespace windows
             const glm::mat4 newOwnLocal = glm::inverse(base) * objectMatrix;
             const math::DecomposedTransform d = math::decomposeMatrix(newOwnLocal);
 
-            services::TransformData t;
-            t.position = d.position;
-            t.rotation = d.rotation; // Euler XYZ degrees == TransformComponent schema
-            t.scale = d.scale;
+            // Final NaN backstop: never persist a non-finite transform (decompose can still degenerate
+            // at a gimbal-lock / shear edge even with a valid scale). Drop this manipulation frame.
+            if (isFiniteVec(d.position) && isFiniteVec(d.rotation) && isFiniteVec(d.scale))
+            {
+                services::TransformData t;
+                t.position = d.position;
+                t.rotation = d.rotation; // Euler XYZ degrees == TransformComponent schema
+                t.scale = d.scale;
 
-            events::scene::SetTransformCommand cmd;
-            cmd.entity = partEntities[selectedPart];
-            cmd.transform = t;
-            events::EventDispatcher::instance().execute(cmd);
+                events::scene::SetTransformCommand cmd;
+                cmd.entity = partEntities[selectedPart];
+                cmd.transform = t;
+                events::EventDispatcher::instance().execute(cmd);
 
-            dirty = true;
-            rebuildRigFromSandbox(); // re-derive the rig so the preview tracks the entity edit
+                // The SetTransformCommand publishes TransformChangedNotification synchronously, which
+                // sets transformsDirty -> draw()'s end-of-frame block applies the CHEAP transform-only
+                // sync (no full mesh reload). No rebuildRigFromSandbox() here: that reloaded the entire
+                // rig from disk every drag frame (the frame drop + load-log spam this fixes).
+                dirty = true;
+            }
         }
 
         if (!usingGizmo && transformGizmoEditActive)

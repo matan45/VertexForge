@@ -30,6 +30,12 @@ namespace services
                 return buildPrefabRigPreview(cmd.instanceId, cmd.desc);
             });
 
+        dispatcher.registerCommandHandler<UpdatePrefabRigPreviewTransformsCommand>(
+            [this](const UpdatePrefabRigPreviewTransformsCommand& cmd) -> bool
+            {
+                return updatePrefabRigPreviewTransforms(cmd.instanceId, cmd.desc);
+            });
+
         dispatcher.registerCommandHandler<CleanUpPrefabRigPreviewCommand>(
             [this](const CleanUpPrefabRigPreviewCommand& cmd)
             {
@@ -210,6 +216,12 @@ namespace services
     bool PreviewServiceImpl::buildPrefabRigPreview(PreviewInstanceId instanceId, const PrefabRigDescDTO& desc)
     {
         return prefabRigProvider ? prefabRigProvider->buildPrefabRigPreview(instanceId, desc) : false;
+    }
+
+    bool PreviewServiceImpl::updatePrefabRigPreviewTransforms(PreviewInstanceId instanceId,
+                                                              const PrefabRigDescDTO& desc)
+    {
+        return prefabRigProvider ? prefabRigProvider->updatePrefabRigPreviewTransforms(instanceId, desc) : false;
     }
 
     void PreviewServiceImpl::cleanUpPrefabRigPreview(PreviewInstanceId instanceId)

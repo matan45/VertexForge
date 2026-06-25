@@ -66,6 +66,14 @@ namespace core
         return controller->buildFromDesc(toDesc(desc));
     }
 
+    bool PrefabRigPreviewAdapter::updatePrefabRigPreviewTransforms(services::PreviewInstanceId instanceId,
+                                                                   const services::PrefabRigDescDTO& desc)
+    {
+        auto* controller = getController(instanceId);
+        if (!controller) return false;
+        return controller->updateTransformsFromDesc(toDesc(desc));
+    }
+
     void PrefabRigPreviewAdapter::cleanUpPrefabRigPreview(services::PreviewInstanceId instanceId)
     {
         auto it = controllers.find(instanceId);

@@ -78,6 +78,11 @@ namespace controllers
         // Returns false (and logs) if the assembly produced no parts.
         bool buildFromDesc(const PrefabRigDesc& desc);
 
+        // Cheap transform-only update: forwards a structure-identical desc's transform fields to the
+        // assembly WITHOUT any waitIdle / pipeline teardown / mesh reload. Returns false if the
+        // structure drifted (or nothing is built) so the caller can fall back to buildFromDesc().
+        bool updateTransformsFromDesc(const PrefabRigDesc& desc);
+
         // Advances the assembly (animators -> attachments -> IK), then re-uploads each skeletal
         // part's composed bone matrices to its pipeline.
         void update(float deltaTime);

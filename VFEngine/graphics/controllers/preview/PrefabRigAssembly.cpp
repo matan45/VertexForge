@@ -104,7 +104,9 @@ namespace controllers
 
             part.meshPath = src.meshPath;
             part.animatorPath = src.animatorPath;
+            part.retargetPath = src.retargetPath;             // cached for structure-drift detection
             part.parentIndex = src.parentPartIndex;
+            part.attachParentSocket = src.attachParentSocket; // cached for structure-drift detection
             part.attachRotationDeg = src.attachChildRotation;
             part.attachScale = src.attachChildScale;
             part.localTransform = src.localTransform;
@@ -226,6 +228,52 @@ namespace controllers
         if (!built)
             vfLogWarning("[PrefabRigAssembly] build produced no parts");
         return built;
+    }
+
+    bool PrefabRigAssembly::updateTransformsFromDesc(const PrefabRigDesc& desc)
+    {
+        // Cheap transform-only refresh — see the header. Applies a structure-IDENTICAL desc's
+        // transform fields in place; reloads NOTHING from disk. Returns false on any structural
+        // drift so the caller falls back to a full build().
+        if (!built)
+            return false;
+        if (desc.parts.size() != parts.size() || desc.ik.size() != chains.size())
+            return false;
+
+        // Structure-identity gate: any change to a field build() consumes structurally (mesh /
+        // animator / retarget / parent index / attach socket) would make the in-place refresh wrong
+        // (e.g. a re-socketed child keeps its stale parentSocketIndex), so bail to a full rebuild.
+        for (size_t i = 0; i < parts.size(); ++i)
+        {
+            const PrefabRigPart& src = desc.parts[i];
+            const Part& part = parts[i];
+            if (src.meshPath != part.meshPath ||
+                src.animatorPath != part.animatorPath ||
+                src.retargetPath != part.retargetPath ||
+                src.parentPartIndex != part.parentIndex ||
+                src.attachParentSocket != part.attachParentSocket)
+            {
+                return false;
+            }
+        }
+
+        // Structure matches — apply ONLY the transform-derived fields. resolveAttachmentsAndIK()
+        // folds localTransform into a ROOT part's partWorld and attachRotationDeg/attachScale into
+        // a child's; everything else (skeleton/stack/sockets/parentSocketIndex/topoOrder/IK
+        // bindings) is untouched.
+        for (size_t i = 0; i < parts.size(); ++i)
+        {
+            const PrefabRigPart& src = desc.parts[i];
+            Part& part = parts[i];
+            part.localTransform = src.localTransform;
+            part.attachRotationDeg = src.attachChildRotation;
+            part.attachScale = src.attachChildScale;
+        }
+
+        // Recompose partWorld now so a same-frame partWorld() read (the gizmo anchor) is consistent.
+        // The per-frame update() also calls this; doing it here is cheap and keeps the read coherent.
+        resolveAttachmentsAndIK();
+        return true;
     }
 
     std::unique_ptr<animation::RetargetContext> PrefabRigAssembly::buildRetargetForPart(

@@ -108,6 +108,10 @@ namespace services
         // Prefab Rig Preview (VK-1433) — assembled multi-part rig, entt-free.
         virtual void initPrefabRigPreview(PreviewInstanceId instanceId) = 0;
         virtual bool buildPrefabRigPreview(PreviewInstanceId instanceId, const PrefabRigDescDTO& desc) = 0;
+        // Cheap transform-only update of an already-built preview (no mesh/skeleton/texture reload);
+        // false on structural drift so the window falls back to buildPrefabRigPreview.
+        virtual bool updatePrefabRigPreviewTransforms(PreviewInstanceId instanceId,
+                                                      const PrefabRigDescDTO& desc) = 0;
         virtual void cleanUpPrefabRigPreview(PreviewInstanceId instanceId) = 0;
         [[nodiscard]] virtual bool isPrefabRigPreviewBuilt(PreviewInstanceId instanceId) const = 0;
         [[nodiscard]] virtual size_t getPrefabRigPartCount(PreviewInstanceId instanceId) const = 0;

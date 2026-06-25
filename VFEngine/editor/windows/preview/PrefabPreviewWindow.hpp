@@ -12,6 +12,7 @@
 #include "data/EntityHandle.hpp"
 #include "data/DTOs.hpp"             // services::TransformData
 #include "providers/PreviewInstanceId.hpp"
+#include "events/EventTypes.hpp"     // events::SubscriptionToken (transform-change subscription)
 #include "animator/SocketTypes.hpp"
 #include "animator/IKTypes.hpp"
 #include "ImGuizmo.h"
@@ -286,6 +287,21 @@ namespace windows
         // a create/delete) re-derives the rig. Cheap CQRS-only walk; computed once per frame.
         std::vector<uint64_t> sandboxStructureSignature() const;
         std::vector<uint64_t> lastStructureSignature;
+
+        // Transform VALUE edits (embedded inspector, numeric fields, the gizmo, undo replay) do NOT
+        // shift the structure signature, so they are caught via a TransformChangedNotification
+        // subscription instead: the callback sets transformsDirty, and draw() applies a CHEAP
+        // transform-only sync (syncTransformsFromSandbox — no mesh reload) at end-of-frame, unless a
+        // full structural rebuild already ran that frame. This replaces the gizmo's old per-frame full
+        // rebuild (which reloaded the whole rig from disk every drag frame) and makes inspector edits
+        // actually move the mesh. Subscribed in openSandbox(), unsubscribed in closeSandbox() — never
+        // the dtor (it can run after the EventDispatcher is gone at shutdown).
+        bool transformsDirty = false;
+        events::SubscriptionToken transformChangedToken;
+        // Re-derive the rig DTO from the sandbox (cheap, CQRS-only — resolves mesh refs to PATHS, never
+        // loads geometry) and push a transform-ONLY update to the preview controller (no waitIdle /
+        // pipeline teardown / mesh reload). Falls back to a full rebuild if the structure drifted.
+        void syncTransformsFromSandbox();
 
         // Selected-part helpers (the window knows part metadata from rigDesc).
         bool partIsSkeletal(int part) const;
