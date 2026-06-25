@@ -2,6 +2,7 @@
 #include "Audio.hpp"
 #include "VorbisEncoder.hpp"
 #include "resource/EndianUtils.hpp"
+#include "resource/VfAudioHeader.hpp"
 #include "resource/VorbisDecoder.hpp"
 
 #include "cpumem/CpuMemoryManager.hpp"
@@ -244,32 +245,33 @@ namespace types
             return;
         }
 
-        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.headerFileType));
-        resource::endian::writeLE<uint32_t>(outFile, Version::major);
-        resource::endian::writeLE<uint32_t>(outFile, Version::minor);
-        resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+        const bool isVorbis = (audioData.compressionFormat == resource::AudioCompressionFormat::Vorbis);
 
-        // New fields: compression format and load type
-        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.compressionFormat));
-        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.loadType));
+        resource::VfAudioHeader header;
+        header.fileType = static_cast<uint8_t>(audioData.headerFileType);
+        header.versionMajor = Version::major;
+        header.versionMinor = Version::minor;
+        header.versionPatch = Version::patch;
+        header.compressionFormat = static_cast<uint8_t>(audioData.compressionFormat);
+        header.loadType = static_cast<uint8_t>(audioData.loadType);
+        header.sampleRate = audioData.sampleRate;
+        header.channels = audioData.channels;
+        header.frames = audioData.frames;
+        header.totalDurationSeconds = audioData.totalDurationInSeconds;
+        header.dataSize = isVorbis
+            ? static_cast<uint32_t>(audioData.compressedData.size())
+            : static_cast<uint32_t>(audioData.data.size() * sizeof(short));
 
-        resource::endian::writeLE<uint32_t>(outFile, audioData.sampleRate);
-        resource::endian::writeLE<uint32_t>(outFile, audioData.channels);
-        resource::endian::writeLE<uint32_t>(outFile, audioData.frames);
-        resource::endian::writeLE<uint32_t>(outFile, audioData.totalDurationInSeconds);
+        resource::writeVfAudioHeader(outFile, header);
 
-        if (audioData.compressionFormat == resource::AudioCompressionFormat::Vorbis)
+        if (isVorbis)
         {
             // Write compressed Vorbis data as raw bytes (opaque blob)
-            auto dataSize = static_cast<uint32_t>(audioData.compressedData.size());
-            resource::endian::writeLE<uint32_t>(outFile, dataSize);
-            outFile.write(reinterpret_cast<const char*>(audioData.compressedData.data()), dataSize);
+            outFile.write(reinterpret_cast<const char*>(audioData.compressedData.data()), header.dataSize);
         }
         else
         {
             // Write PCM data with endian conversion
-            auto dataSize = static_cast<uint32_t>(audioData.data.size() * sizeof(short));
-            resource::endian::writeLE<uint32_t>(outFile, dataSize);
             resource::endian::writeVectorLE<short>(outFile, audioData.data);
         }
 

@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+#include <span>
 
 namespace
 {
@@ -83,7 +84,7 @@ namespace types
         return blocksX * blocksY * 16; // All BC formats use 16 bytes per block
     }
 
-    std::vector<unsigned char> TextureCompressor::padToBlockSize(
+    std::span<const unsigned char> TextureCompressor::padToBlockSize(
         const unsigned char* data, uint32_t width, uint32_t height,
         uint32_t blockX, uint32_t blockY, uint32_t bpp,
         uint32_t& paddedWidth, uint32_t& paddedHeight)
@@ -93,10 +94,10 @@ namespace types
 
         const size_t requiredBytes = static_cast<size_t>(paddedWidth) * paddedHeight * bpp;
 
-        // No padding needed: copy source into a fresh vector (unchanged behaviour).
+        // No padding needed: the source is already block-aligned, so alias it directly.
         if (paddedWidth == width && paddedHeight == height)
         {
-            return std::vector<unsigned char>(data, data + requiredBytes);
+            return std::span<const unsigned char>(data, requiredBytes);
         }
 
         // Grow-only pool: resize the thread-local scratch up but never shrink.
@@ -120,8 +121,9 @@ namespace types
                 compressCategory(), newCapacity - prevCapacity);
         }
 
-        // Fill the padded buffer
-        std::memset(gPadScratch.data(), 0, requiredBytes);
+        // Fill the padded buffer. The clamp-to-edge copy writes every byte of the
+        // padded region (paddedWidth*paddedHeight*bpp == requiredBytes), so no
+        // separate zero-fill is needed.
         for (uint32_t y = 0; y < paddedHeight; ++y)
         {
             uint32_t srcY = std::min(y, height - 1);
@@ -135,9 +137,9 @@ namespace types
             }
         }
 
-        // Return a copy from the pool (callers own the returned buffer; the pool
-        // retains its capacity for the next call on this thread).
-        return std::vector<unsigned char>(gPadScratch.data(), gPadScratch.data() + requiredBytes);
+        // Return a non-owning view into the thread-local scratch. Valid until the
+        // next padToBlockSize call on this thread; callers consume it synchronously.
+        return std::span<const unsigned char>(gPadScratch.data(), requiredBytes);
     }
 
     std::vector<unsigned char> TextureCompressor::compressBC7(
@@ -148,9 +150,10 @@ namespace types
         uint32_t paddedW, paddedH;
         auto padded = padToBlockSize(rgbaData, width, height, 4, 4, 4, paddedW, paddedH);
 
-        // Setup surface
+        // Setup surface. The encoder only reads from ptr, so const_cast away the
+        // view's constness to satisfy the C API's non-const uint8_t* field.
         rgba_surface surface;
-        surface.ptr = padded.data();
+        surface.ptr = const_cast<uint8_t*>(padded.data());
         surface.width = static_cast<int32_t>(paddedW);
         surface.height = static_cast<int32_t>(paddedH);
         surface.stride = static_cast<int32_t>(paddedW * 4);
@@ -200,9 +203,10 @@ namespace types
             reinterpret_cast<const unsigned char*>(halfData.data()),
             width, height, 4, 4, 8, paddedW, paddedH);
 
-        // Setup surface for BC6H (half-float data)
+        // Setup surface for BC6H (half-float data). The encoder only reads from ptr,
+        // so const_cast away the view's constness to satisfy the C API's non-const field.
         rgba_surface surface;
-        surface.ptr = padded.data();
+        surface.ptr = const_cast<uint8_t*>(padded.data());
         surface.width = static_cast<int32_t>(paddedW);
         surface.height = static_cast<int32_t>(paddedH);
         surface.stride = static_cast<int32_t>(paddedW * 8); // 8 bytes per pixel (4 x float16)

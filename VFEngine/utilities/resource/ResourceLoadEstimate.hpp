@@ -1,5 +1,6 @@
 #pragma once
 #include "AssetTypes.hpp"
+#include "VfAudioHeader.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -47,17 +48,18 @@ namespace resource
             return true;
         }
 
-        // .vfAudio header layout (see AudioResource::loadAudio): after the 1-byte
-        // file type + 3 x u32 version + 1-byte compression + 1-byte loadType +
-        // u32 sampleRate, the channel count sits at byte 19 and the per-channel
-        // frame count at byte 23. Decoded PCM = frames * channels * sizeof(int16).
+        // .vfAudio header layout: the field offsets live in VfAudioHeader.hpp
+        // (single source of truth). The channel count sits at kChannelsOffset and
+        // the per-channel frame count at kFramesOffset. Decoded PCM =
+        // frames * channels * sizeof(int16).
         inline uint64_t estimateAudioPcmBytes(const std::string& path)
         {
             std::ifstream f(path, std::ios::binary);
             if (!f)
                 return 0;
             uint32_t channels = 0, frames = 0;
-            if (!readLE32At(f, 19, channels) || !readLE32At(f, 23, frames))
+            if (!readLE32At(f, vfaudio::kChannelsOffset, channels) ||
+                !readLE32At(f, vfaudio::kFramesOffset, frames))
                 return 0;
             if (channels == 0 || channels > 8 || frames == 0)
                 return 0; // implausible -> let the caller fall back

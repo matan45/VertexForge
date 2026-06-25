@@ -100,12 +100,9 @@ namespace controllers::offscreen
 
             for (auto layoutEntity : layoutView)
             {
-                if (!isEffectivelyActiveWithin(registry, layoutEntity, activeScopeRoot))
-                    continue;
-
-                // Scoped preview: restrict to the sandbox canvas's own layout groups.
-                if (activeScopeRoot != entt::null &&
-                    findCanvasWithEntity(registry, layoutEntity).canvasEntity != activeScopeRoot)
+                // Scoped preview: restrict to the sandbox canvas's own layout groups, and
+                // honor the scoped active flags — both decided in a single parent-chain walk.
+                if (!isEffectivelyActiveInScopedCanvas(registry, layoutEntity, activeScopeRoot))
                     continue;
 
                 const auto* layoutCanvas = findCanvasForEntity(registry, layoutEntity);

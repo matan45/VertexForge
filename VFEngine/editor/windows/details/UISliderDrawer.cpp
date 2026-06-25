@@ -6,6 +6,7 @@
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "DrawerHelpers.hpp"
+#include "UIDrawerCommon.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -169,62 +170,6 @@ namespace windows::details
         return changed;
     }
 
-    static bool drawSliderTextureSlot(const char* label, asset::AssetRef& textureRef, const char* uniqueId)
-    {
-        bool changed = false;
-
-        ImGui::Text("%s", label);
-
-        if (textureRef.isValid())
-        {
-            std::string filename = textureRef.resolve();
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-            {
-                filename = filename.substr(lastSlash + 1);
-            }
-            ImGui::SameLine();
-            ImGui::TextDisabled("%s", filename.c_str());
-        }
-
-        char selectId[64];
-        std::snprintf(selectId, sizeof(selectId), "Select##UISld_%s", uniqueId);
-        if (ImGui::Button(selectId))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
-            if (!path.empty())
-            {
-                std::ifstream file(path);
-                if (file.good())
-                {
-                    file.close();
-                    textureRef = asset::AssetRef::fromPath(path);
-                    changed = true;
-                }
-                else
-                {
-                    vfLogError("Selected texture file does not exist or cannot be read: {}", path);
-                }
-            }
-        }
-
-        ImGui::SameLine();
-        bool wasEmpty = !textureRef.isValid();
-        if (wasEmpty) ImGui::BeginDisabled();
-        char clearId[64];
-        std::snprintf(clearId, sizeof(clearId), "Clear##UISld_%s", uniqueId);
-        if (ImGui::Button(clearId))
-        {
-            textureRef = asset::AssetRef::invalid();
-            changed = true;
-        }
-        if (wasEmpty) ImGui::EndDisabled();
-
-        return changed;
-    }
-
     bool UISliderDrawer::drawHandleAppearance(services::UISliderData& data)
     {
         bool changed = false;
@@ -267,10 +212,10 @@ namespace windows::details
             ImGui::TextDisabled("Empty = color only mode");
             ImGui::Spacing();
 
-            changed |= drawSliderTextureSlot("Normal", data.handleNormalTextureRef, "handleNormal");
-            changed |= drawSliderTextureSlot("Hovered", data.handleHoveredTextureRef, "handleHovered");
-            changed |= drawSliderTextureSlot("Pressed", data.handlePressedTextureRef, "handlePressed");
-            changed |= drawSliderTextureSlot("Disabled", data.handleDisabledTextureRef, "handleDisabled");
+            changed |= drawUITextureSlot("Normal", data.handleNormalTextureRef, "UISld_handleNormal");
+            changed |= drawUITextureSlot("Hovered", data.handleHoveredTextureRef, "UISld_handleHovered");
+            changed |= drawUITextureSlot("Pressed", data.handlePressedTextureRef, "UISld_handlePressed");
+            changed |= drawUITextureSlot("Disabled", data.handleDisabledTextureRef, "UISld_handleDisabled");
 
             ImGui::TreePop();
         }
@@ -293,7 +238,7 @@ namespace windows::details
             ImGui::TextDisabled("Empty = color only mode");
             ImGui::Spacing();
 
-            changed |= drawSliderTextureSlot("Fill", data.fillTextureRef, "fill");
+            changed |= drawUITextureSlot("Fill", data.fillTextureRef, "UISld_fill");
 
             ImGui::TreePop();
         }

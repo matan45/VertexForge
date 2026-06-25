@@ -127,6 +127,9 @@ namespace controllers
         const std::vector<animator::SocketDefinition>& editableSockets(size_t part) const;
         std::vector<animator::ik::IKChainConfig>& editableChains();
         const std::vector<animator::ik::IKChainConfig>& editableChains() const;
+        // Re-resolves cached by-name socket bindings after editableSockets() was overwritten
+        // (a rename/reorder leaves child-attach / IK-target indices stale); delegates to the assembly.
+        void reresolveSocketBindings();
 
         size_t partCount() const;
         bool isBuilt() const { return built; }

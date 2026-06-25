@@ -313,6 +313,10 @@ namespace core
         if (controller)
         {
             controller->editableSockets(part) = sockets;
+            // A rename/reorder of this part's sockets invalidates the by-name bindings resolved at
+            // build() time (a child's index into THIS part's sockets, an IK chain's target index);
+            // re-resolve them so the next update() follows the right socket instead of going stale.
+            controller->reresolveSocketBindings();
         }
     }
 

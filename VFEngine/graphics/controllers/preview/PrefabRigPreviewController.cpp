@@ -765,6 +765,11 @@ namespace controllers
         return assembly.editableChains();
     }
 
+    void PrefabRigPreviewController::reresolveSocketBindings()
+    {
+        assembly.reresolveSocketBindings();
+    }
+
     size_t PrefabRigPreviewController::partCount() const { return assembly.partCount(); }
 
     void* PrefabRigPreviewController::render()

@@ -40,10 +40,7 @@ namespace controllers::offscreen::ui_screenspace
 
         for (auto sliderEntity : sliderDrawView)
         {
-            if (!isEffectivelyActiveWithin(registry, sliderEntity, scopedCanvas))
-                continue;
-            if (scopedCanvas != entt::null &&
-                findCanvasWithEntity(registry, sliderEntity).canvasEntity != scopedCanvas)
+            if (!isEffectivelyActiveInScopedCanvas(registry, sliderEntity, scopedCanvas))
                 continue;
 
             size_t entryStart = drawList.size();
@@ -151,10 +148,7 @@ namespace controllers::offscreen::ui_screenspace
 
         for (auto pbEntity : progressBarView)
         {
-            if (!isEffectivelyActiveWithin(registry, pbEntity, scopedCanvas))
-                continue;
-            if (scopedCanvas != entt::null &&
-                findCanvasWithEntity(registry, pbEntity).canvasEntity != scopedCanvas)
+            if (!isEffectivelyActiveInScopedCanvas(registry, pbEntity, scopedCanvas))
                 continue;
 
             size_t entryStart = drawList.size();
@@ -258,10 +252,7 @@ namespace controllers::offscreen::ui_screenspace
         auto scrollBarView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
         for (auto scrollEntity : scrollBarView)
         {
-            if (!isEffectivelyActiveWithin(registry, scrollEntity, scopedCanvas))
-                continue;
-            if (scopedCanvas != entt::null &&
-                findCanvasWithEntity(registry, scrollEntity).canvasEntity != scopedCanvas)
+            if (!isEffectivelyActiveInScopedCanvas(registry, scrollEntity, scopedCanvas))
                 continue;
 
             size_t entryStart = drawList.size();
@@ -494,10 +485,7 @@ namespace controllers::offscreen::ui_screenspace
             if (!comp.isOpen || comp.options.empty())
                 continue;
 
-            if (!isEffectivelyActiveWithin(registry, dropdownEntity, scopedCanvas))
-                continue;
-            if (scopedCanvas != entt::null &&
-                findCanvasWithEntity(registry, dropdownEntity).canvasEntity != scopedCanvas)
+            if (!isEffectivelyActiveInScopedCanvas(registry, dropdownEntity, scopedCanvas))
                 continue;
 
             size_t entryStart = drawList.size();
@@ -574,10 +562,7 @@ namespace controllers::offscreen::ui_screenspace
             if (!comp.selectable || comp.selectedIndex < 0 ||
                 comp.selectedIndex >= static_cast<int>(comp.itemInstances.size()))
                 continue;
-            if (!isEffectivelyActiveWithin(registry, listEntity, scopedCanvas))
-                continue;
-            if (scopedCanvas != entt::null &&
-                findCanvasWithEntity(registry, listEntity).canvasEntity != scopedCanvas)
+            if (!isEffectivelyActiveInScopedCanvas(registry, listEntity, scopedCanvas))
                 continue;
 
             entt::entity item = comp.itemInstances[static_cast<size_t>(comp.selectedIndex)];
@@ -646,10 +631,7 @@ namespace controllers::offscreen::ui_screenspace
         auto dropView = registry.view<components::UIDropTargetComponent, components::UIRectComponent>();
         for (auto targetEntity : dropView)
         {
-            if (!isEffectivelyActiveWithin(registry, targetEntity, scopedCanvas))
-                continue;
-            if (scopedCanvas != entt::null &&
-                findCanvasWithEntity(registry, targetEntity).canvasEntity != scopedCanvas)
+            if (!isEffectivelyActiveInScopedCanvas(registry, targetEntity, scopedCanvas))
                 continue;
 
             const auto& targetComp = registry.get<components::UIDropTargetComponent>(targetEntity);

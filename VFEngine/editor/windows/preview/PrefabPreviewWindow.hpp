@@ -135,6 +135,12 @@ namespace windows
         void savePrefab(bool saveAs);
         nfd::FileDialog fileDialog;
 
+        // Transient "Saved/Failed" badge shared by the prefab / socket / static-socket / IK save
+        // buttons (each keeps its own timer + success flag; this only draws the badge). Green "Saved"
+        // on success, red "Failed" otherwise, on the same line as the preceding button. No-op when the
+        // timer has elapsed (timer <= 0).
+        void drawSaveBadge(float timer, bool success) const;
+
         // --- Phase 2 edit undo ------------------------------------------------
         // Snapshot/push brackets mirror UILayerBuilderWindow: capture a "before" snapshot while no
         // edit session is active, push ONE undo command when the session ends. socketEditActive /
@@ -274,6 +280,13 @@ namespace windows
         // a create/delete) re-derives the rig. Cheap CQRS-only walk; computed once per frame.
         std::vector<uint64_t> sandboxStructureSignature() const;
         std::vector<uint64_t> lastStructureSignature;
+        // The signature walk issues per-node CQRS over the whole subtree, so running it every frame is
+        // wasteful for an idle window. Structural edits are user-driven (component add/remove,
+        // create/delete), so a few-frame detection latency is invisible — throttle the check to roughly
+        // every kStructureCheckInterval frames. (Tree-driven mutations rebuild immediately; this only
+        // catches the embedded inspector's Add/Remove, which can tolerate the latency.)
+        static constexpr int kStructureCheckInterval = 12;
+        int structureCheckCountdown = 0; // frames until the next signature check (0 == check this frame)
 
         // Transform VALUE edits (embedded inspector, numeric fields, the gizmo, undo replay) do NOT
         // shift the structure signature, so they are caught via a TransformChangedNotification
@@ -299,7 +312,11 @@ namespace windows
         void pushEditChains();
 
         // VK-1433 Phase 4 — selection link between the live hierarchy and the part-indexed authoring
-        // panels. selectedEntity() / selectEntity() wrap the scene CQRS (clone of UILayerBuilderWindow).
+        // panels. The selection is WINDOW-LOCAL: routing it through the global scene
+        // GetSelectedEntityQuery / SelectEntityCommand would leak a sandbox entity into the main Scene
+        // Hierarchy / Details panels (and a main-scene selection back into here, blanking this
+        // inspector). selectedEntity() returns this local handle; selectEntity() sets it.
+        services::EntityHandle selectedSandboxEntity_ = services::EntityHandle::invalid();
         services::EntityHandle selectedEntity() const;
         void selectEntity(services::EntityHandle entity);
         // Part index whose source entity == `entity` (linear search over partEntities); -1 if none.

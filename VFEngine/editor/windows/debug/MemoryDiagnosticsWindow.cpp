@@ -587,7 +587,11 @@ namespace windows
             ? static_cast<float>(usedBytes) / static_cast<float>(budgetBytes)
             : 0.0f;
         float frac = std::clamp(rawFrac, 0.0f, 1.0f);
-        float headroomGB = std::max(0.0f, static_cast<float>(budgetBytes - usedBytes) / GB);
+        // budgetBytes/usedBytes are uint64_t — subtract only when in budget so the
+        // difference can't wrap to a huge value (which std::max(0.0f, …) couldn't clamp).
+        float headroomGB = budgetBytes > usedBytes
+            ? static_cast<float>(budgetBytes - usedBytes) / GB
+            : 0.0f;
 
         char overlay[96];
         std::snprintf(overlay, sizeof(overlay), "%.2f / %.2f GB (%.0f%%)  headroom %.2f GB",

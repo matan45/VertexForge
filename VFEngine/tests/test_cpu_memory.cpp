@@ -504,6 +504,54 @@ TEST_SUITE("CpuMemoryGateScheduler")
         cpuMem.setGateState(memory::GateState::Open, 0);
     }
 
+    TEST_CASE("oversized non-Critical load is admitted via the escape valve when the system is idle")
+    {
+        // VK-1434 fix: a non-Critical load whose own estimate alone exceeds the
+        // remaining budget would, under the naive gate, return false from reserve()
+        // every dispatch and be deferred forever (permanent placeholder). The escape
+        // valve admits the highest-priority pending load when NOTHING is in flight and
+        // NO reservation is held — because in that state no future completion or
+        // release can ever lower the projected total, so deferring cannot help.
+        auto& scheduler = ResourceLoadScheduler::instance();
+        auto& cpuMem = memory::CpuMemoryManager::instance();
+        auto& lifecycle = resource::AssetLifecycleManager::instance();
+
+        ResourceSchedulerConfig cfg;
+        cfg.maxConcurrentLoads = 8; // generous: deferral can only be the memory gate
+        scheduler.init(cfg);
+
+        // A clean reservation baseline is required for the escape valve to fire: a
+        // held reservation would (correctly) keep the gate deferring. Sibling cases
+        // assert they leak nothing, so this holds when the suite is run in order.
+        const uint64_t resvBase = cpuMem.outstandingReservations();
+        REQUIRE(resvBase == 0);
+
+        const uint64_t decodedTotal = lifecycle.getTotalTrackedBytes();
+        cpuMem.setBudget(decodedTotal + 1); // 1-byte headroom: any estimate is "over"
+
+        bool ran = false;
+        LoadRequest a;
+        a.guid = asset::AssetGUID::generate();
+        a.assetType = resource::AssetType::Mesh;
+        a.estimatedBytes = 64ull * 1024 * 1024; // 64 MB, far beyond the 1-byte headroom
+        a.executeLoad = [&ran] { ran = true; };
+
+        // submit() dispatches eagerly. Nothing is in flight and no reservation is held,
+        // so the escape valve admits A instead of stranding it.
+        uint64_t idA = scheduler.submit(a);
+        CHECK(ran);
+
+        // Drain: poll the ready future so the (escape-valve) reservation is released.
+        scheduler.update({0.0f, 0.0f, 0.0f});
+        auto recA = findCompletion(idA);
+        REQUIRE(recA.has_value());
+        CHECK(recA->finalStage == LoadStage::Completed);
+        CHECK(cpuMem.outstandingReservations() == resvBase); // no leak
+
+        cpuMem.setBudget(0);
+        cpuMem.setGateState(memory::GateState::Open, 0);
+    }
+
     TEST_CASE("Critical load bypasses the gate even when over budget")
     {
         auto& scheduler = ResourceLoadScheduler::instance();

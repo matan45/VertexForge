@@ -177,6 +177,13 @@ namespace controllers
         std::vector<animator::ik::IKChainConfig>& editableChains();
         const std::vector<animator::ik::IKChainConfig>& editableChains() const;
 
+        // Re-runs the by-name binding resolution that build() does (a child part's index into its
+        // PARENT's sockets, and an IK chain's index into its TARGET part's sockets) using the cached
+        // source names. Call this after overwriting a part's editableSockets() — a rename/reorder
+        // would otherwise leave those cached indices stale (attachment / IK silently follows the
+        // wrong socket until a full rebuild). The next resolveAttachmentsAndIK() uses fresh indices.
+        void reresolveSocketBindings();
+
         // --- IK overlay state (read-only, populated by update()) ------------
         // Resolved per-chain data for an editor overlay: which body part solves it, the resolved
         // tip bone index on that part (-1 if unresolved), the world-space target position fed to
@@ -281,6 +288,7 @@ namespace controllers
             int bodyPartIndex = -1;
             int targetPartIndex = -1;
             int targetSocketIndex = -1;                             // index into target part's sockets
+            std::string targetSocketName;                           // cached source name, for re-resolving targetSocketIndex
             components::IKChainRuntimeState runtimeState;
         };
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <span>
 #include <cstdint>
 #include "config/Config.hpp"
 #include "resource/Types.hpp"
@@ -26,9 +27,14 @@ namespace types
             uint32_t width, uint32_t height,
             resource::TextureCompressionFormat format);
 
-        // Pad image dimensions to block-size multiple, returns padded data
-        // bpp = bytes per pixel (4 for RGBA8, 16 for RGBA32F)
-        static std::vector<unsigned char> padToBlockSize(
+        // Pad image dimensions to block-size multiple, returns a view of the padded data.
+        // bpp = bytes per pixel (4 for RGBA8, 16 for RGBA32F).
+        // The returned span is a non-owning view: for the no-padding case it aliases the
+        // caller's `data`; otherwise it aliases a thread-local scratch buffer that stays
+        // valid until the next padToBlockSize call on the same thread. Callers must consume
+        // it synchronously (the compress entry points do — they feed it straight into the
+        // BC encoder before any further padding call).
+        static std::span<const unsigned char> padToBlockSize(
             const unsigned char* data, uint32_t width, uint32_t height,
             uint32_t blockX, uint32_t blockY, uint32_t bpp,
             uint32_t& paddedWidth, uint32_t& paddedHeight);

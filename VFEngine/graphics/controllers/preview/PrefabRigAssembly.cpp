@@ -207,6 +207,7 @@ namespace controllers
             Chain c;
             c.bodyPartIndex = srcIk.bodyPartIndex;
             c.targetPartIndex = srcIk.targetPartIndex;
+            c.targetSocketName = srcIk.targetSocketName; // cached for reresolveSocketBindings()
             if (srcIk.targetPartIndex >= 0 && srcIk.targetPartIndex < static_cast<int>(parts.size()) &&
                 !srcIk.targetSocketName.empty())
             {
@@ -228,6 +229,50 @@ namespace controllers
         if (!built)
             vfLogWarning("[PrefabRigAssembly] build produced no parts");
         return built;
+    }
+
+    void PrefabRigAssembly::reresolveSocketBindings()
+    {
+        // Re-run the by-name binding resolution from build() (mirrors the two resolve passes there)
+        // using the cached source names. Sockets may have been renamed/reordered via editableSockets(),
+        // so the cached indices can be stale.
+
+        // Each child part's index into its PARENT's sockets (mirror build() :187-197).
+        for (size_t i = 0; i < parts.size(); ++i)
+        {
+            Part& part = parts[i];
+            if (part.parentIndex >= 0 && part.parentIndex < static_cast<int>(parts.size()) &&
+                !part.attachParentSocket.empty())
+            {
+                const Part& parent = parts[static_cast<size_t>(part.parentIndex)];
+                part.parentSocketIndex = animator::indexOfSocket(parent.sockets, part.attachParentSocket);
+                if (part.parentSocketIndex < 0)
+                {
+                    vfLogWarning("[PrefabRigAssembly] Part {} attach socket '{}' not found on parent part {}",
+                                 i, part.attachParentSocket, part.parentIndex);
+                }
+            }
+        }
+
+        // Each IK chain's index into its TARGET part's sockets (mirror build() :210-220).
+        for (Chain& c : chains)
+        {
+            if (c.targetPartIndex >= 0 && c.targetPartIndex < static_cast<int>(parts.size()) &&
+                !c.targetSocketName.empty())
+            {
+                c.targetSocketIndex = animator::indexOfSocket(parts[static_cast<size_t>(c.targetPartIndex)].sockets,
+                                                              c.targetSocketName);
+                if (c.targetSocketIndex < 0)
+                {
+                    vfLogWarning("[PrefabRigAssembly] IK chain target socket '{}' not found on part {}",
+                                 c.targetSocketName, c.targetPartIndex);
+                }
+            }
+            else
+            {
+                c.targetSocketIndex = -1;
+            }
+        }
     }
 
     bool PrefabRigAssembly::updateTransformsFromDesc(const PrefabRigDesc& desc)
@@ -630,25 +675,19 @@ namespace controllers
         animation::AnimationLayerStack* stack = parts[part].stack.get();
         const float frameDt = stack->getCurrentClipFrameDuration(); // seconds per source frame
 
-        if (frames > 0)
-        {
-            // Forward: advance the animator by frames * frameDt seconds. The stack's internal state
-            // machine stays "playing" (pause() only flips our `paused` gate, not the stack), so this
-            // is exactly the Play update — just applied while the rig preview is paused, firing the
-            // same transitions/events a real step would.
-            stack->update(static_cast<float>(frames) * frameDt);
-        }
-        else
-        {
-            // Backward: update() cannot take a negative dt, so seek. Convert the negative seconds
-            // step to a normalized delta via the current state duration and re-seek (clamped to 0).
-            const float durationSec = stack->getCurrentStateDuration();
-            const float current = stack->getNormalizedTime();
-            const float normDelta = (durationSec > 0.0f)
-                                        ? (static_cast<float>(frames) * frameDt / durationSec)
-                                        : 0.0f;
-            stack->setNormalizedTime(std::max(0.0f, current + normDelta));
-        }
+        // Both directions use the SAME no-event seek (the only difference is the sign of `frames`),
+        // so reaching a frame by stepping forward matches the scrub slider's pose exactly: a forward
+        // update() would advance real animator time and fire state transitions / animation events
+        // (and could wrap past a non-looping clip's end), making forward-step poses diverge from the
+        // slider. Convert the frames*frameDt seconds step to a normalized delta via the current
+        // state duration and re-seek (clamped to [0,1]). Matches the prior backward-branch guard for
+        // durationSec <= 0 (no usable duration -> no movement).
+        const float durationSec = stack->getCurrentStateDuration();
+        const float current = stack->getNormalizedTime();
+        const float normDelta = (durationSec > 0.0f)
+                                    ? (static_cast<float>(frames) * frameDt / durationSec)
+                                    : 0.0f;
+        stack->setNormalizedTime(std::clamp(current + normDelta, 0.0f, 1.0f));
 
         // Re-resolve so attached parts and IK follow the new pose immediately.
         resolveAttachmentsAndIK();

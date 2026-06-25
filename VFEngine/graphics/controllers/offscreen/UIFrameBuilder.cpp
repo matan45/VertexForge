@@ -105,15 +105,11 @@ namespace controllers::offscreen
 
             for (auto entity : view)
             {
-                if (!isEffectivelyActiveWithin(registry, entity, scopedCanvas))
+                if (!isEffectivelyActiveInScopedCanvas(registry, entity, scopedCanvas))
                     continue;
 
                 const auto& labelComp = view.get<components::UILabelComponent>(entity);
                 if (labelComp.text.empty() || !labelComp.fontRef.isValid())
-                    continue;
-
-                if (scopedCanvas != entt::null &&
-                    findCanvasWithEntity(registry, entity).canvasEntity != scopedCanvas)
                     continue;
 
                 const auto* canvas = findCanvasForEntity(registry, entity);
@@ -187,15 +183,11 @@ namespace controllers::offscreen
             auto textInputView = registry.view<components::UITextInputComponent, components::UIRectComponent>();
             for (auto entity : textInputView)
             {
-                if (!isEffectivelyActiveWithin(registry, entity, scopedCanvas))
+                if (!isEffectivelyActiveInScopedCanvas(registry, entity, scopedCanvas))
                     continue;
 
                 const auto& tiComp = registry.get<components::UITextInputComponent>(entity);
                 if (!tiComp.fontRef.isValid())
-                    continue;
-
-                if (scopedCanvas != entt::null &&
-                    findCanvasWithEntity(registry, entity).canvasEntity != scopedCanvas)
                     continue;
 
                 bool showPlaceholder = tiComp.text.empty()
@@ -293,11 +285,7 @@ namespace controllers::offscreen
                 auto& comp = registry.get<components::UIDropdownComponent>(dropdownEntity);
                 if (!comp.isOpen || comp.options.empty())
                     continue;
-                if (!isEffectivelyActiveWithin(registry, dropdownEntity, scopedCanvas))
-                    continue;
-
-                if (scopedCanvas != entt::null &&
-                    findCanvasWithEntity(registry, dropdownEntity).canvasEntity != scopedCanvas)
+                if (!isEffectivelyActiveInScopedCanvas(registry, dropdownEntity, scopedCanvas))
                     continue;
 
                 const auto* canvas = findCanvasForEntity(registry, dropdownEntity);
@@ -355,15 +343,11 @@ namespace controllers::offscreen
             auto view = registry.view<components::UIWindowComponent, components::UIRectComponent>();
             for (auto entity : view)
             {
-                if (!isEffectivelyActiveWithin(registry, entity, scopedCanvas))
+                if (!isEffectivelyActiveInScopedCanvas(registry, entity, scopedCanvas))
                     continue;
 
                 const auto& window = view.get<components::UIWindowComponent>(entity);
                 if (!window.showTitleBar || !window.fontRef.isValid())
-                    continue;
-
-                if (scopedCanvas != entt::null &&
-                    findCanvasWithEntity(registry, entity).canvasEntity != scopedCanvas)
                     continue;
 
                 const auto* canvas = findCanvasForEntity(registry, entity);

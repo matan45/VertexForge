@@ -208,12 +208,7 @@ namespace windows
                     ImGui::SameLine();
                     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "(unsaved)");
                 }
-                if (prefabSaveTimer > 0.0f)
-                {
-                    ImGui::SameLine();
-                    ImGui::TextColored(prefabSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
-                                       prefabSaveSuccess ? "Saved" : "Failed");
-                }
+                drawSaveBadge(prefabSaveTimer, prefabSaveSuccess);
 
                 static float leftWidth = 160.0f;
                 static float rightWidth = 280.0f;
@@ -282,17 +277,30 @@ namespace windows
         // add/remove, which dispatch their own commands.)
         if (isOpen && sandboxRoot.isValid())
         {
+            // Fix B4 — the signature walk issues per-node CQRS over the whole subtree, so throttle it
+            // to roughly every kStructureCheckInterval frames instead of every frame. countdown == 0
+            // means "check this frame"; it is reset to the interval after each walk. The countdown is
+            // 0 at the first frame after an open (member default 0; closeSandbox resets it), so the
+            // baseline signature is captured immediately rather than after a throttle delay.
             bool rebuiltThisFrame = false;
-            std::vector<uint64_t> sig = sandboxStructureSignature();
-            if (sig != lastStructureSignature)
+            if (structureCheckCountdown > 0)
             {
-                const bool firstFrame = lastStructureSignature.empty();
-                lastStructureSignature = std::move(sig);
-                if (!firstFrame)
+                --structureCheckCountdown;
+            }
+            else
+            {
+                structureCheckCountdown = kStructureCheckInterval;
+                std::vector<uint64_t> sig = sandboxStructureSignature();
+                if (sig != lastStructureSignature)
                 {
-                    dirty = true;
-                    rebuildRigFromSandbox();
-                    rebuiltThisFrame = true;
+                    const bool firstFrame = lastStructureSignature.empty();
+                    lastStructureSignature = std::move(sig);
+                    if (!firstFrame)
+                    {
+                        dirty = true;
+                        rebuildRigFromSandbox();
+                        rebuiltThisFrame = true;
+                    }
                 }
             }
 
@@ -413,11 +421,19 @@ namespace windows
         rebuildRigFromSandbox();
 
         // Initial selection: the first mesh part if there is one (so the authoring panels are
-        // immediately usable), otherwise the sandbox root.
+        // immediately usable), otherwise the sandbox root. selectEntity drives the window-local
+        // selection that highlights the hierarchy row and feeds the embedded inspector; selectPart
+        // drives the part-indexed authoring panels. Both must be set so the tree, inspector, and
+        // panels agree (the hierarchy-click path sets them together too).
         if (!partEntities.empty())
+        {
+            selectEntity(partEntities[0]);
             selectPart(0);
+        }
         else
+        {
             selectEntity(sandboxRoot);
+        }
     }
 
     void PrefabPreviewWindow::closeSandbox()
@@ -442,9 +458,11 @@ namespace windows
             sandboxRoot = services::EntityHandle::invalid();
         }
         partEntities.clear();
+        selectedSandboxEntity_ = services::EntityHandle::invalid();
         renamingEntity = services::EntityHandle::invalid();
         renameFocusPending = false;
         lastStructureSignature.clear();
+        structureCheckCountdown = 0; // re-baseline the signature on the next open's first frame
     }
 
     void PrefabPreviewWindow::rebuildRigFromSandbox()
@@ -684,6 +702,15 @@ namespace windows
     // ----------------------------------------------------------------------
     // VK-1433 Phase 4c — prefab save
     // ----------------------------------------------------------------------
+    void PrefabPreviewWindow::drawSaveBadge(float timer, bool success) const
+    {
+        // Shared transient "Saved/Failed" badge for the save buttons (prefab / socket / static / IK).
+        if (timer <= 0.0f) return;
+        ImGui::SameLine();
+        ImGui::TextColored(success ? ImVec4(0.3f, 1.0f, 0.3f, 1.0f) : ImVec4(1.0f, 0.3f, 0.3f, 1.0f),
+                           success ? "Saved" : "Failed");
+    }
+
     void PrefabPreviewWindow::savePrefab(bool saveAs)
     {
         if (!sandboxRoot.isValid()) return;
@@ -1702,16 +1729,17 @@ namespace windows
     // ----------------------------------------------------------------------
     services::EntityHandle PrefabPreviewWindow::selectedEntity() const
     {
-        events::scene::GetSelectedEntityQuery q;
-        auto sel = events::EventDispatcher::instance().query(q);
-        return sel.value_or(services::EntityHandle::invalid());
+        // WINDOW-LOCAL selection (see header): the sandbox subtree's selection must NOT touch the
+        // global scene selection, or selecting a sandbox entity here would also re-select it in the
+        // main Scene Hierarchy / Details panels (and a main-scene selection would blank this inspector).
+        return selectedSandboxEntity_;
     }
 
     void PrefabPreviewWindow::selectEntity(services::EntityHandle entity)
     {
-        events::scene::SelectEntityCommand cmd;
-        if (entity.isValid()) cmd.entity = entity;
-        events::EventDispatcher::instance().execute(cmd);
+        // Set the window-local selection only. Callers additionally drive the part-indexed authoring
+        // panels via partForEntity()/selectPart(); no global SelectEntityCommand is issued.
+        selectedSandboxEntity_ = entity;
     }
 
     int PrefabPreviewWindow::partForEntity(services::EntityHandle entity) const
@@ -2173,12 +2201,7 @@ namespace windows
             }
         }
         if (!canSave) ImGui::EndDisabled();
-        if (socketSaveTimer > 0.0f)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(socketSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
-                               socketSaveSuccess ? "Saved" : "Failed");
-        }
+        drawSaveBadge(socketSaveTimer, socketSaveSuccess);
 
         // Close the undo bracket: an edit session is "in flight" while any item is active; when it
         // ends, push one coalesced entry against the snapshot taken at session start.
@@ -2290,12 +2313,7 @@ namespace windows
             }
         }
         if (!canSave) ImGui::EndDisabled();
-        if (socketSaveTimer > 0.0f)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(socketSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
-                               socketSaveSuccess ? "Saved" : "Failed");
-        }
+        drawSaveBadge(socketSaveTimer, socketSaveSuccess);
 
         // Close the undo bracket (see drawBoneSocketPanel).
         const bool anyItemActive = ImGui::IsAnyItemActive();
@@ -2469,12 +2487,7 @@ namespace windows
             ikSaveTimer = kSaveFeedbackSeconds;
         }
         if (!canSave) ImGui::EndDisabled();
-        if (ikSaveTimer > 0.0f)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(ikSaveSuccess ? ImVec4(0.3f, 1, 0.3f, 1) : ImVec4(1, 0.3f, 0.3f, 1),
-                               ikSaveSuccess ? "Saved" : "Failed");
-        }
+        drawSaveBadge(ikSaveTimer, ikSaveSuccess);
 
         // Close the chains undo bracket: coalesce a completed weight/enabled edit into one entry.
         // (A target-binding change rebuilds the assembly; the chains-undo re-applies sockets to keep

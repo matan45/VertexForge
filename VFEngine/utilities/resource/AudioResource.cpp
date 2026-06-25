@@ -2,10 +2,7 @@
 #include "VorbisDecoder.hpp"
 #include "../print/Log.hpp"
 #include "EndianUtils.hpp"
-
-#include "../cpumem/CpuMemoryManager.hpp"
-#include "../cpumem/CpuMemoryCategories.hpp"
-#include "../cpumem/ScopedCpuMemory.hpp"
+#include "VfAudioHeader.hpp"
 
 #include <fstream>
 #include <algorithm>
@@ -205,32 +202,30 @@ namespace resource
         }
 
         // Read header
-        uint8_t headerFileType = endian::readLE<uint8_t>(handle->file);
-        if (static_cast<FileType>(headerFileType) != FileType::AUDIO)
+        VfAudioHeader fileHeader;
+        readVfAudioHeader(handle->file, fileHeader);
+
+        if (static_cast<FileType>(fileHeader.fileType) != FileType::AUDIO)
         {
             vfLogError("Invalid audio file type for streaming: {}", path);
             return nullptr;
         }
 
-        uint32_t majorVersion = endian::readLE<uint32_t>(handle->file);
-        uint32_t minorVersion = endian::readLE<uint32_t>(handle->file);
-        uint32_t patchVersion = endian::readLE<uint32_t>(handle->file);
-
-        if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
+        if (fileHeader.versionMajor != Version::major || fileHeader.versionMinor != Version::minor ||
+            fileHeader.versionPatch != Version::patch)
         {
-            vfLogError("Incompatible file version for streaming: {}.{}.{}", majorVersion, minorVersion, patchVersion);
+            vfLogError("Incompatible file version for streaming: {}.{}.{}",
+                       fileHeader.versionMajor, fileHeader.versionMinor, fileHeader.versionPatch);
             return nullptr;
         }
 
-        // Read new compression fields
-        handle->header.compressionFormat = static_cast<AudioCompressionFormat>(endian::readLE<uint8_t>(handle->file));
-        handle->header.loadType = static_cast<AudioLoadType>(endian::readLE<uint8_t>(handle->file));
-
-        handle->header.sampleRate = endian::readLE<uint32_t>(handle->file);
-        handle->header.channels = endian::readLE<uint32_t>(handle->file);
-        handle->header.frames = endian::readLE<uint32_t>(handle->file);
-        handle->header.totalDurationSeconds = endian::readLE<uint32_t>(handle->file);
-        handle->header.dataSize = endian::readLE<uint32_t>(handle->file);
+        handle->header.compressionFormat = static_cast<AudioCompressionFormat>(fileHeader.compressionFormat);
+        handle->header.loadType = static_cast<AudioLoadType>(fileHeader.loadType);
+        handle->header.sampleRate = fileHeader.sampleRate;
+        handle->header.channels = fileHeader.channels;
+        handle->header.frames = fileHeader.frames;
+        handle->header.totalDurationSeconds = fileHeader.totalDurationSeconds;
+        handle->header.dataSize = fileHeader.dataSize;
 
         if (handle->header.dataSize == 0 || handle->header.sampleRate == 0 || handle->header.channels == 0)
         {
@@ -306,29 +301,27 @@ namespace resource
         }
 
         // Read header
-        uint8_t headerFileType = endian::readLE<uint8_t>(inFile);
-        audioData.headerFileType = static_cast<resource::FileType>(headerFileType);
+        VfAudioHeader fileHeader;
+        readVfAudioHeader(inFile, fileHeader);
 
-        uint32_t majorVersion = endian::readLE<uint32_t>(inFile);
-        uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
-        uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
+        audioData.headerFileType = static_cast<resource::FileType>(fileHeader.fileType);
 
-        if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
+        if (fileHeader.versionMajor != Version::major || fileHeader.versionMinor != Version::minor ||
+            fileHeader.versionPatch != Version::patch)
         {
-            vfLogError("Incompatible file version: {}.{}.{}", majorVersion, minorVersion, patchVersion);
+            vfLogError("Incompatible file version: {}.{}.{}",
+                       fileHeader.versionMajor, fileHeader.versionMinor, fileHeader.versionPatch);
             return {};
         }
 
-        // Read compression fields
-        audioData.compressionFormat = static_cast<AudioCompressionFormat>(endian::readLE<uint8_t>(inFile));
-        audioData.loadType = static_cast<AudioLoadType>(endian::readLE<uint8_t>(inFile));
+        audioData.compressionFormat = static_cast<AudioCompressionFormat>(fileHeader.compressionFormat);
+        audioData.loadType = static_cast<AudioLoadType>(fileHeader.loadType);
+        audioData.sampleRate = fileHeader.sampleRate;
+        audioData.channels = fileHeader.channels;
+        audioData.frames = fileHeader.frames;
+        audioData.totalDurationInSeconds = fileHeader.totalDurationSeconds;
 
-        audioData.sampleRate = endian::readLE<uint32_t>(inFile);
-        audioData.channels = endian::readLE<uint32_t>(inFile);
-        audioData.frames = endian::readLE<uint32_t>(inFile);
-        audioData.totalDurationInSeconds = endian::readLE<uint32_t>(inFile);
-
-        uint32_t dataSize = endian::readLE<uint32_t>(inFile);
+        uint32_t dataSize = fileHeader.dataSize;
 
         if (dataSize == 0)
         {
@@ -350,20 +343,10 @@ namespace resource
                 return {};
             }
 
-            // Account for the decoded PCM buffer now held in audioData.data.
-            // We don't gate with a semaphore here (runtime loads are single-shot
-            // by design); recording is enough to make the peak visible.
-            {
-                static const memory::CategoryId cat =
-                    memory::CpuMemoryManager::instance().registerCategory(
-                        memory::categories::ImportAudioDecode, memory::CategoryKind::Transient);
-                const uint64_t pcmBytes =
-                    static_cast<uint64_t>(audioData.data.size()) * sizeof(short);
-                memory::ScopedCpuMemory pcmGuard(cat, pcmBytes);
-                // Decoded PCM is now in audioData.data — callers see PCM as before.
-                // pcmGuard releases when this block exits; the bytes are then
-                // owned by the returned AudioData (not tracked further).
-            }
+            // The decoded PCM now held in audioData.data is accounted for by
+            // resource::AssetLifecycleManager (acquire/release keyed on the asset
+            // GUID, sized via ResourceManager's audio memEstimator) once the
+            // AudioData is cached — so no separate accounting is recorded here.
         }
         else
         {

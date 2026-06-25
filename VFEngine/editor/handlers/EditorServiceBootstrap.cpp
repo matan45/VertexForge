@@ -72,6 +72,7 @@
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
+#include "events/lifecycle/AssetLifecycleEvents.hpp"
 #include "cpumem/CpuMemoryManager.hpp"
 #include "impl/editor/EditorKeybindingServiceImpl.hpp"
 #include "impl/terrain/SplineTerrainServiceImpl.hpp"
@@ -378,6 +379,16 @@ namespace handlers
                 events::editor::GetEditorSettingsQuery{});
             ::memory::CpuMemoryManager::instance().setBudget(
                 settings.memory.cpuMemoryBudgetBytes);
+
+            // VK-1434 fix: activate AssetLifecycleManager eviction at the same ceiling so
+            // closing the gate sheds unreferenced (refCount==0) assets and reopens it
+            // (the gate only defers; eviction is what frees the decoded total). Kept in
+            // sync with the slider via CpuMemoryServiceImpl's SetCpuMemoryBudgetCommand.
+            {
+                events::lifecycle::SetMemoryBudgetCommand lifeCmd;
+                lifeCmd.totalBudgetBytes = static_cast<size_t>(settings.memory.cpuMemoryBudgetBytes);
+                events::EventDispatcher::instance().execute(lifeCmd);
+            }
         }
 
         events::render::LoadBillboardAtlasCommand atlasCmd;

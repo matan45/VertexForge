@@ -412,8 +412,9 @@ namespace resource {
 			// for truthful accounting. A non-Critical load whose admission would
 			// push the projected total (decoded truth + outstanding reservations +
 			// this estimate) over budget is DEFERRED: left in pendingRequests and
-			// retried next dispatch — never dropped. The reservation is released by
-			// requestId in pollCompletions when the load reaches a terminal state.
+			// retried next dispatch — never dropped (except the escape valve below).
+			// The reservation is released by requestId the moment the worker's exec()
+			// returns (see the ReservationGuard below), with pollCompletions as backstop.
 			if (request.estimatedBytes > 0)
 			{
 				if (request.hint.importance == LoadImportance::Critical)
@@ -425,8 +426,21 @@ namespace resource {
 				}
 				else if (!cpuMem.reserve(reqId, request.estimatedBytes, decodedTotal))
 				{
-					++gateDeferred;
-					continue; // gate closed — leave pending, retry next dispatch
+					// Escape valve (VK-1434 fix): deferring only helps if something
+					// outstanding will later free budget. That is true iff a load is in
+					// flight (its completion lowers decodedTotal) OR a reservation is held
+					// (its release frees headroom). When BOTH are empty, no future event
+					// can lower the projected total, so a load whose own estimate exceeds
+					// the headroom would be stranded forever — admit the highest-priority
+					// pending load (priority_queue top) unconditionally to guarantee
+					// forward progress. Once it is in flight, later iterations defer
+					// normally because inFlightLoads is no longer empty.
+					if (!inFlightLoads.empty() || cpuMem.outstandingReservations() > 0)
+					{
+						++gateDeferred;
+						continue; // gate closed — leave pending, retry next dispatch
+					}
+					cpuMem.reserveUnconditional(reqId, request.estimatedBytes);
 				}
 			}
 
@@ -445,7 +459,18 @@ namespace resource {
 
 			// Submit to JobSystem with LOW priority to avoid starving frame-critical work
 			auto future = jobSystem.submit(
-				[exec = std::move(executeLoad), cancel = cancellation]() {
+				[exec = std::move(executeLoad), cancel = cancellation, reqId]() {
+					// VK-1434 fix: release this load's CPU-memory reservation the moment
+					// exec() returns. By then loader() has decoded and acquire() has
+					// registered the real bytes in AssetLifecycleManager (decodedTotal),
+					// so holding the reservation any longer double-counts the realized load
+					// against the gate budget. RAII also covers the cancelled early-return.
+					// The pollCompletions release stays as an idempotent backstop.
+					struct ReservationGuard {
+						uint64_t id;
+						~ReservationGuard() { memory::CpuMemoryManager::instance().releaseReservation(id); }
+					} resvGuard{reqId};
+
 					if (cancel && cancel->isCancelled())
 						return;
 					exec();

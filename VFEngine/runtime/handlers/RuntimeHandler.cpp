@@ -40,6 +40,8 @@
 #include "events/terrain/OceanEvents.hpp"
 #include "resource/PathResolver.hpp"
 #include "resource/VirtualFileSystem.hpp"
+#include "resource/AssetLifecycleManager.hpp"
+#include "cpumem/CpuMemoryManager.hpp"
 #include <filesystem>
 #include "time/Timer.hpp"
 #include "core/PluginManager.hpp"
@@ -69,6 +71,21 @@ namespace handlers {
         }
 
         initializeServices();
+
+        // VK-1434 fix: the CPU-memory pre-load gate is ACTIVE in shipped games (8 GiB
+        // default, CpuMemoryManager::kDefaultBudgetBytes). The Runtime previously never
+        // coordinated the AssetLifecycleManager eviction budget, so a streamed world that
+        // pushed the decoded total toward 8 GiB would close the gate with nothing to free
+        // it (no eviction => newly entered sectors stall, permanently missing geometry).
+        // Activate eviction at the same ceiling so the gate is reopenable under pressure.
+        // Games can raise or disable (0) the cap via the AssetLifecycle/CpuMemory services.
+        {
+            const uint64_t cpuBudget = memory::CpuMemoryManager::instance().budget();
+            resource::MemoryBudgetConfig budgetCfg =
+                resource::AssetLifecycleManager::instance().getMemoryBudget();
+            budgetCfg.totalBudgetBytes = static_cast<size_t>(cpuBudget);
+            resource::AssetLifecycleManager::instance().setMemoryBudget(budgetCfg);
+        }
 
         pluginManager = std::make_unique<plugin::PluginManager>(std::unordered_set<std::string>{
             std::string(plugin::capability::audio),

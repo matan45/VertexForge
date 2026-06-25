@@ -8,6 +8,7 @@
 // (PrefabPreviewWindow.cpp) and then calls buildPrefabRigDescDTO() here.
 
 #include "data/PrefabRigDescDTO.hpp"
+#include "PrefabRigResolveCore.hpp" // shared ResolvedRigNode + resolveRigFromNodes (part/socket/IK core)
 #include "animator/IKTypes.hpp"
 #include "math/TransformUtils.hpp" // math::composeMatrix (XYZ euler deg == TransformComponent)
 #include <glm/glm.hpp>
@@ -79,87 +80,39 @@ namespace windows
     // parent part (parentEntityName -> node name) and supplies attachParentSocket + the child's
     // transform rotation/scale. IKTargetComponent chains become ik[] entries owned by their node's
     // part; the target binding is defaulted (first static part) and stays editor-transient.
+    //
+    // The part/socket/IK resolution is the shared resolveRigFromNodes core (PrefabRigResolveCore.hpp);
+    // this front-end only flattens the JSON tree into the resolver's ResolvedRigNode inputs. The live
+    // builder (buildPrefabRigDescFromEntity) feeds the SAME resolver from CQRS, so the two agree.
     inline services::PrefabRigDescDTO buildPrefabRigDescDTO(const PrefabEntityNode& root)
     {
-        services::PrefabRigDescDTO desc;
-
-        std::vector<const PrefabEntityNode*> nodes;
+        std::vector<const PrefabEntityNode*> srcNodes;
         std::vector<glm::mat4> nodeWorlds; // each node's accumulated local-to-prefab-root transform
-        detail::flattenNodesWithWorld(root, glm::mat4(1.0f), nodes, nodeWorlds);
+        detail::flattenNodesWithWorld(root, glm::mat4(1.0f), srcNodes, nodeWorlds);
 
-        // Mesh-bearing node -> part index; name -> part index for parent resolution.
-        std::vector<int> nodePartIndex(nodes.size(), -1);
-        std::map<std::string, int> nameToPart;
-
-        for (size_t i = 0; i < nodes.size(); ++i)
+        std::vector<ResolvedRigNode> nodes;
+        nodes.reserve(srcNodes.size());
+        for (size_t i = 0; i < srcNodes.size(); ++i)
         {
-            const PrefabEntityNode& n = *nodes[i];
-            if (!n.hasMesh()) continue;
-
-            services::PrefabRigPartDTO part;
-            part.meshPath = n.meshPath;
-            part.animatorPath = n.animatorPath;
-            part.retargetPath = n.retargetPath;
-            part.defaultMaterialPath = n.defaultMaterialPath;
-            part.subMeshMaterials = n.subMeshMaterials;
-            part.localTransform = nodeWorlds[i]; // authored TRS (root parts apply it; sockets ignore)
-
-            const int partIndex = static_cast<int>(desc.parts.size());
-            nodePartIndex[i] = partIndex;
-            nameToPart[n.name] = partIndex; // last node wins on duplicate names
-            desc.parts.push_back(std::move(part));
+            const PrefabEntityNode& n = *srcNodes[i];
+            ResolvedRigNode node;
+            node.name = n.name;
+            node.world = nodeWorlds[i];
+            node.localRotationEuler = n.rotation; // Euler degrees, as TransformComponent.rotation
+            node.localScale = n.scale;
+            node.meshPath = n.meshPath;
+            node.animatorPath = n.animatorPath;
+            node.retargetPath = n.retargetPath;
+            node.defaultMaterialPath = n.defaultMaterialPath;
+            node.subMeshMaterials = n.subMeshMaterials;
+            node.hasSocketAttachment = n.hasSocketAttachment;
+            node.attachParentEntityName = n.attachParentEntityName;
+            node.attachSocketName = n.attachSocketName;
+            node.ikChains = n.ikChains;
+            // sourceEntity stays invalid: the JSON front-end discards the parallel part-entity vector.
+            nodes.push_back(std::move(node));
         }
 
-        // Resolve socket-attachment parent links + child transforms.
-        for (size_t i = 0; i < nodes.size(); ++i)
-        {
-            const int partIndex = nodePartIndex[i];
-            if (partIndex < 0) continue;
-
-            const PrefabEntityNode& n = *nodes[i];
-            if (!n.hasSocketAttachment) continue;
-
-            auto it = nameToPart.find(n.attachParentEntityName);
-            if (it == nameToPart.end()) continue; // parent has no mesh part -> leave as a root
-
-            services::PrefabRigPartDTO& part = desc.parts[partIndex];
-            part.parentPartIndex = it->second;
-            part.attachParentSocket = n.attachSocketName;
-            part.attachChildRotation = n.rotation; // Euler degrees, as TransformComponent.rotation
-            part.attachChildScale = n.scale;
-        }
-
-        // IK chains. Each owning node's part is the body part; default the target binding to the
-        // first STATIC part (a weapon/prop typically holds the grip socket the hand IK-s to). The
-        // window lets the user override both the part and the socket.
-        for (size_t i = 0; i < nodes.size(); ++i)
-        {
-            const int bodyPart = nodePartIndex[i];
-            if (bodyPart < 0) continue;
-
-            const PrefabEntityNode& n = *nodes[i];
-            for (const auto& chainCfg : n.ikChains)
-            {
-                services::PrefabRigIKDTO ik;
-                ik.chain = chainCfg;
-                ik.bodyPartIndex = bodyPart;
-                ik.targetPartIndex = -1;
-                ik.targetSocketName.clear();
-
-                for (size_t p = 0; p < desc.parts.size(); ++p)
-                {
-                    if (static_cast<int>(p) == bodyPart) continue;
-                    if (desc.parts[p].animatorPath.empty()) // static part
-                    {
-                        ik.targetPartIndex = static_cast<int>(p);
-                        break;
-                    }
-                }
-
-                desc.ik.push_back(std::move(ik));
-            }
-        }
-
-        return desc;
+        return resolveRigFromNodes(nodes).desc;
     }
 }
