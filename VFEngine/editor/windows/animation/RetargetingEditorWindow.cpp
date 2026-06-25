@@ -495,7 +495,7 @@ namespace windows
         ImGui::SetNextWindowSize(editor::preview::initialWindowSize("Retargeting", ImVec2(1100, 640)),
                                  ImGuiCond_FirstUseEver);
         maximizer.preBegin();
-        if (ImGui::Begin(windowTitle.c_str(), &isOpen))
+        if (ImGui::Begin(windowTitle.c_str(), &isOpen, maximizer.windowFlags()))
         {
             const bool canSave = source.loaded && target.loaded;
             if (!canSave) ImGui::BeginDisabled();

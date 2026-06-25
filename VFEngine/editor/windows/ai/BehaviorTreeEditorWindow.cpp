@@ -103,7 +103,7 @@ namespace editor::windows
         std::string title = windowTitle;
         if (isDirty) title = "* " + title;
 
-        if (!ImGui::Begin(title.c_str(), &isOpen, ImGuiWindowFlags_MenuBar))
+        if (!ImGui::Begin(title.c_str(), &isOpen, ImGuiWindowFlags_MenuBar | maximizer.windowFlags()))
         {
             ImGui::End();
             return;

@@ -123,6 +123,7 @@ namespace windows
         maximizer.preBegin();
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoScrollbar;
+        flags |= maximizer.windowFlags();
         if (ImGui::Begin(title.c_str(), &isOpen, flags))
         {
             drawMenuBar();

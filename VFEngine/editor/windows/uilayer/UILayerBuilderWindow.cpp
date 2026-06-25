@@ -581,7 +581,7 @@ namespace windows
         title += "###UILayerBuilder";
 
         bool wasVisible = visible;
-        if (ImGui::Begin(title.c_str(), &visible))
+        if (ImGui::Begin(title.c_str(), &visible, maximizer.windowFlags()))
         {
             maximizer.drawButton();
             drawToolbar();

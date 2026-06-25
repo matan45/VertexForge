@@ -169,7 +169,7 @@ namespace windows
         maximizer.preBegin();
 
         std::string windowId = windowTitle + "###" + instancePath;
-        if (!ImGui::Begin(windowId.c_str(), &isOpen, ImGuiWindowFlags_MenuBar))
+        if (!ImGui::Begin(windowId.c_str(), &isOpen, ImGuiWindowFlags_MenuBar | maximizer.windowFlags()))
         {
             ImGui::End();
             return;

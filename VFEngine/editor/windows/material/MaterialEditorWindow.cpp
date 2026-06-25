@@ -178,6 +178,7 @@ namespace windows
         std::string title = windowTitle + (isDirty ? " *" : "  ");
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoScrollbar;
+        flags |= maximizer.windowFlags();
         if (ImGui::Begin(title.c_str(), &isOpen, flags))
         {
             if (isOpen)
