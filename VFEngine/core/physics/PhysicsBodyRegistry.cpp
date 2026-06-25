@@ -28,6 +28,16 @@ namespace core::physics
         }
     }
 
+    void PhysicsBodyRegistry::registerBodyEntityLink(uint64_t entityId, JPH::BodyID bodyId)
+    {
+        bodyToEntity[bodyId.GetIndex()] = entityId;
+    }
+
+    void PhysicsBodyRegistry::unregisterBodyEntityLink(JPH::BodyID bodyId)
+    {
+        bodyToEntity.erase(bodyId.GetIndex());
+    }
+
     JPH::BodyID PhysicsBodyRegistry::getBodyForEntity(uint64_t entityId) const
     {
         auto it = entityToBody.find(entityId);

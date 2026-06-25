@@ -73,7 +73,7 @@ namespace core::physics
             JPH::BodyID bodyId = ragdoll->GetBodyID(static_cast<int>(i));
             if (!bodyId.IsInvalid())
             {
-                bodyRegistry->registerBody(entityId, bodyId);
+                bodyRegistry->registerBodyEntityLink(entityId, bodyId);
                 bodyRegistry->registerBoneIndex(bodyId, static_cast<int>(i));
             }
         }
@@ -101,6 +101,7 @@ namespace core::physics
                 if (!bodyId.IsInvalid())
                 {
                     bodyRegistry->unregisterBoneIndex(bodyId);
+                    bodyRegistry->unregisterBodyEntityLink(bodyId);
                 }
             }
             // Only remove from the system if it was actually added (built-but-never-activated
@@ -134,7 +135,7 @@ namespace core::physics
             JPH::BodyID bodyId = it->second.ragdoll->GetBodyID(i);
             if (!bodyId.IsInvalid())
             {
-                bodyRegistry->registerBody(entityId, bodyId);
+                bodyRegistry->registerBodyEntityLink(entityId, bodyId);
                 bodyRegistry->registerBoneIndex(bodyId, i);
             }
         }
@@ -350,7 +351,7 @@ namespace core::physics
             JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::Activate);
             if (!bodyId.IsInvalid())
             {
-                bodyRegistry->registerBody(entityId, bodyId);
+                bodyRegistry->registerBodyEntityLink(entityId, bodyId);
                 bodyRegistry->registerBoneIndex(bodyId, i);
                 boneBodies.push_back(bodyId);
             }
@@ -376,6 +377,7 @@ namespace core::physics
             if (!bodyId.IsInvalid())
             {
                 bodyRegistry->unregisterBoneIndex(bodyId);
+                bodyRegistry->unregisterBodyEntityLink(bodyId);
                 removeAndDestroyBody(bodyInterface, bodyId);
             }
         }
