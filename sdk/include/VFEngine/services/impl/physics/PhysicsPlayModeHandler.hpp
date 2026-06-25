@@ -6,6 +6,7 @@
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include <unordered_set>
 #include <unordered_map>
+#include <vector>
 #include <glm/glm.hpp>
 
 namespace services
@@ -21,6 +22,8 @@ namespace services
         ::events::SubscriptionToken editorModeChangedToken;
         ::events::SubscriptionToken rigidBodyAddedToken;
         ::events::SubscriptionToken rigidBodyRemovedToken;
+        ::events::SubscriptionToken prefabInstantiatedToken;
+        ::events::SubscriptionToken entityDeletedToken;
         std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsBodies;
         bool physicsActive = false;
 
@@ -53,6 +56,10 @@ namespace services
         void syncRootMotionEntity(EntityHandle handle);
         void syncStandardPhysicsEntity(EntityHandle handle);
         void initializePhysicsAnimations();
+        // VK-1437: idempotent per-entity physics-animation init over an explicit candidate set. Skips
+        // entities already initialized (createPhysicsAnimation is NOT idempotent) and entities missing
+        // the required components. Used both by the Play-entry full pass and by mid-Play prefab spawns.
+        void initializePhysicsAnimationsFor(const std::vector<EntityHandle>& candidates);
         void cleanupPhysicsAnimations();
         void initializeCharacterControllers();
         void cleanupCharacterControllers();

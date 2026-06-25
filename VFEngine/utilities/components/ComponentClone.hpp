@@ -51,6 +51,23 @@ namespace components
     }
 
     template <>
+    inline void resetClonedRuntimeState<PhysicsAnimationComponent>(PhysicsAnimationComponent& c)
+    {
+        // VK-1437: mirror the deserialize reset in SceneSerializePhysicsAnimation.cpp so a duplicated
+        // entity never inherits the source's live ragdoll/blend state. Authored physicsAnimationRef +
+        // config carry over unchanged.
+        c.currentMode = c.config.defaultMode;
+        c.isInitialized = false;
+        c.transitionProgress = 0.0f;
+        c.ragdollCollisionGroup = 0;
+        c.globalMotorStrength = 1.0f;
+        c.ragdollSettled = false;
+        c.overrideBoneMatrices.clear();
+        c.capturedPoseMatrices.clear();
+        c.blendOutProgress = 1.0f;
+    }
+
+    template <>
     inline void resetClonedRuntimeState<UIScrollComponent>(UIScrollComponent& c)
     {
         c.scrollOffset = {0.0f, 0.0f};

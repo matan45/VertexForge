@@ -57,6 +57,12 @@ namespace resource {
 			if (decal.normalTextureRef.isValid()) lifecycle.acquire(decal.normalTextureRef.getGUID(), AssetType::Texture);
 			if (decal.ormTextureRef.isValid()) lifecycle.acquire(decal.ormTextureRef.getGUID(), AssetType::Texture);
 		}
+
+		if (entity.hasComponent<components::PhysicsAnimationComponent>())
+		{
+			const auto& physAnim = entity.getComponent<components::PhysicsAnimationComponent>();
+			if (physAnim.physicsAnimationRef.isValid()) lifecycle.acquire(physAnim.physicsAnimationRef.getGUID(), AssetType::PhysicsShape);
+		}
 	}
 
 	inline void releaseEntityAssets(scene::Entity& entity, AssetLifecycleManager& lifecycle)
@@ -108,6 +114,12 @@ namespace resource {
 			if (decal.albedoTextureRef.isValid()) lifecycle.release(decal.albedoTextureRef.getGUID());
 			if (decal.normalTextureRef.isValid()) lifecycle.release(decal.normalTextureRef.getGUID());
 			if (decal.ormTextureRef.isValid()) lifecycle.release(decal.ormTextureRef.getGUID());
+		}
+
+		if (entity.hasComponent<components::PhysicsAnimationComponent>())
+		{
+			const auto& physAnim = entity.getComponent<components::PhysicsAnimationComponent>();
+			if (physAnim.physicsAnimationRef.isValid()) lifecycle.release(physAnim.physicsAnimationRef.getGUID());
 		}
 	}
 

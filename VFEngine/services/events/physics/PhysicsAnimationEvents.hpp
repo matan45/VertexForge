@@ -78,6 +78,15 @@ namespace events::physicsAnimation
         std::string_view getName() const override { return "HitReaction"; }
     };
 
+    // VK-1437: tear down provider-side physics-animation state (ragdoll + kinematic bones) for an
+    // entity without removing the ECS component. Idempotent (no-ops if no state exists). Executed when
+    // the PhysicsAnimationComponent is removed at runtime so Jolt bodies don't leak.
+    struct DestroyPhysicsAnimationCommand : ::events::ICommand<void>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "DestroyPhysicsAnimation"; }
+    };
+
     // ============================================
     // QUERIES
     // ============================================
