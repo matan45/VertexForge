@@ -772,10 +772,12 @@ namespace windows
                 const float canvasW = std::max(minCanvas, totalW - leftPaneWidth - rightPaneWidth - 2.0f * thickness);
 
                 // Draggable vertical splitter: adjusts `size` by the horizontal drag * sign, clamped.
+                // Uses SameLine(0,0) (explicit zero gap) instead of changing the global ItemSpacing,
+                // so the pane CONTENTS (e.g. the palette buttons) keep their normal spacing.
                 auto verticalSplitter = [](const char* id, float& size, float sign,
                                            float minSize, float maxSize, float w)
                 {
-                    ImGui::SameLine();
+                    ImGui::SameLine(0.0f, 0.0f);
                     ImGui::InvisibleButton(id, ImVec2(w, ImGui::GetContentRegionAvail().y));
                     if (ImGui::IsItemActive())
                         size = std::clamp(size + ImGui::GetIO().MouseDelta.x * sign, minSize, maxSize);
@@ -784,9 +786,6 @@ namespace windows
                     const ImU32 col = hot ? IM_COL32(130, 130, 150, 255) : IM_COL32(60, 60, 70, 255);
                     ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), col);
                 };
-
-                // Zero item-spacing so the children + splitters tile exactly to totalW.
-                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
                 if (ImGui::BeginChild("LeftPane", ImVec2(leftPaneWidth, 0), ImGuiChildFlags_Borders))
                 {
@@ -799,7 +798,7 @@ namespace windows
                 verticalSplitter("##splitLeft", leftPaneWidth, +1.0f, minLeft,
                                  std::max(minLeft, totalW - rightPaneWidth - minCanvas - 2.0f * thickness), thickness);
 
-                ImGui::SameLine();
+                ImGui::SameLine(0.0f, 0.0f);
                 if (ImGui::BeginChild("CanvasPane", ImVec2(canvasW, 0), ImGuiChildFlags_Borders))
                 {
                     canvasPane.draw();
@@ -809,14 +808,12 @@ namespace windows
                 verticalSplitter("##splitRight", rightPaneWidth, -1.0f, minRight,
                                  std::max(minRight, totalW - leftPaneWidth - minCanvas - 2.0f * thickness), thickness);
 
-                ImGui::SameLine();
+                ImGui::SameLine(0.0f, 0.0f);
                 if (ImGui::BeginChild("InspectorPane", ImVec2(0, 0), ImGuiChildFlags_Borders))
                 {
                     drawInspectorPane();
                 }
                 ImGui::EndChild();
-
-                ImGui::PopStyleVar();
             }
         }
         ImGui::End();
