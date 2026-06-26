@@ -31,6 +31,13 @@ namespace controllers::offscreen
         // over any visible UI element (so scripts can skip world raycasts).
         void computePointerOverUI(const FrameContext& ctx);
 
+        // VK-1442 — display-only edit-preview passes for the UI Layer Builder's scoped offscreen
+        // render. They reuse the resting visual logic of the matching process* method WITHOUT any
+        // hit-testing or notifications, scoped to `scopedCanvas` (the sandbox root). They hold no
+        // cross-frame state, so the builder can call them on a throwaway instance.
+        void applyCheckboxVisualScoped(const FrameContext& ctx, entt::entity scopedCanvas);
+        void applyTabsActivePaneScoped(const FrameContext& ctx, entt::entity scopedCanvas);
+
         entt::entity getFocusedTextInput() const { return focusedTextInput; }
 
     private:

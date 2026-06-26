@@ -105,9 +105,21 @@ namespace windows
         enum class WidgetType
         {
             Panel, Label, Button, Image, TextInput, Checkbox,
-            Slider, ProgressBar, ScrollView, LayoutGroup, ListView
+            Slider, ProgressBar, ScrollView, LayoutGroup, ListView,
+            Dropdown, Tabs, Tooltip
         };
         void addWidget(WidgetType type);
+
+        // VK-1442 — builds the starter child composition for a compound widget (Checkbox /
+        // Dropdown / Tabs / Tooltip) under `root`, right after addWidget has added the root's
+        // own type component. No-op for the simple widget types. Runs inside addWidget's undo
+        // batch so the whole add is one gesture.
+        void assembleCompound(WidgetType type, services::EntityHandle root);
+
+        // VK-1442 — renders a non-blocking advisory strip in the inspector when the selected
+        // entity is a compound widget whose child composition is malformed (reads the registry
+        // via ui_validation::validateCompoundWidget; mutations stay on the CQRS path).
+        void drawCompoundValidationStrip(services::EntityHandle sel);
 
         // ---- Selection ----------------------------------------------------------
         services::EntityHandle selectedEntity() const;

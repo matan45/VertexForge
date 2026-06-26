@@ -626,6 +626,80 @@ namespace controllers::offscreen
         renderHandler->setUIImageDrawList(std::move(drawList));
     }
 
+    // VK-1442 — Text-mode tooltip bubble for the UI Layer Builder's scoped edit preview. Unlike the
+    // runtime tooltip (driven by hover via the UITooltipState singleton), this derives the bubble
+    // entirely from the host rect + component fields so designers can author it WITHOUT hovering. It
+    // is editPreview-gated and never reads or writes UITooltipState. The bubble background goes into
+    // outImages and the text into outLabels (both flagged overlay, appended last so they sit on top).
+    // ChildPanel mode is authored manually and is intentionally not synthesized here.
+    static void generateTooltipPreviewDrawData(
+        entt::registry& registry, const FrameContext& ctx,
+        std::vector<render::ui::UIImageRenderData>& outImages,
+        std::vector<render::ui::UITextRenderData>& outLabels,
+        entt::entity scopedCanvas)
+    {
+        if (!ctx.editPreview)
+            return;
+
+        const float vw = static_cast<float>(ctx.viewportWidth);
+        const float vh = static_cast<float>(ctx.viewportHeight);
+
+        auto view = registry.view<components::UITooltipComponent, components::UIRectComponent>();
+        for (auto entity : view)
+        {
+            const auto& tip = view.get<components::UITooltipComponent>(entity);
+            if (tip.mode != components::UITooltipMode::Text || tip.text.empty())
+                continue;
+            if (!isEffectivelyActiveInScopedCanvas(registry, entity, scopedCanvas))
+                continue;
+
+            const auto* canvas = findCanvasForEntity(registry, entity);
+            if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
+                canvas = &registry.get<components::UICanvasComponent>(entity);
+            if (!canvas)
+                continue;
+
+            float scale = computeCanvasScale(canvas, vw, vh);
+            const auto& rectComp = view.get<components::UIRectComponent>(entity);
+            PixelRect hostRect = resolvePixelRect(rectComp, vw, vh, scale);
+
+            TooltipSizeInfo sizeInfo = estimateTooltipSize(tip, scale);
+
+            // No cursor in edit preview: anchor at the host's bottom-left corner regardless of
+            // followCursor (the runtime's cursor anchor is unavailable here).
+            glm::vec2 anchor(hostRect.x, hostRect.y + hostRect.h);
+            glm::vec2 offset = tip.offset * scale;
+            glm::vec2 displayPos = utilities::ui::computeTooltipPlacement(
+                anchor, offset, sizeInfo.bgSize, vw, vh);
+
+            // Background quad (mirrors the runtime overlay bg).
+            render::ui::UIImageRenderData bg;
+            bg.texturePath = "__white_1x1__";
+            bg.position = displayPos;
+            bg.size = sizeInfo.bgSize;
+            bg.colorTint = tip.backgroundColor;
+            bg.overlay = true;
+            outImages.push_back(std::move(bg));
+
+            // Bubble text (mirrors the runtime overlay text) — requires a valid font, same as runtime.
+            if (tip.fontRef.isValid())
+            {
+                render::ui::UITextRenderData tipText;
+                tipText.fontPath = tip.fontRef.resolve();
+                tipText.text = tip.text;
+                tipText.fontSize = tip.fontSize * scale;
+                tipText.letterSpacing = tip.letterSpacing * scale;
+                tipText.color = tip.textColor;
+                tipText.position = displayPos + sizeInfo.contentOffset;
+                tipText.size = sizeInfo.contentSize;
+                tipText.wordWrap = true;
+                tipText.overflow = components::TextOverflow::Overflow;
+                tipText.overlay = true;
+                outLabels.push_back(std::move(tipText));
+            }
+        }
+    }
+
     // =================================================================
     // VK-1435 — scoped offscreen UI emit (UI Layer Builder preview)
     // =================================================================
@@ -650,11 +724,22 @@ namespace controllers::offscreen
         FrameContext ctx{};
         ctx.renderHandler = nullptr;
         ctx.playModeActive = true; // force the screen-space layout/emit, regardless of editor state
+        ctx.editPreview = true;    // VK-1442 — enable the display-only compound-widget preview passes
         ctx.viewportWidth = targetExtent.width;
         ctx.viewportHeight = targetExtent.height;
 
         const float vw = static_cast<float>(targetExtent.width);
         const float vh = static_cast<float>(targetExtent.height);
+
+        // VK-1442 — display-only compound-widget passes (NO hit-testing). These must run BEFORE layout
+        // + image emit: the tabs pass writes NameComponent.isActive on the active pane (so it is laid
+        // out and rendered) and the checkbox pass writes each checkbox's resting skin onto its
+        // UIImage (read by traverseEntity). A throwaway interaction system is fine — these hold no
+        // cross-frame state. (prepareUICanvasScoped has no interaction-system member; the runtime path
+        // gets one passed in. Mirrors the runtime order: checkbox, then tabs, before layout.)
+        UIInteractionSystem editPreviewInteraction;
+        editPreviewInteraction.applyCheckboxVisualScoped(ctx, canvasRoot);
+        editPreviewInteraction.applyTabsActivePaneScoped(ctx, canvasRoot);
 
         // Lay out this sandbox canvas's layout groups (scoped + scope-active: the active check stops
         // at canvasRoot and treats it as active, so the sandbox root's own flag never gates its
@@ -686,6 +771,11 @@ namespace controllers::offscreen
 
         // Label pass: the four screen-space label emitters, scoped to this canvas.
         emitScopedCanvasLabels(registry, out.labels, vw, vh, canvasRoot);
+
+        // VK-1442 — Text-mode tooltip bubble (background + text), emitted last so it overlays both the
+        // images and the labels. Derived from the host rect + component fields (not hover state), so
+        // designers can author the bubble without a cursor. editPreview-gated; runtime never calls it.
+        generateTooltipPreviewDrawData(registry, ctx, out.images, out.labels, canvasRoot);
     }
 
 } // namespace controllers::offscreen

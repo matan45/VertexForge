@@ -31,6 +31,11 @@ namespace controllers::offscreen
         LightBVHManager* lightBvhManager = nullptr;
         CameraController* cameraController = nullptr;
         bool playModeActive = false;
+        // VK-1442 — editor-only: the UI Layer Builder's scoped offscreen preview sets this so the
+        // interaction-driven parts of compound widgets (checkbox skin, tabs active pane, expanded
+        // dropdown list, text tooltip bubble) render for authoring WITHOUT any hit-testing. The
+        // runtime prepareUICanvas path never sets it, so default false ⇒ runtime byte-identical.
+        bool editPreview = false;
         bool showDebugRendering = true;
         bool showBillboardIcons = true;
         bool showGrid = true;

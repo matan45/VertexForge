@@ -482,7 +482,10 @@ namespace controllers::offscreen::ui_screenspace
         for (auto dropdownEntity : dropdownView)
         {
             auto& comp = registry.get<components::UIDropdownComponent>(dropdownEntity);
-            if (!comp.isOpen || comp.options.empty())
+            // VK-1442 — in the UI Layer Builder's scoped edit preview, show the expanded list even
+            // when closed so designers can author it. isOpen is runtime-only (not serialized) and is
+            // left untouched. editPreview is false on the runtime path ⇒ this gate is unchanged there.
+            if ((!comp.isOpen && !ctx.editPreview) || comp.options.empty())
                 continue;
 
             if (!isEffectivelyActiveInScopedCanvas(registry, dropdownEntity, scopedCanvas))

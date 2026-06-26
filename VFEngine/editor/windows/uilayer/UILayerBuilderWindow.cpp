@@ -15,6 +15,13 @@
 #include "events/editor/UndoRedoEvents.hpp"
 #include "events/project/ResourceEvents.hpp"
 
+// VK-1442 — compound-widget structure validation reads the live registry directly (the editor
+// may; mutations still flow through CQRS). Conversion + the header-only validator come from the
+// utilities include root.
+#include "scene/EntityRegistry.hpp"
+#include "data/EntityConversion.hpp"
+#include "ui/UICompoundValidation.hpp"
+
 #include <imgui.h>
 #include <IconsFontAwesome6.h>
 #include <algorithm>
@@ -440,6 +447,9 @@ namespace windows
         case WidgetType::ScrollView:  name = "ScrollView"; break;
         case WidgetType::LayoutGroup: name = "LayoutGroup"; break;
         case WidgetType::ListView:    name = "ListView"; break;
+        case WidgetType::Dropdown:    name = "Dropdown"; break;
+        case WidgetType::Tabs:        name = "Tabs"; break;
+        case WidgetType::Tooltip:     name = "Tooltip"; break;
         }
 
         // One undo entry for the whole add gesture.
@@ -541,7 +551,29 @@ namespace windows
                 Dispatcher::instance().execute(c);
                 break;
             }
+            case WidgetType::Dropdown:
+            {
+                events::ui::AddUIDropdownComponentCommand c; c.entity = created;
+                Dispatcher::instance().execute(c);
+                break;
             }
+            case WidgetType::Tabs:
+            {
+                events::ui::AddUITabsComponentCommand c; c.entity = created;
+                Dispatcher::instance().execute(c);
+                break;
+            }
+            case WidgetType::Tooltip:
+            {
+                events::ui::AddUITooltipComponentCommand c; c.entity = created;
+                Dispatcher::instance().execute(c);
+                break;
+            }
+            }
+
+            // VK-1442 — build the compound widget's starter child composition (no-op for the
+            // simple widget types), still inside the undo batch so the whole add is one gesture.
+            assembleCompound(type, created);
 
             selectEntity(created);
             dirty = true;
@@ -551,6 +583,136 @@ namespace windows
         Dispatcher::instance().execute(end);
 
         rebuildPreview();
+    }
+
+    // =========================================================================
+    // Compound auto-assembly (VK-1442)
+    // =========================================================================
+
+    void UILayerBuilderWindow::assembleCompound(WidgetType type, services::EntityHandle root)
+    {
+        if (!root.isValid()) return;
+        auto& d = Dispatcher::instance();
+
+        // Small CQRS builders (mirror addWidget's create + seed-rect pattern). Each child inherits
+        // the sandbox preview tag through the registry hierarchy, so no per-child tagging is needed.
+        auto createChild = [&](services::EntityHandle parent, const char* childName) -> services::EntityHandle
+        {
+            events::scene::CreateEntityCommand c;
+            c.name = childName;
+            c.parent = parent;
+            services::EntityHandle h = d.execute(c);
+            if (h.isValid())
+            {
+                events::ui::AddUIRectComponentCommand rc; rc.entity = h;
+                d.execute(rc);
+            }
+            return h;
+        };
+        auto setRect = [&](services::EntityHandle e, glm::vec2 aMin, glm::vec2 aMax,
+                           glm::vec2 pivot, glm::vec2 size, glm::vec2 pos)
+        {
+            services::UIRectData r;
+            r.anchorMin = aMin; r.anchorMax = aMax; r.pivot = pivot;
+            r.sizeDelta = size; r.anchoredPosition = pos;
+            events::ui::SetUIRectDataCommand s; s.entity = e; s.rectData = r;
+            d.execute(s);
+        };
+        auto addImage = [&](services::EntityHandle e, glm::vec4 tint)
+        {
+            events::ui::AddUIImageComponentCommand a; a.entity = e; d.execute(a);
+            services::UIImageData img; img.colorTint = tint;
+            events::ui::SetUIImageDataCommand s; s.entity = e; s.imageData = img; d.execute(s);
+        };
+        auto addLabel = [&](services::EntityHandle e, const std::string& text, uint8_t hAlign, uint8_t vAlign)
+        {
+            events::ui::AddUILabelComponentCommand a; a.entity = e; d.execute(a);
+            services::UILabelData lab; lab.text = text; lab.horizontalAlignment = hAlign; lab.verticalAlignment = vAlign;
+            events::ui::SetUILabelDataCommand s; s.entity = e; s.labelData = lab; d.execute(s);
+        };
+
+        switch (type)
+        {
+        case WidgetType::Checkbox:
+        {
+            // Root already has UICheckbox; add a box image + a left "Check" square + a "Label"
+            // to its right, and enable label-click toggling.
+            addImage(root, glm::vec4(0.20f, 0.20f, 0.24f, 1.0f));
+
+            services::EntityHandle check = createChild(root, "Check");
+            if (check.isValid())
+            {
+                setRect(check, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {26.0f, 26.0f}, {6.0f, 0.0f});
+                addImage(check, glm::vec4(0.30f, 0.70f, 1.0f, 1.0f));
+            }
+            services::EntityHandle label = createChild(root, "Label");
+            if (label.isValid())
+            {
+                setRect(label, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {150.0f, 40.0f}, {40.0f, 0.0f});
+                addLabel(label, "Checkbox", 0 /*Left*/, 1 /*Middle*/);
+            }
+
+            services::UICheckboxData cb;
+            cb.labelToggle = true;
+            events::ui::SetUICheckboxDataCommand s; s.entity = root; s.checkboxData = cb;
+            d.execute(s);
+            break;
+        }
+        case WidgetType::Dropdown:
+        {
+            // Root already has UIDropdown; add a header image + a "Value" label, and seed options
+            // so the (preview-expanded) list is non-empty.
+            addImage(root, glm::vec4(0.25f, 0.25f, 0.25f, 1.0f));
+
+            services::EntityHandle value = createChild(root, "Value");
+            if (value.isValid())
+            {
+                setRect(value, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {180.0f, 40.0f}, {10.0f, 0.0f});
+                addLabel(value, "Select...", 0 /*Left*/, 1 /*Middle*/);
+            }
+
+            services::UIDropdownData dd;
+            dd.options = { {"Option 1", {}}, {"Option 2", {}}, {"Option 3", {}} };
+            events::ui::SetUIDropdownDataCommand s; s.entity = root; s.dropdownData = dd;
+            d.execute(s);
+            break;
+        }
+        case WidgetType::Tabs:
+        {
+            // Root already has UITabs + UIRect. Build the tab bar + two tabs/panes via the shared
+            // authoring helper so the auto-assembled shape matches the inspector's "+ Add Tab".
+            details::UITabsDrawer::addTab(root);
+            details::UITabsDrawer::addTab(root);
+
+            services::UITabsData td;
+            td.activeTabIndex = 0;
+            events::ui::SetUITabsDataCommand s; s.entity = root; s.tabsData = td;
+            d.execute(s);
+            details::UITabsDrawer::syncPaneVisibility(root, 0);
+            break;
+        }
+        case WidgetType::Tooltip:
+        {
+            // Root already has UITooltip; make it a hoverable host (image + label) in Text mode.
+            addImage(root, glm::vec4(0.20f, 0.40f, 0.65f, 1.0f));
+
+            services::EntityHandle label = createChild(root, "Label");
+            if (label.isValid())
+            {
+                setRect(label, {0.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f});
+                addLabel(label, "Hover me", 1 /*Center*/, 1 /*Middle*/);
+            }
+
+            services::UITooltipData tip;
+            tip.mode = 0; // Text
+            tip.text = "Tooltip text";
+            events::ui::SetUITooltipDataCommand s; s.entity = root; s.tooltipData = tip;
+            d.execute(s);
+            break;
+        }
+        default:
+            break; // simple widget types need no extra composition
+        }
     }
 
     // =========================================================================
@@ -786,6 +948,9 @@ namespace windows
             {"Scroll View", WidgetType::ScrollView},
             {"Layout Group", WidgetType::LayoutGroup},
             {"List View", WidgetType::ListView},
+            {"Dropdown", WidgetType::Dropdown},
+            {"Tabs", WidgetType::Tabs},
+            {"Tooltip", WidgetType::Tooltip},
         };
 
         for (const auto& item : items)
@@ -826,6 +991,9 @@ namespace windows
             inspectorSnapshotBefore = uilayer::captureUISnapshot(sel);
         }
 
+        // VK-1442 — advisory strip for compound widgets whose child composition is malformed.
+        drawCompoundValidationStrip(sel);
+
         // The drawers each read/write component data through the same CQRS the canvas uses,
         // so edits show up live in the preview after a rebuild.
         uiCanvasDrawer.draw(sel);
@@ -839,6 +1007,14 @@ namespace windows
         uiCheckboxDrawer.draw(sel);
         uiDropdownDrawer.draw(sel);
         uiTabsDrawer.draw(sel);
+        // The tabs drawer's "+ Add Tab" / "- Remove Tab" buttons create/delete entities; that
+        // structural change lands on the mouse-release frame (which the IsAnyItemActive rebuild
+        // below misses), so rebuild the preview explicitly when it reports one.
+        if (uiTabsDrawer.consumeStructuralChange())
+        {
+            dirty = true;
+            rebuildPreview();
+        }
         uiSliderDrawer.draw(sel);
         uiProgressBarDrawer.draw(sel);
         uiStyleDrawer.draw(sel);
@@ -885,6 +1061,34 @@ namespace windows
         // own active state doesn't fold into the inspector edit session. The popup's selectables
         // dispatch the AddUI*ComponentCommand themselves; we mark dirty + rebuild after they run.
         drawAddComponentMenu(sel);
+    }
+
+    void UILayerBuilderWindow::drawCompoundValidationStrip(services::EntityHandle sel)
+    {
+        if (!sel.isValid()) return;
+
+        auto& reg = scene::EntityRegistry::getRegistry();
+        entt::entity e = services::internal::fromHandle(sel);
+        if (!reg.valid(e)) return;
+
+        ui_validation::CompoundWidgetStatus status = ui_validation::validateCompoundWidget(reg, e);
+        if (status.errors.empty() && status.warnings.empty())
+            return;
+
+        for (const auto& err : status.errors)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.45f, 1.0f));
+            ImGui::TextWrapped(ICON_FA_CIRCLE_EXCLAMATION " %s", err.c_str());
+            ImGui::PopStyleColor();
+        }
+        for (const auto& warning : status.warnings)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.80f, 0.30f, 1.0f));
+            ImGui::TextWrapped(ICON_FA_TRIANGLE_EXCLAMATION " %s", warning.c_str());
+            ImGui::PopStyleColor();
+        }
+        ImGui::Separator();
+        ImGui::Spacing();
     }
 
     void UILayerBuilderWindow::drawAddComponentMenu(services::EntityHandle sel)
