@@ -759,9 +759,36 @@ namespace windows
             else
             {
                 // Three panes: palette+hierarchy (left), canvas (center), inspector (right).
-                const float leftW = 220.0f;
-                const float rightW = 340.0f;
-                if (ImGui::BeginChild("LeftPane", ImVec2(leftW, 0), ImGuiChildFlags_Borders))
+                // leftPaneWidth/rightPaneWidth are user-draggable via the vertical splitters below
+                // so long hierarchy entity names stay readable.
+                const float thickness = 6.0f;
+                const float minLeft = 140.0f, minRight = 220.0f, minCanvas = 220.0f;
+                const float totalW = ImGui::GetContentRegionAvail().x;
+
+                leftPaneWidth = std::clamp(leftPaneWidth, minLeft,
+                                           std::max(minLeft, totalW - rightPaneWidth - minCanvas - 2.0f * thickness));
+                rightPaneWidth = std::clamp(rightPaneWidth, minRight,
+                                            std::max(minRight, totalW - leftPaneWidth - minCanvas - 2.0f * thickness));
+                const float canvasW = std::max(minCanvas, totalW - leftPaneWidth - rightPaneWidth - 2.0f * thickness);
+
+                // Draggable vertical splitter: adjusts `size` by the horizontal drag * sign, clamped.
+                auto verticalSplitter = [](const char* id, float& size, float sign,
+                                           float minSize, float maxSize, float w)
+                {
+                    ImGui::SameLine();
+                    ImGui::InvisibleButton(id, ImVec2(w, ImGui::GetContentRegionAvail().y));
+                    if (ImGui::IsItemActive())
+                        size = std::clamp(size + ImGui::GetIO().MouseDelta.x * sign, minSize, maxSize);
+                    const bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
+                    if (hot) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                    const ImU32 col = hot ? IM_COL32(130, 130, 150, 255) : IM_COL32(60, 60, 70, 255);
+                    ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), col);
+                };
+
+                // Zero item-spacing so the children + splitters tile exactly to totalW.
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+
+                if (ImGui::BeginChild("LeftPane", ImVec2(leftPaneWidth, 0), ImGuiChildFlags_Borders))
                 {
                     drawPalettePane();
                     ImGui::Separator();
@@ -769,12 +796,18 @@ namespace windows
                 }
                 ImGui::EndChild();
 
+                verticalSplitter("##splitLeft", leftPaneWidth, +1.0f, minLeft,
+                                 std::max(minLeft, totalW - rightPaneWidth - minCanvas - 2.0f * thickness), thickness);
+
                 ImGui::SameLine();
-                if (ImGui::BeginChild("CanvasPane", ImVec2(-rightW, 0), ImGuiChildFlags_Borders))
+                if (ImGui::BeginChild("CanvasPane", ImVec2(canvasW, 0), ImGuiChildFlags_Borders))
                 {
                     canvasPane.draw();
                 }
                 ImGui::EndChild();
+
+                verticalSplitter("##splitRight", rightPaneWidth, -1.0f, minRight,
+                                 std::max(minRight, totalW - leftPaneWidth - minCanvas - 2.0f * thickness), thickness);
 
                 ImGui::SameLine();
                 if (ImGui::BeginChild("InspectorPane", ImVec2(0, 0), ImGuiChildFlags_Borders))
@@ -782,6 +815,8 @@ namespace windows
                     drawInspectorPane();
                 }
                 ImGui::EndChild();
+
+                ImGui::PopStyleVar();
             }
         }
         ImGui::End();

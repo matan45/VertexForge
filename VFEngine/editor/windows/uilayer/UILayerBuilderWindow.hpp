@@ -176,6 +176,11 @@ namespace windows
         int refHeight = 1080;
         int refPreset = 0; // index into the resolution preset list
 
+        // Resizable pane widths (px): left = palette+hierarchy, right = inspector. Dragged via
+        // vertical splitters so long hierarchy entity names stay readable.
+        float leftPaneWidth = 220.0f;
+        float rightPaneWidth = 340.0f;
+
         // Canvas view state.
         float zoom = 1.0f;
         glm::vec2 panRef{0.0f, 0.0f};
