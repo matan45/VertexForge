@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UICanvasRectImageEvents.hpp"
 #include "events/render/UILayerPreviewEvents.hpp"
+#include "events/scene/EntityTransformEvents.hpp" // DeleteEntityCommand (canvas context menu)
 #include "UILayerCanvasHandles.hpp"
 
 #include <imgui.h>
@@ -155,20 +156,21 @@ namespace windows::uilayer
         {
             services::EntityHandle sel = w.selectedEntity();
 
-            // First, if a handle of the current selection is under the cursor, begin a drag.
+            // Resize/re-anchor handles of the CURRENT selection take priority, so you can grab a
+            // corner/edge even when it overlaps a child. The BODY hit is deliberately NOT treated
+            // as a grab here: it must fall through to picking so a child *inside* the selected
+            // parent stays selectable (clicking the parent's interior selects the top-most element
+            // under the cursor instead of re-grabbing the parent). [VK-1442 fix]
             uilayer::HandleKind handle = uilayer::HandleKind::None;
             if (sel.isValid())
             {
                 if (auto rect = w.resolvedRectOf(sel))
                 {
                     float grabHalfRef = (map.scale > 0.0f) ? (6.0f / map.scale) : 6.0f;
-                    handle = uilayer::hitTestHandle(*rect, mouseRef, grabHalfRef);
-                    // A layout-group child's position is auto-set every frame; block the move
-                    // (body) drag so it doesn't fight the layout. Resize handles stay active.
-                    if (handle == uilayer::HandleKind::Body && w.isLayoutControlled(sel))
-                        handle = uilayer::HandleKind::None;
-                    if (handle != uilayer::HandleKind::None)
+                    uilayer::HandleKind h = uilayer::hitTestHandle(*rect, mouseRef, grabHalfRef);
+                    if (h != uilayer::HandleKind::None && h != uilayer::HandleKind::Body)
                     {
+                        handle = h; // a real resize/re-anchor handle of the selection
                         if (auto before = w.rectDataOf(sel))
                         {
                             w.dragging = true;
@@ -182,16 +184,48 @@ namespace windows::uilayer
                 }
             }
 
-            // No handle hit: pick the top-most element under the cursor (CPU hit-test
-            // through the preview's reference-extent picker) and select it.
+            // Body / empty: pick the top-most element under the cursor and select it. If the click
+            // landed on the ALREADY-selected element (not a re-selection) and it has a movable rect,
+            // arm a move-drag so a click-drag relocates it — preserving the prior move behavior
+            // without swallowing clicks on nested children.
             if (handle == uilayer::HandleKind::None)
             {
                 services::events::uilayerpreview::PickUILayerElementAtQuery pick;
                 pick.instanceId = w.instanceId();
                 pick.refPx = mouseRef;
                 auto hit = Dispatcher::instance().query(pick);
-                w.selectEntity(hit.isValid() ? hit : w.contentRoot);
+                services::EntityHandle target = hit.isValid() ? hit : w.contentRoot;
+
+                const bool sameSelection = sel.isValid() && (target == sel);
+                w.selectEntity(target);
+
+                if (sameSelection && hit.isValid() && !w.isLayoutControlled(target))
+                {
+                    if (auto before = w.rectDataOf(target))
+                    {
+                        if (auto rect = w.resolvedRectOf(target))
+                        {
+                            w.dragging = true;
+                            w.activeHandle = uilayer::HandleKind::Body;
+                            w.dragEntity = target;
+                            w.dragBefore = *before;
+                            w.dragStartRect = *rect;
+                            w.dragStartRefMouse = mouseRef;
+                        }
+                    }
+                }
             }
+        }
+
+        // Right mouse: pick the element under the cursor so the context menu (below, in draw())
+        // targets it. The menu itself is opened by BeginPopupContextItem on the canvas button.
+        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        {
+            services::events::uilayerpreview::PickUILayerElementAtQuery pick;
+            pick.instanceId = w.instanceId();
+            pick.refPx = mouseRef;
+            auto hit = Dispatcher::instance().query(pick);
+            if (hit.isValid()) w.selectEntity(hit);
         }
 
         // Dragging a handle: dispatch live SetUIRectDataCommand (no undo push mid-drag).
@@ -225,6 +259,26 @@ namespace windows::uilayer
                 w.activeHandle = uilayer::HandleKind::None;
                 w.dragEntity = services::EntityHandle::invalid();
             }
+        }
+
+        // Canvas context menu (bound to the invisible canvas button, the current last item):
+        // right-click opens it; the right-click above already selected the element under the cursor.
+        if (ImGui::BeginPopupContextItem("##uiCanvasContext"))
+        {
+            services::EntityHandle sel = w.selectedEntity();
+            const bool canDelete = sel.isValid() && sel != w.contentRoot && sel != w.canvasRoot;
+            if (!canDelete) ImGui::BeginDisabled();
+            if (ImGui::MenuItem("Delete"))
+            {
+                events::scene::DeleteEntityCommand del;
+                del.entity = sel;
+                Dispatcher::instance().execute(del);
+                w.selectEntity(w.contentRoot);
+                w.dirty = true;
+                w.rebuildPreview();
+            }
+            if (!canDelete) ImGui::EndDisabled();
+            ImGui::EndPopup();
         }
     }
 }

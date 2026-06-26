@@ -116,6 +116,12 @@ namespace windows::uilayer
         if (hidden)
             ImGui::PopStyleColor();
 
+        // Right-click THIS node to open its context menu. Bind the popup explicitly to the tree
+        // node item here: BeginPopupContextItem() with no id (used below) binds to the LAST-drawn
+        // item — the eye button / rename field — so right-clicking the row never opened it. [VK-1442]
+        if (entity != w.contentRoot)
+            ImGui::OpenPopupOnItemClick("##uiNodeCtx", ImGuiPopupFlags_MouseButtonRight);
+
         // Keep the expanded set in sync with user arrow toggles.
         if (ImGui::IsItemToggledOpen())
         {
@@ -228,8 +234,9 @@ namespace windows::uilayer
             }
         }
 
-        // Delete (not the content root — that's the layer's top).
-        if (entity != w.contentRoot && ImGui::BeginPopupContextItem())
+        // Delete (not the content root — that's the layer's top). Opened by OpenPopupOnItemClick
+        // on the tree node above (so right-clicking the row works, not just the trailing widgets).
+        if (ImGui::BeginPopup("##uiNodeCtx"))
         {
             if (ImGui::MenuItem("Delete"))
             {
