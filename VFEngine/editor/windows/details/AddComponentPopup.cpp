@@ -8,9 +8,6 @@
 #include "events/physics/IKEvents.hpp"
 #include "events/scene/ReverbZoneEvents.hpp"
 #include "events/scene/FogVolumeEvents.hpp"
-#include "scene/EntityRegistry.hpp"
-#include "data/EntityConversion.hpp"
-#include "components/Components.hpp"
 #include <imgui.h>
 #include <cctype>
 #include <cstring>
@@ -211,21 +208,16 @@ namespace windows::details
                 ImGui::SetTooltip("Visual effects particle system");
         }
 
+        if (!c.hasVFXSequence && matchesFilter("VFX Sequence", filter))
         {
-            auto& reg = scene::EntityRegistry::getRegistry();
-            auto entity = services::internal::fromHandle(handle);
-            bool hasVFXSequence = reg.valid(entity) &&
-                                  reg.all_of<components::VFXSequenceComponent>(entity);
-            if (!hasVFXSequence && matchesFilter("VFX Sequence", filter))
+            if (ImGui::Selectable("  VFX Sequence"))
             {
-                if (ImGui::Selectable("  VFX Sequence"))
-                {
-                    if (reg.valid(entity))
-                        reg.emplace_or_replace<components::VFXSequenceComponent>(entity);
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("VFX combo sequence (.vfVFXSequence) with event triggers");
+                events::scene::AddVFXSequenceComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
             }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("VFX combo sequence (.vfVFXSequence) with event triggers");
         }
 
         if (!c.hasBillboard && matchesFilter("Billboard", filter))

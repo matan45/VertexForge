@@ -211,6 +211,41 @@ namespace events::scene {
     };
 
     // ============================================
+    // VFX Sequence Component Events
+    // ============================================
+
+    struct AddVFXSequenceComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddVFXSequenceComponent"; }
+    };
+
+    struct RemoveVFXSequenceComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveVFXSequenceComponent"; }
+    };
+
+    struct SetVFXSequenceDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::VFXSequenceData vfxSequenceData;
+
+        std::string_view getName() const override { return "SetVFXSequenceData"; }
+    };
+
+    struct HasVFXSequenceComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasVFXSequenceComponent"; }
+    };
+
+    struct GetVFXSequenceDataQuery : IQuery<std::optional<services::VFXSequenceData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetVFXSequenceData"; }
+    };
+
+    // ============================================
     // Decal Component Events
     // ============================================
 

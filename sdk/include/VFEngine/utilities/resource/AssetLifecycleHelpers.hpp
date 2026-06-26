@@ -44,6 +44,22 @@ namespace resource {
 			if (vfx.vfxRef.isValid()) lifecycle.acquire(vfx.vfxRef.getGUID(), AssetType::VFX);
 		}
 
+		if (entity.hasComponent<components::VFXSequenceComponent>())
+		{
+			const auto& seq = entity.getComponent<components::VFXSequenceComponent>();
+			if (seq.sequenceRef.isValid()) lifecycle.acquire(seq.sequenceRef.getGUID(), AssetType::VFXSequence);
+			for (const auto& trigger : seq.triggers)
+			{
+				if (trigger.sequenceRef.isValid()) lifecycle.acquire(trigger.sequenceRef.getGUID(), AssetType::VFXSequence);
+			}
+		}
+
+		if (entity.hasComponent<components::BillboardComponent>())
+		{
+			const auto& billboard = entity.getComponent<components::BillboardComponent>();
+			if (billboard.textureRef.isValid()) lifecycle.acquire(billboard.textureRef.getGUID(), AssetType::Texture);
+		}
+
 		if (entity.hasComponent<components::AnimatorComponent>())
 		{
 			const auto& anim = entity.getComponent<components::AnimatorComponent>();
@@ -100,6 +116,22 @@ namespace resource {
 		{
 			const auto& vfx = entity.getComponent<components::VFXComponent>();
 			if (vfx.vfxRef.isValid()) lifecycle.release(vfx.vfxRef.getGUID());
+		}
+
+		if (entity.hasComponent<components::VFXSequenceComponent>())
+		{
+			const auto& seq = entity.getComponent<components::VFXSequenceComponent>();
+			if (seq.sequenceRef.isValid()) lifecycle.release(seq.sequenceRef.getGUID());
+			for (const auto& trigger : seq.triggers)
+			{
+				if (trigger.sequenceRef.isValid()) lifecycle.release(trigger.sequenceRef.getGUID());
+			}
+		}
+
+		if (entity.hasComponent<components::BillboardComponent>())
+		{
+			const auto& billboard = entity.getComponent<components::BillboardComponent>();
+			if (billboard.textureRef.isValid()) lifecycle.release(billboard.textureRef.getGUID());
 		}
 
 		if (entity.hasComponent<components::AnimatorComponent>())

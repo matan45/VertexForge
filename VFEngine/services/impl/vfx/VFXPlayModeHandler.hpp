@@ -20,6 +20,8 @@ namespace services
         ::events::SubscriptionToken transformChangedToken;
         ::events::SubscriptionToken sectorLoadedToken;
         ::events::SubscriptionToken sectorUnloadedToken;
+        ::events::SubscriptionToken prefabInstantiatedToken; // VK-1438: mid-Play prefab spawn autoplay
+        ::events::SubscriptionToken entityDeletedToken;      // VK-1438: mid-Play entity-delete cleanup
 
         // Maps entity handle to VFX runtime instance ID
         std::unordered_map<EntityHandle, VFXInstanceId, EntityHandle::Hash> activeVFXInstances;
@@ -39,6 +41,11 @@ namespace services
         };
         std::vector<PendingStreamCreate> pendingStreamCreates;
 
+        // VK-1438: prefab roots instantiated mid-Play, drained in update() so world transforms are
+        // settled by the time VFX instances are created (PrefabInstantiatedNotification fires before
+        // the transform pass). Same thread as update()/the sector path — no extra synchronization.
+        std::vector<EntityHandle> pendingPrefabRoots;
+
     public:
         explicit VFXPlayModeHandler(IVFXRuntimeProvider* vfxProvider);
         ~VFXPlayModeHandler();
@@ -57,6 +64,9 @@ namespace services
         void onSectorLoaded(int32_t coordX, int32_t coordZ);
         void onSectorUnloaded(int32_t coordX, int32_t coordZ);
         void processPendingStreamCreates();
+        void onPrefabInstantiated(EntityHandle root);
+        void onEntityDeleted(EntityHandle entity);
+        void processPendingPrefabCreates();
         void enterPlayMode();
         void exitPlayMode();
     };

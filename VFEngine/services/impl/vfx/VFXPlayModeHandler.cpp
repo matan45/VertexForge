@@ -6,13 +6,31 @@
 #include "../../events/vfx/VFXSnapshotEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../data/EditorMode.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "scene/Entity.hpp"
 #include "components/Components.hpp"
+#include <algorithm>
 
 namespace services
 {
+    namespace
+    {
+        // VK-1438: depth-first collect a freshly-instantiated subtree (root + descendants) as handles,
+        // mirroring PhysicsPlayModeHandler / ScenePersistenceService traversal.
+        void collectSubtreeHandles(const scene::Entity& entity, std::vector<EntityHandle>& out)
+        {
+            out.push_back(internal::toHandle(entity.getHandle()));
+            for (const auto& child : entity.getChildren())
+            {
+                collectSubtreeHandles(child, out);
+            }
+        }
+    }
+
     VFXPlayModeHandler::VFXPlayModeHandler(IVFXRuntimeProvider* vfxProvider)
         : vfxProvider(vfxProvider)
     {
@@ -59,6 +77,29 @@ namespace services
                     onSectorUnloaded(notification.coord.x, notification.coord.z);
                 }
             });
+
+        // VK-1438: a prefab instantiated AFTER Play started gets no VFX from the one-shot Play-entry
+        // pass. Queue its root; processPendingPrefabCreates() drains it in update() once transforms
+        // are settled. Gated on vfxActive so Edit-mode instantiation is a no-op.
+        prefabInstantiatedToken = dispatcher.subscribe<::events::scene::PrefabInstantiatedNotification>(
+            [this](const ::events::scene::PrefabInstantiatedNotification& notification)
+            {
+                if (vfxActive)
+                {
+                    onPrefabInstantiated(notification.rootEntity);
+                }
+            });
+
+        // VK-1438: destroy a runtime VFX instance when its entity is deleted during Play.
+        // EntityDeletedNotification fires per-entity for the whole subtree before removal.
+        entityDeletedToken = dispatcher.subscribe<::events::scene::EntityDeletedNotification>(
+            [this](const ::events::scene::EntityDeletedNotification& notification)
+            {
+                if (vfxActive)
+                {
+                    onEntityDeleted(notification.entity);
+                }
+            });
     }
 
     void VFXPlayModeHandler::unsubscribeFromEvents()
@@ -87,6 +128,18 @@ namespace services
         {
             dispatcher.unsubscribe(sectorUnloadedToken);
             sectorUnloadedToken = {};
+        }
+
+        if (prefabInstantiatedToken.isValid())
+        {
+            dispatcher.unsubscribe(prefabInstantiatedToken);
+            prefabInstantiatedToken = {};
+        }
+
+        if (entityDeletedToken.isValid())
+        {
+            dispatcher.unsubscribe(entityDeletedToken);
+            entityDeletedToken = {};
         }
     }
 
@@ -215,6 +268,7 @@ namespace services
         }
 
         activeVFXInstances.clear();
+        pendingPrefabRoots.clear();
         vfxActive = false;
 
         vfLogInfo("VFX play mode stopped");
@@ -375,6 +429,107 @@ namespace services
         }
     }
 
+    void VFXPlayModeHandler::onPrefabInstantiated(EntityHandle root)
+    {
+        // Defer to update() so the transform pass has settled world matrices for the new subtree.
+        pendingPrefabRoots.push_back(root);
+    }
+
+    void VFXPlayModeHandler::onEntityDeleted(EntityHandle entity)
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        auto it = activeVFXInstances.find(entity);
+        if (it != activeVFXInstances.end())
+        {
+            events::vfxruntime::DestroyVFXInstanceCommand destroyCmd;
+            destroyCmd.instanceId = it->second;
+            dispatcher.execute(destroyCmd);
+            activeVFXInstances.erase(it);
+        }
+
+        // Drop any not-yet-processed work for this entity.
+        pendingPrefabRoots.erase(
+            std::remove(pendingPrefabRoots.begin(), pendingPrefabRoots.end(), entity),
+            pendingPrefabRoots.end());
+        pendingStreamCreates.erase(
+            std::remove_if(pendingStreamCreates.begin(), pendingStreamCreates.end(),
+                [&entity](const PendingStreamCreate& p) { return p.entity == entity; }),
+            pendingStreamCreates.end());
+    }
+
+    void VFXPlayModeHandler::processPendingPrefabCreates()
+    {
+        if (pendingPrefabRoots.empty())
+            return;
+
+        if (!vfxProvider || !vfxProvider->isInitialized())
+        {
+            pendingPrefabRoots.clear();
+            return;
+        }
+
+        std::vector<EntityHandle> roots;
+        roots.swap(pendingPrefabRoots);
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        for (EntityHandle root : roots)
+        {
+            entt::entity rootEntity = internal::fromHandle(root);
+            if (!registry.valid(rootEntity))
+                continue;
+
+            std::vector<EntityHandle> subtree;
+            collectSubtreeHandles(scene::Entity(rootEntity), subtree);
+
+            for (EntityHandle handle : subtree)
+            {
+                entt::entity entity = internal::fromHandle(handle);
+                if (!registry.valid(entity) ||
+                    !registry.all_of<components::VFXComponent, components::WorldTransformComponent>(entity))
+                    continue;
+
+                if (activeVFXInstances.count(handle))
+                    continue;
+
+                auto& vfxComp = registry.get<components::VFXComponent>(entity);
+                if (!vfxComp.vfxRef.isValid())
+                    continue;
+
+                if (registry.all_of<components::NameComponent>(entity) &&
+                    !registry.get<components::NameComponent>(entity).isActive)
+                    continue;
+
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+
+                events::vfxruntime::CreateVFXInstanceCommand createCmd;
+                createCmd.params.vfxAssetPath = vfxComp.vfxRef.resolve();
+                createCmd.params.worldTransform = worldTransform.worldMatrix;
+                createCmd.params.loop = vfxComp.loop;
+                createCmd.params.entityId = static_cast<uint32_t>(entity);
+                createCmd.params.priority = static_cast<VFXEmitterPriority>(vfxComp.priority);
+                createCmd.params.cameraRelative = vfxComp.cameraRelative;
+
+                VFXInstanceId instanceId = dispatcher.execute(createCmd);
+                if (instanceId != 0)
+                {
+                    activeVFXInstances[handle] = instanceId;
+                    vfxComp.runtimeInstanceId = instanceId;
+
+                    if (vfxComp.autoPlay)
+                    {
+                        events::vfxruntime::PlayVFXInstanceCommand playCmd;
+                        playCmd.instanceId = instanceId;
+                        dispatcher.execute(playCmd);
+                        vfxComp.isPlaying = true;
+                    }
+                }
+            }
+        }
+    }
+
     void VFXPlayModeHandler::update(float deltaTime)
     {
         if (!vfxActive || !vfxProvider)
@@ -382,8 +537,9 @@ namespace services
             return;
         }
 
-        // Process budgeted streaming creates
+        // Process budgeted streaming creates + mid-Play prefab spawns (transforms now settled)
         processPendingStreamCreates();
+        processPendingPrefabCreates();
 
         auto& dispatcher = ::events::EventDispatcher::instance();
         events::vfxruntime::UpdateVFXRuntimeCommand cmd;

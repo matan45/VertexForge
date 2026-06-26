@@ -25,6 +25,8 @@ namespace services
         ::events::SubscriptionToken editorModeChangedToken;
         ::events::SubscriptionToken transformChangedToken;
         ::events::SubscriptionToken animationEventToken;
+        ::events::SubscriptionToken prefabInstantiatedToken; // VK-1438: mid-Play prefab spawn autoplay
+        ::events::SubscriptionToken entityDeletedToken;      // VK-1438: mid-Play entity-delete cleanup
 
         // Standalone auto-played combos, one per entity (mirrors VFXPlayModeHandler::activeVFXInstances).
         std::unordered_map<EntityHandle, VFXComboInstanceId, EntityHandle::Hash> autoPlayCombos;
@@ -43,6 +45,11 @@ namespace services
         std::vector<PendingTrigger> pendingTriggers;
         static constexpr size_t MAX_PENDING_TRIGGERS = 256;
 
+        // VK-1438: prefab roots instantiated mid-Play, drained in update() so world transforms are
+        // settled before combos are created. Guarded by pendingMutex (PrefabInstantiatedNotification
+        // may arrive off the update() thread, like the trigger queue).
+        std::vector<EntityHandle> pendingPrefabRoots;
+
     public:
         VFXSequencePlayModeHandler() = default;
         ~VFXSequencePlayModeHandler();
@@ -59,7 +66,11 @@ namespace services
         void onEditorModeChanged(EditorMode previousMode, EditorMode currentMode);
         void onTransformChanged(EntityHandle entity);
         void onAnimationEvent(EntityHandle entity, const std::string& eventName);
+        void onPrefabInstantiated(EntityHandle root);
+        void onEntityDeleted(EntityHandle entity);
         void drainPendingTriggers();
+        void drainPendingPrefabRoots();
+        void tryAutoPlayCombo(EntityHandle handle);
         void enterPlayMode();
         void exitPlayMode();
     };
