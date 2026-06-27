@@ -118,6 +118,12 @@ public class Navmesh {
         _native_navmesh_setRootMotionScale(entityId, scale);
     }
 
+    // Max turn rate in degrees/second for facing the travel direction. 0 = instant snap;
+    // >0 eases the unit toward its heading so it doesn't "jump" forward on sharp turns.
+    public static function setTurnSpeed(int entityId, float degPerSec): void {
+        _native_navmesh_setTurnSpeed(entityId, degPerSec);
+    }
+
     // Get the current max speed of an entity's NavmeshAgent
     public static function getSpeed(int entityId): float {
         return _native_navmesh_getAgentSpeed(entityId);
