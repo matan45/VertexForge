@@ -17,6 +17,10 @@ namespace components
         float height = 2.0f;
         float maxSpeed = 3.5f;
         float maxAcceleration = 8.0f;
+        // Max turn rate (degrees/second) for facing the travel direction. 0 = instant
+        // snap (back-compat); >0 eases the unit toward its heading so a fast unit does
+        // not "jump" forward when the path bends.
+        float turnSpeed = 0.0f;
         float stoppingDistance = 0.1f;
 
         // Arrival and stuck detection
