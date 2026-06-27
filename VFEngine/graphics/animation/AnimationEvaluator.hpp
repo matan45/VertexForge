@@ -78,4 +78,12 @@ namespace animation
                                    glm::vec3& outPos, glm::quat& outRot, glm::vec3& outScale) const;
     };
 #pragma warning(pop)
+
+    // VK-1441: build the final skinning palette from per-bone LOCAL transforms by running ONE
+    // hierarchy pass then globalInverse * world * inverseBindPose. Mirrors evaluatePose()'s tail
+    // (AnimationEvaluator.cpp). Used by the local-space blend paths (cross-fade / blend trees) so a
+    // child bone stays attached to its parent during a blend instead of stretching/shearing.
+    VF_ANIMATION_API std::vector<glm::mat4> composeSkinningPalette(
+        const std::vector<glm::mat4>& localTransforms,
+        const resource::SkeletonData& skeleton);
 }

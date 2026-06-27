@@ -395,6 +395,11 @@ namespace animation
         glm::vec3* prevRootPtr = rootMotionEnabled ? &prevRoot : nullptr;
         glm::vec3* currRootPtr = rootMotionEnabled ? &currRoot : nullptr;
 
+        // Whether each endpoint is a blend-tree state determines if a single evaluator retains its
+        // local pose (plain states do; blend trees route through an internal evaluator and do not).
+        const bool prevIsTree = hasBlendTree(state.previousStateId);
+        const bool currIsTree = hasBlendTree(state.currentStateId);
+
         auto prevPose = evaluateStatePose(state.previousStateId, state.previousStateTime,
                                            previousEvaluator, prevRootPtr);
         auto currPose = evaluateStatePose(state.currentStateId, state.stateTime,
@@ -402,7 +407,22 @@ namespace animation
 
         if (!prevPose.empty() && !currPose.empty())
         {
-            currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
+            // VK-1441: when both endpoints are plain states, each evaluator still holds this frame's
+            // per-bone local TRS, so blend in LOCAL space then run ONE hierarchy + inverse-bind pass
+            // (children stay attached to parents, no limb stretch/shear). When an endpoint is a blend
+            // tree there is no single populated evaluator, so fall back to the legacy palette blend
+            // (byte-identical to prior behavior) for those transitions.
+            if (!prevIsTree && !currIsTree && skeletonData)
+            {
+                currentBoneMatrices = AnimationBlender::blendLocalPoses(
+                    previousEvaluator.getEvaluatedBones(),
+                    currentEvaluator.getEvaluatedBones(),
+                    state.blendWeight, *skeletonData);
+            }
+            else
+            {
+                currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
+            }
             if (rootMotionEnabled)
                 outRootPosition = glm::mix(prevRoot, currRoot, state.blendWeight);
         }

@@ -220,6 +220,9 @@ namespace animation
 
         // Evaluate each active entry's pose
         std::vector<std::vector<glm::mat4>> poses;
+        // VK-1441: snapshot each source's per-bone LOCAL TRS so the N-way blend happens in local
+        // space (the single reused evaluator is overwritten on the next iteration, so copy now).
+        std::vector<std::vector<EvaluatedBone>> localSources;
         std::vector<float> activeWeights;
         std::vector<glm::vec3> rootPositions;
 
@@ -247,6 +250,7 @@ namespace animation
             {
                 poses.push_back(evaluator.evaluatePose(timeInTicks));
             }
+            localSources.push_back(evaluator.getEvaluatedBones());
             activeWeights.push_back(weights[i]);
         }
 
@@ -278,6 +282,6 @@ namespace animation
                 outRootPosition += rootPositions[i] * activeWeights[i];
         }
 
-        return AnimationBlender::blendNPoses(poses, activeWeights);
+        return AnimationBlender::blendLocalNPoses(localSources, activeWeights, skeleton);
     }
 }

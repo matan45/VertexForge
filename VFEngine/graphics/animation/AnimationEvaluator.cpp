@@ -2,6 +2,7 @@
 #include "RetargetContext.hpp"
 #include "print/Log.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
 
 namespace animation
 {
@@ -126,6 +127,32 @@ namespace animation
         if (!animationData) return 0.0f;
         float tps = animationData->ticksPerSecond > 0.0f ? animationData->ticksPerSecond : 24.0f;
         return seconds * tps;
+    }
+
+    std::vector<glm::mat4> composeSkinningPalette(
+        const std::vector<glm::mat4>& localTransforms,
+        const resource::SkeletonData& skeleton)
+    {
+        const size_t boneCount = std::min(localTransforms.size(), skeleton.bones.size());
+
+        // Hierarchy pass: accumulate each bone's local transform up the parent chain. Mirrors
+        // evaluatePose() (skeletons are stored parent-before-child, so world[parent] is ready).
+        std::vector<glm::mat4> worldTransforms(boneCount);
+        for (size_t i = 0; i < boneCount; ++i)
+        {
+            int parent = skeleton.bones[i].parentIndex;
+            if (parent >= 0)
+                worldTransforms[i] = worldTransforms[parent] * localTransforms[i];
+            else
+                worldTransforms[i] = localTransforms[i];
+        }
+
+        const glm::mat4& globalInv = skeleton.globalInverseTransform;
+        std::vector<glm::mat4> result(boneCount);
+        for (size_t i = 0; i < boneCount; ++i)
+            result[i] = globalInv * worldTransforms[i] * skeleton.inverseBindPoses[i];
+
+        return result;
     }
 
     std::vector<glm::mat4> AnimationEvaluator::evaluatePose(float timeInTicks) const
