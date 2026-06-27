@@ -332,7 +332,6 @@ namespace animation
                                     ? glm::vec3(1.0f)
                                     : interpolateScale(ch, timeInTicks, it->second);
 
-                evaluatedBones[i].position = pos;
                 evaluatedBones[i].rotation = rot;
                 evaluatedBones[i].scale = scl;
 
@@ -342,6 +341,14 @@ namespace animation
                     outRootPosition = pos - bindPos;
                     pos = bindPos;
                 }
+
+                // Capture the local position AFTER root-motion pinning, so the local-pose
+                // blend path (blendLocalPoses / blendLocalNPoses -- used by cross-fades and
+                // blend trees) renders the root in-place too, matching the matrix path below
+                // and the retarget branch above. Storing it before the pin leaked the full
+                // root translation + vertical bob (and its one-frame loop-wrap snap) into the
+                // blended render, which read as a vertical "pop" on moving units.
+                evaluatedBones[i].position = pos;
 
                 animatedTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(
                     glm::mat4(1.0f), scl);
