@@ -1,4 +1,5 @@
 #include "TextComponentService.hpp"
+#include "BillboardAutoIcon.hpp"
 #include "scene/SceneGraphSystem.hpp"
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -25,7 +26,7 @@ namespace services {
         }
 
         sceneEntity.addComponent<components::TextComponent>();
-        autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Text));
+        components_helpers::autoAttachBillboard(entity, components::BillboardIconType::Text);
         return true;
     }
 
@@ -37,7 +38,7 @@ namespace services {
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::TextComponent>()) {
-            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Text));
+            components_helpers::autoDetachBillboard(entity, components::BillboardIconType::Text);
             sceneEntity.removeComponent<components::TextComponent>();
             return true;
         }
@@ -127,36 +128,6 @@ namespace services {
             [this](const events::scene::GetTextDataQuery& query) {
                 return getTextData(query.entity);
             });
-    }
-
-    void TextComponentService::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
-            billboard.iconType = static_cast<components::BillboardIconType>(iconType);
-            billboard.editorOnly = true;
-            billboard.selectable = true;
-        }
-    }
-
-    void TextComponentService::autoDetachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
-            if (billboard.iconType == static_cast<components::BillboardIconType>(iconType)) {
-                sceneEntity.removeComponent<components::BillboardComponent>();
-            }
-        }
     }
 
 }

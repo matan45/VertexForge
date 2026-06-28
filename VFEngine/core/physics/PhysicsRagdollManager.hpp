@@ -22,6 +22,11 @@ namespace core::physics
         JPH::Ref<JPH::Ragdoll> ragdoll;
         SkeletonConversionResult skeletonConversion;
         uint32_t collisionGroupId = 0;
+        // True only while the ragdoll's bodies+constraints are added to the Jolt physics system.
+        // A ragdoll is built (CreateRagdoll) but NOT added until activate/transition; calling
+        // RemoveFromPhysicsSystem() on a not-added ragdoll walks invalid constraint indices and
+        // crashes, so every removal site must gate on this flag.
+        bool inSystem = false;
     };
 
     class PhysicsRagdollManager
@@ -65,6 +70,11 @@ namespace core::physics
                                     const glm::vec3& entityPosition);
 
     private:
+        // Clamp every ragdoll body's linear/angular velocity to a finite maximum (and zero out
+        // non-finite values) so an applied impulse can't push a body to escape velocity and NaN
+        // the broad phase. Called after impulses; no-op unless the ragdoll is in the system.
+        void clampRagdollVelocities(uint64_t entityId);
+
         PhysicsContext* ctx = nullptr;
         PhysicsBodyRegistry* bodyRegistry = nullptr;
 

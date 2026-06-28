@@ -30,6 +30,32 @@ namespace render::gpudriven
                static_cast<uint64_t>(static_cast<uint32_t>(z));
     }
 
+    // VK-1443: moved out of GPUDrivenRenderer.hpp to slim that header. Behavior is
+    // identical to the prior inline body.
+    void GPUDrivenRenderer::setBillboardPaletteFromEntries(const std::vector<::vegetation::BillboardPaletteEntry>& entries)
+    {
+        vegetation.billboardPalette.clear();
+        for (const auto& e : entries)
+        {
+            detail::VegetationState::BillboardGPUEntry gpu;
+            gpu.mode = static_cast<uint32_t>(e.mode);
+            gpu.weight = e.weight;
+            gpu.scaleMin = e.scaleRange.x;
+            gpu.scaleMax = e.scaleRange.y;
+            gpu.visible = e.visible;
+
+            // Register texture with bindless system if path is set
+            gpu.bindlessIndex = 0xFFFFFFFF;
+            if (!e.texturePath.empty() && textureStreamManager)
+            {
+                gpu.bindlessIndex = textureStreamManager->registerTexture(
+                    e.texturePath, vk::Format::eR8G8B8A8Srgb);
+            }
+
+            vegetation.billboardPalette.push_back(gpu);
+        }
+    }
+
     void GPUDrivenRenderer::createGrassBuffers(uint32_t maxInstances)
     {
         vk::Device vkDevice = device.getLogicalDevice();

@@ -55,6 +55,8 @@ namespace animation
 
         std::vector<glm::mat4> evaluatePose(float timeInTicks) const;
         std::vector<glm::mat4> evaluatePose(float timeInTicks, glm::vec3& outRootPosition) const;
+        void evaluateLocalPose(float timeInTicks) const;
+        void evaluateLocalPose(float timeInTicks, glm::vec3& outRootPosition) const;
         std::vector<glm::mat4> evaluatePoseLOD(float timeInTicks, const BoneLODSet& activeBones) const;
 
         const std::vector<EvaluatedBone>& getEvaluatedBones() const { return evaluatedBones; }
@@ -73,9 +75,20 @@ namespace animation
 
         void buildBoneToChannelMap();
 
+        bool evaluateLocalPoseInternal(float timeInTicks, glm::vec3* outRootPosition) const;
+        std::vector<glm::mat4> composeEvaluatedPalette() const;
+
         // Retarget sampling for target bone i -> local TRS (used only when retarget != null).
         void sampleRetargetedLocal(size_t i, float timeInTicks,
                                    glm::vec3& outPos, glm::quat& outRot, glm::vec3& outScale) const;
     };
 #pragma warning(pop)
+
+    // VK-1441: build the final skinning palette from per-bone LOCAL transforms by running ONE
+    // hierarchy pass then globalInverse * world * inverseBindPose. Mirrors evaluatePose()'s tail
+    // (AnimationEvaluator.cpp). Used by the local-space blend paths (cross-fade / blend trees) so a
+    // child bone stays attached to its parent during a blend instead of stretching/shearing.
+    VF_ANIMATION_API std::vector<glm::mat4> composeSkinningPalette(
+        const std::vector<glm::mat4>& localTransforms,
+        const resource::SkeletonData& skeleton);
 }

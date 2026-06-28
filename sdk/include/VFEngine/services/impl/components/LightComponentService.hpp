@@ -51,8 +51,6 @@ namespace services {
         template<typename ComponentT>
         bool hasLightImpl(EntityHandle entity) const;
 
-        void autoAttachBillboard(EntityHandle entity, components::BillboardIconType iconType);
-        void autoDetachBillboard(EntityHandle entity, components::BillboardIconType iconType);
         bool hasAnyLightComponent(EntityHandle entity) const;
     };
 

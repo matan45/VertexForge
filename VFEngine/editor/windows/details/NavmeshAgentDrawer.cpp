@@ -37,6 +37,9 @@ namespace windows::details
             ImGui::PushItemWidth(-1);
             ImGui::DragFloat("##NavAgentSpeed", &agent.maxSpeed, 0.1f, 0.0f, 50.0f, "Max Speed: %.1f");
             ImGui::DragFloat("##NavAgentAccel", &agent.maxAcceleration, 0.1f, 0.0f, 100.0f, "Max Accel: %.1f");
+            ImGui::DragFloat("##NavAgentTurnSpeed", &agent.turnSpeed, 5.0f, 0.0f, 1440.0f, "Turn Speed: %.0f deg/s (0=instant)");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Max facing turn rate. 0 = snap instantly to travel direction;\n>0 eases into turns so a fast unit doesn't jump forward.");
             ImGui::DragFloat("##NavAgentStopDist", &agent.stoppingDistance, 0.01f, 0.0f, 5.0f, "Stop Dist: %.2f");
             ImGui::PopItemWidth();
 

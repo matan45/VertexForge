@@ -385,6 +385,20 @@ namespace windows
                         dispatcher.execute(vfxCmd);
                     });
                 }
+                else if (ext == ".vfvfxsequence")
+                {
+                    spawnComponentEntity(fsPath, [&](services::EntityHandle entity)
+                    {
+                        events::scene::AddVFXSequenceComponentCommand addCmd;
+                        addCmd.entity = entity;
+                        dispatcher.execute(addCmd);
+
+                        events::scene::SetVFXSequenceDataCommand seqCmd;
+                        seqCmd.entity = entity;
+                        seqCmd.vfxSequenceData.sequenceRef = asset::AssetRef::fromPath(path);
+                        dispatcher.execute(seqCmd);
+                    });
+                }
                 else if (ext == ".vfaudio")
                 {
                     spawnComponentEntity(fsPath, [&](services::EntityHandle entity)

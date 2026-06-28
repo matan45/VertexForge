@@ -15,6 +15,13 @@
 #include "events/editor/UndoRedoEvents.hpp"
 #include "events/project/ResourceEvents.hpp"
 
+// VK-1442 — compound-widget structure validation reads the live registry directly (the editor
+// may; mutations still flow through CQRS). Conversion + the header-only validator come from the
+// utilities include root.
+#include "scene/EntityRegistry.hpp"
+#include "data/EntityConversion.hpp"
+#include "ui/UICompoundValidation.hpp"
+
 #include <imgui.h>
 #include <IconsFontAwesome6.h>
 #include <algorithm>
@@ -75,7 +82,10 @@ namespace windows
         };
     }
 
-    UILayerBuilderWindow::UILayerBuilderWindow() = default;
+    UILayerBuilderWindow::UILayerBuilderWindow()
+        : hierarchyPane(*this), canvasPane(*this)
+    {
+    }
 
     UILayerBuilderWindow::~UILayerBuilderWindow()
     {
@@ -437,6 +447,9 @@ namespace windows
         case WidgetType::ScrollView:  name = "ScrollView"; break;
         case WidgetType::LayoutGroup: name = "LayoutGroup"; break;
         case WidgetType::ListView:    name = "ListView"; break;
+        case WidgetType::Dropdown:    name = "Dropdown"; break;
+        case WidgetType::Tabs:        name = "Tabs"; break;
+        case WidgetType::Tooltip:     name = "Tooltip"; break;
         }
 
         // One undo entry for the whole add gesture.
@@ -538,7 +551,29 @@ namespace windows
                 Dispatcher::instance().execute(c);
                 break;
             }
+            case WidgetType::Dropdown:
+            {
+                events::ui::AddUIDropdownComponentCommand c; c.entity = created;
+                Dispatcher::instance().execute(c);
+                break;
             }
+            case WidgetType::Tabs:
+            {
+                events::ui::AddUITabsComponentCommand c; c.entity = created;
+                Dispatcher::instance().execute(c);
+                break;
+            }
+            case WidgetType::Tooltip:
+            {
+                events::ui::AddUITooltipComponentCommand c; c.entity = created;
+                Dispatcher::instance().execute(c);
+                break;
+            }
+            }
+
+            // VK-1442 — build the compound widget's starter child composition (no-op for the
+            // simple widget types), still inside the undo batch so the whole add is one gesture.
+            assembleCompound(type, created);
 
             selectEntity(created);
             dirty = true;
@@ -548,6 +583,136 @@ namespace windows
         Dispatcher::instance().execute(end);
 
         rebuildPreview();
+    }
+
+    // =========================================================================
+    // Compound auto-assembly (VK-1442)
+    // =========================================================================
+
+    void UILayerBuilderWindow::assembleCompound(WidgetType type, services::EntityHandle root)
+    {
+        if (!root.isValid()) return;
+        auto& d = Dispatcher::instance();
+
+        // Small CQRS builders (mirror addWidget's create + seed-rect pattern). Each child inherits
+        // the sandbox preview tag through the registry hierarchy, so no per-child tagging is needed.
+        auto createChild = [&](services::EntityHandle parent, const char* childName) -> services::EntityHandle
+        {
+            events::scene::CreateEntityCommand c;
+            c.name = childName;
+            c.parent = parent;
+            services::EntityHandle h = d.execute(c);
+            if (h.isValid())
+            {
+                events::ui::AddUIRectComponentCommand rc; rc.entity = h;
+                d.execute(rc);
+            }
+            return h;
+        };
+        auto setRect = [&](services::EntityHandle e, glm::vec2 aMin, glm::vec2 aMax,
+                           glm::vec2 pivot, glm::vec2 size, glm::vec2 pos)
+        {
+            services::UIRectData r;
+            r.anchorMin = aMin; r.anchorMax = aMax; r.pivot = pivot;
+            r.sizeDelta = size; r.anchoredPosition = pos;
+            events::ui::SetUIRectDataCommand s; s.entity = e; s.rectData = r;
+            d.execute(s);
+        };
+        auto addImage = [&](services::EntityHandle e, glm::vec4 tint)
+        {
+            events::ui::AddUIImageComponentCommand a; a.entity = e; d.execute(a);
+            services::UIImageData img; img.colorTint = tint;
+            events::ui::SetUIImageDataCommand s; s.entity = e; s.imageData = img; d.execute(s);
+        };
+        auto addLabel = [&](services::EntityHandle e, const std::string& text, uint8_t hAlign, uint8_t vAlign)
+        {
+            events::ui::AddUILabelComponentCommand a; a.entity = e; d.execute(a);
+            services::UILabelData lab; lab.text = text; lab.horizontalAlignment = hAlign; lab.verticalAlignment = vAlign;
+            events::ui::SetUILabelDataCommand s; s.entity = e; s.labelData = lab; d.execute(s);
+        };
+
+        switch (type)
+        {
+        case WidgetType::Checkbox:
+        {
+            // Root already has UICheckbox; add a box image + a left "Check" square + a "Label"
+            // to its right, and enable label-click toggling.
+            addImage(root, glm::vec4(0.20f, 0.20f, 0.24f, 1.0f));
+
+            services::EntityHandle check = createChild(root, "Check");
+            if (check.isValid())
+            {
+                setRect(check, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {26.0f, 26.0f}, {6.0f, 0.0f});
+                addImage(check, glm::vec4(0.30f, 0.70f, 1.0f, 1.0f));
+            }
+            services::EntityHandle label = createChild(root, "Label");
+            if (label.isValid())
+            {
+                setRect(label, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {150.0f, 40.0f}, {40.0f, 0.0f});
+                addLabel(label, "Checkbox", 0 /*Left*/, 1 /*Middle*/);
+            }
+
+            services::UICheckboxData cb;
+            cb.labelToggle = true;
+            events::ui::SetUICheckboxDataCommand s; s.entity = root; s.checkboxData = cb;
+            d.execute(s);
+            break;
+        }
+        case WidgetType::Dropdown:
+        {
+            // Root already has UIDropdown; add a header image + a "Value" label, and seed options
+            // so the (preview-expanded) list is non-empty.
+            addImage(root, glm::vec4(0.25f, 0.25f, 0.25f, 1.0f));
+
+            services::EntityHandle value = createChild(root, "Value");
+            if (value.isValid())
+            {
+                setRect(value, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {180.0f, 40.0f}, {10.0f, 0.0f});
+                addLabel(value, "Select...", 0 /*Left*/, 1 /*Middle*/);
+            }
+
+            services::UIDropdownData dd;
+            dd.options = { {"Option 1", {}}, {"Option 2", {}}, {"Option 3", {}} };
+            events::ui::SetUIDropdownDataCommand s; s.entity = root; s.dropdownData = dd;
+            d.execute(s);
+            break;
+        }
+        case WidgetType::Tabs:
+        {
+            // Root already has UITabs + UIRect. Build the tab bar + two tabs/panes via the shared
+            // authoring helper so the auto-assembled shape matches the inspector's "+ Add Tab".
+            details::UITabsDrawer::addTab(root);
+            details::UITabsDrawer::addTab(root);
+
+            services::UITabsData td;
+            td.activeTabIndex = 0;
+            events::ui::SetUITabsDataCommand s; s.entity = root; s.tabsData = td;
+            d.execute(s);
+            details::UITabsDrawer::syncPaneVisibility(root, 0);
+            break;
+        }
+        case WidgetType::Tooltip:
+        {
+            // Root already has UITooltip; make it a hoverable host (image + label) in Text mode.
+            addImage(root, glm::vec4(0.20f, 0.40f, 0.65f, 1.0f));
+
+            services::EntityHandle label = createChild(root, "Label");
+            if (label.isValid())
+            {
+                setRect(label, {0.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f});
+                addLabel(label, "Hover me", 1 /*Center*/, 1 /*Middle*/);
+            }
+
+            services::UITooltipData tip;
+            tip.mode = 0; // Text
+            tip.text = "Tooltip text";
+            events::ui::SetUITooltipDataCommand s; s.entity = root; s.tooltipData = tip;
+            d.execute(s);
+            break;
+        }
+        default:
+            break; // simple widget types need no extra composition
+        }
     }
 
     // =========================================================================
@@ -594,24 +759,56 @@ namespace windows
             else
             {
                 // Three panes: palette+hierarchy (left), canvas (center), inspector (right).
-                const float leftW = 220.0f;
-                const float rightW = 340.0f;
-                if (ImGui::BeginChild("LeftPane", ImVec2(leftW, 0), ImGuiChildFlags_Borders))
+                // leftPaneWidth/rightPaneWidth are user-draggable via the vertical splitters below
+                // so long hierarchy entity names stay readable.
+                const float thickness = 6.0f;
+                const float minLeft = 140.0f, minRight = 220.0f, minCanvas = 220.0f;
+                const float totalW = ImGui::GetContentRegionAvail().x;
+
+                leftPaneWidth = std::clamp(leftPaneWidth, minLeft,
+                                           std::max(minLeft, totalW - rightPaneWidth - minCanvas - 2.0f * thickness));
+                rightPaneWidth = std::clamp(rightPaneWidth, minRight,
+                                            std::max(minRight, totalW - leftPaneWidth - minCanvas - 2.0f * thickness));
+                const float canvasW = std::max(minCanvas, totalW - leftPaneWidth - rightPaneWidth - 2.0f * thickness);
+
+                // Draggable vertical splitter: adjusts `size` by the horizontal drag * sign, clamped.
+                // Uses SameLine(0,0) (explicit zero gap) instead of changing the global ItemSpacing,
+                // so the pane CONTENTS (e.g. the palette buttons) keep their normal spacing.
+                auto verticalSplitter = [](const char* id, float& size, float sign,
+                                           float minSize, float maxSize, float w)
+                {
+                    ImGui::SameLine(0.0f, 0.0f);
+                    ImGui::InvisibleButton(id, ImVec2(w, ImGui::GetContentRegionAvail().y));
+                    if (ImGui::IsItemActive())
+                        size = std::clamp(size + ImGui::GetIO().MouseDelta.x * sign, minSize, maxSize);
+                    const bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
+                    if (hot) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                    const ImU32 col = hot ? IM_COL32(130, 130, 150, 255) : IM_COL32(60, 60, 70, 255);
+                    ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), col);
+                };
+
+                if (ImGui::BeginChild("LeftPane", ImVec2(leftPaneWidth, 0), ImGuiChildFlags_Borders))
                 {
                     drawPalettePane();
                     ImGui::Separator();
-                    drawHierarchyPane();
+                    hierarchyPane.draw();
                 }
                 ImGui::EndChild();
 
-                ImGui::SameLine();
-                if (ImGui::BeginChild("CanvasPane", ImVec2(-rightW, 0), ImGuiChildFlags_Borders))
+                verticalSplitter("##splitLeft", leftPaneWidth, +1.0f, minLeft,
+                                 std::max(minLeft, totalW - rightPaneWidth - minCanvas - 2.0f * thickness), thickness);
+
+                ImGui::SameLine(0.0f, 0.0f);
+                if (ImGui::BeginChild("CanvasPane", ImVec2(canvasW, 0), ImGuiChildFlags_Borders))
                 {
-                    drawCanvasPane();
+                    canvasPane.draw();
                 }
                 ImGui::EndChild();
 
-                ImGui::SameLine();
+                verticalSplitter("##splitRight", rightPaneWidth, -1.0f, minRight,
+                                 std::max(minRight, totalW - leftPaneWidth - minCanvas - 2.0f * thickness), thickness);
+
+                ImGui::SameLine(0.0f, 0.0f);
                 if (ImGui::BeginChild("InspectorPane", ImVec2(0, 0), ImGuiChildFlags_Borders))
                 {
                     drawInspectorPane();
@@ -783,6 +980,9 @@ namespace windows
             {"Scroll View", WidgetType::ScrollView},
             {"Layout Group", WidgetType::LayoutGroup},
             {"List View", WidgetType::ListView},
+            {"Dropdown", WidgetType::Dropdown},
+            {"Tabs", WidgetType::Tabs},
+            {"Tooltip", WidgetType::Tooltip},
         };
 
         for (const auto& item : items)
@@ -790,463 +990,6 @@ namespace windows
             if (ImGui::Button(item.label, ImVec2(-1, 0)))
             {
                 addWidget(item.type);
-            }
-        }
-    }
-
-    // =========================================================================
-    // Hierarchy pane
-    // =========================================================================
-
-    void UILayerBuilderWindow::drawHierarchyPane()
-    {
-        ImGui::SeparatorText("Hierarchy");
-        if (!hasLayer()) return;
-
-        // Reveal: when the selection changes (canvas-click or tree-click), expand the selected
-        // entity's ancestors and request a one-shot scroll-into-view for its node.
-        services::EntityHandle sel = selectedEntity();
-        if (sel.isValid() && sel != lastRevealSel)
-        {
-            lastRevealSel = sel;
-            revealScroll = true;
-
-            // Walk up the parent chain, expanding each ancestor (without collapsing others).
-            services::EntityHandle current = sel;
-            while (current.isValid())
-            {
-                events::scene::GetEntityQuery q;
-                q.entity = current;
-                auto data = Dispatcher::instance().query(q);
-                if (!data.has_value() || !data->parent.has_value() || !data->parent->isValid())
-                    break;
-                expandedNodes.insert(data->parent->id);
-                current = *data->parent;
-            }
-        }
-        else if (!sel.isValid())
-        {
-            lastRevealSel = services::EntityHandle::invalid();
-        }
-
-        if (ImGui::BeginChild("HierTree", ImVec2(0, 0)))
-        {
-            drawHierarchyNode(contentRoot, 0);
-
-            // Empty space below the tree is a top-level drop zone: dropping here reparents the
-            // dragged entity directly under contentRoot ("outside / move to top level").
-            ImVec2 remaining = ImGui::GetContentRegionAvail();
-            if (remaining.y > 0.0f)
-            {
-                ImGui::Dummy(ImVec2(std::max(remaining.x, 1.0f), remaining.y));
-                if (ImGui::BeginDragDropTarget())
-                {
-                    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kHierarchyDragPayload))
-                    {
-                        services::EntityHandle dragged =
-                            *static_cast<const services::EntityHandle*>(p->Data);
-                        if (dragged.isValid() && contentRoot.isValid() && dragged.id != contentRoot.id)
-                        {
-                            events::scene::ReparentEntityCommand reparent;
-                            reparent.entity = dragged;
-                            reparent.newParent = contentRoot;
-                            Dispatcher::instance().execute(reparent);
-                            dirty = true;
-                            rebuildPreview();
-                        }
-                    }
-                    ImGui::EndDragDropTarget();
-                }
-            }
-        }
-        ImGui::EndChild();
-    }
-
-    void UILayerBuilderWindow::drawHierarchyNode(services::EntityHandle entity, int depth)
-    {
-        if (!entity.isValid()) return;
-
-        events::scene::GetEntityQuery q;
-        q.entity = entity;
-        auto data = Dispatcher::instance().query(q);
-        if (!data.has_value()) return;
-
-        const bool isSelected = (selectedEntity() == entity);
-        const bool hasChildren = !data->children.empty();
-        const bool isRenaming = (renamingEntity == entity);
-
-        // Default-open on first sight (preserves the original DefaultOpen UX); thereafter the
-        // expandedNodes set is authoritative and tracks user collapses + reveal expansions.
-        if (seenNodes.insert(entity.id).second)
-        {
-            expandedNodes.insert(entity.id);
-        }
-
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth
-            | ImGuiTreeNodeFlags_AllowOverlap; // let the right-aligned eye button take its own clicks
-        if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
-        if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf;
-
-        ImGui::PushID(static_cast<int>(entity.id));
-        ImGui::SetNextItemOpen(expandedNodes.count(entity.id) > 0, ImGuiCond_Always);
-        // Hidden (inactive) content nodes draw dimmed. The canvas root is held inactive for
-        // isolation (not by the user), so it's never treated as hidden.
-        const bool hidden = !data->isActive && entity != canvasRoot;
-        if (hidden)
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        bool open = ImGui::TreeNodeEx(data->name.empty() ? "(unnamed)" : data->name.c_str(), flags);
-        if (hidden)
-            ImGui::PopStyleColor();
-
-        // Keep the expanded set in sync with user arrow toggles.
-        if (ImGui::IsItemToggledOpen())
-        {
-            if (open) expandedNodes.insert(entity.id);
-            else      expandedNodes.erase(entity.id);
-        }
-
-        // Scroll the freshly-revealed selection into view (one-shot).
-        if (isSelected && revealScroll)
-        {
-            ImGui::SetScrollHereY(0.5f);
-            revealScroll = false;
-        }
-
-        if (!isRenaming)
-        {
-            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-            {
-                selectEntity(entity);
-            }
-
-            // Double-click begins an inline rename (the content root is the layer top — still
-            // renameable, since it's the saved subtree's own node).
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-            {
-                renamingEntity = entity;
-                renameFocusPending = true;
-                snprintf(renameBuf, sizeof(renameBuf), "%s", data->name.c_str());
-            }
-
-            // Drag source: this node can be reparented onto another. Must come right after the
-            // tree node (before any SameLine widgets).
-            if (ImGui::BeginDragDropSource())
-            {
-                services::EntityHandle payload = entity;
-                ImGui::SetDragDropPayload(kHierarchyDragPayload, &payload, sizeof(services::EntityHandle));
-                ImGui::Text("Move %s", data->name.empty() ? "(unnamed)" : data->name.c_str());
-                ImGui::EndDragDropSource();
-            }
-        }
-
-        // Drop target: reparent the dragged entity under this node.
-        if (ImGui::BeginDragDropTarget())
-        {
-            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kHierarchyDragPayload))
-            {
-                services::EntityHandle dragged = *static_cast<const services::EntityHandle*>(p->Data);
-                if (dragged.isValid() && dragged.id != entity.id)
-                {
-                    events::scene::ReparentEntityCommand reparent;
-                    reparent.entity = dragged;
-                    reparent.newParent = entity; // handler enforces the ancestor cycle-check
-                    Dispatcher::instance().execute(reparent);
-                    dirty = true;
-                    rebuildPreview();
-                }
-            }
-            ImGui::EndDragDropTarget();
-        }
-
-        // Visibility toggle (eye icon), right-aligned. Flips the entity's isActive so the element
-        // shows/hides LIVE in the preview (descendants honor it via isEffectivelyActiveWithin).
-        // Skip the canvas root — its inactive state is an isolation artifact, not user visibility.
-        if (!isRenaming && entity != canvasRoot)
-        {
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 24.0f);
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-            if (ImGui::SmallButton(data->isActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH))
-            {
-                events::scene::SetEntityActiveCommand cmd;
-                cmd.entity = entity;
-                cmd.isActive = !data->isActive;
-                Dispatcher::instance().execute(cmd);
-                dirty = true;
-                rebuildPreview();
-            }
-            ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(data->isActive ? "Hide" : "Show");
-        }
-
-        // Inline rename editor (replaces the node's normal interactions for this frame).
-        if (isRenaming)
-        {
-            ImGui::SameLine();
-            if (renameFocusPending)
-            {
-                ImGui::SetKeyboardFocusHere();
-                renameFocusPending = false;
-            }
-            ImGui::SetNextItemWidth(std::max(ImGui::GetContentRegionAvail().x - 10.0f, 80.0f));
-            bool committed = ImGui::InputText("##rename", renameBuf, sizeof(renameBuf),
-                                              ImGuiInputTextFlags_EnterReturnsTrue
-                                                  | ImGuiInputTextFlags_AutoSelectAll);
-            if (ImGui::IsKeyPressed(ImGuiKey_Escape))
-            {
-                renamingEntity = services::EntityHandle::invalid();
-            }
-            else if (committed || ImGui::IsItemDeactivated())
-            {
-                if (renameBuf[0] != '\0')
-                {
-                    events::scene::SetEntityNameCommand cmd;
-                    cmd.entity = entity;
-                    cmd.newName = renameBuf;
-                    Dispatcher::instance().execute(cmd);
-                    dirty = true;
-                }
-                renamingEntity = services::EntityHandle::invalid();
-            }
-        }
-
-        // Delete (not the content root — that's the layer's top).
-        if (entity != contentRoot && ImGui::BeginPopupContextItem())
-        {
-            if (ImGui::MenuItem("Delete"))
-            {
-                events::scene::DeleteEntityCommand del;
-                del.entity = entity;
-                Dispatcher::instance().execute(del);
-                if (isSelected) selectEntity(contentRoot);
-                dirty = true;
-                rebuildPreview();
-            }
-            ImGui::EndPopup();
-        }
-
-        if (open)
-        {
-            for (auto child : data->children)
-            {
-                drawHierarchyNode(child, depth + 1);
-            }
-            ImGui::TreePop();
-        }
-        ImGui::PopID();
-    }
-
-    // =========================================================================
-    // Canvas pane (offscreen image + handles)
-    // =========================================================================
-
-    void UILayerBuilderWindow::drawCanvasPane()
-    {
-        ImVec2 cursor = ImGui::GetCursorScreenPos();
-        glm::vec2 regionOrigin(cursor.x, cursor.y);
-        ImVec2 avail = ImGui::GetContentRegionAvail();
-        glm::vec2 regionSize(avail.x, avail.y);
-        if (regionSize.x <= 0.0f || regionSize.y <= 0.0f) return;
-
-        drawCanvasImageAndHandles(regionOrigin, regionSize);
-    }
-
-    void UILayerBuilderWindow::drawCanvasImageAndHandles(glm::vec2 regionOrigin, glm::vec2 regionSize)
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-
-        // Backdrop (checker-ish dark fill) so the letterboxed area is visible.
-        dl->AddRectFilled(ImVec2(regionOrigin.x, regionOrigin.y),
-                          ImVec2(regionOrigin.x + regionSize.x, regionOrigin.y + regionSize.y),
-                          IM_COL32(28, 28, 32, 255));
-
-        glm::vec2 refExtent = canvasReferenceExtent();
-        uilayer::LetterboxMapping map =
-            uilayer::makeLetterbox(regionOrigin, regionSize, refExtent, zoom, panRef);
-
-        // The offscreen image, drawn letterboxed.
-        void* tex = renderPreview();
-        ImVec2 imgTL(map.originScreen.x, map.originScreen.y);
-        ImVec2 imgBR(map.originScreen.x + map.imageSizeScreen.x,
-                     map.originScreen.y + map.imageSizeScreen.y);
-        if (tex)
-        {
-            dl->AddImage(tex, imgTL, imgBR);
-        }
-        else
-        {
-            dl->AddRectFilled(imgTL, imgBR, IM_COL32(15, 15, 18, 255));
-        }
-        // Canvas border.
-        dl->AddRect(imgTL, imgBR, IM_COL32(90, 90, 100, 255));
-
-        // An invisible button over the content region captures mouse input for the canvas.
-        ImGui::SetCursorScreenPos(ImVec2(regionOrigin.x, regionOrigin.y));
-        ImGui::InvisibleButton("##canvas", ImVec2(regionSize.x, regionSize.y),
-                               ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle);
-
-        handleCanvasInput(map);
-
-        // Selection handles overlay (drawn after input so it reflects the live rect).
-        services::EntityHandle sel = selectedEntity();
-        if (sel.isValid())
-        {
-            if (auto rect = resolvedRectOf(sel))
-            {
-                drawHandleOverlay(dl, map, *rect);
-            }
-        }
-    }
-
-    void UILayerBuilderWindow::drawHandleOverlay(ImDrawList* dl, const uilayer::LetterboxMapping& map,
-                                                 const uilayer::RefRect& rect)
-    {
-        glm::vec2 tl = map.refToScreen(glm::vec2(rect.x, rect.y));
-        glm::vec2 br = map.refToScreen(glm::vec2(rect.right(), rect.bottom()));
-
-        // When the element's position is driven by a parent Layout Group, the move-drag is
-        // disabled (see handleCanvasInput) — signal it with a muted-blue outline + a badge.
-        const bool layoutControlled = isLayoutControlled(selectedEntity());
-        const ImU32 outlineCol = layoutControlled ? IM_COL32(110, 170, 255, 255)
-                                                   : IM_COL32(255, 180, 40, 255);
-
-        // Selection outline.
-        dl->AddRect(ImVec2(tl.x, tl.y), ImVec2(br.x, br.y), outlineCol, 0.0f, 0, 1.5f);
-        if (layoutControlled)
-            dl->AddText(ImVec2(tl.x + 3.0f, tl.y - 15.0f), outlineCol, "Layout-controlled");
-
-        // 8 resize handles (resize / re-anchor still apply even when layout-controlled).
-        const float hs = 4.0f; // half-size in screen px
-        auto positions = uilayer::handlePositions(rect);
-        for (const auto& p : positions)
-        {
-            glm::vec2 s = map.refToScreen(p);
-            dl->AddRectFilled(ImVec2(s.x - hs, s.y - hs), ImVec2(s.x + hs, s.y + hs),
-                              IM_COL32(255, 180, 40, 255));
-            dl->AddRect(ImVec2(s.x - hs, s.y - hs), ImVec2(s.x + hs, s.y + hs), IM_COL32(20, 20, 20, 255));
-        }
-
-        // Anchor markers (the element's anchor rectangle on the canvas).
-        if (showAnchors)
-        {
-            if (auto data = rectDataOf(selectedEntity()))
-            {
-                glm::vec2 ext = canvasReferenceExtent();
-                float aL = data->anchorMin.x * ext.x;
-                float aR = data->anchorMax.x * ext.x;
-                float aT = (1.0f - data->anchorMax.y) * ext.y;
-                float aB = (1.0f - data->anchorMin.y) * ext.y;
-                glm::vec2 atl = map.refToScreen(glm::vec2(aL, aT));
-                glm::vec2 abr = map.refToScreen(glm::vec2(aR, aB));
-                dl->AddRect(ImVec2(atl.x, atl.y), ImVec2(abr.x, abr.y), IM_COL32(80, 160, 255, 200), 0.0f,
-                            0, 1.0f);
-            }
-        }
-
-        // Pivot marker.
-        if (showPivots)
-        {
-            if (auto data = rectDataOf(selectedEntity()))
-            {
-                float px = rect.x + data->pivot.x * rect.w;
-                float py = rect.y + (1.0f - data->pivot.y) * rect.h; // pivot.y is bottom-up
-                glm::vec2 s = map.refToScreen(glm::vec2(px, py));
-                dl->AddCircle(ImVec2(s.x, s.y), 5.0f, IM_COL32(40, 255, 120, 255), 12, 1.5f);
-                dl->AddLine(ImVec2(s.x - 7, s.y), ImVec2(s.x + 7, s.y), IM_COL32(40, 255, 120, 255));
-                dl->AddLine(ImVec2(s.x, s.y - 7), ImVec2(s.x, s.y + 7), IM_COL32(40, 255, 120, 255));
-            }
-        }
-    }
-
-    void UILayerBuilderWindow::handleCanvasInput(const uilayer::LetterboxMapping& map)
-    {
-        const bool hovered = ImGui::IsItemHovered();
-        const bool active = ImGui::IsItemActive();
-        ImGuiIO& io = ImGui::GetIO();
-        glm::vec2 mouseScreen(io.MousePos.x, io.MousePos.y);
-        glm::vec2 mouseRef = map.screenToRef(mouseScreen);
-
-        // Middle-drag pans the canvas.
-        if (active && ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
-        {
-            glm::vec2 deltaScreen(io.MouseDelta.x, io.MouseDelta.y);
-            if (map.scale > 0.0f) panRef += deltaScreen / map.scale;
-        }
-
-        // Left mouse: select / start a handle drag.
-        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-        {
-            services::EntityHandle sel = selectedEntity();
-
-            // First, if a handle of the current selection is under the cursor, begin a drag.
-            uilayer::HandleKind handle = uilayer::HandleKind::None;
-            if (sel.isValid())
-            {
-                if (auto rect = resolvedRectOf(sel))
-                {
-                    float grabHalfRef = (map.scale > 0.0f) ? (6.0f / map.scale) : 6.0f;
-                    handle = uilayer::hitTestHandle(*rect, mouseRef, grabHalfRef);
-                    // A layout-group child's position is auto-set every frame; block the move
-                    // (body) drag so it doesn't fight the layout. Resize handles stay active.
-                    if (handle == uilayer::HandleKind::Body && isLayoutControlled(sel))
-                        handle = uilayer::HandleKind::None;
-                    if (handle != uilayer::HandleKind::None)
-                    {
-                        if (auto before = rectDataOf(sel))
-                        {
-                            dragging = true;
-                            activeHandle = handle;
-                            dragEntity = sel;
-                            dragBefore = *before;
-                            dragStartRect = *rect;
-                            dragStartRefMouse = mouseRef;
-                        }
-                    }
-                }
-            }
-
-            // No handle hit: pick the top-most element under the cursor (CPU hit-test
-            // through the preview's reference-extent picker) and select it.
-            if (handle == uilayer::HandleKind::None)
-            {
-                services::events::uilayerpreview::PickUILayerElementAtQuery pick;
-                pick.instanceId = instanceId();
-                pick.refPx = mouseRef;
-                auto hit = Dispatcher::instance().query(pick);
-                selectEntity(hit.isValid() ? hit : contentRoot);
-            }
-        }
-
-        // Dragging a handle: dispatch live SetUIRectDataCommand (no undo push mid-drag).
-        if (dragging && dragEntity.isValid())
-        {
-            if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-            {
-                glm::vec2 deltaRef = mouseRef - dragStartRefMouse;
-                uilayer::RefRect target = uilayer::applyHandleDrag(dragStartRect, activeHandle, deltaRef);
-
-                glm::vec2 ext = canvasReferenceExtent();
-                services::UIRectData solved =
-                    uilayer::solveRectData(dragBefore, target, ext.x, ext.y);
-
-                events::ui::SetUIRectDataCommand cmd;
-                cmd.entity = dragEntity;
-                cmd.rectData = solved;
-                Dispatcher::instance().execute(cmd);
-                rebuildPreview();
-            }
-
-            // Mouse released: coalesce the whole drag into one undo entry.
-            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-            {
-                if (auto after = rectDataOf(dragEntity))
-                {
-                    const char* verb = (activeHandle == uilayer::HandleKind::Body) ? "Move" : "Resize";
-                    pushRectEditUndo(dragEntity, dragBefore, *after, std::string(verb) + " UI element");
-                }
-                dragging = false;
-                activeHandle = uilayer::HandleKind::None;
-                dragEntity = services::EntityHandle::invalid();
             }
         }
     }
@@ -1280,6 +1023,9 @@ namespace windows
             inspectorSnapshotBefore = uilayer::captureUISnapshot(sel);
         }
 
+        // VK-1442 — advisory strip for compound widgets whose child composition is malformed.
+        drawCompoundValidationStrip(sel);
+
         // The drawers each read/write component data through the same CQRS the canvas uses,
         // so edits show up live in the preview after a rebuild.
         uiCanvasDrawer.draw(sel);
@@ -1293,6 +1039,14 @@ namespace windows
         uiCheckboxDrawer.draw(sel);
         uiDropdownDrawer.draw(sel);
         uiTabsDrawer.draw(sel);
+        // The tabs drawer's "+ Add Tab" / "- Remove Tab" buttons create/delete entities; that
+        // structural change lands on the mouse-release frame (which the IsAnyItemActive rebuild
+        // below misses), so rebuild the preview explicitly when it reports one.
+        if (uiTabsDrawer.consumeStructuralChange())
+        {
+            dirty = true;
+            rebuildPreview();
+        }
         uiSliderDrawer.draw(sel);
         uiProgressBarDrawer.draw(sel);
         uiStyleDrawer.draw(sel);
@@ -1339,6 +1093,34 @@ namespace windows
         // own active state doesn't fold into the inspector edit session. The popup's selectables
         // dispatch the AddUI*ComponentCommand themselves; we mark dirty + rebuild after they run.
         drawAddComponentMenu(sel);
+    }
+
+    void UILayerBuilderWindow::drawCompoundValidationStrip(services::EntityHandle sel)
+    {
+        if (!sel.isValid()) return;
+
+        auto& reg = scene::EntityRegistry::getRegistry();
+        entt::entity e = services::internal::fromHandle(sel);
+        if (!reg.valid(e)) return;
+
+        ui_validation::CompoundWidgetStatus status = ui_validation::validateCompoundWidget(reg, e);
+        if (status.errors.empty() && status.warnings.empty())
+            return;
+
+        for (const auto& err : status.errors)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.45f, 1.0f));
+            ImGui::TextWrapped(ICON_FA_CIRCLE_EXCLAMATION " %s", err.c_str());
+            ImGui::PopStyleColor();
+        }
+        for (const auto& warning : status.warnings)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.80f, 0.30f, 1.0f));
+            ImGui::TextWrapped(ICON_FA_TRIANGLE_EXCLAMATION " %s", warning.c_str());
+            ImGui::PopStyleColor();
+        }
+        ImGui::Separator();
+        ImGui::Spacing();
     }
 
     void UILayerBuilderWindow::drawAddComponentMenu(services::EntityHandle sel)

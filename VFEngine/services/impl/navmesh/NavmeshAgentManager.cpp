@@ -160,7 +160,7 @@ namespace services
     }
 
     void NavmeshAgentManager::updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration,
-                                                int rootMotionDriven, float rootMotionSpeedScale)
+                                                int rootMotionDriven, float rootMotionSpeedScale, float turnSpeed)
     {
         // Persist onto the component first, so values set before the agent joins the
         // crowd (lazy registration on first setAgentDestination) survive and are read
@@ -181,6 +181,7 @@ namespace services
                 agent.rootMotionDriven = enable;
             }
             if (rootMotionSpeedScale >= 0.0f) agent.rootMotionSpeedScale = rootMotionSpeedScale;
+            if (turnSpeed >= 0.0f) agent.turnSpeed = turnSpeed;
             configuredSpeed = agent.maxSpeed;
         }
 
@@ -294,7 +295,26 @@ namespace services
             glm::vec3 agentVel = navmeshProvider->getCrowdAgentVelocity(agentIdx);
             if (agentVel.x * agentVel.x + agentVel.z * agentVel.z > 1e-4f)
             {
-                transform.rotation.y = glm::degrees(glm::atan(agentVel.x, agentVel.z));
+                const float targetYaw = glm::degrees(glm::atan(agentVel.x, agentVel.z));
+                float turnSpeed = 0.0f;
+                if (registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+                    turnSpeed = registry.get<components::NavmeshAgentComponent>(enttEntity).turnSpeed;
+
+                if (turnSpeed <= 0.0f)
+                {
+                    transform.rotation.y = targetYaw;  // instant snap (default / back-compat)
+                }
+                else
+                {
+                    // Rotate toward the heading by at most turnSpeed*dt, the shortest way
+                    // around +-180 deg, so a fast unit eases into the turn instead of
+                    // snapping (which reads as a forward "jump").
+                    float diff = targetYaw - transform.rotation.y;
+                    while (diff > 180.0f) diff -= 360.0f;
+                    while (diff < -180.0f) diff += 360.0f;
+                    const float maxStep = turnSpeed * deltaTime;
+                    transform.rotation.y += glm::clamp(diff, -maxStep, maxStep);
+                }
             }
 
             transform.isDirty = true;

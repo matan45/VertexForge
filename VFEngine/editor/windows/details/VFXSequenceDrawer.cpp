@@ -1,9 +1,8 @@
 #include "print/Log.hpp"
 #include "VFXSequenceDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
-#include "scene/EntityRegistry.hpp"
-#include "data/EntityConversion.hpp"
-#include "components/Components.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/project/SceneEvents.hpp"
 #include "../../dragdrop/AssetDropTarget.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
@@ -44,15 +43,22 @@ namespace windows::details
 
     bool VFXSequenceDrawer::draw(services::EntityHandle handle)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto entity = services::internal::fromHandle(handle);
+        auto& dispatcher = events::EventDispatcher::instance();
 
-        if (!registry.valid(entity) || !registry.all_of<components::VFXSequenceComponent>(entity))
+        events::scene::HasVFXSequenceComponentQuery hasQuery;
+        hasQuery.entity = handle;
+        if (!dispatcher.query(hasQuery))
         {
             return false;
         }
 
-        auto& seq = registry.get<components::VFXSequenceComponent>(entity);
+        events::scene::GetVFXSequenceDataQuery getQuery;
+        getQuery.entity = handle;
+        auto seqOpt = dispatcher.query(getQuery);
+        if (!seqOpt.has_value())
+        {
+            return true;
+        }
 
         ImGui::PushID("VFXSequenceComponent");
 
@@ -63,14 +69,25 @@ namespace windows::details
         {
             ImGui::Indent(10.0f);
 
+            services::VFXSequenceData seq = *seqOpt;
+            bool changed = false;
+
             ImGui::TextDisabled("VFX combo sequence (.vfVFXSequence)");
             ImGui::Spacing();
 
-            drawSequenceFilePath(seq);
+            changed |= drawSequenceFilePath(seq);
             ImGui::Spacing();
-            drawSettings(seq);
+            changed |= drawSettings(seq);
             ImGui::Spacing();
-            drawTriggers(seq);
+            changed |= drawTriggers(seq);
+
+            if (changed)
+            {
+                events::scene::SetVFXSequenceDataCommand cmd;
+                cmd.entity = handle;
+                cmd.vfxSequenceData = seq;
+                dispatcher.execute(cmd);
+            }
 
             ImGui::Unindent(10.0f);
         }
@@ -79,7 +96,9 @@ namespace windows::details
 
         if (removeComponent)
         {
-            registry.remove<components::VFXSequenceComponent>(entity);
+            events::scene::RemoveVFXSequenceComponentCommand cmd;
+            cmd.entity = handle;
+            dispatcher.execute(cmd);
         }
 
         return true;
@@ -105,7 +124,7 @@ namespace windows::details
         return isOpen;
     }
 
-    bool VFXSequenceDrawer::drawSequenceFilePath(components::VFXSequenceComponent& seq)
+    bool VFXSequenceDrawer::drawSequenceFilePath(services::VFXSequenceData& seq)
     {
         bool changed = false;
 
@@ -157,7 +176,7 @@ namespace windows::details
         return changed;
     }
 
-    bool VFXSequenceDrawer::drawSettings(components::VFXSequenceComponent& seq)
+    bool VFXSequenceDrawer::drawSettings(services::VFXSequenceData& seq)
     {
         bool changed = false;
 
@@ -188,7 +207,7 @@ namespace windows::details
         return changed;
     }
 
-    bool VFXSequenceDrawer::drawTriggers(components::VFXSequenceComponent& seq)
+    bool VFXSequenceDrawer::drawTriggers(services::VFXSequenceData& seq)
     {
         bool changed = false;
 

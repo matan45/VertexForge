@@ -44,6 +44,22 @@ namespace resource {
 			if (vfx.vfxRef.isValid()) lifecycle.acquire(vfx.vfxRef.getGUID(), AssetType::VFX);
 		}
 
+		if (entity.hasComponent<components::VFXSequenceComponent>())
+		{
+			const auto& seq = entity.getComponent<components::VFXSequenceComponent>();
+			if (seq.sequenceRef.isValid()) lifecycle.acquire(seq.sequenceRef.getGUID(), AssetType::VFXSequence);
+			for (const auto& trigger : seq.triggers)
+			{
+				if (trigger.sequenceRef.isValid()) lifecycle.acquire(trigger.sequenceRef.getGUID(), AssetType::VFXSequence);
+			}
+		}
+
+		if (entity.hasComponent<components::BillboardComponent>())
+		{
+			const auto& billboard = entity.getComponent<components::BillboardComponent>();
+			if (billboard.textureRef.isValid()) lifecycle.acquire(billboard.textureRef.getGUID(), AssetType::Texture);
+		}
+
 		if (entity.hasComponent<components::AnimatorComponent>())
 		{
 			const auto& anim = entity.getComponent<components::AnimatorComponent>();
@@ -56,6 +72,12 @@ namespace resource {
 			if (decal.albedoTextureRef.isValid()) lifecycle.acquire(decal.albedoTextureRef.getGUID(), AssetType::Texture);
 			if (decal.normalTextureRef.isValid()) lifecycle.acquire(decal.normalTextureRef.getGUID(), AssetType::Texture);
 			if (decal.ormTextureRef.isValid()) lifecycle.acquire(decal.ormTextureRef.getGUID(), AssetType::Texture);
+		}
+
+		if (entity.hasComponent<components::PhysicsAnimationComponent>())
+		{
+			const auto& physAnim = entity.getComponent<components::PhysicsAnimationComponent>();
+			if (physAnim.physicsAnimationRef.isValid()) lifecycle.acquire(physAnim.physicsAnimationRef.getGUID(), AssetType::PhysicsShape);
 		}
 	}
 
@@ -96,6 +118,22 @@ namespace resource {
 			if (vfx.vfxRef.isValid()) lifecycle.release(vfx.vfxRef.getGUID());
 		}
 
+		if (entity.hasComponent<components::VFXSequenceComponent>())
+		{
+			const auto& seq = entity.getComponent<components::VFXSequenceComponent>();
+			if (seq.sequenceRef.isValid()) lifecycle.release(seq.sequenceRef.getGUID());
+			for (const auto& trigger : seq.triggers)
+			{
+				if (trigger.sequenceRef.isValid()) lifecycle.release(trigger.sequenceRef.getGUID());
+			}
+		}
+
+		if (entity.hasComponent<components::BillboardComponent>())
+		{
+			const auto& billboard = entity.getComponent<components::BillboardComponent>();
+			if (billboard.textureRef.isValid()) lifecycle.release(billboard.textureRef.getGUID());
+		}
+
 		if (entity.hasComponent<components::AnimatorComponent>())
 		{
 			const auto& anim = entity.getComponent<components::AnimatorComponent>();
@@ -108,6 +146,12 @@ namespace resource {
 			if (decal.albedoTextureRef.isValid()) lifecycle.release(decal.albedoTextureRef.getGUID());
 			if (decal.normalTextureRef.isValid()) lifecycle.release(decal.normalTextureRef.getGUID());
 			if (decal.ormTextureRef.isValid()) lifecycle.release(decal.ormTextureRef.getGUID());
+		}
+
+		if (entity.hasComponent<components::PhysicsAnimationComponent>())
+		{
+			const auto& physAnim = entity.getComponent<components::PhysicsAnimationComponent>();
+			if (physAnim.physicsAnimationRef.isValid()) lifecycle.release(physAnim.physicsAnimationRef.getGUID());
 		}
 	}
 

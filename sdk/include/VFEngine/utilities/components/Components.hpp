@@ -34,7 +34,7 @@ namespace components
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
                                                PhysicsAnimationComponent,
-                                               VFXComponent, DirectionalLightComponent, PointLightComponent,
+                                               VFXComponent, VFXSequenceComponent, DirectionalLightComponent, PointLightComponent,
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent,
                                                OceanComponent, TextComponent,
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,

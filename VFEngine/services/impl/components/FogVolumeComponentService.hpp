@@ -29,9 +29,6 @@ namespace services {
         std::optional<FogVolumeData> getFogVolumeData(EntityHandle entity) const;
         bool setFogVolumeData(EntityHandle entity, const FogVolumeData& data);
 
-    private:
-        void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
-        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }

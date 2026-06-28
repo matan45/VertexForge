@@ -1,4 +1,5 @@
 #include "AnimationBlender.hpp"
+#include "AnimationEvaluator.hpp" // EvaluatedBone + composeSkinningPalette + resource::SkeletonData
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
@@ -258,5 +259,131 @@ namespace animation
         result = result * glm::mat4_cast(rotation);
         result = glm::scale(result, scale);
         return result;
+    }
+
+    std::vector<glm::mat4> AnimationBlender::blendLocalPoses(
+        const std::vector<EvaluatedBone>& bonesA,
+        const std::vector<EvaluatedBone>& bonesB,
+        float blendWeight,
+        const resource::SkeletonData& skeleton)
+    {
+        const size_t boneCount = std::min({bonesA.size(), bonesB.size(), skeleton.bones.size()});
+        if (boneCount == 0)
+            return {};
+
+        blendWeight = glm::clamp(blendWeight, 0.0f, 1.0f);
+
+        // Blend each bone's ANIMATED local TRS (parent-relative), then rebuild the local transform
+        // exactly as evaluatePose does (preTransform * T*R*S). glm::mix/slerp return the endpoints
+        // exactly at blendWeight 0/1, so those frames stay identical to the single-pose path.
+        std::vector<glm::mat4> localTransforms(boneCount);
+        for (size_t i = 0; i < boneCount; ++i)
+        {
+            BlendedBone blended = blendBoneTransforms(
+                bonesA[i].position, bonesA[i].rotation, bonesA[i].scale,
+                bonesB[i].position, bonesB[i].rotation, bonesB[i].scale,
+                blendWeight);
+            localTransforms[i] = skeleton.bones[i].preTransform *
+                                 composeMatrix(blended.position, blended.rotation, blended.scale);
+        }
+
+        return composeSkinningPalette(localTransforms, skeleton);
+    }
+
+    std::vector<glm::mat4> AnimationBlender::blendLocalNPoses(
+        const std::vector<std::vector<EvaluatedBone>>& sources,
+        const std::vector<float>& weights,
+        const resource::SkeletonData& skeleton)
+    {
+        if (sources.empty() || weights.empty())
+            return {};
+
+        // Bone count = first non-empty source, bounded by the skeleton.
+        size_t boneCount = 0;
+        size_t firstNonEmpty = sources.size();
+        for (size_t p = 0; p < sources.size(); ++p)
+        {
+            if (!sources[p].empty())
+            {
+                boneCount = sources[p].size();
+                firstNonEmpty = p;
+                break;
+            }
+        }
+        boneCount = std::min(boneCount, skeleton.bones.size());
+        if (boneCount == 0)
+            return {};
+
+        // Builds a single source's local transforms (preTransform * T*R*S per bone).
+        auto buildLocals = [&](size_t s)
+        {
+            std::vector<glm::mat4> locals(boneCount);
+            for (size_t i = 0; i < boneCount; ++i)
+                locals[i] = skeleton.bones[i].preTransform *
+                            composeMatrix(sources[s][i].position, sources[s][i].rotation, sources[s][i].scale);
+            return locals;
+        };
+
+        // Single active-weight optimization (mirrors blendNPoses): no blend needed.
+        int activeCount = 0;
+        size_t lastActive = firstNonEmpty;
+        for (size_t i = 0; i < weights.size(); ++i)
+        {
+            if (weights[i] > 0.001f && i < sources.size() && !sources[i].empty())
+            {
+                activeCount++;
+                lastActive = i;
+            }
+        }
+        if (activeCount == 0)
+            return composeSkinningPalette(buildLocals(firstNonEmpty), skeleton);
+        if (activeCount == 1)
+            return composeSkinningPalette(buildLocals(lastActive), skeleton);
+
+        std::vector<glm::mat4> localTransforms(boneCount);
+        for (size_t bone = 0; bone < boneCount; ++bone)
+        {
+            glm::vec3 blendedPos{0.0f};
+            glm::vec3 blendedScale{0.0f};
+            glm::quat blendedRot{0.0f, 0.0f, 0.0f, 0.0f};
+            glm::quat referenceRot;
+            bool firstQuat = true;
+
+            for (size_t p = 0; p < sources.size() && p < weights.size(); ++p)
+            {
+                float w = weights[p];
+                if (w <= 0.001f || sources[p].empty() || bone >= sources[p].size())
+                    continue;
+
+                const EvaluatedBone& eb = sources[p][bone];
+                blendedPos += eb.position * w;
+                blendedScale += eb.scale * w;
+
+                glm::quat rot = eb.rotation;
+                if (firstQuat)
+                {
+                    referenceRot = rot;
+                    blendedRot = rot * w;
+                    firstQuat = false;
+                }
+                else
+                {
+                    if (glm::dot(referenceRot, rot) < 0.0f)
+                        rot = -rot;
+                    blendedRot = blendedRot + rot * w;
+                }
+            }
+
+            float rotLen = glm::length(blendedRot);
+            if (rotLen > 0.0001f)
+                blendedRot = blendedRot / rotLen;
+            else
+                blendedRot = glm::quat{1.0f, 0.0f, 0.0f, 0.0f};
+
+            localTransforms[bone] = skeleton.bones[bone].preTransform *
+                                    composeMatrix(blendedPos, blendedRot, blendedScale);
+        }
+
+        return composeSkinningPalette(localTransforms, skeleton);
     }
 }

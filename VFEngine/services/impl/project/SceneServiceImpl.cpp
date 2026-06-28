@@ -8,6 +8,7 @@
 #include "../components/AnimatorComponentService.hpp"
 #include "../components/SocketComponentService.hpp"
 #include "../components/VFXComponentService.hpp"
+#include "../components/VFXSequenceComponentService.hpp"
 #include "../components/RenderTextureComponentService.hpp"
 #include "../components/BillboardComponentService.hpp"
 #include "../components/TextComponentService.hpp"
@@ -39,6 +40,7 @@ namespace services
         , animatorService(std::make_unique<AnimatorComponentService>(animatorProvider))
         , socketService(socketProvider ? std::make_unique<SocketComponentService>(socketProvider) : nullptr)
         , vfxService(std::make_unique<VFXComponentService>(sceneGraph))
+        , vfxSequenceService(std::make_unique<VFXSequenceComponentService>(sceneGraph))
         , renderTextureComponentService(std::make_unique<RenderTextureComponentService>(sceneGraph))
         , billboardService(std::make_unique<BillboardComponentService>(sceneGraph))
         , textService(std::make_unique<TextComponentService>(sceneGraph))
@@ -81,6 +83,7 @@ namespace services
         animatorService->registerEventHandlers(dispatcher);
         if (socketService) socketService->registerEventHandlers(dispatcher);
         vfxService->registerEventHandlers(dispatcher);
+        vfxSequenceService->registerEventHandlers(dispatcher);
         renderTextureComponentService->registerEventHandlers(dispatcher);
         billboardService->registerEventHandlers(dispatcher);
         textService->registerEventHandlers(dispatcher);

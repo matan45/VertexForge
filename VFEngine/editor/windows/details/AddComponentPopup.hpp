@@ -15,6 +15,7 @@ namespace windows::details {
         bool hasRigidBody = false;
         bool hasPhysicsAnimation = false;
         bool hasVFX = false;
+        bool hasVFXSequence = false;
         bool hasBillboard = false;
         bool hasText = false;
         bool hasDirectionalLight = false;

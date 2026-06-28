@@ -6,6 +6,7 @@
 #include "print/Log.hpp"
 #include "imgui.h"
 #include "ImSequencer.h"
+#include <IconsFontAwesome6.h>
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 
@@ -404,7 +405,7 @@ namespace windows
             ImGui::PushID(i);
 
             // Reorder / remove controls.
-            if (ImGui::SmallButton("^") && i > 0)
+            if (ImGui::SmallButton(ICON_FA_ARROW_UP "##MoveStepUp") && i > 0)
             {
                 std::swap(data->steps[static_cast<size_t>(i)], data->steps[static_cast<size_t>(i - 1)]);
                 if (selectedStep == i) selectedStep = i - 1;
@@ -415,7 +416,7 @@ namespace windows
                 continue;
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton("v") && i + 1 < static_cast<int>(data->steps.size()))
+            if (ImGui::SmallButton(ICON_FA_ARROW_DOWN "##MoveStepDown") && i + 1 < static_cast<int>(data->steps.size()))
             {
                 std::swap(data->steps[static_cast<size_t>(i)], data->steps[static_cast<size_t>(i + 1)]);
                 if (selectedStep == i) selectedStep = i + 1;

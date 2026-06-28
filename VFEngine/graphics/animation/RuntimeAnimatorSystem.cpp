@@ -202,19 +202,26 @@ namespace animation
 
         glm::vec3 delta = anim->consumeRootMotionDelta();
 
-        // VK-1408: for a root-motion-driven NavmeshAgent the detour crowd owns
-        // translation; root motion only sets the pace. Publish the per-frame planar
-        // distance (even when it is 0 on a loop wrap so the consumer's EMA sees it)
-        // and skip the transform write so the two writers no longer stack.
-        if (auto* navAgent = registry.try_get<components::NavmeshAgentComponent>(entity);
-            navAgent && navAgent->rootMotionDriven)
+        // The detour crowd owns a NavmeshAgent's translation, so root motion must never be
+        // added to the transform for one (that would double-move on top of the crowd).
+        //   - rootMotionDriven (VK-1408): publish the per-frame planar distance (even 0 on a
+        //     loop wrap so the consumer's EMA sees it) to PACE the crowd's maxSpeed.
+        //   - otherwise: root motion is purely cosmetic. It was extracted only to keep the
+        //     body rendering in-place (AnimationEvaluator pins the root bone to its bind pose)
+        //     while the crowd moves the entity at its configured maxSpeed (nav-paced
+        //     locomotion). If no crowd driver has taken ownership yet, apply the delta
+        //     normally below so root-motion-only agents can still move.
+        if (auto* navAgent = registry.try_get<components::NavmeshAgentComponent>(entity))
         {
-            auto& transform = registry.get<components::TransformComponent>(entity);
-            const glm::vec3 scaled = delta * transform.scale;
-            navAgent->rootMotionPlanarDistance =
-                glm::length(glm::vec2(scaled.x, scaled.z)) * navAgent->rootMotionSpeedScale;
-            navAgent->rootMotionFresh = true;
-            return;
+            if (navAgent->rootMotionDriven)
+            {
+                auto& transform = registry.get<components::TransformComponent>(entity);
+                const glm::vec3 scaled = delta * transform.scale;
+                navAgent->rootMotionPlanarDistance =
+                    glm::length(glm::vec2(scaled.x, scaled.z)) * navAgent->rootMotionSpeedScale;
+                navAgent->rootMotionFresh = true;
+                return;
+            }
         }
 
         if (delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f)

@@ -266,6 +266,10 @@ namespace services
         CHECK_COMP(Terrain, TerrainComponent);
         CHECK_COMP(TerrainTile, TerrainTileComponent);
         CHECK_COMP(NavmeshAgent, NavmeshAgentComponent);
+        // VK-1441 follow-up: include socket attachment so the prefab preview's structure signature
+        // (PrefabSandboxController::sandboxStructureSignature) notices an Attach/Detach and rebuilds
+        // the rig — otherwise a socket-attached part doesn't move in the preview until reopen.
+        CHECK_COMP(SocketAttachment, SocketAttachmentComponent);
 
 #undef CHECK_COMP
 

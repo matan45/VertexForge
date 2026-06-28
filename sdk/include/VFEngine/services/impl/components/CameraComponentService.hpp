@@ -31,9 +31,6 @@ namespace services {
         bool removeCameraComponent(EntityHandle entity);
         bool hasCameraComponent(EntityHandle entity) const;
 
-    private:
-        void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
-        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }

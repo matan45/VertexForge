@@ -51,6 +51,42 @@ namespace components
     }
 
     template <>
+    inline void resetClonedRuntimeState<PhysicsAnimationComponent>(PhysicsAnimationComponent& c)
+    {
+        // VK-1437: mirror the deserialize reset in SceneSerializePhysicsAnimation.cpp so a duplicated
+        // entity never inherits the source's live ragdoll/blend state. Authored physicsAnimationRef +
+        // config carry over unchanged.
+        c.currentMode = c.config.defaultMode;
+        c.isInitialized = false;
+        c.transitionProgress = 0.0f;
+        c.ragdollCollisionGroup = 0;
+        c.globalMotorStrength = 1.0f;
+        c.ragdollSettled = false;
+        c.overrideBoneMatrices.clear();
+        c.capturedPoseMatrices.clear();
+        c.blendOutProgress = 1.0f;
+    }
+
+    template <>
+    inline void resetClonedRuntimeState<VFXComponent>(VFXComponent& c)
+    {
+        // VK-1438: mirror the deserialize reset in SceneSerializePhysicsAnimation.cpp:290-291 so a
+        // duplicated entity never inherits the source's live VFX instance. Authored vfxRef + config
+        // (autoPlay/loop/priority/cameraRelative) carry over unchanged.
+        c.runtimeInstanceId = 0;
+        c.isPlaying = false;
+    }
+
+    template <>
+    inline void resetClonedRuntimeState<VFXSequenceComponent>(VFXSequenceComponent& c)
+    {
+        // VK-1438: mirror the deserialize reset in SceneSerializePhysicsAnimation.cpp:351 so a
+        // duplicated entity never inherits the source's live combo. Authored sequenceRef + triggers
+        // + config carry over unchanged.
+        c.runtimeComboId = 0;
+    }
+
+    template <>
     inline void resetClonedRuntimeState<UIScrollComponent>(UIScrollComponent& c)
     {
         c.scrollOffset = {0.0f, 0.0f};
@@ -105,6 +141,7 @@ namespace components
     inline void resetClonedRuntimeState<UITabsComponent>(UITabsComponent& c)
     {
         c.previousTabIndex = -1;
+        c.scopedAppliedTabIndex = -1;
     }
 
     template <>

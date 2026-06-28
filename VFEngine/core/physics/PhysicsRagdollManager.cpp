@@ -3,6 +3,7 @@
 #include "PhysicsBodyRegistry.hpp"
 #include "RagdollSettingsBuilder.hpp"
 #include "JoltConversions.hpp"
+#include "physics/RagdollSafety.hpp"
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/GroupFilterTable.h>
@@ -25,9 +26,10 @@ namespace core::physics
 
         for (auto& [entityId, ragdollData] : entityRagdolls)
         {
-            if (ragdollData.ragdoll)
+            if (ragdollData.ragdoll && ragdollData.inSystem)
             {
                 ragdollData.ragdoll->RemoveFromPhysicsSystem();
+                ragdollData.inSystem = false;
             }
         }
         entityRagdolls.clear();
@@ -72,7 +74,7 @@ namespace core::physics
             JPH::BodyID bodyId = ragdoll->GetBodyID(static_cast<int>(i));
             if (!bodyId.IsInvalid())
             {
-                bodyRegistry->registerBody(entityId, bodyId);
+                bodyRegistry->registerBodyEntityLink(entityId, bodyId);
                 bodyRegistry->registerBoneIndex(bodyId, static_cast<int>(i));
             }
         }
@@ -100,9 +102,16 @@ namespace core::physics
                 if (!bodyId.IsInvalid())
                 {
                     bodyRegistry->unregisterBoneIndex(bodyId);
+                    bodyRegistry->unregisterBodyEntityLink(bodyId);
                 }
             }
-            ragdollData.ragdoll->RemoveFromPhysicsSystem();
+            // Only remove from the system if it was actually added (built-but-never-activated
+            // ragdolls, e.g. an Animated/Kinematic-default entity, are torn down here on Stop).
+            if (ragdollData.inSystem)
+            {
+                ragdollData.ragdoll->RemoveFromPhysicsSystem();
+                ragdollData.inSystem = false;
+            }
         }
 
         entityRagdolls.erase(it);
@@ -117,15 +126,17 @@ namespace core::physics
     {
         auto it = entityRagdolls.find(entityId);
         if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+        if (it->second.inSystem) return; // already added; a second AddToPhysicsSystem would corrupt Jolt
 
         it->second.ragdoll->AddToPhysicsSystem(JPH::EActivation::Activate);
+        it->second.inSystem = true;
 
         for (int i = 0; i < static_cast<int>(it->second.ragdoll->GetBodyCount()); ++i)
         {
             JPH::BodyID bodyId = it->second.ragdoll->GetBodyID(i);
             if (!bodyId.IsInvalid())
             {
-                bodyRegistry->registerBody(entityId, bodyId);
+                bodyRegistry->registerBodyEntityLink(entityId, bodyId);
                 bodyRegistry->registerBoneIndex(bodyId, i);
             }
         }
@@ -135,6 +146,7 @@ namespace core::physics
     {
         auto it = entityRagdolls.find(entityId);
         if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+        if (!it->second.inSystem) return; // not added; nothing to remove
 
         for (int i = 0; i < static_cast<int>(it->second.ragdoll->GetBodyCount()); ++i)
         {
@@ -146,6 +158,7 @@ namespace core::physics
         }
 
         it->second.ragdoll->RemoveFromPhysicsSystem();
+        it->second.inSystem = false;
     }
 
     bool PhysicsRagdollManager::getRagdollPose(uint64_t entityId, JPH::SkeletonPose& outPose) const
@@ -160,15 +173,16 @@ namespace core::physics
     void PhysicsRagdollManager::applyRagdollImpulse(uint64_t entityId, const glm::vec3& impulse)
     {
         auto it = entityRagdolls.find(entityId);
-        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+        if (it == entityRagdolls.end() || !it->second.ragdoll || !it->second.inSystem) return;
 
         it->second.ragdoll->AddImpulse(toJolt(impulse));
+        clampRagdollVelocities(entityId);
     }
 
     void PhysicsRagdollManager::applyRagdollBoneImpulse(uint64_t entityId, int physicsBoneIndex, const glm::vec3& impulse)
     {
         auto it = entityRagdolls.find(entityId);
-        if (it == entityRagdolls.end() || !it->second.ragdoll) return;
+        if (it == entityRagdolls.end() || !it->second.ragdoll || !it->second.inSystem) return;
 
         if (physicsBoneIndex < 0 || physicsBoneIndex >= static_cast<int>(it->second.ragdoll->GetBodyCount()))
         {
@@ -179,6 +193,35 @@ namespace core::physics
         if (!bodyId.IsInvalid())
         {
             ctx->getBodyInterface().AddImpulse(bodyId, toJolt(impulse));
+            clampRagdollVelocities(entityId);
+        }
+    }
+
+    void PhysicsRagdollManager::clampRagdollVelocities(uint64_t entityId)
+    {
+        if (!ctx || !ctx->physicsSystem) return;
+
+        auto it = entityRagdolls.find(entityId);
+        if (it == entityRagdolls.end() || !it->second.ragdoll || !it->second.inSystem) return;
+
+        // Bound knockback so an impulse can't reach escape velocity (which would integrate to a
+        // non-finite position and corrupt the broad phase on the next step). Mirrors the root-drive
+        // caps used in driveRagdollRoot.
+        constexpr float kMaxLinear = 30.0f;   // m/s
+        constexpr float kMaxAngular = 30.0f;  // rad/s
+
+        auto& bodyInterface = ctx->getBodyInterface();
+        JPH::Ragdoll* ragdoll = it->second.ragdoll;
+        for (int i = 0; i < static_cast<int>(ragdoll->GetBodyCount()); ++i)
+        {
+            JPH::BodyID bodyId = ragdoll->GetBodyID(i);
+            if (bodyId.IsInvalid()) continue;
+
+            glm::vec3 linear = ::physics::clampVelocityMagnitude(
+                toGlm(bodyInterface.GetLinearVelocity(bodyId)), kMaxLinear);
+            glm::vec3 angular = ::physics::clampVelocityMagnitude(
+                toGlm(bodyInterface.GetAngularVelocity(bodyId)), kMaxAngular);
+            bodyInterface.SetLinearAndAngularVelocity(bodyId, toJolt(linear), toJolt(angular));
         }
     }
 
@@ -339,7 +382,7 @@ namespace core::physics
             JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::Activate);
             if (!bodyId.IsInvalid())
             {
-                bodyRegistry->registerBody(entityId, bodyId);
+                bodyRegistry->registerBodyEntityLink(entityId, bodyId);
                 bodyRegistry->registerBoneIndex(bodyId, i);
                 boneBodies.push_back(bodyId);
             }
@@ -365,6 +408,7 @@ namespace core::physics
             if (!bodyId.IsInvalid())
             {
                 bodyRegistry->unregisterBoneIndex(bodyId);
+                bodyRegistry->unregisterBodyEntityLink(bodyId);
                 removeAndDestroyBody(bodyInterface, bodyId);
             }
         }
@@ -406,7 +450,11 @@ namespace core::physics
         auto it = entityRagdolls.find(entityId);
         if (it != entityRagdolls.end() && it->second.ragdoll)
         {
-            it->second.ragdoll->AddToPhysicsSystem(JPH::EActivation::Activate);
+            if (!it->second.inSystem)
+            {
+                it->second.ragdoll->AddToPhysicsSystem(JPH::EActivation::Activate);
+                it->second.inSystem = true;
+            }
             it->second.ragdoll->SetPose(currentPose);
             it->second.ragdoll->ResetWarmStart();
         }

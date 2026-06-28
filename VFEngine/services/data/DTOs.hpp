@@ -289,6 +289,26 @@ namespace services
         bool loop = true; // Loop the VFX effect
     };
 
+    // Mirrors components::VFXSequenceTrigger (MediaComponents.hpp:240-245): one anim-event ->
+    // .vfVFXSequence mapping.
+    struct VFXSequenceTriggerData
+    {
+        asset::AssetRef sequenceRef; // .vfVFXSequence to play when the event fires
+        std::string eventName;       // animation notify event name
+        std::string socketName;      // optional attach socket
+    };
+
+    // Mirrors components::VFXSequenceComponent (MediaComponents.hpp:247-255). The transient
+    // runtimeComboId is not exposed (never edited through the DTO/command path).
+    struct VFXSequenceData
+    {
+        asset::AssetRef sequenceRef; // standalone autoplay sequence (.vfVFXSequence)
+        bool autoPlay = false;       // component default is false (MediaComponents.hpp:250)
+        bool loop = false;           // component default is false (:251)
+        std::string socketName;      // optional attach for the standalone combo
+        std::vector<VFXSequenceTriggerData> triggers;
+    };
+
     struct RenderTextureData
     {
         uint32_t width = 512;

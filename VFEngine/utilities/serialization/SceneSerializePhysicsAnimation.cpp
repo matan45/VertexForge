@@ -358,6 +358,7 @@ namespace serialization
         j["height"] = agent.height;
         j["maxSpeed"] = agent.maxSpeed;
         j["maxAcceleration"] = agent.maxAcceleration;
+        j["turnSpeed"] = agent.turnSpeed;
         j["stoppingDistance"] = agent.stoppingDistance;
         j["avoidanceQuality"] = agent.avoidanceQuality;
         j["separationWeight"] = agent.separationWeight;
@@ -392,6 +393,8 @@ namespace serialization
             agent.maxSpeed = it->get<float>();
         if (auto it = j.find("maxAcceleration"); it != j.end() && it->is_number())
             agent.maxAcceleration = it->get<float>();
+        if (auto it = j.find("turnSpeed"); it != j.end() && it->is_number())
+            agent.turnSpeed = it->get<float>();
         if (auto it = j.find("stoppingDistance"); it != j.end() && it->is_number())
             agent.stoppingDistance = it->get<float>();
         if (auto it = j.find("avoidanceQuality"); it != j.end() && it->is_number_unsigned())

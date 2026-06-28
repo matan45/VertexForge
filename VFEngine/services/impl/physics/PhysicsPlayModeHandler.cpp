@@ -1,16 +1,21 @@
 #include "print/Log.hpp"
 #include "PhysicsPlayModeHandler.hpp"
+#include "../SceneSubtreeUtils.hpp"
 #include "../scene/OceanService.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "scene/Entity.hpp"
 #include "components/Components.hpp"
 #include "components/PhysicsAnimationComponent.hpp"
 #include "components/ControllerComponents.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "threading/JobSystem.hpp"
 #include <glm/gtc/quaternion.hpp>
+#include <algorithm>
 
 namespace services
 {
@@ -37,7 +42,7 @@ namespace services
         rigidBodyAddedToken = dispatcher.subscribe<::events::physics::RigidBodyAddedNotification>(
             [this](const ::events::physics::RigidBodyAddedNotification& notification)
             {
-                if (physicsActive)
+                if (physicsActive.load())
                 {
                     activePhysicsBodies.insert(notification.entity);
                 }
@@ -47,6 +52,47 @@ namespace services
             [this](const ::events::physics::RigidBodyRemovedNotification& notification)
             {
                 activePhysicsBodies.erase(notification.entity);
+            });
+
+        // VK-1437: a prefab instantiated AFTER Play started gets no physics-animation state from the
+        // one-shot Play-entry pass. Initialize its subtree here so it can immediately respond to
+        // physics-animation queries/commands. Gated on physicsActive so Edit-mode instantiation is a no-op
+        // (those entities are picked up by the full pass at the next Play entry).
+        prefabInstantiatedToken = dispatcher.subscribe<::events::scene::PrefabInstantiatedNotification>(
+            [this](const ::events::scene::PrefabInstantiatedNotification& notification)
+            {
+                if (!physicsActive.load() || !physicsProvider)
+                {
+                    return;
+                }
+
+                std::lock_guard<std::mutex> lock(pendingMutex);
+                pendingPrefabRoots.push_back(notification.rootEntity);
+            });
+
+        // VK-1437: tear down provider-side physics-animation state when an entity is deleted during Play.
+        // EntityDeletedNotification fires per-entity for the whole subtree before removal, so deleting a
+        // prefab root cleans up every descendant ragdoll. destroyPhysicsAnimation is idempotent.
+        entityDeletedToken = dispatcher.subscribe<::events::scene::EntityDeletedNotification>(
+            [this](const ::events::scene::EntityDeletedNotification& notification)
+            {
+                if (!physicsActive.load() || !physicsProvider)
+                {
+                    return;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(pendingMutex);
+                    pendingPrefabRoots.erase(
+                        std::remove(pendingPrefabRoots.begin(), pendingPrefabRoots.end(), notification.entity),
+                        pendingPrefabRoots.end());
+                }
+
+                if (activePhysicsAnimationEntities.erase(notification.entity) > 0 ||
+                    physicsProvider->hasPhysicsAnimation(notification.entity))
+                {
+                    physicsProvider->destroyPhysicsAnimation(notification.entity);
+                }
             });
     }
 
@@ -68,6 +114,16 @@ namespace services
         {
             dispatcher.unsubscribe(rigidBodyRemovedToken);
             rigidBodyRemovedToken = {};
+        }
+        if (prefabInstantiatedToken.isValid())
+        {
+            dispatcher.unsubscribe(prefabInstantiatedToken);
+            prefabInstantiatedToken = {};
+        }
+        if (entityDeletedToken.isValid())
+        {
+            dispatcher.unsubscribe(entityDeletedToken);
+            entityDeletedToken = {};
         }
     }
 
@@ -107,6 +163,10 @@ namespace services
 
         activePhysicsBodies.clear();
         rootMotionLastSyncPos.clear();
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            pendingPrefabRoots.clear();
+        }
         physicsActive = false;
 
         vfLogInfo("Physics play mode stopped");
@@ -120,10 +180,12 @@ namespace services
 
     void PhysicsPlayModeHandler::kickUpdate(float deltaTime)
     {
-        if (!physicsActive || !physicsProvider)
+        if (!physicsActive.load() || !physicsProvider)
         {
             return;
         }
+
+        drainPendingPrefabRoots();
 
         if (oceanService)
         {
@@ -135,7 +197,7 @@ namespace services
 
     void PhysicsPlayModeHandler::syncUpdate(float deltaTime)
     {
-        if (!physicsActive || !physicsProvider)
+        if (!physicsActive.load() || !physicsProvider)
         {
             return;
         }
@@ -246,25 +308,87 @@ namespace services
 
     void PhysicsPlayModeHandler::initializePhysicsAnimations()
     {
+        // Play-entry full pass: every physics-animation entity currently in the scene.
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::PhysicsAnimationComponent,
                                    components::MeshComponent,
                                    components::TransformComponent>();
 
+        std::vector<EntityHandle> candidates;
+        for (auto entity : view)
+        {
+            candidates.push_back(internal::toHandle(entity));
+        }
+
+        initializePhysicsAnimationsFor(candidates);
+    }
+
+    void PhysicsPlayModeHandler::drainPendingPrefabRoots()
+    {
+        std::vector<EntityHandle> roots;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            if (pendingPrefabRoots.empty())
+                return;
+            roots.swap(pendingPrefabRoots);
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<EntityHandle> candidates;
+        for (EntityHandle root : roots)
+        {
+            entt::entity rootEntity = internal::fromHandle(root);
+            if (!registry.valid(rootEntity))
+                continue;
+
+            internal::collectSubtreeHandles(scene::Entity(rootEntity), candidates);
+        }
+
+        if (!candidates.empty())
+            initializePhysicsAnimationsFor(candidates);
+    }
+
+    void PhysicsPlayModeHandler::initializePhysicsAnimationsFor(const std::vector<EntityHandle>& candidates)
+    {
+        if (!physicsProvider)
+        {
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
         // Pre-load all skeleton data in parallel (I/O heavy)
         struct PhysAnimEntry
         {
             entt::entity entity;
+            EntityHandle handle;
             std::string meshPath;
         };
 
         std::vector<PhysAnimEntry> entries;
-        for (auto entity : view)
+        for (const auto& handle : candidates)
         {
-            const auto& meshComp = view.get<components::MeshComponent>(entity);
+            // createPhysicsAnimation is NOT idempotent — never re-init an entity that already has state
+            // (avoids a duplicate ragdoll and skips redundant skeleton I/O on mid-Play re-fire).
+            if (activePhysicsAnimationEntities.contains(handle))
+                continue;
+
+            entt::entity entity = internal::fromHandle(handle);
+            if (!registry.valid(entity) ||
+                !registry.all_of<components::PhysicsAnimationComponent,
+                                 components::MeshComponent,
+                                 components::TransformComponent>(entity))
+                continue;
+
+            const auto& meshComp = registry.get<components::MeshComponent>(entity);
             if (!meshComp.meshRef.isValid() || !meshComp.animatorRef.isValid())
                 continue;
-            entries.push_back({entity, meshComp.meshRef.resolve()});
+            entries.push_back({entity, handle, meshComp.meshRef.resolve()});
+        }
+
+        if (entries.empty())
+        {
+            return;
         }
 
         // Phase 1: parallel skeleton loading
@@ -290,17 +414,17 @@ namespace services
         }
 
         // Phase 2: sequential physics provider calls
+        size_t createdCount = 0;
         for (size_t i = 0; i < entries.size(); ++i)
         {
             auto skeletonData = skeletonFutures[i].get();
             if (!skeletonData)
                 continue;
 
-            auto entity = entries[i].entity;
-            const auto& transform = view.get<components::TransformComponent>(entity);
-            auto& physAnimComp = view.get<components::PhysicsAnimationComponent>(entity);
-
-            EntityHandle handle = internal::toHandle(entity);
+            entt::entity entity = entries[i].entity;
+            EntityHandle handle = entries[i].handle;
+            const auto& transform = registry.get<components::TransformComponent>(entity);
+            auto& physAnimComp = registry.get<components::PhysicsAnimationComponent>(entity);
 
             glm::vec3 eulerRad = glm::radians(transform.rotation);
             glm::quat rotQuat = glm::quat(eulerRad);
@@ -333,11 +457,12 @@ namespace services
 
             physAnimComp.isInitialized = true;
             activePhysicsAnimationEntities.insert(handle);
+            ++createdCount;
         }
 
-        if (!activePhysicsAnimationEntities.empty())
+        if (createdCount > 0)
         {
-            vfLogInfo("Initialized {} physics animation entities", activePhysicsAnimationEntities.size());
+            vfLogInfo("Initialized {} physics animation entities", createdCount);
         }
     }
 

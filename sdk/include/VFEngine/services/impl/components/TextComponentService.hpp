@@ -29,9 +29,6 @@ namespace services {
         std::optional<TextData> getTextData(EntityHandle entity) const;
         bool setTextData(EntityHandle entity, const TextData& textData);
 
-    private:
-        void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
-        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }

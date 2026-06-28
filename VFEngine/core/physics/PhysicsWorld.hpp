@@ -78,6 +78,12 @@ namespace core::physics
         void removeRigidBodyByEntity(uint64_t entityId);
         bool hasEntityBody(uint64_t entityId) const;
 
+        // VK-1437 fix #A: suspend/restore an entity's gameplay rigid body (its Collider/RigidBody
+        // body) in the simulation, used to disable it while the entity is ragdolling. No-op if the
+        // entity has no gameplay body.
+        void setEntityRigidBodyEnabled(uint64_t entityId, bool enabled);
+        void setEntityRigidBodyTransform(uint64_t entityId, const glm::vec3& position, const glm::quat& rotation);
+
         // Position & rotation
         glm::vec3 getPosition(JPH::BodyID bodyId) const;
         glm::quat getRotation(JPH::BodyID bodyId) const;

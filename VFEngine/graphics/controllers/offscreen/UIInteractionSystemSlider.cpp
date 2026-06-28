@@ -14,6 +14,45 @@ namespace controllers::offscreen
 {
     using ui_common::PixelRect;
 
+    namespace
+    {
+        // VK-1442 — apply a tabs widget's pane visibility: the tab bar is the FIRST direct child
+        // carrying a UILayoutGroup; the panes are the tabs entity's OTHER direct children, in order;
+        // pane p is active iff p == activeTabIndex. Shared by processTabsInteraction's click handler
+        // and applyTabsActivePaneScoped (edit preview). Writing NameComponent.isActive matches the
+        // authored state the runtime sets, so persisting it is correct.
+        void applyTabsPaneVisibility(entt::registry& registry, entt::entity tabsEntity, int activeTabIndex)
+        {
+            if (!registry.all_of<components::ChildrenComponent>(tabsEntity))
+                return;
+
+            const auto& children = registry.get<components::ChildrenComponent>(tabsEntity).children;
+
+            entt::entity tabBarEntity = entt::null;
+            for (auto childEntity : children)
+            {
+                if (!registry.valid(childEntity)) continue;
+                if (registry.all_of<components::UILayoutGroupComponent>(childEntity))
+                {
+                    tabBarEntity = childEntity;
+                    break;
+                }
+            }
+            if (tabBarEntity == entt::null)
+                return;
+
+            int paneIndex = 0;
+            for (auto childEntity : children)
+            {
+                if (!registry.valid(childEntity)) continue;
+                if (childEntity == tabBarEntity) continue;
+                if (registry.all_of<components::NameComponent>(childEntity))
+                    registry.get<components::NameComponent>(childEntity).isActive = (paneIndex == activeTabIndex);
+                ++paneIndex;
+            }
+        }
+    }
+
     void UIInteractionSystem::processTabsInteraction(const FrameContext& ctx)
     {
         if (!ctx.playModeActive)
@@ -94,22 +133,7 @@ namespace controllers::offscreen
                     tabsComp.previousTabIndex = previousTabIndex;
                     tabsComp.activeTabIndex = i;
 
-                    std::vector<entt::entity> panels;
-                    for (auto childEntity : children)
-                    {
-                        if (!registry.valid(childEntity)) continue;
-                        if (childEntity == tabBarEntity) continue;
-                        panels.push_back(childEntity);
-                    }
-
-                    for (int p = 0; p < static_cast<int>(panels.size()); ++p)
-                    {
-                        if (registry.all_of<components::NameComponent>(panels[p]))
-                        {
-                            auto& nameComp = registry.get<components::NameComponent>(panels[p]);
-                            nameComp.isActive = (p == i);
-                        }
-                    }
+                    applyTabsPaneVisibility(registry, tabsEntity, i);
 
                     auto& dispatcher = events::EventDispatcher::instance();
                     auto [handle, entityName] = ui_common::makeEntityPayload(registry, tabsEntity);
@@ -133,6 +157,29 @@ namespace controllers::offscreen
                     break;
                 }
             }
+        }
+    }
+
+    // VK-1442 — display-only tabs pass for the UI Layer Builder's scoped offscreen preview. For each
+    // tabs widget active within `scopedCanvas`, it applies the active-pane visibility from the
+    // authored activeTabIndex (NO hit-testing, no notifications). Runs BEFORE layout + image emit in
+    // the scoped path so the active pane is laid out and rendered. Shares applyTabsPaneVisibility
+    // with processTabsInteraction.
+    void UIInteractionSystem::applyTabsActivePaneScoped(const FrameContext& ctx, entt::entity scopedCanvas)
+    {
+        (void)ctx;
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto tabsView = registry.view<components::UITabsComponent, components::UIRectComponent>();
+
+        for (auto tabsEntity : tabsView)
+        {
+            if (!ui_common::isEffectivelyActiveInScopedCanvas(registry, tabsEntity, scopedCanvas))
+                continue;
+            auto& tabsComp = registry.get<components::UITabsComponent>(tabsEntity);
+            if (tabsComp.scopedAppliedTabIndex == tabsComp.activeTabIndex)
+                continue;
+            applyTabsPaneVisibility(registry, tabsEntity, tabsComp.activeTabIndex);
+            tabsComp.scopedAppliedTabIndex = tabsComp.activeTabIndex;
         }
     }
 

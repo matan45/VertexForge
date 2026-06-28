@@ -100,6 +100,55 @@ namespace controllers::offscreen
                     imageComp.textureRef = *stateTexture;
             }
         }
+
+        // Edit-mode rest: a checkbox sits in Normal (or Disabled when not
+        // interactable) so applyCheckboxStateVisual then applies the matching
+        // checked/unchecked skin. Shared by processCheckboxInteraction's edit
+        // branch and applyCheckboxVisualScoped (VK-1442).
+        void restCheckboxState(components::UICheckboxComponent& comp)
+        {
+            comp.currentState = comp.interactable
+                ? components::UICheckboxState::Normal
+                : components::UICheckboxState::Disabled;
+        }
+
+        // PHASE 3 per-checkbox visual: pick the target color + per-state texture
+        // from currentState/isChecked and push it onto the checkbox's UIImage.
+        // Shared by processCheckboxInteraction's PHASE 3 loop and the scoped
+        // edit-preview pass (VK-1442).
+        void applyCheckboxStateVisual(entt::registry& registry, entt::entity checkboxEntity,
+                                      float deltaTime)
+        {
+            auto& comp = registry.get<components::UICheckboxComponent>(checkboxEntity);
+
+            glm::vec4 targetColor;
+            const asset::AssetRef* stateTexture = nullptr;
+            switch (comp.currentState)
+            {
+            case components::UICheckboxState::Hovered:
+                targetColor = comp.hoveredColor;
+                if (comp.hoveredTextureRef.isValid()) stateTexture = &comp.hoveredTextureRef;
+                break;
+            case components::UICheckboxState::Disabled:
+                targetColor = comp.disabledColor;
+                if (comp.disabledTextureRef.isValid()) stateTexture = &comp.disabledTextureRef;
+                break;
+            default: // Normal
+                if (comp.isChecked)
+                {
+                    targetColor = comp.checkedColor;
+                    if (comp.checkedTextureRef.isValid()) stateTexture = &comp.checkedTextureRef;
+                }
+                else
+                {
+                    targetColor = comp.uncheckedColor;
+                    if (comp.uncheckedTextureRef.isValid()) stateTexture = &comp.uncheckedTextureRef;
+                }
+                break;
+            }
+
+            applyWidgetVisual(registry, checkboxEntity, comp, targetColor, stateTexture, deltaTime);
+        }
     }
 
     void UIInteractionSystem::processButtonInteraction(const FrameContext& ctx)
@@ -499,10 +548,7 @@ namespace controllers::offscreen
             // PHASE 3 applies the matching skin/color for the editor preview.
             for (auto checkboxEntity : checkboxView)
             {
-                auto& comp = registry.get<components::UICheckboxComponent>(checkboxEntity);
-                comp.currentState = comp.interactable
-                    ? components::UICheckboxState::Normal
-                    : components::UICheckboxState::Disabled;
+                restCheckboxState(registry.get<components::UICheckboxComponent>(checkboxEntity));
             }
         }
 
@@ -510,37 +556,25 @@ namespace controllers::offscreen
         // checkbox's current-state texture/color is applied to its UIImage).
         for (auto checkboxEntity : checkboxView)
         {
-            auto& comp = registry.get<components::UICheckboxComponent>(checkboxEntity);
+            applyCheckboxStateVisual(registry, checkboxEntity, ctx.deltaTime);
+        }
+    }
 
-            // Pick the target color + per-state texture. Normal depends on the
-            // checked state (checked vs unchecked skin/color).
-            glm::vec4 targetColor;
-            const asset::AssetRef* stateTexture = nullptr;
-            switch (comp.currentState)
-            {
-            case components::UICheckboxState::Hovered:
-                targetColor = comp.hoveredColor;
-                if (comp.hoveredTextureRef.isValid()) stateTexture = &comp.hoveredTextureRef;
-                break;
-            case components::UICheckboxState::Disabled:
-                targetColor = comp.disabledColor;
-                if (comp.disabledTextureRef.isValid()) stateTexture = &comp.disabledTextureRef;
-                break;
-            default: // Normal
-                if (comp.isChecked)
-                {
-                    targetColor = comp.checkedColor;
-                    if (comp.checkedTextureRef.isValid()) stateTexture = &comp.checkedTextureRef;
-                }
-                else
-                {
-                    targetColor = comp.uncheckedColor;
-                    if (comp.uncheckedTextureRef.isValid()) stateTexture = &comp.uncheckedTextureRef;
-                }
-                break;
-            }
+    // VK-1442 — display-only checkbox pass for the UI Layer Builder's scoped offscreen preview.
+    // Mirrors processCheckboxInteraction's edit path (rest state + PHASE 3 visual) but scoped to
+    // `scopedCanvas` and with NO hit-testing, so each checkbox shows its resting checked/unchecked
+    // skin in the builder. Reuses the same file-local helpers, so there is one source of truth.
+    void UIInteractionSystem::applyCheckboxVisualScoped(const FrameContext& ctx, entt::entity scopedCanvas)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto checkboxView = registry.view<components::UICheckboxComponent, components::UIRectComponent>();
 
-            applyWidgetVisual(registry, checkboxEntity, comp, targetColor, stateTexture, ctx.deltaTime);
+        for (auto checkboxEntity : checkboxView)
+        {
+            if (!isEffectivelyActiveInScopedCanvas(registry, checkboxEntity, scopedCanvas))
+                continue;
+            restCheckboxState(registry.get<components::UICheckboxComponent>(checkboxEntity));
+            applyCheckboxStateVisual(registry, checkboxEntity, ctx.deltaTime);
         }
     }
 }

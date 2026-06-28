@@ -27,6 +27,8 @@
 // utilities + glm + entt + the services EntityConversion header, all of which are on the Tests
 // project include path (VFEngine/graphics, VFEngine/utilities, VFEngine/services).
 #include <controllers/offscreen/UICommon.hpp>
+#include <controllers/offscreen/UIInteractionSystem.hpp>
+#include <controllers/offscreen/FramePreparationSystem.hpp>
 
 #include <nlohmann/json.hpp>
 #include <entt/entt.hpp>
@@ -302,5 +304,53 @@ TEST_SUITE("UIPreviewIsolation")
         CHECK(isEffectivelyActiveWithin(registry, leaf.getHandle(), scopeRoot.getHandle()));
 
         destroySubtree(registry, scopeRoot.getHandle());
+    }
+
+    TEST_CASE("tabs scoped preview preserves pane eye toggles until active tab changes")
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        scene::Entity canvas("TabsPreviewCanvas");
+        scene::Entity tabsEntity("TabsWidget");
+        scene::Entity tabBar("TabsTabBar");
+        scene::Entity pane0("TabsPane0");
+        scene::Entity pane1("TabsPane1");
+
+        canvas.addComponent<components::UICanvasComponent>();
+        auto& tabs = tabsEntity.addComponent<components::UITabsComponent>();
+        tabs.activeTabIndex = 0;
+        tabsEntity.addComponent<components::UIRectComponent>();
+        tabBar.addComponent<components::UILayoutGroupComponent>();
+
+        attachChild(registry, canvas.getHandle(), tabsEntity.getHandle());
+        attachChild(registry, tabsEntity.getHandle(), tabBar.getHandle());
+        attachChild(registry, tabsEntity.getHandle(), pane0.getHandle());
+        attachChild(registry, tabsEntity.getHandle(), pane1.getHandle());
+
+        controllers::offscreen::UIInteractionSystem interaction;
+        controllers::offscreen::FrameContext ctx;
+        ctx.editPreview = true;
+
+        interaction.applyTabsActivePaneScoped(ctx, canvas.getHandle());
+        CHECK(registry.get<components::NameComponent>(pane0.getHandle()).isActive);
+        CHECK_FALSE(registry.get<components::NameComponent>(pane1.getHandle()).isActive);
+
+        registry.get<components::NameComponent>(pane0.getHandle()).isActive = false;
+        registry.get<components::NameComponent>(pane1.getHandle()).isActive = true;
+        interaction.applyTabsActivePaneScoped(ctx, canvas.getHandle());
+        CHECK_FALSE(registry.get<components::NameComponent>(pane0.getHandle()).isActive);
+        CHECK(registry.get<components::NameComponent>(pane1.getHandle()).isActive);
+
+        tabs.activeTabIndex = 1;
+        interaction.applyTabsActivePaneScoped(ctx, canvas.getHandle());
+        CHECK_FALSE(registry.get<components::NameComponent>(pane0.getHandle()).isActive);
+        CHECK(registry.get<components::NameComponent>(pane1.getHandle()).isActive);
+
+        tabs.activeTabIndex = 0;
+        interaction.applyTabsActivePaneScoped(ctx, canvas.getHandle());
+        CHECK(registry.get<components::NameComponent>(pane0.getHandle()).isActive);
+        CHECK_FALSE(registry.get<components::NameComponent>(pane1.getHandle()).isActive);
+
+        destroySubtree(registry, canvas.getHandle());
     }
 }

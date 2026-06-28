@@ -91,6 +91,11 @@ namespace services
                 applyHitReaction(cmd.entity, cmd.boneName, cmd.impulse, cmd.recoverTime);
             });
 
+        dispatcher.registerCommandHandler<events::physicsAnimation::DestroyPhysicsAnimationCommand>(
+            [this](const auto& cmd) {
+                if (physicsProvider) physicsProvider->destroyPhysicsAnimation(cmd.entity);
+            });
+
         dispatcher.registerQueryHandler<events::physicsAnimation::IsRagdollSettledQuery>(
             [this](const auto& query) {
                 return isRagdollSettled(query.entity);

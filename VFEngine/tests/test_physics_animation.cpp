@@ -2,10 +2,12 @@
 #include <types/PhysicsAnimationTypes.hpp>
 #include <types/PhysicsTypes.hpp>
 #include <physics/HitReactionState.hpp>
+#include <physics/RagdollSafety.hpp>
 #include <physics/PhysicsAnimationAsset.hpp>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 
 // ============================================================
 // VK-1093: Physics Animation unit tests
@@ -428,6 +430,72 @@ TEST_CASE("resolveEffectiveStrengths: clamps to [0,1]") {
     auto zeroed = physics::resolveEffectiveStrengths(profile, hits, -1.0f);
     CHECK(zeroed[0] == doctest::Approx(0.0f));
     CHECK(zeroed[1] == doctest::Approx(0.0f));
+}
+
+// ============================================================
+// RagdollSafety: impulse / escape-velocity guard (regression for the
+// broad-phase NaN crash when a hit-reaction impulse flung a bone to infinity)
+// ============================================================
+
+TEST_CASE("RagdollSafety: clampVelocityMagnitude leaves under-cap velocities unchanged") {
+    glm::vec3 v = physics::clampVelocityMagnitude(glm::vec3(1.0f, 2.0f, 2.0f), 30.0f); // length 3
+    CHECK(v.x == doctest::Approx(1.0f));
+    CHECK(v.y == doctest::Approx(2.0f));
+    CHECK(v.z == doctest::Approx(2.0f));
+}
+
+TEST_CASE("RagdollSafety: clampVelocityMagnitude caps magnitude and preserves direction") {
+    glm::vec3 axis = physics::clampVelocityMagnitude(glm::vec3(0.0f, 1000.0f, 0.0f), 30.0f);
+    CHECK(glm::length(axis) == doctest::Approx(30.0f));
+    CHECK(axis.y == doctest::Approx(30.0f));
+
+    glm::vec3 diag = physics::clampVelocityMagnitude(glm::vec3(300.0f, 300.0f, 300.0f), 30.0f);
+    CHECK(glm::length(diag) == doctest::Approx(30.0f));
+    CHECK(diag.x == doctest::Approx(diag.y));
+    CHECK(diag.y == doctest::Approx(diag.z));
+}
+
+TEST_CASE("RagdollSafety: clampVelocityMagnitude zeroes non-finite input (broad-phase guard)") {
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    CHECK(physics::clampVelocityMagnitude(glm::vec3(nan, 0.0f, 0.0f), 30.0f) == glm::vec3(0.0f));
+    CHECK(physics::clampVelocityMagnitude(glm::vec3(0.0f, inf, 0.0f), 30.0f) == glm::vec3(0.0f));
+    CHECK(physics::clampVelocityMagnitude(glm::vec3(-inf, nan, 1.0f), 30.0f) == glm::vec3(0.0f));
+}
+
+TEST_CASE("RagdollSafety: clampVelocityMagnitude keeps zero at zero (no divide-by-zero)") {
+    CHECK(physics::clampVelocityMagnitude(glm::vec3(0.0f), 30.0f) == glm::vec3(0.0f));
+}
+
+// ---- VK-1437 fix #A: gameplay-collider suspend/restore decision ----
+
+TEST_CASE("RagdollSafety: usesRagdollBodies identifies the simulated modes") {
+    CHECK_FALSE(physics::usesRagdollBodies(types::PhysicsAnimationMode::Animated));
+    CHECK_FALSE(physics::usesRagdollBodies(types::PhysicsAnimationMode::Kinematic));
+    CHECK(physics::usesRagdollBodies(types::PhysicsAnimationMode::Ragdoll));
+    CHECK(physics::usesRagdollBodies(types::PhysicsAnimationMode::PoweredRagdoll));
+}
+
+TEST_CASE("RagdollSafety: colliderActionForModeChange suspends on enter, restores on leave") {
+    using physics::colliderActionForModeChange;
+    using Action = physics::GameplayColliderAction;
+    using Mode = types::PhysicsAnimationMode;
+
+    // Entering a ragdoll mode -> suspend the gameplay collider.
+    CHECK(colliderActionForModeChange(Mode::Animated, Mode::Ragdoll) == Action::Suspend);
+    CHECK(colliderActionForModeChange(Mode::Animated, Mode::PoweredRagdoll) == Action::Suspend);
+    CHECK(colliderActionForModeChange(Mode::Kinematic, Mode::Ragdoll) == Action::Suspend);
+
+    // Leaving a ragdoll mode -> restore the gameplay collider.
+    CHECK(colliderActionForModeChange(Mode::Ragdoll, Mode::Animated) == Action::Restore);
+    CHECK(colliderActionForModeChange(Mode::PoweredRagdoll, Mode::Kinematic) == Action::Restore);
+
+    // Staying on the same side (ragdoll<->powered, or animated<->kinematic) -> no change.
+    CHECK(colliderActionForModeChange(Mode::Ragdoll, Mode::PoweredRagdoll) == Action::None);
+    CHECK(colliderActionForModeChange(Mode::PoweredRagdoll, Mode::Ragdoll) == Action::None);
+    CHECK(colliderActionForModeChange(Mode::Animated, Mode::Kinematic) == Action::None);
+    CHECK(colliderActionForModeChange(Mode::Animated, Mode::Animated) == Action::None);
 }
 
 // ============================================================

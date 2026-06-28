@@ -283,7 +283,12 @@ namespace controllers::offscreen
             for (auto dropdownEntity : dropdownView)
             {
                 auto& comp = registry.get<components::UIDropdownComponent>(dropdownEntity);
-                if (!comp.isOpen || comp.options.empty())
+                // VK-1442 — render option labels in the UI Layer Builder's scoped edit preview even
+                // when the dropdown is closed, matching generateDropdownDrawData's expanded list. The
+                // scoped label path is the only caller with a non-null scopedCanvas (and it always
+                // means edit preview), so the runtime path (scopedCanvas == null) is unchanged. isOpen
+                // is runtime-only and left untouched.
+                if ((!comp.isOpen && scopedCanvas == entt::null) || comp.options.empty())
                     continue;
                 if (!isEffectivelyActiveInScopedCanvas(registry, dropdownEntity, scopedCanvas))
                     continue;

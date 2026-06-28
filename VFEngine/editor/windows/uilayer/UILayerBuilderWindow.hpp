@@ -22,6 +22,8 @@
 #include "events/EventDispatcher.hpp"
 #include "UILayerCanvasHandles.hpp"
 #include "UILayerInspectorUndo.hpp"
+#include "UILayerHierarchyPane.hpp"
+#include "UILayerCanvasPane.hpp"
 
 // Embed the existing UI inspector drawers for the selection (same set EntityDetailsPanel uses).
 #include "../details/UICanvasDrawer.hpp"
@@ -63,6 +65,11 @@ namespace windows
 {
     class UILayerBuilderWindow
     {
+        // VK-1443 — the hierarchy + canvas panes are stateless sub-controllers that reach this
+        // window's private state + helper methods through friend access.
+        friend class uilayer::UILayerHierarchyPane;
+        friend class uilayer::UILayerCanvasPane;
+
     public:
         UILayerBuilderWindow();
         ~UILayerBuilderWindow();
@@ -91,27 +98,28 @@ namespace windows
         // ---- Panes --------------------------------------------------------------
         void drawToolbar();
         void drawPalettePane();
-        void drawHierarchyPane();
-        void drawCanvasPane();
         void drawInspectorPane();
         void drawAddComponentMenu(services::EntityHandle sel); // UI-only Add-Component popup
-
-        // ---- Canvas interaction (handles + click-select) -----------------------
-        void drawCanvasImageAndHandles(glm::vec2 regionOrigin, glm::vec2 regionSize);
-        void drawHandleOverlay(ImDrawList* dl, const uilayer::LetterboxMapping& map,
-                               const uilayer::RefRect& rect);
-        void handleCanvasInput(const uilayer::LetterboxMapping& map);
-
-        // ---- Hierarchy helpers --------------------------------------------------
-        void drawHierarchyNode(services::EntityHandle entity, int depth);
 
         // ---- Palette --------------------------------------------------------------
         enum class WidgetType
         {
             Panel, Label, Button, Image, TextInput, Checkbox,
-            Slider, ProgressBar, ScrollView, LayoutGroup, ListView
+            Slider, ProgressBar, ScrollView, LayoutGroup, ListView,
+            Dropdown, Tabs, Tooltip
         };
         void addWidget(WidgetType type);
+
+        // VK-1442 — builds the starter child composition for a compound widget (Checkbox /
+        // Dropdown / Tabs / Tooltip) under `root`, right after addWidget has added the root's
+        // own type component. No-op for the simple widget types. Runs inside addWidget's undo
+        // batch so the whole add is one gesture.
+        void assembleCompound(WidgetType type, services::EntityHandle root);
+
+        // VK-1442 — renders a non-blocking advisory strip in the inspector when the selected
+        // entity is a compound widget whose child composition is malformed (reads the registry
+        // via ui_validation::validateCompoundWidget; mutations stay on the CQRS path).
+        void drawCompoundValidationStrip(services::EntityHandle sel);
 
         // ---- Selection ----------------------------------------------------------
         services::EntityHandle selectedEntity() const;
@@ -168,6 +176,11 @@ namespace windows
         int refHeight = 1080;
         int refPreset = 0; // index into the resolution preset list
 
+        // Resizable pane widths (px): left = palette+hierarchy, right = inspector. Dragged via
+        // vertical splitters so long hierarchy entity names stay readable.
+        float leftPaneWidth = 220.0f;
+        float rightPaneWidth = 340.0f;
+
         // Canvas view state.
         float zoom = 1.0f;
         glm::vec2 panRef{0.0f, 0.0f};
@@ -206,9 +219,6 @@ namespace windows
         services::EntityHandle lastRevealSel = services::EntityHandle::invalid();
         bool revealScroll = false;
 
-        // Drag-drop reparent payload id for the hierarchy.
-        static constexpr const char* kHierarchyDragPayload = "DND_UILAYER_ENTITY";
-
         // Theme picker.
         std::string themePath;
 
@@ -234,5 +244,10 @@ namespace windows
         details::UIMaskDrawer uiMaskDrawer;
         details::UIDraggableDrawer uiDraggableDrawer;
         details::UIDropTargetDrawer uiDropTargetDrawer;
+
+        // VK-1443 — stateless pane sub-controllers (each holds only a back-reference to this
+        // window; constructed with *this in the ctor init-list).
+        uilayer::UILayerHierarchyPane hierarchyPane;
+        uilayer::UILayerCanvasPane canvasPane;
     };
 }

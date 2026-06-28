@@ -7,6 +7,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
+#include "../../events/physics/PhysicsAnimationEvents.hpp"
 
 namespace services
 {
@@ -369,6 +370,11 @@ namespace services
         if (sceneEntity.hasComponent<components::PhysicsAnimationComponent>())
         {
             sceneEntity.removeComponent<components::PhysicsAnimationComponent>();
+            // VK-1437: tear down any provider-side ragdoll/kinematic state so it doesn't leak when the
+            // component is removed at runtime. The handler no-ops if no state exists, so this is safe.
+            events::physicsAnimation::DestroyPhysicsAnimationCommand destroyCmd;
+            destroyCmd.entity = entity;
+            ::events::EventDispatcher::instance().execute(destroyCmd);
             return true;
         }
         return false;

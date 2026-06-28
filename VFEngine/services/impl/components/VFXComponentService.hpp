@@ -29,9 +29,6 @@ namespace services {
         std::optional<VFXData> getVFXData(EntityHandle entity) const;
         bool setVFXData(EntityHandle entity, const VFXData& vfxData);
 
-    private:
-        void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
-        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }
