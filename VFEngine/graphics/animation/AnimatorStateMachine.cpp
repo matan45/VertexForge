@@ -369,6 +369,27 @@ namespace animation
         return evaluator.evaluatePose(timeInTicks);
     }
 
+    bool AnimatorStateMachine::evaluateStateLocalPose(
+        uint32_t stateId, float time, AnimationEvaluator& evaluator, glm::vec3* outRootPos) const
+    {
+        if (!activeGraph || !skeletonData || hasBlendTree(stateId))
+            return false;
+
+        auto it = loadedAnimations.find(stateId);
+        if (it == loadedAnimations.end() || !it->second)
+            return false;
+
+        evaluator.loadAnimation(*it->second, *skeletonData, retargetContext);
+        float timeInTicks = evaluator.secondsToTicks(time);
+
+        if (outRootPos)
+            evaluator.evaluateLocalPose(timeInTicks, *outRootPos);
+        else
+            evaluator.evaluateLocalPose(timeInTicks);
+
+        return !evaluator.getEvaluatedBones().empty();
+    }
+
     void AnimatorStateMachine::updateRootMotionDelta(const glm::vec3& currentRootPosition)
     {
         if (rootMotionFirstFrame)
@@ -400,6 +421,36 @@ namespace animation
         const bool prevIsTree = hasBlendTree(state.previousStateId);
         const bool currIsTree = hasBlendTree(state.currentStateId);
 
+        if (!prevIsTree && !currIsTree && skeletonData)
+        {
+            const bool prevOk = evaluateStateLocalPose(state.previousStateId, state.previousStateTime,
+                                                       previousEvaluator, prevRootPtr);
+            const bool currOk = evaluateStateLocalPose(state.currentStateId, state.stateTime,
+                                                       currentEvaluator, currRootPtr);
+
+            if (prevOk && currOk)
+            {
+                currentBoneMatrices = AnimationBlender::blendLocalPoses(
+                    previousEvaluator.getEvaluatedBones(),
+                    currentEvaluator.getEvaluatedBones(),
+                    state.blendWeight, *skeletonData);
+                if (rootMotionEnabled)
+                    outRootPosition = glm::mix(prevRoot, currRoot, state.blendWeight);
+            }
+            else if (currOk)
+            {
+                std::vector<glm::mat4> locals;
+                const auto& bones = currentEvaluator.getEvaluatedBones();
+                locals.reserve(bones.size());
+                for (const auto& bone : bones)
+                    locals.push_back(bone.localTransform);
+                currentBoneMatrices = composeSkinningPalette(locals, *skeletonData);
+                if (rootMotionEnabled)
+                    outRootPosition = currRoot;
+            }
+            return;
+        }
+
         auto prevPose = evaluateStatePose(state.previousStateId, state.previousStateTime,
                                            previousEvaluator, prevRootPtr);
         auto currPose = evaluateStatePose(state.currentStateId, state.stateTime,
@@ -407,22 +458,9 @@ namespace animation
 
         if (!prevPose.empty() && !currPose.empty())
         {
-            // VK-1441: when both endpoints are plain states, each evaluator still holds this frame's
-            // per-bone local TRS, so blend in LOCAL space then run ONE hierarchy + inverse-bind pass
-            // (children stay attached to parents, no limb stretch/shear). When an endpoint is a blend
-            // tree there is no single populated evaluator, so fall back to the legacy palette blend
-            // (byte-identical to prior behavior) for those transitions.
-            if (!prevIsTree && !currIsTree && skeletonData)
-            {
-                currentBoneMatrices = AnimationBlender::blendLocalPoses(
-                    previousEvaluator.getEvaluatedBones(),
-                    currentEvaluator.getEvaluatedBones(),
-                    state.blendWeight, *skeletonData);
-            }
-            else
-            {
-                currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
-            }
+            // Blend-tree endpoints still have no single source evaluator, so keep their legacy
+            // palette blend fallback.
+            currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
             if (rootMotionEnabled)
                 outRootPosition = glm::mix(prevRoot, currRoot, state.blendWeight);
         }

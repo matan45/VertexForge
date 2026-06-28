@@ -55,6 +55,8 @@ namespace animation
 
         std::vector<glm::mat4> evaluatePose(float timeInTicks) const;
         std::vector<glm::mat4> evaluatePose(float timeInTicks, glm::vec3& outRootPosition) const;
+        void evaluateLocalPose(float timeInTicks) const;
+        void evaluateLocalPose(float timeInTicks, glm::vec3& outRootPosition) const;
         std::vector<glm::mat4> evaluatePoseLOD(float timeInTicks, const BoneLODSet& activeBones) const;
 
         const std::vector<EvaluatedBone>& getEvaluatedBones() const { return evaluatedBones; }
@@ -72,6 +74,9 @@ namespace animation
         size_t findKeyframeIndex(const std::vector<KeyType>& keys, float time, size_t& hint) const;
 
         void buildBoneToChannelMap();
+
+        bool evaluateLocalPoseInternal(float timeInTicks, glm::vec3* outRootPosition) const;
+        std::vector<glm::mat4> composeEvaluatedPalette() const;
 
         // Retarget sampling for target bone i -> local TRS (used only when retarget != null).
         void sampleRetargetedLocal(size_t i, float timeInTicks,

@@ -1,5 +1,6 @@
 #include <doctest.h>
 #include <impl/components/VFXSequenceComponentService.hpp>
+#include <impl/components/VFXComponentService.hpp>
 #include <events/EventDispatcher.hpp>
 #include <events/scene/ComponentMediaEvents.hpp>
 #include <data/DTOs.hpp>
@@ -22,6 +23,38 @@
 // CPU-testable; the command surface beneath them is.
 // ============================================================
 
+namespace
+{
+    void unregisterVFXSequenceHandlers(events::EventDispatcher& dispatcher)
+    {
+        dispatcher.unregisterCommandHandler<events::scene::AddVFXSequenceComponentCommand>();
+        dispatcher.unregisterCommandHandler<events::scene::RemoveVFXSequenceComponentCommand>();
+        dispatcher.unregisterCommandHandler<events::scene::SetVFXSequenceDataCommand>();
+        dispatcher.unregisterQueryHandler<events::scene::HasVFXSequenceComponentQuery>();
+        dispatcher.unregisterQueryHandler<events::scene::GetVFXSequenceDataQuery>();
+    }
+
+    class VFXSequenceHandlerCleanup
+    {
+    public:
+        explicit VFXSequenceHandlerCleanup(events::EventDispatcher& dispatcher)
+            : dispatcher(dispatcher)
+        {
+        }
+
+        ~VFXSequenceHandlerCleanup()
+        {
+            unregisterVFXSequenceHandlers(dispatcher);
+        }
+
+        VFXSequenceHandlerCleanup(const VFXSequenceHandlerCleanup&) = delete;
+        VFXSequenceHandlerCleanup& operator=(const VFXSequenceHandlerCleanup&) = delete;
+
+    private:
+        events::EventDispatcher& dispatcher;
+    };
+}
+
 TEST_SUITE("VFXSequenceComponentService")
 {
     TEST_CASE("Add/Has/Set/Get/Remove via the dispatcher, with auto-billboard attach/detach")
@@ -30,6 +63,7 @@ TEST_SUITE("VFXSequenceComponentService")
         services::VFXSequenceComponentService svc(sceneGraph);
         auto& dispatcher = events::EventDispatcher::instance();
         svc.registerEventHandlers(dispatcher);
+        VFXSequenceHandlerCleanup cleanup(dispatcher);
 
         scene::Entity entity("SeqServiceEntity");
         const services::EntityHandle handle = services::internal::toHandle(entity.getHandle());
@@ -109,6 +143,7 @@ TEST_SUITE("VFXSequenceComponentService")
         services::VFXSequenceComponentService svc(sceneGraph);
         auto& dispatcher = events::EventDispatcher::instance();
         svc.registerEventHandlers(dispatcher);
+        VFXSequenceHandlerCleanup cleanup(dispatcher);
 
         scene::Entity entity("SeqServiceEmplace");
         const services::EntityHandle handle = services::internal::toHandle(entity.getHandle());
@@ -125,5 +160,41 @@ TEST_SUITE("VFXSequenceComponentService")
               data.sequenceRef.getGUID());
 
         scene::EntityRegistry::getRegistry().destroy(entity.getHandle());
+    }
+
+    TEST_CASE("shared Particle billboard remains until both VFX component types are removed")
+    {
+        auto sceneGraph = std::make_shared<scene::SceneGraphSystem>();
+        services::VFXComponentService vfxSvc(sceneGraph);
+        services::VFXSequenceComponentService seqSvc(sceneGraph);
+
+        scene::Entity removeSequenceFirst("VFXSharedBillboardA");
+        const services::EntityHandle handleA = services::internal::toHandle(removeSequenceFirst.getHandle());
+        REQUIRE(vfxSvc.addVFXComponent(handleA));
+        REQUIRE(seqSvc.addVFXSequenceComponent(handleA));
+        REQUIRE(removeSequenceFirst.hasComponent<components::BillboardComponent>());
+        CHECK(removeSequenceFirst.getComponent<components::BillboardComponent>().iconType ==
+              components::BillboardIconType::Particle);
+
+        REQUIRE(seqSvc.removeVFXSequenceComponent(handleA));
+        CHECK(removeSequenceFirst.hasComponent<components::VFXComponent>());
+        CHECK(removeSequenceFirst.hasComponent<components::BillboardComponent>());
+
+        REQUIRE(vfxSvc.removeVFXComponent(handleA));
+        CHECK_FALSE(removeSequenceFirst.hasComponent<components::BillboardComponent>());
+        scene::EntityRegistry::getRegistry().destroy(removeSequenceFirst.getHandle());
+
+        scene::Entity removeVFXFirst("VFXSharedBillboardB");
+        const services::EntityHandle handleB = services::internal::toHandle(removeVFXFirst.getHandle());
+        REQUIRE(vfxSvc.addVFXComponent(handleB));
+        REQUIRE(seqSvc.addVFXSequenceComponent(handleB));
+
+        REQUIRE(vfxSvc.removeVFXComponent(handleB));
+        CHECK(removeVFXFirst.hasComponent<components::VFXSequenceComponent>());
+        CHECK(removeVFXFirst.hasComponent<components::BillboardComponent>());
+
+        REQUIRE(seqSvc.removeVFXSequenceComponent(handleB));
+        CHECK_FALSE(removeVFXFirst.hasComponent<components::BillboardComponent>());
+        scene::EntityRegistry::getRegistry().destroy(removeVFXFirst.getHandle());
     }
 }

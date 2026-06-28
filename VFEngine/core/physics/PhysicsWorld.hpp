@@ -82,6 +82,7 @@ namespace core::physics
         // body) in the simulation, used to disable it while the entity is ragdolling. No-op if the
         // entity has no gameplay body.
         void setEntityRigidBodyEnabled(uint64_t entityId, bool enabled);
+        void setEntityRigidBodyTransform(uint64_t entityId, const glm::vec3& position, const glm::quat& rotation);
 
         // Position & rotation
         glm::vec3 getPosition(JPH::BodyID bodyId) const;

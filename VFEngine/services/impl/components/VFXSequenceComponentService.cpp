@@ -1,4 +1,5 @@
 #include "VFXSequenceComponentService.hpp"
+#include "BillboardAutoIcon.hpp"
 #include "scene/SceneGraphSystem.hpp"
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -21,7 +22,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::VFXSequenceComponent>()) {
             sceneEntity.addComponent<components::VFXSequenceComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Particle));
+            components_helpers::autoAttachBillboard(entity, components::BillboardIconType::Particle);
             return true;
         }
         return false;
@@ -36,7 +37,10 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::VFXSequenceComponent>()) {
             sceneEntity.removeComponent<components::VFXSequenceComponent>();
-            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Particle));
+            components_helpers::autoDetachBillboard(
+                entity,
+                components::BillboardIconType::Particle,
+                [](const scene::Entity& e) { return e.hasComponent<components::VFXComponent>(); });
             return true;
         }
         return false;
@@ -107,37 +111,6 @@ namespace services {
         }
         // runtimeComboId is transient — never written from the DTO path.
         return true;
-    }
-
-    void VFXSequenceComponentService::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
-            billboard.iconType = static_cast<components::BillboardIconType>(iconType);
-            billboard.editorOnly = true;
-            billboard.selectable = true;
-        }
-    }
-
-    void VFXSequenceComponentService::autoDetachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
-            // Only remove if it matches the expected icon type (auto-attached billboard)
-            if (billboard.iconType == static_cast<components::BillboardIconType>(iconType)) {
-                sceneEntity.removeComponent<components::BillboardComponent>();
-            }
-        }
     }
 
     void VFXSequenceComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {

@@ -81,6 +81,39 @@ namespace
         return a;
     }
 
+    resource::AnimationData makeEmptyClip(const char* name)
+    {
+        resource::AnimationData a;
+        a.name = name;
+        a.duration = 1.0f;
+        a.ticksPerSecond = 1.0f;
+        return a;
+    }
+
+    resource::SkeletonData makeScaledUnchanneledSkeleton()
+    {
+        resource::SkeletonData s;
+        s.globalInverseTransform = glm::mat4(1.0f);
+
+        resource::SkeletonBone root;
+        root.name = "Root";
+        root.parentIndex = -1;
+        root.offsetMatrix = glm::mat4(1.0f);
+        root.preTransform = glm::mat4(1.0f);
+
+        resource::SkeletonBone child;
+        child.name = "ScaledChild";
+        child.parentIndex = 0;
+        child.offsetMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 0.0f)) *
+                             glm::scale(glm::mat4(1.0f), glm::vec3(2.0f, 0.5f, 1.5f));
+        child.preTransform = glm::mat4(1.0f);
+
+        s.bones = {root, child};
+        s.bindPoses = {glm::mat4(1.0f), child.offsetMatrix};
+        s.inverseBindPoses = {glm::mat4(1.0f), glm::inverse(child.offsetMatrix)};
+        return s;
+    }
+
     // Recover a bone's world origin from a skinning palette the way IK does
     // (IKPostProcess.cpp): pos = palette[i] * bindPose[i] * (0,0,0,1).
     glm::vec3 head(const std::vector<glm::mat4>& palette, const resource::SkeletonData& s, int i)
@@ -201,6 +234,79 @@ TEST_CASE("composeSkinningPalette matches evaluatePose (equivalence guard)")
         for (int c = 0; c < 4; ++c)
             for (int r = 0; r < 4; ++r)
                 CHECK(composed[i][c][r] == doctest::Approx(pal[i][c][r]));
+}
+
+TEST_CASE("composeSkinningPalette clamps to available inverse bind poses")
+{
+    auto skel = makeTwoBoneSkeleton(2.0f);
+    std::vector<glm::mat4> locals = {glm::mat4(1.0f), skel.bones[1].offsetMatrix};
+
+    auto noInverse = skel;
+    noInverse.inverseBindPoses.clear();
+    CHECK(animation::composeSkinningPalette(locals, noInverse).empty());
+
+    auto shortInverse = skel;
+    shortInverse.inverseBindPoses.resize(1);
+    auto bounded = animation::composeSkinningPalette(locals, shortInverse);
+    REQUIRE(bounded.size() == 1);
+}
+
+TEST_CASE("local blend preserves scaled unchanneled bind bones")
+{
+    auto skel = makeScaledUnchanneledSkeleton();
+    auto clip = makeEmptyClip("BindOnly");
+
+    AnimationEvaluator evA, evB;
+    evA.loadAnimation(clip, skel);
+    evB.loadAnimation(clip, skel);
+    auto expected = evA.evaluatePose(0.0f);
+    evB.evaluatePose(0.0f);
+
+    for (float w : {0.0f, 0.5f, 1.0f})
+    {
+        auto blended = AnimationBlender::blendLocalPoses(
+            evA.getEvaluatedBones(), evB.getEvaluatedBones(), w, skel);
+        REQUIRE(blended.size() == expected.size());
+        for (size_t i = 0; i < expected.size(); ++i)
+            for (int c = 0; c < 4; ++c)
+                for (int r = 0; r < 4; ++r)
+                    CHECK(blended[i][c][r] == doctest::Approx(expected[i][c][r]));
+    }
+
+    std::vector<std::vector<EvaluatedBone>> sources = {evA.getEvaluatedBones(), evB.getEvaluatedBones()};
+    std::vector<float> weights = {0.5f, 0.5f};
+    auto nWay = AnimationBlender::blendLocalNPoses(sources, weights, skel);
+    REQUIRE(nWay.size() == expected.size());
+    for (size_t i = 0; i < expected.size(); ++i)
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r)
+                CHECK(nWay[i][c][r] == doctest::Approx(expected[i][c][r]));
+}
+
+TEST_CASE("evaluateLocalPose composed palette matches evaluatePose")
+{
+    const float L = 2.0f;
+    auto skel = makeTwoBoneSkeleton(L);
+    auto clip = makeRotationClip("Local", rotZ(23.0f));
+
+    AnimationEvaluator full;
+    full.loadAnimation(clip, skel);
+    auto expected = full.evaluatePose(0.0f);
+
+    AnimationEvaluator local;
+    local.loadAnimation(clip, skel);
+    local.evaluateLocalPose(0.0f);
+
+    std::vector<glm::mat4> locals;
+    for (const auto& eb : local.getEvaluatedBones())
+        locals.push_back(eb.localTransform);
+    auto composed = animation::composeSkinningPalette(locals, skel);
+
+    REQUIRE(composed.size() == expected.size());
+    for (size_t i = 0; i < expected.size(); ++i)
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r)
+                CHECK(composed[i][c][r] == doctest::Approx(expected[i][c][r]));
 }
 
 TEST_CASE("self-blend equals the single pose (no drift on the non-blend path)")

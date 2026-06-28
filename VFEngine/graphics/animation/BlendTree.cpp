@@ -218,8 +218,6 @@ namespace animation
             weights.resize(n, 1.0f / static_cast<float>(n));
         }
 
-        // Evaluate each active entry's pose
-        std::vector<std::vector<glm::mat4>> poses;
         // VK-1441: snapshot each source's per-bone LOCAL TRS so the N-way blend happens in local
         // space (the single reused evaluator is overwritten on the next iteration, so copy now).
         std::vector<std::vector<EvaluatedBone>> localSources;
@@ -243,25 +241,38 @@ namespace animation
             if (trackRootMotion)
             {
                 glm::vec3 rootPos;
-                poses.push_back(evaluator.evaluatePose(timeInTicks, rootPos));
+                evaluator.evaluateLocalPose(timeInTicks, rootPos);
+                if (evaluator.getEvaluatedBones().empty())
+                    continue;
                 rootPositions.push_back(rootPos);
             }
             else
             {
-                poses.push_back(evaluator.evaluatePose(timeInTicks));
+                evaluator.evaluateLocalPose(timeInTicks);
+                if (evaluator.getEvaluatedBones().empty())
+                    continue;
             }
             localSources.push_back(evaluator.getEvaluatedBones());
             activeWeights.push_back(weights[i]);
         }
 
-        if (poses.empty())
+        if (localSources.empty())
             return {};
 
-        if (poses.size() == 1)
+        auto composeSource = [&skeleton](const std::vector<EvaluatedBone>& source)
+        {
+            std::vector<glm::mat4> locals;
+            locals.reserve(source.size());
+            for (const auto& bone : source)
+                locals.push_back(bone.localTransform);
+            return composeSkinningPalette(locals, skeleton);
+        };
+
+        if (localSources.size() == 1)
         {
             if (trackRootMotion && !rootPositions.empty())
                 outRootPosition = rootPositions[0];
-            return poses[0];
+            return composeSource(localSources[0]);
         }
 
         // Normalize active weights

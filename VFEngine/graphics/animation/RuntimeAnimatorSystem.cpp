@@ -209,7 +209,8 @@ namespace animation
         //   - otherwise: root motion is purely cosmetic. It was extracted only to keep the
         //     body rendering in-place (AnimationEvaluator pins the root bone to its bind pose)
         //     while the crowd moves the entity at its configured maxSpeed (nav-paced
-        //     locomotion) -- so discard the delta.
+        //     locomotion). If no crowd driver has taken ownership yet, apply the delta
+        //     normally below so root-motion-only agents can still move.
         if (auto* navAgent = registry.try_get<components::NavmeshAgentComponent>(entity))
         {
             if (navAgent->rootMotionDriven)
@@ -219,8 +220,8 @@ namespace animation
                 navAgent->rootMotionPlanarDistance =
                     glm::length(glm::vec2(scaled.x, scaled.z)) * navAgent->rootMotionSpeedScale;
                 navAgent->rootMotionFresh = true;
+                return;
             }
-            return;
         }
 
         if (delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f)

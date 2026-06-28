@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "PhysicsPlayModeHandler.hpp"
+#include "../SceneSubtreeUtils.hpp"
 #include "../scene/OceanService.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
@@ -14,23 +15,10 @@
 #include "resource/MeshStreamHandle.hpp"
 #include "threading/JobSystem.hpp"
 #include <glm/gtc/quaternion.hpp>
+#include <algorithm>
 
 namespace services
 {
-    namespace
-    {
-        // VK-1437: depth-first collect a freshly-instantiated subtree (root + descendants) as handles,
-        // mirroring the traversal ScenePersistenceService uses to acquire its resources.
-        void collectSubtreeHandles(const scene::Entity& entity, std::vector<EntityHandle>& out)
-        {
-            out.push_back(internal::toHandle(entity.getHandle()));
-            for (const auto& child : entity.getChildren())
-            {
-                collectSubtreeHandles(child, out);
-            }
-        }
-    }
-
     PhysicsPlayModeHandler::PhysicsPlayModeHandler(IPhysicsProvider* physicsProvider)
         : physicsProvider(physicsProvider)
     {
@@ -54,7 +42,7 @@ namespace services
         rigidBodyAddedToken = dispatcher.subscribe<::events::physics::RigidBodyAddedNotification>(
             [this](const ::events::physics::RigidBodyAddedNotification& notification)
             {
-                if (physicsActive)
+                if (physicsActive.load())
                 {
                     activePhysicsBodies.insert(notification.entity);
                 }
@@ -73,21 +61,13 @@ namespace services
         prefabInstantiatedToken = dispatcher.subscribe<::events::scene::PrefabInstantiatedNotification>(
             [this](const ::events::scene::PrefabInstantiatedNotification& notification)
             {
-                if (!physicsActive || !physicsProvider)
+                if (!physicsActive.load() || !physicsProvider)
                 {
                     return;
                 }
 
-                auto& registry = scene::EntityRegistry::getRegistry();
-                entt::entity root = internal::fromHandle(notification.rootEntity);
-                if (!registry.valid(root))
-                {
-                    return;
-                }
-
-                std::vector<EntityHandle> subtree;
-                collectSubtreeHandles(scene::Entity(root), subtree);
-                initializePhysicsAnimationsFor(subtree);
+                std::lock_guard<std::mutex> lock(pendingMutex);
+                pendingPrefabRoots.push_back(notification.rootEntity);
             });
 
         // VK-1437: tear down provider-side physics-animation state when an entity is deleted during Play.
@@ -96,9 +76,16 @@ namespace services
         entityDeletedToken = dispatcher.subscribe<::events::scene::EntityDeletedNotification>(
             [this](const ::events::scene::EntityDeletedNotification& notification)
             {
-                if (!physicsActive || !physicsProvider)
+                if (!physicsActive.load() || !physicsProvider)
                 {
                     return;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(pendingMutex);
+                    pendingPrefabRoots.erase(
+                        std::remove(pendingPrefabRoots.begin(), pendingPrefabRoots.end(), notification.entity),
+                        pendingPrefabRoots.end());
                 }
 
                 if (activePhysicsAnimationEntities.erase(notification.entity) > 0 ||
@@ -176,6 +163,10 @@ namespace services
 
         activePhysicsBodies.clear();
         rootMotionLastSyncPos.clear();
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            pendingPrefabRoots.clear();
+        }
         physicsActive = false;
 
         vfLogInfo("Physics play mode stopped");
@@ -189,10 +180,12 @@ namespace services
 
     void PhysicsPlayModeHandler::kickUpdate(float deltaTime)
     {
-        if (!physicsActive || !physicsProvider)
+        if (!physicsActive.load() || !physicsProvider)
         {
             return;
         }
+
+        drainPendingPrefabRoots();
 
         if (oceanService)
         {
@@ -204,7 +197,7 @@ namespace services
 
     void PhysicsPlayModeHandler::syncUpdate(float deltaTime)
     {
-        if (!physicsActive || !physicsProvider)
+        if (!physicsActive.load() || !physicsProvider)
         {
             return;
         }
@@ -328,6 +321,31 @@ namespace services
         }
 
         initializePhysicsAnimationsFor(candidates);
+    }
+
+    void PhysicsPlayModeHandler::drainPendingPrefabRoots()
+    {
+        std::vector<EntityHandle> roots;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            if (pendingPrefabRoots.empty())
+                return;
+            roots.swap(pendingPrefabRoots);
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<EntityHandle> candidates;
+        for (EntityHandle root : roots)
+        {
+            entt::entity rootEntity = internal::fromHandle(root);
+            if (!registry.valid(rootEntity))
+                continue;
+
+            internal::collectSubtreeHandles(scene::Entity(rootEntity), candidates);
+        }
+
+        if (!candidates.empty())
+            initializePhysicsAnimationsFor(candidates);
     }
 
     void PhysicsPlayModeHandler::initializePhysicsAnimationsFor(const std::vector<EntityHandle>& candidates)

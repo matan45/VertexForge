@@ -1,4 +1,5 @@
 #include "AudioComponentService.hpp"
+#include "BillboardAutoIcon.hpp"
 #include "scene/SceneGraphSystem.hpp"
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -25,7 +26,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
             sceneEntity.addComponent<components::AudioSource2DComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio2D));
+            components_helpers::autoAttachBillboard(entity, components::BillboardIconType::Audio2D);
             return true;
         }
         return false;
@@ -45,7 +46,7 @@ namespace services {
             }
             sceneEntity.removeComponent<components::AudioSource2DComponent>();
             if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
-                autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio2D));
+                components_helpers::autoDetachBillboard(entity, components::BillboardIconType::Audio2D);
             }
             return true;
         }
@@ -121,7 +122,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
             sceneEntity.addComponent<components::AudioSource3DComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio3D));
+            components_helpers::autoAttachBillboard(entity, components::BillboardIconType::Audio3D);
             return true;
         }
         return false;
@@ -141,7 +142,7 @@ namespace services {
             }
             sceneEntity.removeComponent<components::AudioSource3DComponent>();
             if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
-                autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio3D));
+                components_helpers::autoDetachBillboard(entity, components::BillboardIconType::Audio3D);
             }
             return true;
         }
@@ -237,7 +238,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::ReverbZoneComponent>()) {
             sceneEntity.addComponent<components::ReverbZoneComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::ReverbZone));
+            components_helpers::autoAttachBillboard(entity, components::BillboardIconType::ReverbZone);
             return true;
         }
         return false;
@@ -250,7 +251,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::ReverbZoneComponent>()) {
             sceneEntity.removeComponent<components::ReverbZoneComponent>();
-            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::ReverbZone));
+            components_helpers::autoDetachBillboard(entity, components::BillboardIconType::ReverbZone);
             return true;
         }
         return false;
@@ -305,37 +306,6 @@ namespace services {
         comp.wetLevel = data.wetLevel;
         comp.showDebugVolume = data.showDebugVolume;
         return true;
-    }
-
-    void AudioComponentService::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
-            billboard.iconType = static_cast<components::BillboardIconType>(iconType);
-            billboard.editorOnly = true;
-            billboard.selectable = true;
-        }
-    }
-
-    void AudioComponentService::autoDetachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
-            // Only remove if it matches the expected icon type (auto-attached billboard)
-            if (billboard.iconType == static_cast<components::BillboardIconType>(iconType)) {
-                sceneEntity.removeComponent<components::BillboardComponent>();
-            }
-        }
     }
 
     void AudioComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {

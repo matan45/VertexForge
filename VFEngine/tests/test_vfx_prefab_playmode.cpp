@@ -2,6 +2,7 @@
 
 #include <impl/vfx/VFXSequencePlayModeHandler.hpp>
 #include <impl/vfx/VFXPlayModeHandler.hpp>
+#include <impl/SceneSubtreeUtils.hpp>
 #include <providers/vfx/IVFXRuntimeProvider.hpp>
 #include <events/EventDispatcher.hpp>
 #include <events/vfx/VFXSequenceRuntimeEvents.hpp>
@@ -23,8 +24,10 @@
 
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include <entt/entt.hpp>
 #include <algorithm>
 #include <set>
+#include <utility>
 #include <vector>
 
 // ============================================================
@@ -41,6 +44,35 @@
 namespace
 {
     using EditorMode = services::EditorMode;
+
+    template <typename Fn>
+    class ScopeExit
+    {
+    public:
+        explicit ScopeExit(Fn fn) : fn(std::move(fn)) {}
+        ~ScopeExit() { fn(); }
+
+        ScopeExit(const ScopeExit&) = delete;
+        ScopeExit& operator=(const ScopeExit&) = delete;
+
+    private:
+        Fn fn;
+    };
+
+    template <typename Fn>
+    ScopeExit<Fn> makeScopeExit(Fn fn)
+    {
+        return ScopeExit<Fn>(std::move(fn));
+    }
+
+    void attachChild(entt::registry& registry, entt::entity parent, entt::entity child)
+    {
+        registry.emplace_or_replace<components::ParentComponent>(child).parent = parent;
+        auto* children = registry.try_get<components::ChildrenComponent>(parent);
+        if (!children)
+            children = &registry.emplace<components::ChildrenComponent>(parent);
+        children->children.push_back(child);
+    }
 
     void enterPlay()
     {
@@ -91,6 +123,27 @@ namespace
 
 TEST_SUITE("VFXPrefabPlayMode")
 {
+    TEST_CASE("shared subtree collector returns DFS root-first handles")
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        scene::Entity root("SubtreeRoot");
+        scene::Entity child("SubtreeChild");
+        scene::Entity grandchild("SubtreeGrandchild");
+
+        attachChild(registry, root.getHandle(), child.getHandle());
+        attachChild(registry, child.getHandle(), grandchild.getHandle());
+
+        auto handles = services::internal::collectSubtreeHandles(root);
+        REQUIRE(handles.size() == 3);
+        CHECK(handles[0] == services::internal::toHandle(root.getHandle()));
+        CHECK(handles[1] == services::internal::toHandle(child.getHandle()));
+        CHECK(handles[2] == services::internal::toHandle(grandchild.getHandle()));
+
+        registry.destroy(grandchild.getHandle());
+        registry.destroy(child.getHandle());
+        registry.destroy(root.getHandle());
+    }
+
     TEST_CASE("VFXSequence: mid-Play prefab autoplays the combo on update(); delete destroys it")
     {
         asset::AssetDatabase::instance().clear();
@@ -114,6 +167,14 @@ TEST_SUITE("VFXPrefabPlayMode")
             [&](const services::events::vfxsequence::UpdateVFXSequenceRuntimeCommand&) {});
         dispatcher.registerQueryHandler<services::events::vfxsequence::IsVFXComboInstancePlayingQuery>(
             [&](const services::events::vfxsequence::IsVFXComboInstancePlayingQuery& q) -> bool { return live.count(q.comboId) > 0; });
+        auto cleanupHandlers = makeScopeExit([&dispatcher]
+        {
+            dispatcher.unregisterCommandHandler<services::events::vfxsequence::CreateVFXComboInstanceCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxsequence::PlayVFXComboInstanceCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxsequence::DestroyVFXComboInstanceCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxsequence::UpdateVFXSequenceRuntimeCommand>();
+            dispatcher.unregisterQueryHandler<services::events::vfxsequence::IsVFXComboInstancePlayingQuery>();
+        });
 
         services::VFXSequencePlayModeHandler handler;
         handler.subscribeToEvents();
@@ -125,7 +186,8 @@ TEST_SUITE("VFXPrefabPlayMode")
         scene::Entity entity("SeqPrefabRoot");
         auto& seq = entity.addComponent<components::VFXSequenceComponent>();
         seq.autoPlay = true;
-        seq.sequenceRef = asset::AssetRef::fromGUID(asset::AssetGUID::fromValue(0x5EE1ull));
+        seq.sequenceRef = asset::AssetRef::fromGUID(
+            asset::AssetDatabase::instance().registerAsset("tests/seq_prefab.vfvfxsequence", resource::AssetType::VFXSequence));
         entity.addComponent<components::WorldTransformComponent>();
         const services::EntityHandle handle = services::internal::toHandle(entity.getHandle());
 
@@ -176,6 +238,13 @@ TEST_SUITE("VFXPrefabPlayMode")
             [&](const services::events::vfxruntime::DestroyVFXInstanceCommand& c) { destroys.push_back(c.instanceId); });
         dispatcher.registerCommandHandler<services::events::vfxruntime::UpdateVFXRuntimeCommand>(
             [&](const services::events::vfxruntime::UpdateVFXRuntimeCommand&) {});
+        auto cleanupHandlers = makeScopeExit([&dispatcher]
+        {
+            dispatcher.unregisterCommandHandler<services::events::vfxruntime::CreateVFXInstanceCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxruntime::PlayVFXInstanceCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxruntime::DestroyVFXInstanceCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxruntime::UpdateVFXRuntimeCommand>();
+        });
 
         StubVFXProvider provider;
         services::VFXPlayModeHandler handler(&provider);
@@ -187,7 +256,8 @@ TEST_SUITE("VFXPrefabPlayMode")
         scene::Entity entity("VFXPrefabRoot");
         auto& vfx = entity.addComponent<components::VFXComponent>();
         vfx.autoPlay = true;
-        vfx.vfxRef = asset::AssetRef::fromGUID(asset::AssetGUID::fromValue(0x7EE1ull));
+        vfx.vfxRef = asset::AssetRef::fromGUID(
+            asset::AssetDatabase::instance().registerAsset("tests/vfx_prefab.vfvfx", resource::AssetType::VFX));
         entity.addComponent<components::WorldTransformComponent>();
         const services::EntityHandle handle = services::internal::toHandle(entity.getHandle());
 

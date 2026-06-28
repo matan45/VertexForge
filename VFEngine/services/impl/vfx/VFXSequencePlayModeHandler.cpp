@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "VFXSequencePlayModeHandler.hpp"
+#include "../SceneSubtreeUtils.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/animation/AnimationEventEvents.hpp"
@@ -15,19 +16,6 @@
 
 namespace services
 {
-    namespace
-    {
-        // VK-1438: depth-first collect a freshly-instantiated subtree (root + descendants) as handles.
-        void collectSubtreeHandles(const scene::Entity& entity, std::vector<EntityHandle>& out)
-        {
-            out.push_back(internal::toHandle(entity.getHandle()));
-            for (const auto& child : entity.getChildren())
-            {
-                collectSubtreeHandles(child, out);
-            }
-        }
-    }
-
     VFXSequencePlayModeHandler::~VFXSequencePlayModeHandler()
     {
         unsubscribeFromEvents();
@@ -46,7 +34,7 @@ namespace services
         transformChangedToken = dispatcher.subscribe<::events::scene::TransformChangedNotification>(
             [this](const ::events::scene::TransformChangedNotification& n)
             {
-                if (sequenceActive)
+                if (sequenceActive.load())
                     onTransformChanged(n.entity);
             });
 
@@ -54,7 +42,7 @@ namespace services
         animationEventToken = dispatcher.subscribe<::events::animation::AnimationEventFiredNotification>(
             [this](const ::events::animation::AnimationEventFiredNotification& n)
             {
-                if (sequenceActive)
+                if (sequenceActive.load())
                     onAnimationEvent(n.entity, n.eventName);
             });
 
@@ -64,7 +52,7 @@ namespace services
         prefabInstantiatedToken = dispatcher.subscribe<::events::scene::PrefabInstantiatedNotification>(
             [this](const ::events::scene::PrefabInstantiatedNotification& n)
             {
-                if (sequenceActive)
+                if (sequenceActive.load())
                     onPrefabInstantiated(n.rootEntity);
             });
 
@@ -73,7 +61,7 @@ namespace services
         entityDeletedToken = dispatcher.subscribe<::events::scene::EntityDeletedNotification>(
             [this](const ::events::scene::EntityDeletedNotification& n)
             {
-                if (sequenceActive)
+                if (sequenceActive.load())
                     onEntityDeleted(n.entity);
             });
     }
@@ -106,9 +94,14 @@ namespace services
 
     void VFXSequencePlayModeHandler::onTransformChanged(EntityHandle entity)
     {
-        auto it = autoPlayCombos.find(entity);
-        if (it == autoPlayCombos.end())
-            return;
+        VFXComboInstanceId comboId = 0;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            auto it = autoPlayCombos.find(entity);
+            if (it == autoPlayCombos.end())
+                return;
+            comboId = it->second;
+        }
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto enttEntity = internal::fromHandle(entity);
@@ -118,7 +111,7 @@ namespace services
         const auto& worldTransform = registry.get<components::WorldTransformComponent>(enttEntity);
 
         events::vfxsequence::SetVFXComboInstanceTransformCommand cmd;
-        cmd.comboId = it->second;
+        cmd.comboId = comboId;
         cmd.worldTransform = worldTransform.worldMatrix;
         ::events::EventDispatcher::instance().execute(cmd);
     }
@@ -175,7 +168,10 @@ namespace services
                     dispatcher.execute(attachCmd);
                 }
 
-                triggeredCombos.push_back(comboId);
+                {
+                    std::lock_guard<std::mutex> lock(pendingMutex);
+                    triggeredCombos.push_back(comboId);
+                }
             }
         }
     }
@@ -188,13 +184,20 @@ namespace services
             !registry.all_of<components::VFXSequenceComponent, components::WorldTransformComponent>(entity))
             return;
 
-        if (autoPlayCombos.count(handle))
-            return; // already auto-playing this entity
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            if (autoPlayCombos.count(handle))
+                return; // already auto-playing this entity
+        }
 
-        auto& comp = registry.get<components::VFXSequenceComponent>(entity);
+        const auto& comp = registry.get<components::VFXSequenceComponent>(entity);
+        const bool autoPlay = comp.autoPlay;
+        const bool loop = comp.loop;
+        const std::string sequencePath = comp.sequenceRef.isValid() ? comp.sequenceRef.resolve() : std::string{};
+        const std::string socketName = comp.socketName;
         const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
 
-        if (!comp.autoPlay || !comp.sequenceRef.isValid())
+        if (!autoPlay || sequencePath.empty())
             return;
 
         if (registry.all_of<components::NameComponent>(entity))
@@ -207,27 +210,45 @@ namespace services
         auto& dispatcher = ::events::EventDispatcher::instance();
 
         events::vfxsequence::CreateVFXComboInstanceCommand createCmd;
-        createCmd.sequenceAssetPath = comp.sequenceRef.resolve();
+        createCmd.sequenceAssetPath = sequencePath;
         createCmd.worldTransform = worldTransform.worldMatrix;
         createCmd.entityId = static_cast<uint32_t>(entity);
-        createCmd.autoDestroyOnFinish = !comp.loop; // looping standalone combos persist until exit-play
+        createCmd.autoDestroyOnFinish = !loop; // looping standalone combos persist until exit-play
         const VFXComboInstanceId comboId = dispatcher.execute(createCmd);
         if (comboId == 0)
             return;
 
-        autoPlayCombos[handle] = comboId;
-        comp.runtimeComboId = comboId;
+        VFXComboInstanceId activeComboId = comboId;
+        bool inserted = false;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            auto [it, didInsert] = autoPlayCombos.emplace(handle, comboId);
+            if (!didInsert)
+                activeComboId = it->second;
+            inserted = didInsert;
+        }
+
+        if (!inserted)
+        {
+            events::vfxsequence::DestroyVFXComboInstanceCommand destroyCmd;
+            destroyCmd.comboId = comboId;
+            dispatcher.execute(destroyCmd);
+            return;
+        }
+
+        if (registry.valid(entity) && registry.all_of<components::VFXSequenceComponent>(entity))
+            registry.get<components::VFXSequenceComponent>(entity).runtimeComboId = activeComboId;
 
         events::vfxsequence::PlayVFXComboInstanceCommand playCmd;
-        playCmd.comboId = comboId;
+        playCmd.comboId = activeComboId;
         dispatcher.execute(playCmd);
 
-        if (!comp.socketName.empty())
+        if (!socketName.empty())
         {
             events::vfxsequence::AttachVFXComboInstanceToSocketCommand attachCmd;
-            attachCmd.comboId = comboId;
+            attachCmd.comboId = activeComboId;
             attachCmd.entityHandle = handle.id;
-            attachCmd.socketName = comp.socketName;
+            attachCmd.socketName = socketName;
             dispatcher.execute(attachCmd);
         }
     }
@@ -243,7 +264,12 @@ namespace services
         }
 
         sequenceActive = true;
-        vfLogInfo("VFX sequence play mode started with {} auto-played combos", autoPlayCombos.size());
+        size_t comboCount = 0;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            comboCount = autoPlayCombos.size();
+        }
+        vfLogInfo("VFX sequence play mode started with {} auto-played combos", comboCount);
     }
 
     void VFXSequencePlayModeHandler::onPrefabInstantiated(EntityHandle root)
@@ -255,19 +281,28 @@ namespace services
 
     void VFXSequencePlayModeHandler::onEntityDeleted(EntityHandle entity)
     {
-        auto it = autoPlayCombos.find(entity);
-        if (it != autoPlayCombos.end())
+        VFXComboInstanceId comboId = 0;
+
         {
-            events::vfxsequence::DestroyVFXComboInstanceCommand cmd;
-            cmd.comboId = it->second;
-            ::events::EventDispatcher::instance().execute(cmd);
-            autoPlayCombos.erase(it);
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            auto it = autoPlayCombos.find(entity);
+            if (it != autoPlayCombos.end())
+            {
+                comboId = it->second;
+                autoPlayCombos.erase(it);
+            }
+
+            pendingPrefabRoots.erase(
+                std::remove(pendingPrefabRoots.begin(), pendingPrefabRoots.end(), entity),
+                pendingPrefabRoots.end());
         }
 
-        std::lock_guard<std::mutex> lock(pendingMutex);
-        pendingPrefabRoots.erase(
-            std::remove(pendingPrefabRoots.begin(), pendingPrefabRoots.end(), entity),
-            pendingPrefabRoots.end());
+        if (comboId != 0)
+        {
+            events::vfxsequence::DestroyVFXComboInstanceCommand cmd;
+            cmd.comboId = comboId;
+            ::events::EventDispatcher::instance().execute(cmd);
+        }
     }
 
     void VFXSequencePlayModeHandler::drainPendingPrefabRoots()
@@ -288,7 +323,7 @@ namespace services
                 continue;
 
             std::vector<EntityHandle> subtree;
-            collectSubtreeHandles(scene::Entity(rootEntity), subtree);
+            internal::collectSubtreeHandles(scene::Entity(rootEntity), subtree);
             for (EntityHandle handle : subtree)
             {
                 entt::entity entity = internal::fromHandle(handle);
@@ -300,6 +335,8 @@ namespace services
 
     void VFXSequencePlayModeHandler::exitPlayMode()
     {
+        sequenceActive = false;
+
         auto& registry = scene::EntityRegistry::getRegistry();
         auto& dispatcher = ::events::EventDispatcher::instance();
 
@@ -310,31 +347,32 @@ namespace services
             dispatcher.execute(cmd);
         };
 
-        for (const auto& [handle, comboId] : autoPlayCombos)
+        std::unordered_map<EntityHandle, VFXComboInstanceId, EntityHandle::Hash> autoCombos;
+        std::vector<VFXComboInstanceId> triggerCombos;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            autoCombos.swap(autoPlayCombos);
+            triggerCombos.swap(triggeredCombos);
+            pendingTriggers.clear();
+            pendingPrefabRoots.clear();
+        }
+
+        for (const auto& [handle, comboId] : autoCombos)
         {
             destroy(comboId);
             auto enttEntity = internal::fromHandle(handle);
             if (registry.valid(enttEntity) && registry.all_of<components::VFXSequenceComponent>(enttEntity))
                 registry.get<components::VFXSequenceComponent>(enttEntity).runtimeComboId = 0;
         }
-        for (VFXComboInstanceId comboId : triggeredCombos)
+        for (VFXComboInstanceId comboId : triggerCombos)
             destroy(comboId);
-
-        autoPlayCombos.clear();
-        triggeredCombos.clear();
-        {
-            std::lock_guard<std::mutex> lock(pendingMutex);
-            pendingTriggers.clear();
-            pendingPrefabRoots.clear();
-        }
-        sequenceActive = false;
 
         vfLogInfo("VFX sequence play mode stopped");
     }
 
     void VFXSequencePlayModeHandler::update(float deltaTime)
     {
-        if (!sequenceActive)
+        if (!sequenceActive.load())
             return;
 
         drainPendingPrefabRoots();
@@ -345,19 +383,36 @@ namespace services
         cmd.deltaTime = deltaTime;
         dispatcher.execute(cmd);
 
+        std::vector<VFXComboInstanceId> triggerSnapshot;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            triggerSnapshot = triggeredCombos;
+        }
+
         // Drop ids of triggered combos that have finished/auto-destroyed, so the list does
         // not grow across a long play session (they were only tracked for exit-play teardown).
-        if (!triggeredCombos.empty())
+        if (!triggerSnapshot.empty())
         {
-            triggeredCombos.erase(
-                std::remove_if(triggeredCombos.begin(), triggeredCombos.end(),
-                    [&dispatcher](VFXComboInstanceId id)
-                    {
-                        events::vfxsequence::IsVFXComboInstancePlayingQuery q;
-                        q.comboId = id;
-                        return !dispatcher.query(q);
-                    }),
-                triggeredCombos.end());
+            std::vector<VFXComboInstanceId> finished;
+            for (VFXComboInstanceId id : triggerSnapshot)
+            {
+                events::vfxsequence::IsVFXComboInstancePlayingQuery q;
+                q.comboId = id;
+                if (!dispatcher.query(q))
+                    finished.push_back(id);
+            }
+
+            if (!finished.empty())
+            {
+                std::lock_guard<std::mutex> lock(pendingMutex);
+                triggeredCombos.erase(
+                    std::remove_if(triggeredCombos.begin(), triggeredCombos.end(),
+                        [&finished](VFXComboInstanceId id)
+                        {
+                            return std::find(finished.begin(), finished.end(), id) != finished.end();
+                        }),
+                    triggeredCombos.end());
+            }
         }
     }
 }

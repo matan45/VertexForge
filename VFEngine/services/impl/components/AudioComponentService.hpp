@@ -44,9 +44,6 @@ namespace services {
         std::optional<ReverbZoneData> getReverbZoneData(EntityHandle entity) const;
         bool setReverbZoneData(EntityHandle entity, const ReverbZoneData& data);
 
-    private:
-        void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
-        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }

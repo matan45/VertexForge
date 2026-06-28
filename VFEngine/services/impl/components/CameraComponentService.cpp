@@ -1,4 +1,5 @@
 #include "CameraComponentService.hpp"
+#include "BillboardAutoIcon.hpp"
 #include "scene/SceneGraphSystem.hpp"
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -155,7 +156,7 @@ namespace services {
 
         if (!sceneEntity.hasComponent<components::CameraComponent>()) {
             sceneEntity.addComponent<components::CameraComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Camera));
+            components_helpers::autoAttachBillboard(entity, components::BillboardIconType::Camera);
             return true;
         }
 
@@ -171,7 +172,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::CameraComponent>()) {
             sceneEntity.removeComponent<components::CameraComponent>();
-            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Camera));
+            components_helpers::autoDetachBillboard(entity, components::BillboardIconType::Camera);
             return true;
         }
 
@@ -186,37 +187,6 @@ namespace services {
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         return sceneEntity.hasComponent<components::CameraComponent>();
-    }
-
-    void CameraComponentService::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
-            billboard.iconType = static_cast<components::BillboardIconType>(iconType);
-            billboard.editorOnly = true;
-            billboard.selectable = true;
-        }
-    }
-
-    void CameraComponentService::autoDetachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
-            // Only remove if it matches the expected icon type (auto-attached billboard)
-            if (billboard.iconType == static_cast<components::BillboardIconType>(iconType)) {
-                sceneEntity.removeComponent<components::BillboardComponent>();
-            }
-        }
     }
 
     void CameraComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {

@@ -175,8 +175,11 @@ namespace controllers::offscreen
         {
             if (!ui_common::isEffectivelyActiveInScopedCanvas(registry, tabsEntity, scopedCanvas))
                 continue;
-            const auto& tabsComp = registry.get<components::UITabsComponent>(tabsEntity);
+            auto& tabsComp = registry.get<components::UITabsComponent>(tabsEntity);
+            if (tabsComp.scopedAppliedTabIndex == tabsComp.activeTabIndex)
+                continue;
             applyTabsPaneVisibility(registry, tabsEntity, tabsComp.activeTabIndex);
+            tabsComp.scopedAppliedTabIndex = tabsComp.activeTabIndex;
         }
     }
 

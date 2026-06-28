@@ -1,4 +1,5 @@
 #include "LightComponentService.hpp"
+#include "BillboardAutoIcon.hpp"
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -43,7 +44,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<ComponentT>()) {
             sceneEntity.addComponent<ComponentT>();
-            autoAttachBillboard(entity, iconType);
+            components_helpers::autoAttachBillboard(entity, iconType);
 
             events::lighting::LightComponentChangedNotification notification;
             notification.entity = entity;
@@ -66,9 +67,10 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<ComponentT>()) {
             sceneEntity.removeComponent<ComponentT>();
-            if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity, iconType);
-            }
+            components_helpers::autoDetachBillboard(
+                entity,
+                iconType,
+                [this, entity](const scene::Entity&) { return hasAnyLightComponent(entity); });
 
             events::lighting::LightComponentChangedNotification notification;
             notification.entity = entity;
@@ -395,36 +397,6 @@ namespace services {
         return sceneEntity.hasComponent<components::DirectionalLightComponent>() ||
                sceneEntity.hasComponent<components::PointLightComponent>() ||
                sceneEntity.hasComponent<components::SpotLightComponent>();
-    }
-
-    void LightComponentService::autoAttachBillboard(EntityHandle entity, components::BillboardIconType iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
-            billboard.iconType = iconType;
-            billboard.editorOnly = true;
-            billboard.selectable = true;
-        }
-    }
-
-    void LightComponentService::autoDetachBillboard(EntityHandle entity, components::BillboardIconType iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
-            if (billboard.iconType == iconType) {
-                sceneEntity.removeComponent<components::BillboardComponent>();
-            }
-        }
     }
 
     // ========== Event Handler Registration ==========

@@ -33,9 +33,6 @@ namespace services {
         std::optional<VFXSequenceData> getVFXSequenceData(EntityHandle entity) const;
         bool setVFXSequenceData(EntityHandle entity, const VFXSequenceData& vfxSequenceData);
 
-    private:
-        void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
-        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }

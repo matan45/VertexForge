@@ -6,6 +6,9 @@
 #include "../../events/EventDispatcher.hpp"
 #include <unordered_map>
 #include <vector>
+#include <string>
+#include <mutex>
+#include <atomic>
 #include <cstdint>
 
 namespace services
@@ -25,7 +28,8 @@ namespace services
 
         // Maps entity handle to VFX runtime instance ID
         std::unordered_map<EntityHandle, VFXInstanceId, EntityHandle::Hash> activeVFXInstances;
-        bool vfxActive = false;
+        std::atomic<bool> vfxActive{false};
+        std::mutex pendingMutex;
 
         // Streaming budget: max emitter creates per frame to avoid spikes
         static constexpr uint32_t MAX_STREAMING_CREATES_PER_FRAME = 4;
@@ -67,6 +71,13 @@ namespace services
         void onPrefabInstantiated(EntityHandle root);
         void onEntityDeleted(EntityHandle entity);
         void processPendingPrefabCreates();
+        VFXInstanceId createVFXInstanceForEntity(EntityHandle handle,
+                                                 const std::string& vfxPath,
+                                                 const glm::mat4& worldTransform,
+                                                 bool loop,
+                                                 uint8_t priority,
+                                                 bool cameraRelative,
+                                                 bool autoPlay);
         void enterPlayMode();
         void exitPlayMode();
     };

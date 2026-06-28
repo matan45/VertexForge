@@ -1,4 +1,5 @@
 #include "FogVolumeComponentService.hpp"
+#include "BillboardAutoIcon.hpp"
 #include "scene/SceneGraphSystem.hpp"
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -19,7 +20,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::FogVolumeComponent>()) {
             sceneEntity.addComponent<components::FogVolumeComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::FogVolume));
+            components_helpers::autoAttachBillboard(entity, components::BillboardIconType::FogVolume);
             return true;
         }
         return false;
@@ -32,7 +33,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::FogVolumeComponent>()) {
             sceneEntity.removeComponent<components::FogVolumeComponent>();
-            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::FogVolume));
+            components_helpers::autoDetachBillboard(entity, components::BillboardIconType::FogVolume);
             return true;
         }
         return false;
@@ -87,32 +88,6 @@ namespace services {
         comp.blendMode = static_cast<components::FogVolumeBlendMode>(data.blendMode);
         comp.showGizmo = data.showGizmo;
         return true;
-    }
-
-    void FogVolumeComponentService::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) return;
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
-            billboard.iconType = static_cast<components::BillboardIconType>(iconType);
-            billboard.editorOnly = true;
-            billboard.selectable = true;
-        }
-    }
-
-    void FogVolumeComponentService::autoDetachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) return;
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
-            if (billboard.iconType == static_cast<components::BillboardIconType>(iconType)) {
-                sceneEntity.removeComponent<components::BillboardComponent>();
-            }
-        }
     }
 
     void FogVolumeComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {

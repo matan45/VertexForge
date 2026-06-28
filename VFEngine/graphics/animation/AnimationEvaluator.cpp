@@ -2,10 +2,22 @@
 #include "RetargetContext.hpp"
 #include "print/Log.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
 
 namespace animation
 {
+    namespace
+    {
+        void decomposeBindPose(const glm::mat4& bindPose, EvaluatedBone& outBone)
+        {
+            glm::vec3 skew;
+            glm::vec4 perspective;
+            glm::decompose(bindPose, outBone.scale, outBone.rotation, outBone.position, skew, perspective);
+        }
+    }
+
     void AnimationEvaluator::loadAnimation(const resource::AnimationData& animation,
                                            const resource::SkeletonData& skeleton,
                                            const RetargetContext* retargetContext)
@@ -133,7 +145,11 @@ namespace animation
         const std::vector<glm::mat4>& localTransforms,
         const resource::SkeletonData& skeleton)
     {
-        const size_t boneCount = std::min(localTransforms.size(), skeleton.bones.size());
+        const size_t boneCount = std::min({
+            localTransforms.size(),
+            skeleton.bones.size(),
+            skeleton.inverseBindPoses.size()
+        });
 
         // Hierarchy pass: accumulate each bone's local transform up the parent chain. Mirrors
         // evaluatePose() (skeletons are stored parent-before-child, so world[parent] is ready).
@@ -157,101 +173,50 @@ namespace animation
 
     std::vector<glm::mat4> AnimationEvaluator::evaluatePose(float timeInTicks) const
     {
-        if (!animationData || !skeletonData || skeletonData->bones.empty() || skeletonData->inverseBindPoses.empty())
+        if (!evaluateLocalPoseInternal(timeInTicks, nullptr))
             return {};
 
-        const size_t boneCount = skeletonData->bones.size();
-
-        if (animationData->duration > 0.0f)
-            timeInTicks = std::fmod(timeInTicks, animationData->duration);
-
-        for (size_t i = 0; i < boneCount; ++i)
-        {
-            const auto& bone = skeletonData->bones[i];
-
-            glm::mat4 animatedTransform;
-
-            if (retarget)
-            {
-                glm::vec3 rPos; glm::quat rRot; glm::vec3 rScl;
-                sampleRetargetedLocal(i, timeInTicks, rPos, rRot, rScl);
-                evaluatedBones[i].position = rPos;
-                evaluatedBones[i].rotation = rRot;
-                evaluatedBones[i].scale = rScl;
-                animatedTransform = glm::translate(glm::mat4(1.0f), rPos) * glm::mat4_cast(rRot) *
-                                    glm::scale(glm::mat4(1.0f), rScl);
-                evaluatedBones[i].localTransform = bone.preTransform * animatedTransform;
-                continue;
-            }
-
-            auto it = boneNameToChannelIndex.find(bone.name);
-
-            if (it != boneNameToChannelIndex.end())
-            {
-                const auto& ch = animationData->channels[it->second];
-
-                glm::vec3 pos = ch.positionKeys.empty()
-                                    ? glm::vec3(computedLocalBindPoses[i][3])
-                                    : interpolatePosition(ch, timeInTicks, it->second);
-
-                glm::quat rot = ch.rotationKeys.empty()
-                                    ? glm::quat_cast(glm::mat3(computedLocalBindPoses[i]))
-                                    : interpolateRotation(ch, timeInTicks, it->second);
-
-                glm::vec3 scl = ch.scalingKeys.empty()
-                                    ? glm::vec3(1.0f)
-                                    : interpolateScale(ch, timeInTicks, it->second);
-
-                evaluatedBones[i].position = pos;
-                evaluatedBones[i].rotation = rot;
-                evaluatedBones[i].scale = scl;
-                animatedTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(
-                    glm::mat4(1.0f), scl);
-            }
-            else
-            {
-                evaluatedBones[i].position = glm::vec3(computedLocalBindPoses[i][3]);
-                evaluatedBones[i].rotation = glm::quat_cast(glm::mat3(computedLocalBindPoses[i]));
-                evaluatedBones[i].scale = glm::vec3(1.0f);
-                animatedTransform = computedLocalBindPoses[i];
-            }
-
-            evaluatedBones[i].localTransform = bone.preTransform * animatedTransform;
-        }
-
-        for (size_t i = 0; i < boneCount; ++i)
-        {
-            int parent = skeletonData->bones[i].parentIndex;
-            if (parent >= 0)
-                evaluatedBones[i].worldTransform =
-                    evaluatedBones[parent].worldTransform * evaluatedBones[i].localTransform;
-            else
-                evaluatedBones[i].worldTransform = evaluatedBones[i].localTransform;
-
-            evaluatedBones[i].skinnedPosition = glm::vec3(evaluatedBones[i].worldTransform[3]);
-        }
-
-        const glm::mat4& globalInv = skeletonData->globalInverseTransform;
-        std::vector<glm::mat4> result(boneCount);
-        for (size_t i = 0; i < boneCount; ++i)
-        {
-            result[i] = globalInv * evaluatedBones[i].worldTransform * skeletonData->inverseBindPoses[i];
-            evaluatedBones[i].skinnedPosition =
-                glm::vec3(globalInv * glm::vec4(evaluatedBones[i].skinnedPosition, 1.0f));
-        }
-
-        return result;
+        return composeEvaluatedPalette();
     }
 
     std::vector<glm::mat4> AnimationEvaluator::evaluatePose(float timeInTicks, glm::vec3& outRootPosition) const
     {
-        if (!animationData || !skeletonData || skeletonData->bones.empty() || skeletonData->inverseBindPoses.empty())
+        if (!evaluateLocalPoseInternal(timeInTicks, &outRootPosition))
         {
             outRootPosition = glm::vec3(0.0f);
             return {};
         }
 
-        const size_t boneCount = skeletonData->bones.size();
+        return composeEvaluatedPalette();
+    }
+
+    void AnimationEvaluator::evaluateLocalPose(float timeInTicks) const
+    {
+        evaluateLocalPoseInternal(timeInTicks, nullptr);
+    }
+
+    void AnimationEvaluator::evaluateLocalPose(float timeInTicks, glm::vec3& outRootPosition) const
+    {
+        if (!evaluateLocalPoseInternal(timeInTicks, &outRootPosition))
+            outRootPosition = glm::vec3(0.0f);
+    }
+
+    bool AnimationEvaluator::evaluateLocalPoseInternal(float timeInTicks, glm::vec3* outRootPosition) const
+    {
+        if (!animationData || !skeletonData || skeletonData->bones.empty() || skeletonData->inverseBindPoses.empty())
+            return false;
+
+        if (evaluatedBones.size() < skeletonData->bones.size())
+            return false;
+
+        if (outRootPosition)
+            *outRootPosition = glm::vec3(0.0f);
+
+        const size_t boneCount = std::min({
+            evaluatedBones.size(),
+            skeletonData->bones.size(),
+            skeletonData->inverseBindPoses.size()
+        });
 
         if (animationData->duration > 0.0f)
             timeInTicks = std::fmod(timeInTicks, animationData->duration);
@@ -260,6 +225,7 @@ namespace animation
         // Walk from the root down the hierarchy to find the first bone that actually
         // translates (has > 1 position key). Handles Armature → Root → Hips chains.
         int rootMotionBone = -1;
+        if (outRootPosition)
         {
             int bestDepth = std::numeric_limits<int>::max();
             for (size_t b = 0; b < boneCount; ++b)
@@ -285,8 +251,6 @@ namespace animation
             }
         }
 
-        outRootPosition = glm::vec3(0.0f);
-
         for (size_t i = 0; i < boneCount; ++i)
         {
             const auto& bone = skeletonData->bones[i];
@@ -299,9 +263,9 @@ namespace animation
                 sampleRetargetedLocal(i, timeInTicks, rPos, rRot, rScl);
 
                 const RetargetBone& rb = retarget->perTargetBone[i];
-                if (rb.isRoot)
+                if (outRootPosition && rb.isRoot)
                 {
-                    outRootPosition = rPos - rb.tgtBindLocal;
+                    *outRootPosition = rPos - rb.tgtBindLocal;
                     rPos = rb.tgtBindLocal;
                 }
 
@@ -335,10 +299,10 @@ namespace animation
                 evaluatedBones[i].rotation = rot;
                 evaluatedBones[i].scale = scl;
 
-                if (static_cast<int>(i) == rootMotionBone)
+                if (outRootPosition && static_cast<int>(i) == rootMotionBone)
                 {
                     glm::vec3 bindPos = glm::vec3(computedLocalBindPoses[i][3]);
-                    outRootPosition = pos - bindPos;
+                    *outRootPosition = pos - bindPos;
                     pos = bindPos;
                 }
 
@@ -355,14 +319,28 @@ namespace animation
             }
             else
             {
-                evaluatedBones[i].position = glm::vec3(computedLocalBindPoses[i][3]);
-                evaluatedBones[i].rotation = glm::quat_cast(glm::mat3(computedLocalBindPoses[i]));
-                evaluatedBones[i].scale = glm::vec3(1.0f);
+                decomposeBindPose(computedLocalBindPoses[i], evaluatedBones[i]);
                 animatedTransform = computedLocalBindPoses[i];
             }
 
             evaluatedBones[i].localTransform = bone.preTransform * animatedTransform;
         }
+
+        return true;
+    }
+
+    std::vector<glm::mat4> AnimationEvaluator::composeEvaluatedPalette() const
+    {
+        if (!skeletonData || skeletonData->bones.empty() || skeletonData->inverseBindPoses.empty())
+            return {};
+
+        const size_t boneCount = std::min({
+            evaluatedBones.size(),
+            skeletonData->bones.size(),
+            skeletonData->inverseBindPoses.size()
+        });
+        if (boneCount == 0)
+            return {};
 
         for (size_t i = 0; i < boneCount; ++i)
         {
@@ -480,7 +458,11 @@ namespace animation
         if (!animationData || !skeletonData || skeletonData->bones.empty() || skeletonData->inverseBindPoses.empty())
             return {};
 
-        const size_t boneCount = skeletonData->bones.size();
+        const size_t boneCount = std::min({
+            evaluatedBones.size(),
+            skeletonData->bones.size(),
+            skeletonData->inverseBindPoses.size()
+        });
 
         if (animationData->duration > 0.0f)
             timeInTicks = std::fmod(timeInTicks, animationData->duration);
@@ -532,9 +514,7 @@ namespace animation
                 }
                 else
                 {
-                    evaluatedBones[i].position = glm::vec3(computedLocalBindPoses[i][3]);
-                    evaluatedBones[i].rotation = glm::quat_cast(glm::mat3(computedLocalBindPoses[i]));
-                    evaluatedBones[i].scale = glm::vec3(1.0f);
+                    decomposeBindPose(computedLocalBindPoses[i], evaluatedBones[i]);
                     animatedTransform = computedLocalBindPoses[i];
                 }
 

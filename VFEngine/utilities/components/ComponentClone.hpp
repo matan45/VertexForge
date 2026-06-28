@@ -141,6 +141,7 @@ namespace components
     inline void resetClonedRuntimeState<UITabsComponent>(UITabsComponent& c)
     {
         c.previousTabIndex = -1;
+        c.scopedAppliedTabIndex = -1;
     }
 
     template <>
