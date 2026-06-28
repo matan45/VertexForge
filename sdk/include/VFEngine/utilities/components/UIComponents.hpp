@@ -364,6 +364,7 @@ namespace components
 
         // Runtime state (NOT serialized)
         int previousTabIndex = -1;
+        int scopedAppliedTabIndex = -1;
     };
 
     enum class UISliderOrientation : uint8_t
