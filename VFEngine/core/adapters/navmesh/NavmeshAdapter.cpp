@@ -14,7 +14,6 @@
 namespace core
 {
     static constexpr int MAX_POLYS = 2048;
-    static constexpr int MAX_CROWD_AGENTS = 128;
 
     // Recast/Detour recommended multipliers (see dtCrowdAgentParams docs)
     static constexpr float CROWD_MAX_AGENT_RADIUS_MULT = 4.0f;
@@ -88,7 +87,7 @@ namespace core
         crowd = dtAllocCrowd();
         if (crowd)
         {
-            crowd->init(MAX_CROWD_AGENTS, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, navMesh);
+            crowd->init(crowdCapacity, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, navMesh);
 
             // Configure default filter (slot 0) with global area costs
             dtQueryFilter* defaultFilter = crowd->getEditableFilter(0);

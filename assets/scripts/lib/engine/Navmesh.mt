@@ -15,6 +15,11 @@
 import * from "../math/Vec3f.mt";
 
 public class Navmesh {
+    public static int FORMATION_GRID = 0;
+    public static int FORMATION_LINE = 1;
+    public static int FORMATION_WEDGE = 2;
+    public static int FORMATION_COLUMN = 3;
+    public static int FORMATION_BOX = 4;
 
     public constructor() {
     }
@@ -80,6 +85,27 @@ public class Navmesh {
     // High-level move-to command (alias for setDestination)
     public static function moveTo(int entityId, Vec3f target): void {
         _native_navmesh_setDestination(entityId, target.x, target.y, target.z);
+    }
+
+    // Move a generic set of NavmeshAgent entities as a coordinated group.
+    // Returns a group handle for optional status/debug queries; 0 means rejected.
+    public static function setGroupDestination(int[] entityIds, Vec3f target, float spacing, int formationKind): int {
+        return _native_navmesh_setGroupDestination(entityIds, target.x, target.y, target.z, spacing, formationKind);
+    }
+
+    public static function isGroupArrived(int groupId): bool {
+        return _native_navmesh_isGroupArrived(groupId);
+    }
+
+    public static function getGroupCorridor(int groupId): Vec3f[] {
+        float[] raw = _native_navmesh_getGroupCorridor(groupId);
+        int count = toInt(raw[0]);
+        Vec3f[] points = new Vec3f[count];
+        for (int i = 0; i < count; i = i + 1) {
+            int base = 1 + i * 3;
+            points[i] = new Vec3f(raw[base], raw[base + 1], raw[base + 2]);
+        }
+        return points;
     }
 
     // Stop an entity's NavmeshAgent from moving

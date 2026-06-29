@@ -83,6 +83,33 @@ namespace core::api
                 return value::Value(std::monostate{});
             }});
 
+        interpreter->registerNativeFunction("_native_navmesh_setGroupDestination",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 6 || !value::isNativeArray(args[0]))
+                    return value::Value(static_cast<int64_t>(0));
+
+                const auto& ids = value::asNativeArray(args[0]);
+                if (!ids)
+                    return value::Value(static_cast<int64_t>(0));
+
+                events::navmesh::SetGroupDestinationCommand cmd;
+                cmd.entities.reserve(ids->size());
+                for (size_t i = 0; i < ids->size(); ++i)
+                {
+                    int64_t id = extractInt64((*ids)[i]);
+                    if (id >= 0)
+                        cmd.entities.push_back(intToEntity(id));
+                }
+                cmd.destination = glm::vec3(extractFloat(args[1]), extractFloat(args[2]),
+                                            extractFloat(args[3]));
+                cmd.spacing = extractFloat(args[4]);
+                cmd.formationKind = static_cast<uint8_t>(extractInt64(args[5]));
+
+                uint64_t groupId = dispatcher.execute(cmd);
+                return value::Value(static_cast<int64_t>(groupId));
+            }});
+
         interpreter->registerNativeFunction("_native_navmesh_stopAgent",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 auto& dispatcher = events::EventDispatcher::instance();
@@ -127,6 +154,43 @@ namespace core::api
                 auto& dispatcher = events::EventDispatcher::instance();
                 uint64_t version = dispatcher.query(events::navmesh::GetNavmeshTileVersionQuery{});
                 return value::Value(static_cast<int64_t>(version));
+            }});
+
+        interpreter->registerNativeFunction("_native_navmesh_isGroupArrived",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(false);
+
+                events::navmesh::GetGroupStatusQuery query;
+                query.groupId = static_cast<uint64_t>(extractInt64(args[0]));
+                auto status = dispatcher.query(query);
+                return value::Value(status.complete);
+            }});
+
+        interpreter->registerNativeFunction("_native_navmesh_getGroupCorridor",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty())
+                {
+                    auto empty = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
+                    empty->set(0, value::Value(0.0f));
+                    return value::Value(empty);
+                }
+
+                events::navmesh::GetGroupCorridorDebugQuery query;
+                query.groupId = static_cast<uint64_t>(extractInt64(args[0]));
+                auto points = dispatcher.query(query);
+
+                auto result = std::make_shared<value::NativeArray>(
+                    1 + static_cast<int>(points.size() * 3), value::ValueType::FLOAT);
+                result->set(0, value::Value(static_cast<float>(points.size())));
+                for (size_t i = 0; i < points.size(); ++i)
+                {
+                    result->set(static_cast<int>(1 + i * 3), value::Value(points[i].x));
+                    result->set(static_cast<int>(2 + i * 3), value::Value(points[i].y));
+                    result->set(static_cast<int>(3 + i * 3), value::Value(points[i].z));
+                }
+                return value::Value(result);
             }});
 
         interpreter->registerNativeFunction("_native_navmesh_getClosestPoint",

@@ -26,6 +26,7 @@ namespace core
         types::NavmeshBakeSettings storedSettings;
         TileGraph tileGraph;
         int maxResidentTiles = 0;
+        int crowdCapacity = 1024;
         int budgetWarnCount = 0;
     public:
         explicit NavmeshAdapter();

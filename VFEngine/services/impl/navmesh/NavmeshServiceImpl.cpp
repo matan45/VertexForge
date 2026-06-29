@@ -34,6 +34,10 @@ namespace services
                        [this](const glm::vec3& pos)
                        {
                            return tileManager.worldToTileCoord(pos);
+                       },
+                       [this]()
+                       {
+                           return tileVersion;
                        })
     {
         assert(navmeshProvider && "NavmeshProvider must not be null");
@@ -172,6 +176,15 @@ namespace services
                 setAgentDestination(cmd.entity, cmd.target);
             });
 
+        dispatcher.registerCommandHandler<events::navmesh::SetGroupDestinationCommand>(
+            [this](const events::navmesh::SetGroupDestinationCommand& cmd)
+            {
+                navigation::FormationParams params;
+                params.kind = navigation::formationKindFromByte(cmd.formationKind);
+                params.spacing = cmd.spacing;
+                return agentManager.setGroupDestination(cmd.entities, cmd.destination, params);
+            });
+
         dispatcher.registerCommandHandler<events::navmesh::StopAgentCommand>(
             [this](const events::navmesh::StopAgentCommand& cmd)
             {
@@ -225,6 +238,23 @@ namespace services
             [this](const events::navmesh::GetAgentSpeedQuery& query)
             {
                 return agentManager.getAgentSpeed(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetGroupStatusQuery>(
+            [this](const events::navmesh::GetGroupStatusQuery& query)
+            {
+                auto managerStatus = agentManager.getGroupStatus(query.groupId);
+                events::navmesh::GroupStatus status;
+                status.total = managerStatus.total;
+                status.arrived = managerStatus.arrived;
+                status.complete = managerStatus.complete;
+                return status;
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetGroupCorridorDebugQuery>(
+            [this](const events::navmesh::GetGroupCorridorDebugQuery& query)
+            {
+                return agentManager.getGroupCorridor(query.groupId);
             });
 
         dispatcher.registerQueryHandler<events::navmesh::HasNavmeshQuery>(
