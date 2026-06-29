@@ -493,7 +493,10 @@ namespace services
             for (GroupMember& member : group.members)
             {
                 if (member.arrived)
+                {
+                    holdGroupMemberAtStop(member.entityId);
                     continue;
+                }
 
                 auto agentIt = entityToAgentIndex.find(member.entityId);
                 if (agentIt == entityToAgentIndex.end())
@@ -512,6 +515,7 @@ namespace services
 
                 if (slotDist <= ARRIVAL_DISTANCE)
                 {
+                    member.arrived = true;
                     velocity = glm::vec3(0.0f);
                 }
                 else if (remaining <= finalApproachRadius)
@@ -535,6 +539,19 @@ namespace services
         }
     }
 
+    void NavmeshAgentManager::holdGroupMemberAtStop(uint64_t entityId)
+    {
+        auto agentIt = entityToAgentIndex.find(entityId);
+        if (agentIt == entityToAgentIndex.end())
+            return;
+
+        // Group steering drives Detour with requestMoveVelocity(). Once a member
+        // reaches its slot, keep submitting a zero velocity target until the group
+        // completes or a new order replaces it; otherwise the agent may keep the
+        // previous velocity request and drift through the destination.
+        navmeshProvider->overrideCrowdAgentVelocity(agentIt->second, glm::vec3(0.0f));
+    }
+
     void NavmeshAgentManager::markGroupMemberArrived(uint64_t entityId)
     {
         auto groupIt = entityToGroup.find(entityId);
@@ -550,6 +567,7 @@ namespace services
             if (member.entityId == entityId)
             {
                 member.arrived = true;
+                holdGroupMemberAtStop(entityId);
                 break;
             }
         }
@@ -586,7 +604,10 @@ namespace services
                     {
                         const glm::vec3 pos = navmeshProvider->getCrowdAgentPosition(agentIt->second);
                         if (glm::distance(pos, member.slotTarget) <= ARRIVAL_DISTANCE)
+                        {
                             member.arrived = true;
+                            holdGroupMemberAtStop(member.entityId);
+                        }
                     }
                 }
 

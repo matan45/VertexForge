@@ -106,6 +106,7 @@ namespace services
         bool rebuildGroupCorridor(GroupCorridor& group, uint64_t currentVersion);
         void updateGroupSteering(float deltaTime);
         void finishCompletedGroups();
+        void holdGroupMemberAtStop(uint64_t entityId);
         void markGroupMemberArrived(uint64_t entityId);
         void markGroupNeedsRepath(uint64_t entityId);
     };
