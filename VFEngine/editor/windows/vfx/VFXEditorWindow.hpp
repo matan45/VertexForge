@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "VFXPropertyPanel.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 #include <vfx/VFXTypes.hpp>
 #include <memory>
 #include <string>
@@ -33,6 +34,10 @@ namespace windows
         bool isDirty = false;
         float previewPanelWidth = 280.0f;
         float propertyPanelHeight = 200.0f;
+
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
 
     public:
         explicit VFXEditorWindow(const std::string& vfxPath);
