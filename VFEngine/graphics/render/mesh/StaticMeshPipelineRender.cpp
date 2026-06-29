@@ -84,9 +84,7 @@ namespace render::mesh
                         materialShaderCache->getOrCreatePipeline(pbrValues.materialPath, matData);
                     if (matPipeline && matPipeline->valid)
                     {
-                        targetPipeline = (pbrValues.blendMode == material::BlendMode::Masked)
-                            ? matPipeline->maskedPipeline
-                            : matPipeline->opaquePipeline;
+                        targetPipeline = matPipeline->pipelineForBlendMode(pbrValues.blendMode);
                     }
                 }
             }

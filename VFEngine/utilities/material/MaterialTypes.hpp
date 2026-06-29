@@ -6,6 +6,8 @@
 #include <variant>
 #include <optional>
 #include <cstdint>
+#include <algorithm>
+#include <cctype>
 
 namespace material
 {
@@ -42,6 +44,48 @@ namespace material
     };
 
     using ParameterValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4>;
+
+    enum class MaterialDomain : uint8_t
+    {
+        Surface
+    };
+
+    inline std::string materialDomainToString(MaterialDomain domain)
+    {
+        switch (domain)
+        {
+        case MaterialDomain::Surface: return "surface";
+        default: return "surface";
+        }
+    }
+
+    inline MaterialDomain stringToMaterialDomain(const std::string& str)
+    {
+        if (str == "surface") return MaterialDomain::Surface;
+        return MaterialDomain::Surface;
+    }
+
+    enum class ShadingModel : uint8_t
+    {
+        DefaultLit,
+        Unlit
+    };
+
+    inline std::string shadingModelToString(ShadingModel model)
+    {
+        switch (model)
+        {
+        case ShadingModel::DefaultLit: return "defaultLit";
+        case ShadingModel::Unlit: return "unlit";
+        default: return "defaultLit";
+        }
+    }
+
+    inline ShadingModel stringToShadingModel(const std::string& str)
+    {
+        if (str == "unlit") return ShadingModel::Unlit;
+        return ShadingModel::DefaultLit;
+    }
 
     struct MaterialParameter
     {
@@ -420,9 +464,12 @@ namespace material
     {
         std::string uuid;
         std::string name;
+        MaterialDomain domain = MaterialDomain::Surface;
+        ShadingModel shadingModel = ShadingModel::DefaultLit;
         BlendMode blendMode = BlendMode::Opaque;
         float opacity = 1.0f;
         float alphaCutoff = 0.5f;
+        std::map<std::string, bool> staticParameters;
 
         ShaderGraph graph;
 
@@ -430,7 +477,24 @@ namespace material
 
         std::string cachedVertexShader;
         std::string cachedFragmentShader;
+        std::string irHash;
+        std::string shaderMapKey;
+        bool gpuDrivenSupported = true;
+        std::string gpuDrivenFallbackReason;
 
         bool needsRecompile = true;
     };
+
+    inline bool endsWithIgnoreCase(std::string_view value, std::string_view suffix)
+    {
+        if (value.size() < suffix.size()) return false;
+        const size_t offset = value.size() - suffix.size();
+        for (size_t i = 0; i < suffix.size(); ++i)
+        {
+            unsigned char a = static_cast<unsigned char>(value[offset + i]);
+            unsigned char b = static_cast<unsigned char>(suffix[i]);
+            if (std::tolower(a) != std::tolower(b)) return false;
+        }
+        return true;
+    }
 }

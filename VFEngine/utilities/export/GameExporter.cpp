@@ -11,6 +11,8 @@
 #include "../resource/ShaderResource.hpp"
 #include "../resource/ShaderBinaryFormat.hpp"
 #include "../material/MaterialAsset.hpp"
+#include "../material/MaterialInstanceTypes.hpp"
+#include "../material/MaterialRuntimeData.hpp"
 #include "../archive/VFPakWriter.hpp"
 #include "../archive/VFPakReader.hpp"
 #include "../serialization/BinarySceneSerialization.hpp"
@@ -410,11 +412,12 @@ namespace gameExport
 		int compiledCount = 0;
 		int skippedMaterialCount = 0;
 
-		// Scan all .vfmaterial files in the working directory
+		// Scan all material assets in the working directory (.vfMat is canonical;
+		// .vfMaterial is a legacy spelling kept for existing projects).
 		for (auto it = fs::recursive_directory_iterator(config.workingDirectory, ec);
 		     it != fs::recursive_directory_iterator(); ++it)
 		{
-			if (!it->is_regular_file() || it->path().extension() != ".vfmaterial")
+			if (!it->is_regular_file() || !material::isMaterialFile(it->path().string()))
 			{
 				continue;
 			}
@@ -441,15 +444,10 @@ namespace gameExport
 				continue;
 			}
 
-			// Compute hash key matching MaterialShaderCache::hashShaderSource (FNV-1a)
-			auto fmtHash = [](uint64_t h) {
-				char buf[17];
-				snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(h));
-				return std::string(buf);
-			};
-			std::string vsHash = fmtHash(archive::hashPath(materialData.cachedVertexShader));
-			std::string fsHash = fmtHash(archive::hashPath(materialData.cachedFragmentShader));
-			std::string combinedHash = vsHash + "_" + fsHash;
+			material::MaterialRuntimeData runtimeData =
+				material::MaterialRuntimeDataBuilder::fromMaterialData(materialData);
+			std::string combinedHash = runtimeData.shaderMap.vertexShaderHash + "_" +
+				runtimeData.shaderMap.fragmentShaderHash;
 
 			// Skip if already compiled (dedup by hash)
 			if (compiledHashes.count(combinedHash))
@@ -459,7 +457,7 @@ namespace gameExport
 			compiledHashes.insert(combinedHash);
 
 			// Incremental: check if material source changed
-			std::string archivePath = "Assets/materials/compiled/" + combinedHash + ".vfshader";
+			std::string archivePath = runtimeData.shaderMap.compiledShaderPath;
 			fs::path outPath = compiledDir / (combinedHash + ".vfshader");
 			{
 				ManifestSource src;
