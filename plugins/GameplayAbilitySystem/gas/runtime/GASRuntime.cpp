@@ -23,10 +23,23 @@ namespace gas
     // unordered_map element pointers/references are stable across rehash (only
     // iterators invalidate), so a captured `&value` survives a later insert.
 
+    namespace
+    {
+        // GAS assets are referenced by project-relative path and loaded by raw
+        // file I/O (v1), so the editor/runtime CWD may be the project root or the
+        // assets dir — try an "assets/" fallback before giving up. Proper VFS /
+        // AssetRef-GUID resolution is a follow-up.
+        bool hasAssetsPrefix(const std::string& p)
+        {
+            return p.rfind("assets/", 0) == 0 || p.rfind("assets\\", 0) == 0;
+        }
+    }
+
     const AbilitySpec* GASRuntime::loadAbility(const std::string& path)
     {
         if (auto it = abilityCache.find(path); it != abilityCache.end()) return &it->second;
         auto spec = AbilityAsset::load(path);
+        if (!spec && !hasAssetsPrefix(path)) spec = AbilityAsset::load("assets/" + path);
         if (!spec) return nullptr;
         auto [ins, ok] = abilityCache.emplace(path, std::move(*spec));
         return &ins->second;
@@ -36,6 +49,7 @@ namespace gas
     {
         if (auto it = effectCache.find(idOrPath); it != effectCache.end()) return &it->second;
         auto spec = EffectAsset::load(idOrPath);
+        if (!spec && !hasAssetsPrefix(idOrPath)) spec = EffectAsset::load("assets/" + idOrPath);
         if (!spec) return nullptr;
         const std::string id = spec->id;
         auto [ins, ok] = effectCache.emplace(idOrPath, std::move(*spec));
@@ -48,6 +62,7 @@ namespace gas
     {
         if (auto it = cueCache.find(idOrPath); it != cueCache.end()) return &it->second;
         auto spec = CueAsset::load(idOrPath);
+        if (!spec && !hasAssetsPrefix(idOrPath)) spec = CueAsset::load("assets/" + idOrPath);
         if (!spec) return nullptr;
         const std::string id = spec->id;
         auto [ins, ok] = cueCache.emplace(idOrPath, std::move(*spec));
