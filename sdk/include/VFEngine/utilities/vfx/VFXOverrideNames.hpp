@@ -51,23 +51,15 @@ namespace vfx::overridenames
         startColor
     };
 
+    // Accepts std::string (implicit) and string literals; a separate
+    // const std::string& overload would make literal calls ambiguous.
     inline bool isScalarOverride(std::string_view name)
     {
         return std::find(scalarOverrides.begin(), scalarOverrides.end(), name) != scalarOverrides.end();
     }
 
-    inline bool isScalarOverride(const std::string& name)
-    {
-        return isScalarOverride(std::string_view{name.data(), name.size()});
-    }
-
     inline bool isVectorOverride(std::string_view name)
     {
         return std::find(vectorOverrides.begin(), vectorOverrides.end(), name) != vectorOverrides.end();
-    }
-
-    inline bool isVectorOverride(const std::string& name)
-    {
-        return isVectorOverride(std::string_view{name.data(), name.size()});
     }
 }
