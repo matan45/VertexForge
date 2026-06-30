@@ -4,12 +4,52 @@
 #include "../../events/vfx/VFXRuntimeEvents.hpp"
 #include "../../events/vfx/VFXSequenceRuntimeEvents.hpp"
 #include "../../events/physics/SocketEvents.hpp"
+#include "../../events/project/ResourceEvents.hpp"
+#include "asset/AssetDatabase.hpp"
+#include "vfx/VFXOverrideNames.hpp"
 #include "vfx/VFXSequenceAsset.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <string_view>
 
 namespace services
 {
+    namespace
+    {
+        std::string normalizeSequenceCachePath(const std::string& path)
+        {
+            if (path.empty())
+                return {};
+
+            std::string normalized = asset::AssetDatabase::instance().resolveAssetPath(path);
+            std::replace(normalized.begin(), normalized.end(), '\\', '/');
+
+            std::filesystem::path p(normalized);
+            normalized = p.lexically_normal().string();
+            std::replace(normalized.begin(), normalized.end(), '\\', '/');
+            while (!normalized.empty() && normalized.back() == '/')
+                normalized.pop_back();
+
+#ifdef _WIN32
+            std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#endif
+            return normalized;
+        }
+    }
+
+    VFXSequenceRuntimeServiceImpl::~VFXSequenceRuntimeServiceImpl()
+    {
+        if (assetSavedToken.isValid())
+        {
+            ::events::EventDispatcher::instance().unsubscribe(assetSavedToken);
+            assetSavedToken = {};
+        }
+    }
+
     void VFXSequenceRuntimeServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
@@ -55,6 +95,14 @@ namespace services
 
         dispatcher.registerQueryHandler<events::vfxsequence::IsVFXComboInstancePlayingQuery>(
             [this](const events::vfxsequence::IsVFXComboInstancePlayingQuery& q) { return isComboPlaying(q.comboId); });
+
+        if (assetSavedToken.isValid())
+            dispatcher.unsubscribe(assetSavedToken);
+        assetSavedToken = dispatcher.subscribe<::events::resource::AssetSavedNotification>(
+            [this](const ::events::resource::AssetSavedNotification& n)
+            {
+                invalidateSequence(n.filePath);
+            });
     }
 
     std::shared_ptr<const vfx::VFXSequenceData> VFXSequenceRuntimeServiceImpl::loadSequence(const std::string& path)
@@ -77,6 +125,21 @@ namespace services
         return shared;
     }
 
+    void VFXSequenceRuntimeServiceImpl::invalidateSequence(const std::string& path)
+    {
+        const std::string target = normalizeSequenceCachePath(path);
+        if (target.empty())
+            return;
+
+        for (auto it = sequenceCache.begin(); it != sequenceCache.end();)
+        {
+            if (normalizeSequenceCachePath(it->first) == target)
+                it = sequenceCache.erase(it);
+            else
+                ++it;
+        }
+    }
+
     glm::mat4 VFXSequenceRuntimeServiceImpl::composeStepLocal(const vfx::VFXSequenceStep& step)
     {
         const glm::mat4 t = glm::translate(glm::mat4(1.0f), step.localPosition);
@@ -88,29 +151,32 @@ namespace services
     VFXEmitterOverrides VFXSequenceRuntimeServiceImpl::toOverrides(const vfx::VFXSequenceStep& step)
     {
         VFXEmitterOverrides o;
+        namespace names = vfx::overridenames;
         for (const auto& [name, value] : step.scalarOverrides)
         {
-            if (name == "spawnRate") o.spawnRate = value;
-            else if (name == "lifetime") o.lifetime = value;
-            else if (name == "startSize") o.startSize = value;
-            else if (name == "startSpeed") o.startSpeed = value;
-            else if (name == "stretchMultiplier") o.stretchMultiplier = value;
-            else if (name == "windStrength") o.windStrength = value;
-            else if (name == "gravityStrength") o.gravityStrength = value;
-            else if (name == "softParticleDistance") o.softParticleDistance = value;
-            else if (name == "lightingInfluence") o.lightingInfluence = value;
-            else if (name == "collisionLifetimeLoss") o.collisionLifetimeLoss = value;
-            else if (name == "coneSpread") o.coneSpread = value;
-            else if (name == "renderMode") o.renderMode = static_cast<int>(value);
-            else if (name == "collisionEnabled") o.collisionEnabled = (value != 0.0f);
+            const std::string_view key{name.data(), name.size()};
+            if (key == names::spawnRate) o.spawnRate = value;
+            else if (key == names::lifetime) o.lifetime = value;
+            else if (key == names::startSize) o.startSize = value;
+            else if (key == names::startSpeed) o.startSpeed = value;
+            else if (key == names::stretchMultiplier) o.stretchMultiplier = value;
+            else if (key == names::windStrength) o.windStrength = value;
+            else if (key == names::gravityStrength) o.gravityStrength = value;
+            else if (key == names::softParticleDistance) o.softParticleDistance = value;
+            else if (key == names::lightingInfluence) o.lightingInfluence = value;
+            else if (key == names::collisionLifetimeLoss) o.collisionLifetimeLoss = value;
+            else if (key == names::coneSpread) o.coneSpread = value;
+            else if (key == names::renderMode) o.renderMode = static_cast<int>(value);
+            else if (key == names::collisionEnabled) o.collisionEnabled = (value != 0.0f);
         }
         for (const auto& [name, v] : step.vectorOverrides)
         {
-            if (name == "emitDirection") o.emitDirection = glm::vec3(v);
-            else if (name == "windDirection") o.windDirection = glm::vec3(v);
-            else if (name == "gravityDirection") o.gravityDirection = glm::vec3(v);
-            else if (name == "shapeDimensions") o.shapeDimensions = glm::vec3(v);
-            else if (name == "startColor") o.startColor = v;
+            const std::string_view key{name.data(), name.size()};
+            if (key == names::emitDirection) o.emitDirection = glm::vec3(v);
+            else if (key == names::windDirection) o.windDirection = glm::vec3(v);
+            else if (key == names::gravityDirection) o.gravityDirection = glm::vec3(v);
+            else if (key == names::shapeDimensions) o.shapeDimensions = glm::vec3(v);
+            else if (key == names::startColor) o.startColor = v;
         }
         return o;
     }

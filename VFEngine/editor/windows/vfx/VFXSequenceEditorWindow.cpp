@@ -11,16 +11,16 @@
 #include "events/project/ResourceEvents.hpp"
 
 #include <vfx/VFXSequenceAsset.hpp>
+#include <vfx/VFXSequenceValidation.hpp>
 #include <vfx/VFXAsset.hpp>
 #include <asset/AssetRef.hpp>
-#include <asset/AssetMetadataSerializer.hpp>
 #include <resource/MeshStreamHandle.hpp>
 
 #include <glm/glm.hpp>
 #include <filesystem>
-#include <ctime>
 #include <algorithm>
 #include <string>
+#include <unordered_set>
 #include <vector>
 #include <cmath>
 
@@ -28,42 +28,6 @@ namespace fs = std::filesystem;
 
 namespace windows
 {
-    namespace
-    {
-        // Mirrors RetargetingEditorWindow::writeMeta — writes a formatVersion-2
-        // .vfmeta sidecar listing the sequence's child .vfVFX GUIDs as
-        // dependencies, preserving the asset GUID across re-saves.
-        void writeSequenceMeta(const std::string& assetPath,
-                               const std::vector<asset::AssetGUID>& dependencies)
-        {
-            const auto metaPath = asset::AssetMetadataSerializer::getMetaPath(assetPath);
-
-            asset::AssetMetadata meta;
-            if (auto existing = asset::AssetMetadataSerializer::load(metaPath))
-                meta.guid = existing->guid; // preserve GUID across re-saves
-            else
-                meta.guid = asset::AssetGUID::generate();
-
-            meta.type = resource::AssetType::VFXSequence;
-            meta.importSourcePath = "editor://vfxsequence";
-            meta.formatVersion = asset::AssetMetadata::kCurrentFormatVersion;
-            meta.dependencies = dependencies;
-
-            std::time_t t = std::time(nullptr);
-            std::tm tm{};
-#ifdef _WIN32
-            localtime_s(&tm, &t);
-#else
-            localtime_r(&t, &tm);
-#endif
-            char buf[32];
-            std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
-            meta.importTimestamp = buf;
-
-            asset::AssetMetadataSerializer::save(meta, metaPath);
-        }
-    }
-
     // ImSequencer adapter: one clip per step. starts/ends are in "frames"
     // (kFps frames per second). ImSequencer mutates them in place when a clip is
     // dragged; writeback() converts changes back to Start Time / Duration.
@@ -182,16 +146,6 @@ namespace windows
             isDirty = false;
             vfLogInfo("VFX sequence saved: {}", seqPath);
 
-            // Sidecar dependency graph: each step's child .vfVFX GUID.
-            std::vector<asset::AssetGUID> deps;
-            deps.reserve(data->steps.size());
-            for (const auto& step : data->steps)
-            {
-                if (step.vfxRef.isValid())
-                    deps.push_back(step.vfxRef.getGUID());
-            }
-            writeSequenceMeta(seqPath, deps);
-
             events::resource::AssetSavedNotification assetNotif;
             assetNotif.filePath = seqPath;
             events::EventDispatcher::instance().publish(assetNotif);
@@ -233,6 +187,7 @@ namespace windows
             if (data)
             {
                 drawToolbar();
+                drawValidationStrip();
 
                 ImVec2 avail = ImGui::GetContentRegionAvail();
                 float timelineHeight = 190.0f; // room for the ImSequencer track view
@@ -334,6 +289,53 @@ namespace windows
         ImGui::SameLine();
         maximizer.drawButton();
 
+        ImGui::Separator();
+    }
+
+    void VFXSequenceEditorWindow::drawValidationStrip()
+    {
+        if (!data)
+            return;
+
+        std::unordered_set<std::string> knownSockets;
+        if (!socketNames.empty())
+            knownSockets.insert(socketNames.begin(), socketNames.end());
+
+        vfx::validation::ValidationContext context;
+        context.checkRefResolvable = true;
+        context.knownSocketNames = knownSockets.empty() ? nullptr : &knownSockets;
+
+        const vfx::validation::ValidationReport report =
+            vfx::validation::validateSequence(*data, context);
+        if (report.diagnostics.empty())
+            return;
+
+        for (const auto& diagnostic : report.diagnostics)
+        {
+            ImVec4 color(0.55f, 0.70f, 1.0f, 1.0f);
+            const char* icon = ICON_FA_CIRCLE_INFO;
+            if (diagnostic.severity == vfx::validation::Severity::Error)
+            {
+                color = ImVec4(1.0f, 0.45f, 0.45f, 1.0f);
+                icon = ICON_FA_CIRCLE_EXCLAMATION;
+            }
+            else if (diagnostic.severity == vfx::validation::Severity::Warning)
+            {
+                color = ImVec4(1.0f, 0.80f, 0.30f, 1.0f);
+                icon = ICON_FA_TRIANGLE_EXCLAMATION;
+            }
+
+            ImGui::PushStyleColor(ImGuiCol_Text, color);
+            ImGui::TextWrapped("%s %s", icon, diagnostic.message.c_str());
+            ImGui::PopStyleColor();
+
+            if (ImGui::IsItemClicked() &&
+                diagnostic.stepIndex >= 0 &&
+                diagnostic.stepIndex < static_cast<int>(data->steps.size()))
+            {
+                selectedStep = diagnostic.stepIndex;
+            }
+        }
         ImGui::Separator();
     }
 

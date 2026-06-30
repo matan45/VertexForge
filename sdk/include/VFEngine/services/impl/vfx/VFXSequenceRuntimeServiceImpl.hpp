@@ -3,6 +3,7 @@
 #include "../../data/VFXSequenceTypes.hpp"
 #include "../../data/VFXTypes.hpp"
 #include "../../data/EntityHandle.hpp"
+#include "../../events/EventDispatcher.hpp"
 #include "vfx/VFXSequenceTypes.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -46,11 +47,13 @@ namespace services
 
         std::unordered_map<VFXComboInstanceId, ComboInstance> combos;
         VFXComboInstanceId nextComboId = 1;
+        ::events::SubscriptionToken assetSavedToken;
 
         // Sequence assets are cached as shared_ptr so each combo's step pointers stay valid.
         std::unordered_map<std::string, std::shared_ptr<const vfx::VFXSequenceData>> sequenceCache;
 
         std::shared_ptr<const vfx::VFXSequenceData> loadSequence(const std::string& path);
+        void invalidateSequence(const std::string& path);
         void spawnStep(ComboInstance& combo, ActiveStep& step, const glm::mat4& stepParent);
         glm::mat4 resolveComboParent(ComboInstance& combo);
         glm::mat4 resolveStepParent(ComboInstance& combo, const ActiveStep& step, const glm::mat4& comboParent);
@@ -61,7 +64,7 @@ namespace services
 
     public:
         VFXSequenceRuntimeServiceImpl() = default;
-        ~VFXSequenceRuntimeServiceImpl() = default;
+        ~VFXSequenceRuntimeServiceImpl();
 
         void registerEventHandlers();
 

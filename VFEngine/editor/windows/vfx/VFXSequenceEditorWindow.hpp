@@ -17,7 +17,7 @@ namespace windows
     // child .vfVFX placements in time (or behind a named cue), each with an
     // optional local transform, socket, and name-keyed parameter overrides.
     // Mirrors VFXEditorWindow's lifecycle (path ctor, dirty '*' title, save
-    // publishes AssetSavedNotification + writes a dependency .vfmeta sidecar).
+    // publishes AssetSavedNotification; shared asset services own dependency metadata).
     class VFXSequenceEditorWindow : public controllers::imguiHandler::ImguiWindow
     {
     private:
@@ -71,6 +71,7 @@ namespace windows
         void saveSequence();
 
         void drawToolbar();
+        void drawValidationStrip();
         void drawStepList();
         void drawStepInspector();
         void drawTimeline();

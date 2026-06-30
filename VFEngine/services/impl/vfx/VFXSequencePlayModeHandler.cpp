@@ -64,6 +64,16 @@ namespace services
                 if (sequenceActive.load())
                     onEntityDeleted(n.entity);
             });
+
+        sceneLoadedToken = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
+            [this](const ::events::scene::SceneLoadedNotification&)
+            {
+                if (sequenceActive.load())
+                {
+                    std::lock_guard<std::mutex> lock(pendingMutex);
+                    sceneRescanFrames = kSceneLoadRescanFrames;
+                }
+            });
     }
 
     void VFXSequencePlayModeHandler::unsubscribeFromEvents()
@@ -74,6 +84,7 @@ namespace services
         if (animationEventToken.isValid()) { dispatcher.unsubscribe(animationEventToken); animationEventToken = {}; }
         if (prefabInstantiatedToken.isValid()) { dispatcher.unsubscribe(prefabInstantiatedToken); prefabInstantiatedToken = {}; }
         if (entityDeletedToken.isValid()) { dispatcher.unsubscribe(entityDeletedToken); entityDeletedToken = {}; }
+        if (sceneLoadedToken.isValid()) { dispatcher.unsubscribe(sceneLoadedToken); sceneLoadedToken = {}; }
     }
 
     void VFXSequencePlayModeHandler::onEditorModeChanged(EditorMode previousMode, EditorMode currentMode)
@@ -255,13 +266,7 @@ namespace services
 
     void VFXSequencePlayModeHandler::enterPlayMode()
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        auto view = registry.view<components::VFXSequenceComponent, components::WorldTransformComponent>();
-        for (auto entity : view)
-        {
-            tryAutoPlayCombo(internal::toHandle(entity));
-        }
+        scanAndAutoPlayCombos();
 
         sequenceActive = true;
         size_t comboCount = 0;
@@ -333,6 +338,17 @@ namespace services
         }
     }
 
+    void VFXSequencePlayModeHandler::scanAndAutoPlayCombos()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        auto view = registry.view<components::VFXSequenceComponent, components::WorldTransformComponent>();
+        for (auto entity : view)
+        {
+            tryAutoPlayCombo(internal::toHandle(entity));
+        }
+    }
+
     void VFXSequencePlayModeHandler::exitPlayMode()
     {
         sequenceActive = false;
@@ -355,6 +371,7 @@ namespace services
             triggerCombos.swap(triggeredCombos);
             pendingTriggers.clear();
             pendingPrefabRoots.clear();
+            sceneRescanFrames = 0;
         }
 
         for (const auto& [handle, comboId] : autoCombos)
@@ -374,6 +391,18 @@ namespace services
     {
         if (!sequenceActive.load())
             return;
+
+        bool doRescan = false;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            if (sceneRescanFrames > 0)
+            {
+                --sceneRescanFrames;
+                doRescan = true;
+            }
+        }
+        if (doRescan)
+            scanAndAutoPlayCombos();
 
         drainPendingPrefabRoots();
         drainPendingTriggers();

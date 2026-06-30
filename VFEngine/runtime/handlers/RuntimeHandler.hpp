@@ -47,6 +47,10 @@ namespace services {
     class PhysicsPlayModeHandler;
     class RenderTexturePlayModeHandler;
     class BehaviorTreePlayModeHandler;
+    class VFXRuntimeServiceImpl;
+    class VFXPlayModeHandler;
+    class VFXSequenceRuntimeServiceImpl;
+    class VFXSequencePlayModeHandler;
 }
 
 namespace handlers {
@@ -79,6 +83,10 @@ namespace handlers {
         std::shared_ptr<services::IWorldSectorService> worldSectorService;
         std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
         std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
+        std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
+        std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;
+        std::unique_ptr<services::VFXSequenceRuntimeServiceImpl> vfxSequenceRuntimeService;
+        std::unique_ptr<services::VFXSequencePlayModeHandler> vfxSequencePlayModeHandler;
         std::shared_ptr<services::IRuntimePickerService> runtimePickerService;
         std::shared_ptr<services::IPluginTextureService> pluginTextureService;
         std::shared_ptr<services::IWeatherService> weatherService;

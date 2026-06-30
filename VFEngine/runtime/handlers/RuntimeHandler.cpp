@@ -31,6 +31,10 @@
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/time/TimeServiceImpl.hpp"
+#include "impl/vfx/VFXPlayModeHandler.hpp"
+#include "impl/vfx/VFXRuntimeServiceImpl.hpp"
+#include "impl/vfx/VFXSequencePlayModeHandler.hpp"
+#include "impl/vfx/VFXSequenceRuntimeServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -123,7 +127,7 @@ namespace handlers {
 
         cleanupEventSubscriptions();
 
-        if (physicsPlayModeHandler)
+        if (physicsPlayModeHandler || vfxPlayModeHandler || vfxSequencePlayModeHandler)
         {
             auto& dispatcher = events::EventDispatcher::instance();
             events::editor::EditorModeChangedNotification notification;
@@ -132,6 +136,10 @@ namespace handlers {
             dispatcher.publish(notification);
         }
 
+        vfxSequencePlayModeHandler.reset();
+        vfxPlayModeHandler.reset();
+        vfxSequenceRuntimeService.reset();
+        vfxRuntimeService.reset();
         physicsPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
         worldSectorService.reset();
@@ -230,8 +238,8 @@ namespace handlers {
             return false;
         }
 
-        // PhysicsPlayModeHandler listens for EditorModeChangedNotification
-        if (physicsPlayModeHandler)
+        // Runtime play-mode handlers listen for EditorModeChangedNotification.
+        if (physicsPlayModeHandler || vfxPlayModeHandler || vfxSequencePlayModeHandler)
         {
             events::editor::EditorModeChangedNotification notification;
             notification.previousMode = services::EditorMode::Edit;
@@ -375,6 +383,19 @@ namespace handlers {
             renderTexturePlayModeHandler->subscribeToEvents();
         }
 
+        if (auto* vfxProvider = bootstrap->getVFXRuntimeProvider())
+        {
+            vfxRuntimeService = std::make_unique<services::VFXRuntimeServiceImpl>(vfxProvider);
+            vfxRuntimeService->registerEventHandlers();
+            vfxPlayModeHandler = std::make_unique<services::VFXPlayModeHandler>(vfxProvider);
+            vfxPlayModeHandler->subscribeToEvents();
+
+            vfxSequenceRuntimeService = std::make_unique<services::VFXSequenceRuntimeServiceImpl>();
+            vfxSequenceRuntimeService->registerEventHandlers();
+            vfxSequencePlayModeHandler = std::make_unique<services::VFXSequencePlayModeHandler>();
+            vfxSequencePlayModeHandler->subscribeToEvents();
+        }
+
         if (auto* runtimeRenderService =
                 dynamic_cast<services::RuntimeRenderServiceImpl*>(renderService.get()))
         {
@@ -503,6 +524,16 @@ namespace handlers {
             }
         });
 
+        frameTaskGraph->addTask("VFX", [this]() {
+            if (engineTime::Timer::isGameTimeActive() && vfxPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
+                vfxPlayModeHandler->update(dt);
+                if (vfxSequencePlayModeHandler) {
+                    vfxSequencePlayModeHandler->update(dt);
+                }
+            }
+        });
+
         frameTaskGraph->addTask("Controllers", [this]() {
             if (engineTime::Timer::isGameTimeActive() && controllerService) {
                 float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
@@ -577,6 +608,7 @@ namespace handlers {
         frameTaskGraph->addDependency("PhysicsKick", "WindowState");
         frameTaskGraph->addDependency("PhysicsSync", "PhysicsKick");
         frameTaskGraph->addDependency("Scripts", "PhysicsSync");
+        frameTaskGraph->addDependency("VFX", "Scripts");
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("Navmesh", "BehaviorTrees");
@@ -681,6 +713,7 @@ namespace handlers {
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");
+        frameTaskGraph->addDependency("Transforms", "VFX");
 
         // PostUpdate after transforms.
         frameTaskGraph->addDependency("PostUpdate", "Transforms");
