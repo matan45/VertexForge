@@ -174,6 +174,12 @@ namespace plugin {
         return asset::AssetDatabase::instance().getPath(guid).value_or(std::string());
     }
 
+    std::string PluginContextImpl::resolveProjectPath(const std::string& projectRelativePath) const
+    {
+        if (projectRelativePath.empty()) return {};
+        return asset::AssetDatabase::instance().resolveAssetPath(projectRelativePath);
+    }
+
     void PluginContextImpl::publishEvent(const std::string& eventName, const nlohmann::json& data)
     {
         PluginEventBus::instance().publish(eventName, data);

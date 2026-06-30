@@ -466,6 +466,13 @@ namespace plugin {
         // component fields at runtime without linking the asset database.
         virtual std::string resolveAssetPath(const std::string& assetGuidHex) const = 0;
 
+        // Resolve a project-relative asset path (e.g. "assets/gas/x.vfAbility")
+        // to an absolute path using the loaded project's root, so a plugin can
+        // load assets it references by path regardless of the process working
+        // directory. Absolute inputs are returned normalized; with no project
+        // loaded the input is normalized as-is.
+        virtual std::string resolveProjectPath(const std::string& projectRelativePath) const = 0;
+
     };
 
 }

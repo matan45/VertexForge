@@ -77,6 +77,9 @@ namespace gas
         void seedFromComponents(entt::entity e, EntityState& st);
         void refreshMirrors(entt::entity e, EntityState& st);
 
+        // Resolve a project-relative reference path to an absolute path via the
+        // engine (project-root aware), so GAS assets load regardless of CWD.
+        std::string resolvePath(const std::string& path) const;
         const AbilitySpec* loadAbility(const std::string& path);
         const GameplayEffectSpec* resolveEffect(const std::string& idOrPath);
         const GameplayCueSpec* resolveCue(const std::string& idOrPath);

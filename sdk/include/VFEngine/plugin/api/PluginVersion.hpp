@@ -17,8 +17,9 @@ namespace plugin {
     //      PluginAssetTypeDesc/PluginAssetTypeHandle — plugins declare custom
     //      asset types (extension, Content Browser metadata, Create entry,
     //      dependency scanning, export) without editing engine asset tables.
-    //      Also resolveAssetPath(guidHex) so plugins can load assets dragged
-    //      into their AssetRef component fields at runtime.
+    //      Also resolveAssetPath(guidHex) + resolveProjectPath(relPath) so
+    //      plugins can load assets dragged into their AssetRef component fields
+    //      and assets they reference by project-relative path at runtime.
     constexpr uint32_t VF_PLUGIN_API_VERSION = 15;
 
 }
