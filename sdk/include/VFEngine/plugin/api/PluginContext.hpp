@@ -473,6 +473,13 @@ namespace plugin {
         // loaded the input is normalized as-is.
         virtual std::string resolveProjectPath(const std::string& projectRelativePath) const = 0;
 
+        // Return currently-known, resolved asset paths whose file extension
+        // matches the supplied extension (case-insensitive, with or without a
+        // leading dot). The result comes from the engine asset database;
+        // plugins must treat it as a snapshot and rebuild their own indexes
+        // after cache invalidation.
+        virtual std::vector<std::string> findAssetPathsByExtension(const std::string& extension) const = 0;
+
     };
 
 }

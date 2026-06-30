@@ -151,6 +151,14 @@ namespace gas
 
             for (auto& ae : m_active)
             {
+                ae.inhibited = !ae.spec.ongoingRequiredTags.empty() &&
+                               !m_tags.hasAll(ae.spec.ongoingRequiredTags);
+                if (!ae.spec.removalTags.empty() && m_tags.hasAny(ae.spec.removalTags))
+                {
+                    pushExpire(toExpire, ae.handle);
+                    continue;
+                }
+
                 const bool isDuration = ae.spec.durationPolicy == DurationPolicy::Duration;
                 const bool isPeriodic = ae.spec.period > 0.0f;
 
@@ -170,7 +178,7 @@ namespace gas
                 {
                     ae.timeRemaining -= dt;
                     if (ae.timeRemaining <= 0.0f)
-                        toExpire.push_back(ae.handle);
+                        pushExpire(toExpire, ae.handle);
                 }
                 // Infinite never expires by time.
             }
@@ -244,6 +252,22 @@ namespace gas
             return maxRem;
         }
 
+        float getCooldownRemainingById(const std::string& specId) const
+        {
+            if (specId.empty())
+                return 0.0f;
+
+            float maxRem = 0.0f;
+            for (const auto& ae : m_active)
+            {
+                if (ae.spec.durationPolicy != DurationPolicy::Duration)
+                    continue;
+                if (ae.specId == specId)
+                    maxRem = std::max(maxRem, ae.timeRemaining);
+            }
+            return maxRem;
+        }
+
         // Synthesizes a Duration cooldown effect that grants the given tags. Handy
         // when an ability declares a cooldown by duration+tags rather than effectId.
         static GameplayEffectSpec makeCooldownEffect(const std::string& id, float duration,
@@ -265,6 +289,19 @@ namespace gas
                                 [handle](const ActiveEffect& a) { return a.handle == handle; });
         }
 
+        static void pushExpire(std::vector<std::uint64_t>& handles, std::uint64_t handle)
+        {
+            if (std::find(handles.begin(), handles.end(), handle) == handles.end())
+                handles.push_back(handle);
+        }
+
+        void refreshInhibitionFlags()
+        {
+            for (auto& ae : m_active)
+                ae.inhibited = !ae.spec.ongoingRequiredTags.empty() &&
+                               !m_tags.hasAll(ae.spec.ongoingRequiredTags);
+        }
+
         std::uint64_t createActiveEffect(const GameplayEffectSpec& spec, std::uint64_t sourceId)
         {
             ActiveEffect ae;
@@ -277,6 +314,7 @@ namespace gas
             ae.sourceId = sourceId;
             m_active.push_back(std::move(ae));
             grantTags(spec.grantedTags);
+            refreshInhibitionFlags();
             return m_active.back().handle;
         }
 
@@ -330,6 +368,7 @@ namespace gas
 
         std::vector<AttributeChange> reaggregate()
         {
+            refreshInhibitionFlags();
             return Aggregator::recompute(m_attributes, gatherContinuousMods());
         }
 

@@ -94,14 +94,16 @@ namespace types
             std::vector<uint32_t> indices;
             if (!stream->readLODLevel(currentSubmesh, 0, vertices, indices))
             {
-                result.message = "Failed to read LOD0 geometry from mesh";
-                return result;
+                vfLogWarning("Convex regeneration skipped submesh {}: failed to read LOD0 geometry from {}",
+                             currentSubmesh, meshPath);
+                continue;
             }
 
             if (vertices.empty() || indices.empty())
             {
-                result.message = "Selected mesh geometry is empty";
-                return result;
+                vfLogWarning("Convex regeneration skipped submesh {}: selected geometry is empty in {}",
+                             currentSubmesh, meshPath);
+                continue;
             }
 
             auto meshData = makeLODMeshData(std::move(vertices), std::move(indices));
@@ -122,8 +124,9 @@ namespace types
 
             if (!data.isValid())
             {
-                result.message = "V-HACD generated no valid hulls";
-                return result;
+                vfLogWarning("Convex regeneration skipped submesh {}: V-HACD generated no valid hulls for {}",
+                             currentSubmesh, meshPath);
+                continue;
             }
 
             result.hullCount += static_cast<uint32_t>(data.hulls.size());
@@ -131,6 +134,12 @@ namespace types
                 currentSubmesh,
                 std::move(data)
             });
+        }
+
+        if (entries.empty())
+        {
+            result.message = "No submeshes produced valid hulls";
+            return result;
         }
 
         if (!resource::ConvexDecompositionSidecar::upsert(meshPath, entries))

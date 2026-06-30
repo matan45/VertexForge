@@ -247,18 +247,7 @@ namespace services
         centroid /= static_cast<float>(validEntities.size());
 
         glm::vec3 start = centroid;
-        if (!navmeshProvider->isPointOnNavmesh(start, SNAP_ON_MESH_TOLERANCE))
-        {
-            for (float r : SNAP_SEARCH_RADII)
-            {
-                glm::vec3 candidate = navmeshProvider->getClosestPoint(start, r);
-                if (navmeshProvider->isPointOnNavmesh(candidate, SNAP_ON_MESH_TOLERANCE))
-                {
-                    start = candidate;
-                    break;
-                }
-            }
-        }
+        resolveDestination(centroid, start);
 
         glm::vec3 toDestination = snapped - centroid;
         if (toDestination.x * toDestination.x + toDestination.z * toDestination.z < 1e-6f)
@@ -445,18 +434,7 @@ namespace services
 
         centroid /= static_cast<float>(count);
         glm::vec3 start = centroid;
-        if (!navmeshProvider->isPointOnNavmesh(start, SNAP_ON_MESH_TOLERANCE))
-        {
-            for (float r : SNAP_SEARCH_RADII)
-            {
-                glm::vec3 candidate = navmeshProvider->getClosestPoint(start, r);
-                if (navmeshProvider->isPointOnNavmesh(candidate, SNAP_ON_MESH_TOLERANCE))
-                {
-                    start = candidate;
-                    break;
-                }
-            }
-        }
+        resolveDestination(centroid, start);
 
         navigation::NavPath path = navmeshProvider->findPath(start, group.destination, 0.25f, 2.0f);
         if (!path.isValid || path.waypoints.empty())

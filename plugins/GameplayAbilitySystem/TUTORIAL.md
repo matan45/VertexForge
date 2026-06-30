@@ -102,8 +102,9 @@ ability in `grantedAbilities`.
 **A) Bound input (no script).** Set the ability's `activation.policy = OnPressed`
 and `inputAction = "Fireball"`, keep `GAS_AbilitySystem.pollInput = true`, and map
 a key to the `Fireball` input action. GAS auto-activates it each time the action
-is pressed. This passes **no target**, so it only works for **Self** abilities
-(targeted abilities need a target — use a script).
+is pressed. For targeted abilities, set the component's transient target from
+script/AI with `GameplayAbilitySystem::setTarget(owner, targetId)`; Self abilities
+ignore that target.
 
 **B) From mType.** Full control, including targets. See below.
 

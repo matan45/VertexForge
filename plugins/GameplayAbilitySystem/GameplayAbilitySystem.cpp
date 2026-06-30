@@ -292,6 +292,15 @@ private:
                 return h->makeInt(c, static_cast<int>(s));
             }, this);
 
+        ctx->registerScriptFunction("_gas_set_target",
+            [](void* u, MTypeContext* c, const MTypeValue* const* a, int n) -> MTypeValue*
+            {
+                auto* self = static_cast<GameplayAbilitySystem*>(u);
+                const MTypePluginHost* h = self->host;
+                if (n < 2) return h->makeInt(c, 0);
+                return h->makeInt(c, self->runtime.setTarget(entityArg(h, a[0]), h->getInt(a[1])));
+            }, this);
+
         ctx->registerScriptFunction("_gas_cancel",
             [](void* u, MTypeContext* c, const MTypeValue* const* a, int n) -> MTypeValue*
             {

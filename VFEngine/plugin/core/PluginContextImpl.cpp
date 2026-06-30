@@ -33,6 +33,7 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 
 namespace plugin {
@@ -178,6 +179,30 @@ namespace plugin {
     {
         if (projectRelativePath.empty()) return {};
         return asset::AssetDatabase::instance().resolveAssetPath(projectRelativePath);
+    }
+
+    std::vector<std::string> PluginContextImpl::findAssetPathsByExtension(const std::string& extension) const
+    {
+        std::string ext = extension;
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (!ext.empty() && ext[0] != '.')
+            ext.insert(ext.begin(), '.');
+
+        std::vector<std::string> paths;
+        if (ext.empty())
+            return paths;
+
+        auto& db = asset::AssetDatabase::instance();
+        for (const auto& entry : db.getAllAssets())
+        {
+            std::string entryExt = std::filesystem::path(entry.path).extension().string();
+            std::transform(entryExt.begin(), entryExt.end(), entryExt.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (entryExt == ext)
+                paths.push_back(db.resolveAssetPath(entry.path));
+        }
+        return paths;
     }
 
     void PluginContextImpl::publishEvent(const std::string& eventName, const nlohmann::json& data)

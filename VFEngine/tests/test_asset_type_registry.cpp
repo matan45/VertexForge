@@ -188,6 +188,29 @@ TEST_CASE("AssetTypeRegistry: register / unregister round-trip")
     CHECK_FALSE(reg.findByTypeId("test.widget", gone));
 }
 
+TEST_CASE("AssetTypeRegistry: high-bit extension bytes and badge color lookup")
+{
+    auto& reg = AssetTypeRegistry::instance();
+
+    AssetTypeRecord rec;
+    rec.typeId = "test.highbit";
+    rec.displayName = "High Bit";
+    rec.extensions = {std::string(".vf") + static_cast<char>(0xC0) + "Widget"};
+    rec.badgeColor = 0xFF123456u;
+    rec.owningPlugin = "TestHighBitPlugin";
+
+    auto handle = reg.registerType(rec);
+    REQUIRE(static_cast<bool>(handle));
+
+    AssetTypeRecord out;
+    CHECK(reg.findByExtension(rec.extensions[0], out));
+    CHECK(out.typeId == "test.highbit");
+    CHECK(reg.badgeColorForExtension(rec.extensions[0]) == 0xFF123456u);
+    CHECK(reg.badgeColorForExtension(".unknown", 0xFFABCDEFu) == 0xFFABCDEFu);
+
+    reg.unregisterType(handle);
+}
+
 TEST_CASE("AssetTypeRegistry: collisions are rejected (first registrant wins)")
 {
     auto& reg = AssetTypeRegistry::instance();

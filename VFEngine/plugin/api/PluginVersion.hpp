@@ -20,6 +20,8 @@ namespace plugin {
     //      Also resolveAssetPath(guidHex) + resolveProjectPath(relPath) so
     //      plugins can load assets dragged into their AssetRef component fields
     //      and assets they reference by project-relative path at runtime.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 15;
+    // v16: findAssetPathsByExtension on PluginContext so plugins can build
+    //      read-only indexes over project assets without guessing project roots.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 16;
 
 }

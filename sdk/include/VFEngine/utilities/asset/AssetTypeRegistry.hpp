@@ -75,6 +75,8 @@ namespace asset
         // false when not found.
         bool findByExtension(const std::string& extension, AssetTypeRecord& out) const;
         bool findByTypeId(const std::string& typeId, AssetTypeRecord& out) const;
+        uint32_t badgeColorForExtension(const std::string& extension,
+                                        uint32_t fallback = 0xFF909090u) const;
 
         // All currently-registered PLUGIN types (built-ins are excluded; they
         // have their own engine UI paths). Used by the content-browser create

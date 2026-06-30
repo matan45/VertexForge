@@ -5,6 +5,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
+#include "asset/AssetTypeRegistry.hpp"
 #include <algorithm>
 
 namespace windows
@@ -299,7 +300,7 @@ namespace windows
                 // type's plugin-provided badge color so distinct plugin asset
                 // types are visually distinguishable.
                 const ImVec4 tint = ImGui::ColorConvertU32ToFloat4(
-                    displayInfoForExtension(asset.extension, asset.type).badgeColor);
+                    asset::AssetTypeRegistry::instance().badgeColorForExtension(asset.extension));
                 ImGui::ImageWithBg(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE),
                                    uv0, uv1, ImVec4(0, 0, 0, 0), tint);
             }

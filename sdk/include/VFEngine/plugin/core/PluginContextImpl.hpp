@@ -95,6 +95,7 @@ namespace plugin {
         void unregisterAssetType(PluginAssetTypeHandle handle) override;
         std::string resolveAssetPath(const std::string& assetGuidHex) const override;
         std::string resolveProjectPath(const std::string& projectRelativePath) const override;
+        std::vector<std::string> findAssetPathsByExtension(const std::string& extension) const override;
         void publishEvent(const std::string& eventName, const nlohmann::json& data) override;
         events::SubscriptionToken subscribeEvent(const std::string& eventName,
                                                   std::function<void(const nlohmann::json&)> handler) override;

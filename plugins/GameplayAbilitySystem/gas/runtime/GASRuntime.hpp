@@ -36,7 +36,7 @@ namespace gas
 
         void init(plugin::PluginContext* context, CueRealizer cueSink, EventEmitter emit);
 
-        void setGameActive(bool active) { gameActive = active; }
+        void setGameActive(bool active);
         bool isGameActive() const { return gameActive; }
 
         // Per-frame: tick active effects + refresh component mirrors, and — when
@@ -46,13 +46,14 @@ namespace gas
 
         // Drop a despawned entity's state (call when an entity is destroyed).
         void forget(std::uint32_t entity) { entities.erase(entity); }
-        void reset() { entities.clear(); }
+        void reset();
 
         // --- Native-facing operations (entity ids are raw uint32 from scripts) ---
         int grantAbility(std::uint32_t entity, const std::string& abilityPath);
         int revokeAbility(std::uint32_t entity, const std::string& abilityId);
         ActivationStatus canActivate(std::uint32_t entity, const std::string& abilityId, std::int64_t target);
         ActivationStatus activate(std::uint32_t entity, const std::string& abilityId, std::int64_t target);
+        int setTarget(std::uint32_t entity, std::int64_t target);
         void cancelAbility(std::uint32_t entity, std::uint64_t handle);
         std::uint64_t applyEffect(std::uint32_t source, std::uint32_t target, const std::string& effectPath);
         bool removeEffect(std::uint32_t entity, std::uint64_t handle);
@@ -83,6 +84,10 @@ namespace gas
         const AbilitySpec* loadAbility(const std::string& path);
         const GameplayEffectSpec* resolveEffect(const std::string& idOrPath);
         const GameplayCueSpec* resolveCue(const std::string& idOrPath);
+        float cooldownRemainingFor(EntityState& st, const AbilitySpec& spec);
+        void clearSpecCaches();
+        void buildEffectIdIndex();
+        void buildCueIdIndex();
 
         void emitCues(std::uint32_t entity, const std::vector<std::string>& cueIds);
         void emitAttributeChanges(std::uint32_t entity, const std::vector<AttributeChange>& changes);
@@ -97,5 +102,9 @@ namespace gas
         std::unordered_map<std::string, AbilitySpec> abilityCache;       // by path
         std::unordered_map<std::string, GameplayEffectSpec> effectCache; // by path and by id
         std::unordered_map<std::string, GameplayCueSpec> cueCache;       // by path and by id
+        std::unordered_map<std::string, std::string> effectIdToPath;
+        std::unordered_map<std::string, std::string> cueIdToPath;
+        bool effectIdIndexBuilt = false;
+        bool cueIdIndexBuilt = false;
     };
 }

@@ -214,10 +214,28 @@ namespace core::physics
         }
 
         resource::ConvexDecompositionData result;
+        std::vector<resource::ConvexDecompositionSidecarEntry> sidecarEntries;
+        const bool hasSidecar = resource::ConvexDecompositionSidecar::load(meshPath, sidecarEntries);
         for (uint32_t i = 0; i < header.numSubmeshes; ++i)
         {
             resource::ConvexDecompositionData data;
-            if (!resource::ConvexDecompositionSidecar::loadForSubmesh(meshPath, i, data))
+            bool loaded = false;
+            if (hasSidecar)
+            {
+                auto sidecarIt = std::find_if(
+                    sidecarEntries.begin(), sidecarEntries.end(),
+                    [i](const resource::ConvexDecompositionSidecarEntry& entry)
+                    {
+                        return entry.submeshIndex == i;
+                    });
+                if (sidecarIt != sidecarEntries.end())
+                {
+                    data = sidecarIt->data;
+                    loaded = true;
+                }
+            }
+
+            if (!loaded)
             {
                 if (!streamHandle->hasConvexData())
                     continue;

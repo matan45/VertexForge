@@ -1,6 +1,7 @@
 #include "AssetTypeRegistry.hpp"
 #include "../print/Log.hpp"
 #include <algorithm>
+#include <cctype>
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
@@ -12,7 +13,8 @@ namespace asset
         std::string toLower(const std::string& s)
         {
             std::string out = s;
-            std::transform(out.begin(), out.end(), out.begin(), ::tolower);
+            std::transform(out.begin(), out.end(), out.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return out;
         }
     }
@@ -227,6 +229,17 @@ namespace asset
         if (rit == impl->records.end()) return false;
         out = rit->second;
         return true;
+    }
+
+    uint32_t AssetTypeRegistry::badgeColorForExtension(const std::string& extension, uint32_t fallback) const
+    {
+        const std::string ext = toLower(extension);
+        std::shared_lock lock(impl->mutex);
+        auto eit = impl->extToHandle.find(ext);
+        if (eit == impl->extToHandle.end()) return fallback;
+        auto rit = impl->records.find(eit->second);
+        if (rit == impl->records.end()) return fallback;
+        return rit->second.badgeColor;
     }
 
     std::vector<AssetTypeRecord> AssetTypeRegistry::allPluginTypes() const

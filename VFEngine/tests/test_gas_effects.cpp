@@ -324,4 +324,74 @@ TEST_SUITE("GAS.Effects")
         CHECK(book.getCooldownRemaining({"Cooldown.Fireball"}) == doctest::Approx(0.0f));
         CHECK_FALSE(book.tags().hasTag("Cooldown.Fireball"));
     }
+
+    TEST_CASE("cooldown can be queried by effect id without cooldown tags")
+    {
+        EffectBook book;
+
+        GameplayEffectSpec cooldown;
+        cooldown.id = "Effects.FireballCooldown";
+        cooldown.durationPolicy = DurationPolicy::Duration;
+        cooldown.duration = 4.0f;
+
+        book.apply(cooldown);
+        CHECK(book.getCooldownRemaining({}) == doctest::Approx(0.0f));
+        CHECK(book.getCooldownRemainingById("Effects.FireballCooldown") == doctest::Approx(4.0f));
+
+        book.tick(1.5f);
+        CHECK(book.getCooldownRemainingById("Effects.FireballCooldown") == doctest::Approx(2.5f));
+        CHECK(book.getCooldownRemainingById("Effects.Other") == doctest::Approx(0.0f));
+    }
+
+    TEST_CASE("ongoing required tags suppress and restore continuous modifiers")
+    {
+        EffectBook book;
+        book.attributes().setAttribute("Power", attr(10.0f, 0.0f, 1000.0f));
+        book.recomputeAttributes();
+
+        GameplayEffectSpec buff;
+        buff.id = "ConditionalBuff";
+        buff.durationPolicy = DurationPolicy::Infinite;
+        buff.modifiers = {mod("Power", ModifierOp::Add, 20.0f)};
+        buff.ongoingRequiredTags = {"State.Empowered"};
+
+        book.apply(buff);
+        CHECK(book.attributes().currentOf("Power") == doctest::Approx(10.0f));
+
+        book.tags().addTag("State.Empowered");
+        auto enabled = book.tick(0.0f);
+        CHECK(enabled.expired.empty());
+        CHECK(book.attributes().currentOf("Power") == doctest::Approx(30.0f));
+
+        book.tags().removeTag("State.Empowered");
+        book.tick(0.0f);
+        CHECK(book.attributes().currentOf("Power") == doctest::Approx(10.0f));
+    }
+
+    TEST_CASE("removal tags expire active effects through the normal expiry path")
+    {
+        EffectBook book;
+        book.attributes().setAttribute("Armor", attr(5.0f, 0.0f, 1000.0f));
+        book.recomputeAttributes();
+
+        GameplayEffectSpec shield;
+        shield.id = "Shield";
+        shield.durationPolicy = DurationPolicy::Infinite;
+        shield.modifiers = {mod("Armor", ModifierOp::Add, 15.0f)};
+        shield.grantedTags = {"Buff.Shielded"};
+        shield.removalTags = {"State.Purged"};
+
+        auto applied = book.apply(shield);
+        REQUIRE(applied.applied);
+        CHECK(book.attributes().currentOf("Armor") == doctest::Approx(20.0f));
+        CHECK(book.tags().hasTag("Buff.Shielded"));
+
+        book.tags().addTag("State.Purged");
+        auto tick = book.tick(0.0f);
+        REQUIRE(tick.expired.size() == 1);
+        CHECK(tick.expired[0] == applied.handle);
+        CHECK(book.active().empty());
+        CHECK(book.attributes().currentOf("Armor") == doctest::Approx(5.0f));
+        CHECK_FALSE(book.tags().hasTag("Buff.Shielded"));
+    }
 }

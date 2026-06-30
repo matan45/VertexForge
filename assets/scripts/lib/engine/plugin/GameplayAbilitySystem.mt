@@ -70,6 +70,13 @@ public class GameplayAbilitySystem {
         return _gas_activate(entityId, abilityId, -1);
     }
 
+    // Set the transient target used by input-polled OnPressed abilities.
+    // Use noTarget() to clear it. Direct activate(...) calls can still pass an
+    // explicit target and do not depend on this value.
+    public static function setTarget(int entityId, int targetId): int {
+        return _gas_set_target(entityId, targetId);
+    }
+
     // Cancel an in-flight activation by its handle (no-op if not active).
     public static function cancel(int entityId, int activationHandle): void {
         _gas_cancel(entityId, activationHandle);

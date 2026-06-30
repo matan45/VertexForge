@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asset/AssetRef.hpp"
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,7 @@ struct GAS_AbilitySystemComponent
 {
     std::vector<asset::AssetRef> grantedAbilities; // .vfAbility refs
     bool pollInput = true;
+    std::int64_t targetEntity = -1; // transient runtime target, intentionally not reflected/serialized
 };
 
 // Named attributes as parallel arrays. currentValues is a READ-ONLY mirror the

@@ -6,6 +6,7 @@
 
 #include <glm/glm.hpp>
 
+#include <algorithm>
 #include <limits>
 #include <string>
 #include <utility>
@@ -17,6 +18,30 @@ namespace gas
         ctx = context;
         cueRealizer = std::move(cueSink);
         emitEvent = std::move(emit);
+    }
+
+    void GASRuntime::setGameActive(bool active)
+    {
+        if (active && !gameActive)
+            clearSpecCaches();
+        gameActive = active;
+    }
+
+    void GASRuntime::reset()
+    {
+        entities.clear();
+        clearSpecCaches();
+    }
+
+    void GASRuntime::clearSpecCaches()
+    {
+        abilityCache.clear();
+        effectCache.clear();
+        cueCache.clear();
+        effectIdToPath.clear();
+        cueIdToPath.clear();
+        effectIdIndexBuilt = false;
+        cueIdIndexBuilt = false;
     }
 
     // ------------------------------------------------------------------ assets
@@ -43,27 +68,139 @@ namespace gas
     const GameplayEffectSpec* GASRuntime::resolveEffect(const std::string& idOrPath)
     {
         if (auto it = effectCache.find(idOrPath); it != effectCache.end()) return &it->second;
-        auto spec = EffectAsset::load(resolvePath(idOrPath));
-        if (!spec) spec = EffectAsset::load(idOrPath);
-        if (!spec) return nullptr;
-        const std::string id = spec->id;
-        auto [ins, ok] = effectCache.emplace(idOrPath, std::move(*spec));
-        GameplayEffectSpec* result = &ins->second;          // stable across the next insert
-        if (!id.empty() && id != idOrPath) effectCache.try_emplace(id, *result);
-        return result;
+
+        auto loadPath = [this](const std::string& path, const std::string& cacheKey) -> const GameplayEffectSpec*
+        {
+            if (path.empty())
+                return nullptr;
+            if (auto it = effectCache.find(path); it != effectCache.end())
+            {
+                GameplayEffectSpec* result = &it->second;
+                if (cacheKey != path)
+                    effectCache.try_emplace(cacheKey, *result);
+                return result;
+            }
+
+            auto spec = EffectAsset::load(path);
+            if (!spec)
+                return nullptr;
+
+            const std::string id = spec->id;
+            auto [ins, ok] = effectCache.emplace(cacheKey, std::move(*spec));
+            GameplayEffectSpec* result = &ins->second;
+            if (cacheKey != path)
+                effectCache.try_emplace(path, *result);
+            if (!id.empty())
+            {
+                effectCache.try_emplace(id, *result);
+                effectIdToPath.try_emplace(id, path);
+            }
+            return result;
+        };
+
+        const std::string resolved = resolvePath(idOrPath);
+        if (const GameplayEffectSpec* spec = loadPath(resolved, idOrPath))
+            return spec;
+        if (resolved != idOrPath)
+            if (const GameplayEffectSpec* spec = loadPath(idOrPath, idOrPath))
+                return spec;
+
+        if (!effectIdIndexBuilt)
+            buildEffectIdIndex();
+        if (auto it = effectCache.find(idOrPath); it != effectCache.end())
+            return &it->second;
+        auto pit = effectIdToPath.find(idOrPath);
+        if (pit == effectIdToPath.end())
+            return nullptr;
+        return loadPath(pit->second, pit->second);
     }
 
     const GameplayCueSpec* GASRuntime::resolveCue(const std::string& idOrPath)
     {
         if (auto it = cueCache.find(idOrPath); it != cueCache.end()) return &it->second;
-        auto spec = CueAsset::load(resolvePath(idOrPath));
-        if (!spec) spec = CueAsset::load(idOrPath);
-        if (!spec) return nullptr;
-        const std::string id = spec->id;
-        auto [ins, ok] = cueCache.emplace(idOrPath, std::move(*spec));
-        GameplayCueSpec* result = &ins->second;
-        if (!id.empty() && id != idOrPath) cueCache.try_emplace(id, *result);
-        return result;
+
+        auto loadPath = [this](const std::string& path, const std::string& cacheKey) -> const GameplayCueSpec*
+        {
+            if (path.empty())
+                return nullptr;
+            if (auto it = cueCache.find(path); it != cueCache.end())
+            {
+                GameplayCueSpec* result = &it->second;
+                if (cacheKey != path)
+                    cueCache.try_emplace(cacheKey, *result);
+                return result;
+            }
+
+            auto spec = CueAsset::load(path);
+            if (!spec)
+                return nullptr;
+
+            const std::string id = spec->id;
+            auto [ins, ok] = cueCache.emplace(cacheKey, std::move(*spec));
+            GameplayCueSpec* result = &ins->second;
+            if (cacheKey != path)
+                cueCache.try_emplace(path, *result);
+            if (!id.empty())
+            {
+                cueCache.try_emplace(id, *result);
+                cueIdToPath.try_emplace(id, path);
+            }
+            return result;
+        };
+
+        const std::string resolved = resolvePath(idOrPath);
+        if (const GameplayCueSpec* spec = loadPath(resolved, idOrPath))
+            return spec;
+        if (resolved != idOrPath)
+            if (const GameplayCueSpec* spec = loadPath(idOrPath, idOrPath))
+                return spec;
+
+        if (!cueIdIndexBuilt)
+            buildCueIdIndex();
+        if (auto it = cueCache.find(idOrPath); it != cueCache.end())
+            return &it->second;
+        auto pit = cueIdToPath.find(idOrPath);
+        if (pit == cueIdToPath.end())
+            return nullptr;
+        return loadPath(pit->second, pit->second);
+    }
+
+    void GASRuntime::buildEffectIdIndex()
+    {
+        effectIdIndexBuilt = true;
+        effectIdToPath.clear();
+        if (!ctx)
+            return;
+
+        for (const auto& path : ctx->findAssetPathsByExtension(".vfgameplayeffect"))
+        {
+            auto spec = EffectAsset::load(path);
+            if (!spec || spec->id.empty())
+                continue;
+
+            effectIdToPath.try_emplace(spec->id, path);
+            auto [ins, ok] = effectCache.try_emplace(path, *spec);
+            effectCache.try_emplace(spec->id, ins->second);
+        }
+    }
+
+    void GASRuntime::buildCueIdIndex()
+    {
+        cueIdIndexBuilt = true;
+        cueIdToPath.clear();
+        if (!ctx)
+            return;
+
+        for (const auto& path : ctx->findAssetPathsByExtension(".vfgameplaycue"))
+        {
+            auto spec = CueAsset::load(path);
+            if (!spec || spec->id.empty())
+                continue;
+
+            cueIdToPath.try_emplace(spec->id, path);
+            auto [ins, ok] = cueCache.try_emplace(path, *spec);
+            cueCache.try_emplace(spec->id, ins->second);
+        }
     }
 
     // ----------------------------------------------------------------- seeding
@@ -160,7 +297,7 @@ namespace gas
         c.ownerTags = &st.book.tags();
         c.ownerAttributes = &st.book.attributes();
         c.isGranted = true;
-        c.cooldownRemaining = st.book.getCooldownRemaining(spec->cooldown.cooldownTags);
+        c.cooldownRemaining = cooldownRemainingFor(st, *spec);
         c.resolveEffect = [this](const std::string& id) { return resolveEffect(id); };
         if (target >= 0)
         {
@@ -189,7 +326,7 @@ namespace gas
         c.ownerTags = &st.book.tags();
         c.ownerAttributes = &st.book.attributes();
         c.isGranted = true;
-        c.cooldownRemaining = st.book.getCooldownRemaining(spec->cooldown.cooldownTags);
+        c.cooldownRemaining = cooldownRemainingFor(st, *spec);
         c.resolveEffect = [this](const std::string& id) { return resolveEffect(id); };
         if (target >= 0)
         {
@@ -223,6 +360,21 @@ namespace gas
         emitCues(entity, res.cuesToDispatch);
         refreshMirrors(static_cast<entt::entity>(entity), st);
         return ActivationStatus::Success;
+    }
+
+    int GASRuntime::setTarget(std::uint32_t entity, std::int64_t target)
+    {
+        if (!ctx)
+            return 0;
+        auto& reg = ctx->getRegistry();
+        const auto e = static_cast<entt::entity>(entity);
+        if (!reg.valid(e))
+            return 0;
+        auto* abilSys = reg.try_get<GAS_AbilitySystemComponent>(e);
+        if (!abilSys)
+            return 0;
+        abilSys->targetEntity = target;
+        return 1;
     }
 
     void GASRuntime::cancelAbility(std::uint32_t /*entity*/, std::uint64_t /*handle*/)
@@ -304,7 +456,18 @@ namespace gas
         if (pit == st.abilityPathById.end()) return 0.0f;
         const AbilitySpec* spec = loadAbility(pit->second);
         if (!spec) return 0.0f;
-        return st.book.getCooldownRemaining(spec->cooldown.cooldownTags);
+        return cooldownRemainingFor(st, *spec);
+    }
+
+    float GASRuntime::cooldownRemainingFor(EntityState& st, const AbilitySpec& spec)
+    {
+        float remaining = st.book.getCooldownRemaining(spec.cooldown.cooldownTags);
+        if (!spec.cooldown.effectId.empty())
+        {
+            if (const GameplayEffectSpec* cooldown = resolveEffect(spec.cooldown.effectId))
+                remaining = std::max(remaining, st.book.getCooldownRemainingById(cooldown->id));
+        }
+        return remaining;
     }
 
     // --------------------------------------------------------------------- tick
@@ -334,7 +497,8 @@ namespace gas
                     emitEvent("gas.effect_removed",
                               {{"entity", static_cast<int>(id)}, {"handle", static_cast<int>(h)}, {"reason", "Expired"}});
             emitAttributeChanges(id, rep.changes);
-            refreshMirrors(static_cast<entt::entity>(id), st);
+            if (!rep.changes.empty() || !rep.expired.empty())
+                refreshMirrors(static_cast<entt::entity>(id), st);
         }
 
         if (!gameActive) return;
@@ -356,7 +520,7 @@ namespace gas
                 if (spec->activation.policy != ActivationPolicy::OnPressed) continue;
                 if (spec->activation.inputAction.empty()) continue;
                 if (ctx->isActionPressed(spec->activation.inputAction))
-                    activate(id, abilityId, /*target*/ -1);
+                    activate(id, abilityId, abilSys.targetEntity);
             }
         }
     }

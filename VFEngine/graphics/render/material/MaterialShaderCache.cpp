@@ -64,12 +64,13 @@ namespace render::mesh
         auto it = cache.find(materialPath);
         if (it != cache.end())
         {
-            material::MaterialRuntimeData runtimeData =
-                material::MaterialRuntimeDataBuilder::fromMaterialData(materialData);
+            const std::string vertexShaderHash = hashShaderSource(materialData.cachedVertexShader);
+            const std::string fragmentShaderHash = hashShaderSource(materialData.cachedFragmentShader);
+            const std::string& irHash = materialData.irHash;
 
-            if (it->second.vertexShaderHash == runtimeData.shaderMap.vertexShaderHash &&
-                it->second.fragmentShaderHash == runtimeData.shaderMap.fragmentShaderHash &&
-                it->second.materialIRHash == runtimeData.irHash &&
+            if (it->second.vertexShaderHash == vertexShaderHash &&
+                it->second.fragmentShaderHash == fragmentShaderHash &&
+                (irHash.empty() || it->second.materialIRHash == irHash) &&
                 it->second.valid)
             {
                 return &it->second;
