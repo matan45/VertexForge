@@ -143,6 +143,15 @@ namespace windows
                 pendingRefresh.store(true);
                 projectResultsStale.store(true);
             });
+
+        openMeshPreviewToken = dispatcher.subscribe<events::application::OpenMeshPreviewNotification>(
+            [this](const events::application::OpenMeshPreviewNotification& notification)
+            {
+                if (!notification.filePath.empty())
+                {
+                    previewManager->openPreview(fs::path(notification.filePath), AssetType::Model);
+                }
+            });
     }
 
     ContentBrowser::~ContentBrowser()
@@ -157,6 +166,7 @@ namespace windows
         if (fileDeletedToken.isValid()) dispatcher.unsubscribe(fileDeletedToken);
         if (folderSelectedToken.isValid()) dispatcher.unsubscribe(folderSelectedToken);
         if (batchCompletedToken.isValid()) dispatcher.unsubscribe(batchCompletedToken);
+        if (openMeshPreviewToken.isValid()) dispatcher.unsubscribe(openMeshPreviewToken);
     }
 
     void ContentBrowser::draw()

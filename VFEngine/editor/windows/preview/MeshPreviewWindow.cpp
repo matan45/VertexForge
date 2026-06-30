@@ -5,21 +5,59 @@
 #include "../../camera/OrbitCamera.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "MeshSocketWriter.hpp"
+#include "resource/ConvexDecompositionSidecar.hpp"
 #include "imgui.h"
 #include <imgui_internal.h>
 #include "ImGuizmo.h"
 #include "events/EventDispatcher.hpp"
+#include "events/lifecycle/AssetLifecycleEvents.hpp"
+#include "events/physics/PhysicsEvents.hpp"
 #include "events/render/PreviewEvents.hpp"
 #include "events/physics/SocketEvents.hpp"
+#include "events/project/SceneEvents.hpp"
 #include <IconsFontAwesome6.h>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
+#include <chrono>
+#include <cctype>
 #include <filesystem>
 #include <map>
 #include <cstring>
 
 namespace windows
 {
+    namespace
+    {
+        std::string normalizePathForCompare(const std::string& path)
+        {
+            if (path.empty())
+                return {};
+
+            std::error_code ec;
+            std::filesystem::path normalized = std::filesystem::weakly_canonical(path, ec);
+            if (ec)
+            {
+                ec.clear();
+                normalized = std::filesystem::absolute(path, ec);
+            }
+
+            std::string result = ec ? path : normalized.string();
+            std::replace(result.begin(), result.end(), '\\', '/');
+            std::transform(result.begin(), result.end(), result.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return result;
+        }
+
+        const char* submeshNameOrFallback(const std::vector<services::SubMeshInfo>& subMeshes,
+                                          int submeshIndex)
+        {
+            if (submeshIndex < 0 || static_cast<size_t>(submeshIndex) >= subMeshes.size())
+                return "Unknown";
+            return subMeshes[static_cast<size_t>(submeshIndex)].name.c_str();
+        }
+    }
+
     MeshPreviewWindow::MeshPreviewWindow(const std::string& meshFilePath)
         : meshPath(meshFilePath)
           , camera(std::make_unique<editor::OrbitCamera>())
@@ -28,7 +66,12 @@ namespace windows
         windowTitle = "Mesh Preview: " + path.filename().string();
     }
 
-    MeshPreviewWindow::~MeshPreviewWindow() = default;
+    MeshPreviewWindow::~MeshPreviewWindow()
+    {
+        cancelConvexRegen.store(true);
+        if (convexRegenFuture.valid())
+            convexRegenFuture.wait();
+    }
 
     void MeshPreviewWindow::draw()
     {
@@ -548,7 +591,324 @@ namespace windows
         }
 
         ImGui::Separator();
+        drawColliderPanel();
+
+        ImGui::Separator();
         drawSocketPanel();
+    }
+
+    void MeshPreviewWindow::drawColliderPanel()
+    {
+        pollConvexRegenerationResult();
+
+        if (!ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            return;
+        }
+
+        ImGui::TextWrapped("Convex data is stored in one .vfCollider sidecar next to this .vfMesh.");
+        ImGui::TextWrapped("Changing it affects every entity that uses this mesh.");
+
+        const auto sidecarPath = resource::ConvexDecompositionSidecar::sidecarPathForMesh(meshPath);
+        ImGui::TextDisabled("Sidecar: %s", sidecarPath.filename().string().c_str());
+
+        drawColliderSidecarSummary();
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Text("Target:");
+        if (selectedSubMesh < 0)
+        {
+            ImGui::TextDisabled("  All submeshes");
+        }
+        else
+        {
+            ImGui::TextDisabled("  Submesh %d: %s", selectedSubMesh,
+                                submeshNameOrFallback(subMeshes, selectedSubMesh));
+        }
+
+        drawConvexRegenerationSettings();
+
+        const bool running = convexRegenFuture.valid()
+            && convexRegenFuture.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready;
+
+        if (running)
+        {
+            ImGui::ProgressBar(std::clamp(convexRegenProgress.load(), 0.0f, 1.0f), ImVec2(-1.0f, 0.0f));
+            if (ImGui::Button("Cancel Regeneration"))
+                cancelConvexRegen.store(true);
+        }
+        else
+        {
+            const bool canRegenerate = !meshPath.empty();
+            if (!canRegenerate)
+                ImGui::BeginDisabled();
+
+            const char* buttonLabel = selectedSubMesh < 0
+                ? "Regenerate Convex Decomposition"
+                : "Regenerate Selected Submesh";
+            if (ImGui::Button(buttonLabel))
+            {
+                cancelConvexRegen.store(false);
+                convexRegenProgress.store(0.0f);
+                convexRegenStatus.clear();
+                activeConvexRegenSubmesh = selectedSubMesh;
+                convexRebuiltEntityCount = 0;
+
+                const std::string targetMeshPath = meshPath;
+                const int32_t targetSubmesh = selectedSubMesh;
+                const auto config = convexRegenConfig;
+                convexRegenFuture = std::async(std::launch::async,
+                    [this, targetMeshPath, targetSubmesh, config]()
+                    {
+                        return types::ConvexDecompositionRegenerator::regenerate(
+                            targetMeshPath,
+                            targetSubmesh,
+                            config,
+                            [this](float progress, std::string_view)
+                            {
+                                convexRegenProgress.store(progress);
+                            },
+                            &cancelConvexRegen);
+                    });
+            }
+
+            if (!canRegenerate)
+            {
+                ImGui::EndDisabled();
+                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "No mesh path resolved");
+            }
+        }
+
+        if (!convexRegenStatus.empty())
+        {
+            ImGui::TextWrapped("%s", convexRegenStatus.c_str());
+        }
+    }
+
+    bool MeshPreviewWindow::drawConvexRegenerationSettings()
+    {
+        bool changed = false;
+
+        const char* presetNames[] = {"Fast", "Balanced", "Quality", "Custom"};
+        int presetIndex = static_cast<int>(convexRegenConfig.vhacdPreset);
+        if (ImGui::Combo("Quality Preset##MeshPreviewConvexRegen", &presetIndex, presetNames, IM_ARRAYSIZE(presetNames)))
+        {
+            convexRegenConfig.vhacdPreset = static_cast<importConfig::VHACDPreset>(presetIndex);
+            changed = true;
+        }
+
+        const bool isCustom = convexRegenConfig.vhacdPreset == importConfig::VHACDPreset::Custom;
+        if (!isCustom)
+            ImGui::BeginDisabled();
+
+        int maxHulls = static_cast<int>(convexRegenConfig.maxConvexHulls);
+        if (ImGui::SliderInt("Max Hulls##MeshPreviewConvexRegen", &maxHulls, 1, 64))
+        {
+            convexRegenConfig.maxConvexHulls = static_cast<uint32_t>(maxHulls);
+            changed = true;
+        }
+
+        int maxVerts = static_cast<int>(convexRegenConfig.maxVerticesPerHull);
+        if (ImGui::SliderInt("Max Vertices Per Hull##MeshPreviewConvexRegen", &maxVerts, 8, 256))
+        {
+            convexRegenConfig.maxVerticesPerHull = static_cast<uint32_t>(maxVerts);
+            changed = true;
+        }
+
+        if (ImGui::TreeNode("Advanced Parameters##MeshPreviewConvexRegen"))
+        {
+            int resolution = static_cast<int>(convexRegenConfig.vhacdResolution);
+            if (ImGui::SliderInt("Resolution##MeshPreviewConvexRegen", &resolution, 10000, 500000))
+            {
+                convexRegenConfig.vhacdResolution = static_cast<uint32_t>(resolution);
+                changed = true;
+            }
+
+            float minVolumeError = convexRegenConfig.minVolumePercentError;
+            if (ImGui::SliderFloat("Min Volume Error %%##MeshPreviewConvexRegen", &minVolumeError, 0.1f, 10.0f, "%.1f"))
+            {
+                convexRegenConfig.minVolumePercentError = minVolumeError;
+                changed = true;
+            }
+
+            int recursionDepth = static_cast<int>(convexRegenConfig.maxRecursionDepth);
+            if (ImGui::SliderInt("Max Recursion Depth##MeshPreviewConvexRegen", &recursionDepth, 4, 16))
+            {
+                convexRegenConfig.maxRecursionDepth = static_cast<uint32_t>(recursionDepth);
+                changed = true;
+            }
+
+            if (ImGui::Checkbox("Shrink Wrap##MeshPreviewConvexRegen", &convexRegenConfig.shrinkWrap))
+                changed = true;
+
+            ImGui::TreePop();
+        }
+
+        if (!isCustom)
+            ImGui::EndDisabled();
+
+        return changed;
+    }
+
+    void MeshPreviewWindow::drawColliderSidecarSummary()
+    {
+        std::vector<resource::ConvexDecompositionSidecarEntry> entries;
+        if (!resource::ConvexDecompositionSidecar::load(meshPath, entries))
+        {
+            ImGui::TextDisabled("No generated collider sidecar");
+            return;
+        }
+
+        uint32_t hullCount = 0;
+        for (const auto& entry : entries)
+            hullCount += static_cast<uint32_t>(entry.data.hulls.size());
+
+        ImGui::Text("Generated collider: %zu submeshes, %u hulls", entries.size(), hullCount);
+
+        if (selectedSubMesh >= 0)
+        {
+            const auto it = std::find_if(entries.begin(), entries.end(),
+                [this](const auto& entry)
+                {
+                    return entry.submeshIndex == static_cast<uint32_t>(selectedSubMesh);
+                });
+
+            if (it == entries.end() || !it->data.isValid())
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f),
+                                   "Selected submesh has no generated convex data");
+            }
+            else
+            {
+                ImGui::TextDisabled("Selected submesh: %zu hulls", it->data.hulls.size());
+            }
+        }
+    }
+
+    void MeshPreviewWindow::pollConvexRegenerationResult()
+    {
+        if (!convexRegenFuture.valid())
+            return;
+
+        if (convexRegenFuture.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
+            return;
+
+        types::ConvexRegenerationResult result;
+        try
+        {
+            result = convexRegenFuture.get();
+        }
+        catch (const std::exception& e)
+        {
+            convexRegenStatus = std::string("Convex decomposition failed: ") + e.what();
+            return;
+        }
+
+        if (!result.success)
+        {
+            convexRegenStatus = "Convex decomposition failed: " + result.message;
+            return;
+        }
+
+        convexRegenProgress.store(1.0f);
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::lifecycle::AssetReleaseReadyNotification releaseNotification;
+        releaseNotification.path = meshPath;
+        releaseNotification.type = resource::AssetType::Mesh;
+        dispatcher.publish(releaseNotification);
+
+        convexRebuiltEntityCount = rebuildPhysicsBodiesUsingMesh(activeConvexRegenSubmesh);
+
+        convexRegenStatus = result.message + " (" + std::to_string(result.hullCount) + " hulls)";
+        if (convexRebuiltEntityCount > 0)
+        {
+            convexRegenStatus += ", rebuilt " + std::to_string(convexRebuiltEntityCount) + " live physics ";
+            convexRegenStatus += convexRebuiltEntityCount == 1 ? "body" : "bodies";
+        }
+    }
+
+    uint32_t MeshPreviewWindow::rebuildPhysicsBodiesUsingMesh(int32_t regeneratedSubmesh) const
+    {
+        const std::string targetPath = normalizePathForCompare(meshPath);
+        if (targetPath.empty())
+            return 0;
+
+        uint32_t rebuiltCount = 0;
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::scene::GetEntitiesWithComponentQuery query;
+        query.componentType = services::ComponentTypeId::Collider;
+
+        std::vector<services::EntityHandle> entities;
+        try
+        {
+            entities = dispatcher.query(query);
+        }
+        catch (const std::exception&)
+        {
+            return 0;
+        }
+
+        for (const auto& entity : entities)
+        {
+            try
+            {
+                events::scene::GetColliderDataQuery colliderQuery;
+                colliderQuery.entity = entity;
+                auto colliderOpt = dispatcher.query(colliderQuery);
+                if (!colliderOpt.has_value())
+                    continue;
+
+                if (colliderOpt->shape != types::ColliderShape::ConvexMesh &&
+                    colliderOpt->shape != types::ColliderShape::TriangleMesh)
+                {
+                    continue;
+                }
+
+                std::string entityMeshPath;
+                if (colliderOpt->meshRef.isValid())
+                {
+                    entityMeshPath = colliderOpt->meshRef.resolve();
+                }
+                else
+                {
+                    events::scene::GetMeshDataQuery meshQuery;
+                    meshQuery.entity = entity;
+                    auto meshOpt = dispatcher.query(meshQuery);
+                    if (meshOpt.has_value() && meshOpt->meshRef.isValid())
+                        entityMeshPath = meshOpt->meshRef.resolve();
+                }
+
+                if (normalizePathForCompare(entityMeshPath) != targetPath)
+                    continue;
+
+                if (regeneratedSubmesh >= 0 &&
+                    colliderOpt->submeshIndex >= 0 &&
+                    colliderOpt->submeshIndex != regeneratedSubmesh)
+                {
+                    continue;
+                }
+
+                events::physics::HasRigidBodyQuery hasBodyQuery;
+                hasBodyQuery.entity = entity;
+                if (!dispatcher.query(hasBodyQuery))
+                    continue;
+
+                events::physics::CreatePhysicsBodyCommand rebuildCmd;
+                rebuildCmd.entity = entity;
+                rebuildCmd.rebuild = true;
+                if (dispatcher.execute(rebuildCmd))
+                    ++rebuiltCount;
+            }
+            catch (const std::exception&)
+            {
+                continue;
+            }
+        }
+
+        return rebuiltCount;
     }
 
     void MeshPreviewWindow::drawSocketPanel()
