@@ -12,6 +12,7 @@
 #include <terrain/TerrainMaterialAsset.hpp>
 #include <behaviortree/BehaviorTreeAsset.hpp>
 #include <ui/UIThemeSerialization.hpp>
+#include <fstream>
 
 namespace windows
 {
@@ -396,6 +397,75 @@ namespace windows
             {
                 ImGui::CloseCurrentPopup();
                 showCreateThemeModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    // VK-1449: one generic modal for every plugin-registered asset type. The
+    // pending fields (extension / template / label) were set from the registry
+    // record when the user picked the type from the Create menu. The new file is
+    // written with the type's defaultTemplate JSON (or "{}") and announced via
+    // AssetSavedNotification so the asset database picks it up.
+    void ContentBrowserModals::drawCreatePluginAssetModal(const fs::path& currentPath)
+    {
+        if (showCreatePluginAssetModal &&
+            ImGui::BeginPopupModal("Create Plugin Asset", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextUnformatted(pendingPluginAssetLabel.empty()
+                                       ? "New Plugin Asset"
+                                       : pendingPluginAssetLabel.c_str());
+            ImGui::Separator();
+
+            char buffer[256];
+            std::strncpy(buffer, newPluginAssetName.c_str(), sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText("Name", buffer, IM_ARRAYSIZE(buffer)))
+            {
+                newPluginAssetName = std::string(buffer);
+            }
+
+            const bool canCreate = !newPluginAssetName.empty() && !pendingPluginAssetExt.empty();
+            if (!canCreate) ImGui::BeginDisabled();
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                fs::path newPath = currentPath / (newPluginAssetName + pendingPluginAssetExt);
+                int counter = 1;
+                while (fs::exists(newPath))
+                {
+                    newPath = currentPath /
+                              (newPluginAssetName + "_" + std::to_string(counter) + pendingPluginAssetExt);
+                    counter++;
+                }
+
+                std::string pathStr = StringUtil::wstringToUtf8(newPath.wstring());
+                std::string content = pendingPluginAssetTemplate.empty() ? std::string("{}")
+                                                                         : pendingPluginAssetTemplate;
+                bool ok = false;
+                {
+                    std::ofstream f(newPath);
+                    if (f.is_open())
+                    {
+                        f << content;
+                        ok = f.good();
+                    }
+                }
+                if (ok)
+                {
+                    events::resource::AssetSavedNotification assetNotif;
+                    assetNotif.filePath = pathStr;
+                    events::EventDispatcher::instance().publish(assetNotif);
+                    if (refreshCallback) refreshCallback();
+                }
+                ImGui::CloseCurrentPopup();
+                showCreatePluginAssetModal = false;
+            }
+            if (!canCreate) ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showCreatePluginAssetModal = false;
             }
             ImGui::EndPopup();
         }

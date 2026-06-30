@@ -1,0 +1,13 @@
+{
+    "version": "1.0",
+    "tags": [
+        { "tag": "Character", "comment": "Root character-state tag" },
+        { "tag": "Character.Stunned", "comment": "Cannot activate abilities while present" },
+        { "tag": "Character.Dead", "comment": "Removed from play" },
+        { "tag": "Ability", "comment": "Root ability-identity tag" },
+        { "tag": "Ability.Fireball", "comment": "The Fireball ability identity" },
+        { "tag": "Cooldown", "comment": "Root cooldown tag" },
+        { "tag": "Cooldown.Fireball", "comment": "Granted by Fireball's cooldown" },
+        { "tag": "Element.Fire", "comment": "Fire element" }
+    ]
+}

@@ -41,6 +41,10 @@ namespace plugin {
         std::vector<std::unique_ptr<import::AssetImporter>> registeredAssetImporters;
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
         std::vector<std::string> registeredScriptFunctions;
+        // VK-1449: asset-type registry handle ids this plugin owns, so unload
+        // can unregister them (mirrors registeredAssetImporters). Stored as raw
+        // ids to keep the AssetTypeRegistry header out of this header.
+        std::vector<uint32_t> registeredAssetTypeHandles;
         std::vector<plugin::CustomPipelineHandle> managedCustomPipelines;
         std::vector<plugin::CustomMeshHandle> managedCustomMeshes;
         // VK-1409: post-process effects + the plugin's requested enabled state, so a
@@ -87,6 +91,11 @@ namespace plugin {
                                   const std::string& title) override;
         void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) override;
         void registerAssetImporter(std::unique_ptr<import::AssetImporter> importer) override;
+        PluginAssetTypeHandle registerAssetType(const PluginAssetTypeDesc& desc) override;
+        void unregisterAssetType(PluginAssetTypeHandle handle) override;
+        std::string resolveAssetPath(const std::string& assetGuidHex) const override;
+        std::string resolveProjectPath(const std::string& projectRelativePath) const override;
+        std::vector<std::string> findAssetPathsByExtension(const std::string& extension) const override;
         void publishEvent(const std::string& eventName, const nlohmann::json& data) override;
         events::SubscriptionToken subscribeEvent(const std::string& eventName,
                                                   std::function<void(const nlohmann::json&)> handler) override;

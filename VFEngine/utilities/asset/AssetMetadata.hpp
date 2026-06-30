@@ -31,7 +31,10 @@ namespace asset
     {
         // Version 2 adds the scanned "dependencies" GUID array. Version 1
         // files load unchanged (the field is optional on read).
-        static constexpr uint32_t kCurrentFormatVersion = 2;
+        // Version 3 adds the optional "pluginTypeId" string for plugin-
+        // registered asset types (VK-1449). Absent on built-ins; ignored by
+        // older readers, so older files load unchanged.
+        static constexpr uint32_t kCurrentFormatVersion = 3;
 
         AssetGUID guid;
         resource::AssetType type = resource::AssetType::COUNT;
@@ -40,5 +43,8 @@ namespace asset
         uint32_t formatVersion = kCurrentFormatVersion;
         std::vector<AssetGUID> dependencies;
         std::optional<FractureMetadata> fractureData;
+        // For type == PluginAsset: the registered plugin type id (e.g.
+        // "gas.ability"). Empty for built-in types.
+        std::string pluginTypeId;
     };
 }

@@ -1,0 +1,18 @@
+{
+    "apiVersion": 16,
+    "author": "VertexForge",
+    "capabilities": [
+        "editor",
+        "scripting",
+        "vfx",
+        "audio",
+        "input"
+    ],
+    "dependencies": [],
+    "description": "Gameplay Ability System (VK-816): data-driven abilities, attributes, gameplay effects, hierarchical tags, cooldowns, costs and cues. Ships .vfAbility/.vfGameplayEffect/.vfGameplayCue/.vfGameplayTags assets via the plugin asset-type SDK (VK-1449), an mType facade (GameplayAbilitySystem.mt), and tabbed editor tooling.",
+    "enabled": false,
+    "library": "GameplayAbilitySystem.dll",
+    "loadOrder": 130,
+    "name": "GameplayAbilitySystem",
+    "version": "1.0.0"
+}

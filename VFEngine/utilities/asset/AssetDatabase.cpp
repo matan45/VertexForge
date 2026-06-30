@@ -62,7 +62,8 @@ namespace asset
     }
 
     AssetGUID AssetDatabase::registerAsset(const std::string& path, resource::AssetType type,
-                                           const std::string& importSource)
+                                           const std::string& importSource,
+                                           const std::string& pluginTypeId)
     {
         std::string normalizedPath = normalizePath(path);
 
@@ -82,6 +83,7 @@ namespace asset
         entry.path = normalizedPath;
         entry.type = type;
         entry.importSource = importSource;
+        entry.pluginTypeId = pluginTypeId;
 
         guidToEntry[guid] = entry;
         pathToGuid[normalizedPath] = guid;
@@ -90,7 +92,8 @@ namespace asset
     }
 
     void AssetDatabase::registerAssetWithGUID(const AssetGUID& guid, const std::string& path,
-                                              resource::AssetType type, const std::string& importSource)
+                                              resource::AssetType type, const std::string& importSource,
+                                              const std::string& pluginTypeId)
     {
         std::string normalizedPath = normalizePath(path);
 
@@ -101,6 +104,7 @@ namespace asset
         entry.path = normalizedPath;
         entry.type = type;
         entry.importSource = importSource;
+        entry.pluginTypeId = pluginTypeId;
 
         guidToEntry[guid] = entry;
         pathToGuid[normalizedPath] = guid;
@@ -325,6 +329,10 @@ namespace asset
                     {
                         assetObj["importSource"] = entry.importSource;
                     }
+                    if (!entry.pluginTypeId.empty())
+                    {
+                        assetObj["pluginTypeId"] = entry.pluginTypeId;
+                    }
                     assetsObj[guid.toString()] = assetObj;
                 }
             }
@@ -402,6 +410,7 @@ namespace asset
                     entry.path = normalizePath(assetObj.value("path", ""));
                     entry.type = AssetMetadataSerializer::stringToAssetType(assetObj.value("type", ""));
                     entry.importSource = assetObj.value("importSource", "");
+                    entry.pluginTypeId = assetObj.value("pluginTypeId", "");
 
                     guidToEntry[guid] = entry;
                     pathToGuid[entry.path] = guid;
@@ -480,7 +489,8 @@ namespace asset
                 assetPath = assetPath.parent_path() / assetPath.stem();
 
                 registerAssetWithGUID(metadata->guid, assetPath.string(),
-                                      metadata->type, metadata->importSourcePath);
+                                      metadata->type, metadata->importSourcePath,
+                                      metadata->pluginTypeId);
 
                 if (!metadata->dependencies.empty())
                 {
@@ -558,7 +568,8 @@ namespace asset
                     std::string pathStr = assetPath.string();
 
                     registerAssetWithGUID(metadata->guid, pathStr,
-                                          metadata->type, metadata->importSourcePath);
+                                          metadata->type, metadata->importSourcePath,
+                                          metadata->pluginTypeId);
 
                     vfLogInfo("Resolved missing asset by meta scan: {} -> {}", guid.toString(), pathStr);
                     return normalizePath(pathStr);

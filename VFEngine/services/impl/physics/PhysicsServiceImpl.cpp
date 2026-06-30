@@ -99,7 +99,8 @@ namespace services {
                         const std::string entityName = registry.all_of<components::NameComponent>(entity)
                             ? registry.get<components::NameComponent>(entity).name : std::string("Runtime");
                         const std::string validationError = validateCollider(
-                            collider, registry.get<components::RigidBodyComponent>(entity), entityName);
+                            collider, registry.get<components::RigidBodyComponent>(entity), entityName,
+                            &registry, entity);
                         if (!validationError.empty())
                         {
                             vfLogWarning("{} - skipping runtime physics body creation", validationError);

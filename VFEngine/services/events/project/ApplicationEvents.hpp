@@ -2,6 +2,7 @@
 #include "../EventTypes.hpp"
 #include "types/RenderSettings.hpp"
 #include <cstdint>
+#include <string>
 
 namespace events::application {
 
@@ -100,6 +101,11 @@ namespace events::application {
     struct OpenBackgroundRemovalNotification : INotification {
         std::string filePath;
         std::string_view getName() const override { return "OpenBackgroundRemoval"; }
+    };
+
+    struct OpenMeshPreviewNotification : INotification {
+        std::string filePath;
+        std::string_view getName() const override { return "OpenMeshPreview"; }
     };
 
     // VK-1435 — a UICanvas-rooted .vfPrefab was opened from the content browser. It is a UI

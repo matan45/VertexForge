@@ -175,7 +175,8 @@ namespace windows
         ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
         maximizer.preBegin();
 
-        std::string title = windowTitle + (isDirty ? " *" : "  ");
+        std::string title = windowTitle + (isDirty ? " *" : "  ") +
+                            "###MaterialEditor:" + materialPath;
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoScrollbar;
         flags |= maximizer.windowFlags();

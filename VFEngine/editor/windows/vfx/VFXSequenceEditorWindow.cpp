@@ -217,11 +217,17 @@ namespace windows
             needsInit = false;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(960, 620), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = editor::preview::initialWindowSize("VFXSequenceEditor", ImVec2(960, 620));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
 
         std::string title = windowTitle + (isDirty ? " *" : "  ") + "###VFXSequenceEditor:" + seqPath;
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar;
+        flags |= maximizer.windowFlags();
         if (ImGui::Begin(title.c_str(), &isOpen, flags))
         {
             if (data)
@@ -265,6 +271,12 @@ namespace windows
             }
         }
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            editor::preview::rememberWindowSize("VFXSequenceEditor", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
     }
 
     void VFXSequenceEditorWindow::drawToolbar()
@@ -319,6 +331,8 @@ namespace windows
                 socketNames.clear();
             }
         }
+        ImGui::SameLine();
+        maximizer.drawButton();
 
         ImGui::Separator();
     }

@@ -33,6 +33,13 @@ namespace resource {
 		HumanoidRig = 22,
 		RetargetMap = 23,
 		VFXSequence = 24,
+		// Generic sentinel for plugin-registered asset types (VK-1449). The
+		// precise identity is a string typeId carried alongside (see
+		// asset::AssetTypeRegistry / AssetMetadata::pluginTypeId); all plugin
+		// asset types funnel through this single enum value. Appended before
+		// COUNT — both persistence paths store AssetType by name, never by the
+		// raw integer, so the renumbered COUNT is backward-compatible.
+		PluginAsset = 25,
 		COUNT
 	};
 
@@ -63,6 +70,7 @@ namespace resource {
 		case AssetType::HumanoidRig:      return "HumanoidRig";
 		case AssetType::RetargetMap:      return "RetargetMap";
 		case AssetType::VFXSequence:      return "VFXSequence";
+		case AssetType::PluginAsset:      return "PluginAsset";
 		default:                          return "Unknown";
 		}
 	}

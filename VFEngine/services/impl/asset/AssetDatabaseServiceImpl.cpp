@@ -4,6 +4,7 @@
 #include "../../events/project/FileOperationsEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
 #include "asset/AssetDatabase.hpp"
+#include "asset/AssetTypeRegistry.hpp"
 #include "asset/AssetMetadataSerializer.hpp"
 #include "asset/AssetDatabaseMigrator.hpp"
 #include "asset/DependencyScanner.hpp"
@@ -17,6 +18,33 @@ namespace fs = std::filesystem;
 
 namespace services
 {
+    namespace
+    {
+        std::string pluginTypeIdForAsset(const std::string& filePath, resource::AssetType type)
+        {
+            if (type != resource::AssetType::PluginAsset)
+                return {};
+
+            asset::AssetTypeRecord rec;
+            const std::string extension = fs::path(filePath).extension().string();
+            if (asset::AssetTypeRegistry::instance().findByExtension(extension, rec))
+                return rec.typeId;
+
+            return {};
+        }
+
+        void stampImportTimestamp(asset::AssetMetadata& metadata)
+        {
+            auto now = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now);
+            std::tm tm{};
+            localtime_s(&tm, &time);
+            std::ostringstream oss;
+            oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+            metadata.importTimestamp = oss.str();
+        }
+    }
+
     AssetDatabaseServiceImpl::~AssetDatabaseServiceImpl()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -41,15 +69,7 @@ namespace services
                 metadata.guid = guid;
                 metadata.type = cmd.type;
                 metadata.importSourcePath = cmd.importSource;
-                {
-                    auto now = std::chrono::system_clock::now();
-                    auto time = std::chrono::system_clock::to_time_t(now);
-                    std::tm tm{};
-                    localtime_s(&tm, &time);
-                    std::ostringstream oss;
-                    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-                    metadata.importTimestamp = oss.str();
-                }
+                stampImportTimestamp(metadata);
                 auto metaPath = asset::AssetMetadataSerializer::getMetaPath(cmd.path);
                 asset::AssetMetadataSerializer::save(metadata, metaPath);
 
@@ -306,15 +326,7 @@ namespace services
             metadata.guid = guid;
             metadata.type = type;
             metadata.importSourcePath = sourcePath;
-            {
-                auto now = std::chrono::system_clock::now();
-                auto time = std::chrono::system_clock::to_time_t(now);
-                std::tm tm{};
-                localtime_s(&tm, &time);
-                std::ostringstream oss;
-                oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-                metadata.importTimestamp = oss.str();
-            }
+            stampImportTimestamp(metadata);
             asset::AssetMetadataSerializer::save(metadata, metaPath);
         }
 
@@ -344,25 +356,35 @@ namespace services
                 if (existingMeta.has_value())
                 {
                     guid = existingMeta->guid;
-                    db.registerAssetWithGUID(guid, filePath,
-                        existingMeta->type != resource::AssetType::COUNT ? existingMeta->type : type);
+                    const resource::AssetType effectiveType =
+                        existingMeta->type != resource::AssetType::COUNT ? existingMeta->type : type;
+                    std::string pluginTypeId = existingMeta->pluginTypeId;
+                    const std::string detectedPluginTypeId = pluginTypeIdForAsset(filePath, effectiveType);
+                    if (pluginTypeId.empty())
+                        pluginTypeId = detectedPluginTypeId;
+
+                    db.registerAssetWithGUID(guid, filePath, effectiveType,
+                                             existingMeta->importSourcePath, pluginTypeId);
+
+                    if (existingMeta->type == resource::AssetType::COUNT ||
+                        existingMeta->pluginTypeId != pluginTypeId)
+                    {
+                        existingMeta->type = effectiveType;
+                        existingMeta->pluginTypeId = pluginTypeId;
+                        existingMeta->formatVersion = asset::AssetMetadata::kCurrentFormatVersion;
+                        asset::AssetMetadataSerializer::save(*existingMeta, metaPath);
+                    }
                 }
                 else
                 {
-                    guid = db.registerAsset(filePath, type);
+                    const std::string pluginTypeId = pluginTypeIdForAsset(filePath, type);
+                    guid = db.registerAsset(filePath, type, "", pluginTypeId);
 
                     asset::AssetMetadata metadata;
                     metadata.guid = guid;
                     metadata.type = type;
-                    {
-                        auto now = std::chrono::system_clock::now();
-                        auto time = std::chrono::system_clock::to_time_t(now);
-                        std::tm tm{};
-                        localtime_s(&tm, &time);
-                        std::ostringstream oss;
-                        oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-                        metadata.importTimestamp = oss.str();
-                    }
+                    metadata.pluginTypeId = pluginTypeId;
+                    stampImportTimestamp(metadata);
                     asset::AssetMetadataSerializer::save(metadata, metaPath);
                 }
 
@@ -377,6 +399,44 @@ namespace services
         }
 
         if (!guidOpt) return;
+
+        {
+            auto metaPath = asset::AssetMetadataSerializer::getMetaPath(filePath);
+            auto existingMeta = asset::AssetMetadataSerializer::load(metaPath);
+            if (existingMeta.has_value())
+            {
+                const resource::AssetType detectedType =
+                    asset::AssetDatabaseMigrator::detectAssetTypeFromPath(filePath);
+                const resource::AssetType effectiveType =
+                    existingMeta->type != resource::AssetType::COUNT ? existingMeta->type : detectedType;
+                if (effectiveType == resource::AssetType::PluginAsset && existingMeta->pluginTypeId.empty())
+                {
+                    const std::string pluginTypeId = pluginTypeIdForAsset(filePath, effectiveType);
+                    if (!pluginTypeId.empty())
+                    {
+                        existingMeta->type = effectiveType;
+                        existingMeta->pluginTypeId = pluginTypeId;
+                        existingMeta->formatVersion = asset::AssetMetadata::kCurrentFormatVersion;
+                        asset::AssetMetadataSerializer::save(*existingMeta, metaPath);
+                        db.registerAssetWithGUID(existingMeta->guid, filePath, effectiveType,
+                                                 existingMeta->importSourcePath, pluginTypeId);
+                    }
+                }
+            }
+            else
+            {
+                auto entry = db.getEntry(*guidOpt);
+                if (entry.has_value() &&
+                    entry->type == resource::AssetType::PluginAsset &&
+                    entry->pluginTypeId.empty())
+                {
+                    const std::string pluginTypeId = pluginTypeIdForAsset(filePath, entry->type);
+                    if (!pluginTypeId.empty())
+                        db.registerAssetWithGUID(entry->guid, filePath, entry->type,
+                                                 entry->importSource, pluginTypeId);
+                }
+            }
+        }
 
         // Re-scan dependencies for this asset
         std::string projRoot = getProjectRoot();

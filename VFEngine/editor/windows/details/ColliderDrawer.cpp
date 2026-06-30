@@ -1,10 +1,14 @@
 #include "ColliderDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/project/ApplicationEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/physics/PhysicsSettingsEvents.hpp"
 #include "types/PhysicsTypes.hpp"
 #include <imgui.h>
+#include <algorithm>
+#include <exception>
+#include <filesystem>
 
 namespace windows::details
 {
@@ -44,7 +48,7 @@ namespace windows::details
 
             changed |= drawShapeSelection(colliderData);
             ImGui::Spacing();
-            changed |= drawShapeParameters(colliderData);
+            changed |= drawShapeParameters(handle, colliderData);
             ImGui::Spacing();
             changed |= drawPhysicsMaterial(colliderData);
             ImGui::Spacing();
@@ -134,7 +138,8 @@ namespace windows::details
         return changed;
     }
 
-    bool ColliderDrawer::drawShapeParameters(services::ColliderComponentData& colliderData)
+    bool ColliderDrawer::drawShapeParameters(services::EntityHandle handle,
+                                             services::ColliderComponentData& colliderData)
     {
         bool changed = false;
 
@@ -198,6 +203,12 @@ namespace windows::details
                 {
                     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Triangle meshes are static only");
                 }
+
+                if (colliderData.shape == types::ColliderShape::ConvexMesh)
+                {
+                    ImGui::Spacing();
+                    drawMeshColliderAssetControls(handle, colliderData);
+                }
                 break;
             }
         }
@@ -214,6 +225,64 @@ namespace windows::details
         }
 
         return changed;
+    }
+
+    bool ColliderDrawer::drawMeshColliderAssetControls(
+        services::EntityHandle handle,
+        const services::ColliderComponentData& colliderData)
+    {
+        const std::string meshPath = resolveMeshPath(handle, colliderData);
+
+        ImGui::Separator();
+        ImGui::Text("Mesh Collider Asset");
+        ImGui::TextWrapped("Convex data comes from the .vfCollider sidecar next to the .vfMesh.");
+        ImGui::TextWrapped("It is shared by every entity using this mesh.");
+
+        if (!meshPath.empty())
+        {
+            ImGui::TextDisabled("Mesh: %s", std::filesystem::path(meshPath).filename().string().c_str());
+        }
+
+        if (meshPath.empty())
+            ImGui::BeginDisabled();
+
+        if (ImGui::Button("Edit Mesh Collider..."))
+        {
+            events::application::OpenMeshPreviewNotification notification;
+            notification.filePath = meshPath;
+            events::EventDispatcher::instance().publish(notification);
+        }
+
+        if (meshPath.empty())
+        {
+            ImGui::EndDisabled();
+            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "No mesh path resolved");
+        }
+
+        return false;
+    }
+
+    std::string ColliderDrawer::resolveMeshPath(
+        services::EntityHandle handle,
+        const services::ColliderComponentData& colliderData) const
+    {
+        if (colliderData.meshRef.isValid())
+            return colliderData.meshRef.resolve();
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::scene::GetMeshDataQuery meshQuery;
+        meshQuery.entity = handle;
+        try
+        {
+            auto meshData = dispatcher.query(meshQuery);
+            if (meshData.has_value() && meshData->meshRef.isValid())
+                return meshData->meshRef.resolve();
+        }
+        catch (const std::exception&)
+        {
+        }
+
+        return {};
     }
 
     bool ColliderDrawer::drawPhysicsMaterial(services::ColliderComponentData& colliderData)

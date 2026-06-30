@@ -88,6 +88,7 @@ TEST_CASE("MaterialInstanceData: clearAllOverrides clears everything") {
 
 TEST_CASE("isInstanceFile: true for .vfMatInstance extension") {
     CHECK(material::isInstanceFile("assets/wood.vfMatInstance"));
+    CHECK(material::isInstanceFile("assets/wood.vfmatinstance"));
     CHECK(material::isInstanceFile(".vfMatInstance"));
 }
 
@@ -97,6 +98,8 @@ TEST_CASE("isInstanceFile: false for .vfMat extension") {
 
 TEST_CASE("isMaterialFile: true for .vfMat extension") {
     CHECK(material::isMaterialFile("assets/wood.vfMat"));
+    CHECK(material::isMaterialFile("assets/wood.vfmat"));
+    CHECK(material::isMaterialFile("assets/wood.vfMaterial"));
     CHECK(material::isMaterialFile(".vfMat"));
 }
 

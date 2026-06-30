@@ -65,6 +65,7 @@ namespace windows
         events::SubscriptionToken folderSelectedToken;
         events::SubscriptionToken projectLoadedToken;
         events::SubscriptionToken batchCompletedToken;
+        events::SubscriptionToken openMeshPreviewToken;
         std::atomic<bool> pendingRefresh{false};
 
         AssetThumbnailCache thumbnailCache;

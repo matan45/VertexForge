@@ -1,94 +1,49 @@
 #pragma once
 #include "../resource/AssetTypes.hpp"
-#include <algorithm>
+#include "AssetTypeRegistry.hpp"
 #include <string>
 #include <unordered_set>
 
 namespace asset
 {
-    // Single source of truth for asset file extensions. DependencyScanner and
-    // AssetDatabaseMigrator both derive their extension sets from here so the
-    // lists cannot drift apart again.
+    // Single source of truth for asset file extensions. The built-in tables
+    // (and any plugin-registered types, VK-1449) now live in
+    // asset::AssetTypeRegistry, which is compiled into the AssetDB DLL so a
+    // mutable registry resolves to one instance across the process. These
+    // functions are thin forwarders preserved for source compatibility — the
+    // built-in classification they return is identical to the old inline
+    // tables (guarded by a golden-parity unit test).
+    //
+    // NOTE: calling these forces a link against AssetDB. Engine consumers
+    // (DependencyScanner, AssetDatabaseMigrator, Tests, …) already link it.
+    // Plugins must not call these (they use the PluginContext asset-type API);
+    // merely #including this header is fine (inline functions are only emitted
+    // when ODR-used).
     namespace extensions
     {
-        // Lowercase extension (".vfimage") -> AssetType. COUNT for unknown.
         inline resource::AssetType typeForExtension(const std::string& extension)
         {
-            std::string ext = extension;
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-            if (ext == ".vfimage")        return resource::AssetType::Texture;
-            if (ext == ".vfhdr")          return resource::AssetType::HDR;
-            if (ext == ".vfmesh")         return resource::AssetType::Mesh;
-            if (ext == ".vfaudio")        return resource::AssetType::Audio;
-            if (ext == ".vfanim")         return resource::AssetType::Animation;
-            if (ext == ".vfmat")          return resource::AssetType::Material;
-            if (ext == ".vfmatinstance")  return resource::AssetType::MaterialInstance;
-            if (ext == ".vfanimator")     return resource::AssetType::Animator;
-            if (ext == ".vfvfx")          return resource::AssetType::VFX;
-            if (ext == ".vfvfxsequence")  return resource::AssetType::VFXSequence;
-            if (ext == ".vffont")         return resource::AssetType::Font;
-            if (ext == ".vfnavmesh")      return resource::AssetType::Navmesh;
-            if (ext == ".vfnavindex")     return resource::AssetType::Navmesh;
-            if (ext == ".vfinputmapping") return resource::AssetType::InputMapping;
-            if (ext == ".vfterrain")      return resource::AssetType::Terrain;
-            if (ext == ".vfterrainmat")   return resource::AssetType::TerrainMaterial;
-            if (ext == ".vfbehaviortree") return resource::AssetType::BehaviorTree;
-            if (ext == ".vfphysanim")     return resource::AssetType::PhysicsShape;
-            if (ext == ".vfscene")        return resource::AssetType::Scene;
-            if (ext == ".vfsettings")     return resource::AssetType::Scene;
-            if (ext == ".vftheme")        return resource::AssetType::Theme;
-            if (ext == ".vfprefab")       return resource::AssetType::Prefab;
-            if (ext == ".vfrig")          return resource::AssetType::HumanoidRig;
-            if (ext == ".vfretarget")     return resource::AssetType::RetargetMap;
-            if (ext == ".mt")             return resource::AssetType::Script;
-            return resource::AssetType::COUNT;
+            return AssetTypeRegistry::instance().typeForExtension(extension);
         }
 
-        // Every extension the asset database tracks (registration + migration).
-        // .vfwater/.vfimposter have no AssetType yet but are still referenced
-        // by scenes, so they stay registrable as dependency targets.
         inline const std::unordered_set<std::string>& allAssetExtensions()
         {
-            static const std::unordered_set<std::string> set = {
-                ".vfimage", ".vfhdr", ".vfmesh", ".vfaudio", ".vfanim",
-                ".vfmat", ".vfmatinstance", ".vfanimator", ".vfvfx",
-                ".vfvfxsequence",
-                ".vffont", ".vfscene", ".vfsettings", ".vfprefab", ".vftheme",
-                ".vfterrain", ".vfterrainmat", ".vfwater", ".vfnavmesh",
-                ".vfnavindex", ".vfimposter", ".vfinputmapping",
-                ".vfbehaviortree", ".vfphysanim", ".vfrig", ".vfretarget", ".mt"
-            };
-            return set;
+            return AssetTypeRegistry::instance().allAssetExtensions();
         }
 
-        // JSON-based asset files that can reference other assets — the set the
-        // DependencyScanner parses. Binary formats stay excluded for speed;
-        // unparsable files are skipped silently, so over-inclusion is safe.
         inline const std::unordered_set<std::string>& jsonContainerExtensions()
         {
-            static const std::unordered_set<std::string> set = {
-                ".vfscene", ".vfsettings", ".vfprefab", ".vfmat",
-                ".vfmatinstance", ".vfanimator", ".vfvfx", ".vfvfxsequence",
-                ".vfterrainmat",
-                ".vftheme", ".vfbehaviortree", ".vfinputmapping",
-                ".vfrig", ".vfretarget"
-            };
-            return set;
+            return AssetTypeRegistry::instance().jsonContainerExtensions();
         }
 
         inline bool isAssetExtension(const std::string& extension)
         {
-            std::string ext = extension;
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-            return allAssetExtensions().count(ext) > 0;
+            return AssetTypeRegistry::instance().isAssetExtension(extension);
         }
 
         inline bool isJsonContainerExtension(const std::string& extension)
         {
-            std::string ext = extension;
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-            return jsonContainerExtensions().count(ext) > 0;
+            return AssetTypeRegistry::instance().isJsonContainerExtension(extension);
         }
     }
 }

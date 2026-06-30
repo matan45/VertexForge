@@ -13,6 +13,15 @@ namespace plugin {
     // v14: setFieldAttributes on PluginContext + FieldAttributes/Field (per-field
     //      inspector metadata: label, tooltip, group, units, range/slider, color,
     //      multiline, read-only/hidden, asset-filter) for native plugin components.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 14;
+    // v15: registerAssetType/unregisterAssetType on PluginContext +
+    //      PluginAssetTypeDesc/PluginAssetTypeHandle — plugins declare custom
+    //      asset types (extension, Content Browser metadata, Create entry,
+    //      dependency scanning, export) without editing engine asset tables.
+    //      Also resolveAssetPath(guidHex) + resolveProjectPath(relPath) so
+    //      plugins can load assets dragged into their AssetRef component fields
+    //      and assets they reference by project-relative path at runtime.
+    // v16: findAssetPathsByExtension on PluginContext so plugins can build
+    //      read-only indexes over project assets without guessing project roots.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 16;
 
 }

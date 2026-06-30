@@ -4,7 +4,9 @@
 #include "types/NavmeshTypes.hpp"
 #include "../../data/EntityHandle.hpp"
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace events::navmesh
 {
@@ -49,6 +51,15 @@ namespace events::navmesh
         services::EntityHandle entity;
         glm::vec3 target;
         std::string_view getName() const override { return "SetAgentDestination"; }
+    };
+
+    struct SetGroupDestinationCommand : ICommand<uint64_t>
+    {
+        std::vector<services::EntityHandle> entities;
+        glm::vec3 destination{0.0f};
+        float spacing = 2.0f;
+        uint8_t formationKind = 0;
+        std::string_view getName() const override { return "SetGroupDestination"; }
     };
 
     struct StopAgentCommand : ICommand<>
@@ -109,6 +120,32 @@ namespace events::navmesh
     {
         services::EntityHandle entity;
         std::string_view getName() const override { return "AgentPathBlocked"; }
+    };
+
+    struct GroupReachedDestinationNotification : INotification
+    {
+        uint64_t groupId = 0;
+        std::vector<services::EntityHandle> entities;
+        std::string_view getName() const override { return "GroupReachedDestination"; }
+    };
+
+    struct GroupStatus
+    {
+        int total = 0;
+        int arrived = 0;
+        bool complete = false;
+    };
+
+    struct GetGroupStatusQuery : IQuery<GroupStatus>
+    {
+        uint64_t groupId = 0;
+        std::string_view getName() const override { return "GetGroupStatus"; }
+    };
+
+    struct GetGroupCorridorDebugQuery : IQuery<std::vector<glm::vec3>>
+    {
+        uint64_t groupId = 0;
+        std::string_view getName() const override { return "GetGroupCorridorDebug"; }
     };
 
     struct FindPathQuery : IQuery<navigation::NavPath>

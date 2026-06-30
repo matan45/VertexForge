@@ -1,0 +1,9 @@
+{
+    "version": "1.0",
+    "id": "Fireball.Impact",
+    "trigger": "OnExecute",
+    "vfxPath": "vfx/library/fire_loop.vfVFX",
+    "attachSocket": "",
+    "audioPath": "",
+    "params": {}
+}

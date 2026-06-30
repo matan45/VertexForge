@@ -6,9 +6,13 @@
 #include "data/AsyncLoadingTypes.hpp"
 #include "animator/SocketTypes.hpp"
 #include "resource/Types.hpp"
+#include "config/Config.hpp"
+#include "ConvexDecompositionRegenerator.hpp"
 #include <math/Frustum.hpp>
 #include <glm/glm.hpp>
 #include "ImGuizmo.h"
+#include <atomic>
+#include <future>
 #include <memory>
 #include <string>
 #include <vector>
@@ -67,6 +71,14 @@ namespace windows
         ImGuizmo::OPERATION socketGizmoOp = ImGuizmo::TRANSLATE;
         ImGuizmo::MODE socketGizmoMode = ImGuizmo::LOCAL;
 
+        importConfig::MeshImportConfig convexRegenConfig;
+        std::future<types::ConvexRegenerationResult> convexRegenFuture;
+        std::atomic<bool> cancelConvexRegen{false};
+        std::atomic<float> convexRegenProgress{0.0f};
+        std::string convexRegenStatus;
+        int32_t activeConvexRegenSubmesh = -1;
+        uint32_t convexRebuiltEntityCount = 0;
+
         // Preview-only mesh orientation (turntable buttons in the panel). Applied as
         // the render model matrix and composed into the socket gizmo; socket offsets
         // remain stored in mesh-local space regardless of this rotation.
@@ -89,6 +101,11 @@ namespace windows
         void drawSocketPanel();
         void drawStaticSocketEditor();
         void drawSocketSaveButton();
+        void drawColliderPanel();
+        bool drawConvexRegenerationSettings();
+        void drawColliderSidecarSummary();
+        void pollConvexRegenerationResult();
+        uint32_t rebuildPhysicsBodiesUsingMesh(int32_t regeneratedSubmesh) const;
         void drawSocketGizmo();
         void drawLoadingIndicator(float width, float height);
         void onLoadingComplete();

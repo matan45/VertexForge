@@ -1,5 +1,6 @@
 #include "AssetClosureResolver.hpp"
 #include "../asset/AssetDatabase.hpp"
+#include "../asset/AssetTypeRegistry.hpp"
 #include "../asset/DependencyScanner.hpp"
 #include "../print/Log.hpp"
 #include <algorithm>
@@ -156,6 +157,16 @@ namespace gameExport
 		for (const auto& pattern : userPatterns)
 		{
 			if (matchesPattern(relativePath, pattern)) return true;
+		}
+		// VK-1449: each registered plugin asset type may declare always-include
+		// globs (e.g. a project-global .vfGameplayTags table that no scene
+		// references by GUID but the runtime still needs packed).
+		for (const auto& rec : asset::AssetTypeRegistry::instance().allPluginTypes())
+		{
+			for (const auto& pattern : rec.alwaysIncludeGlobs)
+			{
+				if (matchesPattern(relativePath, pattern)) return true;
+			}
 		}
 		return false;
 	}

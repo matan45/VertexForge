@@ -1,0 +1,18 @@
+{
+    "version": "1.0",
+    "id": "Empower",
+    "displayName": "Empower (Self)",
+    "abilityTags": [ "Ability.Empower" ],
+    "activationRequiredTags": [],
+    "activationBlockedTags": [ "Character.Stunned", "Character.Dead" ],
+    "activationOwnedTags": [],
+    "targetRequiredTags": [],
+    "cancelAbilitiesWithTag": [],
+    "cost": { "effectId": "gas/effects/ManaCost.vfGameplayEffect" },
+    "cooldown": { "duration": 2.0, "cooldownTags": [ "Cooldown.Empower" ], "effectId": "" },
+    "activation": { "inputAction": "Empower", "policy": "OnPressed" },
+    "targeting": { "type": "Self", "range": 0.0, "radius": 0.0 },
+    "tasks": [],
+    "effectsOnActivate": [ "gas/effects/EmpowerHeal.vfGameplayEffect" ],
+    "cueIds": []
+}

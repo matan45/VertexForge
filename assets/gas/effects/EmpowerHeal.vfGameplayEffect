@@ -1,0 +1,16 @@
+{
+    "version": "1.0",
+    "id": "Empower.Heal",
+    "displayName": "Empower Heal",
+    "durationPolicy": "Instant",
+    "duration": 0.0,
+    "period": 0.0,
+    "modifiers": [
+        { "attribute": "Health", "op": "Add", "magnitude": 30.0 }
+    ],
+    "grantedTags": [],
+    "ongoingRequiredTags": [],
+    "removalTags": [],
+    "stacking": { "policy": "None", "limit": 1, "durationRefresh": false, "expiration": "ClearStack" },
+    "cueIds": [ "gas/cues/FireballImpact.vfGameplayCue" ]
+}

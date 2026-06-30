@@ -91,19 +91,24 @@ namespace material
 
     inline bool isInstanceFile(std::string_view path)
     {
-        return path.ends_with(".vfMatInstance");
+        return endsWithIgnoreCase(path, ".vfMatInstance");
     }
 
     inline bool isMaterialFile(std::string_view path)
     {
-        return path.ends_with(".vfMat");
+        return endsWithIgnoreCase(path, ".vfMat") ||
+               endsWithIgnoreCase(path, ".vfMaterial");
     }
 
     inline std::string getDefaultInstancePath(const std::string& parentPath)
     {
-        if (parentPath.ends_with(".vfMat"))
+        if (endsWithIgnoreCase(parentPath, ".vfMat"))
         {
             return parentPath.substr(0, parentPath.length() - 6) + "_inst.vfMatInstance";
+        }
+        if (endsWithIgnoreCase(parentPath, ".vfMaterial"))
+        {
+            return parentPath.substr(0, parentPath.length() - 11) + "_inst.vfMatInstance";
         }
         return parentPath + "_inst.vfMatInstance";
     }

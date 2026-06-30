@@ -17,6 +17,8 @@
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
+#include "core/PluginEventBus.hpp"          // VK-1449: route plugin-asset open requests
+#include <asset/AssetTypeRegistry.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -124,6 +126,23 @@ namespace windows
         case AssetType::Retarget:
             openRetargetEditor(path);
             return true;
+        case AssetType::Plugin:
+        {
+            // VK-1449: route to the owning plugin via the DLL-safe event bus.
+            // The plugin (e.g. GameplayAbilitySystem) subscribes to
+            // "vf.asset.open" and opens its own editor for the matching typeId.
+            // If no plugin is loaded for this extension, the publish is a
+            // harmless no-op (graceful — the asset still browses).
+            asset::AssetTypeRecord rec;
+            std::string typeId;
+            if (asset::AssetTypeRegistry::instance().findByExtension(filePath.extension().string(), rec))
+                typeId = rec.typeId;
+            nlohmann::json payload;
+            payload["typeId"] = typeId;
+            payload["path"] = path;
+            plugin::PluginEventBus::instance().publish("vf.asset.open", payload);
+            return true;
+        }
         default:
             return false;
         }

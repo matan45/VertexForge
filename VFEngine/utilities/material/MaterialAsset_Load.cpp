@@ -422,9 +422,26 @@ namespace material
                 material.name = "Unnamed Material";
                 logWarning("Material has empty name, using default");
             }
+            material.domain = stringToMaterialDomain(j.value("domain", "surface"));
+            material.shadingModel = stringToShadingModel(j.value("shadingModel", "defaultLit"));
             material.blendMode = stringToBlendMode(j.value("blendMode", "opaque"));
             material.opacity = j.value("opacity", 1.0f);
             material.alphaCutoff = j.value("alphaCutoff", 0.5f);
+
+            if (j.contains("staticParameters") && j["staticParameters"].is_object())
+            {
+                for (auto& [name, value] : j["staticParameters"].items())
+                {
+                    if (value.is_boolean())
+                    {
+                        material.staticParameters[name] = value.get<bool>();
+                    }
+                    else
+                    {
+                        logWarning(std::format("Static parameter '{}' is not a boolean, skipping", name));
+                    }
+                }
+            }
         }
 
         void parseGraph(
@@ -444,6 +461,29 @@ namespace material
             }
         }
 
+        void parseMaterialIRMetadata(
+            const json& j, MaterialData& material,
+            const LogWarningFn& logWarning)
+        {
+            if (!j.contains("materialIR"))
+                return;
+            if (!j["materialIR"].is_object())
+            {
+                logWarning("'materialIR' field is not an object, ignoring cooked metadata");
+                return;
+            }
+
+            const auto& irJson = j["materialIR"];
+            material.irHash = irJson.value("hash", "");
+            material.shaderMapKey = irJson.value("shaderMapKey", "");
+            if (irJson.contains("shaderMap") && irJson["shaderMap"].is_object())
+            {
+                material.shaderMapKey = irJson["shaderMap"].value("shaderMapKey", material.shaderMapKey);
+            }
+            material.gpuDrivenSupported = irJson.value("gpuDrivenSupported", true);
+            material.gpuDrivenFallbackReason = irJson.value("gpuDrivenFallbackReason", "");
+        }
+
         std::optional<MaterialData> parseMaterialData(const json& j, std::string_view path)
         {
             WarningTracker warnings;
@@ -457,6 +497,7 @@ namespace material
                 parseGraph(j, material, logWarning);
                 ensurePBROutputNode(material, logWarning);
                 parseCachedShaders(j, material, logWarning);
+                parseMaterialIRMetadata(j, material, logWarning);
 
                 if (warnings.count > 0)
                     vfLogWarning("Loaded material '{}' with {} warning(s)", material.name, warnings.count);

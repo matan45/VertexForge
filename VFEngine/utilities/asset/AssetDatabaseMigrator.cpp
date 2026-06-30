@@ -1,6 +1,7 @@
 #include "AssetDatabaseMigrator.hpp"
 #include "AssetDatabase.hpp"
 #include "AssetExtensions.hpp"
+#include "AssetTypeRegistry.hpp"
 #include "AssetMetadataSerializer.hpp"
 #include "../print/Log.hpp"
 #include <algorithm>
@@ -27,8 +28,6 @@ namespace asset
     {
         MigrationResult result;
 
-        const auto& assetExtensions = extensions::allAssetExtensions();
-
         try
         {
             std::error_code ec;
@@ -46,22 +45,38 @@ namespace asset
                 std::string ext = entry.path().extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-                if (assetExtensions.find(ext) == assetExtensions.end()) continue;
+                // Registry-aware (VK-1449): recognises built-in AND plugin-
+                // registered extensions. Unknown extensions are still skipped
+                // (graceful — no GUID/.vfmeta until a plugin claims them).
+                if (!extensions::isAssetExtension(ext)) continue;
 
                 // Check if .vfmeta already exists
                 auto metaPath = AssetMetadataSerializer::getMetaPath(entry.path());
                 if (fs::exists(metaPath, ec)) continue;
 
                 resource::AssetType type = detectAssetType(ext);
+
+                // For plugin-registered types, carry the precise typeId so the
+                // asset stays classified in DB/search/export even when the
+                // owning plugin is later absent.
+                std::string pluginTypeId;
+                if (type == resource::AssetType::PluginAsset)
+                {
+                    AssetTypeRecord rec;
+                    if (AssetTypeRegistry::instance().findByExtension(ext, rec))
+                        pluginTypeId = rec.typeId;
+                }
+
                 std::string assetPath = entry.path().string();
 
                 // Register in database
-                auto guid = AssetDatabase::instance().registerAsset(assetPath, type);
+                auto guid = AssetDatabase::instance().registerAsset(assetPath, type, "", pluginTypeId);
 
                 // Create .vfmeta sidecar
                 AssetMetadata metadata;
                 metadata.guid = guid;
                 metadata.type = type;
+                metadata.pluginTypeId = pluginTypeId;
                 if (AssetMetadataSerializer::save(metadata, metaPath))
                 {
                     result.metaFilesCreated++;

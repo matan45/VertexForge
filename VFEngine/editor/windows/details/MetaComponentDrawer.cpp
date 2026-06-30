@@ -19,7 +19,12 @@
 namespace windows::details
 {
     // Draw a scalar/struct value with the given label. Returns the new meta_any if changed, empty otherwise.
-    static std::optional<entt::meta_any> drawElementValue(const char* label, entt::meta_any& elem, const entt::meta_type& elemType)
+    // assetFilter (VK-1449): restricts an AssetRef drag-drop to a single
+    // extension (e.g. ".vfability"). nullptr/empty accepts any. Threaded from
+    // the field's FieldAttributes so std::vector<AssetRef> / map-value AssetRef
+    // fields honor .asset(ext) exactly like scalar AssetRef fields do.
+    static std::optional<entt::meta_any> drawElementValue(const char* label, entt::meta_any& elem, const entt::meta_type& elemType,
+                                                          const char* assetFilter = nullptr)
     {
         if (elemType.info() == entt::type_id<int>()) {
             int val = elem.cast<int>();
@@ -103,7 +108,10 @@ namespace windows::details
                 ImGui::SameLine();
                 ImGui::TextDisabled("No asset");
             }
-            if (auto dropped = windows::acceptAssetDropOnLastItem(label, {}))
+            auto dropped = (assetFilter && assetFilter[0])
+                               ? windows::acceptAssetDropOnLastItem(label, {assetFilter})
+                               : windows::acceptAssetDropOnLastItem(label, {});
+            if (dropped)
                 return entt::meta_any{asset::AssetRef::fromPath(*dropped)};
             ImGui::SameLine();
             ImGui::PushID(label);
@@ -451,7 +459,8 @@ namespace windows::details
                     auto elem = view[i];
                     std::string label = "[" + std::to_string(i) + "]";
 
-                    auto result = drawElementValue(label.c_str(), elem, elemType);
+                    auto result = drawElementValue(label.c_str(), elem, elemType,
+                                                   (attr && attr->assetFilter[0]) ? attr->assetFilter : nullptr);
                     if (result.has_value())
                     {
                         view[i].assign(*result);
@@ -531,7 +540,8 @@ namespace windows::details
                     };
 
                     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
-                    auto result = drawElementValue(valueLabel.c_str(), val, valType);
+                    auto result = drawElementValue(valueLabel.c_str(), val, valType,
+                                                   (attr && attr->assetFilter[0]) ? attr->assetFilter : nullptr);
                     if (result.has_value())
                     {
                         // Erase then re-insert to update (insert alone won't overwrite existing keys)

@@ -32,6 +32,10 @@ namespace core::physics {
             std::string_view meshPath,
             uint32_t submeshIndex = 0
         );
+
+        static std::optional<resource::ConvexDecompositionData> loadAllConvexDecompositions(
+            std::string_view meshPath
+        );
     };
 
 }

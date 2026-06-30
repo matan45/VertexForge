@@ -6,6 +6,7 @@
 #include "events/scripting/ScriptingEvents.hpp"
 #include "export/GameExporter.hpp"
 #include "material/MaterialAsset.hpp"
+#include "material/MaterialInstanceTypes.hpp"
 #include <filesystem>
 
 namespace handlers
@@ -185,7 +186,7 @@ namespace handlers
 		     it != fs::recursive_directory_iterator(); it.increment(ec))
 		{
 			if (ec) break;
-			if (!it->is_regular_file() || it->path().extension() != ".vfmaterial") continue;
+			if (!it->is_regular_file() || !material::isMaterialFile(it->path().string())) continue;
 
 			auto materialOpt = material::MaterialAsset::load(it->path().string());
 			if (!materialOpt) continue;

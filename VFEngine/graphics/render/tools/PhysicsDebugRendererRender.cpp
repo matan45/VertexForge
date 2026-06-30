@@ -1,11 +1,163 @@
 #include "PhysicsDebugRenderer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "resource/ConvexDecompositionSidecar.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "resource/ConvexHullTypes.hpp"
 
+#include <filesystem>
+
 namespace render::mesh
 {
+    namespace
+    {
+        void appendPathStamp(std::string& key, const std::filesystem::path& path)
+        {
+            std::error_code ec;
+            if (!std::filesystem::exists(path, ec) || ec)
+                return;
+
+            const auto writeTime = std::filesystem::last_write_time(path, ec);
+            if (!ec)
+                key += "|t=" + std::to_string(writeTime.time_since_epoch().count());
+
+            ec.clear();
+            const auto size = std::filesystem::file_size(path, ec);
+            if (!ec)
+                key += "|s=" + std::to_string(size);
+        }
+
+        std::string makeMeshCacheBaseKey(const PhysicsColliderRenderData& data)
+        {
+            return data.meshPath
+                + "#" + std::to_string(static_cast<int>(data.shape))
+                + "@" + std::to_string(data.submeshIndex);
+        }
+
+        std::string makeMeshCacheKey(const PhysicsColliderRenderData& data)
+        {
+            std::string key = makeMeshCacheBaseKey(data);
+            appendPathStamp(key, data.meshPath);
+            appendPathStamp(key, resource::ConvexDecompositionSidecar::sidecarPathForMesh(data.meshPath));
+            return key;
+        }
+
+        void appendConvexWireframe(const resource::ConvexDecompositionData& convexData,
+                                   std::vector<glm::vec3>& positions,
+                                   std::vector<uint32_t>& lineIndices)
+        {
+            uint32_t vertexOffset = static_cast<uint32_t>(positions.size());
+            for (const auto& hull : convexData.hulls)
+            {
+                for (const auto& v : hull.vertices)
+                {
+                    positions.push_back(v);
+                }
+
+                for (size_t i = 0; i + 2 < hull.indices.size(); i += 3)
+                {
+                    const uint32_t i0 = hull.indices[i] + vertexOffset;
+                    const uint32_t i1 = hull.indices[i + 1] + vertexOffset;
+                    const uint32_t i2 = hull.indices[i + 2] + vertexOffset;
+
+                    lineIndices.push_back(i0);
+                    lineIndices.push_back(i1);
+                    lineIndices.push_back(i1);
+                    lineIndices.push_back(i2);
+                    lineIndices.push_back(i2);
+                    lineIndices.push_back(i0);
+                }
+
+                vertexOffset += static_cast<uint32_t>(hull.vertices.size());
+            }
+        }
+
+        bool appendConvexForSubmesh(resource::MeshStreamHandle& stream,
+                                    const std::string& meshPath,
+                                    uint32_t submeshIndex,
+                                    std::vector<glm::vec3>& positions,
+                                    std::vector<uint32_t>& lineIndices)
+        {
+            resource::ConvexDecompositionData convexData;
+            if (!resource::ConvexDecompositionSidecar::loadForSubmesh(meshPath, submeshIndex, convexData))
+            {
+                if (!stream.readConvexDecomposition(submeshIndex, convexData))
+                    return false;
+            }
+
+            if (!convexData.isValid())
+                return false;
+
+            appendConvexWireframe(convexData, positions, lineIndices);
+            return true;
+        }
+
+        bool appendLODWireframe(resource::MeshStreamHandle& stream,
+                                uint32_t submeshIndex,
+                                std::vector<glm::vec3>& positions,
+                                std::vector<uint32_t>& lineIndices)
+        {
+            std::vector<resource::Vertex> vertices;
+            std::vector<uint32_t> triangleIndices;
+            if (!stream.readLODLevel(submeshIndex, 2, vertices, triangleIndices))
+                return false;
+
+            if (vertices.empty() || triangleIndices.empty())
+                return false;
+
+            const uint32_t vertexOffset = static_cast<uint32_t>(positions.size());
+            positions.reserve(positions.size() + vertices.size());
+            for (const auto& v : vertices)
+            {
+                positions.push_back(v.position);
+            }
+
+            lineIndices.reserve(lineIndices.size() + (triangleIndices.size() / 3) * 6);
+            for (size_t i = 0; i + 2 < triangleIndices.size(); i += 3)
+            {
+                const uint32_t i0 = triangleIndices[i] + vertexOffset;
+                const uint32_t i1 = triangleIndices[i + 1] + vertexOffset;
+                const uint32_t i2 = triangleIndices[i + 2] + vertexOffset;
+
+                lineIndices.push_back(i0);
+                lineIndices.push_back(i1);
+                lineIndices.push_back(i1);
+                lineIndices.push_back(i2);
+                lineIndices.push_back(i2);
+                lineIndices.push_back(i0);
+            }
+
+            return true;
+        }
+
+        bool appendAllConvex(resource::MeshStreamHandle& stream,
+                             const std::string& meshPath,
+                             std::vector<glm::vec3>& positions,
+                             std::vector<uint32_t>& lineIndices)
+        {
+            bool appended = false;
+            const auto& header = stream.getHeader();
+            for (uint32_t i = 0; i < header.numSubmeshes; ++i)
+            {
+                appended |= appendConvexForSubmesh(stream, meshPath, i, positions, lineIndices);
+            }
+            return appended;
+        }
+
+        bool appendAllLODWireframes(resource::MeshStreamHandle& stream,
+                                    std::vector<glm::vec3>& positions,
+                                    std::vector<uint32_t>& lineIndices)
+        {
+            bool appended = false;
+            const auto& header = stream.getHeader();
+            for (uint32_t i = 0; i < header.numSubmeshes; ++i)
+            {
+                appended |= appendLODWireframe(stream, i, positions, lineIndices);
+            }
+            return appended;
+        }
+    }
+
     const MeshDebugData* PhysicsDebugRenderer::getOrCreateHeightFieldBuffers(
         const PhysicsColliderRenderData& data) const
     {
@@ -92,99 +244,84 @@ namespace render::mesh
         return entry.buffers.isValid ? &heightfieldCache[data.heightfieldCacheKey].buffers : nullptr;
     }
 
-    const MeshDebugData* PhysicsDebugRenderer::getOrCreateMeshBuffers(const std::string& meshPath) const
+    const MeshDebugData* PhysicsDebugRenderer::getOrCreateMeshBuffers(
+        const PhysicsColliderRenderData& data) const
     {
-        if (meshPath.empty())
+        if (data.meshPath.empty())
         {
             return nullptr;
         }
 
-        auto it = meshCache.find(meshPath);
+        const std::string cacheKey = makeMeshCacheKey(data);
+        auto it = meshCache.find(cacheKey);
         if (it != meshCache.end())
         {
             return it->second.isValid ? &it->second : nullptr;
         }
 
-        auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
+        const std::string cacheBaseKey = makeMeshCacheBaseKey(data);
+        const std::string cacheVariantPrefix = cacheBaseKey + "|";
+        for (auto stale = meshCache.begin(); stale != meshCache.end();)
+        {
+            const bool sameMeshVariant = stale->first == cacheBaseKey
+                || stale->first.starts_with(cacheVariantPrefix);
+            if (!sameMeshVariant)
+            {
+                ++stale;
+                continue;
+            }
+
+            auto& dev = device.getLogicalDevice();
+            if (stale->second.vertexBuffer)
+            {
+                dev.destroyBuffer(stale->second.vertexBuffer);
+                device.getMemoryManager().free(stale->second.vertexAllocation);
+                stale->second.vertexAllocation = {};
+            }
+            if (stale->second.indexBuffer)
+            {
+                dev.destroyBuffer(stale->second.indexBuffer);
+                device.getMemoryManager().free(stale->second.indexAllocation);
+                stale->second.indexAllocation = {};
+            }
+            stale = meshCache.erase(stale);
+        }
+
+        auto streamHandle = resource::MeshStreamResource::openStream(data.meshPath);
         if (!streamHandle)
         {
-            meshCache[meshPath] = MeshDebugData{};
+            meshCache[cacheKey] = MeshDebugData{};
             return nullptr;
         }
 
         std::vector<glm::vec3> positions;
         std::vector<uint32_t> lineIndices;
 
-        resource::ConvexDecompositionData convexData;
-        if (streamHandle->readConvexDecomposition(0, convexData) && convexData.isValid())
+        bool appended = false;
+        if (data.shape == types::ColliderShape::ConvexMesh)
         {
-            uint32_t vertexOffset = 0;
-            for (const auto& hull : convexData.hulls)
-            {
-                for (const auto& v : hull.vertices)
-                {
-                    positions.push_back(v);
-                }
-
-                for (size_t i = 0; i + 2 < hull.indices.size(); i += 3)
-                {
-                    uint32_t i0 = hull.indices[i] + vertexOffset;
-                    uint32_t i1 = hull.indices[i + 1] + vertexOffset;
-                    uint32_t i2 = hull.indices[i + 2] + vertexOffset;
-
-                    lineIndices.push_back(i0);
-                    lineIndices.push_back(i1);
-                    lineIndices.push_back(i1);
-                    lineIndices.push_back(i2);
-                    lineIndices.push_back(i2);
-                    lineIndices.push_back(i0);
-                }
-
-                vertexOffset += static_cast<uint32_t>(hull.vertices.size());
-            }
+            appended = data.submeshIndex >= 0
+                ? appendConvexForSubmesh(*streamHandle,
+                                          data.meshPath,
+                                          static_cast<uint32_t>(data.submeshIndex),
+                                          positions,
+                                          lineIndices)
+                : appendAllConvex(*streamHandle, data.meshPath, positions, lineIndices);
         }
-        else
+
+        if (!appended)
         {
-            std::vector<resource::Vertex> vertices;
-            std::vector<uint32_t> triangleIndices;
-
-            if (!streamHandle->readLODLevel(0, 2, vertices, triangleIndices))
-            {
-                meshCache[meshPath] = MeshDebugData{};
-                return nullptr;
-            }
-
-            if (vertices.empty() || triangleIndices.empty())
-            {
-                meshCache[meshPath] = MeshDebugData{};
-                return nullptr;
-            }
-
-            positions.reserve(vertices.size());
-            for (const auto& v : vertices)
-            {
-                positions.push_back(v.position);
-            }
-
-            lineIndices.reserve((triangleIndices.size() / 3) * 6);
-            for (size_t i = 0; i + 2 < triangleIndices.size(); i += 3)
-            {
-                uint32_t i0 = triangleIndices[i];
-                uint32_t i1 = triangleIndices[i + 1];
-                uint32_t i2 = triangleIndices[i + 2];
-
-                lineIndices.push_back(i0);
-                lineIndices.push_back(i1);
-                lineIndices.push_back(i1);
-                lineIndices.push_back(i2);
-                lineIndices.push_back(i2);
-                lineIndices.push_back(i0);
-            }
+            appended = data.submeshIndex >= 0
+                ? appendLODWireframe(*streamHandle,
+                                      static_cast<uint32_t>(data.submeshIndex),
+                                      positions,
+                                      lineIndices)
+                : appendAllLODWireframes(*streamHandle, positions, lineIndices);
         }
 
         if (positions.empty() || lineIndices.empty())
         {
-            meshCache[meshPath] = MeshDebugData{};
+            meshCache[cacheKey] = MeshDebugData{};
             return nullptr;
         }
 
@@ -244,12 +381,12 @@ namespace render::mesh
                 device.getMemoryManager().free(meshData.indexAllocation);
                 meshData.indexAllocation = {};
             }
-            meshCache[meshPath] = MeshDebugData{};
+            meshCache[cacheKey] = MeshDebugData{};
             return nullptr;
         }
 
-        meshCache[meshPath] = std::move(meshData);
-        return &meshCache[meshPath];
+        meshCache[cacheKey] = std::move(meshData);
+        return &meshCache[cacheKey];
     }
 
     glm::vec4 PhysicsDebugRenderer::getColorForCollider(const PhysicsColliderRenderData& data) const
@@ -363,7 +500,7 @@ namespace render::mesh
             case types::ColliderShape::ConvexMesh:
             case types::ColliderShape::TriangleMesh:
                 {
-                    const MeshDebugData* meshData = getOrCreateMeshBuffers(collider.meshPath);
+                    const MeshDebugData* meshData = getOrCreateMeshBuffers(collider);
 
                     if (meshData && meshData->isValid)
                     {

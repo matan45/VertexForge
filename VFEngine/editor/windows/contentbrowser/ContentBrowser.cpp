@@ -143,6 +143,15 @@ namespace windows
                 pendingRefresh.store(true);
                 projectResultsStale.store(true);
             });
+
+        openMeshPreviewToken = dispatcher.subscribe<events::application::OpenMeshPreviewNotification>(
+            [this](const events::application::OpenMeshPreviewNotification& notification)
+            {
+                if (!notification.filePath.empty())
+                {
+                    previewManager->openPreview(fs::path(notification.filePath), AssetType::Model);
+                }
+            });
     }
 
     ContentBrowser::~ContentBrowser()
@@ -157,6 +166,7 @@ namespace windows
         if (fileDeletedToken.isValid()) dispatcher.unsubscribe(fileDeletedToken);
         if (folderSelectedToken.isValid()) dispatcher.unsubscribe(folderSelectedToken);
         if (batchCompletedToken.isValid()) dispatcher.unsubscribe(batchCompletedToken);
+        if (openMeshPreviewToken.isValid()) dispatcher.unsubscribe(openMeshPreviewToken);
     }
 
     void ContentBrowser::draw()
@@ -256,6 +266,7 @@ namespace windows
         if (extension == ".vfNavIndex") return Navmesh;
         if (extension == ".vfNavTile") return Navmesh;
         if (extension == ".vfPhysAnim") return PhysAnim;
+        if (extension == ".vfCollider") return Collider;
         if (extension == ".vfOcean") return Ocean;
         if (extension == ".vfBehaviorTree") return BehaviorTree;
         if (extension == ".mt") return Script;
@@ -269,7 +280,16 @@ namespace windows
             extension == ".vfAnim" || extension == ".vfScene");
 
         if (!isVfAsset)
+        {
+            // VK-1449: a registered plugin asset extension (e.g. .vfAbility)
+            // classifies as Plugin. Evaluated live (not via typeCache), so a
+            // plugin load/unload is reflected immediately and a missing plugin
+            // degrades to Other rather than a stale type.
+            asset::AssetTypeRecord rec;
+            if (asset::AssetTypeRegistry::instance().findByExtension(extension, rec))
+                return Plugin;
             return Other;
+        }
 
         std::string pathKey = StringUtil::wstringToUtf8(entry.path().wstring());
         if (auto it = typeCache.find(pathKey); it != typeCache.end() &&

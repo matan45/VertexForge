@@ -4,13 +4,27 @@
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "material/MaterialTypes.hpp"
+#include "material/MaterialRuntimeData.hpp"
 #include "resource/PathResolver.hpp"
 #include "print/Log.hpp"
-#include "archive/VFPakFormat.hpp"
 #include <functional>
 
 namespace render::mesh
 {
+    vk::Pipeline MaterialPipelineData::pipelineForBlendMode(material::BlendMode blendMode) const
+    {
+        switch (blendMode)
+        {
+        case material::BlendMode::Masked: return maskedPipeline;
+        case material::BlendMode::Translucent: return translucentPipeline ? translucentPipeline : opaquePipeline;
+        case material::BlendMode::Additive: return additivePipeline ? additivePipeline : opaquePipeline;
+        case material::BlendMode::Multiply: return multiplyPipeline ? multiplyPipeline : opaquePipeline;
+        case material::BlendMode::Opaque:
+        default:
+            return opaquePipeline;
+        }
+    }
+
     MaterialShaderCache::MaterialShaderCache(core::Device& device)
         : device(device)
     {
@@ -50,11 +64,13 @@ namespace render::mesh
         auto it = cache.find(materialPath);
         if (it != cache.end())
         {
-            std::string vsHash = hashShaderSource(materialData.cachedVertexShader);
-            std::string fsHash = hashShaderSource(materialData.cachedFragmentShader);
+            const std::string vertexShaderHash = hashShaderSource(materialData.cachedVertexShader);
+            const std::string fragmentShaderHash = hashShaderSource(materialData.cachedFragmentShader);
+            const std::string& irHash = materialData.irHash;
 
-            if (it->second.vertexShaderHash == vsHash &&
-                it->second.fragmentShaderHash == fsHash &&
+            if (it->second.vertexShaderHash == vertexShaderHash &&
+                it->second.fragmentShaderHash == fragmentShaderHash &&
+                (irHash.empty() || it->second.materialIRHash == irHash) &&
                 it->second.valid)
             {
                 return &it->second;
@@ -80,14 +96,17 @@ namespace render::mesh
     {
         outData.shader = std::make_shared<core::Shader>(device);
 
-        outData.vertexShaderHash = hashShaderSource(materialData.cachedVertexShader);
-        outData.fragmentShaderHash = hashShaderSource(materialData.cachedFragmentShader);
+        material::MaterialRuntimeData runtimeData =
+            material::MaterialRuntimeDataBuilder::fromMaterialData(materialData);
+        outData.vertexShaderHash = runtimeData.shaderMap.vertexShaderHash;
+        outData.fragmentShaderHash = runtimeData.shaderMap.fragmentShaderHash;
+        outData.materialIRHash = runtimeData.irHash;
+        outData.shaderMapKey = runtimeData.shaderMap.shaderMapKey;
 
         if (resource::PathResolver::isExportedMode())
         {
             // In exported builds, load pre-compiled SPIR-V directly by hash
-            std::string combinedHash = outData.vertexShaderHash + "_" + outData.fragmentShaderHash;
-            std::string vfshaderPath = "Assets/materials/compiled/" + combinedHash + ".vfshader";
+            std::string vfshaderPath = runtimeData.shaderMap.compiledShaderPath;
 
             if (!outData.shader->loadPrecompiledShader(vfshaderPath))
             {
@@ -131,7 +150,9 @@ namespace render::mesh
 
         try
         {
-            core::GraphicsPipelineConfig config{
+            auto makeConfig = [&](material::BlendMode mode)
+            {
+                core::GraphicsPipelineConfig config{
                 .device = device.getLogicalDevice(),
                 .extent = swapchainExtent,
                 .colorAttachmentFormats = { colorFormat },
@@ -150,14 +171,56 @@ namespace render::mesh
                 // sample count mismatches the MSAA target and binding the pipeline
                 // invalidates the pass's setRasterizationSamplesEXT for later draws.
                 .dynamicSampleCount = true,
+                };
+
+                switch (mode)
+                {
+                case material::BlendMode::Translucent:
+                    config.depthWriteEnable = false;
+                    config.blendEnable = true;
+                    config.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+                    config.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+                    config.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+                    config.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+                    break;
+                case material::BlendMode::Additive:
+                    config.depthWriteEnable = false;
+                    config.blendEnable = true;
+                    config.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+                    config.dstColorBlendFactor = vk::BlendFactor::eOne;
+                    config.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+                    config.dstAlphaBlendFactor = vk::BlendFactor::eOne;
+                    break;
+                case material::BlendMode::Multiply:
+                    config.depthWriteEnable = false;
+                    config.blendEnable = true;
+                    config.srcColorBlendFactor = vk::BlendFactor::eDstColor;
+                    config.dstColorBlendFactor = vk::BlendFactor::eZero;
+                    config.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+                    config.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+                    break;
+                case material::BlendMode::Opaque:
+                case material::BlendMode::Masked:
+                default:
+                    break;
+                }
+                return config;
             };
 
-            auto opaqueResult = core::PipelineUtilities::createGraphicsPipeline(config);
+            auto opaqueResult = core::PipelineUtilities::createGraphicsPipeline(makeConfig(material::BlendMode::Opaque));
             data.opaquePipeline = opaqueResult.pipeline;
 
-            // Masked pipeline (same as opaque for now)
-            auto maskedResult = core::PipelineUtilities::createGraphicsPipeline(config);
+            auto maskedResult = core::PipelineUtilities::createGraphicsPipeline(makeConfig(material::BlendMode::Masked));
             data.maskedPipeline = maskedResult.pipeline;
+
+            auto translucentResult = core::PipelineUtilities::createGraphicsPipeline(makeConfig(material::BlendMode::Translucent));
+            data.translucentPipeline = translucentResult.pipeline;
+
+            auto additiveResult = core::PipelineUtilities::createGraphicsPipeline(makeConfig(material::BlendMode::Additive));
+            data.additivePipeline = additiveResult.pipeline;
+
+            auto multiplyResult = core::PipelineUtilities::createGraphicsPipeline(makeConfig(material::BlendMode::Multiply));
+            data.multiplyPipeline = multiplyResult.pipeline;
 
             return true;
         }
@@ -179,6 +242,12 @@ namespace render::mesh
                 device.getLogicalDevice().destroyPipeline(it->second.opaquePipeline);
             if (it->second.maskedPipeline)
                 device.getLogicalDevice().destroyPipeline(it->second.maskedPipeline);
+            if (it->second.translucentPipeline)
+                device.getLogicalDevice().destroyPipeline(it->second.translucentPipeline);
+            if (it->second.additivePipeline)
+                device.getLogicalDevice().destroyPipeline(it->second.additivePipeline);
+            if (it->second.multiplyPipeline)
+                device.getLogicalDevice().destroyPipeline(it->second.multiplyPipeline);
 
             if (it->second.shader)
                 it->second.shader->cleanUp();
@@ -200,6 +269,12 @@ namespace render::mesh
                 device.getLogicalDevice().destroyPipeline(data.opaquePipeline);
             if (data.maskedPipeline)
                 device.getLogicalDevice().destroyPipeline(data.maskedPipeline);
+            if (data.translucentPipeline)
+                device.getLogicalDevice().destroyPipeline(data.translucentPipeline);
+            if (data.additivePipeline)
+                device.getLogicalDevice().destroyPipeline(data.additivePipeline);
+            if (data.multiplyPipeline)
+                device.getLogicalDevice().destroyPipeline(data.multiplyPipeline);
 
             if (data.shader)
                 data.shader->cleanUp();
@@ -224,9 +299,6 @@ namespace render::mesh
 
     std::string MaterialShaderCache::hashShaderSource(const std::string& source)
     {
-        uint64_t hash = archive::hashPath(source);
-        char buf[17];
-        snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(hash));
-        return std::string(buf);
+        return material::MaterialRuntimeDataBuilder::shaderSourceHash(source);
     }
 }

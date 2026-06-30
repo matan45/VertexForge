@@ -1,5 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 #include <vfx/VFXSequenceTypes.hpp>
 #include <memory>
 #include <string>
@@ -51,6 +52,10 @@ namespace windows
         // Socket field becomes a dropdown of that mesh's authored sockets.
         std::string socketMeshPath;
         std::vector<std::string> socketNames;
+
+        editor::preview::WindowMaximizer maximizer;
+        ImVec2 initialSize{0.0f, 0.0f};
+        bool sizeSaved = false;
 
     public:
         explicit VFXSequenceEditorWindow(const std::string& seqPath);

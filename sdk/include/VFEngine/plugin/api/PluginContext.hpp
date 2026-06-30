@@ -21,6 +21,7 @@
 #include "../../utilities/navigation/NavmeshData.hpp"
 #include "../../services/data/VFXTypes.hpp"
 #include "FieldAttributes.hpp"
+#include "PluginAssetType.hpp"      // VK-1449: PluginAssetTypeDesc / PluginAssetTypeHandle
 
 #include <plugin/PluginHostApi.h>   // mType plugin C ABI (MTypeNativeFn, MTypePluginHost)
 
@@ -446,6 +447,38 @@ namespace plugin {
 
             return factory;
         }
+
+        // === Plugin Asset Type Registration (API v15 — VK-1449) ===
+        // Declare a custom asset type (extension(s), Content Browser metadata,
+        // Create-menu entry, dependency-scan opt-in, export inclusion) without
+        // editing the engine's hardcoded asset tables. Register during
+        // onInitialize; auto-unregistered on plugin unload. Returns an invalid
+        // handle (operator bool == false) if the typeId or any extension
+        // collides with a built-in or an already-registered type (first wins).
+        // Double-click open-routing arrives as the "vf.asset.open" plugin event
+        // ({typeId, path}); subscribe via subscribeEvent to open your editor.
+        virtual PluginAssetTypeHandle registerAssetType(const PluginAssetTypeDesc& desc) = 0;
+        virtual void unregisterAssetType(PluginAssetTypeHandle handle) = 0;
+
+        // Resolve an asset GUID (hex string, e.g. asset::AssetRef::toHexString())
+        // to its current file path via the engine asset database. Returns "" if
+        // unknown. Lets a plugin USE the assets dragged into its AssetRef
+        // component fields at runtime without linking the asset database.
+        virtual std::string resolveAssetPath(const std::string& assetGuidHex) const = 0;
+
+        // Resolve a project-relative asset path (e.g. "assets/gas/x.vfAbility")
+        // to an absolute path using the loaded project's root, so a plugin can
+        // load assets it references by path regardless of the process working
+        // directory. Absolute inputs are returned normalized; with no project
+        // loaded the input is normalized as-is.
+        virtual std::string resolveProjectPath(const std::string& projectRelativePath) const = 0;
+
+        // Return currently-known, resolved asset paths whose file extension
+        // matches the supplied extension (case-insensitive, with or without a
+        // leading dot). The result comes from the engine asset database;
+        // plugins must treat it as a snapshot and rebuild their own indexes
+        // after cache invalidation.
+        virtual std::vector<std::string> findAssetPathsByExtension(const std::string& extension) const = 0;
 
     };
 

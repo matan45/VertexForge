@@ -249,6 +249,7 @@ namespace controllers::offscreen
             renderData.radius = colliderComp.size.x;
             renderData.height = colliderComp.height;
             renderData.isTrigger = colliderComp.isTrigger;
+            renderData.submeshIndex = colliderComp.submeshIndex;
 
             if (colliderComp.shape == components::ColliderShape::ConvexMesh ||
                 colliderComp.shape == components::ColliderShape::TriangleMesh)

@@ -1,0 +1,18 @@
+{
+    "version": "1.0",
+    "id": "Fireball",
+    "displayName": "Fireball",
+    "abilityTags": [ "Ability.Fireball", "Element.Fire" ],
+    "activationRequiredTags": [],
+    "activationBlockedTags": [ "Character.Stunned", "Character.Dead" ],
+    "activationOwnedTags": [],
+    "targetRequiredTags": [],
+    "cancelAbilitiesWithTag": [],
+    "cost": { "effectId": "gas/effects/ManaCost.vfGameplayEffect" },
+    "cooldown": { "duration": 3.0, "cooldownTags": [ "Cooldown.Fireball" ], "effectId": "" },
+    "activation": { "inputAction": "Fireball", "policy": "OnPressed" },
+    "targeting": { "type": "Single", "range": 20.0, "radius": 0.0 },
+    "tasks": [],
+    "effectsOnActivate": [ "gas/effects/FireballDamage.vfGameplayEffect" ],
+    "cueIds": []
+}

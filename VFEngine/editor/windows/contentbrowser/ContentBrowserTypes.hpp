@@ -1,5 +1,6 @@
 #pragma once
 #include "resource/AssetTypes.hpp"
+#include <asset/AssetTypeRegistry.hpp>
 #include <array>
 #include <cstdio>
 #include <optional>
@@ -36,6 +37,7 @@ namespace windows
         InputMapping,
         Retarget,
         VFXSequence,
+        Collider,
         Other
     };
 
@@ -64,7 +66,9 @@ namespace windows
         Plugin = 16,
         InputMapping = 17,
         Retarget = 18, // shared by .vfrig and .vfretarget (VK-910)
-        VFXSequence = 19 // .vfVFXSequence combo asset (VK-1425)
+        VFXSequence = 19, // .vfVFXSequence combo asset (VK-1425)
+        Material = 20, // .vfTerrainMat atlas glyph
+        Collider = 21 // .vfCollider sidecar glyph
     };
 
     // Canonical per-type display data. Single source of truth for the filter
@@ -78,10 +82,10 @@ namespace windows
         uint32_t badgeColor; // IM_COL32 layout (0xAABBGGRR)
     };
 
-    inline const std::array<AssetTypeInfo, 25>& assetTypeTable()
+    inline const std::array<AssetTypeInfo, 26>& assetTypeTable()
     {
         using enum AssetType;
-        static const std::array<AssetTypeInfo, 25> table = {{
+        static const std::array<AssetTypeInfo, 26> table = {{
             {Texture,          "Texture",           AtlasIcon::File,         0xFFF7C34F},
             {HDR,              "HDR",               AtlasIcon::File,         0xFFF7E04F},
             {Model,            "Model",             AtlasIcon::File,         0xFF4FC3F7},
@@ -96,7 +100,7 @@ namespace windows
             {Script,           "Script",            AtlasIcon::Mtype,        0xFF8AF74F},
             {Font,             "Font",              AtlasIcon::Font,         0xFFC0C0C0},
             {Project,          "Project",           AtlasIcon::Project,      0xFFE0E0E0},
-            {TerrainMaterial,  "Terrain Material",  AtlasIcon::File,         0xFF4FB78A},
+            {TerrainMaterial,  "Terrain Material",  AtlasIcon::Material,     0xFF4FB78A},
             {Terrain,          "Terrain",           AtlasIcon::Terrain,      0xFF4F8A5E},
             {Navmesh,          "Navmesh",           AtlasIcon::Navmesh,      0xFF6EC0F7},
             {PhysAnim,         "Phys Anim",         AtlasIcon::PhysAnim,     0xFFC04FF7},
@@ -106,6 +110,7 @@ namespace windows
             {InputMapping,     "Input Mapping",     AtlasIcon::InputMapping, 0xFFAAAAF7},
             {Retarget,         "Retarget",          AtlasIcon::Retarget,     0xFFD08AF7},
             {VFXSequence,      "VFX Sequence",      AtlasIcon::VFXSequence,  0xFFF74FC8},
+            {Collider,         "Collider",          AtlasIcon::Collider,     0xFF7AA7FF},
             {Other,            "Other",             AtlasIcon::File,         0xFF909090}
         }};
         return table;
@@ -170,11 +175,36 @@ namespace windows
         case resource::AssetType::Prefab:           return AssetType::Prefab;
         case resource::AssetType::HumanoidRig:      return AssetType::Retarget;
         case resource::AssetType::RetargetMap:      return AssetType::Retarget;
+        case resource::AssetType::PluginAsset:      return AssetType::Plugin; // VK-1449
         case resource::AssetType::Skeleton:
         case resource::AssetType::World:
         case resource::AssetType::Theme:
         default:                                    return AssetType::Other;
         }
+    }
+
+    // VK-1449: per-asset display metadata. Built-in types resolve from the
+    // canonical table above; a registered plugin extension instead carries the
+    // plugin's own display name + badge color (icon stays the generic Plugin
+    // glyph in v1). Returned by value (std::string label) so nothing dangles.
+    struct AssetDisplayInfo
+    {
+        std::string label;
+        AtlasIcon icon = AtlasIcon::File;
+        uint32_t badgeColor = 0xFF909090;
+    };
+
+    inline AssetDisplayInfo displayInfoForExtension(const std::string& extension, AssetType fallbackType)
+    {
+        asset::AssetTypeRecord rec;
+        if (asset::AssetTypeRegistry::instance().findByExtension(extension, rec))
+        {
+            return {rec.displayName.empty() ? rec.typeId : rec.displayName,
+                    AtlasIcon::Plugin,
+                    rec.badgeColor};
+        }
+        const AssetTypeInfo& info = assetTypeInfo(fallbackType);
+        return {info.label, info.icon, info.badgeColor};
     }
 
     struct Asset

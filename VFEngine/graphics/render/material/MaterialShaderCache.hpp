@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include "material/MaterialTypes.hpp"
 
 namespace core
 {
@@ -23,9 +24,16 @@ namespace render::mesh
         std::shared_ptr<core::Shader> shader;
         vk::Pipeline opaquePipeline;
         vk::Pipeline maskedPipeline;
+        vk::Pipeline translucentPipeline;
+        vk::Pipeline additivePipeline;
+        vk::Pipeline multiplyPipeline;
         std::string vertexShaderHash;
         std::string fragmentShaderHash;
+        std::string materialIRHash;
+        std::string shaderMapKey;
         bool valid = false;
+
+        vk::Pipeline pipelineForBlendMode(material::BlendMode blendMode) const;
     };
 
     class MaterialShaderCache

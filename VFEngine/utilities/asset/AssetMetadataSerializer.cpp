@@ -20,6 +20,14 @@ namespace asset
             j["importTimestamp"] = metadata.importTimestamp;
             j["formatVersion"] = metadata.formatVersion;
 
+            // Plugin-registered asset types (VK-1449): persist the precise
+            // type id so the asset survives in DB/search/export even when the
+            // owning plugin is currently absent. Absent for built-in types.
+            if (!metadata.pluginTypeId.empty())
+            {
+                j["pluginTypeId"] = metadata.pluginTypeId;
+            }
+
             if (!metadata.dependencies.empty())
             {
                 // Sorted for deterministic output (stable diffs under VCS)
@@ -103,6 +111,7 @@ namespace asset
             metadata.importSourcePath = j.value("importSource", "");
             metadata.importTimestamp = j.value("importTimestamp", "");
             metadata.formatVersion = j.value("formatVersion", 1u);
+            metadata.pluginTypeId = j.value("pluginTypeId", "");
 
             if (!metadata.guid.isValid())
             {

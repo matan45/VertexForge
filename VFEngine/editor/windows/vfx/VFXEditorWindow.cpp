@@ -240,11 +240,18 @@ namespace windows
             needsInit = false;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(1000, 700), ImGuiCond_FirstUseEver);
+        if (initialSize.x <= 0.0f)
+        {
+            initialSize = editor::preview::initialWindowSize("VFXEditor", ImVec2(1000, 700));
+        }
+        ImGui::SetNextWindowSize(initialSize, ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
 
-        std::string title = windowTitle + (isDirty ? " *" : "  ");
+        std::string title = windowTitle + (isDirty ? " *" : "  ") +
+                            "###VFXEditor:" + vfxPath;
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar;
+        flags |= maximizer.windowFlags();
         if (ImGui::Begin(title.c_str(), &isOpen, flags))
         {
             if (isOpen)
@@ -288,6 +295,12 @@ namespace windows
             }
         }
         ImGui::End();
+
+        if (!isOpen && !sizeSaved)
+        {
+            editor::preview::rememberWindowSize("VFXEditor", maximizer.effectiveSize());
+            sizeSaved = true;
+        }
     }
 
     void VFXEditorWindow::drawToolbar()
@@ -324,6 +337,8 @@ namespace windows
         {
             saveVFX();
         }
+        ImGui::SameLine();
+        maximizer.drawButton();
 
         ImGui::Separator();
     }

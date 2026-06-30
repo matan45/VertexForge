@@ -18,6 +18,10 @@ namespace asset
         std::string path;
         resource::AssetType type = resource::AssetType::COUNT;
         std::string importSource;
+        // For type == PluginAsset: the registered plugin type id (VK-1449).
+        // Empty for built-in types. Persisted so plugin assets stay
+        // classified in search/export when the owning plugin is absent.
+        std::string pluginTypeId;
     };
 
     // Compiled into the AssetDB DLL so the singleton state is shared across
@@ -38,11 +42,14 @@ namespace asset
         AssetDatabase(const AssetDatabase&) = delete;
         AssetDatabase& operator=(const AssetDatabase&) = delete;
 
-        // Registration
+        // Registration. pluginTypeId is the VK-1449 plugin type id when
+        // type == PluginAsset; pass empty for built-in types.
         AssetGUID registerAsset(const std::string& path, resource::AssetType type,
-                                const std::string& importSource = "");
+                                const std::string& importSource = "",
+                                const std::string& pluginTypeId = "");
         void registerAssetWithGUID(const AssetGUID& guid, const std::string& path,
-                                   resource::AssetType type, const std::string& importSource = "");
+                                   resource::AssetType type, const std::string& importSource = "",
+                                   const std::string& pluginTypeId = "");
         void unregisterAsset(const AssetGUID& guid);
 
         // Lookups

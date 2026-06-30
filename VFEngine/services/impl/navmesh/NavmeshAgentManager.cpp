@@ -4,16 +4,64 @@
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "navigation/CorridorFollow.hpp"
 #include "navigation/RootMotionSpeed.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
+#include <cstdint>
 #include <iterator>
 #include <unordered_set>
+#include <utility>
 
 namespace services
 {
-    NavmeshAgentManager::NavmeshAgentManager(INavmeshProvider* provider, TileCoordFunc worldToTileCoordFunc)
-        : navmeshProvider(provider), worldToTileCoord(std::move(worldToTileCoordFunc))
+    NavmeshAgentManager::NavmeshAgentManager(INavmeshProvider* provider, TileCoordFunc worldToTileCoordFunc,
+                                             TileVersionFunc tileVersionFunc)
+        : navmeshProvider(provider),
+          worldToTileCoord(std::move(worldToTileCoordFunc)),
+          tileVersion(std::move(tileVersionFunc))
     {
+    }
+
+    bool NavmeshAgentManager::resolveDestination(const glm::vec3& target, glm::vec3& snapped) const
+    {
+        snapped = target;
+        if (navmeshProvider->isPointOnNavmesh(target, SNAP_ON_MESH_TOLERANCE))
+            return true;
+
+        for (float r : SNAP_SEARCH_RADII)
+        {
+            glm::vec3 candidate = navmeshProvider->getClosestPoint(target, r);
+            if (navmeshProvider->isPointOnNavmesh(candidate, SNAP_ON_MESH_TOLERANCE))
+            {
+                snapped = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    int NavmeshAgentManager::ensureAgentRegistered(EntityHandle entity)
+    {
+        auto it = entityToAgentIndex.find(entity.id);
+        if (it != entityToAgentIndex.end())
+            return it->second;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto enttEntity = internal::fromHandle(entity);
+        if (!registry.valid(enttEntity) ||
+            !registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+        {
+            return -1;
+        }
+
+        addAgent(entity);
+        it = entityToAgentIndex.find(entity.id);
+        if (it == entityToAgentIndex.end())
+            return -1;
+
+        return it->second;
     }
 
     void NavmeshAgentManager::addAgent(EntityHandle entity)
@@ -66,6 +114,8 @@ namespace services
 
     void NavmeshAgentManager::removeAgent(EntityHandle entity)
     {
+        removeEntityFromGroup(entity.id);
+
         auto it = entityToAgentIndex.find(entity.id);
         if (it != entityToAgentIndex.end())
         {
@@ -81,6 +131,8 @@ namespace services
             }
 
             entityToAgentIndex.erase(it);
+            entityToTarget.erase(entity.id);
+            entityStuckTimer.erase(entity.id);
             velocityTransitionFrames.erase(entity.id);
         }
     }
@@ -92,63 +144,171 @@ namespace services
         // findNearestPoly finds nothing) and trip false stuck-detection in updatePositions.
         // getClosestPoint returns the input unchanged when nothing is found, so each
         // candidate is validated with isPointOnNavmesh and the search widens on failure.
-        glm::vec3 snapped = target;
-        if (!navmeshProvider->isPointOnNavmesh(target, SNAP_ON_MESH_TOLERANCE))
+        glm::vec3 snapped;
+        if (!resolveDestination(target, snapped))
         {
-            bool resolved = false;
-            for (float r : SNAP_SEARCH_RADII)
-            {
-                glm::vec3 candidate = navmeshProvider->getClosestPoint(target, r);
-                if (navmeshProvider->isPointOnNavmesh(candidate, SNAP_ON_MESH_TOLERANCE))
-                {
-                    snapped = candidate;
-                    resolved = true;
-                    break;
-                }
-            }
-            if (!resolved)
-            {
-                // No navmesh poly within the widest search radius (or the navmesh isn't loaded
-                // yet): clear any prior target so the agent idles cleanly instead of accumulating
-                // a false "blocked" stuck timer. Logged so a dropped move order is diagnosable
-                // rather than a silent freeze.
-                vfLogWarning("NavmeshAgentManager: destination ({:.1f}, {:.1f}, {:.1f}) is more than "
-                             "{:.0f} units off the navmesh (or navmesh not loaded) - move order dropped",
-                             target.x, target.y, target.z, SNAP_SEARCH_RADII[std::size(SNAP_SEARCH_RADII) - 1]);
-                stopAgent(entity);
-                return;
-            }
+            // No navmesh poly within the widest search radius (or the navmesh isn't loaded
+            // yet): clear any prior target so the agent idles cleanly instead of accumulating
+            // a false "blocked" stuck timer. Logged so a dropped move order is diagnosable
+            // rather than a silent freeze.
+            vfLogWarning("NavmeshAgentManager: destination ({:.1f}, {:.1f}, {:.1f}) is more than "
+                         "{:.0f} units off the navmesh (or navmesh not loaded) - move order dropped",
+                         target.x, target.y, target.z, SNAP_SEARCH_RADII[std::size(SNAP_SEARCH_RADII) - 1]);
+            stopAgent(entity);
+            return;
         }
 
-        auto it = entityToAgentIndex.find(entity.id);
-        if (it == entityToAgentIndex.end())
-        {
-            // Nothing in the engine publishes AddAgentCommand, so an entity that
-            // gained a NavmeshAgentComponent (at scene load, via a prefab, or via
-            // a runtime addComponent) is not yet in the crowd. Register it lazily
-            // on its first destination request -- by now the navmesh is loaded and
-            // the entity is positioned, which is exactly when addCrowdAgent works.
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto enttEntity = internal::fromHandle(entity);
-            if (!registry.valid(enttEntity) ||
-                !registry.all_of<components::NavmeshAgentComponent>(enttEntity))
-            {
-                return;
-            }
-            addAgent(entity);
-            it = entityToAgentIndex.find(entity.id);
-            if (it == entityToAgentIndex.end())
-            {
-                return;  // off-navmesh / crowd full: addCrowdAgent failed
-            }
-        }
-        navmeshProvider->setCrowdAgentTarget(it->second, snapped);
+        // A direct per-agent destination supersedes any generic group steering.
+        removeEntityFromGroup(entity.id);
+
+        int agentIdx = ensureAgentRegistered(entity);
+        if (agentIdx < 0)
+            return;  // off-navmesh / crowd full: addCrowdAgent failed
+
+        navmeshProvider->setCrowdAgentTarget(agentIdx, snapped);
         entityToTarget[entity.id] = snapped;
         entityStuckTimer.erase(entity.id);
     }
 
+    void NavmeshAgentManager::removeEntityFromGroup(uint64_t entityId)
+    {
+        auto groupIt = entityToGroup.find(entityId);
+        if (groupIt == entityToGroup.end())
+            return;
+
+        const uint64_t groupId = groupIt->second;
+        entityToGroup.erase(groupIt);
+
+        auto it = groups.find(groupId);
+        if (it == groups.end())
+            return;
+
+        auto& members = it->second.members;
+        members.erase(std::remove_if(members.begin(), members.end(),
+            [entityId](const GroupMember& member)
+            {
+                return member.entityId == entityId;
+            }), members.end());
+
+        if (members.empty())
+            groups.erase(it);
+    }
+
+    uint64_t NavmeshAgentManager::setGroupDestination(const std::vector<EntityHandle>& entities,
+                                                      const glm::vec3& target,
+                                                      const navigation::FormationParams& formation)
+    {
+        if (entities.empty())
+            return 0;
+
+        navigation::FormationParams params = formation;
+        params.spacing = std::max(0.1f, params.spacing);
+
+        glm::vec3 snapped;
+        if (!resolveDestination(target, snapped))
+        {
+            vfLogWarning("NavmeshAgentManager: group destination ({:.1f}, {:.1f}, {:.1f}) is more than "
+                         "{:.0f} units off the navmesh (or navmesh not loaded) - group move dropped",
+                         target.x, target.y, target.z, SNAP_SEARCH_RADII[std::size(SNAP_SEARCH_RADII) - 1]);
+            for (const EntityHandle& entity : entities)
+                stopAgent(entity);
+            return 0;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<EntityHandle> validEntities;
+        std::vector<glm::vec3> positions;
+        validEntities.reserve(entities.size());
+        positions.reserve(entities.size());
+
+        glm::vec3 centroid{0.0f};
+        for (const EntityHandle& entity : entities)
+        {
+            auto enttEntity = internal::fromHandle(entity);
+            if (!registry.valid(enttEntity) ||
+                !registry.all_of<components::TransformComponent, components::NavmeshAgentComponent>(enttEntity))
+            {
+                continue;
+            }
+
+            int agentIdx = ensureAgentRegistered(entity);
+            if (agentIdx < 0)
+                continue;
+
+            const glm::vec3 position = registry.get<components::TransformComponent>(enttEntity).position;
+            validEntities.push_back(entity);
+            positions.push_back(position);
+            centroid += position;
+        }
+
+        if (validEntities.empty())
+            return 0;
+
+        centroid /= static_cast<float>(validEntities.size());
+
+        glm::vec3 start = centroid;
+        resolveDestination(centroid, start);
+
+        glm::vec3 toDestination = snapped - centroid;
+        if (toDestination.x * toDestination.x + toDestination.z * toDestination.z < 1e-6f)
+            toDestination = glm::vec3(0.0f, 0.0f, 1.0f);
+        const float facingYaw = glm::atan(toDestination.x, toDestination.z);
+
+        std::vector<int> slotForUnit(validEntities.size(), 0);
+        navigation::assignSlotsStable(positions, centroid, facingYaw, params, slotForUnit);
+
+        GroupCorridor group;
+        group.destination = snapped;
+        group.formation = params;
+        group.builtTileVersion = tileVersion ? tileVersion() : 0;
+        group.corridor = navmeshProvider->findPath(start, snapped, 0.25f, 2.0f);
+        if (!group.corridor.isValid || group.corridor.waypoints.empty())
+        {
+            group.corridor.isValid = true;
+            group.corridor.waypoints = {start, snapped};
+        }
+
+        const uint64_t groupId = nextGroupId++;
+        group.members.reserve(validEntities.size());
+
+        for (size_t i = 0; i < validEntities.size(); ++i)
+        {
+            const EntityHandle entity = validEntities[i];
+            removeEntityFromGroup(entity.id);
+
+            const int slot = slotForUnit[i];
+            const glm::vec3 slotLocal = navigation::formationSlotLocal(
+                params.kind, slot, static_cast<int>(validEntities.size()), params.spacing);
+            glm::vec3 slotWorld = navigation::toWorld(slotLocal, snapped, facingYaw);
+            slotWorld.y = snapped.y;
+            if (!navmeshProvider->isPointOnNavmesh(slotWorld, SNAP_ON_MESH_TOLERANCE))
+            {
+                glm::vec3 candidate = navmeshProvider->getClosestPoint(slotWorld, params.spacing * 2.0f + 1.0f);
+                if (navmeshProvider->isPointOnNavmesh(candidate, SNAP_ON_MESH_TOLERANCE))
+                    slotWorld = candidate;
+            }
+
+            entityToGroup[entity.id] = groupId;
+            entityToTarget[entity.id] = slotWorld;
+            entityStuckTimer.erase(entity.id);
+            velocityTransitionFrames.erase(entity.id);
+
+            GroupMember member;
+            member.entityId = entity.id;
+            member.slot = slot;
+            member.lateralOffset = slotLocal.x;
+            member.slotTarget = slotWorld;
+            group.members.push_back(member);
+        }
+
+        groups[groupId] = std::move(group);
+        return groupId;
+    }
+
     void NavmeshAgentManager::stopAgent(EntityHandle entity)
     {
+        removeEntityFromGroup(entity.id);
+
         auto it = entityToAgentIndex.find(entity.id);
         if (it != entityToAgentIndex.end())
         {
@@ -209,6 +369,261 @@ namespace services
         return navmeshProvider->getCrowdAgentMaxSpeed(it->second);
     }
 
+    NavmeshAgentManager::GroupMoveStatus NavmeshAgentManager::getGroupStatus(uint64_t groupId) const
+    {
+        GroupMoveStatus status;
+        auto it = groups.find(groupId);
+        if (it == groups.end())
+        {
+            status.complete = groupId != 0;
+            return status;
+        }
+
+        status.total = static_cast<int>(it->second.members.size());
+        for (const GroupMember& member : it->second.members)
+        {
+            if (member.arrived)
+            {
+                ++status.arrived;
+                continue;
+            }
+
+            auto agentIt = entityToAgentIndex.find(member.entityId);
+            if (agentIt == entityToAgentIndex.end())
+                continue;
+
+            const glm::vec3 pos = navmeshProvider->getCrowdAgentPosition(agentIt->second);
+            if (glm::distance(pos, member.slotTarget) <= ARRIVAL_DISTANCE)
+                ++status.arrived;
+        }
+
+        status.complete = status.total > 0 && status.arrived >= status.total;
+        return status;
+    }
+
+    std::vector<glm::vec3> NavmeshAgentManager::getGroupCorridor(uint64_t groupId) const
+    {
+        auto it = groups.find(groupId);
+        if (it == groups.end())
+            return {};
+        return it->second.corridor.waypoints;
+    }
+
+    bool NavmeshAgentManager::rebuildGroupCorridor(GroupCorridor& group, uint64_t currentVersion)
+    {
+        glm::vec3 centroid{0.0f};
+        int count = 0;
+        for (const GroupMember& member : group.members)
+        {
+            if (member.arrived)
+                continue;
+
+            auto agentIt = entityToAgentIndex.find(member.entityId);
+            if (agentIt == entityToAgentIndex.end())
+                continue;
+
+            centroid += navmeshProvider->getCrowdAgentPosition(agentIt->second);
+            ++count;
+        }
+
+        if (count <= 0)
+        {
+            group.builtTileVersion = currentVersion;
+            return false;
+        }
+
+        centroid /= static_cast<float>(count);
+        glm::vec3 start = centroid;
+        resolveDestination(centroid, start);
+
+        navigation::NavPath path = navmeshProvider->findPath(start, group.destination, 0.25f, 2.0f);
+        if (!path.isValid || path.waypoints.empty())
+        {
+            path.isValid = true;
+            path.waypoints = {start, group.destination};
+        }
+
+        group.corridor = std::move(path);
+        group.builtTileVersion = currentVersion;
+        return true;
+    }
+
+    void NavmeshAgentManager::updateGroupSteering(float)
+    {
+        if (groups.empty())
+            return;
+
+        const uint64_t currentVersion = tileVersion ? tileVersion() : 0;
+        int repaths = 0;
+
+        for (auto& groupEntry : groups)
+        {
+            GroupCorridor& group = groupEntry.second;
+            if (navigation::corridorStale(group.builtTileVersion, currentVersion) &&
+                repaths < MAX_GROUP_REPATHS_PER_FRAME)
+            {
+                rebuildGroupCorridor(group, currentVersion);
+                ++repaths;
+            }
+
+            const float totalLength = navigation::corridorTotalLength(group.corridor);
+            const float finalApproachRadius = std::max(group.formation.spacing * 2.0f, 4.0f);
+            for (GroupMember& member : group.members)
+            {
+                if (member.arrived)
+                {
+                    holdGroupMemberAtStop(member.entityId);
+                    continue;
+                }
+
+                auto agentIt = entityToAgentIndex.find(member.entityId);
+                if (agentIt == entityToAgentIndex.end())
+                    continue;
+
+                const int agentIdx = agentIt->second;
+                const glm::vec3 pos = navmeshProvider->getCrowdAgentPosition(agentIdx);
+                const float maxSpeed = navmeshProvider->getCrowdAgentMaxSpeed(agentIdx);
+                glm::vec3 velocity{0.0f};
+
+                const auto projection = navigation::projectOntoCorridor(group.corridor, pos);
+                const float remaining = std::max(0.0f, totalLength - projection.arcLength);
+                const glm::vec3 toSlot = member.slotTarget - pos;
+                const glm::vec3 planarToSlot{toSlot.x, 0.0f, toSlot.z};
+                const float slotDist = glm::length(planarToSlot);
+
+                if (slotDist <= ARRIVAL_DISTANCE)
+                {
+                    member.arrived = true;
+                    velocity = glm::vec3(0.0f);
+                }
+                else if (remaining <= finalApproachRadius)
+                {
+                    const float slowRadius = std::max(ARRIVAL_DISTANCE * 3.0f, 1.0f);
+                    const float scale = std::clamp(slotDist / slowRadius, 0.2f, 1.0f);
+                    velocity = planarToSlot / slotDist * maxSpeed * scale;
+                }
+                else
+                {
+                    navigation::CorridorFollowParams params;
+                    params.lookAhead = std::max(group.formation.spacing, 2.0f);
+                    params.arriveRadius = std::max(ARRIVAL_DISTANCE, group.formation.spacing * 0.5f);
+                    params.lateralOffset = member.lateralOffset;
+                    params.corridorHalfWidth = std::max(group.formation.spacing * 2.0f, 0.25f);
+                    velocity = navigation::corridorFollowVelocity(group.corridor, pos, maxSpeed, params);
+                }
+
+                navmeshProvider->overrideCrowdAgentVelocity(agentIdx, velocity);
+            }
+        }
+    }
+
+    void NavmeshAgentManager::holdGroupMemberAtStop(uint64_t entityId)
+    {
+        auto agentIt = entityToAgentIndex.find(entityId);
+        if (agentIt == entityToAgentIndex.end())
+            return;
+
+        // Group steering drives Detour with requestMoveVelocity(). Once a member
+        // reaches its slot, keep submitting a zero velocity target until the group
+        // completes or a new order replaces it; otherwise the agent may keep the
+        // previous velocity request and drift through the destination.
+        navmeshProvider->overrideCrowdAgentVelocity(agentIt->second, glm::vec3(0.0f));
+    }
+
+    void NavmeshAgentManager::markGroupMemberArrived(uint64_t entityId)
+    {
+        auto groupIt = entityToGroup.find(entityId);
+        if (groupIt == entityToGroup.end())
+            return;
+
+        auto it = groups.find(groupIt->second);
+        if (it == groups.end())
+            return;
+
+        for (GroupMember& member : it->second.members)
+        {
+            if (member.entityId == entityId)
+            {
+                member.arrived = true;
+                holdGroupMemberAtStop(entityId);
+                break;
+            }
+        }
+    }
+
+    void NavmeshAgentManager::markGroupNeedsRepath(uint64_t entityId)
+    {
+        auto groupIt = entityToGroup.find(entityId);
+        if (groupIt == entityToGroup.end())
+            return;
+
+        auto it = groups.find(groupIt->second);
+        if (it != groups.end())
+            it->second.builtTileVersion = UINT64_MAX;
+    }
+
+    void NavmeshAgentManager::finishCompletedGroups()
+    {
+        if (groups.empty())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<uint64_t> completed;
+
+        for (auto& [groupId, group] : groups)
+        {
+            bool allArrived = !group.members.empty();
+            for (GroupMember& member : group.members)
+            {
+                if (!member.arrived)
+                {
+                    auto agentIt = entityToAgentIndex.find(member.entityId);
+                    if (agentIt != entityToAgentIndex.end())
+                    {
+                        const glm::vec3 pos = navmeshProvider->getCrowdAgentPosition(agentIt->second);
+                        if (glm::distance(pos, member.slotTarget) <= ARRIVAL_DISTANCE)
+                        {
+                            member.arrived = true;
+                            holdGroupMemberAtStop(member.entityId);
+                        }
+                    }
+                }
+
+                allArrived = allArrived && member.arrived;
+            }
+
+            if (allArrived)
+            {
+                events::navmesh::GroupReachedDestinationNotification notif;
+                notif.groupId = groupId;
+                for (const GroupMember& member : group.members)
+                {
+                    EntityHandle handle{member.entityId};
+                    auto enttEntity = internal::fromHandle(handle);
+                    if (registry.valid(enttEntity))
+                        notif.entities.push_back(handle);
+                }
+                ::events::EventDispatcher::instance().publish(notif);
+                completed.push_back(groupId);
+            }
+        }
+
+        for (uint64_t groupId : completed)
+        {
+            auto it = groups.find(groupId);
+            if (it == groups.end())
+                continue;
+
+            for (const GroupMember& member : it->second.members)
+            {
+                entityToGroup.erase(member.entityId);
+                entityToTarget.erase(member.entityId);
+                entityStuckTimer.erase(member.entityId);
+            }
+            groups.erase(it);
+        }
+    }
+
     void NavmeshAgentManager::updatePositions(float deltaTime)
     {
         if (entityToAgentIndex.empty())
@@ -249,6 +664,8 @@ namespace services
             }
         }
 
+        updateGroupSteering(deltaTime);
+
         navmeshProvider->updateCrowd(deltaTime);
 
         // Process velocity transitions for recently-resumed agents
@@ -262,7 +679,8 @@ namespace services
                 {
                     auto agentIt = entityToAgentIndex.find(transIt->first);
                     auto targetIt = entityToTarget.find(transIt->first);
-                    if (agentIt != entityToAgentIndex.end() && targetIt != entityToTarget.end())
+                    if (agentIt != entityToAgentIndex.end() && targetIt != entityToTarget.end() &&
+                        entityToGroup.find(transIt->first) == entityToGroup.end())
                     {
                         navmeshProvider->setCrowdAgentTarget(agentIt->second, targetIt->second);
                     }
@@ -339,6 +757,7 @@ namespace services
 
                 if (distToTarget <= arrivalDist)
                 {
+                    markGroupMemberArrived(entityId);
                     entityToTarget.erase(targetIt);
                     entityStuckTimer.erase(entityId);
 
@@ -356,7 +775,11 @@ namespace services
                         entityStuckTimer[entityId] += deltaTime;
                         if (entityStuckTimer[entityId] >= stuckTimeThresh)
                         {
-                            entityToTarget.erase(targetIt);
+                            const bool inGroup = entityToGroup.find(entityId) != entityToGroup.end();
+                            if (inGroup)
+                                markGroupNeedsRepath(entityId);
+                            else
+                                entityToTarget.erase(targetIt);
                             entityStuckTimer.erase(entityId);
 
                             events::navmesh::AgentPathBlockedNotification notif;
@@ -371,6 +794,8 @@ namespace services
                 }
             }
         }
+
+        finishCompletedGroups();
     }
 
     void NavmeshAgentManager::suspendAgentsOnUnloadedTiles(
@@ -440,7 +865,8 @@ namespace services
             if (targetIt == entityToTarget.end())
                 continue;
 
-            if (unloadedSet.count(worldToTileCoord(targetIt->second)))
+            if (unloadedSet.count(worldToTileCoord(targetIt->second)) &&
+                entityToGroup.find(entityId) == entityToGroup.end())
                 navmeshProvider->setCrowdAgentTarget(agentIdx, targetIt->second);
         }
     }
@@ -476,7 +902,8 @@ namespace services
 
                         if (it->hasTarget)
                         {
-                            navmeshProvider->setCrowdAgentTarget(agentIdx, it->target);
+                            if (entityToGroup.find(it->entityId) == entityToGroup.end())
+                                navmeshProvider->setCrowdAgentTarget(agentIdx, it->target);
                             entityToTarget[it->entityId] = it->target;
                         }
 
@@ -506,5 +933,7 @@ namespace services
         entityStuckTimer.clear();
         suspendedAgents.clear();
         velocityTransitionFrames.clear();
+        groups.clear();
+        entityToGroup.clear();
     }
 }

@@ -1,5 +1,7 @@
 #include "MaterialAsset.hpp"
+#include "MaterialIR.hpp"
 #include "MaterialParameterSet.hpp"
+#include "MaterialRuntimeData.hpp"
 #include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
 #include <nlohmann/json.hpp>
@@ -262,9 +264,20 @@ namespace material
         j["version"] = MATERIAL_FORMAT_VERSION;
         j["uuid"] = material.uuid;
         j["name"] = material.name;
+        j["domain"] = materialDomainToString(material.domain);
+        j["shadingModel"] = shadingModelToString(material.shadingModel);
         j["blendMode"] = blendModeToString(material.blendMode);
         j["opacity"] = material.opacity;
         j["alphaCutoff"] = material.alphaCutoff;
+        if (!material.staticParameters.empty())
+        {
+            json staticParams = json::object();
+            for (const auto& [name, value] : material.staticParameters)
+            {
+                staticParams[name] = value;
+            }
+            j["staticParameters"] = staticParams;
+        }
         j["graph"] = serializeGraph(material);
 
         // Derived view of the exposed parameters for external tooling. The graph node
@@ -302,6 +315,30 @@ namespace material
             j["cachedShader"] = cachedJson;
         }
 
+        MaterialRuntimeData runtimeData = MaterialRuntimeDataBuilder::fromMaterialData(material);
+        const MaterialIR& ir = runtimeData.ir;
+        json irJson;
+        irJson["version"] = ir.version;
+        irJson["compilerVersion"] = ir.compilerVersion;
+        irJson["hash"] = runtimeData.irHash;
+        irJson["shaderMapKey"] = runtimeData.shaderMap.shaderMapKey;
+        irJson["gpuDrivenSupported"] = ir.gpuDrivenSupported;
+        if (!ir.gpuDrivenFallbackReason.empty())
+        {
+            irJson["gpuDrivenFallbackReason"] = ir.gpuDrivenFallbackReason;
+        }
+
+        json shaderMapJson;
+        shaderMapJson["irHash"] = runtimeData.shaderMap.irHash;
+        shaderMapJson["vertexShaderHash"] = runtimeData.shaderMap.vertexShaderHash;
+        shaderMapJson["fragmentShaderHash"] = runtimeData.shaderMap.fragmentShaderHash;
+        shaderMapJson["shaderMapKey"] = runtimeData.shaderMap.shaderMapKey;
+        shaderMapJson["compiledShaderPath"] = runtimeData.shaderMap.compiledShaderPath;
+        shaderMapJson["hasGeneratedShader"] = runtimeData.shaderMap.hasGeneratedShader;
+        irJson["shaderMap"] = shaderMapJson;
+
+        j["materialIR"] = irJson;
+
         try
         {
             return writeJsonToFile(j, path, material.name);
@@ -318,6 +355,8 @@ namespace material
         MaterialData material;
         material.uuid = std::to_string(uuid::UUID().getValue());
         material.name = name;
+        material.domain = MaterialDomain::Surface;
+        material.shadingModel = ShadingModel::DefaultLit;
         material.blendMode = BlendMode::Opaque;
         material.needsRecompile = true;
 

@@ -1,0 +1,16 @@
+{
+    "version": "1.0",
+    "id": "Fireball.Cost",
+    "displayName": "Fireball Mana Cost",
+    "durationPolicy": "Instant",
+    "duration": 0.0,
+    "period": 0.0,
+    "modifiers": [
+        { "attribute": "Mana", "op": "Add", "magnitude": -25.0 }
+    ],
+    "grantedTags": [],
+    "ongoingRequiredTags": [],
+    "removalTags": [],
+    "stacking": { "policy": "None", "limit": 1, "durationRefresh": false, "expiration": "ClearStack" },
+    "cueIds": []
+}
