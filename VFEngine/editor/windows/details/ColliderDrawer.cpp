@@ -1,15 +1,29 @@
 #include "ColliderDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/lifecycle/AssetLifecycleEvents.hpp"
+#include "events/physics/PhysicsEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/physics/PhysicsSettingsEvents.hpp"
 #include "types/PhysicsTypes.hpp"
 #include <imgui.h>
+#include <algorithm>
+#include <chrono>
+#include <exception>
 
 namespace windows::details
 {
+    ColliderDrawer::~ColliderDrawer()
+    {
+        cancelConvexRegen.store(true);
+        if (convexRegenFuture.valid())
+            convexRegenFuture.wait();
+    }
+
     bool ColliderDrawer::draw(services::EntityHandle handle)
     {
+        pollRegenerationResult(handle, activeConvexRegenMeshPath);
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         events::scene::HasColliderComponentQuery hasColliderQuery;
@@ -44,7 +58,7 @@ namespace windows::details
 
             changed |= drawShapeSelection(colliderData);
             ImGui::Spacing();
-            changed |= drawShapeParameters(colliderData);
+            changed |= drawShapeParameters(handle, colliderData);
             ImGui::Spacing();
             changed |= drawPhysicsMaterial(colliderData);
             ImGui::Spacing();
@@ -134,7 +148,8 @@ namespace windows::details
         return changed;
     }
 
-    bool ColliderDrawer::drawShapeParameters(services::ColliderComponentData& colliderData)
+    bool ColliderDrawer::drawShapeParameters(services::EntityHandle handle,
+                                             services::ColliderComponentData& colliderData)
     {
         bool changed = false;
 
@@ -198,6 +213,12 @@ namespace windows::details
                 {
                     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Triangle meshes are static only");
                 }
+
+                if (colliderData.shape == types::ColliderShape::ConvexMesh)
+                {
+                    ImGui::Spacing();
+                    drawConvexRegenerationControls(handle, colliderData);
+                }
                 break;
             }
         }
@@ -214,6 +235,219 @@ namespace windows::details
         }
 
         return changed;
+    }
+
+    bool ColliderDrawer::drawConvexRegenerationControls(
+        services::EntityHandle handle,
+        const services::ColliderComponentData& colliderData)
+    {
+        bool started = false;
+        const std::string meshPath = resolveMeshPath(handle, colliderData);
+
+        ImGui::Separator();
+        ImGui::Text("Convex Decomposition");
+        drawConvexRegenerationSettings();
+
+        pollRegenerationResult(handle, meshPath);
+
+        const bool running = convexRegenFuture.valid()
+            && convexRegenFuture.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready;
+
+        if (running)
+        {
+            ImGui::ProgressBar(std::clamp(convexRegenProgress.load(), 0.0f, 1.0f), ImVec2(-1.0f, 0.0f));
+            if (ImGui::Button("Cancel Regeneration"))
+                cancelConvexRegen.store(true);
+        }
+        else
+        {
+            if (meshPath.empty())
+                ImGui::BeginDisabled();
+
+            if (ImGui::Button("Regenerate Convex Decomposition"))
+            {
+                cancelConvexRegen.store(false);
+                convexRegenProgress.store(0.0f);
+                convexRegenStatus.clear();
+                activeConvexRegenMeshPath = meshPath;
+                activeConvexRegenEntity = handle;
+
+                const int32_t submeshIndex = colliderData.submeshIndex;
+                const auto config = convexRegenConfig;
+                convexRegenFuture = std::async(std::launch::async,
+                    [this, meshPath, submeshIndex, config]()
+                    {
+                        return types::ConvexDecompositionRegenerator::regenerate(
+                            meshPath,
+                            submeshIndex,
+                            config,
+                            [this](float progress, std::string_view)
+                            {
+                                convexRegenProgress.store(progress);
+                            },
+                            &cancelConvexRegen);
+                    });
+                started = true;
+            }
+
+            if (meshPath.empty())
+            {
+                ImGui::EndDisabled();
+                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "No mesh path resolved");
+            }
+        }
+
+        if (!convexRegenStatus.empty())
+        {
+            ImGui::TextWrapped("%s", convexRegenStatus.c_str());
+        }
+
+        return started;
+    }
+
+    bool ColliderDrawer::drawConvexRegenerationSettings()
+    {
+        bool changed = false;
+
+        const char* presetNames[] = {"Fast", "Balanced", "Quality", "Custom"};
+        int presetIndex = static_cast<int>(convexRegenConfig.vhacdPreset);
+        if (ImGui::Combo("Quality Preset##ConvexRegen", &presetIndex, presetNames, IM_ARRAYSIZE(presetNames)))
+        {
+            convexRegenConfig.vhacdPreset = static_cast<importConfig::VHACDPreset>(presetIndex);
+            changed = true;
+        }
+
+        const bool isCustom = convexRegenConfig.vhacdPreset == importConfig::VHACDPreset::Custom;
+        if (!isCustom)
+            ImGui::BeginDisabled();
+
+        int maxHulls = static_cast<int>(convexRegenConfig.maxConvexHulls);
+        if (ImGui::SliderInt("Max Hulls##ConvexRegen", &maxHulls, 1, 64))
+        {
+            convexRegenConfig.maxConvexHulls = static_cast<uint32_t>(maxHulls);
+            changed = true;
+        }
+
+        int maxVerts = static_cast<int>(convexRegenConfig.maxVerticesPerHull);
+        if (ImGui::SliderInt("Max Vertices Per Hull##ConvexRegen", &maxVerts, 8, 256))
+        {
+            convexRegenConfig.maxVerticesPerHull = static_cast<uint32_t>(maxVerts);
+            changed = true;
+        }
+
+        if (ImGui::TreeNode("Advanced Parameters##ConvexRegen"))
+        {
+            int resolution = static_cast<int>(convexRegenConfig.vhacdResolution);
+            if (ImGui::SliderInt("Resolution##ConvexRegen", &resolution, 10000, 500000))
+            {
+                convexRegenConfig.vhacdResolution = static_cast<uint32_t>(resolution);
+                changed = true;
+            }
+
+            float minVolumeError = convexRegenConfig.minVolumePercentError;
+            if (ImGui::SliderFloat("Min Volume Error %%##ConvexRegen", &minVolumeError, 0.1f, 10.0f, "%.1f"))
+            {
+                convexRegenConfig.minVolumePercentError = minVolumeError;
+                changed = true;
+            }
+
+            int recursionDepth = static_cast<int>(convexRegenConfig.maxRecursionDepth);
+            if (ImGui::SliderInt("Max Recursion Depth##ConvexRegen", &recursionDepth, 4, 16))
+            {
+                convexRegenConfig.maxRecursionDepth = static_cast<uint32_t>(recursionDepth);
+                changed = true;
+            }
+
+            if (ImGui::Checkbox("Shrink Wrap##ConvexRegen", &convexRegenConfig.shrinkWrap))
+                changed = true;
+
+            ImGui::TreePop();
+        }
+
+        if (!isCustom)
+            ImGui::EndDisabled();
+
+        return changed;
+    }
+
+    std::string ColliderDrawer::resolveMeshPath(
+        services::EntityHandle handle,
+        const services::ColliderComponentData& colliderData) const
+    {
+        if (colliderData.meshRef.isValid())
+            return colliderData.meshRef.resolve();
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::scene::GetMeshDataQuery meshQuery;
+        meshQuery.entity = handle;
+        try
+        {
+            auto meshData = dispatcher.query(meshQuery);
+            if (meshData.has_value() && meshData->meshRef.isValid())
+                return meshData->meshRef.resolve();
+        }
+        catch (const std::exception&)
+        {
+        }
+
+        return {};
+    }
+
+    void ColliderDrawer::pollRegenerationResult(services::EntityHandle handle, const std::string& meshPath)
+    {
+        if (!convexRegenFuture.valid())
+            return;
+
+        if (convexRegenFuture.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
+            return;
+
+        types::ConvexRegenerationResult result;
+        try
+        {
+            result = convexRegenFuture.get();
+        }
+        catch (const std::exception& e)
+        {
+            convexRegenStatus = std::string("Convex decomposition failed: ") + e.what();
+            return;
+        }
+        if (!result.success)
+        {
+            convexRegenStatus = "Convex decomposition failed: " + result.message;
+            return;
+        }
+
+        convexRegenProgress.store(1.0f);
+        convexRegenStatus = result.message + " (" + std::to_string(result.hullCount) + " hulls)";
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::lifecycle::AssetReleaseReadyNotification releaseNotification;
+        releaseNotification.path = activeConvexRegenMeshPath.empty()
+            ? meshPath
+            : activeConvexRegenMeshPath;
+        releaseNotification.type = resource::AssetType::Mesh;
+        dispatcher.publish(releaseNotification);
+
+        const services::EntityHandle rebuildEntity = activeConvexRegenEntity.isValid()
+            ? activeConvexRegenEntity
+            : handle;
+        try
+        {
+            events::physics::HasRigidBodyQuery hasBodyQuery;
+            hasBodyQuery.entity = rebuildEntity;
+            if (dispatcher.query(hasBodyQuery))
+            {
+                events::physics::CreatePhysicsBodyCommand rebuildCmd;
+                rebuildCmd.entity = rebuildEntity;
+                rebuildCmd.rebuild = true;
+                dispatcher.execute(rebuildCmd);
+            }
+        }
+        catch (const std::exception&)
+        {
+            // Physics service may not be registered in all editor contexts; cache eviction above is enough
+            // for the next body creation to pick up the regenerated collider.
+        }
     }
 
     bool ColliderDrawer::drawPhysicsMaterial(services::ColliderComponentData& colliderData)

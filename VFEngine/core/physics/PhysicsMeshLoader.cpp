@@ -1,6 +1,10 @@
 #include "PhysicsMeshLoader.hpp"
+#include "resource/ConvexDecompositionSidecar.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "print/Log.hpp"
+
+#include <algorithm>
+#include <iterator>
 
 namespace core::physics
 {
@@ -138,6 +142,14 @@ namespace core::physics
             return std::nullopt;
         }
 
+        resource::ConvexDecompositionData sidecarData;
+        if (resource::ConvexDecompositionSidecar::loadForSubmesh(meshPath, submeshIndex, sidecarData))
+        {
+            vfLogDebug("PhysicsMeshLoader: Loaded sidecar convex decomposition with {} hulls from {}",
+                       sidecarData.hulls.size(), meshPath);
+            return sidecarData;
+        }
+
         auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
         if (!streamHandle)
         {
@@ -175,6 +187,68 @@ namespace core::physics
         vfLogDebug("PhysicsMeshLoader: Loaded convex decomposition with {} hulls from {}",
                    result.hulls.size(), meshPath);
 
+        return result;
+    }
+
+    std::optional<resource::ConvexDecompositionData> PhysicsMeshLoader::loadAllConvexDecompositions(
+        std::string_view meshPath)
+    {
+        if (meshPath.empty())
+        {
+            vfLogWarning("PhysicsMeshLoader: Empty mesh path provided");
+            return std::nullopt;
+        }
+
+        auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
+        if (!streamHandle)
+        {
+            vfLogWarning("PhysicsMeshLoader: Failed to open mesh file: {}", meshPath);
+            return std::nullopt;
+        }
+
+        const auto& header = streamHandle->getHeader();
+        if (header.numSubmeshes == 0)
+        {
+            vfLogWarning("PhysicsMeshLoader: Mesh has no submeshes: {}", meshPath);
+            return std::nullopt;
+        }
+
+        resource::ConvexDecompositionData result;
+        for (uint32_t i = 0; i < header.numSubmeshes; ++i)
+        {
+            resource::ConvexDecompositionData data;
+            if (!resource::ConvexDecompositionSidecar::loadForSubmesh(meshPath, i, data))
+            {
+                if (!streamHandle->hasConvexData())
+                    continue;
+
+                if (!streamHandle->readConvexDecomposition(i, data))
+                {
+                    vfLogWarning("PhysicsMeshLoader: Failed to read convex decomposition for submesh {} from: {}",
+                                 i, meshPath);
+                    continue;
+                }
+            }
+
+            if (!data.isValid())
+                continue;
+
+            if (!result.hasDecomposition)
+            {
+                result.hasDecomposition = true;
+                result.params = data.params;
+            }
+
+            result.hulls.insert(result.hulls.end(),
+                                std::make_move_iterator(data.hulls.begin()),
+                                std::make_move_iterator(data.hulls.end()));
+        }
+
+        if (!result.isValid())
+            return std::nullopt;
+
+        vfLogDebug("PhysicsMeshLoader: Loaded {} convex hulls from all submeshes in {}",
+                   result.hulls.size(), meshPath);
         return result;
     }
 }

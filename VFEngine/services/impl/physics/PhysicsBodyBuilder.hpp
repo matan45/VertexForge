@@ -45,9 +45,24 @@ namespace services
         colData.offset *= absScale;
     }
 
+    inline bool hasMeshColliderSource(const components::ColliderComponent& collider,
+                                      const entt::registry* registry = nullptr,
+                                      entt::entity entity = entt::null)
+    {
+        if (collider.meshRef.isValid())
+            return true;
+
+        return registry != nullptr
+            && entity != entt::null
+            && registry->all_of<components::MeshComponent>(entity)
+            && registry->get<components::MeshComponent>(entity).meshRef.isValid();
+    }
+
     inline std::string validateCollider(const components::ColliderComponent& collider,
                                         const components::RigidBodyComponent& rigidBody,
-                                        const std::string& entityName)
+                                        const std::string& entityName,
+                                        const entt::registry* registry = nullptr,
+                                        entt::entity entity = entt::null)
     {
         switch (collider.shape)
         {
@@ -70,11 +85,11 @@ namespace services
                     entityName, collider.height);
             break;
         case components::ColliderShape::ConvexMesh:
-            if (!collider.meshRef.isValid())
+            if (!hasMeshColliderSource(collider, registry, entity))
                 return fmt::format("Entity '{}': ConvexMesh collider has no mesh path specified", entityName);
             break;
         case components::ColliderShape::TriangleMesh:
-            if (!collider.meshRef.isValid())
+            if (!hasMeshColliderSource(collider, registry, entity))
                 return fmt::format("Entity '{}': TriangleMesh collider has no mesh path specified", entityName);
             if (rigidBody.type == components::RigidBodyType::Dynamic)
                 return fmt::format("Entity '{}': TriangleMesh collider cannot be used with Dynamic rigid body (use Static or Kinematic)", entityName);

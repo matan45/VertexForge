@@ -121,7 +121,7 @@ namespace core::physics
 
         auto decomposition = (info.submeshIndex >= 0)
             ? PhysicsMeshLoader::loadConvexDecomposition(info.meshPath, static_cast<uint32_t>(info.submeshIndex))
-            : PhysicsMeshLoader::loadConvexDecomposition(info.meshPath);
+            : PhysicsMeshLoader::loadAllConvexDecompositions(info.meshPath);
         if (decomposition && !decomposition->hulls.empty())
         {
             JPH::StaticCompoundShapeSettings compoundSettings;

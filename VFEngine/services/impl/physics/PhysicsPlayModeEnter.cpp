@@ -37,7 +37,7 @@ namespace services
                 std::string entityName = registry.all_of<components::NameComponent>(entity)
                     ? registry.get<components::NameComponent>(entity).name : "Unknown";
 
-                std::string validationError = validateCollider(collider, rigidBody, entityName);
+                std::string validationError = validateCollider(collider, rigidBody, entityName, &registry, entity);
                 if (!validationError.empty())
                 {
                     vfLogWarning("{} - skipping physics body creation", validationError);

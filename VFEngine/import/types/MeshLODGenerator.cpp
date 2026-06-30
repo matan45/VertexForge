@@ -78,6 +78,7 @@ namespace
         result.params.maxVerticesPerHull = effectiveConfig.maxVerticesPerHull;
         result.params.minVolumePercentError = effectiveConfig.minVolumePercentError;
         result.params.maxRecursionDepth = effectiveConfig.maxRecursionDepth;
+        result.params.shrinkWrap = effectiveConfig.shrinkWrap;
 
         constexpr uint32_t joltMaxVertices = 256;
         const uint32_t effectiveMaxVertices = std::min(effectiveConfig.maxVerticesPerHull, joltMaxVertices);

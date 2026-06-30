@@ -4,6 +4,9 @@
 #include <types/PhysicsTypes.hpp>
 #include <data/DTOs.hpp>
 #include <interfaces/physics/IPhysicsService.hpp>
+#include <impl/physics/PhysicsBodyBuilder.hpp>
+#include <asset/AssetRef.hpp>
+#include <asset/AssetGUID.hpp>
 
 // ============================================================
 // VK-1238: Sub-Mesh Fragment Rendering with Per-Fragment
@@ -106,6 +109,36 @@ TEST_CASE("ColliderData: default submeshIndex does not affect non-mesh shapes") 
     services::ColliderData sphereData;
     sphereData.shape = services::ColliderData::Shape::Sphere;
     CHECK(sphereData.submeshIndex == -1);
+}
+
+TEST_CASE("validateCollider: ConvexMesh can use MeshComponent mesh ref fallback") {
+    entt::registry registry;
+    auto entity = registry.create();
+
+    components::ColliderComponent collider;
+    collider.shape = components::ColliderShape::ConvexMesh;
+    collider.meshRef = asset::AssetRef::invalid();
+
+    auto& mesh = registry.emplace<components::MeshComponent>(entity);
+    mesh.meshRef = asset::AssetRef::fromGUID(asset::AssetGUID::fromValue(0x1234));
+
+    components::RigidBodyComponent body;
+    body.type = components::RigidBodyType::Dynamic;
+
+    CHECK(services::validateCollider(collider, body, "WithMeshComponent", &registry, entity).empty());
+}
+
+TEST_CASE("validateCollider: ConvexMesh without collider or mesh component source fails") {
+    entt::registry registry;
+    auto entity = registry.create();
+
+    components::ColliderComponent collider;
+    collider.shape = components::ColliderShape::ConvexMesh;
+
+    components::RigidBodyComponent body;
+    body.type = components::RigidBodyType::Dynamic;
+
+    CHECK_FALSE(services::validateCollider(collider, body, "MissingMesh", &registry, entity).empty());
 }
 
 // ---- Fragment spawn scenario ----
