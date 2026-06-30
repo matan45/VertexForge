@@ -7,6 +7,7 @@
 #include "gas/core/GASAssets.hpp"
 #include "gas/editor/AbilityEditorWindow.hpp"
 #include "gas/editor/EffectEditorWindow.hpp"
+#include "gas/editor/CueEditorWindow.hpp"
 #include "gas/editor/TagTableEditorWindow.hpp"
 #include "gas/editor/GASDebuggerWindow.hpp"
 
@@ -83,6 +84,7 @@ public:
                 const std::string path = data.value("path", std::string());
                 if (typeId == "gas.ability" && abilityWindow) abilityWindow->open(path);
                 else if (typeId == "gas.effect" && effectWindow) effectWindow->open(path);
+                else if (typeId == "gas.cue" && cueWindow) cueWindow->open(path);
                 else if (typeId == "gas.tags" && tagWindow) tagWindow->open(path);
             }));
 
@@ -394,10 +396,12 @@ private:
         ImGui::SetCurrentContext(ctx->getImGuiContext());
         abilityWindow = std::make_shared<gas::AbilityEditorWindow>();
         effectWindow = std::make_shared<gas::EffectEditorWindow>();
+        cueWindow = std::make_shared<gas::CueEditorWindow>();
         tagWindow = std::make_shared<gas::TagTableEditorWindow>();
         debuggerWindow = std::make_shared<gas::GASDebuggerWindow>();
         ctx->registerEditorWindow(abilityWindow, "GAS Ability Editor");
         ctx->registerEditorWindow(effectWindow, "GAS Effect Editor");
+        ctx->registerEditorWindow(cueWindow, "GAS Cue Editor");
         ctx->registerEditorWindow(tagWindow, "GAS Tag Table");
         ctx->registerEditorWindow(debuggerWindow, "GAS Debugger");
     }
@@ -425,6 +429,7 @@ private:
     gas::GASRuntime runtime;
     std::shared_ptr<gas::AbilityEditorWindow> abilityWindow;
     std::shared_ptr<gas::EffectEditorWindow> effectWindow;
+    std::shared_ptr<gas::CueEditorWindow> cueWindow;
     std::shared_ptr<gas::TagTableEditorWindow> tagWindow;
     std::shared_ptr<gas::GASDebuggerWindow> debuggerWindow;
 };
