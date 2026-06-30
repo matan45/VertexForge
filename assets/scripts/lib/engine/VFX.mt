@@ -226,4 +226,38 @@ public class VFX {
     public static function comboIsPlaying(int comboId): bool {
         return _native_vfx_comboIsPlaying(comboId);
     }
+
+    // ============================================
+    // Deterministic transport (VK-1451)
+    // Stable runtime controls. Live mid-game seek is intentionally not exposed:
+    // GPU particles already in flight cannot be visually rewound, so a scripted
+    // seek would mislead. Seeking is an editor-preview / authoring capability.
+    // ============================================
+
+    // Spawn a combo with an explicit RNG seed so its emission schedule is
+    // reproducible across runs. Returns the combo id (0 on failure).
+    public static function spawnComboSeeded(string path, float x, float y, float z, int seed): int {
+        return _native_vfx_spawnComboSeeded(path, x, y, z, seed);
+    }
+
+    // Spawn a combo and fast-forward its schedule by `prewarm` seconds before the
+    // first visible frame (e.g. a fire that should already be burning on spawn).
+    public static function spawnComboPrewarmed(string path, float x, float y, float z, float prewarm): int {
+        return _native_vfx_spawnComboPrewarmed(path, x, y, z, prewarm);
+    }
+
+    // Pause a combo's timeline (children freeze where they are).
+    public static function pauseCombo(int comboId): void {
+        _native_vfx_pauseCombo(comboId);
+    }
+
+    // Resume a paused combo.
+    public static function resumeCombo(int comboId): void {
+        _native_vfx_resumeCombo(comboId);
+    }
+
+    // Set the combo's playback rate (1.0 = normal, 2.0 = double speed, etc.).
+    public static function setComboRate(int comboId, float rate): void {
+        _native_vfx_setComboRate(comboId, rate);
+    }
 }
