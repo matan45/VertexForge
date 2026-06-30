@@ -68,7 +68,7 @@ namespace vfx
         // time-driven spawns, then marker-fired cue spawns, then StopAfterDuration stops.
         void advance(float dt, std::vector<ComboEvent>& out)
         {
-            if (!data_ || dt <= 0.0f)
+            if (!data_ || dt < 0.0f)
                 return;
             elapsed_ += dt;
 

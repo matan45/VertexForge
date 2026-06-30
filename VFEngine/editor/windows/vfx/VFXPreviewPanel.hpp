@@ -36,6 +36,16 @@ namespace editor::vfxeditor
 
         void setParams(const services::VFXPreviewParams& params);
 
+        // VK-1451 — composited sequence preview. setSequence loads all steps into the
+        // controller at once; seek/setRate are the deterministic transport controls.
+        void setSequence(const services::VFXSequencePreviewDesc& desc);
+        void seek(float seconds);
+        void setRate(float rate);
+
+        // The sequence window drives transport from its timeline, so it hides the
+        // panel's built-in Play/Stop/Restart row.
+        void setBuiltInControls(bool show) { builtInControls = show; }
+
         void play();
         void pause();
         void stop();
@@ -44,5 +54,7 @@ namespace editor::vfxeditor
     private:
         void handleInput();
         void drawPlaybackControls();
+
+        bool builtInControls = true;
     };
 }

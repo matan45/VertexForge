@@ -64,6 +64,30 @@ namespace editor::vfxeditor
         events::EventDispatcher::instance().execute(cmd);
     }
 
+    void VFXPreviewPanel::setSequence(const services::VFXSequencePreviewDesc& desc)
+    {
+        services::events::vfxpreview::SetVFXSequencePreviewCommand cmd;
+        cmd.instanceId = services::PreviewInstanceId(instanceId);
+        cmd.desc = desc;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void VFXPreviewPanel::seek(float seconds)
+    {
+        services::events::vfxpreview::SeekVFXPreviewCommand cmd;
+        cmd.instanceId = services::PreviewInstanceId(instanceId);
+        cmd.seconds = seconds;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void VFXPreviewPanel::setRate(float rate)
+    {
+        services::events::vfxpreview::SetVFXPreviewRateCommand cmd;
+        cmd.instanceId = services::PreviewInstanceId(instanceId);
+        cmd.rate = rate;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
     void VFXPreviewPanel::play()
     {
         services::events::vfxpreview::PlayVFXCommand cmd;
@@ -188,6 +212,7 @@ namespace editor::vfxeditor
         }
         ImGui::EndChild();
 
-        drawPlaybackControls();
+        if (builtInControls)
+            drawPlaybackControls();
     }
 }

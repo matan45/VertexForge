@@ -12,6 +12,7 @@
 
 #include <vfx/VFXSequenceAsset.hpp>
 #include <vfx/VFXSequenceValidation.hpp>
+#include <vfx/VFXComboTimeline.hpp>
 #include <vfx/VFXAsset.hpp>
 #include <asset/AssetRef.hpp>
 #include <resource/MeshStreamHandle.hpp>
@@ -19,6 +20,7 @@
 #include <glm/glm.hpp>
 #include <filesystem>
 #include <algorithm>
+#include <cstring>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -119,6 +121,8 @@ namespace windows
         , timeline(std::make_unique<SequenceTimeline>())
     {
         windowTitle = "VFX Sequence: " + fs::path(seqPath).filename().string();
+        // The timeline row below drives transport, so hide the panel's built-in buttons.
+        previewPanel->setBuiltInControls(false);
     }
 
     VFXSequenceEditorWindow::~VFXSequenceEditorWindow() = default;
@@ -427,7 +431,7 @@ namespace windows
                 if (selectedStep == i) selectedStep = i - 1;
                 else if (selectedStep == i - 1) selectedStep = i;
                 isDirty = true;
-                previewActiveStep = -1;
+                previewDirty = true;
                 ImGui::PopID();
                 continue;
             }
@@ -438,7 +442,7 @@ namespace windows
                 if (selectedStep == i) selectedStep = i + 1;
                 else if (selectedStep == i + 1) selectedStep = i;
                 isDirty = true;
-                previewActiveStep = -1;
+                previewDirty = true;
                 ImGui::PopID();
                 continue;
             }
@@ -449,7 +453,7 @@ namespace windows
                 if (selectedStep == i) selectedStep = -1;
                 else if (selectedStep > i) --selectedStep;
                 isDirty = true;
-                previewActiveStep = -1;
+                previewDirty = true;
                 ImGui::PopID();
                 break; // container mutated — restart next frame
             }
@@ -502,7 +506,8 @@ namespace windows
             {
                 step.vfxRef = ref;
                 isDirty = true;
-                previewActiveStep = -1; // force the preview to reload this step
+                vfxCache.clear();
+                previewDirty = true; // force the preview to reload this step
             }
         }
 
@@ -643,143 +648,237 @@ namespace windows
 
     void VFXSequenceEditorWindow::drawTimeline()
     {
-        // Transport row, then an ImSequencer track view: one draggable clip per
-        // step. Drag a clip to set its Start Time, drag its right edge to set
-        // Duration; the playhead (current frame) scrubs the preview.
+        // Transport row: play/pause, reset, reload, playback rate, seed, prewarm.
+        // VK-1451 — drives the composited preview deterministically (mirrors
+        // AnimationTimelinePanel: ImSequencer change -> seek).
         if (ImGui::Button(previewPlaying ? "Pause" : "Play"))
+        {
             previewPlaying = !previewPlaying;
+            if (previewPlaying) previewPanel->play();
+            else previewPanel->pause();
+        }
         ImGui::SameLine();
         if (ImGui::Button("Reset"))
         {
             previewTime = 0.0f;
-            previewPlaying = false;
-            previewActiveStep = -1;
+            previewPanel->seek(0.0f);
         }
         ImGui::SameLine();
         if (ImGui::Button("Reload"))
-            previewActiveStep = -1; // re-load the active step's (possibly edited) .vfVFX
+        {
+            vfxCache.clear();    // drop cached .vfVFX so edits on disk are picked up
+            previewDirty = true; // re-load each step's .vfVFX + overrides into the composite
+        }
         ImGui::SameLine();
         ImGui::Checkbox("Loop", &previewLoop);
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(90.0f);
+        if (ImGui::DragFloat("Rate", &previewRate, 0.05f, 0.1f, 4.0f, "%.2fx"))
+        {
+            previewRate = std::clamp(previewRate, 0.1f, 4.0f);
+            previewPanel->setRate(previewRate);
+        }
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110.0f);
+        int seedProxy = static_cast<int>(previewSeed);
+        if (ImGui::InputInt("Seed", &seedProxy, 0, 0))
+        {
+            previewSeed = static_cast<uint32_t>(std::max(0, seedProxy));
+            previewDirty = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Randomize"))
+        {
+            previewSeed = static_cast<uint32_t>(ImGui::GetTime() * 1000.0) ^ 0x9E3779B9u;
+            if (previewSeed == 0) previewSeed = 1u;
+            previewDirty = true;
+        }
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(90.0f);
+        ImGui::DragFloat("Prewarm", &previewPrewarm, 0.05f, 0.0f, 30.0f, "%.2fs");
+        ImGui::SameLine();
+        if (ImGui::Button("Apply##prewarm"))
+        {
+            previewTime = previewPrewarm;
+            previewPanel->seek(previewPrewarm);
+        }
         ImGui::SameLine();
         ImGui::Text("t = %.2f s", previewTime);
 
         float maxTime = 1.0f;
         for (const auto& step : data->steps)
             maxTime = std::max(maxTime, step.startTime + std::max(step.duration, 0.5f));
+        for (const auto& marker : data->eventMarkers)
+            maxTime = std::max(maxTime, marker.time + 0.5f);
 
+        // While playing, advance the local playhead in lock-step with the panel's sim.
         if (previewPlaying)
         {
-            previewTime += ImGui::GetIO().DeltaTime;
+            previewTime += ImGui::GetIO().DeltaTime * (previewRate > 0.0f ? previewRate : 1.0f);
             if (previewTime > maxTime)
             {
                 if (previewLoop)
                 {
                     previewTime = 0.0f;
-                    previewActiveStep = -1;
+                    previewPanel->seek(0.0f);
                 }
                 else
                 {
                     previewTime = maxTime;
                     previewPlaying = false;
+                    previewPanel->pause();
                 }
             }
         }
 
-        // ImSequencer track view (one clip per step).
+        // ImSequencer track view (one clip per step). A user drag of the playhead is a
+        // scrub -> seek; clip drags edit step timing (writeback).
         timeline->sync(data.get());
         previewFrame = static_cast<int>(std::lround(previewTime * SequenceTimeline::kFps));
+        const int frameBefore = previewFrame;
         int selected = selectedStep;
         const int options = ImSequencer::SEQUENCER_CHANGE_FRAME | ImSequencer::SEQUENCER_EDIT_STARTEND;
         ImSequencer::Sequencer(timeline.get(), &previewFrame, &timelineExpanded, &selected,
                                &timelineFirstFrame, options);
 
-        // Scrubbing moved the playhead; clip drags edited step timing.
         previewTime = std::clamp(static_cast<float>(previewFrame) / SequenceTimeline::kFps, 0.0f, maxTime);
+        if (previewFrame != frameBefore)
+            previewPanel->seek(previewTime); // user scrubbed the playhead
+
         if (timeline->writeback())
+        {
             isDirty = true;
+            previewDirty = true; // step timing changed -> rebuild the composite schedule
+        }
         if (selected >= 0 && selected < static_cast<int>(data->steps.size()))
             selectedStep = selected;
+
+        drawMarkersRow();
     }
 
-    int VFXSequenceEditorWindow::pickActiveStep() const
+    void VFXSequenceEditorWindow::drawMarkersRow()
     {
-        if (!data || data->steps.empty())
-            return -1;
+        if (!data)
+            return;
 
-        if (previewPlaying)
+        ImGui::Separator();
+        ImGui::TextUnformatted("Event Markers (one-shot cues)");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+ Add"))
         {
-            // The most-recently-started time-driven step at/under the playhead.
-            int best = -1;
-            float bestStart = -1.0f;
-            for (int i = 0; i < static_cast<int>(data->steps.size()); ++i)
+            data->eventMarkers.push_back(vfx::VFXSequenceEventMarker{previewTime, ""});
+            isDirty = true;
+            previewDirty = true;
+        }
+
+        int toRemove = -1;
+        for (size_t m = 0; m < data->eventMarkers.size(); ++m)
+        {
+            ImGui::PushID(static_cast<int>(m));
+            auto& marker = data->eventMarkers[m];
+
+            ImGui::SetNextItemWidth(90.0f);
+            if (ImGui::DragFloat("Time", &marker.time, 0.01f, 0.0f, 120.0f, "%.2fs"))
             {
-                const auto& s = data->steps[static_cast<size_t>(i)];
-                if (!s.cueName.empty() || !s.vfxRef.isValid())
-                    continue; // cue-driven steps don't auto-fire in the preview
-                if (previewTime + 1.0e-4f >= s.startTime && s.startTime >= bestStart)
-                {
-                    bestStart = s.startTime;
-                    best = i;
-                }
+                isDirty = true;
+                previewDirty = true;
             }
-            if (best >= 0)
-                return best;
+            ImGui::SameLine();
+
+            char buf[64];
+            std::strncpy(buf, marker.cueName.c_str(), sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            ImGui::SetNextItemWidth(140.0f);
+            if (ImGui::InputText("Cue", buf, sizeof(buf)))
+            {
+                marker.cueName = buf;
+                isDirty = true;
+                previewDirty = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+                toRemove = static_cast<int>(m);
+
+            ImGui::PopID();
         }
 
-        // Not playing (or nothing active yet): preview the selected step.
-        if (selectedStep >= 0 && selectedStep < static_cast<int>(data->steps.size()) &&
-            data->steps[static_cast<size_t>(selectedStep)].vfxRef.isValid())
-            return selectedStep;
-
-        return -1;
+        if (toRemove >= 0)
+        {
+            data->eventMarkers.erase(data->eventMarkers.begin() + toRemove);
+            isDirty = true;
+            previewDirty = true;
+        }
     }
 
-    void VFXSequenceEditorWindow::syncPreviewToStep(int stepIndex)
+    services::VFXSequencePreviewDesc VFXSequenceEditorWindow::buildSequenceDesc() const
     {
-        previewActiveStep = stepIndex;
-        if (!previewPanel || !data)
-            return;
+        services::VFXSequencePreviewDesc desc;
+        if (!data)
+            return desc;
 
-        if (stepIndex < 0 || stepIndex >= static_cast<int>(data->steps.size()))
+        desc.seed = previewSeed != 0 ? previewSeed : data->seed;
+        desc.playbackRate = previewRate > 0.0f ? previewRate : 1.0f;
+        desc.fixedStep = data->fixedStep;
+        for (const auto& marker : data->eventMarkers)
+            desc.markers.emplace_back(marker.time, marker.cueName);
+
+        const uint32_t comboSeed = desc.seed != 0 ? desc.seed : 1u;
+
+        for (size_t i = 0; i < data->steps.size(); ++i)
         {
-            previewPanel->stop();
-            return;
+            const auto& step = data->steps[i];
+            if (!step.vfxRef.isValid())
+                continue;
+            const std::string path = step.vfxRef.resolve();
+            if (path.empty())
+                continue;
+
+            std::shared_ptr<vfx::VFXData> vfxData;
+            if (auto cacheIt = vfxCache.find(path); cacheIt != vfxCache.end())
+            {
+                vfxData = cacheIt->second;
+            }
+            else
+            {
+                if (auto loaded = vfx::VFXAsset::load(path))
+                    vfxData = std::make_shared<vfx::VFXData>(std::move(*loaded));
+                vfxCache[path] = vfxData; // cache nulls too, so a bad path isn't retried each frame
+            }
+            if (!vfxData)
+                continue;
+
+            services::VFXSequencePreviewStep ps;
+            ps.params = editor::vfxeditor::buildVFXPreviewParams(*vfxData);
+
+            // Step overrides (parity with the runtime spawnStep path).
+            for (const auto& [name, value] : step.scalarOverrides)
+            {
+                if (name == "spawnRate") ps.params.spawnRate = value;
+                else if (name == "lifetime") ps.params.lifetime = value;
+                else if (name == "startSize") ps.params.startSize = value;
+                else if (name == "startSpeed") ps.params.startSpeed = value;
+                else if (name == "stretchMultiplier") ps.params.stretchMultiplier = value;
+            }
+            for (const auto& [name, value] : step.vectorOverrides)
+            {
+                if (name == "startColor") ps.params.startColor = value;
+                else if (name == "emitDirection") ps.params.emitDirection = glm::vec3(value);
+            }
+
+            ps.localTransform = vfx::VFXComboTimeline::composeStepLocal(step);
+            ps.seed = vfx::VFXComboTimeline::deriveSeed(comboSeed, static_cast<int>(desc.steps.size()));
+            ps.startTime = step.startTime;
+            ps.duration = step.duration;
+            ps.loop = step.loop;
+            ps.stopMode = static_cast<int>(static_cast<uint8_t>(step.stopMode));
+            ps.cueName = step.cueName;
+            desc.steps.push_back(std::move(ps));
         }
 
-        const auto& step = data->steps[static_cast<size_t>(stepIndex)];
-        const std::string path = step.vfxRef.isValid() ? step.vfxRef.resolve() : std::string();
-        if (path.empty())
-        {
-            previewPanel->stop();
-            return;
-        }
-
-        auto vfxData = vfx::VFXAsset::load(path);
-        if (!vfxData)
-        {
-            previewPanel->stop();
-            return;
-        }
-
-        services::VFXPreviewParams params = editor::vfxeditor::buildVFXPreviewParams(*vfxData);
-
-        // Apply the step's name-keyed overrides for parity with the runtime.
-        for (const auto& [name, value] : step.scalarOverrides)
-        {
-            if (name == "spawnRate") params.spawnRate = value;
-            else if (name == "lifetime") params.lifetime = value;
-            else if (name == "startSize") params.startSize = value;
-            else if (name == "startSpeed") params.startSpeed = value;
-            else if (name == "stretchMultiplier") params.stretchMultiplier = value;
-        }
-        for (const auto& [name, value] : step.vectorOverrides)
-        {
-            if (name == "startColor") params.startColor = value;
-            else if (name == "emitDirection") params.emitDirection = glm::vec3(value);
-        }
-
-        previewPanel->setParams(params);
-        previewPanel->play();
+        return desc;
     }
 
     void VFXSequenceEditorWindow::drawPreviewViewport()
@@ -787,22 +886,29 @@ namespace windows
         if (!previewPanel)
             return;
         if (!previewPanel->isInitialized())
+        {
             previewPanel->init();
-
-        const int active = pickActiveStep();
-        if (active != previewActiveStep)
-            syncPreviewToStep(active);
-
-        if (previewActiveStep >= 0 && previewActiveStep < static_cast<int>(data->steps.size()))
-        {
-            const auto& s = data->steps[static_cast<size_t>(previewActiveStep)];
-            const std::string label = s.label.empty() ? ("step " + std::to_string(previewActiveStep)) : s.label;
-            ImGui::Text("Previewing: %s", label.c_str());
+            previewPanel->setBuiltInControls(false);
+            previewDirty = true;
         }
+
+        if (previewDirty)
+        {
+            previewPanel->setSequence(buildSequenceDesc());
+            previewDirty = false;
+            // setSequence resets the controller to t=0; restore the playhead + run state.
+            if (previewTime > 0.0f)
+                previewPanel->seek(previewTime);
+            if (previewPlaying)
+                previewPanel->play();
+            else
+                previewPanel->pause();
+        }
+
+        if (data && data->steps.empty())
+            ImGui::TextDisabled("Add steps to preview the composited combo");
         else
-        {
-            ImGui::TextDisabled("Select a step (or press Play) to preview its VFX");
-        }
+            ImGui::Text("Composited preview — %d step(s)", data ? static_cast<int>(data->steps.size()) : 0);
 
         previewPanel->draw();
     }

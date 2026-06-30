@@ -334,6 +334,24 @@ namespace services
             {
                 return renderVFXPreview(query.instanceId);
             });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::SetVFXSequencePreviewCommand>(
+            [this](const events::vfxpreview::SetVFXSequencePreviewCommand& cmd)
+            {
+                setVFXSequence(cmd.instanceId, cmd.desc);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::SeekVFXPreviewCommand>(
+            [this](const events::vfxpreview::SeekVFXPreviewCommand& cmd)
+            {
+                seekVFXPreview(cmd.instanceId, cmd.seconds);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxpreview::SetVFXPreviewRateCommand>(
+            [this](const events::vfxpreview::SetVFXPreviewRateCommand& cmd)
+            {
+                setVFXPreviewRate(cmd.instanceId, cmd.rate);
+            });
     }
 
     void PreviewServiceImpl::initMaterialPreview(PreviewInstanceId instanceId)

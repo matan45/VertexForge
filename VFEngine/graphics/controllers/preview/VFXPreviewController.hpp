@@ -6,8 +6,12 @@
 #include <vfx/VFXShapeTypes.hpp>
 #include <vfx/VFXEventTypes.hpp>
 #include <vfx/VFXBurstTypes.hpp>
+#include <vfx/VFXComboTimeline.hpp>
+#include <vfx/VFXSequenceTypes.hpp>
 #include <glm/glm.hpp>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace core
@@ -83,6 +87,29 @@ namespace controllers
         float collisionLifetimeLoss = 0.0f;
     };
 
+    // VK-1451 — one step of a composited sequence preview (controller-side mirror of
+    // services::VFXSequencePreviewStep).
+    struct VFXSequencePreviewStep
+    {
+        VFXPreviewParams params;
+        glm::mat4 localTransform{1.0f};
+        uint32_t seed = 0;
+        float startTime = 0.0f;
+        float duration = 0.0f;
+        bool loop = false;
+        int stopMode = 0; // 0 = PlayToCompletion, 1 = StopAfterDuration
+        std::string cueName;
+    };
+
+    struct VFXSequencePreviewDesc
+    {
+        std::vector<VFXSequencePreviewStep> steps;
+        std::vector<std::pair<float, std::string>> markers;
+        uint32_t seed = 0;
+        float playbackRate = 1.0f;
+        float fixedStep = 0.0f;
+    };
+
     class VFXPreviewController
     {
     private:
@@ -102,6 +129,36 @@ namespace controllers
         VFXPreviewParams currentParams;
         bool initialized = false;
         vk::Extent2D lastExtent{};
+
+        // VK-1451 — composited sequence preview. When sequenceMode is on, render()
+        // composites every live step bundle into the one offscreen image instead of the
+        // single currentParams emitter above. Each bundle owns its own seeded CPU particle
+        // system and its own pipeline (one texture/descriptor set per step).
+        struct StepBundle
+        {
+            int stepIndex = -1;
+            int mode = 0; // render::vfx::VFXRenderMode (0=Billboard,3=MeshParticle,4=Ribbon)
+            glm::mat4 localTransform{1.0f};
+            std::unique_ptr<render::vfx::VFXParticleSystem> system;
+            std::unique_ptr<render::vfx::VFXBillboardPipeline> billboard;
+            std::unique_ptr<render::vfx::VFXMeshPreviewPipeline> mesh;
+            std::unique_ptr<render::mesh::MeshGPUCache> meshCache;
+            std::unique_ptr<render::vfx::VFXRibbonPreviewPipeline> ribbon;
+        };
+
+        bool sequenceMode = false;
+        bool sequencePlaying = false;
+        float sequenceRate = 1.0f;
+        float sequenceFixedStep = 0.0f;
+        float sequenceAccumulator = 0.0f;
+        vfx::VFXSequenceData scheduleData;     // built from the desc; drives the timeline
+        vfx::VFXComboTimeline timeline;
+        std::vector<VFXSequencePreviewStep> sequenceSteps;
+        std::vector<StepBundle> bundles;
+        glm::mat4 lastView{1.0f};
+        glm::mat4 lastProjection{1.0f};
+        glm::vec3 lastCameraPos{0.0f};
+        float lastCameraTime = 0.0f;
 
     public:
         explicit VFXPreviewController();
@@ -125,11 +182,24 @@ namespace controllers
         void* render();
         bool isInitialized() const { return initialized; }
 
+        // VK-1451 — composited sequence preview transport.
+        void setSequence(const VFXSequencePreviewDesc& desc);
+        void seekSequence(float seconds);
+        void setSequenceRate(float rate);
+
     private:
         void createOffscreenResources();
         void cleanupOffscreenResources();
         void recreateOffscreenResources();
         void createSampler();
         void updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;
+
+        // Sequence-preview internals.
+        void configureSystemFromParams(render::vfx::VFXParticleSystem& system, const VFXPreviewParams& params) const;
+        void createBundle(int stepIndex);
+        void stepSequence(float dt);                       // advance timeline + sim all bundles by dt
+        void clearBundles();
+        void* renderSequence(uint32_t imageIndex, vk::CommandBuffer commandBuffer);
+        void recordBundle(const StepBundle& bundle, vk::CommandBuffer commandBuffer) const;
     };
 }

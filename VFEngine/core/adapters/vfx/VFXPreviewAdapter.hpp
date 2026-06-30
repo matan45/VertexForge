@@ -32,7 +32,14 @@ namespace core
 
         void* renderVFXPreview(services::PreviewInstanceId instanceId) override;
 
+        // VK-1451 — composited sequence preview.
+        void setVFXSequence(services::PreviewInstanceId instanceId,
+                            const services::VFXSequencePreviewDesc& desc) override;
+        void seekVFX(services::PreviewInstanceId instanceId, float seconds) override;
+        void setVFXRate(services::PreviewInstanceId instanceId, float rate) override;
+
     private:
         controllers::VFXPreviewController* getController(services::PreviewInstanceId instanceId) const;
+        static controllers::VFXPreviewParams toControllerParams(const services::VFXPreviewParams& params);
     };
 }

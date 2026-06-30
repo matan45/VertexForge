@@ -2,9 +2,16 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "../preview/PreviewWindowChrome.hpp"
 #include <vfx/VFXSequenceTypes.hpp>
+#include <providers/vfx/IVFXPreviewProvider.hpp>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+namespace vfx
+{
+    struct VFXData;
+}
 
 namespace editor::vfxeditor
 {
@@ -29,14 +36,20 @@ namespace windows
         bool isDirty = false;
         bool needsInit = true;
 
-        // Timeline scrub. Drives the real GPU single-emitter preview
-        // (VFXPreviewPanel / IVFXPreviewProvider) one step at a time: whichever
-        // step is active at the playhead is loaded and played. The runtime plays
-        // the full composited combo on the GPU in Play mode.
+        // Timeline scrub. Drives the real GPU composited preview (VK-1451): every
+        // step is rendered at once into one offscreen image, deterministically seeded,
+        // with play/pause/seek/rate/prewarm transport mirroring AnimationTimelinePanel.
         float previewTime = 0.0f;
-        bool previewPlaying = false;
+        bool previewPlaying = true;             // auto-play the composited combo on open
         bool previewLoop = true;
-        int previewActiveStep = -1;             // step currently loaded into the panel
+        bool previewDirty = true;               // rebuild + re-send the sequence desc
+        uint32_t previewSeed = 0;               // 0 => auto (asset seed, then random)
+        float previewRate = 1.0f;
+        float previewPrewarm = 0.0f;
+
+        // Per-path .vfVFX cache so rebuilding the composite on a timing/seed/marker edit
+        // doesn't re-read every step's file from disk each frame (Reload clears it).
+        mutable std::unordered_map<std::string, std::shared_ptr<vfx::VFXData>> vfxCache;
 
         std::unique_ptr<editor::vfxeditor::VFXPreviewPanel> previewPanel;
 
@@ -75,11 +88,13 @@ namespace windows
         void drawStepList();
         void drawStepInspector();
         void drawTimeline();
+        void drawMarkersRow();          // one-shot event-marker editor under the timeline
 
-        // Real GPU preview (one active step at a time).
+        // Real GPU composited preview (all steps at once).
         void drawPreviewViewport();
-        int pickActiveStep() const;
-        void syncPreviewToStep(int stepIndex);
+        // Build the full composited descriptor from the current sequence data
+        // (loads each step's .vfVFX, applies overrides, attaches timing + derived seed).
+        services::VFXSequencePreviewDesc buildSequenceDesc() const;
 
         void loadSocketNames();             // read sockets from socketMeshPath
         void drawSocketField(vfx::VFXSequenceStep& step); // dropdown if a mesh is set, else text

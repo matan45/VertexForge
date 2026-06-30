@@ -9,6 +9,8 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include <string>
+#include <utility>
+#include <cstdint>
 
 namespace services
 {
@@ -62,6 +64,30 @@ namespace services
         float collisionLifetimeLoss = 0.0f;
     };
 
+    // VK-1451 — one step of a composited sequence preview: a fully-built emitter
+    // (params), where it sits (localTransform), its deterministic seed, and the
+    // timing the embedded schedule needs to spawn/stop/cue it.
+    struct VFXSequencePreviewStep
+    {
+        VFXPreviewParams params;
+        glm::mat4 localTransform{1.0f};
+        uint32_t seed = 0;
+        float startTime = 0.0f;
+        float duration = 0.0f;
+        bool loop = false;
+        int stopMode = 0; // 0 = PlayToCompletion, 1 = StopAfterDuration
+        std::string cueName; // empty => time-driven
+    };
+
+    struct VFXSequencePreviewDesc
+    {
+        std::vector<VFXSequencePreviewStep> steps;
+        std::vector<std::pair<float, std::string>> markers; // {time, cueName}
+        uint32_t seed = 0;
+        float playbackRate = 1.0f;
+        float fixedStep = 0.0f; // 0 => variable step
+    };
+
     class IVFXPreviewProvider
     {
     public:
@@ -86,5 +112,12 @@ namespace services
         virtual void stopVFX(PreviewInstanceId instanceId) = 0;
 
         virtual void* renderVFXPreview(PreviewInstanceId instanceId) = 0;
+
+        // VK-1451 — composited sequence preview. Default no-ops so non-sequence
+        // providers/mocks need not implement them; play/pause/stop/updateSimulation/
+        // render are reused as-is for the sequence path.
+        virtual void setVFXSequence(PreviewInstanceId, const VFXSequencePreviewDesc&) {}
+        virtual void seekVFX(PreviewInstanceId, float) {}
+        virtual void setVFXRate(PreviewInstanceId, float) {}
     };
 }
