@@ -46,6 +46,20 @@ TEST_CASE("VFX Sequence type is registered in the table")
     CHECK(windows::assetTypeInfo(AssetType::VFXSequence).icon == windows::AtlasIcon::VFXSequence);
 }
 
+TEST_CASE("Collider and terrain material atlas icons are registered")
+{
+    using windows::AssetType;
+    using windows::AtlasIcon;
+
+    CHECK(windows::assetTypeInfo(AssetType::TerrainMaterial).icon == AtlasIcon::Material);
+    CHECK(static_cast<uint32_t>(windows::assetTypeInfo(AssetType::TerrainMaterial).icon) == 20);
+
+    CHECK(windows::assetTypeInfo(AssetType::Collider).type == AssetType::Collider);
+    CHECK(std::string(windows::assetTypeInfo(AssetType::Collider).label) == "Collider");
+    CHECK(windows::assetTypeInfo(AssetType::Collider).icon == AtlasIcon::Collider);
+    CHECK(static_cast<uint32_t>(windows::assetTypeInfo(AssetType::Collider).icon) == 21);
+}
+
 TEST_CASE("thumbnailed types fall back to the generic File icon, not a per-type glyph")
 {
     using windows::AssetType;
@@ -60,10 +74,6 @@ TEST_CASE("thumbnailed types fall back to the generic File icon, not a per-type 
     CHECK(windows::assetTypeInfo(AssetType::Model).icon == AtlasIcon::File);
     CHECK(windows::assetTypeInfo(AssetType::Material).icon == AtlasIcon::File);
     CHECK(windows::assetTypeInfo(AssetType::MaterialInstance).icon == AtlasIcon::File);
-
-    // TerrainMaterial shared the (now removed) Material glyph and is NOT
-    // thumbnailed, so it likewise resolves to the generic File icon.
-    CHECK(windows::assetTypeInfo(AssetType::TerrainMaterial).icon == AtlasIcon::File);
 
     // The generic "Other" row itself stays on File.
     CHECK(windows::assetTypeInfo(AssetType::Other).icon == AtlasIcon::File);

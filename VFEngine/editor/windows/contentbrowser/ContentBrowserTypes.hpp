@@ -36,6 +36,7 @@ namespace windows
         InputMapping,
         Retarget,
         VFXSequence,
+        Collider,
         Other
     };
 
@@ -64,7 +65,9 @@ namespace windows
         Plugin = 16,
         InputMapping = 17,
         Retarget = 18, // shared by .vfrig and .vfretarget (VK-910)
-        VFXSequence = 19 // .vfVFXSequence combo asset (VK-1425)
+        VFXSequence = 19, // .vfVFXSequence combo asset (VK-1425)
+        Material = 20, // .vfTerrainMat atlas glyph
+        Collider = 21 // .vfCollider sidecar glyph
     };
 
     // Canonical per-type display data. Single source of truth for the filter
@@ -78,10 +81,10 @@ namespace windows
         uint32_t badgeColor; // IM_COL32 layout (0xAABBGGRR)
     };
 
-    inline const std::array<AssetTypeInfo, 25>& assetTypeTable()
+    inline const std::array<AssetTypeInfo, 26>& assetTypeTable()
     {
         using enum AssetType;
-        static const std::array<AssetTypeInfo, 25> table = {{
+        static const std::array<AssetTypeInfo, 26> table = {{
             {Texture,          "Texture",           AtlasIcon::File,         0xFFF7C34F},
             {HDR,              "HDR",               AtlasIcon::File,         0xFFF7E04F},
             {Model,            "Model",             AtlasIcon::File,         0xFF4FC3F7},
@@ -96,7 +99,7 @@ namespace windows
             {Script,           "Script",            AtlasIcon::Mtype,        0xFF8AF74F},
             {Font,             "Font",              AtlasIcon::Font,         0xFFC0C0C0},
             {Project,          "Project",           AtlasIcon::Project,      0xFFE0E0E0},
-            {TerrainMaterial,  "Terrain Material",  AtlasIcon::File,         0xFF4FB78A},
+            {TerrainMaterial,  "Terrain Material",  AtlasIcon::Material,     0xFF4FB78A},
             {Terrain,          "Terrain",           AtlasIcon::Terrain,      0xFF4F8A5E},
             {Navmesh,          "Navmesh",           AtlasIcon::Navmesh,      0xFF6EC0F7},
             {PhysAnim,         "Phys Anim",         AtlasIcon::PhysAnim,     0xFFC04FF7},
@@ -106,6 +109,7 @@ namespace windows
             {InputMapping,     "Input Mapping",     AtlasIcon::InputMapping, 0xFFAAAAF7},
             {Retarget,         "Retarget",          AtlasIcon::Retarget,     0xFFD08AF7},
             {VFXSequence,      "VFX Sequence",      AtlasIcon::VFXSequence,  0xFFF74FC8},
+            {Collider,         "Collider",          AtlasIcon::Collider,     0xFF7AA7FF},
             {Other,            "Other",             AtlasIcon::File,         0xFF909090}
         }};
         return table;

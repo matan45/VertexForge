@@ -256,6 +256,7 @@ namespace windows
         if (extension == ".vfNavIndex") return Navmesh;
         if (extension == ".vfNavTile") return Navmesh;
         if (extension == ".vfPhysAnim") return PhysAnim;
+        if (extension == ".vfCollider") return Collider;
         if (extension == ".vfOcean") return Ocean;
         if (extension == ".vfBehaviorTree") return BehaviorTree;
         if (extension == ".mt") return Script;
