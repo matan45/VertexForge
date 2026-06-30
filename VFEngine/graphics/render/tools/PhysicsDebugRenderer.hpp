@@ -2,6 +2,7 @@
 
 #include "DebugRendererBase.hpp"
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <memory>
 #include <vector>
 #include <string>
@@ -25,6 +26,7 @@ namespace render::mesh
         uint8_t bodyType = 1; // 0=Static, 1=Dynamic, 2=Kinematic
         bool isTrigger = false;
         std::string meshPath; // Path to mesh for ConvexMesh/TriangleMesh shapes
+        int32_t submeshIndex = -1; // -1 = all submeshes, >= 0 = one submesh
 
         // HeightField wireframe (world-space vertices, line-list indices)
         const std::vector<glm::vec3>* heightfieldVertices = nullptr;
@@ -109,7 +111,7 @@ namespace render::mesh
         void createSphereBuffers();
         void createCapsuleBuffers();
 
-        const MeshDebugData* getOrCreateMeshBuffers(const std::string& meshPath) const;
+        const MeshDebugData* getOrCreateMeshBuffers(const PhysicsColliderRenderData& data) const;
         void cleanupMeshCache();
 
         const MeshDebugData* getOrCreateHeightFieldBuffers(const PhysicsColliderRenderData& data) const;

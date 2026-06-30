@@ -39,6 +39,8 @@ ICON_FILES = {
     17: "input",             # physics animation
     18: "animation-retarget",             # physics animation
     19: "VFXSequence",             # physics animation
+    20: "material",
+    21: "collider",
 }
 
 def find_icon_file(base_name):
