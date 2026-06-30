@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <string>
+#include <thread>
 
 // ============================================================
 // VK-1422: runtime navmesh tile rebuilds (obstacle carving,
@@ -12,14 +13,40 @@
 // NOT write back to the authored .vfNavTile assets. The dirty-tile
 // rebuild still applies in memory (addNavmeshTile) either way.
 //
-// The JobSystem is uninitialized here, so submitTileBake runs the
-// bake inline; pollTileBakeCompletions() then applies it and, when
-// permitted, writes the tile to the cache directory.
+// The test must be deterministic whether the process-wide JobSystem is
+// initialized by an earlier suite or not.
 // ============================================================
 
 namespace
 {
     namespace fs = std::filesystem;
+
+    constexpr int kMaxDirtyTileBakePumpFrames = 5000;
+
+    struct TempDir
+    {
+        fs::path path;
+
+        explicit TempDir(const char* name)
+            : path(fs::temp_directory_path() / name)
+        {
+            fs::remove_all(path);
+            fs::create_directories(path);
+        }
+
+        ~TempDir()
+        {
+            std::error_code ec;
+            fs::remove_all(path, ec);
+        }
+    };
+
+    struct RebuildResult
+    {
+        bool bakeCompleted = false;
+        bool wroteToDisk = false;
+        int addedTiles = 0;
+    };
 
     // Minimal provider: records how many tiles were applied in-memory.
     class CountingProvider : public services::INavmeshProvider
@@ -106,12 +133,30 @@ namespace
         };
     }
 
+    bool pumpDirtyTileBake(services::NavmeshTileManager& manager)
+    {
+        for (int frame = 0; frame < kMaxDirtyTileBakePumpFrames; ++frame)
+        {
+            manager.processDirtyTiles();
+            manager.pollTileBakeCompletions();
+
+            if (manager.getPendingBakeCount() == 0)
+            {
+                manager.pollTileBakeCompletions();
+                return true;
+            }
+
+            std::this_thread::yield();
+        }
+
+        manager.pollTileBakeCompletions();
+        return manager.getPendingBakeCount() == 0;
+    }
+
     // Rebuilds tile (3,4) through the dirty-tile path and reports whether the
     // tile file landed on disk. The tile is applied in-memory regardless.
-    bool rebuildDirtyTileWritesToDisk(bool playMode, const fs::path& dir, int& addedTilesOut)
+    RebuildResult rebuildDirtyTileWritesToDisk(bool playMode, const fs::path& dir)
     {
-        fs::remove_all(dir);
-
         CountingProvider provider;
         types::NavmeshBakeSettings settings;
         services::NavmeshTileManager manager(&provider, settings, makeTriangleGeometry());
@@ -120,11 +165,16 @@ namespace
         manager.setPlayModeActive(playMode);
 
         manager.markTileDirty(3, 4);
-        manager.processDirtyTiles();        // bakes inline (JobSystem uninitialized)
-        manager.pollTileBakeCompletions();  // applies + (maybe) saves to disk
 
-        addedTilesOut = provider.addedTiles;
-        return fs::exists(dir / "tile_3_4.vfNavTile");
+        RebuildResult result;
+        result.bakeCompleted = pumpDirtyTileBake(manager);
+        result.addedTiles = provider.addedTiles;
+        result.wroteToDisk = fs::exists(dir / "tile_3_4.vfNavTile");
+
+        if (!result.bakeCompleted)
+            manager.clear();
+
+        return result;
     }
 }
 
@@ -132,27 +182,23 @@ TEST_SUITE("NavmeshPlayIsolation")
 {
     TEST_CASE("play-mode tile rebuild stays in-memory and does not touch disk")
     {
-        fs::path dir = fs::temp_directory_path() / "vf_test_nav_play_isolation_play";
+        TempDir dir("vf_test_nav_play_isolation_play");
 
-        int addedTiles = 0;
-        bool wroteToDisk = rebuildDirtyTileWritesToDisk(/*playMode=*/true, dir, addedTiles);
+        RebuildResult result = rebuildDirtyTileWritesToDisk(/*playMode=*/true, dir.path);
 
-        CHECK_FALSE(wroteToDisk); // VK-1422: no .vfNavTile written during play
-        CHECK(addedTiles == 1);   // but the rebuild still applied in memory
-
-        fs::remove_all(dir);
+        REQUIRE(result.bakeCompleted);
+        CHECK_FALSE(result.wroteToDisk); // VK-1422: no .vfNavTile written during play
+        CHECK(result.addedTiles == 1);   // but the rebuild still applied in memory
     }
 
     TEST_CASE("edit-mode tile rebuild persists the tile to disk (authoring unchanged)")
     {
-        fs::path dir = fs::temp_directory_path() / "vf_test_nav_play_isolation_edit";
+        TempDir dir("vf_test_nav_play_isolation_edit");
 
-        int addedTiles = 0;
-        bool wroteToDisk = rebuildDirtyTileWritesToDisk(/*playMode=*/false, dir, addedTiles);
+        RebuildResult result = rebuildDirtyTileWritesToDisk(/*playMode=*/false, dir.path);
 
-        CHECK(wroteToDisk);     // edit-mode brush authoring still saves
-        CHECK(addedTiles == 1); // and applies in memory
-
-        fs::remove_all(dir);
+        REQUIRE(result.bakeCompleted);
+        CHECK(result.wroteToDisk);     // edit-mode brush authoring still saves
+        CHECK(result.addedTiles == 1); // and applies in memory
     }
 }
