@@ -311,6 +311,18 @@ namespace gas
     void GASRuntime::tick(float dt)
     {
         if (!ctx) return;
+        auto& reg = ctx->getRegistry();
+
+        // When playing, discover and seed EVERY entity carrying any GAS component
+        // (seeds attributes/tags and applies startup effects). Without this an
+        // entity that has only GAS_AttributeSet + GAS_ActiveEffects (no ability
+        // system) would never be seeded. getOrSeed is idempotent.
+        if (gameActive)
+        {
+            for (const auto e : reg.view<GAS_AttributeSetComponent>()) getOrSeed(static_cast<std::uint32_t>(e));
+            for (const auto e : reg.view<GAS_ActiveEffectsComponent>()) getOrSeed(static_cast<std::uint32_t>(e));
+            for (const auto e : reg.view<GAS_AbilitySystemComponent>()) getOrSeed(static_cast<std::uint32_t>(e));
+        }
 
         // Advance effects on every seeded entity. dt is the scaled game delta
         // (0 outside Play), so timed effects/cooldowns naturally pause in edit.
@@ -329,7 +341,6 @@ namespace gas
 
         // Input-driven activation (Play mode only). Poll each ability-bearing
         // entity's granted OnPressed abilities and fire bound input actions.
-        auto& reg = ctx->getRegistry();
         for (const auto e : reg.view<GAS_AbilitySystemComponent>())
         {
             const auto& abilSys = reg.get<GAS_AbilitySystemComponent>(e);

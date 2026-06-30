@@ -151,12 +151,19 @@ namespace handlers
 
         frameTaskGraph->addTask("Plugins", [this]() {
             if (pluginManager) {
-                // VK-816: pass the scaled GAME delta (matches the Runtime path,
-                // RuntimeHandler.cpp) so plugin onUpdate respects pause/time-scale
-                // and is 0 in edit mode. Plugins that must tick in edit mode
-                // (e.g. RTSGameplay fog) ignore dt and recompute regardless; dt-
-                // driven systems (GAS effects/cooldowns) naturally pause.
-                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
+                // VK-816: dt is the scaled GAME delta DURING PLAY (matches the
+                // Runtime path) and 0 in edit / paused / time-scale==0. Gated on
+                // isPlayMode() like the other gameplay tasks because
+                // getGameDeltaTime() alone is nonzero in edit mode whenever the
+                // editor clock runs. dt-driven plugins (GAS effects/cooldowns/
+                // input) therefore run only while gameplay advances; dt-agnostic
+                // plugins (e.g. RTSGameplay fog) still tick every frame and
+                // ignore dt.
+                const bool gameplayActive = editorModeService &&
+                    editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive();
+                float dt = gameplayActive
+                    ? static_cast<float>(engineTime::Timer::getGameDeltaTime())
+                    : 0.0f;
                 pluginManager->updateAll(dt);
             }
         });
