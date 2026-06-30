@@ -293,6 +293,16 @@ namespace windows
 
             if (thumb)
                 ImGui::Image(thumb, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+            else if (asset.type == AssetType::Plugin)
+            {
+                // VK-1449: tint the generic Plugin glyph by the registered
+                // type's plugin-provided badge color so distinct plugin asset
+                // types are visually distinguishable.
+                const ImVec4 tint = ImGui::ColorConvertU32ToFloat4(
+                    displayInfoForExtension(asset.extension, asset.type).badgeColor);
+                ImGui::ImageWithBg(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE),
+                                   uv0, uv1, ImVec4(0, 0, 0, 0), tint);
+            }
             else
                 ImGui::Image(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
 

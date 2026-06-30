@@ -8,7 +8,9 @@
 #include "events/asset/AssetDatabaseEvents.hpp"
 #include "../scene/FolderStructureWindow.hpp"
 #include "../../fileops/AsyncFileOperations.hpp"
+#include <asset/AssetTypeRegistry.hpp>
 #include <algorithm>
+#include <map>
 
 namespace
 {
@@ -106,6 +108,10 @@ namespace windows
             ImGui::OpenPopup("Create New UI Theme");
         drawCreateThemeModal(currentPath);
 
+        if (showCreatePluginAssetModal)
+            ImGui::OpenPopup("Create Plugin Asset");
+        drawCreatePluginAssetModal(currentPath);
+
         if (showSavePrefabModal)
             ImGui::OpenPopup("Save Prefab");
         drawSavePrefabModal(currentPath);
@@ -176,6 +182,37 @@ namespace windows
                 {
                     showCreateThemeModal = true;
                     newThemeName.clear();
+                }
+
+                // VK-1449: plugin-registered asset types, grouped by their
+                // plugin-provided category, using plugin-provided display names.
+                auto pluginTypes = asset::AssetTypeRegistry::instance().allPluginTypes();
+                std::map<std::string, std::vector<const asset::AssetTypeRecord*>> byCategory;
+                for (const auto& rec : pluginTypes)
+                    if (rec.createMenuEntry && !rec.extensions.empty())
+                        byCategory[rec.category.empty() ? "Plugin Assets" : rec.category].push_back(&rec);
+                if (!byCategory.empty())
+                {
+                    ImGui::Separator();
+                    for (const auto& [cat, recs] : byCategory)
+                    {
+                        if (ImGui::BeginMenu(cat.c_str()))
+                        {
+                            for (const auto* rec : recs)
+                            {
+                                const std::string label = rec->displayName.empty() ? rec->typeId : rec->displayName;
+                                if (ImGui::MenuItem(label.c_str()))
+                                {
+                                    showCreatePluginAssetModal = true;
+                                    newPluginAssetName.clear();
+                                    pendingPluginAssetExt = rec->extensions.front();
+                                    pendingPluginAssetTemplate = rec->defaultTemplate;
+                                    pendingPluginAssetLabel = label;
+                                }
+                            }
+                            ImGui::EndMenu();
+                        }
+                    }
                 }
                 ImGui::EndMenu();
             }

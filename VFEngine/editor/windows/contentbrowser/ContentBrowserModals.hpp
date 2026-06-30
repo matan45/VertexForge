@@ -38,6 +38,15 @@ namespace windows
         std::string newThemeName;
         bool showCreateThemeModal = false;
 
+        // VK-1449: one generic modal serves every plugin-registered asset type.
+        // The pending fields are set from the registry record when the user picks
+        // the type from the Create menu.
+        std::string newPluginAssetName;
+        bool showCreatePluginAssetModal = false;
+        std::string pendingPluginAssetExt;       // ".vfability" (already lowercased)
+        std::string pendingPluginAssetTemplate;  // defaultTemplate JSON, or empty -> "{}"
+        std::string pendingPluginAssetLabel;     // displayName, for the modal prompt
+
         std::string newPrefabName;
         bool showSavePrefabModal = false;
         services::EntityHandle pendingSavePrefabEntity;
@@ -95,6 +104,7 @@ namespace windows
         void drawCreateTerrainMaterialModal(const fs::path& currentPath);
         void drawCreateBehaviorTreeModal(const fs::path& currentPath);
         void drawCreateThemeModal(const fs::path& currentPath);
+        void drawCreatePluginAssetModal(const fs::path& currentPath);
         void drawSavePrefabModal(const fs::path& currentPath);
         void drawRenameModal(const fs::path& selectedFile);
         void drawDeleteModal();

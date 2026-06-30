@@ -21,6 +21,7 @@
 #include "../../utilities/navigation/NavmeshData.hpp"
 #include "../../services/data/VFXTypes.hpp"
 #include "FieldAttributes.hpp"
+#include "PluginAssetType.hpp"      // VK-1449: PluginAssetTypeDesc / PluginAssetTypeHandle
 
 #include <plugin/PluginHostApi.h>   // mType plugin C ABI (MTypeNativeFn, MTypePluginHost)
 
@@ -446,6 +447,24 @@ namespace plugin {
 
             return factory;
         }
+
+        // === Plugin Asset Type Registration (API v15 — VK-1449) ===
+        // Declare a custom asset type (extension(s), Content Browser metadata,
+        // Create-menu entry, dependency-scan opt-in, export inclusion) without
+        // editing the engine's hardcoded asset tables. Register during
+        // onInitialize; auto-unregistered on plugin unload. Returns an invalid
+        // handle (operator bool == false) if the typeId or any extension
+        // collides with a built-in or an already-registered type (first wins).
+        // Double-click open-routing arrives as the "vf.asset.open" plugin event
+        // ({typeId, path}); subscribe via subscribeEvent to open your editor.
+        virtual PluginAssetTypeHandle registerAssetType(const PluginAssetTypeDesc& desc) = 0;
+        virtual void unregisterAssetType(PluginAssetTypeHandle handle) = 0;
+
+        // Resolve an asset GUID (hex string, e.g. asset::AssetRef::toHexString())
+        // to its current file path via the engine asset database. Returns "" if
+        // unknown. Lets a plugin USE the assets dragged into its AssetRef
+        // component fields at runtime without linking the asset database.
+        virtual std::string resolveAssetPath(const std::string& assetGuidHex) const = 0;
 
     };
 

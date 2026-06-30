@@ -151,7 +151,12 @@ namespace handlers
 
         frameTaskGraph->addTask("Plugins", [this]() {
             if (pluginManager) {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                // VK-816: pass the scaled GAME delta (matches the Runtime path,
+                // RuntimeHandler.cpp) so plugin onUpdate respects pause/time-scale
+                // and is 0 in edit mode. Plugins that must tick in edit mode
+                // (e.g. RTSGameplay fog) ignore dt and recompute regardless; dt-
+                // driven systems (GAS effects/cooldowns) naturally pause.
+                float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 pluginManager->updateAll(dt);
             }
         });

@@ -26,6 +26,9 @@
 #include "scene/EntityRegistry.hpp"
 #include "Pipeline.hpp"
 #include "registry/AssetImporter.hpp"
+#include "asset/AssetTypeRegistry.hpp"   // VK-1449: plugin asset-type registration
+#include "asset/AssetDatabase.hpp"       // VK-1449: resolveAssetPath
+#include "asset/AssetGUID.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <fstream>
@@ -122,6 +125,53 @@ namespace plugin {
     std::vector<std::unique_ptr<import::AssetImporter>> PluginContextImpl::takeAssetImporters()
     {
         return std::move(registeredAssetImporters);
+    }
+
+    PluginAssetTypeHandle PluginContextImpl::registerAssetType(const PluginAssetTypeDesc& desc)
+    {
+        asset::AssetTypeRecord rec;
+        rec.typeId = desc.typeId;
+        rec.displayName = desc.displayName;
+        rec.category = desc.category;
+        rec.extensions = desc.extensions;          // registry lowercases internally
+        rec.jsonContainer = desc.jsonContainer;
+        rec.createMenuEntry = desc.createMenuEntry;
+        rec.icon = desc.icon;
+        rec.badgeColor = desc.badgeColor;
+        rec.defaultTemplate = desc.defaultTemplate;
+        rec.alwaysIncludeGlobs = desc.alwaysIncludeGlobs;
+        rec.owningPlugin = pluginName;
+
+        const asset::AssetTypeHandle h = asset::AssetTypeRegistry::instance().registerType(rec);
+        if (h)
+        {
+            registeredAssetTypeHandles.push_back(h.id);
+            vfLogInfo("[Plugin:{}] Registered asset type '{}' ({} extension(s))",
+                      pluginName, desc.typeId, desc.extensions.size());
+        }
+        else
+        {
+            vfLogWarning("[Plugin:{}] Rejected asset type '{}' (duplicate id or extension collision)",
+                         pluginName, desc.typeId);
+        }
+        return PluginAssetTypeHandle{h.id};
+    }
+
+    void PluginContextImpl::unregisterAssetType(PluginAssetTypeHandle handle)
+    {
+        if (!handle) return;
+        asset::AssetTypeRegistry::instance().unregisterType(asset::AssetTypeHandle{handle.id});
+        registeredAssetTypeHandles.erase(
+            std::remove(registeredAssetTypeHandles.begin(), registeredAssetTypeHandles.end(), handle.id),
+            registeredAssetTypeHandles.end());
+    }
+
+    std::string PluginContextImpl::resolveAssetPath(const std::string& assetGuidHex) const
+    {
+        if (assetGuidHex.empty()) return {};
+        const asset::AssetGUID guid = asset::AssetGUID::fromString(assetGuidHex);
+        if (!guid.isValid()) return {};
+        return asset::AssetDatabase::instance().getPath(guid).value_or(std::string());
     }
 
     void PluginContextImpl::publishEvent(const std::string& eventName, const nlohmann::json& data)
@@ -1264,6 +1314,18 @@ namespace plugin {
             }
         }
         registeredScriptFunctions.clear();
+
+        // VK-1449: drop this plugin's registered asset types before unload. The
+        // registry records are value-owned (no plugin-DLL pointers), so order vs
+        // DLL unmap is not critical, but doing it here bumps the registry
+        // revision so the Content Browser invalidates its stale type caches.
+        if (!registeredAssetTypeHandles.empty()) {
+            try {
+                asset::AssetTypeRegistry::instance().unregisterByPlugin(pluginName);
+            } catch (...) {
+            }
+            registeredAssetTypeHandles.clear();
+        }
 
         for (const auto& handle : managedCustomPipelines) {
             events::custompipeline::DestroyCustomPipelineCommand cmd;

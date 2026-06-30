@@ -1,5 +1,6 @@
 #pragma once
 #include "resource/AssetTypes.hpp"
+#include <asset/AssetTypeRegistry.hpp>
 #include <array>
 #include <cstdio>
 #include <optional>
@@ -174,11 +175,36 @@ namespace windows
         case resource::AssetType::Prefab:           return AssetType::Prefab;
         case resource::AssetType::HumanoidRig:      return AssetType::Retarget;
         case resource::AssetType::RetargetMap:      return AssetType::Retarget;
+        case resource::AssetType::PluginAsset:      return AssetType::Plugin; // VK-1449
         case resource::AssetType::Skeleton:
         case resource::AssetType::World:
         case resource::AssetType::Theme:
         default:                                    return AssetType::Other;
         }
+    }
+
+    // VK-1449: per-asset display metadata. Built-in types resolve from the
+    // canonical table above; a registered plugin extension instead carries the
+    // plugin's own display name + badge color (icon stays the generic Plugin
+    // glyph in v1). Returned by value (std::string label) so nothing dangles.
+    struct AssetDisplayInfo
+    {
+        std::string label;
+        AtlasIcon icon = AtlasIcon::File;
+        uint32_t badgeColor = 0xFF909090;
+    };
+
+    inline AssetDisplayInfo displayInfoForExtension(const std::string& extension, AssetType fallbackType)
+    {
+        asset::AssetTypeRecord rec;
+        if (asset::AssetTypeRegistry::instance().findByExtension(extension, rec))
+        {
+            return {rec.displayName.empty() ? rec.typeId : rec.displayName,
+                    AtlasIcon::Plugin,
+                    rec.badgeColor};
+        }
+        const AssetTypeInfo& info = assetTypeInfo(fallbackType);
+        return {info.label, info.icon, info.badgeColor};
     }
 
     struct Asset

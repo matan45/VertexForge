@@ -437,7 +437,8 @@ project "Utilities"
       "VFEngine/utilities/destruction/**",
       "VFEngine/utilities/threading/**",              -- compiled by Threading DLL (sole enkiTS owner)
       "VFEngine/utilities/scene/EntityRegistry.cpp",  -- compiled by ECSRegistry DLL
-      "VFEngine/utilities/asset/AssetDatabase.cpp"    -- compiled by AssetDB DLL
+      "VFEngine/utilities/asset/AssetDatabase.cpp",   -- compiled by AssetDB DLL
+      "VFEngine/utilities/asset/AssetTypeRegistry.cpp" -- compiled by AssetDB DLL (VK-1449)
    }
 
    includedirs {
@@ -655,6 +656,8 @@ project "AssetDB"
    files {
       "VFEngine/utilities/asset/AssetDatabase.hpp",
       "VFEngine/utilities/asset/AssetDatabase.cpp",
+      "VFEngine/utilities/asset/AssetTypeRegistry.hpp",
+      "VFEngine/utilities/asset/AssetTypeRegistry.cpp",
       "VFEngine/utilities/asset/AssetDBExport.hpp"
    }
 

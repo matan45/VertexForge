@@ -280,7 +280,16 @@ namespace windows
             extension == ".vfAnim" || extension == ".vfScene");
 
         if (!isVfAsset)
+        {
+            // VK-1449: a registered plugin asset extension (e.g. .vfAbility)
+            // classifies as Plugin. Evaluated live (not via typeCache), so a
+            // plugin load/unload is reflected immediately and a missing plugin
+            // degrades to Other rather than a stale type.
+            asset::AssetTypeRecord rec;
+            if (asset::AssetTypeRegistry::instance().findByExtension(extension, rec))
+                return Plugin;
             return Other;
+        }
 
         std::string pathKey = StringUtil::wstringToUtf8(entry.path().wstring());
         if (auto it = typeCache.find(pathKey); it != typeCache.end() &&
