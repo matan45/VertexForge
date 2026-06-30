@@ -46,9 +46,17 @@ namespace
     vfx::VFXSequenceData makeSampleSequence()
     {
         vfx::VFXSequenceData data;
-        data.version = "1.0";
+        data.version = "1.1";
         data.uuid = "1234567890";
         data.name = "FireballCombo";
+
+        // VK-1451 timeline controls.
+        data.seed = 777u;
+        data.playbackRate = 1.5f;
+        data.fixedStep = 1.0f / 60.0f;
+        data.prewarm = 0.25f;
+        data.eventMarkers.push_back(vfx::VFXSequenceEventMarker{0.20f, "OnHit"});
+        data.eventMarkers.push_back(vfx::VFXSequenceEventMarker{0.80f, "OnEnd"});
 
         // Step 0: time-driven, looping, with a socket and a scalar override.
         {
@@ -173,6 +181,53 @@ TEST_SUITE("VFXSequenceAsset")
         {
             checkStepEqual(loaded.steps[i], original.steps[i]);
         }
+
+        // VK-1451 timeline controls round-trip.
+        CHECK(loaded.seed == original.seed);
+        CHECK(loaded.playbackRate == doctest::Approx(original.playbackRate));
+        CHECK(loaded.fixedStep == doctest::Approx(original.fixedStep));
+        CHECK(loaded.prewarm == doctest::Approx(original.prewarm));
+        REQUIRE(loaded.eventMarkers.size() == original.eventMarkers.size());
+        for (size_t i = 0; i < original.eventMarkers.size(); ++i)
+        {
+            CHECK(loaded.eventMarkers[i].time == doctest::Approx(original.eventMarkers[i].time));
+            CHECK(loaded.eventMarkers[i].cueName == original.eventMarkers[i].cueName);
+        }
+    }
+
+    TEST_CASE("a 1.0 file without timeline-control keys loads with safe defaults")
+    {
+        resetSequenceTestRoot();
+
+        // A legacy 1.0 file: only version/uuid/name/steps, no VK-1451 keys.
+        json j;
+        j["version"] = "1.0";
+        j["uuid"] = "42";
+        j["name"] = "Legacy";
+
+        json step;
+        step["vfxRef"] = "00000000aaaa1111";
+        step["label"] = "only";
+        step["startTime"] = 0.0f;
+        j["steps"] = json::array({step});
+
+        const fs::path path = sequenceTestRoot() / "Legacy.vfVFXSequence";
+        {
+            std::ofstream file(path);
+            REQUIRE(file.is_open());
+            file << j.dump(4);
+        }
+
+        auto loadedOpt = vfx::VFXSequenceAsset::load(path.string());
+        REQUIRE(loadedOpt.has_value());
+        const vfx::VFXSequenceData& loaded = *loadedOpt;
+
+        REQUIRE(loaded.steps.size() == 1);
+        CHECK(loaded.seed == 0u);
+        CHECK(loaded.playbackRate == doctest::Approx(1.0f));
+        CHECK(loaded.fixedStep == doctest::Approx(0.0f));
+        CHECK(loaded.prewarm == doctest::Approx(0.0f));
+        CHECK(loaded.eventMarkers.empty());
     }
 
     TEST_CASE("malformed step is skipped, good steps survive, no throw")

@@ -8,7 +8,11 @@
 
 namespace vfx
 {
-    inline constexpr const char* VFX_SEQUENCE_FORMAT_VERSION = "1.0";
+    // 1.1 (VK-1451) adds seed/playbackRate/fixedStep/prewarm/eventMarkers.
+    // The loader stays version-agnostic (tolerant j.value defaults), so 1.0
+    // assets load unchanged and 1.1 assets load on older readers minus the new
+    // fields.
+    inline constexpr const char* VFX_SEQUENCE_FORMAT_VERSION = "1.1";
 
     class VFXSequenceAsset
     {

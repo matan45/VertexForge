@@ -22,6 +22,15 @@ namespace services::events::vfxsequence
         glm::mat4 worldTransform{1.0f};
         uint32_t entityId = 0;            // owning entity (0 == none)
         bool autoDestroyOnFinish = true;  // erase the combo once every step has finished
+        // VK-1451 timeline controls. Each is a "use asset default" sentinel unless set:
+        //   seed         == 0   -> use asset seed (which, if 0, is auto-randomized)
+        //   prewarm      <  0   -> use asset prewarm
+        //   playbackRate <  0   -> use asset playbackRate
+        //   fixedStep    <  0   -> use asset fixedStep
+        uint32_t seed = 0;
+        float prewarm = -1.0f;
+        float playbackRate = -1.0f;
+        float fixedStep = -1.0f;
         std::string_view getName() const override { return "CreateVFXComboInstance"; }
     };
 
@@ -86,6 +95,34 @@ namespace services::events::vfxsequence
     {
         float deltaTime = 0.0f;
         std::string_view getName() const override { return "UpdateVFXSequenceRuntime"; }
+    };
+
+    // ============================================================
+    // VK-1451 — deterministic transport controls
+    // ============================================================
+
+    struct SetVFXComboPausedCommand : ::events::ICommand<void>
+    {
+        VFXComboInstanceId comboId = 0;
+        bool paused = true;
+        std::string_view getName() const override { return "SetVFXComboPaused"; }
+    };
+
+    struct SetVFXComboPlaybackRateCommand : ::events::ICommand<void>
+    {
+        VFXComboInstanceId comboId = 0;
+        float rate = 1.0f;
+        std::string_view getName() const override { return "SetVFXComboPlaybackRate"; }
+    };
+
+    // Deterministically jump the combo's schedule to `seconds`: rewind + fixed-step
+    // replay. Freshly spawned runtime children warm from t=0 (GPU particle buffers
+    // cannot be rewound) — the spawn schedule is what is reproducible.
+    struct SeekVFXComboCommand : ::events::ICommand<void>
+    {
+        VFXComboInstanceId comboId = 0;
+        float seconds = 0.0f;
+        std::string_view getName() const override { return "SeekVFXCombo"; }
     };
 
     struct IsVFXComboInstancePlayingQuery : ::events::IQuery<bool>

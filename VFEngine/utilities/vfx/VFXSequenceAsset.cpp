@@ -248,6 +248,30 @@ namespace vfx
                 }
             }
 
+            // VK-1451 timeline controls (all tolerant — absent keys keep defaults).
+            data.seed = j.value("seed", 0u);
+            data.playbackRate = j.value("playbackRate", 1.0f);
+            data.fixedStep = j.value("fixedStep", 0.0f);
+            data.prewarm = j.value("prewarm", 0.0f);
+
+            if (j.contains("eventMarkers") && j["eventMarkers"].is_array())
+            {
+                for (const auto& markerJson : j["eventMarkers"])
+                {
+                    if (!markerJson.is_object())
+                        continue;
+                    VFXSequenceEventMarker marker;
+                    marker.time = markerJson.value("time", 0.0f);
+                    marker.cueName = markerJson.value("cueName", "");
+                    if (marker.cueName.empty())
+                    {
+                        logWarning("Event marker with empty cueName, skipping");
+                        continue;
+                    }
+                    data.eventMarkers.push_back(std::move(marker));
+                }
+            }
+
             if (warningCount > 0)
                 vfLogWarning("Loaded VFX sequence '{}' with {} warning(s)", data.name, warningCount);
 
@@ -279,6 +303,22 @@ namespace vfx
             stepsJson.push_back(serializeStep(step));
         }
         j["steps"] = stepsJson;
+
+        // VK-1451 timeline controls.
+        j["seed"] = data.seed;
+        j["playbackRate"] = data.playbackRate;
+        j["fixedStep"] = data.fixedStep;
+        j["prewarm"] = data.prewarm;
+
+        json markersJson = json::array();
+        for (const auto& marker : data.eventMarkers)
+        {
+            json m;
+            m["time"] = marker.time;
+            m["cueName"] = marker.cueName;
+            markersJson.push_back(std::move(m));
+        }
+        j["eventMarkers"] = markersJson;
 
         try
         {

@@ -243,6 +243,27 @@ namespace vfx::validation
             }
         }
 
+        // VK-1451 — one-shot event markers.
+        for (size_t m = 0; m < sequence.eventMarkers.size(); ++m)
+        {
+            const VFXSequenceEventMarker& marker = sequence.eventMarkers[m];
+            if (marker.time < 0.0f)
+            {
+                detail::add(report, Severity::Warning, -1,
+                            "Event marker " + std::to_string(m) + " has a negative time.");
+            }
+            if (marker.cueName.empty())
+            {
+                detail::add(report, Severity::Warning, -1,
+                            "Event marker " + std::to_string(m) + " has an empty cue name.");
+            }
+            else if (exactCueSteps.find(marker.cueName) == exactCueSteps.end())
+            {
+                detail::add(report, Severity::Info, -1,
+                            "Event marker '" + marker.cueName + "' matches no cue-driven step.");
+            }
+        }
+
         return report;
     }
 }

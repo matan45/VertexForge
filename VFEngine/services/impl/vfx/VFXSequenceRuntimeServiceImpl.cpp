@@ -12,8 +12,11 @@
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
+#include <random>
 #include <string_view>
+#include <vector>
 
 namespace services
 {
@@ -57,7 +60,8 @@ namespace services
         dispatcher.registerCommandHandler<events::vfxsequence::CreateVFXComboInstanceCommand>(
             [this](const events::vfxsequence::CreateVFXComboInstanceCommand& cmd)
             {
-                return createCombo(cmd.sequenceAssetPath, cmd.worldTransform, cmd.entityId, cmd.autoDestroyOnFinish);
+                return createCombo(cmd.sequenceAssetPath, cmd.worldTransform, cmd.entityId, cmd.autoDestroyOnFinish,
+                                   cmd.seed, cmd.prewarm, cmd.playbackRate, cmd.fixedStep);
             });
 
         dispatcher.registerCommandHandler<events::vfxsequence::DestroyVFXComboInstanceCommand>(
@@ -92,6 +96,18 @@ namespace services
 
         dispatcher.registerCommandHandler<events::vfxsequence::UpdateVFXSequenceRuntimeCommand>(
             [this](const events::vfxsequence::UpdateVFXSequenceRuntimeCommand& cmd) { update(cmd.deltaTime); });
+
+        dispatcher.registerCommandHandler<events::vfxsequence::SetVFXComboPausedCommand>(
+            [this](const events::vfxsequence::SetVFXComboPausedCommand& cmd) { setComboPaused(cmd.comboId, cmd.paused); });
+
+        dispatcher.registerCommandHandler<events::vfxsequence::SetVFXComboPlaybackRateCommand>(
+            [this](const events::vfxsequence::SetVFXComboPlaybackRateCommand& cmd)
+            {
+                setComboPlaybackRate(cmd.comboId, cmd.rate);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxsequence::SeekVFXComboCommand>(
+            [this](const events::vfxsequence::SeekVFXComboCommand& cmd) { seekCombo(cmd.comboId, cmd.seconds); });
 
         dispatcher.registerQueryHandler<events::vfxsequence::IsVFXComboInstancePlayingQuery>(
             [this](const events::vfxsequence::IsVFXComboInstancePlayingQuery& q) { return isComboPlaying(q.comboId); });
@@ -138,14 +154,6 @@ namespace services
             else
                 ++it;
         }
-    }
-
-    glm::mat4 VFXSequenceRuntimeServiceImpl::composeStepLocal(const vfx::VFXSequenceStep& step)
-    {
-        const glm::mat4 t = glm::translate(glm::mat4(1.0f), step.localPosition);
-        const glm::mat4 r = glm::mat4_cast(glm::quat(glm::radians(step.localEulerDeg)));
-        const glm::mat4 s = glm::scale(glm::mat4(1.0f), step.localScale);
-        return t * r * s;
     }
 
     VFXEmitterOverrides VFXSequenceRuntimeServiceImpl::toOverrides(const vfx::VFXSequenceStep& step)
@@ -226,8 +234,9 @@ namespace services
         return dispatcher.query(xformQuery);
     }
 
-    void VFXSequenceRuntimeServiceImpl::spawnStep(ComboInstance& combo, ActiveStep& step, const glm::mat4& stepParent)
+    void VFXSequenceRuntimeServiceImpl::spawnStep(ComboInstance& combo, int stepIndex, const glm::mat4& stepParent)
     {
+        ActiveStep& step = combo.steps[static_cast<size_t>(stepIndex)];
         step.spawned = true; // mark regardless of outcome so we never retry a failed spawn
         if (!step.def)
             return;
@@ -243,11 +252,12 @@ namespace services
         auto& dispatcher = ::events::EventDispatcher::instance();
         events::vfxruntime::CreateVFXInstanceCommand createCmd;
         createCmd.params.vfxAssetPath = path;
-        createCmd.params.worldTransform = stepParent * composeStepLocal(*step.def);
+        createCmd.params.worldTransform = stepParent * vfx::VFXComboTimeline::composeStepLocal(*step.def);
         createCmd.params.loop = step.def->loop;
         createCmd.params.autoDestroy = !step.def->loop; // non-looping children self-destruct when done
         createCmd.params.priority = VFXEmitterPriority::Normal;
         createCmd.params.cameraRelative = false;
+        createCmd.params.seed = combo.timeline.derivedSeed(stepIndex); // VK-1451 deterministic child seed
 
         const VFXInstanceId childId = dispatcher.execute(createCmd);
         if (childId == 0)
@@ -271,7 +281,9 @@ namespace services
 
     VFXComboInstanceId VFXSequenceRuntimeServiceImpl::createCombo(const std::string& sequenceAssetPath,
                                                                   const glm::mat4& worldTransform,
-                                                                  uint32_t entityId, bool autoDestroyOnFinish)
+                                                                  uint32_t entityId, bool autoDestroyOnFinish,
+                                                                  uint32_t seed, float prewarm,
+                                                                  float playbackRate, float fixedStep)
     {
         auto data = loadSequence(sequenceAssetPath);
         if (!data || data->steps.empty())
@@ -289,9 +301,30 @@ namespace services
         if (entityId != 0)
             combo.socketEntity = EntityHandle{static_cast<uint64_t>(entityId)};
 
+        // VK-1451 timeline controls — command value overrides the asset's, asset is the
+        // default, and a still-zero seed is auto-randomized once here so playback varies
+        // while staying stable for the life of the combo.
+        uint32_t effectiveSeed = seed != 0 ? seed : data->seed;
+        if (effectiveSeed == 0)
+        {
+            static std::random_device seedRd;
+            static std::mt19937 seedGen(seedRd());
+            effectiveSeed = std::uniform_int_distribution<uint32_t>{}(seedGen);
+            if (effectiveSeed == 0)
+                effectiveSeed = 1u;
+        }
+        combo.seed = effectiveSeed;
+        combo.playbackRate = playbackRate >= 0.0f ? playbackRate : data->playbackRate;
+        if (combo.playbackRate <= 0.0f)
+            combo.playbackRate = 1.0f;
+        combo.fixedStep = fixedStep >= 0.0f ? fixedStep : data->fixedStep;
+        combo.prewarm = prewarm >= 0.0f ? prewarm : data->prewarm;
+
         combo.steps.reserve(data->steps.size());
         for (const auto& stepDef : data->steps)
             combo.steps.push_back(ActiveStep{&stepDef, 0, false, false});
+
+        combo.timeline.reset(*data, combo.seed);
 
         combos.emplace(id, std::move(combo));
         return id;
@@ -326,7 +359,16 @@ namespace services
         auto it = combos.find(id);
         if (it == combos.end())
             return;
-        it->second.playing = true;
+        ComboInstance& combo = it->second;
+        combo.playing = true;
+
+        // VK-1451 — apply the authored prewarm once, the first time the combo starts.
+        if (!combo.prewarmApplied)
+        {
+            combo.prewarmApplied = true;
+            if (combo.prewarm > 0.0f && combo.timeline.elapsed() == 0.0f)
+                replayTo(combo, combo.prewarm);
+        }
     }
 
     void VFXSequenceRuntimeServiceImpl::stopCombo(VFXComboInstanceId id)
@@ -367,8 +409,10 @@ namespace services
             return;
         ComboInstance& combo = it->second;
         destroyCombo(combo);
-        combo.elapsed = 0.0f;
         combo.playing = false;
+        combo.accumulator = 0.0f;
+        combo.prewarmApplied = false;
+        combo.timeline.rewind();
         for (auto& step : combo.steps)
         {
             step.spawned = false;
@@ -414,12 +458,9 @@ namespace services
             return;
         ComboInstance& combo = it->second;
         const glm::mat4 comboParent = resolveComboParent(combo);
-        for (auto& step : combo.steps)
-        {
-            if (step.spawned || !step.def || step.def->cueName != cueName)
-                continue;
-            spawnStep(combo, step, resolveStepParent(combo, step, comboParent));
-        }
+        std::vector<vfx::ComboEvent> events;
+        combo.timeline.fireCue(cueName, events);
+        applyComboEvents(combo, events, comboParent);
     }
 
     bool VFXSequenceRuntimeServiceImpl::isComboPlaying(VFXComboInstanceId id) const
@@ -428,45 +469,113 @@ namespace services
         return it != combos.end() && it->second.playing;
     }
 
+    void VFXSequenceRuntimeServiceImpl::applyComboEvents(ComboInstance& combo,
+                                                         const std::vector<vfx::ComboEvent>& events,
+                                                         const glm::mat4& comboParent)
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        for (const auto& ev : events)
+        {
+            if (ev.stepIndex < 0 || ev.stepIndex >= static_cast<int>(combo.steps.size()))
+                continue;
+            ActiveStep& step = combo.steps[static_cast<size_t>(ev.stepIndex)];
+            if (ev.kind == vfx::ComboEventKind::SpawnStep)
+            {
+                spawnStep(combo, ev.stepIndex, resolveStepParent(combo, step, comboParent));
+            }
+            else // StopStep — the timeline already gated StopAfterDuration + duration + threshold.
+            {
+                if (step.childId != 0)
+                {
+                    events::vfxruntime::StopVFXInstanceCommand stopCmd;
+                    stopCmd.instanceId = step.childId;
+                    dispatcher.execute(stopCmd);
+                }
+                step.stopped = true;
+            }
+        }
+    }
+
+    void VFXSequenceRuntimeServiceImpl::replayTo(ComboInstance& combo, float targetSeconds)
+    {
+        // Tear down live children and reset the schedule to t=0.
+        destroyCombo(combo);
+        combo.timeline.rewind();
+        combo.accumulator = 0.0f;
+        for (auto& step : combo.steps)
+        {
+            step.spawned = false;
+            step.stopped = false;
+            step.childId = 0;
+        }
+
+        if (targetSeconds <= 0.0f)
+            return;
+
+        // Fast-forward the schedule. Mirror update()'s accumulator exactly so a seek to T
+        // lands on the same timeline state a real playthrough to T would: advance in whole
+        // fixed steps and carry the remainder, so the spawn set is identical.
+        std::vector<vfx::ComboEvent> scratch;
+        if (combo.fixedStep > 0.0f)
+        {
+            const long steps = static_cast<long>(std::floor(targetSeconds / combo.fixedStep));
+            for (long k = 0; k < steps && k < 1000000; ++k)
+                combo.timeline.advance(combo.fixedStep, scratch);
+            combo.accumulator = targetSeconds - static_cast<float>(steps) * combo.fixedStep;
+        }
+        else
+        {
+            combo.timeline.advance(targetSeconds, scratch);
+        }
+
+        // (Re)spawn only the steps that should be live at the target time, seeded. Steps
+        // whose StopAfterDuration window already ended are left unspawned (no zombie
+        // children); play-to-completion steps that started before T restart here — the
+        // documented "schedule replay" limit of GPU runtime seek.
+        const glm::mat4 comboParent = resolveComboParent(combo);
+        for (int i = 0; i < combo.timeline.stepCount(); ++i)
+        {
+            if (combo.timeline.isSpawned(i) && !combo.timeline.isStopped(i))
+                spawnStep(combo, i, resolveStepParent(combo, combo.steps[static_cast<size_t>(i)], comboParent));
+        }
+    }
+
     void VFXSequenceRuntimeServiceImpl::update(float deltaTime)
     {
         if (combos.empty())
             return;
 
         auto& dispatcher = ::events::EventDispatcher::instance();
+        std::vector<vfx::ComboEvent> events;
 
         for (auto it = combos.begin(); it != combos.end();)
         {
             ComboInstance& combo = it->second;
             const glm::mat4 comboParent = resolveComboParent(combo);
 
-            if (combo.playing)
+            if (combo.playing && !combo.paused && deltaTime > 0.0f)
             {
-                combo.elapsed += deltaTime;
+                events.clear();
+                const float scaled = deltaTime * combo.playbackRate;
 
-                // Spawn time-driven steps whose start time has arrived.
-                for (auto& step : combo.steps)
+                if (combo.fixedStep > 0.0f)
                 {
-                    if (step.spawned || !step.def || !step.def->cueName.empty())
-                        continue;
-                    if (combo.elapsed >= step.def->startTime)
-                        spawnStep(combo, step, resolveStepParent(combo, step, comboParent));
-                }
-
-                // Stop steps that have a finite duration with StopAfterDuration behavior.
-                for (auto& step : combo.steps)
-                {
-                    if (step.childId == 0 || step.stopped || !step.def)
-                        continue;
-                    if (step.def->stopMode == vfx::VFXStepStopMode::StopAfterDuration && step.def->duration > 0.0f &&
-                        combo.elapsed >= step.def->startTime + step.def->duration)
+                    combo.accumulator += scaled;
+                    // Guard against a spiral-of-death after a huge frame hitch.
+                    int guard = 0;
+                    while (combo.accumulator >= combo.fixedStep && guard < 4096)
                     {
-                        events::vfxruntime::StopVFXInstanceCommand stopCmd;
-                        stopCmd.instanceId = step.childId;
-                        dispatcher.execute(stopCmd);
-                        step.stopped = true;
+                        combo.timeline.advance(combo.fixedStep, events);
+                        combo.accumulator -= combo.fixedStep;
+                        ++guard;
                     }
                 }
+                else
+                {
+                    combo.timeline.advance(scaled, events);
+                }
+
+                applyComboEvents(combo, events, comboParent);
             }
 
             // Cascade the (possibly socket-driven) transform onto every live child.
@@ -476,7 +585,8 @@ namespace services
                     continue;
                 events::vfxruntime::SetVFXInstanceTransformCommand xformCmd;
                 xformCmd.instanceId = step.childId;
-                xformCmd.worldTransform = resolveStepParent(combo, step, comboParent) * composeStepLocal(*step.def);
+                xformCmd.worldTransform =
+                    resolveStepParent(combo, step, comboParent) * vfx::VFXComboTimeline::composeStepLocal(*step.def);
                 dispatcher.execute(xformCmd);
             }
 
@@ -492,26 +602,49 @@ namespace services
             }
 
             // Combo is finished once it has played, every step has spawned, and no children remain.
-            bool allSpawned = true;
             bool anyLive = false;
             for (const auto& step : combo.steps)
             {
-                if (!step.spawned)
-                    allSpawned = false;
                 if (step.childId != 0)
                     anyLive = true;
             }
+            const bool allSpawned = combo.timeline.allStepsSpawned();
 
             if (combo.playing && allSpawned && !anyLive)
                 combo.playing = false;
 
-            if (!combo.playing && allSpawned && !anyLive && combo.autoDestroyOnFinish && combo.elapsed > 0.0f)
+            if (!combo.playing && allSpawned && !anyLive && combo.autoDestroyOnFinish &&
+                combo.timeline.elapsed() > 0.0f)
             {
                 it = combos.erase(it);
                 continue;
             }
             ++it;
         }
+    }
+
+    void VFXSequenceRuntimeServiceImpl::setComboPaused(VFXComboInstanceId id, bool paused)
+    {
+        auto it = combos.find(id);
+        if (it == combos.end())
+            return;
+        it->second.paused = paused;
+    }
+
+    void VFXSequenceRuntimeServiceImpl::setComboPlaybackRate(VFXComboInstanceId id, float rate)
+    {
+        auto it = combos.find(id);
+        if (it == combos.end() || rate <= 0.0f)
+            return;
+        it->second.playbackRate = rate;
+    }
+
+    void VFXSequenceRuntimeServiceImpl::seekCombo(VFXComboInstanceId id, float seconds)
+    {
+        auto it = combos.find(id);
+        if (it == combos.end())
+            return;
+        replayTo(it->second, std::max(0.0f, seconds));
     }
 
     void VFXSequenceRuntimeServiceImpl::destroyAll()

@@ -71,6 +71,7 @@ namespace controllers
         services::VFXEmitterPriority priority = services::VFXEmitterPriority::Normal;
         bool cameraRelative = false;
         bool autoDestroy = false;
+        uint32_t seed = 0; // VK-1451: 0 => random seed chosen once at creation
     };
 
     struct VFXRuntimeInstance
@@ -100,6 +101,7 @@ namespace controllers
         float lodBias = 0.0f;
         bool burstClampWarned = false;
         bool autoDestroy = false;
+        uint32_t seed = 0; // VK-1451: stable per-instance RNG seed (set once at creation)
     };
 
     class VFXSceneRenderer

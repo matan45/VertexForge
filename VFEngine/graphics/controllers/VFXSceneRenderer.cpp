@@ -14,6 +14,7 @@
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
 #include "print/Log.hpp"
+#include <random>
 
 namespace controllers
 {
@@ -130,6 +131,23 @@ namespace controllers
         instance.priority = params.priority;
         instance.cameraRelative = params.cameraRelative;
         instance.autoDestroy = params.autoDestroy;
+
+        // VK-1451: a stable per-instance RNG seed, chosen ONCE here. An explicit seed
+        // (combo determinism) makes the emission schedule reproducible; otherwise pick a
+        // random seed once so playback still varies between fresh effects — but no longer
+        // re-randomizes every frame as it did before.
+        if (params.seed != 0)
+        {
+            instance.seed = params.seed;
+        }
+        else
+        {
+            static std::random_device seedRd;
+            static std::mt19937 seedGen(seedRd());
+            instance.seed = std::uniform_int_distribution<uint32_t>{}(seedGen);
+            if (instance.seed == 0)
+                instance.seed = 1u; // never store the 0 sentinel
+        }
 
         if (!params.vfxAssetPath.empty())
         {

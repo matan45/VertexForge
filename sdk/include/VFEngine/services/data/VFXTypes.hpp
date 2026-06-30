@@ -28,6 +28,10 @@ namespace services
         // Destroy the instance automatically once a non-looping effect has
         // finished emitting and its last particles have expired (fire-and-forget)
         bool autoDestroy = false;
+        // VK-1451 — deterministic seed for the emitter RNG. 0 => the renderer picks a
+        // random seed once at creation (legacy behavior). A non-zero value makes the
+        // instance's emission schedule reproducible across runs.
+        uint32_t seed = 0;
     };
 
     struct VFXEmitterOverrides

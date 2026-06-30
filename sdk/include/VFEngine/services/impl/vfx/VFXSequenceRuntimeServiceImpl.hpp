@@ -5,6 +5,7 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "vfx/VFXSequenceTypes.hpp"
+#include "vfx/VFXComboTimeline.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -34,7 +35,6 @@ namespace services
             VFXComboInstanceId id = 0;
             std::shared_ptr<const vfx::VFXSequenceData> data;
             glm::mat4 parentTransform{1.0f};
-            float elapsed = 0.0f;
             bool playing = false;
             bool autoDestroyOnFinish = true;
             // Entity used to resolve sockets (combo-level attach and per-step sockets).
@@ -43,6 +43,18 @@ namespace services
             std::string attachSocket;
             bool socketWarned = false;   // warn-once when a socket can't be resolved
             std::vector<ActiveStep> steps;
+
+            // VK-1451 — deterministic transport state. The simulated clock now lives in
+            // `timeline` (timeline.elapsed()); `accumulator` carries the sub-fixedStep
+            // remainder so the spawn schedule is independent of frame pacing.
+            vfx::VFXComboTimeline timeline;
+            uint32_t seed = 0;
+            float playbackRate = 1.0f;
+            float fixedStep = 0.0f;      // 0 => variable step
+            float prewarm = 0.0f;
+            float accumulator = 0.0f;
+            bool paused = false;
+            bool prewarmApplied = false;
         };
 
         std::unordered_map<VFXComboInstanceId, ComboInstance> combos;
@@ -54,12 +66,16 @@ namespace services
 
         std::shared_ptr<const vfx::VFXSequenceData> loadSequence(const std::string& path);
         void invalidateSequence(const std::string& path);
-        void spawnStep(ComboInstance& combo, ActiveStep& step, const glm::mat4& stepParent);
+        void spawnStep(ComboInstance& combo, int stepIndex, const glm::mat4& stepParent);
+        void applyComboEvents(ComboInstance& combo, const std::vector<vfx::ComboEvent>& events,
+                              const glm::mat4& comboParent);
+        // Rewind + deterministic fixed-step replay of the schedule to `targetSeconds`,
+        // then (re)spawn only the steps live at that time. Used by seek and prewarm.
+        void replayTo(ComboInstance& combo, float targetSeconds);
         glm::mat4 resolveComboParent(ComboInstance& combo);
         glm::mat4 resolveStepParent(ComboInstance& combo, const ActiveStep& step, const glm::mat4& comboParent);
         void destroyCombo(ComboInstance& combo);
 
-        static glm::mat4 composeStepLocal(const vfx::VFXSequenceStep& step);
         static VFXEmitterOverrides toOverrides(const vfx::VFXSequenceStep& step);
 
     public:
@@ -68,8 +84,12 @@ namespace services
 
         void registerEventHandlers();
 
+        // VK-1451: seed/prewarm/playbackRate/fixedStep are "use asset default" sentinels
+        // (seed==0, the floats <0) unless the caller overrides them.
         VFXComboInstanceId createCombo(const std::string& sequenceAssetPath, const glm::mat4& worldTransform,
-                                       uint32_t entityId, bool autoDestroyOnFinish);
+                                       uint32_t entityId, bool autoDestroyOnFinish,
+                                       uint32_t seed = 0, float prewarm = -1.0f,
+                                       float playbackRate = -1.0f, float fixedStep = -1.0f);
         void destroyCombo(VFXComboInstanceId id);
         void playCombo(VFXComboInstanceId id);
         void stopCombo(VFXComboInstanceId id);
@@ -80,6 +100,11 @@ namespace services
         void triggerCue(VFXComboInstanceId id, const std::string& cueName);
         bool isComboPlaying(VFXComboInstanceId id) const;
         void update(float deltaTime);
+
+        // VK-1451 — deterministic transport.
+        void setComboPaused(VFXComboInstanceId id, bool paused);
+        void setComboPlaybackRate(VFXComboInstanceId id, float rate);
+        void seekCombo(VFXComboInstanceId id, float seconds);
 
         // Destroy every combo and all child instances. Used on exit-play teardown.
         void destroyAll();

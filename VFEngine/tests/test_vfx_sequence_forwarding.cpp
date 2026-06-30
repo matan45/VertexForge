@@ -6,6 +6,7 @@
 #include <data/VFXTypes.hpp>
 #include <vfx/VFXSequenceAsset.hpp>
 #include <vfx/VFXSequenceTypes.hpp>
+#include <vfx/VFXComboTimeline.hpp>
 #include <asset/AssetRef.hpp>
 #include <asset/AssetGUID.hpp>
 #include <asset/AssetDatabase.hpp>
@@ -49,6 +50,7 @@ namespace
             bool loop = false;
             bool autoDestroy = false;
             glm::mat4 worldTransform{1.0f};
+            uint32_t seed = 0; // VK-1451 deterministic child seed
         };
 
         std::vector<CreateRecord> creates;
@@ -71,7 +73,7 @@ namespace
                 {
                     VFXInstanceId id = nextId++;
                     creates.push_back({id, c.params.vfxAssetPath, c.params.loop,
-                                       c.params.autoDestroy, c.params.worldTransform});
+                                       c.params.autoDestroy, c.params.worldTransform, c.params.seed});
                     live.insert(id);
                     return id;
                 });
@@ -476,5 +478,159 @@ TEST_SUITE("VFXSequenceForwarding")
         // Exactly one Create — only the resolving step spawned.
         REQUIRE(mock.creates.size() == 1);
         CHECK(mock.creates[0].path == "assets/vfx/good.vfVFX");
+    }
+
+    // ============================================================
+    // VK-1451 — deterministic transport at the service level
+    // ============================================================
+
+    // -------- spawned child carries the derived per-step seed --------
+    TEST_CASE("spawned child seed equals deriveSeed(comboSeed, stepIndex)")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "seeded";
+        data.seed = 12345u; // explicit asset seed => deterministic
+        for (int i = 0; i < 2; ++i)
+        {
+            vfx::VFXSequenceStep s;
+            s.vfxRef = makeResolvingRef(0xF080 + i, "assets/vfx/s" + std::to_string(i) + ".vfVFX");
+            s.startTime = 0.0f;
+            s.loop = false;
+            data.steps.push_back(s);
+        }
+        std::string path = saveSequence("Combo_Seeded.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false); // seed arg 0 => use asset 12345
+        svc.playCombo(combo);
+        svc.update(0.1f);
+
+        REQUIRE(mock.creates.size() == 2);
+        CHECK(mock.creates[0].seed == vfx::VFXComboTimeline::deriveSeed(12345u, 0));
+        CHECK(mock.creates[1].seed == vfx::VFXComboTimeline::deriveSeed(12345u, 1));
+        CHECK(mock.creates[0].seed != mock.creates[1].seed);
+        CHECK(mock.creates[0].seed != 0u);
+    }
+
+    // -------- pause halts spawns; resume re-enables them --------
+    TEST_CASE("pause stops the schedule; resume lets due steps spawn")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "paused";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF090, "assets/vfx/p.vfVFX");
+        s.startTime = 0.5f;
+        s.loop = false;
+        data.steps.push_back(s);
+        std::string path = saveSequence("Combo_Paused.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+
+        svc.setComboPaused(combo, true);
+        svc.update(1.0f); // would normally cross 0.5, but paused => no spawn
+        CHECK(mock.creates.empty());
+
+        svc.setComboPaused(combo, false);
+        svc.update(1.0f); // now the step is due
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].path == "assets/vfx/p.vfVFX");
+    }
+
+    // -------- playback rate scales how fast the schedule advances --------
+    TEST_CASE("playback rate 2x reaches a step in half the wall-clock time")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "rate";
+        data.playbackRate = 2.0f; // 2x
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF0A0, "assets/vfx/r.vfVFX");
+        s.startTime = 1.0f;
+        s.loop = false;
+        data.steps.push_back(s);
+        std::string path = saveSequence("Combo_Rate.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+
+        svc.update(0.6f); // scaled = 1.2 >= 1.0 => spawns (at rate 1.0 it would not)
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].path == "assets/vfx/r.vfVFX");
+    }
+
+    // -------- seek jumps the schedule: live steps spawn, future steps don't --------
+    TEST_CASE("seekCombo spawns steps live at the target time and not future steps")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "seek";
+        {
+            vfx::VFXSequenceStep early; // live at t=1.0 (looping, no stop window)
+            early.vfxRef = makeResolvingRef(0xF0B0, "assets/vfx/early.vfVFX");
+            early.startTime = 0.0f;
+            early.loop = true;
+            data.steps.push_back(early);
+
+            vfx::VFXSequenceStep future; // not yet at t=1.0
+            future.vfxRef = makeResolvingRef(0xF0B1, "assets/vfx/future.vfVFX");
+            future.startTime = 2.0f;
+            future.loop = false;
+            data.steps.push_back(future);
+        }
+        std::string path = saveSequence("Combo_Seek.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+
+        svc.seekCombo(combo, 1.0f);
+
+        // Only the early (still-live) step is (re)spawned at the seek target.
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].path == "assets/vfx/early.vfVFX");
+    }
+
+    // -------- prewarm at create fast-forwards the schedule before the first frame --------
+    TEST_CASE("a combo created with prewarm spawns due steps immediately on play")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "prewarm";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF0C0, "assets/vfx/pw.vfVFX");
+        s.startTime = 1.0f;
+        s.loop = true; // stays live after spawning
+        data.steps.push_back(s);
+        std::string path = saveSequence("Combo_Prewarm.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        // prewarm 2.0s (> startTime 1.0) => the step should already be live when play starts.
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false,
+                                     /*seed*/ 0u, /*prewarm*/ 2.0f, /*rate*/ -1.0f, /*fixedStep*/ -1.0f);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo); // applies prewarm
+
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].path == "assets/vfx/pw.vfVFX");
     }
 }
