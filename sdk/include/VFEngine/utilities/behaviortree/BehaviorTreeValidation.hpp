@@ -565,6 +565,42 @@ namespace behaviortree::validation
                 }
                 break;
             }
+            case BTNodeType::DynamicSubTree:
+            {
+                // Unlike SubTree, DynamicSubTree is NOT inlined at load, so it legitimately survives into
+                // the expanded runtime tree (no allowSubTrees rejection). It must, however, declare at
+                // least one way to resolve its target at runtime.
+                std::string selectionKey;
+                std::string injectionTag;
+                std::string defaultTreePath;
+                const bool hasSelection =
+                    detail::hasStringProperty(node, "selectionKey", selectionKey) && !selectionKey.empty();
+                const bool hasTag =
+                    detail::hasStringProperty(node, "injectionTag", injectionTag) && !injectionTag.empty();
+                const bool hasDefault =
+                    detail::hasStringProperty(node, "defaultTreePath", defaultTreePath) && !defaultTreePath.empty();
+
+                if (!hasSelection && !hasTag && !hasDefault)
+                {
+                    detail::add(report, Severity::Error, node.id,
+                        "DynamicSubTree needs at least one of selectionKey, injectionTag, or defaultTreePath.");
+                }
+                if (hasDefault && context.subtreeExists && !context.subtreeExists(defaultTreePath))
+                {
+                    detail::add(report, Severity::Error, node.id,
+                        "DynamicSubTree defaultTreePath '" + defaultTreePath + "' does not exist.");
+                }
+                for (const auto& mapping : node.blackboardMappings)
+                {
+                    if (mapping.parentKey.empty() || mapping.childKey.empty())
+                    {
+                        detail::add(report, Severity::Warning, node.id,
+                            "DynamicSubTree has a blackboard mapping with an empty parent or child key.");
+                        break;
+                    }
+                }
+                break;
+            }
             case BTNodeType::Parallel:
                 detail::validateStringEnumProperty(report, node, "policy", "Parallel", detail::isValidParallelPolicy);
                 break;

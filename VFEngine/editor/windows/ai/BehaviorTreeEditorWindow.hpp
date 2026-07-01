@@ -10,6 +10,8 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
+#include <cstdint>
 
 namespace editor::windows
 {
@@ -34,6 +36,8 @@ namespace editor::windows
         bool debugActive = false;
         services::EntityHandle debugTarget;
         behaviortree::BTRuntimeSnapshot debugSnapshot;
+        // VK-1457: editor-session breakpoints (node ids) — authoritative here, pushed to the runtime.
+        std::unordered_set<uint32_t> breakpoints;
 
         behaviortree::validation::ValidationReport validationReport;
         std::unordered_map<uint32_t, behaviortree::validation::Severity> validationSeverities;
@@ -58,6 +62,8 @@ namespace editor::windows
         void drawValidationPanel();
         void drawBlackboardPanel();
         void drawLiveBlackboardPanel();
+        void drawDebugPanel();          // VK-1457: transport + breakpoints + history + aborts
+        void pushBreakpointsToRuntime(); // VK-1457: send the current breakpoint set to the debug target
         void onGraphChanged();
         void revalidate();
         void updateDebugState();

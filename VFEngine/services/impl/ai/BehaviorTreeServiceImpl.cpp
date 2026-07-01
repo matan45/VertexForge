@@ -102,6 +102,32 @@ namespace services
                 return provider->getRuntimeSnapshot(query.entity);
             });
 
+        // === Dynamic subtree (VK-1457) ===
+        dispatcher.registerCommandHandler<events::ai::SetDynamicSubtreeCommand>(
+            [this](const auto& cmd)
+            {
+                provider->setDynamicSubtree(cmd.entity, cmd.tag, cmd.treePath);
+            });
+
+        // === Debug controls (VK-1457) ===
+        dispatcher.registerCommandHandler<events::ai::SetTreeDebugPausedCommand>(
+            [this](const auto& cmd)
+            {
+                provider->setDebugPaused(cmd.paused);
+            });
+
+        dispatcher.registerCommandHandler<events::ai::StepTreeDebugCommand>(
+            [this](const auto&)
+            {
+                provider->stepDebug();
+            });
+
+        dispatcher.registerCommandHandler<events::ai::SetTreeBreakpointsCommand>(
+            [this](const auto& cmd)
+            {
+                provider->setBreakpoints(cmd.entity, cmd.nodeIds);
+            });
+
         dispatcher.registerQueryHandler<events::ai::GetAttachedBehaviorTreesQuery>(
             [this](const auto&)
             {

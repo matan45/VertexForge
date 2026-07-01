@@ -4,6 +4,7 @@
 #include "../../../utilities/behaviortree/BehaviorTreeAsset.hpp"
 #include "../../../utilities/eqs/EQSTypes.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <optional>
 #include <mutex>
@@ -44,8 +45,15 @@ namespace core
                                                           const std::string& key) override;
         bool hasBlackboardKey(services::EntityHandle entity, const std::string& key) const override;
 
+        void setDynamicSubtree(services::EntityHandle entity, const std::string& tag,
+                               const std::string& treePath) override;
+
         void setDebugTarget(services::EntityHandle entity) override;
         behaviortree::BTRuntimeSnapshot getRuntimeSnapshot(services::EntityHandle entity) const override;
+
+        void setDebugPaused(bool paused) override;
+        void stepDebug() override;
+        void setBreakpoints(services::EntityHandle entity, const std::vector<uint32_t>& nodeIds) override;
 
         // === IBTTaskExecutor ===
         behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle entity,
@@ -141,10 +149,18 @@ namespace core
         behaviortree::BTRuntimeSnapshot debugSnapshot;
         uint64_t tickCounter = 0;
 
+        // VK-1457 debug controls (editor-session only). Main thread writes, worker tick reads.
+        std::atomic<bool> debugPaused{false};
+        std::atomic<bool> stepRequested{false};
+        mutable std::mutex breakpointMutex;
+        std::unordered_set<uint32_t> breakpoints; // node ids on the debug target that auto-pause when Running
+
         std::shared_ptr<const behaviortree::BehaviorTreeData> getOrLoadTree(const std::string& treePath);
         void applyPendingReloads();
         void captureDebugSnapshot(const behaviortree::BehaviorTreeRuntime& runtime);
-        void cleanupScriptInstances(uint64_t entityId, const behaviortree::BehaviorTreeData& treeData);
+        // Tick the debug target and apply post-tick breakpoint rising-edge detection (may set debugPaused).
+        void tickDebugTarget(RuntimeInstance& instance, float deltaTime);
+        void cleanupScriptInstances(uint64_t entityId);
         void cancelPendingEQSQueriesForEntity(uint64_t entityId);
 
         // Shared sensing delegation, reused by both the task methods and the built-in services so the

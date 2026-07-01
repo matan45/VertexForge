@@ -303,6 +303,65 @@ TEST_SUITE("AIBehaviorTreeValidation")
         CHECK(hasDiagnostic(report, validation::Severity::Error, "still contains a SubTree"));
     }
 
+    TEST_CASE("dynamic subtree validation (VK-1457)")
+    {
+        auto makeDynTree = [](const bt::BTNode& dyn)
+        {
+            bt::BehaviorTreeData data;
+            data.graph.rootNodeId = 1;
+            data.graph.nodes.push_back(makeNode(1, bt::BTNodeType::Root));
+            data.graph.nodes.push_back(dyn);
+            linkNodes(data.graph, 1, 2);
+            finalizeIds(data.graph);
+            return data;
+        };
+
+        SUBCASE("no selection source is an error")
+        {
+            auto dyn = makeNode(2, bt::BTNodeType::DynamicSubTree);
+            auto report = validation::validateBehaviorTree(makeDynTree(dyn));
+            CHECK(hasDiagnostic(report, validation::Severity::Error, "at least one of"));
+        }
+
+        SUBCASE("a selection key alone is valid")
+        {
+            auto dyn = makeNode(2, bt::BTNodeType::DynamicSubTree);
+            dyn.properties["selectionKey"] = std::string("brain");
+            auto report = validation::validateBehaviorTree(makeDynTree(dyn));
+            CHECK_FALSE(report.hasErrors());
+        }
+
+        SUBCASE("a missing default tree path is an error when a predicate is provided")
+        {
+            auto dyn = makeNode(2, bt::BTNodeType::DynamicSubTree);
+            dyn.properties["defaultTreePath"] = std::string("assets/ai/Missing.vfBehaviorTree");
+            validation::ValidationContext context;
+            context.subtreeExists = [](std::string_view) { return false; };
+            auto report = validation::validateBehaviorTree(makeDynTree(dyn), context);
+            CHECK(hasDiagnostic(report, validation::Severity::Error, "does not exist"));
+        }
+
+        SUBCASE("an empty mapping key is a warning")
+        {
+            auto dyn = makeNode(2, bt::BTNodeType::DynamicSubTree);
+            dyn.properties["selectionKey"] = std::string("brain");
+            dyn.blackboardMappings.push_back({"", "child", bt::MappingDirection::In});
+            auto report = validation::validateBehaviorTree(makeDynTree(dyn));
+            CHECK_FALSE(report.hasErrors());
+            CHECK(hasDiagnostic(report, validation::Severity::Warning, "empty parent or child key"));
+        }
+
+        SUBCASE("DynamicSubTree survives the expanded-tree check (unlike SubTree)")
+        {
+            auto dyn = makeNode(2, bt::BTNodeType::DynamicSubTree);
+            dyn.properties["selectionKey"] = std::string("brain");
+            validation::ValidationContext context;
+            context.allowSubTrees = false; // runtime-expanded tree
+            auto report = validation::validateBehaviorTree(makeDynTree(dyn), context);
+            CHECK_FALSE(report.hasErrors());
+        }
+    }
+
     TEST_CASE("script task missing script metadata is visible but non-blocking")
     {
         auto data = makeValidTree();
@@ -358,6 +417,60 @@ TEST_SUITE("AIBehaviorTreeValidation")
         CHECK_FALSE(std::holds_alternative<services::EntityHandle>(loadedNode->properties.at("entityValue")));
         CHECK(std::holds_alternative<int32_t>(loadedNode->properties.at("entityValue")));
 
+        fs::remove_all(path.parent_path());
+    }
+
+    TEST_CASE("DynamicSubTree node with blackboard mappings round-trips through save/load")
+    {
+        bt::BehaviorTreeData data = makeValidTree();
+        // Repurpose the leaf (id 3) as a DynamicSubTree with config + explicit mappings.
+        auto& node = data.graph.nodes[2];
+        node.type = bt::BTNodeType::DynamicSubTree;
+        node.name = "Run Dynamic Subtree";
+        node.properties.clear();
+        node.properties["selectionKey"] = std::string("brainPath");
+        node.properties["injectionTag"] = std::string("combat");
+        node.properties["defaultTreePath"] = std::string("assets/ai/Idle.vfBehaviorTree");
+        node.blackboardMappings.push_back({"target", "target", bt::MappingDirection::In});
+        node.blackboardMappings.push_back({"result", "outcome", bt::MappingDirection::Out});
+        node.blackboardMappings.push_back({"shared", "shared", bt::MappingDirection::InOut});
+
+        const fs::path path = uniqueTempPath("dynsub");
+        REQUIRE(bt::BehaviorTreeAsset::save(path.string(), data));
+        auto loaded = bt::BehaviorTreeAsset::load(path.string());
+        REQUIRE(loaded.has_value());
+        CHECK(loaded->version == bt::BT_FORMAT_VERSION);
+
+        const auto* loadedNode = loaded->graph.findNodeById(3);
+        REQUIRE(loadedNode != nullptr);
+        CHECK(loadedNode->type == bt::BTNodeType::DynamicSubTree);
+        CHECK(std::get<std::string>(loadedNode->properties.at("selectionKey")) == "brainPath");
+        CHECK(std::get<std::string>(loadedNode->properties.at("injectionTag")) == "combat");
+
+        REQUIRE(loadedNode->blackboardMappings.size() == 3);
+        CHECK(loadedNode->blackboardMappings[0].parentKey == "target");
+        CHECK(loadedNode->blackboardMappings[0].childKey == "target");
+        CHECK(loadedNode->blackboardMappings[0].direction == bt::MappingDirection::In);
+        CHECK(loadedNode->blackboardMappings[1].childKey == "outcome");
+        CHECK(loadedNode->blackboardMappings[1].direction == bt::MappingDirection::Out);
+        CHECK(loadedNode->blackboardMappings[2].direction == bt::MappingDirection::InOut);
+
+        fs::remove_all(path.parent_path());
+    }
+
+    TEST_CASE("pre-1.2 asset without blackboardMappings loads with empty mappings")
+    {
+        // A tree with no DynamicSubTree nodes and no mappings key (the old shape) must still load,
+        // and every node's blackboardMappings must be empty.
+        bt::BehaviorTreeData data = makeValidTree();
+        const fs::path path = uniqueTempPath("legacy");
+        REQUIRE(bt::BehaviorTreeAsset::save(path.string(), data));
+        auto loaded = bt::BehaviorTreeAsset::load(path.string());
+        REQUIRE(loaded.has_value());
+        for (const auto& node : loaded->graph.nodes)
+        {
+            CHECK(node.blackboardMappings.empty());
+        }
         fs::remove_all(path.parent_path());
     }
 }

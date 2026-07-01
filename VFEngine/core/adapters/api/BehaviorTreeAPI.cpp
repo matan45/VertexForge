@@ -282,5 +282,23 @@ namespace core::api
                 query.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
                 return value::Value(dispatcher.query(query));
             }});
+
+        // === Dynamic subtree injection (VK-1457) ===
+        // _native_bt_setDynamicSubtree(entity, tag, treePath) — bind a DynamicSubTree injection tag to a
+        // tree path at runtime; an empty path clears the binding.
+        interpreter->registerNativeFunction("_native_bt_setDynamicSubtree",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 3) return value::Value(std::monostate{});
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(std::monostate{});
+
+                events::ai::SetDynamicSubtreeCommand cmd;
+                cmd.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
+                cmd.tag = extractString(args[1]);
+                cmd.treePath = extractString(args[2]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
     }
 }

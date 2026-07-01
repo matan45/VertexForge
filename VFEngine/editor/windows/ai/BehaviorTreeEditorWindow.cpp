@@ -150,6 +150,14 @@ namespace editor::windows
 
         drawValidationPanel();
 
+        if (debugActive)
+        {
+            if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                drawDebugPanel();
+            }
+        }
+
         float halfHeight = ImGui::GetContentRegionAvail().y * 0.5f;
         ImGui::BeginChild("BTPropertyPanel", ImVec2(0, halfHeight), ImGuiChildFlags_Borders);
         ImGui::Text("Properties");
@@ -253,6 +261,38 @@ namespace editor::windows
             label += diagnostic.message;
             return label;
         }
+
+        const char* btEventTypeLabel(behaviortree::BTEventType type)
+        {
+            switch (type)
+            {
+            case behaviortree::BTEventType::Enter: return "Enter";
+            case behaviortree::BTEventType::Exit: return "Exit";
+            case behaviortree::BTEventType::Abort: return "Abort";
+            case behaviortree::BTEventType::ServiceFire: return "Service";
+            default: return "?";
+            }
+        }
+
+        const char* btStatusLabel(behaviortree::BTNodeStatus status)
+        {
+            switch (status)
+            {
+            case behaviortree::BTNodeStatus::Success: return "Success";
+            case behaviortree::BTNodeStatus::Failure: return "Failure";
+            case behaviortree::BTNodeStatus::Running: return "Running";
+            default: return "?";
+            }
+        }
+
+        // Resolve a node id to a readable "Name (id)" using the authored graph.
+        std::string nodeLabel(const behaviortree::BTGraph& graph, uint32_t nodeId)
+        {
+            const behaviortree::BTNode* node = graph.findNodeById(nodeId);
+            std::string name = node ? (node->name.empty() ? behaviortree::nodeTypeToString(node->type) : node->name)
+                                    : std::string("<gone>");
+            return name + " (" + std::to_string(nodeId) + ")";
+        }
     }
 
     void BehaviorTreeEditorWindow::drawDebugMenu()
@@ -319,12 +359,25 @@ namespace editor::windows
             events::ai::GetTreeRuntimeSnapshotQuery snapshotQuery;
             snapshotQuery.entity = debugTarget;
             debugSnapshot = dispatcher.query(snapshotQuery);
-            graphEditor.setLiveStatus(debugSnapshot.valid ? &debugSnapshot.nodeStatuses : nullptr);
+            const bool valid = debugSnapshot.valid;
+            graphEditor.setLiveStatus(valid ? &debugSnapshot.nodeStatuses : nullptr);
+            graphEditor.setActivePath(valid ? &debugSnapshot.activePath : nullptr);
+            graphEditor.setBreakpoints(&breakpoints);
         }
         else
         {
             graphEditor.setLiveStatus(nullptr);
+            graphEditor.setActivePath(nullptr);
+            graphEditor.setBreakpoints(nullptr);
         }
+    }
+
+    void BehaviorTreeEditorWindow::pushBreakpointsToRuntime()
+    {
+        events::ai::SetTreeBreakpointsCommand cmd;
+        cmd.entity = debugTarget;
+        cmd.nodeIds.assign(breakpoints.begin(), breakpoints.end());
+        events::EventDispatcher::instance().execute(cmd);
     }
 
     void BehaviorTreeEditorWindow::startDebugging(services::EntityHandle entity)
@@ -336,6 +389,9 @@ namespace editor::windows
         events::ai::SetTreeDebugTargetCommand cmd;
         cmd.entity = entity;
         events::EventDispatcher::instance().execute(cmd);
+
+        // The runtime cleared its breakpoint set when the target changed; re-apply the editor's set.
+        pushBreakpointsToRuntime();
     }
 
     void BehaviorTreeEditorWindow::stopDebugging()
@@ -344,6 +400,8 @@ namespace editor::windows
         debugTarget = services::EntityHandle::invalid();
         debugSnapshot = {};
         graphEditor.setLiveStatus(nullptr);
+        graphEditor.setActivePath(nullptr);
+        graphEditor.setBreakpoints(nullptr);
 
         events::ai::SetTreeDebugTargetCommand cmd;
         cmd.entity = services::EntityHandle::invalid();
@@ -477,6 +535,111 @@ namespace editor::windows
         if (debugSnapshot.blackboard.empty())
         {
             ImGui::TextDisabled("(blackboard is empty)");
+        }
+    }
+
+    void BehaviorTreeEditorWindow::drawDebugPanel()
+    {
+        if (!treeData) return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // --- Transport: pause / resume / step ---
+        const bool paused = debugSnapshot.paused;
+        if (paused)
+        {
+            if (ImGui::Button("Resume"))
+            {
+                events::ai::SetTreeDebugPausedCommand cmd;
+                cmd.paused = false;
+                dispatcher.execute(cmd);
+            }
+        }
+        else
+        {
+            if (ImGui::Button("Pause"))
+            {
+                events::ai::SetTreeDebugPausedCommand cmd;
+                cmd.paused = true;
+                dispatcher.execute(cmd);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Step"))
+        {
+            dispatcher.execute(events::ai::StepTreeDebugCommand{});
+        }
+        ImGui::SameLine();
+        ImGui::TextColored(paused ? ImVec4(1.0f, 0.6f, 0.2f, 1.0f) : ImVec4(0.3f, 0.85f, 0.4f, 1.0f),
+                           paused ? "PAUSED" : "RUNNING");
+
+        // --- Breakpoint toggle for the selected node ---
+        const uint32_t selectedId = graphEditor.getSelectedNodeId();
+        if (selectedId != 0)
+        {
+            const bool isBp = breakpoints.count(selectedId) != 0;
+            std::string btnLabel = (isBp ? "Remove breakpoint on " : "Add breakpoint on ") +
+                                   nodeLabel(treeData->graph, selectedId);
+            if (ImGui::Button(btnLabel.c_str()))
+            {
+                if (isBp) breakpoints.erase(selectedId);
+                else breakpoints.insert(selectedId);
+                pushBreakpointsToRuntime();
+            }
+        }
+        else
+        {
+            ImGui::TextDisabled("Select a node to toggle a breakpoint");
+        }
+        if (!breakpoints.empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Clear BPs"))
+            {
+                breakpoints.clear();
+                pushBreakpointsToRuntime();
+            }
+        }
+
+        if (!debugSnapshot.activeDynamicSubtreePath.empty())
+        {
+            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Dynamic subtree: %s",
+                               debugSnapshot.activeDynamicSubtreePath.c_str());
+        }
+
+        // --- Aborts / interruptions ---
+        if (!debugSnapshot.abortRecords.empty() &&
+            ImGui::CollapsingHeader("Aborts / Interruptions"))
+        {
+            ImGui::BeginChild("BTAborts", ImVec2(0, 90.0f), true);
+            for (const auto& record : debugSnapshot.abortRecords)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.45f, 0.35f, 1.0f));
+                ImGui::TextWrapped("t%llu  %s  %s", static_cast<unsigned long long>(record.tickIndex),
+                                   nodeLabel(treeData->graph, record.nodeId).c_str(), record.reason.c_str());
+                ImGui::PopStyleColor();
+            }
+            ImGui::EndChild();
+        }
+
+        // --- Execution history (most recent last) ---
+        if (ImGui::CollapsingHeader("Execution History", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::BeginChild("BTHistory", ImVec2(0, 140.0f), true);
+            if (debugSnapshot.executionEvents.empty())
+            {
+                ImGui::TextDisabled("(no events)");
+            }
+            for (const auto& ev : debugSnapshot.executionEvents)
+            {
+                ImGui::Text("t%llu  %-8s %-8s %s", static_cast<unsigned long long>(ev.tickIndex),
+                            btEventTypeLabel(ev.type), btStatusLabel(ev.status),
+                            nodeLabel(treeData->graph, ev.nodeId).c_str());
+            }
+            // Keep the newest events in view.
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f)
+                ImGui::SetScrollHereY(1.0f);
+            ImGui::EndChild();
         }
     }
 

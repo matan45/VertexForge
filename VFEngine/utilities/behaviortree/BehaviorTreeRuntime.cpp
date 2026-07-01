@@ -1,11 +1,27 @@
 ﻿#include "BehaviorTreeRuntime.hpp"
+#include "BehaviorTreeDynamic.hpp"
+#include "../print/Log.hpp"
 #include <cmath>
 #include <vector>
 #include <algorithm>
 #include <cstdint>
+#include <string>
 
 namespace behaviortree
 {
+    namespace
+    {
+        constexpr int kMaxNestingDepth = 8;             // matches static SubTree expansion maxDepth
+        constexpr std::size_t kMaxExecutionEvents = 128; // bounded debugger history ring
+        constexpr std::size_t kMaxAbortRecords = 32;
+
+        std::string normalizeRuntimePath(std::string path)
+        {
+            std::replace(path.begin(), path.end(), '\\', '/');
+            return path;
+        }
+    }
+
     void BehaviorTreeRuntime::init(std::shared_ptr<const BehaviorTreeData> data, services::EntityHandle entity)
     {
         treeData = std::move(data);
@@ -18,6 +34,12 @@ namespace behaviortree
         nodeStates.clear();
         serviceStates.clear();
         conditionCache.clear();
+
+        // VK-1457: per-tree state is rebuilt on (re-)init; dynamic-subtree wiring (resolver/injections/
+        // nesting context/debugRecording) is configuration set separately and must survive a hot-reload.
+        nestedRuntimes.clear();
+        loggedDynamicErrors.clear();
+        clearDebugHistory();
     }
 
     BTNodeStatus BehaviorTreeRuntime::tick(float deltaTime, IBTTaskExecutor* executor)
@@ -25,6 +47,12 @@ namespace behaviortree
         if (!treeData || treeData->graph.rootNodeId == 0)
         {
             return BTNodeStatus::Failure;
+        }
+
+        if (debugRecording)
+        {
+            ++recordTickIndex;
+            activeDynamicSubtreePath.clear(); // re-derived this tick if a DynamicSubTree runs
         }
 
         // Mark all services unvisited; tickService re-marks the ones reached this frame.
@@ -46,6 +74,10 @@ namespace behaviortree
         nodeStates.clear();
         serviceStates.clear();
         conditionCache.clear();
+        // VK-1457: drop nested dynamic subtrees (they reference tree data being reset).
+        nestedRuntimes.clear();
+        loggedDynamicErrors.clear();
+        clearDebugHistory();
         if (treeData)
         {
             blackboard.initializeFromGraph(treeData->graph);
@@ -55,6 +87,10 @@ namespace behaviortree
     void BehaviorTreeRuntime::resetSubtreeState(uint32_t nodeId)
     {
         nodeStates.erase(nodeId);
+        // VK-1457: only reached for already-terminal subtrees (a completing composite/repeater resets its
+        // children), by which point a DynamicSubTree has already torn its nested runtime down. Drop any
+        // lingering nested defensively (no executor here — see abortAll's orphan sweep for the full flush).
+        nestedRuntimes.erase(nodeId);
         auto children = treeData->graph.getChildren(nodeId);
         for (const auto* child : children)
         {
@@ -71,8 +107,12 @@ namespace behaviortree
             if (node && isTaskNode(node->type))
             {
                 executor->onAbort(ownerEntity, *node);
+                recordAbort(nodeId, "aborted");
             }
         }
+        // VK-1457: a DynamicSubTree leaf owns a nested runtime — abort it too so in-flight nav/EQS/scripts
+        // inside the subtree are cancelled and its services fire onServiceEnd.
+        teardownNested(nodeId, executor);
         nodeStates.erase(nodeId);
         auto children = treeData->graph.getChildren(nodeId);
         for (const auto* child : children)
@@ -200,8 +240,28 @@ namespace behaviortree
         }
 
         auto& state = getNodeState(nodeId);
+
+        // VK-1457 debugger: record task-leaf Enter/Exit transitions (gated; no-op unless recording).
+        if (debugRecording && isTaskNode(node->type))
+        {
+            const bool wasRunning = state.lastStatus == BTNodeStatus::Running;
+            const bool nowRunning = status == BTNodeStatus::Running;
+            if (!wasRunning && nowRunning)
+            {
+                recordExecutionEvent(BTEventType::Enter, nodeId, status);
+            }
+            else if (wasRunning && !nowRunning)
+            {
+                recordExecutionEvent(BTEventType::Exit, nodeId, status);
+            }
+        }
+
         state.lastStatus = status;
         state.isFirstTick = false;
+        if (status != BTNodeStatus::Running)
+        {
+            state.lastCompletedStatus = status; // "last result" column for the debugger
+        }
 
         return status;
     }
@@ -539,6 +599,7 @@ namespace behaviortree
                 {
                     executor->onServiceTick(ownerEntity, node, blackboard, dt);
                 }
+                recordExecutionEvent(BTEventType::ServiceFire, node.id, BTNodeStatus::Running);
                 ++svc.fireCount;
                 svc.currentInterval = computeServiceInterval(node, svc.fireCount);
             }
@@ -553,6 +614,7 @@ namespace behaviortree
             {
                 executor->onServiceTick(ownerEntity, node, blackboard, dt);
             }
+            recordExecutionEvent(BTEventType::ServiceFire, node.id, BTNodeStatus::Running);
             ++svc.fireCount;
             svc.currentInterval = computeServiceInterval(node, svc.fireCount);
         }
@@ -610,6 +672,16 @@ namespace behaviortree
             }
         }
         serviceStates.clear();
+
+        // VK-1457: nested dynamic subtrees run their own services — flush them when this runtime stops
+        // being ticked (detach/disable/stop). Nested runtimes are kept (not dropped) so a re-enable resumes.
+        for (auto& [id, nested] : nestedRuntimes)
+        {
+            if (nested.runtime)
+            {
+                nested.runtime->endAllServices(executor);
+            }
+        }
     }
 
     BTNodeStatus BehaviorTreeRuntime::tickTask(const BTNode& node, float dt, IBTTaskExecutor* executor)
@@ -694,8 +766,187 @@ namespace behaviortree
             return executor->executeLineOfSight(ownerEntity, targetKey, maxDistance, eyeOffset, blackboard);
         }
 
+        case BTNodeType::DynamicSubTree:
+        {
+            return tickDynamicSubTree(node, dt, executor);
+        }
+
         default:
             return BTNodeStatus::Failure;
         }
+    }
+
+    BTNodeStatus BehaviorTreeRuntime::tickDynamicSubTree(const BTNode& node, float dt, IBTTaskExecutor* executor)
+    {
+        // 1. Resolve the target tree: blackboard[selectionKey] > injections[injectionTag] > defaultTreePath.
+        const std::string path = resolveDynamicSubtreePath(node, blackboard, *injections);
+        if (path.empty())
+        {
+            teardownNested(node.id, executor);
+            return BTNodeStatus::Failure;
+        }
+
+        std::shared_ptr<const BehaviorTreeData> data;
+        if (treeResolver)
+        {
+            data = treeResolver(path);
+        }
+
+        // 2. Rebuild the nested runtime when there is none, the path changed (runtime swap), or the
+        //    resolved data pointer changed (asset hot-reload).
+        auto it = nestedRuntimes.find(node.id);
+        bool needBuild = (it == nestedRuntimes.end());
+        if (!needBuild)
+        {
+            if (it->second.path != path) needBuild = true;
+            else if (data && it->second.data.get() != data.get()) needBuild = true;
+        }
+
+        if (needBuild)
+        {
+            teardownNested(node.id, executor); // drop the stale nested (aborts its in-flight work)
+            if (!data)
+            {
+                vfLogWarning("BT DynamicSubTree: could not resolve tree '{}' (node {})", path, node.id);
+                return BTNodeStatus::Failure;
+            }
+
+            const std::string norm = normalizeRuntimePath(path);
+            if (nestingDepth + 1 > kMaxNestingDepth)
+            {
+                if (loggedDynamicErrors.insert(node.id).second)
+                {
+                    vfLogError("BT DynamicSubTree: nesting depth limit ({}) exceeded at '{}'",
+                               kMaxNestingDepth, path);
+                }
+                return BTNodeStatus::Failure;
+            }
+            for (const auto& ancestor : ancestorPaths)
+            {
+                if (ancestor == norm)
+                {
+                    if (loggedDynamicErrors.insert(node.id).second)
+                    {
+                        vfLogError("BT DynamicSubTree: cyclic reference to '{}' rejected", path);
+                    }
+                    return BTNodeStatus::Failure;
+                }
+            }
+
+            NestedSubtree nested;
+            nested.runtime = std::make_unique<BehaviorTreeRuntime>();
+            nested.path = path;
+            nested.data = data;
+            nested.runtime->init(data, ownerEntity);
+            nested.runtime->setTreeResolver(treeResolver);
+            nested.runtime->injections = injections; // share the live injection map down the chain
+            std::vector<std::string> childAncestors = ancestorPaths;
+            childAncestors.push_back(norm);
+            nested.runtime->setNestingContext(nestingDepth + 1, std::move(childAncestors));
+
+            it = nestedRuntimes.emplace(node.id, std::move(nested)).first;
+            loggedDynamicErrors.erase(node.id); // a fresh successful build clears any prior error latch
+        }
+
+        BehaviorTreeRuntime& nested = *it->second.runtime;
+
+        // 3. Copy IN (parent -> child), tick with the SAME executor, copy OUT (child -> parent).
+        applyMappingsIn(node.blackboardMappings, blackboard, nested.getBlackboard());
+        const BTNodeStatus status = nested.tick(dt, executor);
+        applyMappingsOut(node.blackboardMappings, blackboard, nested.getBlackboard());
+
+        if (debugRecording)
+        {
+            activeDynamicSubtreePath = path;
+        }
+
+        // 4. On terminal, drop the nested so the next entry re-selects (and re-copies IN) fresh.
+        if (status != BTNodeStatus::Running)
+        {
+            it->second.runtime->endAllServices(executor);
+            nestedRuntimes.erase(it);
+        }
+        return status;
+    }
+
+    void BehaviorTreeRuntime::teardownNested(uint32_t nodeId, IBTTaskExecutor* executor)
+    {
+        auto it = nestedRuntimes.find(nodeId);
+        if (it == nestedRuntimes.end()) return;
+        if (it->second.runtime)
+        {
+            it->second.runtime->abortAll(executor);
+        }
+        nestedRuntimes.erase(it);
+    }
+
+    void BehaviorTreeRuntime::abortAll(IBTTaskExecutor* executor)
+    {
+        if (treeData && treeData->graph.rootNodeId != 0)
+        {
+            abortSubtree(treeData->graph.rootNodeId, executor); // fires onAbort + tears down reached nested
+        }
+        // Orphan sweep: nested not reached from the root (e.g. a Parallel that never aborts a running
+        // sibling) still gets aborted + dropped so no in-flight work leaks.
+        for (auto& [id, nested] : nestedRuntimes)
+        {
+            if (nested.runtime)
+            {
+                nested.runtime->abortAll(executor);
+            }
+        }
+        nestedRuntimes.clear();
+        endAllServices(executor);
+    }
+
+    void BehaviorTreeRuntime::setDynamicInjection(const std::string& tag, const std::string& path)
+    {
+        if (tag.empty()) return;
+        (*injections)[tag] = path;
+    }
+
+    void BehaviorTreeRuntime::clearDynamicInjection(const std::string& tag)
+    {
+        injections->erase(tag);
+    }
+
+    void BehaviorTreeRuntime::setNestingContext(int depth, std::vector<std::string> ancestors)
+    {
+        nestingDepth = depth;
+        ancestorPaths.clear();
+        ancestorPaths.reserve(ancestors.size());
+        for (auto& ancestor : ancestors)
+        {
+            ancestorPaths.push_back(normalizeRuntimePath(std::move(ancestor)));
+        }
+    }
+
+    void BehaviorTreeRuntime::clearDebugHistory()
+    {
+        abortRecords.clear();
+        executionEvents.clear();
+        activeDynamicSubtreePath.clear();
+        recordTickIndex = 0;
+    }
+
+    void BehaviorTreeRuntime::recordExecutionEvent(BTEventType type, uint32_t nodeId, BTNodeStatus status)
+    {
+        if (!debugRecording) return;
+        executionEvents.push_back(BTExecutionEvent{recordTickIndex, nodeId, type, status});
+        if (executionEvents.size() > kMaxExecutionEvents)
+        {
+            executionEvents.erase(executionEvents.begin());
+        }
+    }
+
+    void BehaviorTreeRuntime::recordAbort(uint32_t nodeId, const std::string& reason)
+    {
+        if (!debugRecording) return;
+        abortRecords.push_back(BTAbortRecord{nodeId, recordTickIndex, reason});
+        if (abortRecords.size() > kMaxAbortRecords)
+        {
+            abortRecords.erase(abortRecords.begin());
+        }
+        recordExecutionEvent(BTEventType::Abort, nodeId, BTNodeStatus::Failure);
     }
 }

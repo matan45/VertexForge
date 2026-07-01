@@ -82,6 +82,7 @@ namespace editor::windows
         case BTNodeType::BlackboardCondition: drawBlackboardConditionProperties(*node, graph); break;
         case BTNodeType::EnvironmentQuery: drawEnvironmentQueryProperties(*node, graph); break;
         case BTNodeType::SubTree: drawSubTreeProperties(*node); break;
+        case BTNodeType::DynamicSubTree: drawDynamicSubTreeProperties(*node); break;
         case BTNodeType::Service: drawServiceProperties(*node, graph); break;
         default: break;
         }
@@ -559,6 +560,96 @@ namespace editor::windows
 
         ImGui::TextDisabled("Inlined at load time; blackboard keys are merged");
         ImGui::TextDisabled("(parent wins on name collision)");
+    }
+
+    void BTPropertyPanel::drawDynamicSubTreeProperties(BTNode& node)
+    {
+        auto editStringProp = [this, &node](const char* label, const char* key)
+        {
+            std::string current;
+            auto it = node.properties.find(key);
+            if (it != node.properties.end() && std::holds_alternative<std::string>(it->second))
+                current = std::get<std::string>(it->second);
+
+            char buf[256];
+            strncpy(buf, current.c_str(), sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            if (ImGui::InputText(label, buf, sizeof(buf)))
+            {
+                node.properties[key] = std::string(buf);
+                notifyChanged();
+            }
+        };
+
+        // Resolution order (highest priority first): selection key > injection tag > default path.
+        editStringProp("Selection Key", "selectionKey");
+        editStringProp("Injection Tag", "injectionTag");
+        editStringProp("Default Tree Path", "defaultTreePath");
+        ImGui::TextDisabled("Resolves: blackboard[Selection Key] >");
+        ImGui::TextDisabled("injection[Tag] > Default Tree Path");
+
+        ImGui::Separator();
+        ImGui::Text("Blackboard Mappings");
+        ImGui::TextDisabled("Explicit parent<->child value bindings");
+
+        static const std::array<const char*, 3> directionNames = {"In", "Out", "InOut"};
+
+        int removeIdx = -1;
+        for (int i = 0; i < static_cast<int>(node.blackboardMappings.size()); ++i)
+        {
+            ImGui::PushID(i);
+            auto& mapping = node.blackboardMappings[static_cast<size_t>(i)];
+
+            char parentBuf[64];
+            strncpy(parentBuf, mapping.parentKey.c_str(), sizeof(parentBuf) - 1);
+            parentBuf[sizeof(parentBuf) - 1] = '\0';
+            ImGui::SetNextItemWidth(90.0f);
+            if (ImGui::InputText("##parent", parentBuf, sizeof(parentBuf)))
+            {
+                mapping.parentKey = parentBuf;
+                notifyChanged();
+            }
+
+            ImGui::SameLine();
+            int dir = static_cast<int>(mapping.direction);
+            ImGui::SetNextItemWidth(70.0f);
+            if (ImGui::Combo("##dir", &dir, directionNames.data(), static_cast<int>(directionNames.size())))
+            {
+                mapping.direction = static_cast<MappingDirection>(dir);
+                notifyChanged();
+            }
+
+            ImGui::SameLine();
+            char childBuf[64];
+            strncpy(childBuf, mapping.childKey.c_str(), sizeof(childBuf) - 1);
+            childBuf[sizeof(childBuf) - 1] = '\0';
+            ImGui::SetNextItemWidth(90.0f);
+            if (ImGui::InputText("##child", childBuf, sizeof(childBuf)))
+            {
+                mapping.childKey = childBuf;
+                notifyChanged();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+            {
+                removeIdx = i;
+            }
+
+            ImGui::PopID();
+        }
+
+        if (removeIdx >= 0)
+        {
+            node.blackboardMappings.erase(node.blackboardMappings.begin() + removeIdx);
+            notifyChanged();
+        }
+
+        if (ImGui::Button("+ Add Mapping"))
+        {
+            node.blackboardMappings.push_back({"parentKey", "childKey", MappingDirection::In});
+            notifyChanged();
+        }
     }
 
     void BTPropertyPanel::drawLineOfSightProperties(BTNode& node, const BTGraph* graph)

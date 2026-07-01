@@ -179,6 +179,7 @@ namespace editor::graph
                 if (ImGui::MenuItem("Environment Query")) createNode(BTNodeType::EnvironmentQuery, newNodePosition);
                 if (ImGui::MenuItem("Line Of Sight")) createNode(BTNodeType::LineOfSight, newNodePosition);
                 if (ImGui::MenuItem("Run Subtree")) createNode(BTNodeType::SubTree, newNodePosition);
+                if (ImGui::MenuItem("Run Dynamic Subtree")) createNode(BTNodeType::DynamicSubTree, newNodePosition);
                 ImGui::EndMenu();
             }
 
@@ -252,6 +253,11 @@ namespace editor::graph
             break;
         case BTNodeType::SubTree:
             node.properties["treePath"] = std::string("");
+            break;
+        case BTNodeType::DynamicSubTree:
+            node.properties["selectionKey"] = std::string("");
+            node.properties["injectionTag"] = std::string("");
+            node.properties["defaultTreePath"] = std::string("");
             break;
         case BTNodeType::LineOfSight:
             node.properties["targetKey"] = std::string("target");

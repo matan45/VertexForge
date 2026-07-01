@@ -151,6 +151,20 @@ namespace behaviortree
             j["scriptClassName"] = node.scriptClassName;
         }
 
+        // Explicit blackboard parameter mappings (VK-1457). Emitted only when present so old-shaped
+        // assets stay byte-identical. A dedicated array — properties can only carry scalars/strings/vec3.
+        if (!node.blackboardMappings.empty())
+        {
+            json mappings = json::array();
+            for (const auto& m : node.blackboardMappings)
+            {
+                mappings.push_back({{"parent", m.parentKey},
+                                    {"child", m.childKey},
+                                    {"dir", mappingDirectionToString(m.direction)}});
+            }
+            j["blackboardMappings"] = std::move(mappings);
+        }
+
         return j;
     }
 
@@ -174,6 +188,20 @@ namespace behaviortree
 
         node.scriptPath = j.value("scriptPath", "");
         node.scriptClassName = j.value("scriptClassName", "");
+
+        // Explicit blackboard parameter mappings (VK-1457). Absent in pre-1.2 assets -> empty.
+        if (j.contains("blackboardMappings") && j["blackboardMappings"].is_array())
+        {
+            for (const auto& m : j["blackboardMappings"])
+            {
+                if (!m.is_object()) continue;
+                BlackboardMapping mapping;
+                mapping.parentKey = m.value("parent", "");
+                mapping.childKey = m.value("child", "");
+                mapping.direction = stringToMappingDirection(m.value("dir", "In"));
+                node.blackboardMappings.push_back(std::move(mapping));
+            }
+        }
 
         return node;
     }

@@ -8,7 +8,9 @@
 
 namespace behaviortree
 {
-    inline constexpr const char* BT_FORMAT_VERSION = "1.1";
+    // 1.2 (VK-1457) adds DynamicSubTree nodes + per-node blackboardMappings.
+    // Backward compatible: load() never gates on version; missing mappings deserialize to empty.
+    inline constexpr const char* BT_FORMAT_VERSION = "1.2";
 
     class BehaviorTreeAsset
     {

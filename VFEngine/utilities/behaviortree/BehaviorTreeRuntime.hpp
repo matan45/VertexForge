@@ -3,7 +3,11 @@
 #include "BehaviorTreeTypes.hpp"
 #include "Blackboard.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
+#include <functional>
+#include <string>
+#include <vector>
 
 namespace behaviortree
 {
@@ -14,6 +18,11 @@ namespace behaviortree
         float elapsedTime = 0.0f;
         int repeatCount = 0;
         bool isFirstTick = true;
+
+        // Last COMPLETED (non-Running) result, for the runtime debugger's "last result" column
+        // (VK-1457). Updated in tickNode whenever a node returns a terminal status; distinct from
+        // lastStatus, which can be Running.
+        BTNodeStatus lastCompletedStatus = BTNodeStatus::Failure;
     };
 
     // Live state for a Service node (VK-1456). Kept SEPARATE from BTNodeRuntime/nodeStates:
@@ -107,6 +116,11 @@ namespace behaviortree
 
     class BehaviorTreeRuntime
     {
+    public:
+        // Resolves a DynamicSubTree's target path to its (immutable, possibly cached) tree data.
+        // Injected by the adapter (getOrLoadTree); left null in unit tests that don't use dynamic subtrees.
+        using TreeResolver = std::function<std::shared_ptr<const BehaviorTreeData>(const std::string& path)>;
+
     private:
         // Immutable tree data, shared between all runtimes attached to the same asset path.
         // All mutable per-agent state lives in nodeStates/blackboard.
@@ -119,6 +133,32 @@ namespace behaviortree
         // not by abort/reset. conditionCache is a pure optimization self-healed by blackboard versions.
         std::unordered_map<uint32_t, ServiceState> serviceStates;
         std::unordered_map<uint32_t, ConditionCacheEntry> conditionCache;
+
+        // VK-1457 dynamic subtree state. One nested runtime per DynamicSubTree node, keyed by node id.
+        // `path` + `data` record what it was built from so a runtime path swap or asset hot-reload
+        // (data pointer changes) triggers a rebuild.
+        struct NestedSubtree
+        {
+            std::unique_ptr<BehaviorTreeRuntime> runtime;
+            std::string path;
+            std::shared_ptr<const BehaviorTreeData> data;
+        };
+        std::unordered_map<uint32_t, NestedSubtree> nestedRuntimes;
+
+        TreeResolver treeResolver;
+        // Shared down the nesting chain so a live SetDynamicSubtree injection reaches every level.
+        std::shared_ptr<std::unordered_map<std::string, std::string>> injections =
+            std::make_shared<std::unordered_map<std::string, std::string>>();
+        int nestingDepth = 0;
+        std::vector<std::string> ancestorPaths; // normalized paths on the active nesting stack (cycle guard)
+        std::unordered_set<uint32_t> loggedDynamicErrors; // throttles cycle/depth error logs to once per node
+
+        // VK-1457 debugger recording (only the debug-target runtime enables this).
+        bool debugRecording = false;
+        uint64_t recordTickIndex = 0;
+        std::vector<BTAbortRecord> abortRecords;
+        std::vector<BTExecutionEvent> executionEvents;
+        std::string activeDynamicSubtreePath;
     public:
         void init(std::shared_ptr<const BehaviorTreeData> data, services::EntityHandle entity);
         BTNodeStatus tick(float deltaTime, IBTTaskExecutor* executor);
@@ -126,8 +166,33 @@ namespace behaviortree
 
         // Fire onServiceEnd for every currently-active service and clear them. Call from the executor
         // (e.g. adapter detach/disable/stopAll/reload) before a runtime stops being ticked, since the
-        // end-of-tick diff can only run while tick() is being called.
+        // end-of-tick diff can only run while tick() is being called. Recurses into nested dynamic subtrees.
         void endAllServices(IBTTaskExecutor* executor);
+
+        // VK-1457: abort the whole tree from the root (fires onAbort for running tasks + onServiceEnd),
+        // then drop nested dynamic subtrees. Used by the adapter on detach/stop.
+        void abortAll(IBTTaskExecutor* executor);
+
+        // VK-1457 dynamic-subtree wiring. Set once after init(); preserved across a re-init (hot reload).
+        void setTreeResolver(TreeResolver resolver) { treeResolver = std::move(resolver); }
+        void setDynamicInjection(const std::string& tag, const std::string& path);
+        void clearDynamicInjection(const std::string& tag);
+        // Seed the cycle/depth guard. Root: depth 0 with its own normalized path as the sole ancestor.
+        void setNestingContext(int depth, std::vector<std::string> ancestors);
+
+        // VK-1457 debugger. When enabled (only for the debug-target runtime), the tick records a bounded
+        // execution-event history + abort records; disabled runtimes pay nothing. Turning recording on
+        // clears any stale history so each debug session starts fresh.
+        void setDebugRecording(bool enabled)
+        {
+            if (enabled && !debugRecording) clearDebugHistory();
+            debugRecording = enabled;
+        }
+        bool isDebugRecording() const { return debugRecording; }
+        void clearDebugHistory();
+        const std::vector<BTAbortRecord>& getAbortRecords() const { return abortRecords; }
+        const std::vector<BTExecutionEvent>& getExecutionEvents() const { return executionEvents; }
+        const std::string& getActiveDynamicSubtreePath() const { return activeDynamicSubtreePath; }
 
         Blackboard& getBlackboard() { return blackboard; }
         const Blackboard& getBlackboard() const { return blackboard; }
@@ -143,6 +208,14 @@ namespace behaviortree
         BTNodeStatus tickDecorator(const BTNode& node, float dt, IBTTaskExecutor* executor);
         BTNodeStatus tickService(const BTNode& node, float dt, IBTTaskExecutor* executor);
         BTNodeStatus tickTask(const BTNode& node, float dt, IBTTaskExecutor* executor);
+        BTNodeStatus tickDynamicSubTree(const BTNode& node, float dt, IBTTaskExecutor* executor);
+
+        // Abort + drop the nested dynamic-subtree runtime attached to nodeId, if any.
+        void teardownNested(uint32_t nodeId, IBTTaskExecutor* executor);
+
+        // Bounded-ring history recorders (no-ops unless debugRecording).
+        void recordExecutionEvent(BTEventType type, uint32_t nodeId, BTNodeStatus status);
+        void recordAbort(uint32_t nodeId, const std::string& reason);
 
         BTNodeRuntime& getNodeState(uint32_t nodeId);
         void resetSubtreeState(uint32_t nodeId);

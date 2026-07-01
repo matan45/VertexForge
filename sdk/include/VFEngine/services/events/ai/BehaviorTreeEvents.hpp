@@ -104,4 +104,34 @@ namespace events::ai {
         std::string_view getName() const override { return "GetTreeRuntimeSnapshot"; }
     };
 
+    // === Dynamic subtree (VK-1457) ===
+
+    // Bind an injection tag to a tree path for one entity's DynamicSubTree nodes; empty path clears it.
+    struct SetDynamicSubtreeCommand : ICommand<> {
+        services::EntityHandle entity;
+        std::string tag;
+        std::string treePath;
+
+        std::string_view getName() const override { return "SetDynamicSubtree"; }
+    };
+
+    // === Debug controls (VK-1457, editor-session only) ===
+
+    struct SetTreeDebugPausedCommand : ICommand<> {
+        bool paused = false;
+
+        std::string_view getName() const override { return "SetTreeDebugPaused"; }
+    };
+
+    struct StepTreeDebugCommand : ICommand<> {
+        std::string_view getName() const override { return "StepTreeDebug"; }
+    };
+
+    struct SetTreeBreakpointsCommand : ICommand<> {
+        services::EntityHandle entity;
+        std::vector<uint32_t> nodeIds;
+
+        std::string_view getName() const override { return "SetTreeBreakpoints"; }
+    };
+
 }

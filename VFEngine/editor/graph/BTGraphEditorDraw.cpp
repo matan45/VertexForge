@@ -1,4 +1,5 @@
 #include "BTGraphEditor.hpp"
+#include <algorithm>
 
 namespace ed = ax::NodeEditor;
 using namespace behaviortree;
@@ -76,14 +77,25 @@ namespace editor::graph
         bool hasLiveStatus = liveStatusBorder(liveStatuses, node.id, borderColor);
         bool hasValidationStatus = !hasLiveStatus && validationBorder(validationSeverities, node.id, borderColor);
 
+        // VK-1457: the active execution spine gets a bolder border than a plain Running tint.
+        const bool onActivePath = activePath &&
+            std::find(activePath->begin(), activePath->end(), node.id) != activePath->end();
+        const bool isBreakpoint = breakpoints && breakpoints->count(node.id) != 0;
+
         ed::PushStyleColor(ed::StyleColor_NodeBg, ImGui::ColorConvertU32ToFloat4(nodeColor));
         ed::PushStyleColor(ed::StyleColor_NodeBorder, borderColor);
-        if (hasLiveStatus || hasValidationStatus)
-            ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 3.0f);
+        const bool thickBorder = hasLiveStatus || hasValidationStatus || onActivePath;
+        if (thickBorder)
+            ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, onActivePath ? 5.0f : 3.0f);
 
         ed::BeginNode(toEditorNodeId(node.id));
 
         ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 255));
+        if (isBreakpoint)
+        {
+            ImGui::TextColored(ImVec4(0.95f, 0.2f, 0.2f, 1.0f), "%s", "\xE2\x97\x8F"); // red bullet marker
+            ImGui::SameLine();
+        }
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[%s]", getCategoryName(node.type));
         ImGui::Text("%s", node.name.empty() ? nodeTypeToString(node.type) : node.name.c_str());
 
@@ -115,7 +127,7 @@ namespace editor::graph
 
         ed::EndNode();
 
-        if (hasLiveStatus || hasValidationStatus)
+        if (thickBorder)
             ed::PopStyleVar();
         ed::PopStyleColor(2);
     }
@@ -283,6 +295,40 @@ namespace editor::graph
             if (distIt != node.properties.end() && std::holds_alternative<float>(distIt->second))
                 dist = std::get<float>(distIt->second);
             ImGui::Text("Range: %.0fm", dist);
+            break;
+        }
+        case BTNodeType::DynamicSubTree:
+        {
+            auto keyIt = node.properties.find("selectionKey");
+            bool shown = false;
+            if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second) &&
+                !std::get<std::string>(keyIt->second).empty())
+            {
+                ImGui::Text("Key: %s", std::get<std::string>(keyIt->second).c_str());
+                shown = true;
+            }
+            auto tagIt = node.properties.find("injectionTag");
+            if (tagIt != node.properties.end() && std::holds_alternative<std::string>(tagIt->second) &&
+                !std::get<std::string>(tagIt->second).empty())
+            {
+                ImGui::Text("Tag: %s", std::get<std::string>(tagIt->second).c_str());
+                shown = true;
+            }
+            auto defIt = node.properties.find("defaultTreePath");
+            if (defIt != node.properties.end() && std::holds_alternative<std::string>(defIt->second))
+            {
+                const auto& path = std::get<std::string>(defIt->second);
+                if (!path.empty())
+                {
+                    size_t slash = path.find_last_of("/\\");
+                    ImGui::Text("Default: %s", slash == std::string::npos ? path.c_str() : path.c_str() + slash + 1);
+                    shown = true;
+                }
+            }
+            if (!shown)
+                ImGui::TextColored(ImVec4(0.95f, 0.55f, 0.2f, 1.0f), "(no source)");
+            if (!node.blackboardMappings.empty())
+                ImGui::Text("Maps: %zu", node.blackboardMappings.size());
             break;
         }
         default:

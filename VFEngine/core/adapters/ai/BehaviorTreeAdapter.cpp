@@ -9,7 +9,10 @@
 #include "../../../services/events/physics/PhysicsEvents.hpp"
 #include "print/Log.hpp"
 #include "behaviortree/BehaviorTreeValidation.hpp"
+#include "behaviortree/BehaviorTreeDynamic.hpp"
 #include <algorithm>
+#include <any>
+#include <unordered_set>
 
 namespace core
 {
@@ -38,11 +41,14 @@ namespace core
         return defaultVal;
     }
 
-    // Service EQS queries key off the node id so multiple EQS services on one entity don't collide;
-    // the "{entityId}:" prefix means cancelPendingEQSQueriesForEntity() still sweeps them.
-    static std::string eqsServiceKey(uint64_t entityId, uint32_t nodeId)
+    // Service EQS queries key off the node's ADDRESS, not its id (VK-1457): a parent tree and a nested
+    // dynamic subtree have independent id spaces (both start at 1), so keying by id would let two live
+    // Service nodes on one entity clobber each other's pending handle. The cached BehaviorTreeData is
+    // immutable for the session, so node addresses are stable; the "{entityId}:" prefix is preserved so
+    // cancelPendingEQSQueriesForEntity() still sweeps them.
+    static std::string eqsServiceKey(uint64_t entityId, const BTNode& node)
     {
-        return std::to_string(entityId) + ":svc:" + std::to_string(nodeId);
+        return std::to_string(entityId) + ":svc:" + std::to_string(reinterpret_cast<uintptr_t>(&node));
     }
 
     static void logValidationDiagnostics(const std::string& treePath,
@@ -120,6 +126,10 @@ namespace core
         RuntimeInstance instance;
         instance.runtime = std::make_unique<BehaviorTreeRuntime>();
         instance.runtime->init(treeData, entity);
+        // VK-1457: dynamic subtrees resolve their target through the same cache as static loads, and the
+        // cycle/depth guard is seeded with this root's normalized path.
+        instance.runtime->setTreeResolver([this](const std::string& path) { return getOrLoadTree(path); });
+        instance.runtime->setNestingContext(0, {normalizeBTPath(treePath)});
         instance.treePath = treePath;
         instance.enabled = true;
 
@@ -128,25 +138,25 @@ namespace core
         return true;
     }
 
-    void BehaviorTreeAdapter::cleanupScriptInstances(uint64_t entityId, const BehaviorTreeData& treeData)
+    // Destroy + unload every script instance owned by this entity (VK-1457). Sweeping by entity id rather
+    // than walking a single graph covers parent + nested dynamic-subtree + swapped-out scripts uniformly.
+    void BehaviorTreeAdapter::cleanupScriptInstances(uint64_t entityId)
     {
         if (!scriptingProvider) return;
 
-        for (const auto& node : treeData.graph.nodes)
+        for (auto sit = scriptInstances.begin(); sit != scriptInstances.end(); )
         {
-            if (node.type != BTNodeType::ScriptTask || node.scriptPath.empty())
-                continue;
-
-            auto sit = scriptInstances.find({entityId, node.scriptPath});
-            if (sit != scriptInstances.end())
+            if (sit->first.entityId != entityId)
             {
-                if (scriptingProvider->isScriptLoaded(sit->second))
-                {
-                    scriptingProvider->callOnDestroy(sit->second);
-                    scriptingProvider->unloadScript(sit->second);
-                }
-                scriptInstances.erase(sit);
+                ++sit;
+                continue;
             }
+            if (scriptingProvider->isScriptLoaded(sit->second))
+            {
+                scriptingProvider->callOnDestroy(sit->second);
+                scriptingProvider->unloadScript(sit->second);
+            }
+            sit = scriptInstances.erase(sit);
         }
     }
 
@@ -172,14 +182,13 @@ namespace core
         auto it = runtimes.find(entity.id);
         if (it == runtimes.end()) return;
 
-        if (it->second.runtime && it->second.runtime->hasTreeData())
-        {
-            cleanupScriptInstances(entity.id, it->second.runtime->getTreeData());
-        }
+        // Abort in-flight work first (fires onAbort for running tasks incl. scripts + flushes services,
+        // recursing into nested dynamic subtrees), THEN destroy the scripts, THEN sweep service EQS.
         if (it->second.runtime)
         {
-            it->second.runtime->endAllServices(this);
+            it->second.runtime->abortAll(this);
         }
+        cleanupScriptInstances(entity.id);
         cancelPendingEQSQueriesForEntity(entity.id);
 
         runtimes.erase(it);
@@ -306,11 +315,8 @@ namespace core
             {
                 if (instance.treePath != treePath || !instance.runtime) continue;
 
-                // Old node ids/scripts are invalid against the new graph
-                if (instance.runtime->hasTreeData())
-                {
-                    cleanupScriptInstances(entityId, instance.runtime->getTreeData());
-                }
+                // Old node ids/scripts/nested subtrees are invalid against the new graph
+                cleanupScriptInstances(entityId);
                 cancelPendingEQSQueriesForEntity(entityId);
                 instance.runtime->endAllServices(this);
 
@@ -350,24 +356,63 @@ namespace core
 
     void BehaviorTreeAdapter::captureDebugSnapshot(const BehaviorTreeRuntime& runtime)
     {
+        if (!runtime.hasTreeData()) return;
+
         BTRuntimeSnapshot snapshot;
         snapshot.valid = true;
         snapshot.tickIndex = tickCounter;
 
-        const auto& nodeStates = runtime.getNodeStates();
-        snapshot.nodeStatuses.reserve(nodeStates.size());
-        for (const auto& [nodeId, state] : nodeStates)
-            snapshot.nodeStatuses[nodeId] = state.lastStatus;
+        // Per-node statuses / child indices / elapsed / last results / active path + sorted blackboard.
+        const BTGraph& graph = runtime.getTreeData().graph;
+        behaviortree::captureSnapshotCore(graph, runtime.getNodeStates(), runtime.getBlackboard(),
+                                          graph.rootNodeId, snapshot);
 
-        const auto& blackboardValues = runtime.getBlackboard().getAll();
-        snapshot.blackboard.reserve(blackboardValues.size());
-        for (const auto& [key, value] : blackboardValues)
-            snapshot.blackboard.emplace_back(key, value);
-        std::sort(snapshot.blackboard.begin(), snapshot.blackboard.end(),
-                  [](const auto& a, const auto& b) { return a.first < b.first; });
+        // Bounded history + aborts + which dynamic subtree is running are recorded by the runtime itself
+        // (only while debugRecording is enabled, i.e. for this target).
+        snapshot.abortRecords = runtime.getAbortRecords();
+        snapshot.executionEvents = runtime.getExecutionEvents();
+        snapshot.activeDynamicSubtreePath = runtime.getActiveDynamicSubtreePath();
+        snapshot.paused = debugPaused.load(std::memory_order_relaxed);
 
         std::lock_guard<std::mutex> lock(snapshotMutex);
         debugSnapshot = std::move(snapshot);
+    }
+
+    void BehaviorTreeAdapter::tickDebugTarget(RuntimeInstance& instance, float deltaTime)
+    {
+        // Copy the breakpoint set under the lock (the editor may replace it on the main thread).
+        std::unordered_set<uint32_t> bps;
+        {
+            std::lock_guard<std::mutex> lock(breakpointMutex);
+            bps = breakpoints;
+        }
+
+        // Which breakpointed nodes were already Running BEFORE this tick (for rising-edge detection).
+        std::unordered_set<uint32_t> runningBefore;
+        if (!bps.empty())
+        {
+            for (const auto& [nodeId, state] : instance.runtime->getNodeStates())
+            {
+                if (state.lastStatus == BTNodeStatus::Running && bps.count(nodeId))
+                    runningBefore.insert(nodeId);
+            }
+        }
+
+        instance.lastTickStatus = instance.runtime->tick(deltaTime, this);
+
+        // Rising edge: a breakpointed node became Running that wasn't before -> freeze at end of tick.
+        if (!bps.empty())
+        {
+            for (const auto& [nodeId, state] : instance.runtime->getNodeStates())
+            {
+                if (state.lastStatus == BTNodeStatus::Running && bps.count(nodeId) &&
+                    runningBefore.find(nodeId) == runningBefore.end())
+                {
+                    debugPaused.store(true, std::memory_order_relaxed);
+                    break;
+                }
+            }
+        }
     }
 
     void BehaviorTreeAdapter::updateAll(float deltaTime)
@@ -381,6 +426,7 @@ namespace core
             entityIds.push_back(entityId);
 
         uint64_t debugId = debugTargetEntityId.load(std::memory_order_relaxed);
+        const bool paused = debugPaused.load(std::memory_order_relaxed);
 
         for (uint64_t entityId : entityIds)
         {
@@ -390,19 +436,74 @@ namespace core
             auto& instance = it->second;
             if (!instance.enabled || !instance.runtime) continue;
 
-            instance.lastTickStatus = instance.runtime->tick(deltaTime, this);
+            const bool isTarget = (entityId == debugId);
+            instance.runtime->setDebugRecording(isTarget); // only the target records history (worker-side)
 
-            if (entityId == debugId)
-                captureDebugSnapshot(*instance.runtime);
+            if (!isTarget)
+            {
+                instance.lastTickStatus = instance.runtime->tick(deltaTime, this);
+                continue;
+            }
+
+            if (paused)
+            {
+                // Frozen: advance only on an explicit step. Refresh the snapshot either way so the editor
+                // sees live blackboard edits and the paused flag.
+                if (stepRequested.exchange(false, std::memory_order_relaxed))
+                    tickDebugTarget(instance, deltaTime);
+            }
+            else
+            {
+                tickDebugTarget(instance, deltaTime); // may trip a breakpoint and set debugPaused
+            }
+            captureDebugSnapshot(*instance.runtime);
         }
+    }
+
+    void BehaviorTreeAdapter::setDynamicSubtree(services::EntityHandle entity, const std::string& tag,
+                                                const std::string& treePath)
+    {
+        auto it = runtimes.find(entity.id);
+        if (it == runtimes.end() || !it->second.runtime) return;
+
+        if (treePath.empty())
+            it->second.runtime->clearDynamicInjection(tag);
+        else
+            it->second.runtime->setDynamicInjection(tag, treePath);
     }
 
     void BehaviorTreeAdapter::setDebugTarget(services::EntityHandle entity)
     {
         debugTargetEntityId.store(entity.isValid() ? entity.id : 0);
 
+        // Switching (or clearing) the target starts a fresh debug session.
+        debugPaused.store(false, std::memory_order_relaxed);
+        stepRequested.store(false, std::memory_order_relaxed);
+        {
+            std::lock_guard<std::mutex> lock(breakpointMutex);
+            breakpoints.clear();
+        }
+
         std::lock_guard<std::mutex> lock(snapshotMutex);
         debugSnapshot = {};
+    }
+
+    void BehaviorTreeAdapter::setDebugPaused(bool paused)
+    {
+        debugPaused.store(paused, std::memory_order_relaxed);
+    }
+
+    void BehaviorTreeAdapter::stepDebug()
+    {
+        stepRequested.store(true, std::memory_order_relaxed);
+    }
+
+    void BehaviorTreeAdapter::setBreakpoints(services::EntityHandle entity, const std::vector<uint32_t>& nodeIds)
+    {
+        (void)entity; // breakpoints only apply to the current debug target
+        std::lock_guard<std::mutex> lock(breakpointMutex);
+        breakpoints.clear();
+        breakpoints.insert(nodeIds.begin(), nodeIds.end());
     }
 
     BTRuntimeSnapshot BehaviorTreeAdapter::getRuntimeSnapshot(services::EntityHandle entity) const
@@ -416,11 +517,15 @@ namespace core
 
     void BehaviorTreeAdapter::stopAll()
     {
-        for (auto& [_, instance] : runtimes)
+        for (auto& [entityId, instance] : runtimes)
         {
             if (instance.runtime)
             {
-                instance.runtime->endAllServices(this);
+                // Abort in-flight work (cancels nav/EQS/scripts + flushes nested services), destroy the
+                // entity's scripts, then reset the tree for a clean next play session.
+                instance.runtime->abortAll(this);
+                cleanupScriptInstances(entityId);
+                cancelPendingEQSQueriesForEntity(entityId);
                 instance.runtime->reset();
             }
         }
@@ -564,8 +669,16 @@ namespace core
         std::string result = scriptingProvider->callMethodWithReturn(
             it->second, "tick", {std::any(deltaTime)});
 
+        // VK-1457: fire the optional onEnd(success) completion hook when the task returns a terminal
+        // status. onAbort covers the preempted path; onEnd covers natural success/failure completion.
+        const bool running = (result == "running");
+        if (!running && scriptingProvider->hasMethod(it->second, "onEnd"))
+        {
+            scriptingProvider->callMethodWithReturn(it->second, "onEnd", {std::any(result == "success")});
+        }
+
         if (result == "success") return BTNodeStatus::Success;
-        if (result == "running") return BTNodeStatus::Running;
+        if (running) return BTNodeStatus::Running;
         return BTNodeStatus::Failure;
     }
 
@@ -828,7 +941,7 @@ namespace core
             if (queryName.empty())
                 return;
 
-            const std::string key = eqsServiceKey(entity.id, node.id);
+            const std::string key = eqsServiceKey(entity.id, node);
             auto it = pendingEQSQueries.find(key);
             if (it != pendingEQSQueries.end())
             {
@@ -882,7 +995,7 @@ namespace core
         if (serviceType != "EQSRefresh")
             return;
 
-        const std::string key = eqsServiceKey(entity.id, node.id);
+        const std::string key = eqsServiceKey(entity.id, node);
         auto it = pendingEQSQueries.find(key);
         if (it != pendingEQSQueries.end())
         {
