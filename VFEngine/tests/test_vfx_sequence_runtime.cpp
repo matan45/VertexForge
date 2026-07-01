@@ -301,6 +301,11 @@ TEST_SUITE("VFXSequenceRuntimeFoundation")
                         "assets/vfx/cache_old_late.vfVFX") != mock.createPaths.end());
 
         const std::string missingPath = (runtimeTestRoot() / "MissingThenFixed.vfVFXSequence").string();
+        // runtimeTestRoot() persists across runs and this test writes missingPath below
+        // (line ~305). Delete it up front so the negative-cache precondition ("file does
+        // not exist yet") holds on every run, not just the first.
+        std::error_code missingEc;
+        fs::remove(missingPath, missingEc);
         CHECK(svc.createCombo(missingPath, glm::mat4(1.0f), 0, false) == 0);
         REQUIRE(vfx::VFXSequenceAsset::save(singleStepSequence(refA), missingPath));
         saved.filePath = missingPath;
