@@ -10,10 +10,13 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 
+#include <data/VFXOverrideApplier.hpp>
+#include <impl/vfx/VFXPreviewOverrideBridge.hpp>
 #include <vfx/VFXSequenceAsset.hpp>
 #include <vfx/VFXSequenceValidation.hpp>
 #include <vfx/VFXComboTimeline.hpp>
 #include <vfx/VFXAsset.hpp>
+#include <vfx/VFXParameterRegistry.hpp>
 #include <asset/AssetRef.hpp>
 #include <resource/MeshStreamHandle.hpp>
 
@@ -25,6 +28,7 @@
 #include <unordered_set>
 #include <vector>
 #include <cmath>
+#include <variant>
 
 namespace fs = std::filesystem;
 
@@ -114,6 +118,99 @@ namespace windows
             }
         }
     };
+
+    namespace
+    {
+        vfx::VFXPropertyType inferEditorValueType(const vfx::VFXPropertyValue& value)
+        {
+            if (std::holds_alternative<float>(value)) return vfx::VFXPropertyType::Float;
+            if (std::holds_alternative<glm::vec2>(value)) return vfx::VFXPropertyType::Vec2;
+            if (std::holds_alternative<glm::vec3>(value)) return vfx::VFXPropertyType::Vec3;
+            if (std::holds_alternative<glm::vec4>(value)) return vfx::VFXPropertyType::Vec4;
+            if (std::holds_alternative<int32_t>(value)) return vfx::VFXPropertyType::Int;
+            if (std::holds_alternative<bool>(value)) return vfx::VFXPropertyType::Bool;
+            if (std::holds_alternative<std::string>(value)) return vfx::VFXPropertyType::String;
+            if (std::holds_alternative<vfx::VFXCurve>(value)) return vfx::VFXPropertyType::Curve;
+            if (std::holds_alternative<vfx::VFXGradient>(value)) return vfx::VFXPropertyType::Gradient;
+            return vfx::VFXPropertyType::Float;
+        }
+
+        bool drawOverrideValueWidget(vfx::VFXParamOverride& overrideValue)
+        {
+            const vfx::VFXExposedParameter* parameter = vfx::findExposedParameter(overrideValue.name);
+            const vfx::VFXPropertyType type = parameter ? parameter->type : inferEditorValueType(overrideValue.value);
+
+            if (parameter && !vfx::valueMatchesType(overrideValue.value, parameter->type))
+            {
+                ImGui::TextDisabled("%s stored", vfx::propertyTypeToString(inferEditorValueType(overrideValue.value)));
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Reset"))
+                {
+                    overrideValue.value = vfx::defaultValueFor(parameter->type);
+                    return true;
+                }
+                return false;
+            }
+
+            switch (type)
+            {
+            case vfx::VFXPropertyType::Float:
+            {
+                float* value = std::get_if<float>(&overrideValue.value);
+                return value && ImGui::DragFloat("##oval", value, 0.01f);
+            }
+            case vfx::VFXPropertyType::Int:
+            {
+                auto* stored = std::get_if<int32_t>(&overrideValue.value);
+                if (!stored) return false;
+                int value = static_cast<int>(*stored);
+                if (ImGui::InputInt("##oval", &value))
+                {
+                    *stored = static_cast<int32_t>(value);
+                    return true;
+                }
+                return false;
+            }
+            case vfx::VFXPropertyType::Bool:
+            {
+                bool* value = std::get_if<bool>(&overrideValue.value);
+                return value && ImGui::Checkbox("##oval", value);
+            }
+            case vfx::VFXPropertyType::Vec3:
+            {
+                glm::vec3* value = std::get_if<glm::vec3>(&overrideValue.value);
+                return value && ImGui::DragFloat3("##oval", &value->x, 0.01f);
+            }
+            case vfx::VFXPropertyType::Vec4:
+            {
+                glm::vec4* value = std::get_if<glm::vec4>(&overrideValue.value);
+                return value && ImGui::DragFloat4("##oval", &value->x, 0.01f);
+            }
+            case vfx::VFXPropertyType::Color:
+            {
+                glm::vec4* value = std::get_if<glm::vec4>(&overrideValue.value);
+                return value && ImGui::ColorEdit4("##oval", &value->x);
+            }
+            case vfx::VFXPropertyType::String:
+            {
+                auto* stored = std::get_if<std::string>(&overrideValue.value);
+                if (!stored) return false;
+                char buf[256];
+                std::strncpy(buf, stored->c_str(), sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
+                if (ImGui::InputText("##oval", buf, IM_ARRAYSIZE(buf)))
+                {
+                    *stored = buf;
+                    return true;
+                }
+                return false;
+            }
+            default:
+                ImGui::TextDisabled("%s", vfx::propertyTypeToString(type));
+                return false;
+            }
+        }
+    }
 
     VFXSequenceEditorWindow::VFXSequenceEditorWindow(const std::string& seqPath)
         : seqPath(seqPath)
@@ -411,6 +508,151 @@ namespace windows
         }
     }
 
+    void VFXSequenceEditorWindow::drawOverrideList(std::vector<vfx::VFXParamOverride>& overrides, const char* label)
+    {
+        ImGui::TextUnformatted(label);
+        ImGui::PushID(label);
+
+        for (size_t i = 0; i < overrides.size(); ++i)
+        {
+            ImGui::PushID(static_cast<int>(i));
+            auto& overrideValue = overrides[i];
+
+            char nameBuf[128];
+            std::strncpy(nameBuf, overrideValue.name.c_str(), sizeof(nameBuf) - 1);
+            nameBuf[sizeof(nameBuf) - 1] = '\0';
+            ImGui::SetNextItemWidth(150.0f);
+            if (ImGui::InputText("##oname", nameBuf, IM_ARRAYSIZE(nameBuf)))
+            {
+                overrideValue.name = nameBuf;
+                isDirty = true;
+                previewDirty = true;
+            }
+
+            ImGui::SameLine();
+            const vfx::VFXExposedParameter* parameter = vfx::findExposedParameter(overrideValue.name);
+            std::string preview = parameter
+                ? std::string(parameter->label.empty() ? parameter->name : parameter->label)
+                : std::string("(custom)");
+            ImGui::SetNextItemWidth(150.0f);
+            if (ImGui::BeginCombo("##opick", preview.c_str()))
+            {
+                for (const auto& candidate : vfx::kExposedParameters)
+                {
+                    const bool selected = overrideValue.name == candidate.name;
+                    const std::string itemLabel = std::string(candidate.label.empty() ? candidate.name : candidate.label);
+                    if (ImGui::Selectable(itemLabel.c_str(), selected))
+                    {
+                        overrideValue.name = std::string(candidate.name);
+                        if (!vfx::valueMatchesType(overrideValue.value, candidate.type))
+                            overrideValue.value = vfx::defaultValueFor(candidate.type);
+                        isDirty = true;
+                        previewDirty = true;
+                    }
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                if (!parameter && !overrideValue.name.empty())
+                {
+                    ImGui::Separator();
+                    ImGui::TextDisabled("custom: %s", overrideValue.name.c_str());
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(190.0f);
+            if (drawOverrideValueWidget(overrideValue))
+            {
+                isDirty = true;
+                previewDirty = true;
+            }
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+            {
+                overrides.erase(overrides.begin() + static_cast<long>(i));
+                isDirty = true;
+                previewDirty = true;
+                ImGui::PopID();
+                break;
+            }
+            ImGui::PopID();
+        }
+
+        if (ImGui::SmallButton("+ Override"))
+        {
+            const auto& first = vfx::kExposedParameters.front();
+            overrides.push_back(vfx::VFXParamOverride{std::string(first.name), vfx::defaultValueFor(first.type)});
+            isDirty = true;
+            previewDirty = true;
+        }
+
+        ImGui::PopID();
+    }
+
+    void VFXSequenceEditorWindow::drawCuePayload(vfx::VFXCuePayload& payload)
+    {
+        bool hasPosition = payload.position.has_value();
+        if (ImGui::Checkbox("Position", &hasPosition))
+        {
+            if (hasPosition) payload.position = glm::vec3(0.0f);
+            else payload.position.reset();
+            isDirty = true;
+            previewDirty = true;
+        }
+        if (payload.position)
+        {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(210.0f);
+            if (ImGui::DragFloat3("##payloadPosition", &payload.position->x, 0.01f))
+            {
+                isDirty = true;
+                previewDirty = true;
+            }
+        }
+
+        bool hasColor = payload.color.has_value();
+        if (ImGui::Checkbox("Color", &hasColor))
+        {
+            if (hasColor) payload.color = glm::vec4(1.0f);
+            else payload.color.reset();
+            isDirty = true;
+            previewDirty = true;
+        }
+        if (payload.color)
+        {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(210.0f);
+            if (ImGui::ColorEdit4("##payloadColor", &payload.color->x))
+            {
+                isDirty = true;
+                previewDirty = true;
+            }
+        }
+
+        bool hasScalar = payload.scalar.has_value();
+        if (ImGui::Checkbox("Scalar", &hasScalar))
+        {
+            if (hasScalar) payload.scalar = 0.0f;
+            else payload.scalar.reset();
+            isDirty = true;
+            previewDirty = true;
+        }
+        if (payload.scalar)
+        {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100.0f);
+            if (ImGui::DragFloat("##payloadScalar", &(*payload.scalar), 0.01f))
+            {
+                isDirty = true;
+                previewDirty = true;
+            }
+        }
+
+        drawOverrideList(payload.custom, "Payload Overrides");
+    }
+
     void VFXSequenceEditorWindow::drawStepList()
     {
         if (data->steps.empty())
@@ -571,79 +813,7 @@ namespace windows
 
         ImGui::Separator();
 
-        // --- Scalar overrides ---
-        ImGui::TextUnformatted("Scalar Overrides");
-        for (size_t i = 0; i < step.scalarOverrides.size(); ++i)
-        {
-            ImGui::PushID(static_cast<int>(i) + 1000);
-            auto& [name, value] = step.scalarOverrides[i];
-
-            char nameBuf[128];
-            std::strncpy(nameBuf, name.c_str(), sizeof(nameBuf) - 1);
-            nameBuf[sizeof(nameBuf) - 1] = '\0';
-            ImGui::SetNextItemWidth(140.0f);
-            if (ImGui::InputText("##sname", nameBuf, IM_ARRAYSIZE(nameBuf)))
-            {
-                name = nameBuf;
-                isDirty = true;
-            }
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(100.0f);
-            if (ImGui::DragFloat("##sval", &value, 0.01f))
-                isDirty = true;
-            ImGui::SameLine();
-            if (ImGui::SmallButton("X"))
-            {
-                step.scalarOverrides.erase(step.scalarOverrides.begin() + static_cast<long>(i));
-                isDirty = true;
-                ImGui::PopID();
-                break;
-            }
-            ImGui::PopID();
-        }
-        if (ImGui::SmallButton("+ Scalar"))
-        {
-            step.scalarOverrides.emplace_back("param", 0.0f);
-            isDirty = true;
-        }
-
-        ImGui::Separator();
-
-        // --- Vector overrides ---
-        ImGui::TextUnformatted("Vector Overrides");
-        for (size_t i = 0; i < step.vectorOverrides.size(); ++i)
-        {
-            ImGui::PushID(static_cast<int>(i) + 2000);
-            auto& [name, value] = step.vectorOverrides[i];
-
-            char nameBuf[128];
-            std::strncpy(nameBuf, name.c_str(), sizeof(nameBuf) - 1);
-            nameBuf[sizeof(nameBuf) - 1] = '\0';
-            ImGui::SetNextItemWidth(140.0f);
-            if (ImGui::InputText("##vname", nameBuf, IM_ARRAYSIZE(nameBuf)))
-            {
-                name = nameBuf;
-                isDirty = true;
-            }
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(200.0f);
-            if (ImGui::DragFloat4("##vval", &value.x, 0.01f))
-                isDirty = true;
-            ImGui::SameLine();
-            if (ImGui::SmallButton("X"))
-            {
-                step.vectorOverrides.erase(step.vectorOverrides.begin() + static_cast<long>(i));
-                isDirty = true;
-                ImGui::PopID();
-                break;
-            }
-            ImGui::PopID();
-        }
-        if (ImGui::SmallButton("+ Vector"))
-        {
-            step.vectorOverrides.emplace_back("param", glm::vec4(0.0f));
-            isDirty = true;
-        }
+        drawOverrideList(step.overrides, "Overrides");
     }
 
     void VFXSequenceEditorWindow::drawTimeline()
@@ -802,6 +972,8 @@ namespace windows
             if (ImGui::SmallButton("X"))
                 toRemove = static_cast<int>(m);
 
+            drawCuePayload(marker.payload);
+
             ImGui::PopID();
         }
 
@@ -853,20 +1025,7 @@ namespace windows
             services::VFXSequencePreviewStep ps;
             ps.params = editor::vfxeditor::buildVFXPreviewParams(*vfxData);
 
-            // Step overrides (parity with the runtime spawnStep path).
-            for (const auto& [name, value] : step.scalarOverrides)
-            {
-                if (name == "spawnRate") ps.params.spawnRate = value;
-                else if (name == "lifetime") ps.params.lifetime = value;
-                else if (name == "startSize") ps.params.startSize = value;
-                else if (name == "startSpeed") ps.params.startSpeed = value;
-                else if (name == "stretchMultiplier") ps.params.stretchMultiplier = value;
-            }
-            for (const auto& [name, value] : step.vectorOverrides)
-            {
-                if (name == "startColor") ps.params.startColor = value;
-                else if (name == "emitDirection") ps.params.emitDirection = glm::vec3(value);
-            }
+            services::applyToPreviewParams(ps.params, services::toEmitterOverrides(step.overrides));
 
             ps.localTransform = vfx::VFXComboTimeline::composeStepLocal(step);
             ps.seed = vfx::VFXComboTimeline::deriveSeed(comboSeed, static_cast<int>(desc.steps.size()));

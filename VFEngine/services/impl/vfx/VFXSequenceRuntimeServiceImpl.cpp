@@ -3,10 +3,11 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/vfx/VFXRuntimeEvents.hpp"
 #include "../../events/vfx/VFXSequenceRuntimeEvents.hpp"
+#include "../../events/vfx/VFXEventNotifications.hpp"
 #include "../../events/physics/SocketEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
+#include "../../data/VFXOverrideApplier.hpp"
 #include "asset/AssetDatabase.hpp"
-#include "vfx/VFXOverrideNames.hpp"
 #include "vfx/VFXSequenceAsset.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -92,7 +93,10 @@ namespace services
             [this](const events::vfxsequence::DetachVFXComboInstanceCommand& cmd) { detachCombo(cmd.comboId); });
 
         dispatcher.registerCommandHandler<events::vfxsequence::TriggerVFXComboCueCommand>(
-            [this](const events::vfxsequence::TriggerVFXComboCueCommand& cmd) { triggerCue(cmd.comboId, cmd.cueName); });
+            [this](const events::vfxsequence::TriggerVFXComboCueCommand& cmd)
+            {
+                triggerCue(cmd.comboId, cmd.cueName, cmd.payload);
+            });
 
         dispatcher.registerCommandHandler<events::vfxsequence::UpdateVFXSequenceRuntimeCommand>(
             [this](const events::vfxsequence::UpdateVFXSequenceRuntimeCommand& cmd) { update(cmd.deltaTime); });
@@ -158,35 +162,7 @@ namespace services
 
     VFXEmitterOverrides VFXSequenceRuntimeServiceImpl::toOverrides(const vfx::VFXSequenceStep& step)
     {
-        VFXEmitterOverrides o;
-        namespace names = vfx::overridenames;
-        for (const auto& [name, value] : step.scalarOverrides)
-        {
-            const std::string_view key{name.data(), name.size()};
-            if (key == names::spawnRate) o.spawnRate = value;
-            else if (key == names::lifetime) o.lifetime = value;
-            else if (key == names::startSize) o.startSize = value;
-            else if (key == names::startSpeed) o.startSpeed = value;
-            else if (key == names::stretchMultiplier) o.stretchMultiplier = value;
-            else if (key == names::windStrength) o.windStrength = value;
-            else if (key == names::gravityStrength) o.gravityStrength = value;
-            else if (key == names::softParticleDistance) o.softParticleDistance = value;
-            else if (key == names::lightingInfluence) o.lightingInfluence = value;
-            else if (key == names::collisionLifetimeLoss) o.collisionLifetimeLoss = value;
-            else if (key == names::coneSpread) o.coneSpread = value;
-            else if (key == names::renderMode) o.renderMode = static_cast<int>(value);
-            else if (key == names::collisionEnabled) o.collisionEnabled = (value != 0.0f);
-        }
-        for (const auto& [name, v] : step.vectorOverrides)
-        {
-            const std::string_view key{name.data(), name.size()};
-            if (key == names::emitDirection) o.emitDirection = glm::vec3(v);
-            else if (key == names::windDirection) o.windDirection = glm::vec3(v);
-            else if (key == names::gravityDirection) o.gravityDirection = glm::vec3(v);
-            else if (key == names::shapeDimensions) o.shapeDimensions = glm::vec3(v);
-            else if (key == names::startColor) o.startColor = v;
-        }
-        return o;
+        return services::toEmitterOverrides(step.overrides);
     }
 
     glm::mat4 VFXSequenceRuntimeServiceImpl::resolveComboParent(ComboInstance& combo)
@@ -234,12 +210,30 @@ namespace services
         return dispatcher.query(xformQuery);
     }
 
-    void VFXSequenceRuntimeServiceImpl::spawnStep(ComboInstance& combo, int stepIndex, const glm::mat4& stepParent)
+    glm::mat4 VFXSequenceRuntimeServiceImpl::composeStepWorldTransform(const ActiveStep& step,
+                                                                       const glm::mat4& stepParent) const
+    {
+        if (!step.def)
+            return stepParent;
+
+        glm::mat4 local = vfx::VFXComboTimeline::composeStepLocal(*step.def);
+        if (step.payload && step.payload->position)
+            local = glm::translate(glm::mat4(1.0f), *step.payload->position) * local;
+        return stepParent * local;
+    }
+
+    void VFXSequenceRuntimeServiceImpl::spawnStep(ComboInstance& combo, int stepIndex, const glm::mat4& stepParent,
+                                                  const vfx::VFXCuePayload* payload)
     {
         ActiveStep& step = combo.steps[static_cast<size_t>(stepIndex)];
         step.spawned = true; // mark regardless of outcome so we never retry a failed spawn
         if (!step.def)
             return;
+
+        if (payload)
+            step.payload = *payload;
+        else
+            step.payload.reset();
 
         const std::string path = step.def->vfxRef.resolve();
         if (path.empty())
@@ -252,7 +246,7 @@ namespace services
         auto& dispatcher = ::events::EventDispatcher::instance();
         events::vfxruntime::CreateVFXInstanceCommand createCmd;
         createCmd.params.vfxAssetPath = path;
-        createCmd.params.worldTransform = stepParent * vfx::VFXComboTimeline::composeStepLocal(*step.def);
+        createCmd.params.worldTransform = composeStepWorldTransform(step, stepParent);
         createCmd.params.loop = step.def->loop;
         createCmd.params.autoDestroy = !step.def->loop; // non-looping children self-destruct when done
         createCmd.params.priority = VFXEmitterPriority::Normal;
@@ -266,7 +260,14 @@ namespace services
             return;
         }
 
-        const VFXEmitterOverrides overrides = toOverrides(*step.def);
+        VFXEmitterOverrides overrides = toOverrides(*step.def);
+        if (payload)
+        {
+            if (payload->color)
+                overrides.startColor = *payload->color;
+            for (const auto& overrideValue : payload->custom)
+                services::applyOverride(overrides, overrideValue);
+        }
         events::vfxruntime::ApplyVFXInstanceOverridesCommand ovCmd;
         ovCmd.instanceId = childId;
         ovCmd.overrides = overrides;
@@ -341,6 +342,7 @@ namespace services
                 destroyCmd.instanceId = step.childId;
                 dispatcher.execute(destroyCmd);
                 step.childId = 0;
+                step.payload.reset();
             }
         }
     }
@@ -391,6 +393,7 @@ namespace services
                 destroyCmd.instanceId = step.childId;
                 dispatcher.execute(destroyCmd);
                 step.childId = 0;
+                step.payload.reset();
             }
             else
             {
@@ -418,6 +421,7 @@ namespace services
             step.spawned = false;
             step.stopped = false;
             step.childId = 0;
+            step.payload.reset();
         }
     }
 
@@ -451,7 +455,8 @@ namespace services
         it->second.attachSocket.clear();
     }
 
-    void VFXSequenceRuntimeServiceImpl::triggerCue(VFXComboInstanceId id, const std::string& cueName)
+    void VFXSequenceRuntimeServiceImpl::triggerCue(VFXComboInstanceId id, const std::string& cueName,
+                                                   const vfx::VFXCuePayload& payload)
     {
         auto it = combos.find(id);
         if (it == combos.end() || cueName.empty())
@@ -460,7 +465,8 @@ namespace services
         const glm::mat4 comboParent = resolveComboParent(combo);
         std::vector<vfx::ComboEvent> events;
         combo.timeline.fireCue(cueName, events);
-        applyComboEvents(combo, events, comboParent);
+        publishCueFired(combo, cueName, payload);
+        applyComboEvents(combo, events, comboParent, &payload);
     }
 
     bool VFXSequenceRuntimeServiceImpl::isComboPlaying(VFXComboInstanceId id) const
@@ -471,7 +477,8 @@ namespace services
 
     void VFXSequenceRuntimeServiceImpl::applyComboEvents(ComboInstance& combo,
                                                          const std::vector<vfx::ComboEvent>& events,
-                                                         const glm::mat4& comboParent)
+                                                         const glm::mat4& comboParent,
+                                                         const vfx::VFXCuePayload* manualPayload)
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
         for (const auto& ev : events)
@@ -481,7 +488,13 @@ namespace services
             ActiveStep& step = combo.steps[static_cast<size_t>(ev.stepIndex)];
             if (ev.kind == vfx::ComboEventKind::SpawnStep)
             {
-                spawnStep(combo, ev.stepIndex, resolveStepParent(combo, step, comboParent));
+                const vfx::VFXCuePayload* payload = manualPayload;
+                if (!payload && ev.sourceMarker >= 0 && combo.data &&
+                    ev.sourceMarker < static_cast<int>(combo.data->eventMarkers.size()))
+                {
+                    payload = &combo.data->eventMarkers[static_cast<size_t>(ev.sourceMarker)].payload;
+                }
+                spawnStep(combo, ev.stepIndex, resolveStepParent(combo, step, comboParent), payload);
             }
             else // StopStep — the timeline already gated StopAfterDuration + duration + threshold.
             {
@@ -492,6 +505,33 @@ namespace services
                     dispatcher.execute(stopCmd);
                 }
                 step.stopped = true;
+            }
+        }
+    }
+
+    void VFXSequenceRuntimeServiceImpl::publishCueFired(ComboInstance& combo, const std::string& cueName,
+                                                        const vfx::VFXCuePayload& payload)
+    {
+        events::vfxsequence::VFXComboCueFiredNotification notification;
+        notification.comboId = combo.id;
+        notification.cueName = cueName;
+        notification.payload = payload;
+        ::events::EventDispatcher::instance().publish(notification);
+    }
+
+    void VFXSequenceRuntimeServiceImpl::publishNewlyFiredMarkers(ComboInstance& combo, const std::vector<bool>& before)
+    {
+        if (!combo.data)
+            return;
+
+        const std::vector<bool>& after = combo.timeline.firedMarkers();
+        const size_t count = std::min(before.size(), after.size());
+        for (size_t i = 0; i < count && i < combo.data->eventMarkers.size(); ++i)
+        {
+            if (!before[i] && after[i])
+            {
+                const vfx::VFXSequenceEventMarker& marker = combo.data->eventMarkers[i];
+                publishCueFired(combo, marker.cueName, marker.payload);
             }
         }
     }
@@ -507,6 +547,7 @@ namespace services
             step.spawned = false;
             step.stopped = false;
             step.childId = 0;
+            step.payload.reset();
         }
 
         if (targetSeconds <= 0.0f)
@@ -528,6 +569,16 @@ namespace services
             combo.timeline.advance(targetSeconds, scratch);
         }
 
+        std::vector<int> sourceMarkerByStep(combo.steps.size(), -1);
+        for (const auto& ev : scratch)
+        {
+            if (ev.kind == vfx::ComboEventKind::SpawnStep &&
+                ev.stepIndex >= 0 && ev.stepIndex < static_cast<int>(sourceMarkerByStep.size()))
+            {
+                sourceMarkerByStep[static_cast<size_t>(ev.stepIndex)] = ev.sourceMarker;
+            }
+        }
+
         // (Re)spawn only the steps that should be live at the target time, seeded. Steps
         // whose StopAfterDuration window already ended are left unspawned (no zombie
         // children); play-to-completion steps that started before T restart here — the
@@ -536,7 +587,16 @@ namespace services
         for (int i = 0; i < combo.timeline.stepCount(); ++i)
         {
             if (combo.timeline.isSpawned(i) && !combo.timeline.isStopped(i))
-                spawnStep(combo, i, resolveStepParent(combo, combo.steps[static_cast<size_t>(i)], comboParent));
+            {
+                const vfx::VFXCuePayload* payload = nullptr;
+                const int sourceMarker = sourceMarkerByStep[static_cast<size_t>(i)];
+                if (sourceMarker >= 0 && combo.data &&
+                    sourceMarker < static_cast<int>(combo.data->eventMarkers.size()))
+                {
+                    payload = &combo.data->eventMarkers[static_cast<size_t>(sourceMarker)].payload;
+                }
+                spawnStep(combo, i, resolveStepParent(combo, combo.steps[static_cast<size_t>(i)], comboParent), payload);
+            }
         }
     }
 
@@ -565,14 +625,18 @@ namespace services
                     int guard = 0;
                     while (combo.accumulator >= combo.fixedStep && guard < 4096)
                     {
+                        const std::vector<bool> firedBefore = combo.timeline.firedMarkers();
                         combo.timeline.advance(combo.fixedStep, events);
+                        publishNewlyFiredMarkers(combo, firedBefore);
                         combo.accumulator -= combo.fixedStep;
                         ++guard;
                     }
                 }
                 else
                 {
+                    const std::vector<bool> firedBefore = combo.timeline.firedMarkers();
                     combo.timeline.advance(scaled, events);
+                    publishNewlyFiredMarkers(combo, firedBefore);
                 }
 
                 applyComboEvents(combo, events, comboParent);
@@ -585,8 +649,7 @@ namespace services
                     continue;
                 events::vfxruntime::SetVFXInstanceTransformCommand xformCmd;
                 xformCmd.instanceId = step.childId;
-                xformCmd.worldTransform =
-                    resolveStepParent(combo, step, comboParent) * vfx::VFXComboTimeline::composeStepLocal(*step.def);
+                xformCmd.worldTransform = composeStepWorldTransform(step, resolveStepParent(combo, step, comboParent));
                 dispatcher.execute(xformCmd);
             }
 
@@ -598,7 +661,10 @@ namespace services
                 events::vfxruntime::IsVFXInstancePlayingQuery playingQuery;
                 playingQuery.instanceId = step.childId;
                 if (!dispatcher.query(playingQuery))
+                {
                     step.childId = 0;
+                    step.payload.reset();
+                }
             }
 
             // Combo is finished once it has played, every step has spawned, and no children remain.

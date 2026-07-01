@@ -1,6 +1,6 @@
 #pragma once
 
-#include "VFXOverrideNames.hpp"
+#include "VFXParameterRegistry.hpp"
 #include "VFXSequenceTypes.hpp"
 
 #include <algorithm>
@@ -90,42 +90,64 @@ namespace vfx::validation
             add(report, severity, stepIndex, stepName(stepIndex, step) + std::move(message));
         }
 
-        template <typename T>
-        inline void validateOverrideList(ValidationReport& report,
-                                         const std::vector<std::pair<std::string, T>>& overrides,
-                                         bool scalarList,
-                                         int stepIndex,
-                                         const VFXSequenceStep& step)
+        inline VFXPropertyType valueType(const VFXPropertyValue& value)
+        {
+            if (std::holds_alternative<float>(value)) return VFXPropertyType::Float;
+            if (std::holds_alternative<glm::vec2>(value)) return VFXPropertyType::Vec2;
+            if (std::holds_alternative<glm::vec3>(value)) return VFXPropertyType::Vec3;
+            if (std::holds_alternative<glm::vec4>(value)) return VFXPropertyType::Vec4;
+            if (std::holds_alternative<int32_t>(value)) return VFXPropertyType::Int;
+            if (std::holds_alternative<bool>(value)) return VFXPropertyType::Bool;
+            if (std::holds_alternative<std::string>(value)) return VFXPropertyType::String;
+            if (std::holds_alternative<VFXCurve>(value)) return VFXPropertyType::Curve;
+            if (std::holds_alternative<VFXGradient>(value)) return VFXPropertyType::Gradient;
+            return VFXPropertyType::Float;
+        }
+
+        inline bool runtimeSupportedType(VFXPropertyType type)
+        {
+            return type == VFXPropertyType::Float ||
+                   type == VFXPropertyType::Vec3 ||
+                   type == VFXPropertyType::Color ||
+                   type == VFXPropertyType::Int ||
+                   type == VFXPropertyType::Bool;
+        }
+
+        inline void validateOverrides(ValidationReport& report,
+                                      const std::vector<VFXParamOverride>& overrides,
+                                      int stepIndex,
+                                      const VFXSequenceStep& step)
         {
             std::unordered_set<std::string> seen;
-            for (const auto& [name, value] : overrides)
+            for (const auto& overrideValue : overrides)
             {
-                (void)value;
+                const std::string& name = overrideValue.name;
                 if (!seen.insert(name).second)
                 {
                     addStep(report, Severity::Info, stepIndex, step,
                             "duplicate override '" + name + "'; the last value wins.");
                 }
 
-                const bool knownInThisSlot = scalarList
-                    ? overridenames::isScalarOverride(name)
-                    : overridenames::isVectorOverride(name);
-                const bool knownInOtherSlot = scalarList
-                    ? overridenames::isVectorOverride(name)
-                    : overridenames::isScalarOverride(name);
-
-                if (knownInThisSlot)
-                    continue;
-
-                if (knownInOtherSlot)
-                {
-                    addStep(report, Severity::Warning, stepIndex, step,
-                            "override '" + name + "' is in the wrong override list.");
-                }
-                else
+                const VFXExposedParameter* parameter = findExposedParameter(name);
+                if (!parameter)
                 {
                     addStep(report, Severity::Warning, stepIndex, step,
                             "unknown override '" + name + "' is ignored at runtime.");
+                    continue;
+                }
+
+                if (!runtimeSupportedType(parameter->type))
+                {
+                    addStep(report, Severity::Warning, stepIndex, step,
+                            "override '" + name + "' has type " + propertyTypeToString(parameter->type) +
+                            " which is not applied at runtime.");
+                }
+
+                if (!valueMatchesType(overrideValue.value, parameter->type))
+                {
+                    addStep(report, Severity::Warning, stepIndex, step,
+                            "override '" + name + "' expects " + propertyTypeToString(parameter->type) +
+                            " but stores " + propertyTypeToString(valueType(overrideValue.value)) + ".");
                 }
             }
         }
@@ -213,8 +235,7 @@ namespace vfx::validation
                 }
             }
 
-            detail::validateOverrideList(report, step.scalarOverrides, true, i, step);
-            detail::validateOverrideList(report, step.vectorOverrides, false, i, step);
+            detail::validateOverrides(report, step.overrides, i, step);
         }
 
         for (const auto& [cue, steps] : exactCueSteps)
@@ -256,11 +277,6 @@ namespace vfx::validation
             {
                 detail::add(report, Severity::Warning, -1,
                             "Event marker " + std::to_string(m) + " has an empty cue name.");
-            }
-            else if (exactCueSteps.find(marker.cueName) == exactCueSteps.end())
-            {
-                detail::add(report, Severity::Info, -1,
-                            "Event marker '" + marker.cueName + "' matches no cue-driven step.");
             }
         }
 

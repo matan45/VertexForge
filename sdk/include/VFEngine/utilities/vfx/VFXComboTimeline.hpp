@@ -22,6 +22,7 @@ namespace vfx
     {
         ComboEventKind kind;
         int stepIndex;
+        int sourceMarker = -1;
     };
 
     // VK-1451 — the single source of truth for "which combo steps spawn/stop/fire at
@@ -94,7 +95,7 @@ namespace vfx
                 if (elapsed_ >= marker.time)
                 {
                     firedMarkers_[m] = true;
-                    fireCueInternal(marker.cueName, out);
+                    fireCueInternal(marker.cueName, out, static_cast<int>(m));
                 }
             }
 
@@ -108,7 +109,7 @@ namespace vfx
         {
             if (!data_)
                 return;
-            fireCueInternal(cueName, out);
+            fireCueInternal(cueName, out, -1);
             // A cue step with an already-elapsed StopAfterDuration window stops at once.
             emitDueStops(out);
         }
@@ -131,6 +132,7 @@ namespace vfx
 
         bool isSpawned(int stepIndex) const { return spawned_[static_cast<size_t>(stepIndex)]; }
         bool isStopped(int stepIndex) const { return stopped_[static_cast<size_t>(stepIndex)]; }
+        const std::vector<bool>& firedMarkers() const { return firedMarkers_; }
 
         // Mirrors the Phase-1 completion gate: every step (time- and cue-driven) spawned.
         bool allStepsSpawned() const
@@ -162,7 +164,7 @@ namespace vfx
         }
 
     private:
-        void fireCueInternal(std::string_view cueName, std::vector<ComboEvent>& out)
+        void fireCueInternal(std::string_view cueName, std::vector<ComboEvent>& out, int sourceMarker)
         {
             if (cueName.empty())
                 return;
@@ -172,7 +174,7 @@ namespace vfx
                 if (spawned_[i] || s.cueName.empty() || std::string_view(s.cueName) != cueName)
                     continue;
                 spawned_[i] = true;
-                out.push_back({ComboEventKind::SpawnStep, static_cast<int>(i)});
+                out.push_back({ComboEventKind::SpawnStep, static_cast<int>(i), sourceMarker});
             }
         }
 

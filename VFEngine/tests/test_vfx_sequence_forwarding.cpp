@@ -2,6 +2,7 @@
 
 #include <impl/vfx/VFXSequenceRuntimeServiceImpl.hpp>
 #include <events/EventDispatcher.hpp>
+#include <events/vfx/VFXEventNotifications.hpp>
 #include <events/vfx/VFXRuntimeEvents.hpp>
 #include <data/VFXTypes.hpp>
 #include <vfx/VFXSequenceAsset.hpp>
@@ -59,6 +60,7 @@ namespace
         std::vector<VFXInstanceId> destroys;
         std::vector<VFXInstanceId> setTransforms;
         std::vector<VFXInstanceId> applyOverrides;
+        std::vector<services::VFXEmitterOverrides> overrideRecords;
 
         // Ids the provider currently reports as "playing". spawnStep() pushes here;
         // a test clears an id to simulate provider auto-destroy of a finished child.
@@ -95,7 +97,11 @@ namespace
                 [this](const services::events::vfxruntime::SetVFXInstanceTransformCommand& c) { setTransforms.push_back(c.instanceId); });
 
             d.registerCommandHandler<services::events::vfxruntime::ApplyVFXInstanceOverridesCommand>(
-                [this](const services::events::vfxruntime::ApplyVFXInstanceOverridesCommand& c) { applyOverrides.push_back(c.instanceId); });
+                [this](const services::events::vfxruntime::ApplyVFXInstanceOverridesCommand& c)
+                {
+                    applyOverrides.push_back(c.instanceId);
+                    overrideRecords.push_back(c.overrides);
+                });
 
             d.registerQueryHandler<services::events::vfxruntime::IsVFXInstancePlayingQuery>(
                 [this](const services::events::vfxruntime::IsVFXInstancePlayingQuery& q) -> bool { return live.count(q.instanceId) > 0; });
@@ -285,6 +291,130 @@ TEST_SUITE("VFXSequenceForwarding")
         // Triggering an unknown cue spawns nothing more.
         svc.triggerCue(combo, "nope");
         CHECK(mock.creates.size() == 1);
+    }
+
+    TEST_CASE("manual cue payload publishes notification and applies child overrides")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        vfx::VFXSequenceData data;
+        data.name = "payload";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF021, "assets/vfx/payload.vfVFX");
+        s.cueName = "impact";
+        s.overrides.push_back(vfx::VFXParamOverride{"spawnRate", 5.0f});
+        data.steps.push_back(s);
+
+        std::string path = saveSequence("Combo_CuePayload.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+
+        vfx::VFXCuePayload payload;
+        payload.position = glm::vec3(2.0f, 0.0f, 0.0f);
+        payload.color = glm::vec4(0.2f, 0.4f, 0.6f, 1.0f);
+        payload.custom.push_back(vfx::VFXParamOverride{"spawnRate", 9.0f});
+
+        svc.triggerCue(combo, "impact", payload);
+
+        REQUIRE(notifications.size() == 1);
+        CHECK(notifications[0].comboId == combo);
+        CHECK(notifications[0].cueName == "impact");
+        REQUIRE(notifications[0].payload.position.has_value());
+        CHECK(notifications[0].payload.position->x == doctest::Approx(2.0f));
+
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].worldTransform[3][0] == doctest::Approx(2.0f));
+        REQUIRE(mock.overrideRecords.size() == 1);
+        REQUIRE(mock.overrideRecords[0].startColor.has_value());
+        CHECK(mock.overrideRecords[0].startColor->z == doctest::Approx(0.6f));
+        REQUIRE(mock.overrideRecords[0].spawnRate.has_value());
+        CHECK(*mock.overrideRecords[0].spawnRate == doctest::Approx(9.0f));
+    }
+
+    TEST_CASE("marker payload publishes notification and applies to marker-spawned children")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        vfx::VFXSequenceData data;
+        data.name = "markerPayload";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF022, "assets/vfx/marker_payload.vfVFX");
+        s.cueName = "impact";
+        data.steps.push_back(s);
+
+        vfx::VFXSequenceEventMarker marker{0.1f, "impact"};
+        marker.payload.position = glm::vec3(0.0f, 3.0f, 0.0f);
+        marker.payload.color = glm::vec4(1.0f, 0.0f, 0.25f, 1.0f);
+        data.eventMarkers.push_back(marker);
+
+        std::string path = saveSequence("Combo_MarkerPayload.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+        svc.update(0.2f);
+
+        REQUIRE(notifications.size() == 1);
+        CHECK(notifications[0].cueName == "impact");
+        REQUIRE(notifications[0].payload.color.has_value());
+        CHECK(notifications[0].payload.color->z == doctest::Approx(0.25f));
+
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].worldTransform[3][1] == doctest::Approx(3.0f));
+        REQUIRE(mock.overrideRecords.size() == 1);
+        REQUIRE(mock.overrideRecords[0].startColor.has_value());
+        CHECK(mock.overrideRecords[0].startColor->z == doctest::Approx(0.25f));
+    }
+
+    TEST_CASE("pure-signal marker publishes cue notification without spawning a child")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        vfx::VFXSequenceData data;
+        data.name = "signal";
+        vfx::VFXSequenceStep future;
+        future.vfxRef = makeResolvingRef(0xF023, "assets/vfx/future_signal.vfVFX");
+        future.startTime = 5.0f;
+        data.steps.push_back(future);
+        vfx::VFXSequenceEventMarker marker{0.1f, "signalOnly"};
+        marker.payload.scalar = 8.0f;
+        data.eventMarkers.push_back(marker);
+
+        std::string path = saveSequence("Combo_SignalOnly.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+        svc.update(0.2f);
+
+        CHECK(mock.creates.empty());
+        REQUIRE(notifications.size() == 1);
+        CHECK(notifications[0].cueName == "signalOnly");
+        REQUIRE(notifications[0].payload.scalar.has_value());
+        CHECK(*notifications[0].payload.scalar == doctest::Approx(8.0f));
     }
 
     // -------- stopCombo: Stop to non-loop, Destroy to loop children --------

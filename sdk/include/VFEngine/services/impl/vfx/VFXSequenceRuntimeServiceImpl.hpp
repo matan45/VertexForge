@@ -8,6 +8,7 @@
 #include "vfx/VFXComboTimeline.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -28,6 +29,7 @@ namespace services
             VFXInstanceId childId = 0;
             bool spawned = false;
             bool stopped = false;
+            std::optional<vfx::VFXCuePayload> payload;
         };
 
         struct ComboInstance
@@ -66,15 +68,19 @@ namespace services
 
         std::shared_ptr<const vfx::VFXSequenceData> loadSequence(const std::string& path);
         void invalidateSequence(const std::string& path);
-        void spawnStep(ComboInstance& combo, int stepIndex, const glm::mat4& stepParent);
+        void spawnStep(ComboInstance& combo, int stepIndex, const glm::mat4& stepParent,
+                       const vfx::VFXCuePayload* payload = nullptr);
         void applyComboEvents(ComboInstance& combo, const std::vector<vfx::ComboEvent>& events,
-                              const glm::mat4& comboParent);
+                              const glm::mat4& comboParent, const vfx::VFXCuePayload* manualPayload = nullptr);
         // Rewind + deterministic fixed-step replay of the schedule to `targetSeconds`,
         // then (re)spawn only the steps live at that time. Used by seek and prewarm.
         void replayTo(ComboInstance& combo, float targetSeconds);
         glm::mat4 resolveComboParent(ComboInstance& combo);
         glm::mat4 resolveStepParent(ComboInstance& combo, const ActiveStep& step, const glm::mat4& comboParent);
+        glm::mat4 composeStepWorldTransform(const ActiveStep& step, const glm::mat4& stepParent) const;
         void destroyCombo(ComboInstance& combo);
+        void publishCueFired(ComboInstance& combo, const std::string& cueName, const vfx::VFXCuePayload& payload);
+        void publishNewlyFiredMarkers(ComboInstance& combo, const std::vector<bool>& before);
 
         static VFXEmitterOverrides toOverrides(const vfx::VFXSequenceStep& step);
 
@@ -97,7 +103,8 @@ namespace services
         void setComboTransform(VFXComboInstanceId id, const glm::mat4& worldTransform);
         void attachComboToSocket(VFXComboInstanceId id, EntityHandle entity, const std::string& socketName);
         void detachCombo(VFXComboInstanceId id);
-        void triggerCue(VFXComboInstanceId id, const std::string& cueName);
+        void triggerCue(VFXComboInstanceId id, const std::string& cueName,
+                        const vfx::VFXCuePayload& payload = {});
         bool isComboPlaying(VFXComboInstanceId id) const;
         void update(float deltaTime);
 

@@ -155,18 +155,20 @@ namespace controllers
             if (isSubEmitter)
                 continue;
 
+            bool enabled = false;
             std::string vfxPath;
             const auto& eventConfig = parentInstance->config.events;
 
             switch (event.eventType)
             {
-            case 0: if (eventConfig.onSpawnEnabled) vfxPath = eventConfig.onSpawnVFXPath; break;
-            case 1: if (eventConfig.onDeathEnabled) vfxPath = eventConfig.onDeathVFXPath; break;
-            case 2: if (eventConfig.onCollisionEnabled) vfxPath = eventConfig.onCollisionVFXPath; break;
-            case 3: if (eventConfig.onLifetimeThresholdEnabled) vfxPath = eventConfig.onLifetimeThresholdVFXPath; break;
+            case 0: enabled = eventConfig.onSpawnEnabled; if (enabled) vfxPath = eventConfig.onSpawnVFXPath; break;
+            case 1: enabled = eventConfig.onDeathEnabled; if (enabled) vfxPath = eventConfig.onDeathVFXPath; break;
+            case 2: enabled = eventConfig.onCollisionEnabled; if (enabled) vfxPath = eventConfig.onCollisionVFXPath; break;
+            case 3: enabled = eventConfig.onLifetimeThresholdEnabled; if (enabled) vfxPath = eventConfig.onLifetimeThresholdVFXPath; break;
+            default: break;
             }
 
-            if (vfxPath.empty())
+            if (!enabled)
                 continue;
 
             uint32_t parentSubCount = 0;
@@ -176,30 +178,30 @@ namespace controllers
                     parentSubCount++;
             }
 
-            if (parentSubCount >= MAX_SUB_EMITTERS_PER_PARENT)
-                continue;
-
-            VFXRuntimeParams subParams;
-            subParams.vfxAssetPath = vfxPath;
-            subParams.worldTransform = glm::translate(glm::mat4(1.0f),
-                glm::vec3(event.position.x, event.position.y, event.position.z));
-            subParams.loop = false;
-
-            VFXInstanceId subId = createInstance(subParams);
-            if (subId != 0)
+            if (!vfxPath.empty() && parentSubCount < MAX_SUB_EMITTERS_PER_PARENT)
             {
-                playInstance(subId);
+                VFXRuntimeParams subParams;
+                subParams.vfxAssetPath = vfxPath;
+                subParams.worldTransform = glm::translate(glm::mat4(1.0f),
+                    glm::vec3(event.position.x, event.position.y, event.position.z));
+                subParams.loop = false;
 
-                SubEmitterInstance subEmitter;
-                subEmitter.parentId = parentId;
-                subEmitter.subId = subId;
-                subEmitter.lifetime = 0.0f;
+                VFXInstanceId subId = createInstance(subParams);
+                if (subId != 0)
+                {
+                    playInstance(subId);
 
-                auto subIt = instances.find(subId);
-                if (subIt != instances.end())
-                    subEmitter.maxLifetime = subIt->second.config.lifetime * 2.0f;
+                    SubEmitterInstance subEmitter;
+                    subEmitter.parentId = parentId;
+                    subEmitter.subId = subId;
+                    subEmitter.lifetime = 0.0f;
 
-                activeSubEmitters.push_back(subEmitter);
+                    auto subIt = instances.find(subId);
+                    if (subIt != instances.end())
+                        subEmitter.maxLifetime = subIt->second.config.lifetime * 2.0f;
+
+                    activeSubEmitters.push_back(subEmitter);
+                }
             }
 
             services::events::vfxruntime::VFXParticleEventNotification notification;

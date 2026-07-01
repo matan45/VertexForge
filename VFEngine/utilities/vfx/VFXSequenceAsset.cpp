@@ -111,6 +111,284 @@ namespace vfx
             }
             return fallback;
         }
+
+        glm::vec4 jsonToVec4(const json& j, const glm::vec4& fallback)
+        {
+            if (j.is_array() && j.size() >= 4)
+            {
+                return glm::vec4(j[0].get<float>(), j[1].get<float>(),
+                                 j[2].get<float>(), j[3].get<float>());
+            }
+            return fallback;
+        }
+
+        std::optional<VFXPropertyType> parsePropertyTypeStrict(const std::string& value)
+        {
+            constexpr std::array allTypes{
+                VFXPropertyType::Float,
+                VFXPropertyType::Vec2,
+                VFXPropertyType::Vec3,
+                VFXPropertyType::Vec4,
+                VFXPropertyType::Color,
+                VFXPropertyType::Int,
+                VFXPropertyType::Bool,
+                VFXPropertyType::String,
+                VFXPropertyType::Curve,
+                VFXPropertyType::Gradient
+            };
+
+            for (VFXPropertyType type : allTypes)
+            {
+                if (value == propertyTypeToString(type))
+                    return type;
+            }
+            return std::nullopt;
+        }
+
+        json serializePropertyValue(const VFXPropertyValue& value, VFXPropertyType type)
+        {
+            switch (type)
+            {
+            case VFXPropertyType::Float:
+                return std::holds_alternative<float>(value) ? std::get<float>(value) : 0.0f;
+            case VFXPropertyType::Vec2:
+                if (const auto* v = std::get_if<glm::vec2>(&value))
+                    return json::array({v->x, v->y});
+                return json::array({0.0f, 0.0f});
+            case VFXPropertyType::Vec3:
+                if (const auto* v = std::get_if<glm::vec3>(&value))
+                    return json::array({v->x, v->y, v->z});
+                return json::array({0.0f, 0.0f, 0.0f});
+            case VFXPropertyType::Vec4:
+            case VFXPropertyType::Color:
+                if (const auto* v = std::get_if<glm::vec4>(&value))
+                    return json::array({v->x, v->y, v->z, v->w});
+                return json::array({1.0f, 1.0f, 1.0f, 1.0f});
+            case VFXPropertyType::Int:
+                return std::holds_alternative<int32_t>(value) ? std::get<int32_t>(value) : 0;
+            case VFXPropertyType::Bool:
+                return std::holds_alternative<bool>(value) ? std::get<bool>(value) : false;
+            case VFXPropertyType::String:
+                return std::holds_alternative<std::string>(value) ? std::get<std::string>(value) : "";
+            case VFXPropertyType::Curve:
+            {
+                json curveJson;
+                json keys = json::array();
+                if (const auto* curve = std::get_if<VFXCurve>(&value))
+                {
+                    for (const auto& key : curve->keys)
+                        keys.push_back(json::array({key.time, key.value, key.inTangent, key.outTangent}));
+                }
+                curveJson["keys"] = std::move(keys);
+                return curveJson;
+            }
+            case VFXPropertyType::Gradient:
+            {
+                json gradientJson;
+                json stops = json::array();
+                if (const auto* gradient = std::get_if<VFXGradient>(&value))
+                {
+                    for (const auto& stop : gradient->stops)
+                    {
+                        stops.push_back(json::array({stop.position, stop.color.r, stop.color.g,
+                                                     stop.color.b, stop.color.a}));
+                    }
+                }
+                gradientJson["stops"] = std::move(stops);
+                return gradientJson;
+            }
+            default:
+                return 0.0f;
+            }
+        }
+
+        VFXPropertyValue deserializePropertyValue(const json& j, VFXPropertyType type)
+        {
+            switch (type)
+            {
+            case VFXPropertyType::Float:
+                return j.is_number() ? j.get<float>() : 0.0f;
+            case VFXPropertyType::Vec2:
+                if (j.is_array() && j.size() >= 2)
+                    return glm::vec2(j[0].get<float>(), j[1].get<float>());
+                return glm::vec2(0.0f);
+            case VFXPropertyType::Vec3:
+                if (j.is_array() && j.size() >= 3)
+                    return glm::vec3(j[0].get<float>(), j[1].get<float>(), j[2].get<float>());
+                return glm::vec3(0.0f);
+            case VFXPropertyType::Vec4:
+            case VFXPropertyType::Color:
+                if (j.is_array() && j.size() >= 4)
+                    return glm::vec4(j[0].get<float>(), j[1].get<float>(), j[2].get<float>(), j[3].get<float>());
+                return glm::vec4(1.0f);
+            case VFXPropertyType::Int:
+                return j.is_number_integer() ? j.get<int32_t>() : int32_t{0};
+            case VFXPropertyType::Bool:
+                return j.is_boolean() ? j.get<bool>() : false;
+            case VFXPropertyType::String:
+                return j.is_string() ? j.get<std::string>() : std::string{};
+            case VFXPropertyType::Curve:
+            {
+                VFXCurve curve;
+                if (j.is_object() && j.contains("keys") && j["keys"].is_array())
+                {
+                    for (const auto& key : j["keys"])
+                    {
+                        if (key.is_array() && key.size() >= 4)
+                            curve.keys.push_back({key[0].get<float>(), key[1].get<float>(),
+                                                  key[2].get<float>(), key[3].get<float>()});
+                    }
+                }
+                return curve;
+            }
+            case VFXPropertyType::Gradient:
+            {
+                VFXGradient gradient;
+                if (j.is_object() && j.contains("stops") && j["stops"].is_array())
+                {
+                    for (const auto& stop : j["stops"])
+                    {
+                        if (stop.is_array() && stop.size() >= 5)
+                        {
+                            gradient.stops.push_back({stop[0].get<float>(),
+                                glm::vec4(stop[1].get<float>(), stop[2].get<float>(),
+                                          stop[3].get<float>(), stop[4].get<float>())});
+                        }
+                    }
+                }
+                return gradient;
+            }
+            default:
+                return 0.0f;
+            }
+        }
+
+        VFXPropertyType inferValueType(const VFXParamOverride& overrideValue)
+        {
+            if (const VFXExposedParameter* parameter = findExposedParameter(overrideValue.name))
+                return parameter->type;
+
+            const VFXPropertyValue& value = overrideValue.value;
+            if (std::holds_alternative<float>(value)) return VFXPropertyType::Float;
+            if (std::holds_alternative<glm::vec2>(value)) return VFXPropertyType::Vec2;
+            if (std::holds_alternative<glm::vec3>(value)) return VFXPropertyType::Vec3;
+            if (std::holds_alternative<glm::vec4>(value)) return VFXPropertyType::Vec4;
+            if (std::holds_alternative<int32_t>(value)) return VFXPropertyType::Int;
+            if (std::holds_alternative<bool>(value)) return VFXPropertyType::Bool;
+            if (std::holds_alternative<std::string>(value)) return VFXPropertyType::String;
+            if (std::holds_alternative<VFXCurve>(value)) return VFXPropertyType::Curve;
+            if (std::holds_alternative<VFXGradient>(value)) return VFXPropertyType::Gradient;
+            return VFXPropertyType::Float;
+        }
+
+        json serializeParamOverride(const VFXParamOverride& overrideValue)
+        {
+            const VFXPropertyType type = inferValueType(overrideValue);
+            return json::array({
+                overrideValue.name,
+                propertyTypeToString(type),
+                serializePropertyValue(overrideValue.value, type)
+            });
+        }
+
+        std::optional<VFXParamOverride> deserializeParamOverride(const json& entry)
+        {
+            if (!entry.is_array() || entry.size() < 3 || !entry[0].is_string() || !entry[1].is_string())
+                return std::nullopt;
+
+            auto type = parsePropertyTypeStrict(entry[1].get<std::string>());
+            if (!type)
+                return std::nullopt;
+
+            VFXParamOverride overrideValue;
+            overrideValue.name = entry[0].get<std::string>();
+            overrideValue.value = deserializePropertyValue(entry[2], *type);
+            return overrideValue;
+        }
+
+        VFXParamOverride migrateLegacyScalarOverride(const std::string& name, float value)
+        {
+            VFXParamOverride overrideValue;
+            overrideValue.name = name;
+
+            const VFXExposedParameter* parameter = findExposedParameter(name);
+            if (!parameter || parameter->type == VFXPropertyType::Float)
+                overrideValue.value = value;
+            else if (parameter->type == VFXPropertyType::Int)
+                overrideValue.value = static_cast<int32_t>(value);
+            else if (parameter->type == VFXPropertyType::Bool)
+                overrideValue.value = (value != 0.0f);
+            else
+                overrideValue.value = value;
+
+            return overrideValue;
+        }
+
+        VFXParamOverride migrateLegacyVectorOverride(const std::string& name, const glm::vec4& value)
+        {
+            VFXParamOverride overrideValue;
+            overrideValue.name = name;
+
+            const VFXExposedParameter* parameter = findExposedParameter(name);
+            if (parameter && parameter->type == VFXPropertyType::Vec3)
+                overrideValue.value = glm::vec3(value);
+            else if (parameter && parameter->type == VFXPropertyType::Color)
+                overrideValue.value = value;
+            else
+                overrideValue.value = value;
+
+            return overrideValue;
+        }
+
+        bool payloadEmpty(const VFXCuePayload& payload)
+        {
+            return !payload.position.has_value() &&
+                   !payload.color.has_value() &&
+                   !payload.scalar.has_value() &&
+                   payload.custom.empty();
+        }
+
+        json serializePayload(const VFXCuePayload& payload)
+        {
+            json j;
+            if (payload.position)
+                j["position"] = vec3ToJson(*payload.position);
+            if (payload.color)
+                j["color"] = vec4ToJson(*payload.color);
+            if (payload.scalar)
+                j["scalar"] = *payload.scalar;
+            if (!payload.custom.empty())
+            {
+                json custom = json::array();
+                for (const auto& overrideValue : payload.custom)
+                    custom.push_back(serializeParamOverride(overrideValue));
+                j["custom"] = std::move(custom);
+            }
+            return j;
+        }
+
+        VFXCuePayload deserializePayload(const json& j)
+        {
+            VFXCuePayload payload;
+            if (!j.is_object())
+                return payload;
+
+            if (j.contains("position"))
+                payload.position = jsonToVec3(j["position"], glm::vec3(0.0f));
+            if (j.contains("color"))
+                payload.color = jsonToVec4(j["color"], glm::vec4(1.0f));
+            if (j.contains("scalar") && j["scalar"].is_number())
+                payload.scalar = j["scalar"].get<float>();
+            if (j.contains("custom") && j["custom"].is_array())
+            {
+                for (const auto& entry : j["custom"])
+                {
+                    if (auto overrideValue = deserializeParamOverride(entry))
+                        payload.custom.push_back(std::move(*overrideValue));
+                }
+            }
+            return payload;
+        }
     } // anonymous namespace
 
     json VFXSequenceAsset::serializeStep(const VFXSequenceStep& step)
@@ -128,19 +406,10 @@ namespace vfx
         j["stopMode"] = static_cast<int>(static_cast<uint8_t>(step.stopMode));
         j["socketName"] = step.socketName;
 
-        json scalarArr = json::array();
-        for (const auto& [name, value] : step.scalarOverrides)
-        {
-            scalarArr.push_back(json::array({name, value}));
-        }
-        j["scalarOverrides"] = scalarArr;
-
-        json vectorArr = json::array();
-        for (const auto& [name, value] : step.vectorOverrides)
-        {
-            vectorArr.push_back(json::array({name, vec4ToJson(value)}));
-        }
-        j["vectorOverrides"] = vectorArr;
+        json overrides = json::array();
+        for (const auto& overrideValue : step.overrides)
+            overrides.push_back(serializeParamOverride(overrideValue));
+        j["overrides"] = overrides;
 
         return j;
     }
@@ -172,20 +441,45 @@ namespace vfx
             static_cast<uint8_t>(j.value("stopMode", 0)));
         step.socketName = j.value("socketName", "");
 
-        if (j.contains("scalarOverrides") && j["scalarOverrides"].is_array())
+        if (j.contains("overrides") && j["overrides"].is_array())
+        {
+            for (const auto& entry : j["overrides"])
+            {
+                if (auto overrideValue = deserializeParamOverride(entry))
+                    step.overrides.push_back(std::move(*overrideValue));
+            }
+        }
+        else if (j.contains("scalarOverrides") && j["scalarOverrides"].is_array())
         {
             for (const auto& entry : j["scalarOverrides"])
             {
                 if (entry.is_array() && entry.size() >= 2 &&
                     entry[0].is_string() && entry[1].is_number())
                 {
-                    step.scalarOverrides.emplace_back(entry[0].get<std::string>(),
-                                                      entry[1].get<float>());
+                    step.overrides.push_back(
+                        migrateLegacyScalarOverride(entry[0].get<std::string>(),
+                                                    entry[1].get<float>()));
+                }
+            }
+
+            if (j.contains("vectorOverrides") && j["vectorOverrides"].is_array())
+            {
+                for (const auto& entry : j["vectorOverrides"])
+                {
+                    if (entry.is_array() && entry.size() >= 2 &&
+                        entry[0].is_string() && entry[1].is_array() && entry[1].size() >= 4)
+                    {
+                        const auto& v = entry[1];
+                        step.overrides.push_back(
+                            migrateLegacyVectorOverride(
+                                entry[0].get<std::string>(),
+                                glm::vec4(v[0].get<float>(), v[1].get<float>(),
+                                          v[2].get<float>(), v[3].get<float>())));
+                    }
                 }
             }
         }
-
-        if (j.contains("vectorOverrides") && j["vectorOverrides"].is_array())
+        else if (j.contains("vectorOverrides") && j["vectorOverrides"].is_array())
         {
             for (const auto& entry : j["vectorOverrides"])
             {
@@ -193,10 +487,11 @@ namespace vfx
                     entry[0].is_string() && entry[1].is_array() && entry[1].size() >= 4)
                 {
                     const auto& v = entry[1];
-                    step.vectorOverrides.emplace_back(
-                        entry[0].get<std::string>(),
-                        glm::vec4(v[0].get<float>(), v[1].get<float>(),
-                                  v[2].get<float>(), v[3].get<float>()));
+                    step.overrides.push_back(
+                        migrateLegacyVectorOverride(
+                            entry[0].get<std::string>(),
+                            glm::vec4(v[0].get<float>(), v[1].get<float>(),
+                                      v[2].get<float>(), v[3].get<float>())));
                 }
             }
         }
@@ -263,6 +558,8 @@ namespace vfx
                     VFXSequenceEventMarker marker;
                     marker.time = markerJson.value("time", 0.0f);
                     marker.cueName = markerJson.value("cueName", "");
+                    if (markerJson.contains("payload"))
+                        marker.payload = deserializePayload(markerJson["payload"]);
                     if (marker.cueName.empty())
                     {
                         logWarning("Event marker with empty cueName, skipping");
@@ -316,6 +613,8 @@ namespace vfx
             json m;
             m["time"] = marker.time;
             m["cueName"] = marker.cueName;
+            if (!payloadEmpty(marker.payload))
+                m["payload"] = serializePayload(marker.payload);
             markersJson.push_back(std::move(m));
         }
         j["eventMarkers"] = markersJson;

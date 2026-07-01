@@ -1,6 +1,7 @@
 #include <doctest.h>
 
 #include <vfx/VFXOverrideNames.hpp>
+#include <vfx/VFXParameterRegistry.hpp>
 #include <vfx/VFXSequenceValidation.hpp>
 #include <asset/AssetDatabase.hpp>
 #include <asset/AssetGUID.hpp>
@@ -45,6 +46,7 @@ TEST_SUITE("VFXSequenceValidation")
         CHECK(vfx::overridenames::isScalarOverride("collisionEnabled"));
         CHECK(vfx::overridenames::isVectorOverride("emitDirection"));
         CHECK(vfx::overridenames::isVectorOverride("startColor"));
+        CHECK(vfx::kExposedParameters.size() == 18);
     }
 
     TEST_CASE("missing and optionally unresolved refs are reported")
@@ -68,19 +70,18 @@ TEST_SUITE("VFXSequenceValidation")
         CHECK(hasDiagnostic(report, vfx::validation::Severity::Warning, "does not currently resolve"));
     }
 
-    TEST_CASE("override diagnostics catch unknown, wrong-slot and duplicate names")
+    TEST_CASE("override diagnostics catch unknown, type mismatch and duplicate names")
     {
         vfx::VFXSequenceData data;
         auto step = makeValidStep();
-        step.scalarOverrides.emplace_back("startColor", 1.0f);
-        step.scalarOverrides.emplace_back("notARealOverride", 2.0f);
-        step.scalarOverrides.emplace_back("spawnRate", 3.0f);
-        step.scalarOverrides.emplace_back("spawnRate", 4.0f);
-        step.vectorOverrides.emplace_back("spawnRate", glm::vec4(1.0f));
+        step.overrides.push_back(vfx::VFXParamOverride{"startColor", 1.0f});
+        step.overrides.push_back(vfx::VFXParamOverride{"notARealOverride", 2.0f});
+        step.overrides.push_back(vfx::VFXParamOverride{"spawnRate", 3.0f});
+        step.overrides.push_back(vfx::VFXParamOverride{"spawnRate", 4.0f});
         data.steps.push_back(step);
 
         const auto report = vfx::validation::validateSequence(data);
-        CHECK(hasDiagnostic(report, vfx::validation::Severity::Warning, "wrong override list"));
+        CHECK(hasDiagnostic(report, vfx::validation::Severity::Warning, "expects Color"));
         CHECK(hasDiagnostic(report, vfx::validation::Severity::Warning, "unknown override"));
         CHECK(hasDiagnostic(report, vfx::validation::Severity::Info, "duplicate override"));
     }
@@ -111,6 +112,7 @@ TEST_SUITE("VFXSequenceValidation")
         emptyCue.label = "EmptyCue";
         emptyCue.cueName = "";
         data.steps.push_back(emptyCue);
+        data.eventMarkers.push_back(vfx::VFXSequenceEventMarker{0.25f, "signalOnly"});
 
         std::unordered_set<std::string> sockets{"hand_r"};
         vfx::validation::ValidationContext context;
@@ -125,5 +127,6 @@ TEST_SUITE("VFXSequenceValidation")
         CHECK(hasDiagnostic(report, vfx::validation::Severity::Info, "fans out"));
         CHECK(hasDiagnostic(report, vfx::validation::Severity::Warning, "case or whitespace"));
         CHECK_FALSE(hasDiagnostic(report, vfx::validation::Severity::Warning, "EmptyCue"));
+        CHECK_FALSE(hasDiagnostic(report, vfx::validation::Severity::Info, "matches no cue-driven step"));
     }
 }

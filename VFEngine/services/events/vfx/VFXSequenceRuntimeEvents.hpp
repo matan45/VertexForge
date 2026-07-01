@@ -2,6 +2,7 @@
 
 #include "../EventTypes.hpp"
 #include "../../data/VFXSequenceTypes.hpp"
+#include <vfx/VFXSequenceTypes.hpp>
 #include <glm/glm.hpp>
 #include <string>
 
@@ -88,6 +89,7 @@ namespace services::events::vfxsequence
     {
         VFXComboInstanceId comboId = 0;
         std::string cueName;
+        vfx::VFXCuePayload payload;
         std::string_view getName() const override { return "TriggerVFXComboCue"; }
     };
 

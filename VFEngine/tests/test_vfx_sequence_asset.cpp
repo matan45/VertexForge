@@ -17,6 +17,7 @@
 
 #include <vfx/VFXSequenceAsset.hpp>
 #include <vfx/VFXSequenceTypes.hpp>
+#include <vfx/VFXTypes.hpp>
 #include <asset/AssetRef.hpp>
 #include <asset/AssetDatabase.hpp>
 #include <nlohmann/json.hpp>
@@ -24,6 +25,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <variant>
 
 namespace
 {
@@ -46,7 +48,7 @@ namespace
     vfx::VFXSequenceData makeSampleSequence()
     {
         vfx::VFXSequenceData data;
-        data.version = "1.1";
+        data.version = vfx::VFX_SEQUENCE_FORMAT_VERSION;
         data.uuid = "1234567890";
         data.name = "FireballCombo";
 
@@ -55,7 +57,12 @@ namespace
         data.playbackRate = 1.5f;
         data.fixedStep = 1.0f / 60.0f;
         data.prewarm = 0.25f;
-        data.eventMarkers.push_back(vfx::VFXSequenceEventMarker{0.20f, "OnHit"});
+        vfx::VFXSequenceEventMarker hitMarker{0.20f, "OnHit"};
+        hitMarker.payload.position = glm::vec3(1.0f, 2.0f, 3.0f);
+        hitMarker.payload.color = glm::vec4(0.25f, 0.5f, 0.75f, 1.0f);
+        hitMarker.payload.scalar = 42.0f;
+        hitMarker.payload.custom.push_back(vfx::VFXParamOverride{"startColor", glm::vec4(1.0f, 0.5f, 0.25f, 1.0f)});
+        data.eventMarkers.push_back(hitMarker);
         data.eventMarkers.push_back(vfx::VFXSequenceEventMarker{0.80f, "OnEnd"});
 
         // Step 0: time-driven, looping, with a socket and a scalar override.
@@ -72,7 +79,7 @@ namespace
             step.duration = 0.0f;
             step.stopMode = vfx::VFXStepStopMode::PlayToCompletion;
             step.socketName = "hand_R";
-            step.scalarOverrides.emplace_back("spawnRate", 50.0f);
+            step.overrides.push_back(vfx::VFXParamOverride{"spawnRate", 50.0f});
             data.steps.push_back(step);
         }
 
@@ -91,7 +98,7 @@ namespace
             step.duration = 1.5f;
             step.stopMode = vfx::VFXStepStopMode::StopAfterDuration;
             step.socketName = ""; // no socket
-            step.vectorOverrides.emplace_back("startColor", glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+            step.overrides.push_back(vfx::VFXParamOverride{"startColor", glm::vec4(1.0f, 0.0f, 0.0f, 1.0f)});
             data.steps.push_back(step);
         }
 
@@ -109,13 +116,78 @@ namespace
             step.duration = 2.0f;
             step.stopMode = vfx::VFXStepStopMode::StopAfterDuration;
             step.socketName = "spine_01";
-            step.scalarOverrides.emplace_back("lifetime", 3.0f);
-            step.scalarOverrides.emplace_back("startSpeed", 12.5f);
-            step.vectorOverrides.emplace_back("emitDirection", glm::vec4(0.0f, 1.0f, 0.0f, 0.0f));
+            step.overrides.push_back(vfx::VFXParamOverride{"lifetime", 3.0f});
+            step.overrides.push_back(vfx::VFXParamOverride{"startSpeed", 12.5f});
+            step.overrides.push_back(vfx::VFXParamOverride{"emitDirection", glm::vec3(0.0f, 1.0f, 0.0f)});
             data.steps.push_back(step);
         }
 
         return data;
+    }
+
+    void checkValueEqual(const vfx::VFXPropertyValue& a, const vfx::VFXPropertyValue& b)
+    {
+        REQUIRE(a.index() == b.index());
+        if (const auto* va = std::get_if<float>(&a))
+            CHECK(*va == doctest::Approx(std::get<float>(b)));
+        else if (const auto* va = std::get_if<glm::vec2>(&a))
+        {
+            const auto& vb = std::get<glm::vec2>(b);
+            CHECK(va->x == doctest::Approx(vb.x));
+            CHECK(va->y == doctest::Approx(vb.y));
+        }
+        else if (const auto* va = std::get_if<glm::vec3>(&a))
+        {
+            const auto& vb = std::get<glm::vec3>(b);
+            CHECK(va->x == doctest::Approx(vb.x));
+            CHECK(va->y == doctest::Approx(vb.y));
+            CHECK(va->z == doctest::Approx(vb.z));
+        }
+        else if (const auto* va = std::get_if<glm::vec4>(&a))
+        {
+            const auto& vb = std::get<glm::vec4>(b);
+            CHECK(va->x == doctest::Approx(vb.x));
+            CHECK(va->y == doctest::Approx(vb.y));
+            CHECK(va->z == doctest::Approx(vb.z));
+            CHECK(va->w == doctest::Approx(vb.w));
+        }
+        else if (const auto* va = std::get_if<int32_t>(&a))
+            CHECK(*va == std::get<int32_t>(b));
+        else if (const auto* va = std::get_if<bool>(&a))
+            CHECK(*va == std::get<bool>(b));
+        else if (const auto* va = std::get_if<std::string>(&a))
+            CHECK(*va == std::get<std::string>(b));
+    }
+
+    void checkOverrideEqual(const vfx::VFXParamOverride& a, const vfx::VFXParamOverride& b)
+    {
+        CHECK(a.name == b.name);
+        checkValueEqual(a.value, b.value);
+    }
+
+    void checkPayloadEqual(const vfx::VFXCuePayload& a, const vfx::VFXCuePayload& b)
+    {
+        CHECK(a.position.has_value() == b.position.has_value());
+        if (a.position)
+        {
+            CHECK(a.position->x == doctest::Approx(b.position->x));
+            CHECK(a.position->y == doctest::Approx(b.position->y));
+            CHECK(a.position->z == doctest::Approx(b.position->z));
+        }
+        CHECK(a.color.has_value() == b.color.has_value());
+        if (a.color)
+        {
+            CHECK(a.color->x == doctest::Approx(b.color->x));
+            CHECK(a.color->y == doctest::Approx(b.color->y));
+            CHECK(a.color->z == doctest::Approx(b.color->z));
+            CHECK(a.color->w == doctest::Approx(b.color->w));
+        }
+        CHECK(a.scalar.has_value() == b.scalar.has_value());
+        if (a.scalar)
+            CHECK(*a.scalar == doctest::Approx(*b.scalar));
+        REQUIRE(a.custom.size() == b.custom.size());
+        for (size_t i = 0; i < a.custom.size(); ++i)
+            checkOverrideEqual(a.custom[i], b.custom[i]);
     }
 
     void checkStepEqual(const vfx::VFXSequenceStep& a, const vfx::VFXSequenceStep& b)
@@ -138,22 +210,9 @@ namespace
         CHECK(a.stopMode == b.stopMode);
         CHECK(a.socketName == b.socketName);
 
-        REQUIRE(a.scalarOverrides.size() == b.scalarOverrides.size());
-        for (size_t i = 0; i < a.scalarOverrides.size(); ++i)
-        {
-            CHECK(a.scalarOverrides[i].first == b.scalarOverrides[i].first);
-            CHECK(a.scalarOverrides[i].second == doctest::Approx(b.scalarOverrides[i].second));
-        }
-
-        REQUIRE(a.vectorOverrides.size() == b.vectorOverrides.size());
-        for (size_t i = 0; i < a.vectorOverrides.size(); ++i)
-        {
-            CHECK(a.vectorOverrides[i].first == b.vectorOverrides[i].first);
-            CHECK(a.vectorOverrides[i].second.x == doctest::Approx(b.vectorOverrides[i].second.x));
-            CHECK(a.vectorOverrides[i].second.y == doctest::Approx(b.vectorOverrides[i].second.y));
-            CHECK(a.vectorOverrides[i].second.z == doctest::Approx(b.vectorOverrides[i].second.z));
-            CHECK(a.vectorOverrides[i].second.w == doctest::Approx(b.vectorOverrides[i].second.w));
-        }
+        REQUIRE(a.overrides.size() == b.overrides.size());
+        for (size_t i = 0; i < a.overrides.size(); ++i)
+            checkOverrideEqual(a.overrides[i], b.overrides[i]);
     }
 }
 
@@ -172,7 +231,7 @@ TEST_SUITE("VFXSequenceAsset")
         REQUIRE(loadedOpt.has_value());
         const vfx::VFXSequenceData& loaded = *loadedOpt;
 
-        CHECK(loaded.version == original.version);
+        CHECK(loaded.version == vfx::VFX_SEQUENCE_FORMAT_VERSION);
         CHECK(loaded.uuid == original.uuid);
         CHECK(loaded.name == original.name);
 
@@ -192,7 +251,56 @@ TEST_SUITE("VFXSequenceAsset")
         {
             CHECK(loaded.eventMarkers[i].time == doctest::Approx(original.eventMarkers[i].time));
             CHECK(loaded.eventMarkers[i].cueName == original.eventMarkers[i].cueName);
+            checkPayloadEqual(loaded.eventMarkers[i].payload, original.eventMarkers[i].payload);
         }
+    }
+
+    TEST_CASE("legacy scalar/vector override arrays migrate to typed overrides")
+    {
+        resetSequenceTestRoot();
+
+        json j;
+        j["version"] = "1.1";
+        j["uuid"] = "legacy-overrides";
+        j["name"] = "LegacyOverrides";
+
+        json step;
+        step["vfxRef"] = "00000000aaaa1111";
+        step["label"] = "legacy";
+        step["scalarOverrides"] = json::array({
+            json::array({"spawnRate", 12.5f}),
+            json::array({"renderMode", 2.0f}),
+            json::array({"collisionEnabled", 1.0f}),
+            json::array({"unknownScalar", 7.0f})
+        });
+        step["vectorOverrides"] = json::array({
+            json::array({"emitDirection", json::array({0.0f, 1.0f, 0.0f, 9.0f})}),
+            json::array({"startColor", json::array({1.0f, 0.0f, 0.5f, 1.0f})}),
+            json::array({"unknownVector", json::array({1.0f, 2.0f, 3.0f, 4.0f})})
+        });
+        j["steps"] = json::array({step});
+
+        const fs::path path = sequenceTestRoot() / "LegacyOverrides.vfVFXSequence";
+        {
+            std::ofstream file(path);
+            REQUIRE(file.is_open());
+            file << j.dump(4);
+        }
+
+        auto loadedOpt = vfx::VFXSequenceAsset::load(path.string());
+        REQUIRE(loadedOpt.has_value());
+        REQUIRE(loadedOpt->steps.size() == 1);
+        const auto& overrides = loadedOpt->steps[0].overrides;
+        REQUIRE(overrides.size() == 7);
+
+        CHECK(overrides[0].name == "spawnRate");
+        CHECK(std::get<float>(overrides[0].value) == doctest::Approx(12.5f));
+        CHECK(std::get<int32_t>(overrides[1].value) == 2);
+        CHECK(std::get<bool>(overrides[2].value) == true);
+        CHECK(std::get<float>(overrides[3].value) == doctest::Approx(7.0f));
+        CHECK(std::get<glm::vec3>(overrides[4].value).y == doctest::Approx(1.0f));
+        CHECK(std::get<glm::vec4>(overrides[5].value).z == doctest::Approx(0.5f));
+        CHECK(std::get<glm::vec4>(overrides[6].value).w == doctest::Approx(4.0f));
     }
 
     TEST_CASE("a 1.0 file without timeline-control keys loads with safe defaults")

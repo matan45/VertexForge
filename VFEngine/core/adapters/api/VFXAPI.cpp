@@ -11,6 +11,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "data/EntityConversion.hpp"
+#include "data/VFXOverrideApplier.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace core::api
@@ -709,6 +710,36 @@ namespace core::api
                 return value::Value(std::monostate{});
             }});
 
+        // _native_vfx_triggerComboCuePayload(comboId, cueName, x, y, z, r, g, b, a [, scalar]) -> void
+        interpreter->registerNativeFunction("_native_vfx_triggerComboCuePayload",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 9)
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                std::string cueName = extractString(args[1], "VFX.triggerComboCuePayload");
+                if (cueName.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                services::events::vfxsequence::TriggerVFXComboCueCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                cmd.cueName = std::move(cueName);
+                cmd.payload.position = glm::vec3(extractFloat(args[2]), extractFloat(args[3]), extractFloat(args[4]));
+                cmd.payload.color = glm::vec4(extractFloat(args[5]), extractFloat(args[6]),
+                                               extractFloat(args[7]), extractFloat(args[8]));
+                if (args.size() >= 10)
+                    cmd.payload.scalar = extractFloat(args[9]);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
         // _native_vfx_comboIsPlaying(comboId) -> bool
         interpreter->registerNativeFunction("_native_vfx_comboIsPlaying",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
@@ -876,20 +907,7 @@ namespace core::api
                 services::events::vfxruntime::ApplyVFXInstanceOverridesCommand cmd;
                 cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
 
-                if (name == "spawnRate")                 cmd.overrides.spawnRate = val;
-                else if (name == "lifetime")             cmd.overrides.lifetime = val;
-                else if (name == "startSize")            cmd.overrides.startSize = val;
-                else if (name == "startSpeed")           cmd.overrides.startSpeed = val;
-                else if (name == "stretchMultiplier")    cmd.overrides.stretchMultiplier = val;
-                else if (name == "windStrength")         cmd.overrides.windStrength = val;
-                else if (name == "gravityStrength")      cmd.overrides.gravityStrength = val;
-                else if (name == "softParticleDistance") cmd.overrides.softParticleDistance = val;
-                else if (name == "lightingInfluence")    cmd.overrides.lightingInfluence = val;
-                else if (name == "collisionLifetimeLoss") cmd.overrides.collisionLifetimeLoss = val;
-                else if (name == "coneSpread")           cmd.overrides.coneSpread = val;
-                else if (name == "renderMode")           cmd.overrides.renderMode = static_cast<int>(val);
-                else if (name == "collisionEnabled")     cmd.overrides.collisionEnabled = (val != 0.0f);
-                else
+                if (!services::applyScalarOverride(cmd.overrides, name, val))
                 {
                     return value::Value(false);
                 }
@@ -925,12 +943,7 @@ namespace core::api
                 services::events::vfxruntime::ApplyVFXInstanceOverridesCommand cmd;
                 cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
 
-                if (name == "emitDirection")          cmd.overrides.emitDirection = vec;
-                else if (name == "windDirection")     cmd.overrides.windDirection = vec;
-                else if (name == "gravityDirection")  cmd.overrides.gravityDirection = vec;
-                else if (name == "shapeDimensions")   cmd.overrides.shapeDimensions = vec;
-                else if (name == "startColor")        cmd.overrides.startColor = glm::vec4(vec, w);
-                else
+                if (!services::applyVectorOverride(cmd.overrides, name, glm::vec4(vec, w)))
                 {
                     return value::Value(false);
                 }

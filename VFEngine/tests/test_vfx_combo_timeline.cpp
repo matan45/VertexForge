@@ -188,6 +188,10 @@ TEST_SUITE("VFXComboTimeline")
         ev.clear();
         tl.advance(0.3f, ev); // elapsed 0.4 crosses the marker => cue step 0 spawns
         CHECK(spawnIndices(ev) == std::vector<int>{0});
+        REQUIRE(ev.size() == 1);
+        CHECK(ev[0].sourceMarker == 0);
+        REQUIRE(tl.firedMarkers().size() == 1);
+        CHECK(tl.firedMarkers()[0]);
         CHECK(tl.isSpawned(0));
 
         ev.clear();
@@ -214,6 +218,8 @@ TEST_SUITE("VFXComboTimeline")
         tl.advance(0.5f, ev);
         CHECK(ev.empty());
         CHECK_FALSE(tl.isSpawned(0));
+        REQUIRE(tl.firedMarkers().size() == 1);
+        CHECK(tl.firedMarkers()[0]);
     }
 
     TEST_CASE("fireCue spawns matching not-yet-spawned cue steps and is idempotent")
@@ -229,6 +235,9 @@ TEST_SUITE("VFXComboTimeline")
         std::vector<ComboEvent> ev;
         tl.fireCue("hit", ev);
         CHECK(spawnIndices(ev) == std::vector<int>{0, 1});
+        REQUIRE(ev.size() == 2);
+        CHECK(ev[0].sourceMarker == -1);
+        CHECK(ev[1].sourceMarker == -1);
 
         ev.clear();
         tl.fireCue("hit", ev); // already spawned => nothing

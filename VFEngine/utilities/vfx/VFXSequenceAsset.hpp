@@ -9,10 +9,12 @@
 namespace vfx
 {
     // 1.1 (VK-1451) adds seed/playbackRate/fixedStep/prewarm/eventMarkers.
+    // 1.2 (VK-1452) replaces scalar/vector override lists with typed overrides
+    // and adds marker cue payloads.
     // The loader stays version-agnostic (tolerant j.value defaults), so 1.0
     // assets load unchanged and 1.1 assets load on older readers minus the new
     // fields.
-    inline constexpr const char* VFX_SEQUENCE_FORMAT_VERSION = "1.1";
+    inline constexpr const char* VFX_SEQUENCE_FORMAT_VERSION = "1.2";
 
     class VFXSequenceAsset
     {

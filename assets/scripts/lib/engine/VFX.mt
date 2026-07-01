@@ -222,6 +222,12 @@ public class VFX {
         _native_vfx_triggerComboCue(comboId, cueName);
     }
 
+    // Fire a cue with typed payload data for child offsets/tints and listeners.
+    public static function triggerComboCuePayload(int comboId, string cueName,
+            float x, float y, float z, float r, float g, float b, float a, float scalar): void {
+        _native_vfx_triggerComboCuePayload(comboId, cueName, x, y, z, r, g, b, a, scalar);
+    }
+
     // Check whether a combo is still playing (has unfinished steps).
     public static function comboIsPlaying(int comboId): bool {
         return _native_vfx_comboIsPlaying(comboId);

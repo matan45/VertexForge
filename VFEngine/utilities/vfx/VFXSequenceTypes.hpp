@@ -1,10 +1,11 @@
 #pragma once
 
 #include "../asset/AssetRef.hpp"
+#include "VFXParameterRegistry.hpp"
 #include <glm/glm.hpp>
+#include <optional>
 #include <string>
 #include <vector>
-#include <utility>
 #include <cstdint>
 
 namespace vfx
@@ -35,8 +36,15 @@ namespace vfx
         float duration = 0.0f;              // 0 => play to child completion
         VFXStepStopMode stopMode = VFXStepStopMode::PlayToCompletion;
         std::string socketName;             // optional per-step socket
-        std::vector<std::pair<std::string, float>>     scalarOverrides;
-        std::vector<std::pair<std::string, glm::vec4>> vectorOverrides;
+        std::vector<VFXParamOverride> overrides;
+    };
+
+    struct VFXCuePayload
+    {
+        std::optional<glm::vec3> position;
+        std::optional<glm::vec4> color;
+        std::optional<float> scalar;
+        std::vector<VFXParamOverride> custom;
     };
 
     // A one-shot timeline event marker (VK-1451). When the combo clock crosses
@@ -47,6 +55,7 @@ namespace vfx
     {
         float time = 0.0f;
         std::string cueName;
+        VFXCuePayload payload;
     };
 
     struct VFXSequenceData

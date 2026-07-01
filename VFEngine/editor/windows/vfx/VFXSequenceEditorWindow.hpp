@@ -89,6 +89,8 @@ namespace windows
         void drawStepInspector();
         void drawTimeline();
         void drawMarkersRow();          // one-shot event-marker editor under the timeline
+        void drawOverrideList(std::vector<vfx::VFXParamOverride>& overrides, const char* label);
+        void drawCuePayload(vfx::VFXCuePayload& payload);
 
         // Real GPU composited preview (all steps at once).
         void drawPreviewViewport();
