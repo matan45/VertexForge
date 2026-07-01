@@ -7,11 +7,13 @@
 #include "components/PhysicsComponents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/project/SceneEvents.hpp"
+#include "../../services/events/project/ResourceEvents.hpp"
 #include "../../services/events/terrain/TerrainEvents.hpp"
 #include "../../services/events/terrain/BrushEvents.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include "print/Log.hpp"
+#include "asset/AssetDatabase.hpp"  // VK-1460: canonicalize AssetSaved paths for config-cache invalidation
 
 namespace core
 {
@@ -82,6 +84,8 @@ namespace core
         controllerParams.priority = params.priority;
         controllerParams.cameraRelative = params.cameraRelative;
         controllerParams.autoDestroy = params.autoDestroy;
+        controllerParams.seed = params.seed;
+        controllerParams.poolable = params.poolable;
 
         return renderer->createInstance(controllerParams);
     }
@@ -166,6 +170,24 @@ namespace core
     {
         if (renderer)
         {
+            // VK-1453: apply config-cache invalidations queued from AssetSaved on the
+            // update thread (the notification is delivered on the publishing thread).
+            std::vector<std::string> invalidations;
+            {
+                std::lock_guard<std::mutex> lock(configInvalidationMutex);
+                invalidations.swap(pendingConfigInvalidations);
+            }
+            for (const auto& path : invalidations)
+            {
+                // VK-1460: the config cache is keyed by the spawn path (vfxRef.resolve() =
+                // canonical getPath(guid)), but AssetSaved carries the editor's raw save
+                // path. Canonicalize to the same form (resolveAssetPath is idempotent) so
+                // the erase actually matches — otherwise edited effects keep rendering the
+                // stale config until the scene is reloaded.
+                renderer->invalidateConfigCache(
+                    asset::AssetDatabase::instance().resolveAssetPath(path));
+            }
+
             updateSceneColliders();
             updateTerrainHeightfield();
             renderer->update(deltaTime);
@@ -301,6 +323,9 @@ namespace core
             stats.poolWarmSlots = rs.poolWarmSlots;
             stats.poolUsedSlots = rs.poolUsedSlots;
             stats.poolTotalSlots = rs.poolTotalSlots;
+            stats.culledEmitters = rs.culledEmitters;
+            stats.throttledEmitters = rs.throttledEmitters;
+            stats.vfxCullDistance = rs.vfxCullDistance;
         }
         return stats;
     }
@@ -351,6 +376,50 @@ namespace core
     {
         if (renderer)
             renderer->seekInstance(id, emissionTime, spawnAccumulator);
+    }
+
+    services::IVFXRuntimeProvider::CullState VFXRuntimeAdapter::getCullState() const
+    {
+        CullState state;
+        if (renderer)
+        {
+            auto rs = renderer->getCullState();
+            state.valid = rs.valid;
+            state.viewProj = rs.viewProj;
+            state.cameraPos = rs.cameraPos;
+            state.distanceCullEnabled = rs.distanceCullEnabled;
+            state.maxDrawDistance = rs.maxDrawDistance;
+        }
+        return state;
+    }
+
+    void VFXRuntimeAdapter::setQualityTier(vfx::VFXQualityTier tier)
+    {
+        if (renderer)
+            renderer->setQualityTier(tier);
+    }
+
+    std::vector<services::IVFXRuntimeProvider::InstanceDebugInfo> VFXRuntimeAdapter::getInstanceDebugInfo() const
+    {
+        std::vector<InstanceDebugInfo> out;
+        if (!renderer)
+            return out;
+
+        auto rendererInfos = renderer->getInstanceDebugInfo();
+        out.reserve(rendererInfos.size());
+        for (const auto& src : rendererInfos)
+        {
+            InstanceDebugInfo info;
+            info.id = src.id;
+            info.worldPosition = src.worldPosition;
+            info.extents = src.extents;
+            info.inFrustum = src.inFrustum;
+            info.lod = src.lod;
+            info.particleCount = src.particleCount;
+            info.priority = src.priority;
+            out.push_back(info);
+        }
+        return out;
     }
 
     void VFXRuntimeAdapter::updateSceneColliders()
@@ -495,6 +564,16 @@ namespace core
             dispatcher.subscribe<events::brush::BrushAppliedNotification>(
                 [this](const events::brush::BrushAppliedNotification&) {
                     terrainHeightfieldCached = false;
+                }));
+
+        // VK-1453: drop the cached parsed config when a .vfVFX asset is re-saved so the
+        // next spawn picks up the edit. Queued here (delivered on the editor thread) and
+        // applied on the update thread. Reuses this adapter's subscription/token list.
+        terrainSubscriptions.push_back(
+            dispatcher.subscribe<events::resource::AssetSavedNotification>(
+                [this](const events::resource::AssetSavedNotification& n) {
+                    std::lock_guard<std::mutex> lock(configInvalidationMutex);
+                    pendingConfigInvalidations.push_back(n.filePath);
                 }));
     }
 

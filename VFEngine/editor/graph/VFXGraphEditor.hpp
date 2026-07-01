@@ -105,7 +105,7 @@ namespace editor::graph {
         int pasteCount = 0;
 
         void addNode(vfx::VFXNodeType type);
-        void addShapeNode(vfx::ShapeType shapeType, const std::string& name);
+        void addShapeNode();
         void removeExistingLinks(uint32_t nodeId, const std::string& pin, bool isSource);
 
         static void initializeModifierProperties(vfx::VFXNode& node);

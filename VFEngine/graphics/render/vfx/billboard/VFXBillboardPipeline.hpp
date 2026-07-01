@@ -77,6 +77,11 @@ namespace render::vfx
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
+        // Record only the bind+draw commands (no render-pass begin/end). Lets a caller
+        // composite several emitters into one already-open dynamic-rendering pass
+        // (VK-1451 sequence preview). recordCommandBuffer = begin + recordDraws + end.
+        void recordDraws(const vk::CommandBuffer& commandBuffer) const;
+
         bool isInitialized() const { return initialized; }
 
     private:

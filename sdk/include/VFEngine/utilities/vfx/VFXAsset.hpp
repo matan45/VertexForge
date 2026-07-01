@@ -8,7 +8,10 @@
 
 namespace vfx
 {
-    inline constexpr const char* VFX_FORMAT_VERSION = "1.0";
+    // 1.1 (VK-1453) adds the optional bounds / scalability / cullEligible block.
+    // The loader stays version-agnostic (tolerant j.value / j.contains defaults),
+    // so 1.0 assets load unchanged (Auto bounds, disabled scalability, cull off).
+    inline constexpr const char* VFX_FORMAT_VERSION = "1.1";
 
     class VFXAsset
     {

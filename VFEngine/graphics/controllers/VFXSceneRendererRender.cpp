@@ -40,7 +40,31 @@ namespace controllers
 
         gpuBufferManager->clearParticleBufferIfNeeded(cmd);
         gpuBufferManager->uploadStateBuffer(cmd);
-        gpuBufferManager->clearDrawCommands(cmd);
+
+        // VK-1460: selective draw-command clear (replaces the wholesale per-frame clear).
+        // Each emitter's draw command points at its persistent per-emitter particle region
+        // and is only (re)written by the compute dispatch; a temporally-throttled emitter
+        // skips dispatch on off-frames, so zeroing the whole buffer would blank it -> flicker.
+        // Keep the command for every emitter that should still be visible (active, in-frustum,
+        // not distance-culled -- whether it dispatches this frame or is throttle-skipped) and
+        // only zero slots that transitioned to hidden (culled/inactive) since last frame.
+        {
+            std::unordered_set<uint32_t> keepSlots;
+            for (const auto& [id, instance] : instances)
+            {
+                if (!instance.gpuDriven || !instance.active)
+                    continue;
+                if (!isEmitterInFrustum(instance) || isEmitterDistanceCulled(instance))
+                    continue;
+                keepSlots.insert(instance.gpuEmitterIndex);
+            }
+            for (uint32_t slot : liveDrawSlots)
+            {
+                if (keepSlots.find(slot) == keepSlots.end())
+                    gpuBufferManager->clearDrawCommand(cmd, slot);
+            }
+            liveDrawSlots = std::move(keepSlots);
+        }
 
         gpuComputePipeline->insertTransferToTransferBarrier(
             cmd, gpuBufferManager->getStateBuffer()
@@ -62,8 +86,23 @@ namespace controllers
             if (!instance.gpuDriven || !instance.active)
                 continue;
 
-            if (!isEmitterInFrustum(instance))
+            // VK-1453: skip simulating emitters that are off-screen or beyond the cull
+            // distance (per-instance override honored inside isEmitterDistanceCulled).
+            if (!isEmitterInFrustum(instance) || isEmitterDistanceCulled(instance))
+            {
+                ++culledEmittersThisFrame;
                 continue;
+            }
+
+            // VK-1453: temporal throttling — simulate downscaled effects only every Nth
+            // frame (the phase offset spreads throttled emitters across frames).
+            if (instance.updateInterval > 1 &&
+                (frameNumber + static_cast<uint32_t>(instance.updatePhase)) %
+                    static_cast<uint32_t>(instance.updateInterval) != 0)
+            {
+                ++throttledEmittersThisFrame;
+                continue;
+            }
 
             gpuComputePipeline->dispatch(
                 cmd,
@@ -88,13 +127,9 @@ namespace controllers
         {
             if (instance.gpuDriven && instance.active)
             {
-                if (distanceCullingEnabled && maxVFXDistSq > 0.0f)
-                {
-                    glm::vec3 emitterPos = glm::vec3(instance.worldTransform[3]);
-                    glm::vec3 diff = emitterPos - currentCameraPos;
-                    if (glm::dot(diff, diff) > maxVFXDistSq)
-                        continue;
-                }
+                // VK-1453: honors the per-instance scalability cull-distance override.
+                if (isEmitterDistanceCulled(instance))
+                    continue;
                 activeGPUEmitters++;
             }
         }
@@ -155,18 +190,20 @@ namespace controllers
             if (isSubEmitter)
                 continue;
 
+            bool enabled = false;
             std::string vfxPath;
             const auto& eventConfig = parentInstance->config.events;
 
             switch (event.eventType)
             {
-            case 0: if (eventConfig.onSpawnEnabled) vfxPath = eventConfig.onSpawnVFXPath; break;
-            case 1: if (eventConfig.onDeathEnabled) vfxPath = eventConfig.onDeathVFXPath; break;
-            case 2: if (eventConfig.onCollisionEnabled) vfxPath = eventConfig.onCollisionVFXPath; break;
-            case 3: if (eventConfig.onLifetimeThresholdEnabled) vfxPath = eventConfig.onLifetimeThresholdVFXPath; break;
+            case 0: enabled = eventConfig.onSpawnEnabled; if (enabled) vfxPath = eventConfig.onSpawnVFXPath; break;
+            case 1: enabled = eventConfig.onDeathEnabled; if (enabled) vfxPath = eventConfig.onDeathVFXPath; break;
+            case 2: enabled = eventConfig.onCollisionEnabled; if (enabled) vfxPath = eventConfig.onCollisionVFXPath; break;
+            case 3: enabled = eventConfig.onLifetimeThresholdEnabled; if (enabled) vfxPath = eventConfig.onLifetimeThresholdVFXPath; break;
+            default: break;
             }
 
-            if (vfxPath.empty())
+            if (!enabled)
                 continue;
 
             uint32_t parentSubCount = 0;
@@ -176,30 +213,37 @@ namespace controllers
                     parentSubCount++;
             }
 
-            if (parentSubCount >= MAX_SUB_EMITTERS_PER_PARENT)
+            // VK-1460: restore dev behavior — suppress BOTH the sub-emitter spawn and the
+            // VFXParticleEventNotification when there is no sub-VFX path or the per-parent
+            // cap is reached (dev `continue`d in both cases). Publishing past the cap
+            // spammed subscribed gameplay/script listeners every frame.
+            if (vfxPath.empty() || parentSubCount >= MAX_SUB_EMITTERS_PER_PARENT)
                 continue;
 
-            VFXRuntimeParams subParams;
-            subParams.vfxAssetPath = vfxPath;
-            subParams.worldTransform = glm::translate(glm::mat4(1.0f),
-                glm::vec3(event.position.x, event.position.y, event.position.z));
-            subParams.loop = false;
-
-            VFXInstanceId subId = createInstance(subParams);
-            if (subId != 0)
+            if (!vfxPath.empty() && parentSubCount < MAX_SUB_EMITTERS_PER_PARENT)
             {
-                playInstance(subId);
+                VFXRuntimeParams subParams;
+                subParams.vfxAssetPath = vfxPath;
+                subParams.worldTransform = glm::translate(glm::mat4(1.0f),
+                    glm::vec3(event.position.x, event.position.y, event.position.z));
+                subParams.loop = false;
 
-                SubEmitterInstance subEmitter;
-                subEmitter.parentId = parentId;
-                subEmitter.subId = subId;
-                subEmitter.lifetime = 0.0f;
+                VFXInstanceId subId = createInstance(subParams);
+                if (subId != 0)
+                {
+                    playInstance(subId);
 
-                auto subIt = instances.find(subId);
-                if (subIt != instances.end())
-                    subEmitter.maxLifetime = subIt->second.config.lifetime * 2.0f;
+                    SubEmitterInstance subEmitter;
+                    subEmitter.parentId = parentId;
+                    subEmitter.subId = subId;
+                    subEmitter.lifetime = 0.0f;
 
-                activeSubEmitters.push_back(subEmitter);
+                    auto subIt = instances.find(subId);
+                    if (subIt != instances.end())
+                        subEmitter.maxLifetime = subIt->second.config.lifetime * 2.0f;
+
+                    activeSubEmitters.push_back(subEmitter);
+                }
             }
 
             services::events::vfxruntime::VFXParticleEventNotification notification;
@@ -258,6 +302,30 @@ namespace controllers
                 return false;
         }
         return true;
+    }
+
+    bool VFXSceneRenderer::isEmitterDistanceCulled(const VFXRuntimeInstance& instance) const
+    {
+        // Camera-relative effects follow the camera and are never distance-culled.
+        if (instance.cameraRelative)
+            return false;
+
+        // VK-1453: a per-instance scalability cull distance (>=0) wins over the global one
+        // and applies even when global distance culling is off; otherwise fall back to the
+        // global toggle + distance.
+        float distSq = instance.cullDistanceSqOverride;
+        if (distSq < 0.0f)
+        {
+            if (!distanceCullingEnabled || maxVFXDistSq <= 0.0f)
+                return false;
+            distSq = maxVFXDistSq;
+        }
+        if (distSq <= 0.0f)
+            return false;
+
+        glm::vec3 emitterPos = glm::vec3(instance.worldTransform[3]);
+        glm::vec3 diff = emitterPos - currentCameraPos;
+        return glm::dot(diff, diff) > distSq;
     }
 
     void VFXSceneRenderer::updateInstanceLOD(VFXRuntimeInstance& instance) const

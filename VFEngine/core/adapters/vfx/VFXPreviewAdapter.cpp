@@ -37,12 +37,8 @@ namespace core
         }
     }
 
-    void VFXPreviewAdapter::setVFXParams(services::PreviewInstanceId instanceId,
-                                         const services::VFXPreviewParams& params)
+    controllers::VFXPreviewParams VFXPreviewAdapter::toControllerParams(const services::VFXPreviewParams& params)
     {
-        auto* controller = getController(instanceId);
-        if (!controller) return;
-
         controllers::VFXPreviewParams controllerParams;
         controllerParams.spawnRate = params.spawnRate;
         controllerParams.lifetime = params.lifetime;
@@ -77,7 +73,16 @@ namespace core
         controllerParams.collisionFriction = params.collisionFriction;
         controllerParams.collisionLifetimeLoss = params.collisionLifetimeLoss;
 
-        controller->setParams(controllerParams);
+        return controllerParams;
+    }
+
+    void VFXPreviewAdapter::setVFXParams(services::PreviewInstanceId instanceId,
+                                         const services::VFXPreviewParams& params)
+    {
+        auto* controller = getController(instanceId);
+        if (!controller) return;
+
+        controller->setParams(toControllerParams(params));
     }
 
     void VFXPreviewAdapter::updateVFXCamera(services::PreviewInstanceId instanceId, const glm::mat4& view,
@@ -130,5 +135,48 @@ namespace core
     {
         auto* controller = getController(instanceId);
         return controller ? controller->render() : nullptr;
+    }
+
+    void VFXPreviewAdapter::setVFXSequence(services::PreviewInstanceId instanceId,
+                                           const services::VFXSequencePreviewDesc& desc)
+    {
+        auto* controller = getController(instanceId);
+        if (!controller) return;
+
+        controllers::VFXSequencePreviewDesc ctrlDesc;
+        ctrlDesc.seed = desc.seed;
+        ctrlDesc.playbackRate = desc.playbackRate;
+        ctrlDesc.fixedStep = desc.fixedStep;
+        ctrlDesc.markers = desc.markers;
+        ctrlDesc.steps.reserve(desc.steps.size());
+        for (const auto& step : desc.steps)
+        {
+            controllers::VFXSequencePreviewStep ctrlStep;
+            ctrlStep.params = toControllerParams(step.params);
+            ctrlStep.localTransform = step.localTransform;
+            ctrlStep.seed = step.seed;
+            ctrlStep.startTime = step.startTime;
+            ctrlStep.duration = step.duration;
+            ctrlStep.loop = step.loop;
+            ctrlStep.stopMode = step.stopMode;
+            ctrlStep.cueName = step.cueName;
+            ctrlDesc.steps.push_back(std::move(ctrlStep));
+        }
+
+        controller->setSequence(ctrlDesc);
+    }
+
+    void VFXPreviewAdapter::seekVFX(services::PreviewInstanceId instanceId, float seconds)
+    {
+        auto* controller = getController(instanceId);
+        if (controller)
+            controller->seekSequence(seconds);
+    }
+
+    void VFXPreviewAdapter::setVFXRate(services::PreviewInstanceId instanceId, float rate)
+    {
+        auto* controller = getController(instanceId);
+        if (controller)
+            controller->setSequenceRate(rate);
     }
 }

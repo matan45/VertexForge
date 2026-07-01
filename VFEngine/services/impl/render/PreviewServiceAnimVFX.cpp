@@ -170,4 +170,22 @@ namespace services
             handle.imguiDescriptorSet = vfxProvider->renderVFXPreview(instanceId);
         return handle;
     }
+
+    void PreviewServiceImpl::setVFXSequence(PreviewInstanceId instanceId, const VFXSequencePreviewDesc& desc)
+    {
+        if (vfxProvider)
+            vfxProvider->setVFXSequence(instanceId, desc);
+    }
+
+    void PreviewServiceImpl::seekVFXPreview(PreviewInstanceId instanceId, float seconds)
+    {
+        if (vfxProvider)
+            vfxProvider->seekVFX(instanceId, seconds);
+    }
+
+    void PreviewServiceImpl::setVFXPreviewRate(PreviewInstanceId instanceId, float rate)
+    {
+        if (vfxProvider)
+            vfxProvider->setVFXRate(instanceId, rate);
+    }
 }

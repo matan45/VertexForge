@@ -2,9 +2,17 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "../preview/PreviewWindowChrome.hpp"
 #include <vfx/VFXSequenceTypes.hpp>
+#include <providers/vfx/IVFXPreviewProvider.hpp>
+#include <math/Frustum.hpp>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+namespace vfx
+{
+    struct VFXData;
+}
 
 namespace editor::vfxeditor
 {
@@ -17,7 +25,7 @@ namespace windows
     // child .vfVFX placements in time (or behind a named cue), each with an
     // optional local transform, socket, and name-keyed parameter overrides.
     // Mirrors VFXEditorWindow's lifecycle (path ctor, dirty '*' title, save
-    // publishes AssetSavedNotification + writes a dependency .vfmeta sidecar).
+    // publishes AssetSavedNotification; shared asset services own dependency metadata).
     class VFXSequenceEditorWindow : public controllers::imguiHandler::ImguiWindow
     {
     private:
@@ -29,14 +37,20 @@ namespace windows
         bool isDirty = false;
         bool needsInit = true;
 
-        // Timeline scrub. Drives the real GPU single-emitter preview
-        // (VFXPreviewPanel / IVFXPreviewProvider) one step at a time: whichever
-        // step is active at the playhead is loaded and played. The runtime plays
-        // the full composited combo on the GPU in Play mode.
+        // Timeline scrub. Drives the real GPU composited preview (VK-1451): every
+        // step is rendered at once into one offscreen image, deterministically seeded,
+        // with play/pause/seek/rate/prewarm transport mirroring AnimationTimelinePanel.
         float previewTime = 0.0f;
-        bool previewPlaying = false;
+        bool previewPlaying = true;             // auto-play the composited combo on open
         bool previewLoop = true;
-        int previewActiveStep = -1;             // step currently loaded into the panel
+        bool previewDirty = true;               // rebuild + re-send the sequence desc
+        uint32_t previewSeed = 0;               // 0 => auto (asset seed, then random)
+        float previewRate = 1.0f;
+        float previewPrewarm = 0.0f;
+
+        // Per-path .vfVFX cache so rebuilding the composite on a timing/seed/marker edit
+        // doesn't re-read every step's file from disk each frame (Reload clears it).
+        mutable std::unordered_map<std::string, std::shared_ptr<vfx::VFXData>> vfxCache;
 
         std::unique_ptr<editor::vfxeditor::VFXPreviewPanel> previewPanel;
 
@@ -57,6 +71,8 @@ namespace windows
         ImVec2 initialSize{0.0f, 0.0f};
         bool sizeSaved = false;
 
+        bool showBounds = false; // VK-1453 — toggle the aggregate-bounds overlay
+
     public:
         explicit VFXSequenceEditorWindow(const std::string& seqPath);
         ~VFXSequenceEditorWindow() override;    // out-of-line (VFXPreviewPanel is incomplete here)
@@ -71,14 +87,24 @@ namespace windows
         void saveSequence();
 
         void drawToolbar();
+        void drawValidationStrip();
         void drawStepList();
         void drawStepInspector();
         void drawTimeline();
+        void drawMarkersRow();          // one-shot event-marker editor under the timeline
+        void drawOverrideList(std::vector<vfx::VFXParamOverride>& overrides, const char* label);
+        void drawCuePayload(vfx::VFXCuePayload& payload);
 
-        // Real GPU preview (one active step at a time).
+        // Real GPU composited preview (all steps at once).
         void drawPreviewViewport();
-        int pickActiveStep() const;
-        void syncPreviewToStep(int stepIndex);
+        // Build the full composited descriptor from the current sequence data
+        // (loads each step's .vfVFX, applies overrides, attaches timing + derived seed).
+        services::VFXSequencePreviewDesc buildSequenceDesc() const;
+
+        // VK-1453 — aggregate bounds over the steps (union of each child's resolved
+        // bounds transformed by its local placement); recalc captures it as Fixed.
+        math::AABB computeSequenceBoundsUnion() const;
+        void recalcSequenceBounds();
 
         void loadSocketNames();             // read sockets from socketMeshPath
         void drawSocketField(vfx::VFXSequenceStep& step); // dropdown if a mesh is set, else text

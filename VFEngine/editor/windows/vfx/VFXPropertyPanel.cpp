@@ -273,27 +273,46 @@ namespace editor::vfxeditor
 
         if (node->type == vfx::VFXNodeType::Emitter)
         {
-            // Advanced properties not shown in the compact node
-            static const std::unordered_set<std::string> coreProperties = {
-                "spawnRate", "lifetime", "startSize", "startVelocity",
-                "startColor", "looping", "texture"
-            };
             static const std::unordered_set<std::string> handledProperties = {
+                "spawnRate", "lifetime", "startSize", "startVelocity",
+                "startColor", "looping", "texture",
                 "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
                 "flipbookRandomStart", "alphaClipThreshold", "additiveBlend", "meshPath",
                 "renderMode", "softParticleDistance", "stretchMultiplier",
                 "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
-                "uvScrollSpeedU", "uvScrollSpeedV"
+                "uvScrollSpeedU", "uvScrollSpeedV",
+                "lightingInfluence", "ambientAmount", "normalMode",
+                "distortionEnabled", "distortionStrength", "distortionTexture"
             };
 
-            if (ImGui::CollapsingHeader("Advanced Properties", ImGuiTreeNodeFlags_DefaultOpen))
+            if (ImGui::CollapsingHeader("Core", ImGuiTreeNodeFlags_DefaultOpen))
+                drawCoreProperties(*node);
+            if (ImGui::CollapsingHeader("Flipbook"))
+                drawFlipbookProperties(*node);
+            if (ImGui::CollapsingHeader("Rendering"))
+                drawRenderingProperties(*node);
+            if (ImGui::CollapsingHeader("Ribbon"))
+                drawRibbonProperties(*node, 80.0f);
+            if (ImGui::CollapsingHeader("UV Scroll"))
+                drawUVScrollProperties(*node, 80.0f);
+            if (ImGui::CollapsingHeader("Bursts"))
+                drawBurstProperties(*node, 80.0f);
+            if (ImGui::CollapsingHeader("Events"))
+                drawEventsProperties(*node, 80.0f);
+            if (ImGui::CollapsingHeader("Lighting"))
+                drawLightingProperties(*node);
+            if (ImGui::CollapsingHeader("Collision"))
+                drawCollisionProperties(*node, 80.0f);
+            if (ImGui::CollapsingHeader("Distortion"))
+                drawDistortionProperties(*node);
+
+            if (ImGui::CollapsingHeader("Advanced"))
             {
                 float labelWidth = 160.0f;
                 float inputWidth = 80.0f;
 
                 for (auto& [propName, prop] : node->properties)
                 {
-                    if (coreProperties.count(propName)) continue;
                     if (handledProperties.count(propName)) continue;
                     if (propName.rfind("flipbook", 0) == 0) continue;
                     if (propName.rfind("event", 0) == 0) continue;
@@ -352,21 +371,18 @@ namespace editor::vfxeditor
                     }
                 }
             }
+            return;
+        }
 
-            ImGui::Spacing();
-            drawFlipbookProperties(*node);
-            ImGui::Spacing();
-            drawRenderingProperties(*node);
-            ImGui::Spacing();
-            drawRibbonProperties(*node, 80.0f);
-            ImGui::Spacing();
-            drawUVScrollProperties(*node, 80.0f);
-            ImGui::Spacing();
-            drawBurstProperties(*node, 80.0f);
-            ImGui::Spacing();
-            drawEventsProperties(*node, 80.0f);
-            ImGui::Spacing();
-            drawCollisionProperties(*node, 80.0f);
+        if (vfx::isForceNode(node->type))
+        {
+            drawForceProperties(*node);
+            return;
+        }
+
+        if (vfx::isShapeNode(node->type))
+        {
+            drawShapeProperties(*node);
             return;
         }
 

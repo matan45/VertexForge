@@ -3,6 +3,7 @@
 #include "VFXAsset.hpp"
 #include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <fstream>
 #include <filesystem>
 #include <format>
@@ -89,6 +90,20 @@ namespace vfx
             }
 
             return j;
+        }
+
+        json vec3ToJson(const glm::vec3& v)
+        {
+            return json::array({v.x, v.y, v.z});
+        }
+
+        glm::vec3 jsonToVec3(const json& j, const glm::vec3& fallback)
+        {
+            if (j.is_array() && j.size() >= 3)
+            {
+                return glm::vec3(j[0].get<float>(), j[1].get<float>(), j[2].get<float>());
+            }
+            return fallback;
         }
 
     } // anonymous namespace
@@ -398,6 +413,44 @@ namespace vfx
                 parseVFXLinks(graphJson, vfxData.graph, logWarning);
             }
 
+            // VK-1453 (Phase 4) — bounds / scalability / cull opt-in (all tolerant;
+            // absent keys keep the struct defaults: Auto bounds, disabled, off).
+            if (j.contains("bounds") && j["bounds"].is_object())
+            {
+                const auto& boundsJson = j["bounds"];
+                vfxData.bounds.mode = static_cast<VFXBoundsMode>(
+                    static_cast<uint8_t>(boundsJson.value("mode", 0)));
+                if (boundsJson.contains("center"))
+                    vfxData.bounds.center = jsonToVec3(boundsJson["center"], glm::vec3(0.0f));
+                if (boundsJson.contains("extents"))
+                    vfxData.bounds.extents = jsonToVec3(boundsJson["extents"], glm::vec3(0.0f));
+            }
+
+            if (j.contains("scalability") && j["scalability"].is_object())
+            {
+                const auto& scalabilityJson = j["scalability"];
+                vfxData.scalability.enabled = scalabilityJson.value("enabled", false);
+                if (scalabilityJson.contains("levels") && scalabilityJson["levels"].is_array())
+                {
+                    const auto& levelsJson = scalabilityJson["levels"];
+                    const size_t count = std::min<size_t>(levelsJson.size(), kVFXQualityTierCount);
+                    for (size_t i = 0; i < count; ++i)
+                    {
+                        const auto& levelJson = levelsJson[i];
+                        if (!levelJson.is_object())
+                            continue;
+                        VFXScalabilityLevel& level = vfxData.scalability.levels[i];
+                        level.spawnRateScale = levelJson.value("spawnRateScale", 1.0f);
+                        level.maxParticles = levelJson.value("maxParticles", -1);
+                        level.cullDistance = levelJson.value("cullDistance", -1.0f);
+                        level.updateInterval = levelJson.value("updateInterval", 1);
+                        level.rendererEnabled = levelJson.value("rendererEnabled", true);
+                    }
+                }
+            }
+
+            vfxData.cullEligible = j.value("cullEligible", false);
+
             if (warningCount > 0)
                 vfLogWarning("Loaded VFX '{}' with {} warning(s)", vfxData.name, warningCount);
 
@@ -440,6 +493,35 @@ namespace vfx
         graphJson["links"] = linksJson;
 
         j["graph"] = graphJson;
+
+        // VK-1453 (Phase 4) — explicit bounds, per-tier scalability and cull opt-in.
+        {
+            json boundsJson;
+            boundsJson["mode"] = static_cast<int>(static_cast<uint8_t>(vfxData.bounds.mode));
+            boundsJson["center"] = vec3ToJson(vfxData.bounds.center);
+            boundsJson["extents"] = vec3ToJson(vfxData.bounds.extents);
+            j["bounds"] = std::move(boundsJson);
+        }
+
+        {
+            json scalabilityJson;
+            scalabilityJson["enabled"] = vfxData.scalability.enabled;
+            json levelsJson = json::array();
+            for (const auto& level : vfxData.scalability.levels)
+            {
+                json levelJson;
+                levelJson["spawnRateScale"] = level.spawnRateScale;
+                levelJson["maxParticles"] = level.maxParticles;
+                levelJson["cullDistance"] = level.cullDistance;
+                levelJson["updateInterval"] = level.updateInterval;
+                levelJson["rendererEnabled"] = level.rendererEnabled;
+                levelsJson.push_back(std::move(levelJson));
+            }
+            scalabilityJson["levels"] = std::move(levelsJson);
+            j["scalability"] = std::move(scalabilityJson);
+        }
+
+        j["cullEligible"] = vfxData.cullEligible;
 
         try
         {

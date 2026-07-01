@@ -87,6 +87,16 @@ namespace services
                     onEntityDeleted(notification.entity);
                 }
             });
+
+        sceneLoadedToken = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
+            [this](const ::events::scene::SceneLoadedNotification&)
+            {
+                if (vfxActive.load())
+                {
+                    std::lock_guard<std::mutex> lock(pendingMutex);
+                    sceneRescanFrames = kSceneLoadRescanFrames;
+                }
+            });
     }
 
     void VFXPlayModeHandler::unsubscribeFromEvents()
@@ -127,6 +137,12 @@ namespace services
         {
             dispatcher.unsubscribe(entityDeletedToken);
             entityDeletedToken = {};
+        }
+
+        if (sceneLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(sceneLoadedToken);
+            sceneLoadedToken = {};
         }
     }
 
@@ -178,36 +194,7 @@ namespace services
             return;
         }
 
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::VFXComponent, components::WorldTransformComponent>();
-
-        for (auto entity : view)
-        {
-            auto& vfxComp = view.get<components::VFXComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            if (!vfxComp.vfxRef.isValid())
-            {
-                continue;
-            }
-
-            if (registry.all_of<components::NameComponent>(entity))
-            {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
-            }
-
-            createVFXInstanceForEntity(internal::toHandle(entity),
-                                       vfxComp.vfxRef.resolve(),
-                                       worldTransform.worldMatrix,
-                                       vfxComp.loop,
-                                       vfxComp.priority,
-                                       vfxComp.cameraRelative,
-                                       vfxComp.autoPlay);
-        }
+        scanAndCreateAutoplayInstances();
 
         vfxActive = true;
         size_t instanceCount = 0;
@@ -236,6 +223,7 @@ namespace services
             instances.swap(activeVFXInstances);
             pendingPrefabRoots.clear();
             pendingStreamCreates.clear();
+            sceneRescanFrames = 0;
         }
 
         for (const auto& [handle, instanceId] : instances)
@@ -509,6 +497,45 @@ namespace services
         }
     }
 
+    void VFXPlayModeHandler::scanAndCreateAutoplayInstances()
+    {
+        if (!vfxProvider || !vfxProvider->isInitialized())
+        {
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::VFXComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            auto& vfxComp = view.get<components::VFXComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            if (!vfxComp.vfxRef.isValid())
+            {
+                continue;
+            }
+
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            createVFXInstanceForEntity(internal::toHandle(entity),
+                                       vfxComp.vfxRef.resolve(),
+                                       worldTransform.worldMatrix,
+                                       vfxComp.loop,
+                                       vfxComp.priority,
+                                       vfxComp.cameraRelative,
+                                       vfxComp.autoPlay);
+        }
+    }
+
     VFXInstanceId VFXPlayModeHandler::createVFXInstanceForEntity(EntityHandle handle,
                                                                  const std::string& vfxPath,
                                                                  const glm::mat4& worldTransform,
@@ -584,6 +611,20 @@ namespace services
         if (!vfxActive.load() || !vfxProvider)
         {
             return;
+        }
+
+        bool doRescan = false;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            if (sceneRescanFrames > 0)
+            {
+                --sceneRescanFrames;
+                doRescan = true;
+            }
+        }
+        if (doRescan)
+        {
+            scanAndCreateAutoplayInstances();
         }
 
         // Process budgeted streaming creates + mid-Play prefab spawns (transforms now settled)

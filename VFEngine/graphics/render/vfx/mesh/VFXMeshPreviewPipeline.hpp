@@ -100,6 +100,9 @@ namespace render::vfx
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
+        // Bind+draw only (no render-pass begin/end) for VK-1451 composited preview.
+        void recordDraws(const vk::CommandBuffer& commandBuffer) const;
+
         bool isInitialized() const { return initialized; }
         bool hasMesh() const { return meshIndexCount > 0; }
 

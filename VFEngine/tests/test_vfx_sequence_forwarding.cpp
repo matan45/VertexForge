@@ -2,10 +2,12 @@
 
 #include <impl/vfx/VFXSequenceRuntimeServiceImpl.hpp>
 #include <events/EventDispatcher.hpp>
+#include <events/vfx/VFXEventNotifications.hpp>
 #include <events/vfx/VFXRuntimeEvents.hpp>
 #include <data/VFXTypes.hpp>
 #include <vfx/VFXSequenceAsset.hpp>
 #include <vfx/VFXSequenceTypes.hpp>
+#include <vfx/VFXComboTimeline.hpp>
 #include <asset/AssetRef.hpp>
 #include <asset/AssetGUID.hpp>
 #include <asset/AssetDatabase.hpp>
@@ -49,6 +51,8 @@ namespace
             bool loop = false;
             bool autoDestroy = false;
             glm::mat4 worldTransform{1.0f};
+            uint32_t seed = 0; // VK-1451 deterministic child seed
+            bool poolable = false; // VK-1460 — combo children must never opt into pooling
         };
 
         std::vector<CreateRecord> creates;
@@ -57,6 +61,7 @@ namespace
         std::vector<VFXInstanceId> destroys;
         std::vector<VFXInstanceId> setTransforms;
         std::vector<VFXInstanceId> applyOverrides;
+        std::vector<services::VFXEmitterOverrides> overrideRecords;
 
         // Ids the provider currently reports as "playing". spawnStep() pushes here;
         // a test clears an id to simulate provider auto-destroy of a finished child.
@@ -71,7 +76,8 @@ namespace
                 {
                     VFXInstanceId id = nextId++;
                     creates.push_back({id, c.params.vfxAssetPath, c.params.loop,
-                                       c.params.autoDestroy, c.params.worldTransform});
+                                       c.params.autoDestroy, c.params.worldTransform, c.params.seed,
+                                       c.params.poolable});
                     live.insert(id);
                     return id;
                 });
@@ -93,7 +99,11 @@ namespace
                 [this](const services::events::vfxruntime::SetVFXInstanceTransformCommand& c) { setTransforms.push_back(c.instanceId); });
 
             d.registerCommandHandler<services::events::vfxruntime::ApplyVFXInstanceOverridesCommand>(
-                [this](const services::events::vfxruntime::ApplyVFXInstanceOverridesCommand& c) { applyOverrides.push_back(c.instanceId); });
+                [this](const services::events::vfxruntime::ApplyVFXInstanceOverridesCommand& c)
+                {
+                    applyOverrides.push_back(c.instanceId);
+                    overrideRecords.push_back(c.overrides);
+                });
 
             d.registerQueryHandler<services::events::vfxruntime::IsVFXInstancePlayingQuery>(
                 [this](const services::events::vfxruntime::IsVFXInstancePlayingQuery& q) -> bool { return live.count(q.instanceId) > 0; });
@@ -283,6 +293,130 @@ TEST_SUITE("VFXSequenceForwarding")
         // Triggering an unknown cue spawns nothing more.
         svc.triggerCue(combo, "nope");
         CHECK(mock.creates.size() == 1);
+    }
+
+    TEST_CASE("manual cue payload publishes notification and applies child overrides")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        vfx::VFXSequenceData data;
+        data.name = "payload";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF021, "assets/vfx/payload.vfVFX");
+        s.cueName = "impact";
+        s.overrides.push_back(vfx::VFXParamOverride{"spawnRate", 5.0f});
+        data.steps.push_back(s);
+
+        std::string path = saveSequence("Combo_CuePayload.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+
+        vfx::VFXCuePayload payload;
+        payload.position = glm::vec3(2.0f, 0.0f, 0.0f);
+        payload.color = glm::vec4(0.2f, 0.4f, 0.6f, 1.0f);
+        payload.custom.push_back(vfx::VFXParamOverride{"spawnRate", 9.0f});
+
+        svc.triggerCue(combo, "impact", payload);
+
+        REQUIRE(notifications.size() == 1);
+        CHECK(notifications[0].comboId == combo);
+        CHECK(notifications[0].cueName == "impact");
+        REQUIRE(notifications[0].payload.position.has_value());
+        CHECK(notifications[0].payload.position->x == doctest::Approx(2.0f));
+
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].worldTransform[3][0] == doctest::Approx(2.0f));
+        REQUIRE(mock.overrideRecords.size() == 1);
+        REQUIRE(mock.overrideRecords[0].startColor.has_value());
+        CHECK(mock.overrideRecords[0].startColor->z == doctest::Approx(0.6f));
+        REQUIRE(mock.overrideRecords[0].spawnRate.has_value());
+        CHECK(*mock.overrideRecords[0].spawnRate == doctest::Approx(9.0f));
+    }
+
+    TEST_CASE("marker payload publishes notification and applies to marker-spawned children")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        vfx::VFXSequenceData data;
+        data.name = "markerPayload";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF022, "assets/vfx/marker_payload.vfVFX");
+        s.cueName = "impact";
+        data.steps.push_back(s);
+
+        vfx::VFXSequenceEventMarker marker{0.1f, "impact"};
+        marker.payload.position = glm::vec3(0.0f, 3.0f, 0.0f);
+        marker.payload.color = glm::vec4(1.0f, 0.0f, 0.25f, 1.0f);
+        data.eventMarkers.push_back(marker);
+
+        std::string path = saveSequence("Combo_MarkerPayload.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+        svc.update(0.2f);
+
+        REQUIRE(notifications.size() == 1);
+        CHECK(notifications[0].cueName == "impact");
+        REQUIRE(notifications[0].payload.color.has_value());
+        CHECK(notifications[0].payload.color->z == doctest::Approx(0.25f));
+
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].worldTransform[3][1] == doctest::Approx(3.0f));
+        REQUIRE(mock.overrideRecords.size() == 1);
+        REQUIRE(mock.overrideRecords[0].startColor.has_value());
+        CHECK(mock.overrideRecords[0].startColor->z == doctest::Approx(0.25f));
+    }
+
+    TEST_CASE("pure-signal marker publishes cue notification without spawning a child")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        vfx::VFXSequenceData data;
+        data.name = "signal";
+        vfx::VFXSequenceStep future;
+        future.vfxRef = makeResolvingRef(0xF023, "assets/vfx/future_signal.vfVFX");
+        future.startTime = 5.0f;
+        data.steps.push_back(future);
+        vfx::VFXSequenceEventMarker marker{0.1f, "signalOnly"};
+        marker.payload.scalar = 8.0f;
+        data.eventMarkers.push_back(marker);
+
+        std::string path = saveSequence("Combo_SignalOnly.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+        svc.update(0.2f);
+
+        CHECK(mock.creates.empty());
+        REQUIRE(notifications.size() == 1);
+        CHECK(notifications[0].cueName == "signalOnly");
+        REQUIRE(notifications[0].payload.scalar.has_value());
+        CHECK(*notifications[0].payload.scalar == doctest::Approx(8.0f));
     }
 
     // -------- stopCombo: Stop to non-loop, Destroy to loop children --------
@@ -476,5 +610,191 @@ TEST_SUITE("VFXSequenceForwarding")
         // Exactly one Create — only the resolving step spawned.
         REQUIRE(mock.creates.size() == 1);
         CHECK(mock.creates[0].path == "assets/vfx/good.vfVFX");
+    }
+
+    // ============================================================
+    // VK-1451 — deterministic transport at the service level
+    // ============================================================
+
+    // -------- spawned child carries the derived per-step seed --------
+    TEST_CASE("spawned child seed equals deriveSeed(comboSeed, stepIndex)")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "seeded";
+        data.seed = 12345u; // explicit asset seed => deterministic
+        for (int i = 0; i < 2; ++i)
+        {
+            vfx::VFXSequenceStep s;
+            s.vfxRef = makeResolvingRef(0xF080 + i, "assets/vfx/s" + std::to_string(i) + ".vfVFX");
+            s.startTime = 0.0f;
+            s.loop = false;
+            data.steps.push_back(s);
+        }
+        std::string path = saveSequence("Combo_Seeded.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false); // seed arg 0 => use asset 12345
+        svc.playCombo(combo);
+        svc.update(0.1f);
+
+        REQUIRE(mock.creates.size() == 2);
+        CHECK(mock.creates[0].seed == vfx::VFXComboTimeline::deriveSeed(12345u, 0));
+        CHECK(mock.creates[1].seed == vfx::VFXComboTimeline::deriveSeed(12345u, 1));
+        CHECK(mock.creates[0].seed != mock.creates[1].seed);
+        CHECK(mock.creates[0].seed != 0u);
+    }
+
+    // -------- VK-1460: combo children never opt into the dormant instance pool --------
+    TEST_CASE("spawned combo children are created non-poolable (VK-1460)")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        // A non-looping (autoDestroy), no-socket, non-camera-relative step is exactly the
+        // shape that USED to opt into renderer pooling. Combo children must NOT, because a
+        // combo retains the child id across frames and the pool re-issues ids with no
+        // generation tag (cross-combo aliasing). Assert poolable is false despite that shape.
+        vfx::VFXSequenceData data;
+        data.name = "nopool";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF0D0, "assets/vfx/np.vfVFX");
+        s.startTime = 0.0f;
+        s.loop = false;    // autoDestroy == true
+        s.socketName = ""; // no socket
+        data.steps.push_back(s);
+
+        std::string path = saveSequence("Combo_NoPool.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+        svc.update(0.1f);
+
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].autoDestroy == true); // the former pooling precondition holds
+        CHECK(mock.creates[0].poolable == false);   // ...yet the child is not poolable
+    }
+
+    // -------- pause halts spawns; resume re-enables them --------
+    TEST_CASE("pause stops the schedule; resume lets due steps spawn")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "paused";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF090, "assets/vfx/p.vfVFX");
+        s.startTime = 0.5f;
+        s.loop = false;
+        data.steps.push_back(s);
+        std::string path = saveSequence("Combo_Paused.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+
+        svc.setComboPaused(combo, true);
+        svc.update(1.0f); // would normally cross 0.5, but paused => no spawn
+        CHECK(mock.creates.empty());
+
+        svc.setComboPaused(combo, false);
+        svc.update(1.0f); // now the step is due
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].path == "assets/vfx/p.vfVFX");
+    }
+
+    // -------- playback rate scales how fast the schedule advances --------
+    TEST_CASE("playback rate 2x reaches a step in half the wall-clock time")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "rate";
+        data.playbackRate = 2.0f; // 2x
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF0A0, "assets/vfx/r.vfVFX");
+        s.startTime = 1.0f;
+        s.loop = false;
+        data.steps.push_back(s);
+        std::string path = saveSequence("Combo_Rate.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+
+        svc.update(0.6f); // scaled = 1.2 >= 1.0 => spawns (at rate 1.0 it would not)
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].path == "assets/vfx/r.vfVFX");
+    }
+
+    // -------- seek jumps the schedule: live steps spawn, future steps don't --------
+    TEST_CASE("seekCombo spawns steps live at the target time and not future steps")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "seek";
+        {
+            vfx::VFXSequenceStep early; // live at t=1.0 (looping, no stop window)
+            early.vfxRef = makeResolvingRef(0xF0B0, "assets/vfx/early.vfVFX");
+            early.startTime = 0.0f;
+            early.loop = true;
+            data.steps.push_back(early);
+
+            vfx::VFXSequenceStep future; // not yet at t=1.0
+            future.vfxRef = makeResolvingRef(0xF0B1, "assets/vfx/future.vfVFX");
+            future.startTime = 2.0f;
+            future.loop = false;
+            data.steps.push_back(future);
+        }
+        std::string path = saveSequence("Combo_Seek.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+
+        svc.seekCombo(combo, 1.0f);
+
+        // Only the early (still-live) step is (re)spawned at the seek target.
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].path == "assets/vfx/early.vfVFX");
+    }
+
+    // -------- prewarm at create fast-forwards the schedule before the first frame --------
+    TEST_CASE("a combo created with prewarm spawns due steps immediately on play")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        vfx::VFXSequenceData data;
+        data.name = "prewarm";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF0C0, "assets/vfx/pw.vfVFX");
+        s.startTime = 1.0f;
+        s.loop = true; // stays live after spawning
+        data.steps.push_back(s);
+        std::string path = saveSequence("Combo_Prewarm.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        // prewarm 2.0s (> startTime 1.0) => the step should already be live when play starts.
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false,
+                                     /*seed*/ 0u, /*prewarm*/ 2.0f, /*rate*/ -1.0f, /*fixedStep*/ -1.0f);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo); // applies prewarm
+
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].path == "assets/vfx/pw.vfVFX");
     }
 }

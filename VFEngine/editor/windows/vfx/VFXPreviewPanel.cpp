@@ -64,6 +64,30 @@ namespace editor::vfxeditor
         events::EventDispatcher::instance().execute(cmd);
     }
 
+    void VFXPreviewPanel::setSequence(const services::VFXSequencePreviewDesc& desc)
+    {
+        services::events::vfxpreview::SetVFXSequencePreviewCommand cmd;
+        cmd.instanceId = services::PreviewInstanceId(instanceId);
+        cmd.desc = desc;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void VFXPreviewPanel::seek(float seconds)
+    {
+        services::events::vfxpreview::SeekVFXPreviewCommand cmd;
+        cmd.instanceId = services::PreviewInstanceId(instanceId);
+        cmd.seconds = seconds;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void VFXPreviewPanel::setRate(float rate)
+    {
+        services::events::vfxpreview::SetVFXPreviewRateCommand cmd;
+        cmd.instanceId = services::PreviewInstanceId(instanceId);
+        cmd.rate = rate;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
     void VFXPreviewPanel::play()
     {
         services::events::vfxpreview::PlayVFXCommand cmd;
@@ -126,6 +150,54 @@ namespace editor::vfxeditor
         }
     }
 
+    void VFXPreviewPanel::drawBoundsOverlay(float imageMinX, float imageMinY, float imageSizeX, float imageSizeY)
+    {
+        // Project the 8 AABB corners with the same view/proj the GPU rendered with.
+        // The projection already bakes in the Vulkan Y-flip (OrbitCamera negates
+        // proj[1][1]) and the image is displayed top-down, so NDC maps to the image
+        // rect as (ndc*0.5+0.5) on both axes with no extra flip.
+        const glm::mat4 view = camera->getViewMatrix();
+        const glm::mat4 proj = camera->getProjectionMatrix();
+        const glm::mat4 vp = proj * view;
+
+        const glm::vec3 mn = overlayBounds.min;
+        const glm::vec3 mx = overlayBounds.max;
+        const glm::vec3 corners[8] = {
+            {mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z}, {mx.x, mx.y, mn.z}, {mn.x, mx.y, mn.z},
+            {mn.x, mn.y, mx.z}, {mx.x, mn.y, mx.z}, {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
+        };
+
+        ImVec2 screen[8];
+        bool visible[8];
+        for (int i = 0; i < 8; ++i)
+        {
+            glm::vec4 clip = vp * glm::vec4(corners[i], 1.0f);
+            if (clip.w <= 1e-6f)
+            {
+                visible[i] = false;
+                continue;
+            }
+            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            screen[i] = ImVec2(imageMinX + (ndc.x * 0.5f + 0.5f) * imageSizeX,
+                               imageMinY + (ndc.y * 0.5f + 0.5f) * imageSizeY);
+            visible[i] = true;
+        }
+
+        static const int edges[12][2] = {
+            {0, 1}, {1, 2}, {2, 3}, {3, 0}, // near face
+            {4, 5}, {5, 6}, {6, 7}, {7, 4}, // far face
+            {0, 4}, {1, 5}, {2, 6}, {3, 7}  // connecting
+        };
+
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImU32 color = IM_COL32(80, 200, 255, 200);
+        for (const auto& e : edges)
+        {
+            if (visible[e[0]] && visible[e[1]])
+                dl->AddLine(screen[e[0]], screen[e[1]], color, 1.5f);
+        }
+    }
+
     void VFXPreviewPanel::draw()
     {
         ImGui::Text("VFX Preview");
@@ -179,7 +251,10 @@ namespace editor::vfxeditor
 
             if (textureHandle.imguiDescriptorSet)
             {
+                ImVec2 imageMin = ImGui::GetCursorScreenPos();
                 ImGui::Image(textureHandle.imguiDescriptorSet, imageSize);
+                if (showBounds && hasOverlayBounds)
+                    drawBoundsOverlay(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
             }
             else
             {
@@ -188,6 +263,7 @@ namespace editor::vfxeditor
         }
         ImGui::EndChild();
 
-        drawPlaybackControls();
+        if (builtInControls)
+            drawPlaybackControls();
     }
 }

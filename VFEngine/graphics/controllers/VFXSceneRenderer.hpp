@@ -3,11 +3,14 @@
 #include "../render/vfx/billboard/VFXBillboardTypes.hpp"
 #include "../render/vfx/compute/GPUVFXTypes.hpp"
 #include "../../services/data/VFXTypes.hpp"
+#include "vfx/VFXScalability.hpp"
+#include "vfx/VFXHandlePool.hpp"
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <cstdint>
 #include <string>
@@ -71,6 +74,8 @@ namespace controllers
         services::VFXEmitterPriority priority = services::VFXEmitterPriority::Normal;
         bool cameraRelative = false;
         bool autoDestroy = false;
+        uint32_t seed = 0; // VK-1451: 0 => random seed chosen once at creation
+        bool poolable = false; // VK-1453: opt into dormant-instance reuse (fire-and-forget only)
     };
 
     struct VFXRuntimeInstance
@@ -100,6 +105,15 @@ namespace controllers
         float lodBias = 0.0f;
         bool burstClampWarned = false;
         bool autoDestroy = false;
+        uint32_t seed = 0; // VK-1451: stable per-instance RNG seed (set once at creation)
+
+        // VK-1453 (Phase 4) — pooling + scalability per-instance state.
+        bool poolable = false;                // opt into dormant reuse (fire-and-forget only)
+        bool dormant = false;                 // retired-but-retained for later revival
+        std::string assetPath;                // source .vfVFX path (dormant-pool key)
+        float cullDistanceSqOverride = -1.0f; // <0 => use the global VFX cull distance
+        int updateInterval = 1;               // >1 => simulate only every Nth frame
+        int updatePhase = 0;                  // frame offset so throttled emitters spread out
     };
 
     class VFXSceneRenderer
@@ -122,6 +136,17 @@ namespace controllers
 
         std::unordered_map<VFXInstanceId, VFXRuntimeInstance> instances;
         std::unordered_map<uint32_t, VFXInstanceId> emitterIndexToInstanceId;
+
+        // VK-1460: emitter slots whose draw command was left live last frame. Used by the
+        // selective draw-command clear in recordComputeCommands so a temporally-throttled
+        // emitter keeps its (persistent, per-emitter) command on frames it skips dispatch,
+        // while slots that transitioned to hidden (culled/inactive) are zeroed.
+        std::unordered_set<uint32_t> liveDrawSlots;
+
+        // VK-1453 (Phase 4) — parsed-config cache (skip re-reading .vfVFX on repeat
+        // spawns) + dormant fire-and-forget instance pool for cheap reuse.
+        std::unordered_map<std::string, render::vfx::VFXEmitterConfig> configCache;
+        vfx::VFXHandlePool instancePool;
 
         // Deferred destruction queue to avoid per-instance waitIdle()
         // Each entry is (emitterIndex, frameWhenDestroyed)
@@ -158,6 +183,12 @@ namespace controllers
 
         bool distanceCullingEnabled = false;
         float maxVFXDistSq = 0.0f;
+
+        // VK-1453 (Phase 4) — global quality tier applied to scalability profiles at
+        // instance creation, plus per-frame cull/throttle counters for the debug UI.
+        vfx::VFXQualityTier currentTier = vfx::VFXQualityTier::High;
+        uint32_t culledEmittersThisFrame = 0;
+        uint32_t throttledEmittersThisFrame = 0;
 
         glm::vec4 frustumPlanes[6]{};
         bool frustumPlanesValid = false;
@@ -245,6 +276,25 @@ namespace controllers
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
         void setMaxDrawDistance(float distance) { maxVFXDistSq = distance * distance; }
 
+        // VK-1453 (Phase 4) — global VFX quality tier. Selects the scalability level for
+        // each instance at creation; existing instances are not retroactively re-scaled.
+        void setQualityTier(vfx::VFXQualityTier tier) { currentTier = tier; }
+
+        // Camera + cull-state snapshot so the combo service can pre-cull off-screen
+        // fire-and-forget effects before spawning them.
+        struct VFXCullState
+        {
+            bool valid = false;
+            glm::mat4 viewProj{1.0f};
+            glm::vec3 cameraPos{0.0f};
+            bool distanceCullEnabled = false;
+            float maxDrawDistance = 0.0f;
+        };
+        VFXCullState getCullState() const;
+
+        // Drop a cached parsed config so the next spawn of `path` re-reads it from disk.
+        void invalidateConfigCache(const std::string& path);
+
         struct VFXProxyLight
         {
             glm::vec3 position{0.0f};
@@ -265,9 +315,26 @@ namespace controllers
             uint32_t poolWarmSlots = 0;
             uint32_t poolUsedSlots = 0;
             uint32_t poolTotalSlots = 0;
+            // VK-1453 (Phase 4)
+            uint32_t culledEmitters = 0;    // emitters skipped by frustum/distance cull this frame
+            uint32_t throttledEmitters = 0; // emitters whose sim was skipped by updateInterval
+            float vfxCullDistance = 0.0f;   // active max VFX draw distance (0 => unlimited)
         };
 
         VFXBudgetStats getBudgetStats() const;
+
+        // VK-1453 (Phase 4) — per-instance snapshot for the VFX debug window (capped).
+        struct VFXInstanceDebugInfo
+        {
+            VFXInstanceId id = 0;
+            glm::vec3 worldPosition{0.0f};
+            glm::vec3 extents{0.0f};
+            bool inFrustum = true;
+            uint8_t lod = 0;
+            uint32_t particleCount = 0;
+            uint8_t priority = 2;
+        };
+        std::vector<VFXInstanceDebugInfo> getInstanceDebugInfo() const;
 
         struct VFXLODConfig
         {
@@ -294,8 +361,19 @@ namespace controllers
         void cleanupFinishedSubEmitters(float deltaTime);
         void extractFrustumPlanes(const glm::mat4& viewProj);
         bool isEmitterInFrustum(const VFXRuntimeInstance& instance) const;
+        bool isEmitterDistanceCulled(const VFXRuntimeInstance& instance) const;
         void updateInstanceLOD(VFXRuntimeInstance& instance) const;
         VFXInstanceId findLowestPriorityInstance(services::VFXEmitterPriority belowPriority) const;
+
+        // VK-1453 (Phase 4) helpers.
+        render::vfx::VFXEmitterConfig loadConfigCached(const std::string& path);
+        uint32_t pickInstanceSeed(uint32_t explicitSeed);
+        void configureInstanceEmitter(VFXInstanceId id, VFXRuntimeInstance& instance,
+                                      services::VFXEmitterPriority priority, int maxParticlesCap);
+        void reviveDormantInstance(VFXRuntimeInstance& instance, const VFXRuntimeParams& params,
+                                   const render::vfx::VFXEmitterConfig& baseConfig,
+                                   const vfx::VFXScalabilityLevel& level);
+        void retireInstanceToDormant(VFXInstanceId id);
 
         render::vfx::GPUEmitterConfig toGPUConfig(
             const render::vfx::VFXEmitterConfig& cpuConfig,

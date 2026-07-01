@@ -1,10 +1,12 @@
 #pragma once
 
 #include "../asset/AssetRef.hpp"
+#include "VFXParameterRegistry.hpp"
+#include "VFXTypes.hpp"
 #include <glm/glm.hpp>
+#include <optional>
 #include <string>
 #include <vector>
-#include <utility>
 #include <cstdint>
 
 namespace vfx
@@ -35,8 +37,26 @@ namespace vfx
         float duration = 0.0f;              // 0 => play to child completion
         VFXStepStopMode stopMode = VFXStepStopMode::PlayToCompletion;
         std::string socketName;             // optional per-step socket
-        std::vector<std::pair<std::string, float>>     scalarOverrides;
-        std::vector<std::pair<std::string, glm::vec4>> vectorOverrides;
+        std::vector<VFXParamOverride> overrides;
+    };
+
+    struct VFXCuePayload
+    {
+        std::optional<glm::vec3> position;
+        std::optional<glm::vec4> color;
+        std::optional<float> scalar;
+        std::vector<VFXParamOverride> custom;
+    };
+
+    // A one-shot timeline event marker (VK-1451). When the combo clock crosses
+    // `time` it fires the engine's named-cue mechanism: every not-yet-spawned
+    // cue-driven step whose `cueName` matches is spawned. Markers are time-based
+    // (no RNG) so they replay deterministically across seek/prewarm.
+    struct VFXSequenceEventMarker
+    {
+        float time = 0.0f;
+        std::string cueName;
+        VFXCuePayload payload;
     };
 
     struct VFXSequenceData
@@ -45,5 +65,17 @@ namespace vfx
         std::string uuid;
         std::string name = "Unnamed Sequence";
         std::vector<VFXSequenceStep> steps;
+
+        // VK-1451 — deterministic timeline controls. All additive with safe
+        // defaults so existing .vfVFXSequence assets load unchanged.
+        uint32_t seed = 0;          // 0 => auto-random per combo at runtime
+        float    playbackRate = 1.0f;
+        float    fixedStep = 0.0f;  // 0 => variable step (Phase-1 behavior)
+        float    prewarm = 0.0f;    // seconds to fast-forward when the combo starts
+        std::vector<VFXSequenceEventMarker> eventMarkers;
+
+        // VK-1453 (Phase 4) — aggregate bounds over the sequence's steps. Additive
+        // with a neutral default (Auto) so existing .vfVFXSequence files are unaffected.
+        VFXBounds bounds;
     };
 }

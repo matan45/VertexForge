@@ -11,6 +11,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "data/EntityConversion.hpp"
+#include "data/VFXOverrideApplier.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace core::api
@@ -709,6 +710,36 @@ namespace core::api
                 return value::Value(std::monostate{});
             }});
 
+        // _native_vfx_triggerComboCuePayload(comboId, cueName, x, y, z, r, g, b, a [, scalar]) -> void
+        interpreter->registerNativeFunction("_native_vfx_triggerComboCuePayload",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 9)
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                std::string cueName = extractString(args[1], "VFX.triggerComboCuePayload");
+                if (cueName.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                services::events::vfxsequence::TriggerVFXComboCueCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                cmd.cueName = std::move(cueName);
+                cmd.payload.position = glm::vec3(extractFloat(args[2]), extractFloat(args[3]), extractFloat(args[4]));
+                cmd.payload.color = glm::vec4(extractFloat(args[5]), extractFloat(args[6]),
+                                               extractFloat(args[7]), extractFloat(args[8]));
+                if (args.size() >= 10)
+                    cmd.payload.scalar = extractFloat(args[9]);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
         // _native_vfx_comboIsPlaying(comboId) -> bool
         interpreter->registerNativeFunction("_native_vfx_comboIsPlaying",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
@@ -725,6 +756,131 @@ namespace core::api
                 query.comboId = static_cast<services::VFXComboInstanceId>(comboId);
                 bool playing = events::EventDispatcher::instance().query(query);
                 return value::Value(playing);
+            }});
+
+        // ============================================================
+        // VFX COMBO DETERMINISTIC TRANSPORT (VK-1451)
+        // Stable runtime controls only — live mid-game seek is intentionally NOT
+        // scripted (GPU particles cannot be visually rewound).
+        // ============================================================
+
+        // _native_vfx_spawnComboSeeded(path, x, y, z, seed) -> int comboId
+        // Same as spawnCombo but with an explicit RNG seed for a reproducible schedule.
+        interpreter->registerNativeFunction("_native_vfx_spawnComboSeeded",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 5)
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+                std::string path = extractString(args[0], "VFX.spawnComboSeeded");
+                if (path.empty())
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+                glm::vec3 position{extractFloat(args[1]), extractFloat(args[2]), extractFloat(args[3])};
+
+                services::events::vfxsequence::CreateVFXComboInstanceCommand createCmd;
+                createCmd.sequenceAssetPath = path;
+                createCmd.worldTransform = glm::translate(glm::mat4(1.0f), position);
+                createCmd.seed = static_cast<uint32_t>(extractInt64(args[4]));
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                services::VFXComboInstanceId comboId = dispatcher.execute(createCmd);
+                if (comboId != 0)
+                {
+                    services::events::vfxsequence::PlayVFXComboInstanceCommand playCmd;
+                    playCmd.comboId = comboId;
+                    dispatcher.execute(playCmd);
+                }
+                return value::Value(static_cast<int64_t>(comboId));
+            }});
+
+        // _native_vfx_spawnComboPrewarmed(path, x, y, z, prewarm) -> int comboId
+        // Spawn and fast-forward the schedule by `prewarm` seconds before the first frame.
+        interpreter->registerNativeFunction("_native_vfx_spawnComboPrewarmed",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 5)
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+                std::string path = extractString(args[0], "VFX.spawnComboPrewarmed");
+                if (path.empty())
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+                glm::vec3 position{extractFloat(args[1]), extractFloat(args[2]), extractFloat(args[3])};
+
+                services::events::vfxsequence::CreateVFXComboInstanceCommand createCmd;
+                createCmd.sequenceAssetPath = path;
+                createCmd.worldTransform = glm::translate(glm::mat4(1.0f), position);
+                createCmd.prewarm = extractFloat(args[4]);
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                services::VFXComboInstanceId comboId = dispatcher.execute(createCmd);
+                if (comboId != 0)
+                {
+                    services::events::vfxsequence::PlayVFXComboInstanceCommand playCmd;
+                    playCmd.comboId = comboId;
+                    dispatcher.execute(playCmd);
+                }
+                return value::Value(static_cast<int64_t>(comboId));
+            }});
+
+        // _native_vfx_pauseCombo(comboId) -> void
+        interpreter->registerNativeFunction("_native_vfx_pauseCombo",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                services::events::vfxsequence::SetVFXComboPausedCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                cmd.paused = true;
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_resumeCombo(comboId) -> void
+        interpreter->registerNativeFunction("_native_vfx_resumeCombo",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.empty())
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                services::events::vfxsequence::SetVFXComboPausedCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                cmd.paused = false;
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_setComboRate(comboId, rate) -> void
+        interpreter->registerNativeFunction("_native_vfx_setComboRate",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 2)
+                {
+                    return value::Value(std::monostate{});
+                }
+                int64_t comboId = extractInt64(args[0]);
+                if (comboId <= 0)
+                {
+                    return value::Value(std::monostate{});
+                }
+                services::events::vfxsequence::SetVFXComboPlaybackRateCommand cmd;
+                cmd.comboId = static_cast<services::VFXComboInstanceId>(comboId);
+                cmd.rate = extractFloat(args[1]);
+                events::EventDispatcher::instance().execute(cmd);
+                return value::Value(std::monostate{});
             }});
 
         // _native_vfx_setOverride(instanceId, name, value) -> bool
@@ -751,20 +907,7 @@ namespace core::api
                 services::events::vfxruntime::ApplyVFXInstanceOverridesCommand cmd;
                 cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
 
-                if (name == "spawnRate")                 cmd.overrides.spawnRate = val;
-                else if (name == "lifetime")             cmd.overrides.lifetime = val;
-                else if (name == "startSize")            cmd.overrides.startSize = val;
-                else if (name == "startSpeed")           cmd.overrides.startSpeed = val;
-                else if (name == "stretchMultiplier")    cmd.overrides.stretchMultiplier = val;
-                else if (name == "windStrength")         cmd.overrides.windStrength = val;
-                else if (name == "gravityStrength")      cmd.overrides.gravityStrength = val;
-                else if (name == "softParticleDistance") cmd.overrides.softParticleDistance = val;
-                else if (name == "lightingInfluence")    cmd.overrides.lightingInfluence = val;
-                else if (name == "collisionLifetimeLoss") cmd.overrides.collisionLifetimeLoss = val;
-                else if (name == "coneSpread")           cmd.overrides.coneSpread = val;
-                else if (name == "renderMode")           cmd.overrides.renderMode = static_cast<int>(val);
-                else if (name == "collisionEnabled")     cmd.overrides.collisionEnabled = (val != 0.0f);
-                else
+                if (!services::applyScalarOverride(cmd.overrides, name, val))
                 {
                     return value::Value(false);
                 }
@@ -800,12 +943,7 @@ namespace core::api
                 services::events::vfxruntime::ApplyVFXInstanceOverridesCommand cmd;
                 cmd.instanceId = static_cast<services::VFXInstanceId>(instanceId);
 
-                if (name == "emitDirection")          cmd.overrides.emitDirection = vec;
-                else if (name == "windDirection")     cmd.overrides.windDirection = vec;
-                else if (name == "gravityDirection")  cmd.overrides.gravityDirection = vec;
-                else if (name == "shapeDimensions")   cmd.overrides.shapeDimensions = vec;
-                else if (name == "startColor")        cmd.overrides.startColor = glm::vec4(vec, w);
-                else
+                if (!services::applyVectorOverride(cmd.overrides, name, glm::vec4(vec, w)))
                 {
                     return value::Value(false);
                 }

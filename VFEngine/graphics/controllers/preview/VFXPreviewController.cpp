@@ -11,8 +11,12 @@
 #include "../../render/vfx/ribbon/VFXRibbonPreviewPipeline.hpp"
 #include "../../render/vfx/particle/VFXParticleSystem.hpp"
 #include "../../render/mesh/MeshGPUCache.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
 #include "print/Log.hpp"
+#include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
+#include <cmath>
 #include <imgui_impl_vulkan.h>
 
 namespace controllers
@@ -130,6 +134,8 @@ namespace controllers
         }
 
         device.getLogicalDevice().waitIdle();
+
+        clearBundles(); // VK-1451: destroy per-step pipelines before the shared resources
 
         if (ribbonPipeline)
         {
@@ -264,6 +270,11 @@ namespace controllers
     void VFXPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
                                              const glm::vec3& cameraPos, float time)
     {
+        lastView = view;
+        lastProjection = projection;
+        lastCameraPos = cameraPos;
+        lastCameraTime = time;
+
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->updateCameraUBO(view, projection, cameraPos, time);
@@ -278,10 +289,42 @@ namespace controllers
         {
             ribbonPipeline->updateCameraUBO(view, projection, cameraPos, time);
         }
+
+        // Sequence mode: every step bundle owns its own pipeline and camera UBO.
+        for (auto& bundle : bundles)
+        {
+            if (bundle.billboard && bundle.billboard->isInitialized())
+                bundle.billboard->updateCameraUBO(view, projection, cameraPos, time);
+            if (bundle.mesh && bundle.mesh->isInitialized())
+                bundle.mesh->updateCameraUBO(view, projection, cameraPos, time);
+            if (bundle.ribbon && bundle.ribbon->isInitialized())
+                bundle.ribbon->updateCameraUBO(view, projection, cameraPos, time);
+        }
     }
 
     void VFXPreviewController::update(float deltaTime)
     {
+        if (sequenceMode)
+        {
+            const float scaled = sequencePlaying ? deltaTime * sequenceRate : 0.0f;
+            if (sequenceFixedStep > 0.0f)
+            {
+                sequenceAccumulator += scaled;
+                int guard = 0;
+                while (sequenceAccumulator >= sequenceFixedStep && guard < 4096)
+                {
+                    stepSequence(sequenceFixedStep);
+                    sequenceAccumulator -= sequenceFixedStep;
+                    ++guard;
+                }
+            }
+            else if (scaled > 0.0f)
+            {
+                stepSequence(scaled);
+            }
+            return;
+        }
+
         if (particleSystem)
         {
             particleSystem->update(deltaTime);
@@ -290,6 +333,11 @@ namespace controllers
 
     void VFXPreviewController::play()
     {
+        if (sequenceMode)
+        {
+            sequencePlaying = true;
+            return;
+        }
         if (particleSystem)
         {
             particleSystem->setPlaying(true);
@@ -298,6 +346,11 @@ namespace controllers
 
     void VFXPreviewController::pause()
     {
+        if (sequenceMode)
+        {
+            sequencePlaying = false;
+            return;
+        }
         if (particleSystem)
         {
             particleSystem->setPlaying(false);
@@ -306,6 +359,12 @@ namespace controllers
 
     void VFXPreviewController::stop()
     {
+        if (sequenceMode)
+        {
+            sequencePlaying = false;
+            seekSequence(0.0f);
+            return;
+        }
         if (particleSystem)
         {
             particleSystem->setPlaying(false);
@@ -315,6 +374,8 @@ namespace controllers
 
     bool VFXPreviewController::isPlaying() const
     {
+        if (sequenceMode)
+            return sequencePlaying;
         return particleSystem ? particleSystem->isPlaying() : false;
     }
 
@@ -369,39 +430,8 @@ namespace controllers
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
-        // Route to appropriate pipeline based on render mode
-        auto renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
-        bool useMeshPipeline = renderMode == render::vfx::VFXRenderMode::MeshParticle &&
-                               meshPipeline && meshPipeline->isInitialized() &&
-                               meshPipeline->hasMesh();
-
-        bool useRibbonPipeline = renderMode == render::vfx::VFXRenderMode::Ribbon &&
-                                 ribbonPipeline && ribbonPipeline->isInitialized();
-
-        if (particleSystem)
-        {
-            if (useRibbonPipeline)
-            {
-                const auto& segments = particleSystem->getRibbonSegments();
-                ribbonPipeline->setRibbonSegments(segments);
-            }
-            else
-            {
-                auto instances = particleSystem->getInstanceData();
-                if (useMeshPipeline)
-                {
-                    meshPipeline->setParticleInstances(instances);
-                }
-                else
-                {
-                    pipeline->setParticleInstances(instances);
-                }
-            }
-        }
-
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();
-
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,
@@ -410,17 +440,59 @@ namespace controllers
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        if (useRibbonPipeline)
+        if (sequenceMode)
         {
-            ribbonPipeline->recordCommandBuffer(commandBuffer, imageIndex);
-        }
-        else if (useMeshPipeline)
-        {
-            meshPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+            // One render pass, one clear, every live step bundle composited on top.
+            auto colorAttach = core::colorClear(
+                offscreenResources.colorImages[imageIndex].colorImageView,
+                vk::ClearColorValue(std::array<float, 4>{0.1f, 0.1f, 0.1f, 1.0f}));
+            auto depthAttach = core::depthClear(offscreenResources.depthImage.depthImageView, 1.0f, 0);
+
+            core::DynamicRenderingInfo dynInfo{};
+            dynInfo.extent = swapChain.getSwapchainExtent();
+            dynInfo.colorAttachments = {colorAttach};
+            dynInfo.depthAttachment = depthAttach;
+
+            core::beginDynamicRendering(commandBuffer, dynInfo);
+            for (auto& bundle : bundles)
+            {
+                recordBundle(bundle, commandBuffer);
+            }
+            core::endDynamicRendering(commandBuffer);
         }
         else
         {
-            pipeline->recordCommandBuffer(commandBuffer, imageIndex);
+            // Single-emitter path: route to the pipeline for the active render mode.
+            auto renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
+            bool useMeshPipeline = renderMode == render::vfx::VFXRenderMode::MeshParticle &&
+                                   meshPipeline && meshPipeline->isInitialized() &&
+                                   meshPipeline->hasMesh();
+            bool useRibbonPipeline = renderMode == render::vfx::VFXRenderMode::Ribbon &&
+                                     ribbonPipeline && ribbonPipeline->isInitialized();
+
+            if (particleSystem)
+            {
+                if (useRibbonPipeline)
+                {
+                    const auto& segments = particleSystem->getRibbonSegments();
+                    ribbonPipeline->setRibbonSegments(segments);
+                }
+                else
+                {
+                    auto instances = particleSystem->getInstanceData();
+                    if (useMeshPipeline)
+                        meshPipeline->setParticleInstances(instances);
+                    else
+                        pipeline->setParticleInstances(instances);
+                }
+            }
+
+            if (useRibbonPipeline)
+                ribbonPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+            else if (useMeshPipeline)
+                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+            else
+                pipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,
@@ -440,6 +512,273 @@ namespace controllers
         device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
 
         return static_cast<void*>(offscreenResources.colorImages[imageIndex].descriptorSet);
+    }
+
+    // ============================================================
+    // VK-1451 — composited sequence preview
+    // ============================================================
+
+    void VFXPreviewController::clearBundles()
+    {
+        if (!bundles.empty())
+        {
+            device.getLogicalDevice().waitIdle();
+            for (auto& bundle : bundles)
+            {
+                if (bundle.billboard) bundle.billboard->cleanUp();
+                if (bundle.mesh) bundle.mesh->cleanUp();
+                if (bundle.ribbon) bundle.ribbon->cleanUp();
+                if (bundle.meshCache) bundle.meshCache->unloadAllMeshes();
+            }
+            bundles.clear();
+        }
+    }
+
+    void VFXPreviewController::setSequence(const VFXSequencePreviewDesc& desc)
+    {
+        if (!initialized)
+            return;
+
+        clearBundles();
+
+        sequenceMode = true;
+        sequenceSteps = desc.steps;
+        sequenceRate = desc.playbackRate > 0.0f ? desc.playbackRate : 1.0f;
+        sequenceFixedStep = desc.fixedStep;
+        sequenceAccumulator = 0.0f;
+        sequencePlaying = true;
+
+        // Build a scheduling-only VFXSequenceData the timeline can drive (the heavy
+        // emitter params live in sequenceSteps and are only consulted when a bundle spawns).
+        scheduleData = vfx::VFXSequenceData{};
+        scheduleData.seed = desc.seed;
+        scheduleData.playbackRate = sequenceRate;
+        scheduleData.fixedStep = sequenceFixedStep;
+        scheduleData.steps.reserve(desc.steps.size());
+        for (const auto& step : desc.steps)
+        {
+            vfx::VFXSequenceStep s;
+            s.startTime = step.startTime;
+            s.duration = step.duration;
+            s.loop = step.loop;
+            s.cueName = step.cueName;
+            s.stopMode = step.stopMode == 1 ? vfx::VFXStepStopMode::StopAfterDuration
+                                            : vfx::VFXStepStopMode::PlayToCompletion;
+            scheduleData.steps.push_back(std::move(s));
+        }
+        for (const auto& marker : desc.markers)
+            scheduleData.eventMarkers.push_back(vfx::VFXSequenceEventMarker{marker.first, marker.second});
+
+        const uint32_t effectiveSeed = desc.seed != 0 ? desc.seed : 1u;
+        timeline.reset(scheduleData, effectiveSeed);
+
+        // Spawn whatever is already live at t=0 so the first frame shows something.
+        seekSequence(0.0f);
+    }
+
+    void VFXPreviewController::setSequenceRate(float rate)
+    {
+        if (rate > 0.0f)
+            sequenceRate = rate;
+    }
+
+    void VFXPreviewController::configureSystemFromParams(render::vfx::VFXParticleSystem& system,
+                                                         const VFXPreviewParams& params) const
+    {
+        render::vfx::VFXEmitterConfig config;
+        config.spawnRate = params.spawnRate;
+        config.lifetime = params.lifetime;
+        config.startSize = params.startSize;
+        config.startSpeed = params.startSpeed;
+        config.startColor = params.startColor;
+        config.emitDirection = params.emitDirection;
+        config.texturePath = params.texturePath;
+        config.looping = params.looping;
+        config.modifiers = params.modifiers;
+        config.forces = params.forces;
+        config.shape = params.shape;
+        config.bursts = params.bursts;
+        config.flipbookRows = params.flipbookRows;
+        config.flipbookColumns = params.flipbookColumns;
+        config.flipbookFrameRate = params.flipbookFrameRate;
+        config.flipbookRandomStart = params.flipbookRandomStart;
+        config.alphaClipThreshold = params.alphaClipThreshold;
+        config.additiveBlend = params.additiveBlend;
+        config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
+        config.softParticleDistance = params.softParticleDistance;
+        config.stretchMultiplier = params.stretchMultiplier;
+        config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
+        config.ribbonWidth = params.ribbonWidth;
+        config.ribbonMinDistance = params.ribbonMinDistance;
+        config.events = params.events;
+        config.collisionEnabled = params.collisionEnabled;
+        config.collisionBounce = params.collisionBounce;
+        config.collisionFriction = params.collisionFriction;
+        config.collisionLifetimeLoss = params.collisionLifetimeLoss;
+        config.lightingInfluence = params.lightingInfluence;
+        config.normalMode = params.normalMode;
+        config.ambientAmount = params.ambientAmount;
+        system.setEmitterConfig(config);
+    }
+
+    void VFXPreviewController::createBundle(int stepIndex)
+    {
+        if (stepIndex < 0 || stepIndex >= static_cast<int>(sequenceSteps.size()))
+            return;
+
+        const VFXSequencePreviewStep& step = sequenceSteps[static_cast<size_t>(stepIndex)];
+        const VFXPreviewParams& params = step.params;
+
+        StepBundle bundle;
+        bundle.stepIndex = stepIndex;
+        bundle.localTransform = step.localTransform;
+        bundle.mode = params.renderMode;
+        const auto renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
+
+        bundle.system = std::make_unique<render::vfx::VFXParticleSystem>();
+        bundle.system->setSeed(step.seed != 0 ? step.seed : vfx::VFXComboTimeline::deriveSeed(timeline.seed(), stepIndex));
+        bundle.system->reset();
+        configureSystemFromParams(*bundle.system, params);
+        bundle.system->setPlaying(true);
+
+        render::vfx::VFXFlipbookConfig fbConfig;
+        fbConfig.rows = params.flipbookRows;
+        fbConfig.columns = params.flipbookColumns;
+        fbConfig.alphaClipThreshold = params.alphaClipThreshold;
+        fbConfig.additiveBlend = params.additiveBlend;
+        fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
+        fbConfig.stretchMultiplier = params.stretchMultiplier;
+        fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
+        fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;
+        fbConfig.uvScrollSpeedV = params.uvScrollSpeedV;
+
+        if (renderMode == render::vfx::VFXRenderMode::Ribbon)
+        {
+            bundle.ribbon = std::make_unique<render::vfx::VFXRibbonPreviewPipeline>(device, swapChain, offscreenResources);
+            bundle.ribbon->init();
+            if (!params.texturePath.empty())
+                bundle.ribbon->setTexture(params.texturePath);
+            bundle.ribbon->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
+                                               params.ribbonWidth, fbConfig.glowColor,
+                                               params.uvScrollSpeedU, params.uvScrollSpeedV);
+            bundle.ribbon->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
+        }
+        else if (renderMode == render::vfx::VFXRenderMode::MeshParticle)
+        {
+            bundle.meshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
+            bundle.mesh = std::make_unique<render::vfx::VFXMeshPreviewPipeline>(device, swapChain, offscreenResources,
+                                                                                *bundle.meshCache);
+            bundle.mesh->init();
+            if (!params.meshPath.empty())
+                bundle.mesh->setMesh(params.meshPath);
+            if (!params.texturePath.empty())
+                bundle.mesh->setTexture(params.texturePath);
+            bundle.mesh->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, fbConfig.glowColor,
+                                            params.uvScrollSpeedU, params.uvScrollSpeedV);
+            bundle.mesh->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
+        }
+        else
+        {
+            bundle.billboard = std::make_unique<render::vfx::VFXBillboardPipeline>(device, swapChain, offscreenResources);
+            bundle.billboard->init();
+            if (!params.texturePath.empty())
+                bundle.billboard->setTexture(params.texturePath);
+            bundle.billboard->setFlipbookConfig(fbConfig);
+            bundle.billboard->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
+        }
+
+        bundles.push_back(std::move(bundle));
+    }
+
+    void VFXPreviewController::stepSequence(float dt)
+    {
+        std::vector<vfx::ComboEvent> events;
+        timeline.advance(dt, events);
+        for (const auto& ev : events)
+        {
+            if (ev.kind == vfx::ComboEventKind::SpawnStep)
+            {
+                createBundle(ev.stepIndex);
+            }
+            else // StopStep: stop emitting; particles already in flight fade out.
+            {
+                for (auto& b : bundles)
+                    if (b.stepIndex == ev.stepIndex && b.system)
+                        b.system->setPlaying(false);
+            }
+        }
+
+        // Advance every live bundle by the same dt so newly-spawned systems age with the
+        // exact fixed cadence (deterministic replay).
+        for (auto& b : bundles)
+            if (b.system)
+                b.system->update(dt);
+    }
+
+    void VFXPreviewController::seekSequence(float seconds)
+    {
+        if (!sequenceMode)
+            return;
+
+        clearBundles();
+        timeline.rewind();
+        sequenceAccumulator = 0.0f;
+
+        const float target = std::max(0.0f, seconds);
+
+        // Spawn anything scheduled at t=0 first (advance(0) is allowed and idempotent),
+        // then replay forward in whole fixed steps so the spawn set and particle ages
+        // match a real playthrough to `target`.
+        stepSequence(0.0f);
+
+        if (sequenceFixedStep > 0.0f)
+        {
+            const long steps = static_cast<long>(std::floor(target / sequenceFixedStep));
+            for (long k = 0; k < steps && k < 1000000; ++k)
+                stepSequence(sequenceFixedStep);
+            sequenceAccumulator = std::max(0.0f, target - static_cast<float>(steps) * sequenceFixedStep);
+        }
+        else if (target > 0.0f)
+        {
+            stepSequence(target);
+        }
+    }
+
+    void VFXPreviewController::recordBundle(const StepBundle& bundle, vk::CommandBuffer commandBuffer) const
+    {
+        if (!bundle.system)
+            return;
+
+        const auto mode = static_cast<render::vfx::VFXRenderMode>(bundle.mode);
+
+        if (mode == render::vfx::VFXRenderMode::Ribbon && bundle.ribbon && bundle.ribbon->isInitialized())
+        {
+            auto segments = bundle.system->getRibbonSegments();
+            for (auto& s : segments)
+            {
+                s.posA = glm::vec3(bundle.localTransform * glm::vec4(s.posA, 1.0f));
+                s.posB = glm::vec3(bundle.localTransform * glm::vec4(s.posB, 1.0f));
+            }
+            bundle.ribbon->setRibbonSegments(segments);
+            bundle.ribbon->recordDraws(commandBuffer);
+        }
+        else if (mode == render::vfx::VFXRenderMode::MeshParticle && bundle.mesh &&
+                 bundle.mesh->isInitialized() && bundle.mesh->hasMesh())
+        {
+            auto instances = bundle.system->getInstanceData();
+            for (auto& inst : instances)
+                inst.worldPosition = glm::vec3(bundle.localTransform * glm::vec4(inst.worldPosition, 1.0f));
+            bundle.mesh->setParticleInstances(instances);
+            bundle.mesh->recordDraws(commandBuffer);
+        }
+        else if (bundle.billboard && bundle.billboard->isInitialized())
+        {
+            auto instances = bundle.system->getInstanceData();
+            for (auto& inst : instances)
+                inst.worldPosition = glm::vec3(bundle.localTransform * glm::vec4(inst.worldPosition, 1.0f));
+            bundle.billboard->setParticleInstances(instances);
+            bundle.billboard->recordDraws(commandBuffer);
+        }
     }
 
     void VFXPreviewController::createOffscreenResources()

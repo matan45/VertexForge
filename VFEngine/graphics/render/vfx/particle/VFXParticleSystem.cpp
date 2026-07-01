@@ -119,9 +119,16 @@ namespace render::vfx
         }
         spawnAccumulator = 0.0f;
         emissionTime = 0.0f;
+        timeAccumulator = 0.0f;
 
         ribbonRing.clear();
         ribbonHead = 0;
+
+        // VK-1451: re-seed deterministically so a reset + replay reproduces the same
+        // particle stream (composited sequence preview seek/prewarm). Seed 0 keeps the
+        // legacy behavior (RNG continues from wherever it was).
+        if (storedSeed != 0)
+            rng.seed(storedSeed);
     }
 
     std::vector<VFXInstanceData> VFXParticleSystem::getInstanceData() const

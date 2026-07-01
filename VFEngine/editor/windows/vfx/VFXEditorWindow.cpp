@@ -4,6 +4,7 @@
 #include "../../graph/VFXGraphEditor.hpp"
 #include <vfx/VFXAsset.hpp>
 #include <vfx/VFXTypes.hpp>
+#include <vfx/VFXBoundsUtil.hpp>
 #include <vfx/VFXModifierConfigLoader.hpp>
 #include <vfx/VFXForceConfigLoader.hpp>
 #include <vfx/VFXShapeConfigLoader.hpp>
@@ -268,6 +269,8 @@ namespace windows
                     ImVec2 topSize = ImGui::GetContentRegionAvail();
 
                     ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, topSize.y), true);
+                    if (vfxData)
+                        previewPanel->setBoundsOverlay(showBounds, vfx::resolveBounds(vfxData->bounds, *vfxData));
                     previewPanel->draw();
                     ImGui::EndChild();
 
@@ -339,8 +342,102 @@ namespace windows
         }
         ImGui::SameLine();
         maximizer.drawButton();
+        ImGui::SameLine();
+        ImGui::Checkbox("Show Bounds", &showBounds);
+
+        if (ImGui::CollapsingHeader("Bounds & Scalability"))
+        {
+            ImGui::Indent();
+            ImGui::TextDisabled("Bounds (cull + visualization)");
+            drawBoundsControls();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Scalability profile");
+            drawScalabilityControls();
+            ImGui::Unindent();
+        }
 
         ImGui::Separator();
+    }
+
+    void VFXEditorWindow::drawBoundsControls()
+    {
+        if (!vfxData) return;
+        auto& b = vfxData->bounds;
+
+        int mode = static_cast<int>(b.mode);
+        if (ImGui::RadioButton("Auto", &mode, static_cast<int>(vfx::VFXBoundsMode::Auto)))
+        {
+            b.mode = vfx::VFXBoundsMode::Auto;
+            isDirty = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Fixed", &mode, static_cast<int>(vfx::VFXBoundsMode::Fixed)))
+        {
+            b.mode = vfx::VFXBoundsMode::Fixed;
+            isDirty = true;
+        }
+
+        if (b.mode == vfx::VFXBoundsMode::Fixed)
+        {
+            if (ImGui::DragFloat3("Center", &b.center.x, 0.1f))
+                isDirty = true;
+            if (ImGui::DragFloat3("Extents", &b.extents.x, 0.1f, 0.0f, 1.0e6f))
+                isDirty = true;
+        }
+        else
+        {
+            const glm::vec3 e = vfx::computeAutoBounds(*vfxData).getExtents();
+            ImGui::Text("Auto extents: %.1f, %.1f, %.1f", e.x, e.y, e.z);
+        }
+
+        if (ImGui::Button("Recalculate from emitter"))
+        {
+            const math::AABB a = vfx::computeAutoBounds(*vfxData);
+            b.mode = vfx::VFXBoundsMode::Fixed;
+            b.center = a.getCenter();
+            b.extents = a.getExtents();
+            isDirty = true;
+        }
+        ImGui::SetItemTooltip("Capture the analytic Auto bounds as an editable Fixed box.");
+
+        if (ImGui::Checkbox("Cull-eligible (allow pre-spawn cull)", &vfxData->cullEligible))
+            isDirty = true;
+    }
+
+    void VFXEditorWindow::drawScalabilityControls()
+    {
+        if (!vfxData) return;
+        auto& s = vfxData->scalability;
+
+        if (ImGui::Checkbox("Enable scalability profile", &s.enabled))
+            isDirty = true;
+        if (!s.enabled)
+        {
+            ImGui::TextDisabled("Disabled: effect is unaffected by the quality tier.");
+            return;
+        }
+
+        static const char* tierNames[vfx::kVFXQualityTierCount] = {"Low", "Medium", "High", "Ultra"};
+        for (int i = 0; i < vfx::kVFXQualityTierCount; ++i)
+        {
+            ImGui::PushID(i);
+            if (ImGui::TreeNode(tierNames[i]))
+            {
+                auto& lvl = s.levels[i];
+                if (ImGui::DragFloat("Spawn rate scale", &lvl.spawnRateScale, 0.01f, 0.0f, 8.0f))
+                    isDirty = true;
+                if (ImGui::DragInt("Max particles (-1=off)", &lvl.maxParticles, 1.0f, -1, 1000000))
+                    isDirty = true;
+                if (ImGui::DragFloat("Cull distance (-1=global)", &lvl.cullDistance, 0.5f, -1.0f, 1.0e5f))
+                    isDirty = true;
+                if (ImGui::DragInt("Update interval", &lvl.updateInterval, 1.0f, 1, 16))
+                    isDirty = true;
+                if (ImGui::Checkbox("Renderer enabled", &lvl.rendererEnabled))
+                    isDirty = true;
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
     }
 
     void VFXEditorWindow::drawGraphPanel()

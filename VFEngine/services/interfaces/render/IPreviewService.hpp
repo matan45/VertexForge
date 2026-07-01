@@ -105,6 +105,12 @@ namespace services
 
         [[nodiscard]] virtual ViewportTextureHandle renderVFXPreview(PreviewInstanceId instanceId) = 0;
 
+        // VK-1451 — composited sequence preview (all steps at once). Reuses
+        // play/pause/stop/updateVFXSimulation/renderVFXPreview above.
+        virtual void setVFXSequence(PreviewInstanceId instanceId, const VFXSequencePreviewDesc& desc) = 0;
+        virtual void seekVFXPreview(PreviewInstanceId instanceId, float seconds) = 0;
+        virtual void setVFXPreviewRate(PreviewInstanceId instanceId, float rate) = 0;
+
         // Prefab Rig Preview (VK-1433) — assembled multi-part rig, entt-free.
         virtual void initPrefabRigPreview(PreviewInstanceId instanceId) = 0;
         virtual bool buildPrefabRigPreview(PreviewInstanceId instanceId, const PrefabRigDescDTO& desc) = 0;

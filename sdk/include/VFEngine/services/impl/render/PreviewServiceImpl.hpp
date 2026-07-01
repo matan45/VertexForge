@@ -108,6 +108,10 @@ namespace services
 
         [[nodiscard]] ViewportTextureHandle renderVFXPreview(PreviewInstanceId instanceId) override;
 
+        void setVFXSequence(PreviewInstanceId instanceId, const VFXSequencePreviewDesc& desc) override;
+        void seekVFXPreview(PreviewInstanceId instanceId, float seconds) override;
+        void setVFXPreviewRate(PreviewInstanceId instanceId, float rate) override;
+
         // Prefab Rig Preview (VK-1433)
         void initPrefabRigPreview(PreviewInstanceId instanceId) override;
         bool buildPrefabRigPreview(PreviewInstanceId instanceId, const PrefabRigDescDTO& desc) override;

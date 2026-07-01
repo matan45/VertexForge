@@ -172,7 +172,8 @@ namespace controllers
 
         static std::random_device rd;
         static std::mt19937 gen(rd());
-        std::uniform_int_distribution<uint32_t> dist;
+        // Burst probability RNG only — emitter seed is now the stable per-instance value
+        // (VK-1451). Burst jitter stays frame-random (accepted GPU micro-nondeterminism).
         std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
 
         for (auto& [id, instance] : instances)
@@ -232,7 +233,11 @@ namespace controllers
                 }
             }
 
-            auto gpuConfig = toGPUConfig(instance.config, effectiveDt, instance.gpuParticleCount, dist(gen));
+            // VK-1451: feed the stable per-instance seed (set once at creation) instead
+            // of re-randomizing every frame, so an explicitly-seeded instance reproduces
+            // its emission schedule. The shader still folds particleIdx/frameNumber into
+            // the per-particle RNG, so visuals stay varied without being random per frame.
+            auto gpuConfig = toGPUConfig(instance.config, effectiveDt, instance.gpuParticleCount, instance.seed);
 
             gpuConfig.colliderCount = (instance.config.collisionEnabled && instance.currentLOD == 0)
                                           ? sceneColliderCount : 0;

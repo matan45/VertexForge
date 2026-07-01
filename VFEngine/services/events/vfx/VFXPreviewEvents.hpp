@@ -67,6 +67,31 @@ namespace services::events::vfxpreview
     };
 
     // ============================================================
+    // VK-1451 — composited sequence preview transport
+    // ============================================================
+
+    struct SetVFXSequencePreviewCommand : ::events::ICommand<void>
+    {
+        PreviewInstanceId instanceId;
+        VFXSequencePreviewDesc desc;
+        std::string_view getName() const override { return "SetVFXSequencePreview"; }
+    };
+
+    struct SeekVFXPreviewCommand : ::events::ICommand<void>
+    {
+        PreviewInstanceId instanceId;
+        float seconds = 0.0f;
+        std::string_view getName() const override { return "SeekVFXPreview"; }
+    };
+
+    struct SetVFXPreviewRateCommand : ::events::ICommand<void>
+    {
+        PreviewInstanceId instanceId;
+        float rate = 1.0f;
+        std::string_view getName() const override { return "SetVFXPreviewRate"; }
+    };
+
+    // ============================================================
     // VFX PREVIEW QUERIES
     // ============================================================
 

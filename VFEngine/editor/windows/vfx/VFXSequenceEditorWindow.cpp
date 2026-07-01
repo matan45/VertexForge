@@ -10,60 +10,31 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 
+#include <data/VFXOverrideApplier.hpp>
+#include <impl/vfx/VFXPreviewOverrideBridge.hpp>
 #include <vfx/VFXSequenceAsset.hpp>
+#include <vfx/VFXSequenceValidation.hpp>
+#include <vfx/VFXComboTimeline.hpp>
 #include <vfx/VFXAsset.hpp>
+#include <vfx/VFXBoundsUtil.hpp>
+#include <vfx/VFXParameterRegistry.hpp>
 #include <asset/AssetRef.hpp>
-#include <asset/AssetMetadataSerializer.hpp>
 #include <resource/MeshStreamHandle.hpp>
 
 #include <glm/glm.hpp>
 #include <filesystem>
-#include <ctime>
 #include <algorithm>
+#include <cstring>
 #include <string>
+#include <unordered_set>
 #include <vector>
 #include <cmath>
+#include <variant>
 
 namespace fs = std::filesystem;
 
 namespace windows
 {
-    namespace
-    {
-        // Mirrors RetargetingEditorWindow::writeMeta — writes a formatVersion-2
-        // .vfmeta sidecar listing the sequence's child .vfVFX GUIDs as
-        // dependencies, preserving the asset GUID across re-saves.
-        void writeSequenceMeta(const std::string& assetPath,
-                               const std::vector<asset::AssetGUID>& dependencies)
-        {
-            const auto metaPath = asset::AssetMetadataSerializer::getMetaPath(assetPath);
-
-            asset::AssetMetadata meta;
-            if (auto existing = asset::AssetMetadataSerializer::load(metaPath))
-                meta.guid = existing->guid; // preserve GUID across re-saves
-            else
-                meta.guid = asset::AssetGUID::generate();
-
-            meta.type = resource::AssetType::VFXSequence;
-            meta.importSourcePath = "editor://vfxsequence";
-            meta.formatVersion = asset::AssetMetadata::kCurrentFormatVersion;
-            meta.dependencies = dependencies;
-
-            std::time_t t = std::time(nullptr);
-            std::tm tm{};
-#ifdef _WIN32
-            localtime_s(&tm, &t);
-#else
-            localtime_r(&t, &tm);
-#endif
-            char buf[32];
-            std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
-            meta.importTimestamp = buf;
-
-            asset::AssetMetadataSerializer::save(meta, metaPath);
-        }
-    }
-
     // ImSequencer adapter: one clip per step. starts/ends are in "frames"
     // (kFps frames per second). ImSequencer mutates them in place when a clip is
     // dragged; writeback() converts changes back to Start Time / Duration.
@@ -149,12 +120,107 @@ namespace windows
         }
     };
 
+    namespace
+    {
+        vfx::VFXPropertyType inferEditorValueType(const vfx::VFXPropertyValue& value)
+        {
+            if (std::holds_alternative<float>(value)) return vfx::VFXPropertyType::Float;
+            if (std::holds_alternative<glm::vec2>(value)) return vfx::VFXPropertyType::Vec2;
+            if (std::holds_alternative<glm::vec3>(value)) return vfx::VFXPropertyType::Vec3;
+            if (std::holds_alternative<glm::vec4>(value)) return vfx::VFXPropertyType::Vec4;
+            if (std::holds_alternative<int32_t>(value)) return vfx::VFXPropertyType::Int;
+            if (std::holds_alternative<bool>(value)) return vfx::VFXPropertyType::Bool;
+            if (std::holds_alternative<std::string>(value)) return vfx::VFXPropertyType::String;
+            if (std::holds_alternative<vfx::VFXCurve>(value)) return vfx::VFXPropertyType::Curve;
+            if (std::holds_alternative<vfx::VFXGradient>(value)) return vfx::VFXPropertyType::Gradient;
+            return vfx::VFXPropertyType::Float;
+        }
+
+        bool drawOverrideValueWidget(vfx::VFXParamOverride& overrideValue)
+        {
+            const vfx::VFXExposedParameter* parameter = vfx::findExposedParameter(overrideValue.name);
+            const vfx::VFXPropertyType type = parameter ? parameter->type : inferEditorValueType(overrideValue.value);
+
+            if (parameter && !vfx::valueMatchesType(overrideValue.value, parameter->type))
+            {
+                ImGui::TextDisabled("%s stored", vfx::propertyTypeToString(inferEditorValueType(overrideValue.value)));
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Reset"))
+                {
+                    overrideValue.value = vfx::defaultValueFor(parameter->type);
+                    return true;
+                }
+                return false;
+            }
+
+            switch (type)
+            {
+            case vfx::VFXPropertyType::Float:
+            {
+                float* value = std::get_if<float>(&overrideValue.value);
+                return value && ImGui::DragFloat("##oval", value, 0.01f);
+            }
+            case vfx::VFXPropertyType::Int:
+            {
+                auto* stored = std::get_if<int32_t>(&overrideValue.value);
+                if (!stored) return false;
+                int value = static_cast<int>(*stored);
+                if (ImGui::InputInt("##oval", &value))
+                {
+                    *stored = static_cast<int32_t>(value);
+                    return true;
+                }
+                return false;
+            }
+            case vfx::VFXPropertyType::Bool:
+            {
+                bool* value = std::get_if<bool>(&overrideValue.value);
+                return value && ImGui::Checkbox("##oval", value);
+            }
+            case vfx::VFXPropertyType::Vec3:
+            {
+                glm::vec3* value = std::get_if<glm::vec3>(&overrideValue.value);
+                return value && ImGui::DragFloat3("##oval", &value->x, 0.01f);
+            }
+            case vfx::VFXPropertyType::Vec4:
+            {
+                glm::vec4* value = std::get_if<glm::vec4>(&overrideValue.value);
+                return value && ImGui::DragFloat4("##oval", &value->x, 0.01f);
+            }
+            case vfx::VFXPropertyType::Color:
+            {
+                glm::vec4* value = std::get_if<glm::vec4>(&overrideValue.value);
+                return value && ImGui::ColorEdit4("##oval", &value->x);
+            }
+            case vfx::VFXPropertyType::String:
+            {
+                auto* stored = std::get_if<std::string>(&overrideValue.value);
+                if (!stored) return false;
+                char buf[256];
+                std::strncpy(buf, stored->c_str(), sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
+                if (ImGui::InputText("##oval", buf, IM_ARRAYSIZE(buf)))
+                {
+                    *stored = buf;
+                    return true;
+                }
+                return false;
+            }
+            default:
+                ImGui::TextDisabled("%s", vfx::propertyTypeToString(type));
+                return false;
+            }
+        }
+    }
+
     VFXSequenceEditorWindow::VFXSequenceEditorWindow(const std::string& seqPath)
         : seqPath(seqPath)
         , previewPanel(std::make_unique<editor::vfxeditor::VFXPreviewPanel>(this))
         , timeline(std::make_unique<SequenceTimeline>())
     {
         windowTitle = "VFX Sequence: " + fs::path(seqPath).filename().string();
+        // The timeline row below drives transport, so hide the panel's built-in buttons.
+        previewPanel->setBuiltInControls(false);
     }
 
     VFXSequenceEditorWindow::~VFXSequenceEditorWindow() = default;
@@ -181,16 +247,6 @@ namespace windows
         {
             isDirty = false;
             vfLogInfo("VFX sequence saved: {}", seqPath);
-
-            // Sidecar dependency graph: each step's child .vfVFX GUID.
-            std::vector<asset::AssetGUID> deps;
-            deps.reserve(data->steps.size());
-            for (const auto& step : data->steps)
-            {
-                if (step.vfxRef.isValid())
-                    deps.push_back(step.vfxRef.getGUID());
-            }
-            writeSequenceMeta(seqPath, deps);
 
             events::resource::AssetSavedNotification assetNotif;
             assetNotif.filePath = seqPath;
@@ -233,6 +289,7 @@ namespace windows
             if (data)
             {
                 drawToolbar();
+                drawValidationStrip();
 
                 ImVec2 avail = ImGui::GetContentRegionAvail();
                 float timelineHeight = 190.0f; // room for the ImSequencer track view
@@ -333,7 +390,62 @@ namespace windows
         }
         ImGui::SameLine();
         maximizer.drawButton();
+        ImGui::SameLine();
+        ImGui::TextDisabled("|");
+        ImGui::SameLine();
+        if (ImGui::Button("Recalc Bounds"))
+            recalcSequenceBounds();
+        ImGui::SetItemTooltip("Union each step's bounds (transformed by its placement) and capture as the sequence's Fixed bounds.");
+        ImGui::SameLine();
+        ImGui::Checkbox("Show Bounds", &showBounds);
 
+        ImGui::Separator();
+    }
+
+    void VFXSequenceEditorWindow::drawValidationStrip()
+    {
+        if (!data)
+            return;
+
+        std::unordered_set<std::string> knownSockets;
+        if (!socketNames.empty())
+            knownSockets.insert(socketNames.begin(), socketNames.end());
+
+        vfx::validation::ValidationContext context;
+        context.checkRefResolvable = true;
+        context.knownSocketNames = knownSockets.empty() ? nullptr : &knownSockets;
+
+        const vfx::validation::ValidationReport report =
+            vfx::validation::validateSequence(*data, context);
+        if (report.diagnostics.empty())
+            return;
+
+        for (const auto& diagnostic : report.diagnostics)
+        {
+            ImVec4 color(0.55f, 0.70f, 1.0f, 1.0f);
+            const char* icon = ICON_FA_CIRCLE_INFO;
+            if (diagnostic.severity == vfx::validation::Severity::Error)
+            {
+                color = ImVec4(1.0f, 0.45f, 0.45f, 1.0f);
+                icon = ICON_FA_CIRCLE_EXCLAMATION;
+            }
+            else if (diagnostic.severity == vfx::validation::Severity::Warning)
+            {
+                color = ImVec4(1.0f, 0.80f, 0.30f, 1.0f);
+                icon = ICON_FA_TRIANGLE_EXCLAMATION;
+            }
+
+            ImGui::PushStyleColor(ImGuiCol_Text, color);
+            ImGui::TextWrapped("%s %s", icon, diagnostic.message.c_str());
+            ImGui::PopStyleColor();
+
+            if (ImGui::IsItemClicked() &&
+                diagnostic.stepIndex >= 0 &&
+                diagnostic.stepIndex < static_cast<int>(data->steps.size()))
+            {
+                selectedStep = diagnostic.stepIndex;
+            }
+        }
         ImGui::Separator();
     }
 
@@ -405,6 +517,151 @@ namespace windows
         }
     }
 
+    void VFXSequenceEditorWindow::drawOverrideList(std::vector<vfx::VFXParamOverride>& overrides, const char* label)
+    {
+        ImGui::TextUnformatted(label);
+        ImGui::PushID(label);
+
+        for (size_t i = 0; i < overrides.size(); ++i)
+        {
+            ImGui::PushID(static_cast<int>(i));
+            auto& overrideValue = overrides[i];
+
+            char nameBuf[128];
+            std::strncpy(nameBuf, overrideValue.name.c_str(), sizeof(nameBuf) - 1);
+            nameBuf[sizeof(nameBuf) - 1] = '\0';
+            ImGui::SetNextItemWidth(150.0f);
+            if (ImGui::InputText("##oname", nameBuf, IM_ARRAYSIZE(nameBuf)))
+            {
+                overrideValue.name = nameBuf;
+                isDirty = true;
+                previewDirty = true;
+            }
+
+            ImGui::SameLine();
+            const vfx::VFXExposedParameter* parameter = vfx::findExposedParameter(overrideValue.name);
+            std::string preview = parameter
+                ? std::string(parameter->label.empty() ? parameter->name : parameter->label)
+                : std::string("(custom)");
+            ImGui::SetNextItemWidth(150.0f);
+            if (ImGui::BeginCombo("##opick", preview.c_str()))
+            {
+                for (const auto& candidate : vfx::kExposedParameters)
+                {
+                    const bool selected = overrideValue.name == candidate.name;
+                    const std::string itemLabel = std::string(candidate.label.empty() ? candidate.name : candidate.label);
+                    if (ImGui::Selectable(itemLabel.c_str(), selected))
+                    {
+                        overrideValue.name = std::string(candidate.name);
+                        if (!vfx::valueMatchesType(overrideValue.value, candidate.type))
+                            overrideValue.value = vfx::defaultValueFor(candidate.type);
+                        isDirty = true;
+                        previewDirty = true;
+                    }
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                if (!parameter && !overrideValue.name.empty())
+                {
+                    ImGui::Separator();
+                    ImGui::TextDisabled("custom: %s", overrideValue.name.c_str());
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(190.0f);
+            if (drawOverrideValueWidget(overrideValue))
+            {
+                isDirty = true;
+                previewDirty = true;
+            }
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+            {
+                overrides.erase(overrides.begin() + static_cast<long>(i));
+                isDirty = true;
+                previewDirty = true;
+                ImGui::PopID();
+                break;
+            }
+            ImGui::PopID();
+        }
+
+        if (ImGui::SmallButton("+ Override"))
+        {
+            const auto& first = vfx::kExposedParameters.front();
+            overrides.push_back(vfx::VFXParamOverride{std::string(first.name), vfx::defaultValueFor(first.type)});
+            isDirty = true;
+            previewDirty = true;
+        }
+
+        ImGui::PopID();
+    }
+
+    void VFXSequenceEditorWindow::drawCuePayload(vfx::VFXCuePayload& payload)
+    {
+        bool hasPosition = payload.position.has_value();
+        if (ImGui::Checkbox("Position", &hasPosition))
+        {
+            if (hasPosition) payload.position = glm::vec3(0.0f);
+            else payload.position.reset();
+            isDirty = true;
+            previewDirty = true;
+        }
+        if (payload.position)
+        {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(210.0f);
+            if (ImGui::DragFloat3("##payloadPosition", &payload.position->x, 0.01f))
+            {
+                isDirty = true;
+                previewDirty = true;
+            }
+        }
+
+        bool hasColor = payload.color.has_value();
+        if (ImGui::Checkbox("Color", &hasColor))
+        {
+            if (hasColor) payload.color = glm::vec4(1.0f);
+            else payload.color.reset();
+            isDirty = true;
+            previewDirty = true;
+        }
+        if (payload.color)
+        {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(210.0f);
+            if (ImGui::ColorEdit4("##payloadColor", &payload.color->x))
+            {
+                isDirty = true;
+                previewDirty = true;
+            }
+        }
+
+        bool hasScalar = payload.scalar.has_value();
+        if (ImGui::Checkbox("Scalar", &hasScalar))
+        {
+            if (hasScalar) payload.scalar = 0.0f;
+            else payload.scalar.reset();
+            isDirty = true;
+            previewDirty = true;
+        }
+        if (payload.scalar)
+        {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100.0f);
+            if (ImGui::DragFloat("##payloadScalar", &(*payload.scalar), 0.01f))
+            {
+                isDirty = true;
+                previewDirty = true;
+            }
+        }
+
+        drawOverrideList(payload.custom, "Payload Overrides");
+    }
+
     void VFXSequenceEditorWindow::drawStepList()
     {
         if (data->steps.empty())
@@ -425,7 +682,7 @@ namespace windows
                 if (selectedStep == i) selectedStep = i - 1;
                 else if (selectedStep == i - 1) selectedStep = i;
                 isDirty = true;
-                previewActiveStep = -1;
+                previewDirty = true;
                 ImGui::PopID();
                 continue;
             }
@@ -436,7 +693,7 @@ namespace windows
                 if (selectedStep == i) selectedStep = i + 1;
                 else if (selectedStep == i + 1) selectedStep = i;
                 isDirty = true;
-                previewActiveStep = -1;
+                previewDirty = true;
                 ImGui::PopID();
                 continue;
             }
@@ -447,7 +704,7 @@ namespace windows
                 if (selectedStep == i) selectedStep = -1;
                 else if (selectedStep > i) --selectedStep;
                 isDirty = true;
-                previewActiveStep = -1;
+                previewDirty = true;
                 ImGui::PopID();
                 break; // container mutated — restart next frame
             }
@@ -500,7 +757,8 @@ namespace windows
             {
                 step.vfxRef = ref;
                 isDirty = true;
-                previewActiveStep = -1; // force the preview to reload this step
+                vfxCache.clear();
+                previewDirty = true; // force the preview to reload this step
             }
         }
 
@@ -564,220 +822,292 @@ namespace windows
 
         ImGui::Separator();
 
-        // --- Scalar overrides ---
-        ImGui::TextUnformatted("Scalar Overrides");
-        for (size_t i = 0; i < step.scalarOverrides.size(); ++i)
-        {
-            ImGui::PushID(static_cast<int>(i) + 1000);
-            auto& [name, value] = step.scalarOverrides[i];
-
-            char nameBuf[128];
-            std::strncpy(nameBuf, name.c_str(), sizeof(nameBuf) - 1);
-            nameBuf[sizeof(nameBuf) - 1] = '\0';
-            ImGui::SetNextItemWidth(140.0f);
-            if (ImGui::InputText("##sname", nameBuf, IM_ARRAYSIZE(nameBuf)))
-            {
-                name = nameBuf;
-                isDirty = true;
-            }
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(100.0f);
-            if (ImGui::DragFloat("##sval", &value, 0.01f))
-                isDirty = true;
-            ImGui::SameLine();
-            if (ImGui::SmallButton("X"))
-            {
-                step.scalarOverrides.erase(step.scalarOverrides.begin() + static_cast<long>(i));
-                isDirty = true;
-                ImGui::PopID();
-                break;
-            }
-            ImGui::PopID();
-        }
-        if (ImGui::SmallButton("+ Scalar"))
-        {
-            step.scalarOverrides.emplace_back("param", 0.0f);
-            isDirty = true;
-        }
-
-        ImGui::Separator();
-
-        // --- Vector overrides ---
-        ImGui::TextUnformatted("Vector Overrides");
-        for (size_t i = 0; i < step.vectorOverrides.size(); ++i)
-        {
-            ImGui::PushID(static_cast<int>(i) + 2000);
-            auto& [name, value] = step.vectorOverrides[i];
-
-            char nameBuf[128];
-            std::strncpy(nameBuf, name.c_str(), sizeof(nameBuf) - 1);
-            nameBuf[sizeof(nameBuf) - 1] = '\0';
-            ImGui::SetNextItemWidth(140.0f);
-            if (ImGui::InputText("##vname", nameBuf, IM_ARRAYSIZE(nameBuf)))
-            {
-                name = nameBuf;
-                isDirty = true;
-            }
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(200.0f);
-            if (ImGui::DragFloat4("##vval", &value.x, 0.01f))
-                isDirty = true;
-            ImGui::SameLine();
-            if (ImGui::SmallButton("X"))
-            {
-                step.vectorOverrides.erase(step.vectorOverrides.begin() + static_cast<long>(i));
-                isDirty = true;
-                ImGui::PopID();
-                break;
-            }
-            ImGui::PopID();
-        }
-        if (ImGui::SmallButton("+ Vector"))
-        {
-            step.vectorOverrides.emplace_back("param", glm::vec4(0.0f));
-            isDirty = true;
-        }
+        drawOverrideList(step.overrides, "Overrides");
     }
 
     void VFXSequenceEditorWindow::drawTimeline()
     {
-        // Transport row, then an ImSequencer track view: one draggable clip per
-        // step. Drag a clip to set its Start Time, drag its right edge to set
-        // Duration; the playhead (current frame) scrubs the preview.
+        // Transport row: play/pause, reset, reload, playback rate, seed, prewarm.
+        // VK-1451 — drives the composited preview deterministically (mirrors
+        // AnimationTimelinePanel: ImSequencer change -> seek).
         if (ImGui::Button(previewPlaying ? "Pause" : "Play"))
+        {
             previewPlaying = !previewPlaying;
+            if (previewPlaying) previewPanel->play();
+            else previewPanel->pause();
+        }
         ImGui::SameLine();
         if (ImGui::Button("Reset"))
         {
             previewTime = 0.0f;
-            previewPlaying = false;
-            previewActiveStep = -1;
+            previewPanel->seek(0.0f);
         }
         ImGui::SameLine();
         if (ImGui::Button("Reload"))
-            previewActiveStep = -1; // re-load the active step's (possibly edited) .vfVFX
+        {
+            vfxCache.clear();    // drop cached .vfVFX so edits on disk are picked up
+            previewDirty = true; // re-load each step's .vfVFX + overrides into the composite
+        }
         ImGui::SameLine();
         ImGui::Checkbox("Loop", &previewLoop);
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(90.0f);
+        if (ImGui::DragFloat("Rate", &previewRate, 0.05f, 0.1f, 4.0f, "%.2fx"))
+        {
+            previewRate = std::clamp(previewRate, 0.1f, 4.0f);
+            previewPanel->setRate(previewRate);
+        }
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110.0f);
+        int seedProxy = static_cast<int>(previewSeed);
+        if (ImGui::InputInt("Seed", &seedProxy, 0, 0))
+        {
+            previewSeed = static_cast<uint32_t>(std::max(0, seedProxy));
+            previewDirty = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Randomize"))
+        {
+            previewSeed = static_cast<uint32_t>(ImGui::GetTime() * 1000.0) ^ 0x9E3779B9u;
+            if (previewSeed == 0) previewSeed = 1u;
+            previewDirty = true;
+        }
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(90.0f);
+        ImGui::DragFloat("Prewarm", &previewPrewarm, 0.05f, 0.0f, 30.0f, "%.2fs");
+        ImGui::SameLine();
+        if (ImGui::Button("Apply##prewarm"))
+        {
+            previewTime = previewPrewarm;
+            previewPanel->seek(previewPrewarm);
+        }
         ImGui::SameLine();
         ImGui::Text("t = %.2f s", previewTime);
 
         float maxTime = 1.0f;
         for (const auto& step : data->steps)
             maxTime = std::max(maxTime, step.startTime + std::max(step.duration, 0.5f));
+        for (const auto& marker : data->eventMarkers)
+            maxTime = std::max(maxTime, marker.time + 0.5f);
 
+        // While playing, advance the local playhead in lock-step with the panel's sim.
         if (previewPlaying)
         {
-            previewTime += ImGui::GetIO().DeltaTime;
+            previewTime += ImGui::GetIO().DeltaTime * (previewRate > 0.0f ? previewRate : 1.0f);
             if (previewTime > maxTime)
             {
                 if (previewLoop)
                 {
                     previewTime = 0.0f;
-                    previewActiveStep = -1;
+                    previewPanel->seek(0.0f);
                 }
                 else
                 {
                     previewTime = maxTime;
                     previewPlaying = false;
+                    previewPanel->pause();
                 }
             }
         }
 
-        // ImSequencer track view (one clip per step).
+        // ImSequencer track view (one clip per step). A user drag of the playhead is a
+        // scrub -> seek; clip drags edit step timing (writeback).
         timeline->sync(data.get());
         previewFrame = static_cast<int>(std::lround(previewTime * SequenceTimeline::kFps));
+        const int frameBefore = previewFrame;
         int selected = selectedStep;
         const int options = ImSequencer::SEQUENCER_CHANGE_FRAME | ImSequencer::SEQUENCER_EDIT_STARTEND;
         ImSequencer::Sequencer(timeline.get(), &previewFrame, &timelineExpanded, &selected,
                                &timelineFirstFrame, options);
 
-        // Scrubbing moved the playhead; clip drags edited step timing.
         previewTime = std::clamp(static_cast<float>(previewFrame) / SequenceTimeline::kFps, 0.0f, maxTime);
+        if (previewFrame != frameBefore)
+            previewPanel->seek(previewTime); // user scrubbed the playhead
+
         if (timeline->writeback())
+        {
             isDirty = true;
+            previewDirty = true; // step timing changed -> rebuild the composite schedule
+        }
         if (selected >= 0 && selected < static_cast<int>(data->steps.size()))
             selectedStep = selected;
+
+        drawMarkersRow();
     }
 
-    int VFXSequenceEditorWindow::pickActiveStep() const
+    void VFXSequenceEditorWindow::drawMarkersRow()
     {
-        if (!data || data->steps.empty())
-            return -1;
+        if (!data)
+            return;
 
-        if (previewPlaying)
+        ImGui::Separator();
+        ImGui::TextUnformatted("Event Markers (one-shot cues)");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+ Add"))
         {
-            // The most-recently-started time-driven step at/under the playhead.
-            int best = -1;
-            float bestStart = -1.0f;
-            for (int i = 0; i < static_cast<int>(data->steps.size()); ++i)
+            data->eventMarkers.push_back(vfx::VFXSequenceEventMarker{previewTime, ""});
+            isDirty = true;
+            previewDirty = true;
+        }
+
+        int toRemove = -1;
+        for (size_t m = 0; m < data->eventMarkers.size(); ++m)
+        {
+            ImGui::PushID(static_cast<int>(m));
+            auto& marker = data->eventMarkers[m];
+
+            ImGui::SetNextItemWidth(90.0f);
+            if (ImGui::DragFloat("Time", &marker.time, 0.01f, 0.0f, 120.0f, "%.2fs"))
             {
-                const auto& s = data->steps[static_cast<size_t>(i)];
-                if (!s.cueName.empty() || !s.vfxRef.isValid())
-                    continue; // cue-driven steps don't auto-fire in the preview
-                if (previewTime + 1.0e-4f >= s.startTime && s.startTime >= bestStart)
-                {
-                    bestStart = s.startTime;
-                    best = i;
-                }
+                isDirty = true;
+                previewDirty = true;
             }
-            if (best >= 0)
-                return best;
+            ImGui::SameLine();
+
+            char buf[64];
+            std::strncpy(buf, marker.cueName.c_str(), sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            ImGui::SetNextItemWidth(140.0f);
+            if (ImGui::InputText("Cue", buf, sizeof(buf)))
+            {
+                marker.cueName = buf;
+                isDirty = true;
+                previewDirty = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+                toRemove = static_cast<int>(m);
+
+            drawCuePayload(marker.payload);
+
+            ImGui::PopID();
         }
 
-        // Not playing (or nothing active yet): preview the selected step.
-        if (selectedStep >= 0 && selectedStep < static_cast<int>(data->steps.size()) &&
-            data->steps[static_cast<size_t>(selectedStep)].vfxRef.isValid())
-            return selectedStep;
-
-        return -1;
+        if (toRemove >= 0)
+        {
+            data->eventMarkers.erase(data->eventMarkers.begin() + toRemove);
+            isDirty = true;
+            previewDirty = true;
+        }
     }
 
-    void VFXSequenceEditorWindow::syncPreviewToStep(int stepIndex)
+    services::VFXSequencePreviewDesc VFXSequenceEditorWindow::buildSequenceDesc() const
     {
-        previewActiveStep = stepIndex;
-        if (!previewPanel || !data)
+        services::VFXSequencePreviewDesc desc;
+        if (!data)
+            return desc;
+
+        desc.seed = previewSeed != 0 ? previewSeed : data->seed;
+        desc.playbackRate = previewRate > 0.0f ? previewRate : 1.0f;
+        desc.fixedStep = data->fixedStep;
+        for (const auto& marker : data->eventMarkers)
+            desc.markers.emplace_back(marker.time, marker.cueName);
+
+        const uint32_t comboSeed = desc.seed != 0 ? desc.seed : 1u;
+
+        for (size_t i = 0; i < data->steps.size(); ++i)
+        {
+            const auto& step = data->steps[i];
+            if (!step.vfxRef.isValid())
+                continue;
+            const std::string path = step.vfxRef.resolve();
+            if (path.empty())
+                continue;
+
+            std::shared_ptr<vfx::VFXData> vfxData;
+            if (auto cacheIt = vfxCache.find(path); cacheIt != vfxCache.end())
+            {
+                vfxData = cacheIt->second;
+            }
+            else
+            {
+                if (auto loaded = vfx::VFXAsset::load(path))
+                    vfxData = std::make_shared<vfx::VFXData>(std::move(*loaded));
+                vfxCache[path] = vfxData; // cache nulls too, so a bad path isn't retried each frame
+            }
+            if (!vfxData)
+                continue;
+
+            services::VFXSequencePreviewStep ps;
+            ps.params = editor::vfxeditor::buildVFXPreviewParams(*vfxData);
+
+            services::applyToPreviewParams(ps.params, services::toEmitterOverrides(step.overrides));
+
+            ps.localTransform = vfx::VFXComboTimeline::composeStepLocal(step);
+            // Seed by the SOURCE step index i, not the compacted output count, so a
+            // skipped (invalid/empty) earlier step doesn't desync the preview from the
+            // runtime, which seeds via combo.timeline.derivedSeed(stepIndex) over the
+            // 1:1 combo.steps built from data->steps.
+            ps.seed = vfx::VFXComboTimeline::deriveSeed(comboSeed, static_cast<int>(i));
+            ps.startTime = step.startTime;
+            ps.duration = step.duration;
+            ps.loop = step.loop;
+            ps.stopMode = static_cast<int>(static_cast<uint8_t>(step.stopMode));
+            ps.cueName = step.cueName;
+            desc.steps.push_back(std::move(ps));
+        }
+
+        return desc;
+    }
+
+    math::AABB VFXSequenceEditorWindow::computeSequenceBoundsUnion() const
+    {
+        if (!data)
+            return math::AABB(glm::vec3(-1.0f), glm::vec3(1.0f));
+
+        bool any = false;
+        math::AABB result;
+        for (const auto& step : data->steps)
+        {
+            if (!step.vfxRef.isValid())
+                continue;
+            const std::string path = step.vfxRef.resolve();
+            if (path.empty())
+                continue;
+
+            std::shared_ptr<vfx::VFXData> vfxData;
+            if (auto it = vfxCache.find(path); it != vfxCache.end())
+                vfxData = it->second;
+            else
+            {
+                if (auto loaded = vfx::VFXAsset::load(path))
+                    vfxData = std::make_shared<vfx::VFXData>(std::move(*loaded));
+                vfxCache[path] = vfxData; // cache nulls too, so a bad path isn't retried
+            }
+            if (!vfxData)
+                continue;
+
+            const math::AABB local = vfx::resolveBounds(vfxData->bounds, *vfxData);
+            const math::AABB world = local.getTransformed(vfx::VFXComboTimeline::composeStepLocal(step));
+            if (!any)
+            {
+                result = world;
+                any = true;
+            }
+            else
+            {
+                result.expand(world.min);
+                result.expand(world.max);
+            }
+        }
+
+        if (!any)
+            return math::AABB(glm::vec3(-1.0f), glm::vec3(1.0f));
+        return result;
+    }
+
+    void VFXSequenceEditorWindow::recalcSequenceBounds()
+    {
+        if (!data)
             return;
-
-        if (stepIndex < 0 || stepIndex >= static_cast<int>(data->steps.size()))
-        {
-            previewPanel->stop();
-            return;
-        }
-
-        const auto& step = data->steps[static_cast<size_t>(stepIndex)];
-        const std::string path = step.vfxRef.isValid() ? step.vfxRef.resolve() : std::string();
-        if (path.empty())
-        {
-            previewPanel->stop();
-            return;
-        }
-
-        auto vfxData = vfx::VFXAsset::load(path);
-        if (!vfxData)
-        {
-            previewPanel->stop();
-            return;
-        }
-
-        services::VFXPreviewParams params = editor::vfxeditor::buildVFXPreviewParams(*vfxData);
-
-        // Apply the step's name-keyed overrides for parity with the runtime.
-        for (const auto& [name, value] : step.scalarOverrides)
-        {
-            if (name == "spawnRate") params.spawnRate = value;
-            else if (name == "lifetime") params.lifetime = value;
-            else if (name == "startSize") params.startSize = value;
-            else if (name == "startSpeed") params.startSpeed = value;
-            else if (name == "stretchMultiplier") params.stretchMultiplier = value;
-        }
-        for (const auto& [name, value] : step.vectorOverrides)
-        {
-            if (name == "startColor") params.startColor = value;
-            else if (name == "emitDirection") params.emitDirection = glm::vec3(value);
-        }
-
-        previewPanel->setParams(params);
-        previewPanel->play();
+        const math::AABB a = computeSequenceBoundsUnion();
+        data->bounds.mode = vfx::VFXBoundsMode::Fixed;
+        data->bounds.center = a.getCenter();
+        data->bounds.extents = a.getExtents();
+        isDirty = true;
     }
 
     void VFXSequenceEditorWindow::drawPreviewViewport()
@@ -785,21 +1115,44 @@ namespace windows
         if (!previewPanel)
             return;
         if (!previewPanel->isInitialized())
-            previewPanel->init();
-
-        const int active = pickActiveStep();
-        if (active != previewActiveStep)
-            syncPreviewToStep(active);
-
-        if (previewActiveStep >= 0 && previewActiveStep < static_cast<int>(data->steps.size()))
         {
-            const auto& s = data->steps[static_cast<size_t>(previewActiveStep)];
-            const std::string label = s.label.empty() ? ("step " + std::to_string(previewActiveStep)) : s.label;
-            ImGui::Text("Previewing: %s", label.c_str());
+            previewPanel->init();
+            previewPanel->setBuiltInControls(false);
+            previewDirty = true;
+        }
+
+        if (previewDirty)
+        {
+            previewPanel->setSequence(buildSequenceDesc());
+            previewDirty = false;
+            // setSequence resets the controller to t=0; restore the playhead + run state.
+            if (previewTime > 0.0f)
+                previewPanel->seek(previewTime);
+            if (previewPlaying)
+                previewPanel->play();
+            else
+                previewPanel->pause();
+        }
+
+        if (data && data->steps.empty())
+            ImGui::TextDisabled("Add steps to preview the composited combo");
+        else
+            ImGui::Text("Composited preview — %d step(s)", data ? static_cast<int>(data->steps.size()) : 0);
+
+        if (showBounds && data)
+        {
+            const auto& b = data->bounds;
+            math::AABB ov;
+            if (b.mode == vfx::VFXBoundsMode::Fixed &&
+                (b.extents.x > 0.0f || b.extents.y > 0.0f || b.extents.z > 0.0f))
+                ov = math::AABB(b.center - b.extents, b.center + b.extents);
+            else
+                ov = computeSequenceBoundsUnion();
+            previewPanel->setBoundsOverlay(true, ov);
         }
         else
         {
-            ImGui::TextDisabled("Select a step (or press Play) to preview its VFX");
+            previewPanel->setBoundsOverlay(false, math::AABB{});
         }
 
         previewPanel->draw();

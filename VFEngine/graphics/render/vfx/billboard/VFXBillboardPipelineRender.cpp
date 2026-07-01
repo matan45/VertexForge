@@ -117,28 +117,33 @@ namespace render::vfx
         dynInfo.depthAttachment = depthAttach;
 
         core::beginDynamicRendering(commandBuffer, dynInfo);
+        recordDraws(commandBuffer);
+        core::endDynamicRendering(commandBuffer);
+    }
 
-        if (currentInstanceCount > 0)
+    void VFXBillboardPipeline::recordDraws(const vk::CommandBuffer& commandBuffer) const
+    {
+        if (!initialized || currentInstanceCount == 0)
         {
-            commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-
-            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                              0, descriptorSet, nullptr);
-
-            vk::Buffer vertexBuffers[] = {quadVertexBuffer, instanceBuffer};
-            vk::DeviceSize offsets[] = {0, 0};
-            commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
-
-            commandBuffer.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
-
-            commandBuffer.pushConstants(pipelineLayout,
-                                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                                        0, sizeof(VFXFlipbookPushConstants), &flipbookPC);
-
-            commandBuffer.drawIndexed(VFXConstants::QUAD_INDEX_COUNT, currentInstanceCount, 0, 0, 0);
-            render::FrameDrawStats::count(render::DrawCategory::VFX);
+            return;
         }
 
-        core::endDynamicRendering(commandBuffer);
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                          0, descriptorSet, nullptr);
+
+        vk::Buffer vertexBuffers[] = {quadVertexBuffer, instanceBuffer};
+        vk::DeviceSize offsets[] = {0, 0};
+        commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
+
+        commandBuffer.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
+
+        commandBuffer.pushConstants(pipelineLayout,
+                                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                    0, sizeof(VFXFlipbookPushConstants), &flipbookPC);
+
+        commandBuffer.drawIndexed(VFXConstants::QUAD_INDEX_COUNT, currentInstanceCount, 0, 0, 0);
+        render::FrameDrawStats::count(render::DrawCategory::VFX);
     }
 }

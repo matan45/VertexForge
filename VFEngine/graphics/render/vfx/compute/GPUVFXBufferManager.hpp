@@ -137,6 +137,9 @@ namespace render::vfx
         void resetAllActiveCounts(vk::CommandBuffer cmd);
         void uploadStateBuffer(vk::CommandBuffer cmd);
         void clearDrawCommands(vk::CommandBuffer cmd);
+        // VK-1460: zero a single emitter's draw command (used by the selective per-frame
+        // clear so temporally-throttled emitters keep their command on off-frames).
+        void clearDrawCommand(vk::CommandBuffer cmd, uint32_t emitterIndex);
         void clearRibbonHead(vk::CommandBuffer cmd, uint32_t emitterIndex);
         void clearParticleBufferIfNeeded(vk::CommandBuffer cmd);
 

@@ -28,6 +28,15 @@ namespace services
         // Destroy the instance automatically once a non-looping effect has
         // finished emitting and its last particles have expired (fire-and-forget)
         bool autoDestroy = false;
+        // VK-1451 — deterministic seed for the emitter RNG. 0 => the renderer picks a
+        // random seed once at creation (legacy behavior). A non-zero value makes the
+        // instance's emission schedule reproducible across runs.
+        uint32_t seed = 0;
+        // VK-1453 (Phase 4) — opt into instance pooling. Only honored for
+        // fire-and-forget instances (autoDestroy && !loop && !cameraRelative && no
+        // socket); the renderer keeps the finished slot dormant for reuse by a later
+        // spawn of the same asset path. Default false => byte-identical.
+        bool poolable = false;
     };
 
     struct VFXEmitterOverrides

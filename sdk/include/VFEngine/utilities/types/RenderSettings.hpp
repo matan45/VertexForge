@@ -4,6 +4,7 @@
 #include "../../graphics/render/gi/GITypes.hpp"
 #include "../atmosphere/AtmosphereSettings.hpp"
 #include "../cloud/CloudSettings.hpp"
+#include "../vfx/VFXScalability.hpp"
 
 namespace types
 {
@@ -244,6 +245,11 @@ namespace types
     {
         RenderPreset activePreset = RenderPreset::High;
 
+        // VK-1453 (Phase 4) — global VFX quality tier that drives per-asset
+        // scalability profiles. Derived from the preset in fromPreset(); High is the
+        // neutral default so unset/Custom presets leave VFX unchanged.
+        vfx::VFXQualityTier vfxQualityTier = vfx::VFXQualityTier::High;
+
         DisplaySettings display;
         ShadowSettings shadows;
         RTShadowSettings rtShadows;
@@ -283,6 +289,7 @@ namespace types
                 s.distanceCulling.staticMeshDistance = 500.0f;
                 s.distanceCulling.foliageDistance = 200.0f;
                 s.distanceCulling.vfxDistance = 150.0f;
+                s.vfxQualityTier = vfx::VFXQualityTier::Low;
                 s.terrain.lodBias = 0.5f;
                 s.terrain.errorThreshold = 5.0f;
                 s.gi = render::gi::GISettings::fromQuality(render::gi::GIQuality::Off);
@@ -304,6 +311,7 @@ namespace types
                 s.distanceCulling.staticMeshDistance = 750.0f;
                 s.distanceCulling.foliageDistance = 350.0f;
                 s.distanceCulling.vfxDistance = 200.0f;
+                s.vfxQualityTier = vfx::VFXQualityTier::Medium;
                 s.terrain.lodBias = 0.8f;
                 s.terrain.errorThreshold = 3.0f;
                 s.gi = render::gi::GISettings::fromQuality(render::gi::GIQuality::Off);
@@ -329,6 +337,7 @@ namespace types
                 s.culling.globalLodBias = -1.0f;
                 s.distanceCulling.enabled = false;
                 s.distanceCulling.staticMeshDistance = 2000.0f;
+                s.vfxQualityTier = vfx::VFXQualityTier::Ultra;
                 s.terrain.lodBias = 1.5f;
                 s.terrain.errorThreshold = 1.0f;
                 s.gi = render::gi::GISettings::fromQuality(render::gi::GIQuality::High);

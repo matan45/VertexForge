@@ -162,27 +162,33 @@ namespace render::vfx
         dynInfo.depthAttachment = depthAttach;
 
         core::beginDynamicRendering(commandBuffer, dynInfo);
+        recordDraws(commandBuffer);
+        core::endDynamicRendering(commandBuffer);
+    }
 
-        if (currentInstanceCount > 0 && meshIndexCount > 0 && meshVertexBuffer && meshIndexBuffer)
+    void VFXMeshPreviewPipeline::recordDraws(const vk::CommandBuffer& commandBuffer) const
+    {
+        if (!initialized || currentInstanceCount == 0 || meshIndexCount == 0 ||
+            !meshVertexBuffer || !meshIndexBuffer)
         {
-            commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-
-            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                              0, descriptorSet, nullptr);
-
-            vk::Buffer vertexBuffers[] = {meshVertexBuffer, instanceBuffer};
-            vk::DeviceSize offsets[] = {0, 0};
-            commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
-
-            commandBuffer.bindIndexBuffer(meshIndexBuffer, 0, vk::IndexType::eUint32);
-
-            commandBuffer.pushConstants(pipelineLayout,
-                                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                                        0, sizeof(VFXMeshPreviewPushConstants), &pushConstants);
-
-            commandBuffer.drawIndexed(meshIndexCount, currentInstanceCount, 0, 0, 0);
+            return;
         }
 
-        core::endDynamicRendering(commandBuffer);
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                          0, descriptorSet, nullptr);
+
+        vk::Buffer vertexBuffers[] = {meshVertexBuffer, instanceBuffer};
+        vk::DeviceSize offsets[] = {0, 0};
+        commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
+
+        commandBuffer.bindIndexBuffer(meshIndexBuffer, 0, vk::IndexType::eUint32);
+
+        commandBuffer.pushConstants(pipelineLayout,
+                                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                    0, sizeof(VFXMeshPreviewPushConstants), &pushConstants);
+
+        commandBuffer.drawIndexed(meshIndexCount, currentInstanceCount, 0, 0, 0);
     }
 }

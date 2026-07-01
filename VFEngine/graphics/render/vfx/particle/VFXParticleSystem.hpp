@@ -36,6 +36,16 @@ namespace render::vfx
         void update(float deltaTime);
         void reset();
 
+        // VK-1451: bind a deterministic RNG seed. A non-zero seed makes the CPU sim
+        // reproducible (used by the composited sequence preview so seek/prewarm replay
+        // is bit-identical). Seed 0 keeps the legacy time-based seeding behavior.
+        void setSeed(uint32_t seed)
+        {
+            storedSeed = seed;
+            if (seed != 0)
+                rng.seed(seed);
+        }
+
         void setPlaying(bool isPlaying) { playing = isPlaying; }
         bool isPlaying() const { return playing; }
 
@@ -73,5 +83,7 @@ namespace render::vfx
 
         float timeAccumulator = 0.0f;
         std::uniform_real_distribution<float> unitDist{0.0f, 1.0f};
+
+        uint32_t storedSeed = 0; // VK-1451: 0 => legacy time-seeded; non-zero => deterministic
     };
 }

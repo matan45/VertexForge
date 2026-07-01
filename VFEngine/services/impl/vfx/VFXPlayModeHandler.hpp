@@ -25,11 +25,14 @@ namespace services
         ::events::SubscriptionToken sectorUnloadedToken;
         ::events::SubscriptionToken prefabInstantiatedToken; // VK-1438: mid-Play prefab spawn autoplay
         ::events::SubscriptionToken entityDeletedToken;      // VK-1438: mid-Play entity-delete cleanup
+        ::events::SubscriptionToken sceneLoadedToken;        // Runtime deferred startup scene autoplay
 
         // Maps entity handle to VFX runtime instance ID
         std::unordered_map<EntityHandle, VFXInstanceId, EntityHandle::Hash> activeVFXInstances;
         std::atomic<bool> vfxActive{false};
         std::mutex pendingMutex;
+        int sceneRescanFrames = 0; // guarded by pendingMutex
+        static constexpr int kSceneLoadRescanFrames = 3;
 
         // Streaming budget: max emitter creates per frame to avoid spikes
         static constexpr uint32_t MAX_STREAMING_CREATES_PER_FRAME = 4;
@@ -71,6 +74,7 @@ namespace services
         void onPrefabInstantiated(EntityHandle root);
         void onEntityDeleted(EntityHandle entity);
         void processPendingPrefabCreates();
+        void scanAndCreateAutoplayInstances();
         VFXInstanceId createVFXInstanceForEntity(EntityHandle handle,
                                                  const std::string& vfxPath,
                                                  const glm::mat4& worldTransform,

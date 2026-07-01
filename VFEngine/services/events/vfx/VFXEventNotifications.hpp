@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../EventTypes.hpp"
+#include "../../data/VFXSequenceTypes.hpp"
+#include <vfx/VFXSequenceTypes.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <cstdint>
@@ -18,5 +20,17 @@ namespace services::events::vfxruntime
         std::string vfxAssetPath;
 
         std::string_view getName() const override { return "VFXParticleEvent"; }
+    };
+}
+
+namespace services::events::vfxsequence
+{
+    struct VFXComboCueFiredNotification : ::events::INotification
+    {
+        VFXComboInstanceId comboId = 0;
+        std::string cueName;
+        vfx::VFXCuePayload payload;
+
+        std::string_view getName() const override { return "VFXComboCueFired"; }
     };
 }

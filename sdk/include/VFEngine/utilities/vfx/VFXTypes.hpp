@@ -7,9 +7,27 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include "VFXCurveTypes.hpp"
+#include "VFXScalability.hpp"
 
 namespace vfx
 {
+    // VK-1453 (Phase 4) — explicit local-space bounds for an effect.
+    //   Auto  - derived analytically from the emitter graph when needed.
+    //   Fixed - authored min/max box (center +/- extents), captured and stored.
+    // Default (Auto, zero extents) reproduces pre-Phase-4 behavior. See
+    // VFXBoundsUtil.hpp for computeAutoBounds()/resolveBounds().
+    enum class VFXBoundsMode : uint8_t
+    {
+        Auto = 0,
+        Fixed = 1
+    };
+
+    struct VFXBounds
+    {
+        VFXBoundsMode mode = VFXBoundsMode::Auto;
+        glm::vec3 center{0.0f};
+        glm::vec3 extents{0.0f};
+    };
     enum class VFXPropertyType : uint8_t
     {
         Float,
@@ -130,6 +148,12 @@ namespace vfx
         std::string name;
         std::string version;
         VFXGraph graph;
+
+        // VK-1453 (Phase 4) — all additive with neutral defaults so existing
+        // .vfVFX assets load and behave byte-identically.
+        VFXBounds bounds;             // explicit/derived bounds for cull + viz
+        VFXScalability scalability;   // per-quality-tier scalability profile (disabled by default)
+        bool cullEligible = false;    // opt-in: allow pre-spawn distance+frustum culling
     };
 
     namespace EmitterDefaults

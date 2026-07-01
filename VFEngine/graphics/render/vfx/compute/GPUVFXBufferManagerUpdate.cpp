@@ -156,6 +156,21 @@ namespace render::vfx
         cmd.fillBuffer(drawCommandBuffer, 0, getDrawCommandBufferSize(), 0);
     }
 
+    void GPUVFXBufferManager::clearDrawCommand(vk::CommandBuffer cmd, uint32_t emitterIndex)
+    {
+        if (!initialized || !drawCommandBuffer || emitterIndex >= maxEmitters)
+        {
+            return;
+        }
+
+        // sizeof(VFXDrawIndirectCommand) (20 bytes) is a multiple of 4, so both the offset
+        // and size satisfy vkCmdFillBuffer's 4-byte alignment requirement.
+        cmd.fillBuffer(drawCommandBuffer,
+                       static_cast<vk::DeviceSize>(emitterIndex) * sizeof(VFXDrawIndirectCommand),
+                       sizeof(VFXDrawIndirectCommand),
+                       0);
+    }
+
     void GPUVFXBufferManager::clearParticleBufferIfNeeded(vk::CommandBuffer cmd)
     {
         if (!initialized || !particleBuffer || particleBufferCleared)
