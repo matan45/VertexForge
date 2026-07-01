@@ -3,16 +3,335 @@
 #include "../../dragdrop/AssetDropTarget.hpp"
 #include <nfd/FileDialog.hpp>
 #include <vfx/VFXBurstTypes.hpp>
+#include <vfx/VFXShapeProperties.hpp>
+#include <vfx/VFXShapeTypes.hpp>
+#include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <filesystem>
 
 namespace editor::vfxeditor
 {
-    void VFXPropertyPanel::drawFlipbookProperties(vfx::VFXNode& node)
+    bool VFXPropertyPanel::drawScalarProperty(const char* label, vfx::VFXProperty& prop, float inputWidth, float step)
     {
-        ImGui::Text("Flipbook");
+        constexpr float labelWidth = 120.0f;
+
+        switch (prop.type)
+        {
+        case vfx::VFXPropertyType::Float:
+            if (auto* val = std::get_if<float>(&prop.value))
+            {
+                ImGui::Text("%s", label);
+                ImGui::SameLine(labelWidth);
+                ImGui::SetNextItemWidth(inputWidth);
+                return ImGui::DragFloat("##v", val, step, prop.min, prop.max, "%.2f");
+            }
+            break;
+
+        case vfx::VFXPropertyType::Int:
+            if (auto* val = std::get_if<int32_t>(&prop.value))
+            {
+                ImGui::Text("%s", label);
+                ImGui::SameLine(labelWidth);
+                ImGui::SetNextItemWidth(inputWidth);
+                return ImGui::DragInt("##v", val, 1,
+                                      static_cast<int>(prop.min), static_cast<int>(prop.max));
+            }
+            break;
+
+        case vfx::VFXPropertyType::Bool:
+            if (auto* val = std::get_if<bool>(&prop.value))
+            {
+                ImGui::Text("%s", label);
+                ImGui::SameLine(labelWidth);
+                return ImGui::Checkbox("##v", val);
+            }
+            break;
+
+        case vfx::VFXPropertyType::Vec3:
+            if (auto* val = std::get_if<glm::vec3>(&prop.value))
+            {
+                ImGui::Text("%s", label);
+                ImGui::SameLine(labelWidth);
+                ImGui::SetNextItemWidth(inputWidth * 2.4f);
+                return ImGui::DragFloat3("##v", &val->x, step, prop.min, prop.max, "%.2f");
+            }
+            break;
+
+        default:
+            break;
+        }
+
+        return false;
+    }
+
+    void VFXPropertyPanel::drawCoreProperties(vfx::VFXNode& node)
+    {
+        constexpr float inputWidth = 80.0f;
+
+        struct CoreEntry { const char* key; const char* label; float step; };
+        static constexpr CoreEntry entries[] = {
+            {"spawnRate",     "Spawn Rate", 0.1f},
+            {"lifetime",      "Lifetime",   0.1f},
+            {"startSize",     "Start Size", 0.1f},
+            {"startVelocity", "Velocity",   0.1f},
+            {"looping",       "Looping",    0.1f},
+        };
+
+        for (const auto& entry : entries)
+        {
+            auto it = node.properties.find(entry.key);
+            if (it == node.properties.end()) continue;
+
+            ImGui::PushID(entry.key);
+            if (drawScalarProperty(entry.label, it->second, inputWidth, entry.step))
+                notifyChanged();
+            ImGui::PopID();
+        }
+
+        if (auto colorIt = node.properties.find("startColor"); colorIt != node.properties.end())
+        {
+            if (auto* val = std::get_if<glm::vec4>(&colorIt->second.value))
+            {
+                ImGui::Text("Start Color");
+                ImGui::SameLine(120.0f);
+                ImGui::SetNextItemWidth(inputWidth * 2.4f);
+                if (ImGui::ColorEdit4("##startColor", &val->x))
+                    notifyChanged();
+            }
+        }
+
+        auto textureIt = node.properties.find("texture");
+        if (textureIt == node.properties.end()) return;
+
+        auto* textureVal = std::get_if<std::string>(&textureIt->second.value);
+        if (!textureVal) return;
+
+        ImGui::Text("Texture");
+        ImGui::SameLine(120.0f);
+        std::string display = textureVal->empty() ? "(none)" : std::filesystem::path(*textureVal).filename().string();
+        char buf[256];
+        std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        ImGui::SetNextItemWidth(inputWidth * 1.8f);
+        ImGui::InputText("##coreTexture", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+        if (auto dropped = windows::acceptAssetDropOnLastItem("VFXTextureDrop", {".vfimage"}))
+        {
+            *textureVal = *dropped;
+            notifyChanged();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("...##textureBrowse"))
+        {
+            nfd::FileDialog dialog;
+            std::string path = dialog.openFileDialog({
+                {L"VF Image", L"*.vfImage"}
+            });
+            if (!path.empty())
+            {
+                *textureVal = path;
+                notifyChanged();
+            }
+        }
+        if (!textureVal->empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("X##textureClear"))
+            {
+                textureVal->clear();
+                notifyChanged();
+            }
+        }
+    }
+
+    void VFXPropertyPanel::drawForceProperties(vfx::VFXNode& node)
+    {
+        struct ForceEntry { const char* key; const char* label; float step; };
+
+        auto drawEntries = [&](const ForceEntry* entries, size_t count)
+        {
+            constexpr float inputWidth = 80.0f;
+            for (size_t i = 0; i < count; ++i)
+            {
+                const auto& entry = entries[i];
+                auto it = node.properties.find(entry.key);
+                if (it == node.properties.end()) continue;
+
+                ImGui::PushID(entry.key);
+                if (drawScalarProperty(entry.label, it->second, inputWidth, entry.step))
+                    notifyChanged();
+                ImGui::PopID();
+            }
+        };
+
+        switch (node.type)
+        {
+        case vfx::VFXNodeType::ForceGravity: {
+            ImGui::Text("Gravity");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"direction",  "Direction",   0.1f},
+                {"strength",   "Strength",    0.1f},
+                {"localSpace", "Local Space", 0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::VFXNodeType::ForceWind: {
+            ImGui::Text("Wind");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"direction",      "Direction",       0.1f},
+                {"strength",       "Strength",        0.1f},
+                {"noiseStrength",  "Noise Strength",  0.1f},
+                {"noiseFrequency", "Noise Frequency", 0.1f},
+                {"localSpace",     "Local Space",     0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::VFXNodeType::ForceTurbulence: {
+            ImGui::Text("Turbulence");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"strength",    "Strength",     0.1f},
+                {"frequency",   "Frequency",    0.1f},
+                {"scrollSpeed", "Scroll Speed", 0.1f},
+                {"octaves",     "Octaves",      0.1f},
+                {"localSpace",  "Local Space",  0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::VFXNodeType::ForceVortex: {
+            ImGui::Text("Vortex");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"axis",       "Axis",        0.1f},
+                {"center",     "Center",      0.1f},
+                {"strength",   "Strength",    0.1f},
+                {"radialPull", "Radial Pull", 0.1f},
+                {"localSpace", "Local Space", 0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    void VFXPropertyPanel::drawShapeProperties(vfx::VFXNode& node)
+    {
+        constexpr float inputWidth = 80.0f;
+
+        ImGui::Text("Shape");
         ImGui::Separator();
 
+        vfx::ShapeType activeType = vfx::ShapeType::Point;
+        auto shapeIt = node.properties.find("shapeType");
+        if (shapeIt != node.properties.end())
+        {
+            if (auto* val = std::get_if<std::string>(&shapeIt->second.value))
+                activeType = vfx::stringToShapeType(*val);
+        }
+
+        const char* shapeItems[] = {"Point", "Sphere", "Cone", "Box", "Torus"};
+        int currentShape = static_cast<int>(activeType);
+        ImGui::Text("Shape Type");
+        ImGui::SameLine(120.0f);
+        ImGui::SetNextItemWidth(inputWidth * 1.8f);
+        if (ImGui::Combo("##shapeType", &currentShape, shapeItems, 5))
+        {
+            activeType = static_cast<vfx::ShapeType>(currentShape);
+            vfx::applyShapeTypeProperties(node, activeType);
+            notifyChanged();
+        }
+
+        auto emitIt = node.properties.find("emitFrom");
+        if (emitIt != node.properties.end())
+        {
+            if (auto* val = std::get_if<std::string>(&emitIt->second.value))
+            {
+                const char* emitItems[] = {"Volume", "Surface"};
+                int currentEmit = static_cast<int>(vfx::stringToEmitFrom(*val));
+                ImGui::Text("Emit From");
+                ImGui::SameLine(120.0f);
+                ImGui::SetNextItemWidth(inputWidth * 1.8f);
+                if (ImGui::Combo("##emitFrom", &currentEmit, emitItems, 2))
+                {
+                    *val = vfx::emitFromToString(static_cast<vfx::EmitFrom>(currentEmit));
+                    notifyChanged();
+                }
+            }
+        }
+
+        auto randomIt = node.properties.find("randomDirection");
+        if (randomIt != node.properties.end())
+        {
+            ImGui::PushID("randomDirection");
+            if (drawScalarProperty("Random Direction", randomIt->second, inputWidth))
+                notifyChanged();
+            ImGui::PopID();
+        }
+
+        struct ShapeEntry { const char* key; const char* label; float step; };
+        auto drawDimensionEntries = [&](const ShapeEntry* entries, size_t count)
+        {
+            for (size_t i = 0; i < count; ++i)
+            {
+                const auto& entry = entries[i];
+                auto it = node.properties.find(entry.key);
+                if (it == node.properties.end()) continue;
+
+                ImGui::PushID(entry.key);
+                if (drawScalarProperty(entry.label, it->second, inputWidth, entry.step))
+                    notifyChanged();
+                ImGui::PopID();
+            }
+        };
+
+        switch (activeType)
+        {
+        case vfx::ShapeType::Sphere: {
+            static constexpr ShapeEntry entries[] = {
+                {"radius", "Radius", 0.1f},
+            };
+            drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::ShapeType::Cone: {
+            static constexpr ShapeEntry entries[] = {
+                {"radius", "Radius", 0.1f},
+                {"height", "Height", 0.1f},
+                {"angle",  "Angle",  0.01f},
+            };
+            drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::ShapeType::Box: {
+            static constexpr ShapeEntry entries[] = {
+                {"halfExtents", "Half Extents", 0.1f},
+            };
+            drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::ShapeType::Torus: {
+            static constexpr ShapeEntry entries[] = {
+                {"majorRadius", "Major Radius", 0.1f},
+                {"minorRadius", "Minor Radius", 0.1f},
+            };
+            drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::ShapeType::Point:
+        default:
+            break;
+        }
+    }
+
+    void VFXPropertyPanel::drawFlipbookProperties(vfx::VFXNode& node)
+    {
         struct FlipbookEntry { const char* key; const char* label; };
         static constexpr FlipbookEntry entries[] = {
             {"flipbookColumns",     "Columns"},
@@ -196,9 +515,6 @@ namespace editor::vfxeditor
 
     void VFXPropertyPanel::drawRenderingProperties(vfx::VFXNode& node)
     {
-        ImGui::Text("Rendering");
-        ImGui::Separator();
-
         float inputWidth = 80.0f;
 
         int currentRenderMode = 0;
@@ -227,11 +543,6 @@ namespace editor::vfxeditor
 
         if (currentRenderMode == 3)
             drawMeshPathSelector(node, inputWidth);
-
-        if (currentRenderMode == 4)
-            drawRibbonProperties(node, inputWidth);
-
-        drawUVScrollProperties(node, inputWidth);
 
         struct RenderEntry { const char* key; const char* label; };
         static constexpr RenderEntry entries[] = {
@@ -283,10 +594,19 @@ namespace editor::vfxeditor
             if (disableWidget) ImGui::EndDisabled();
             ImGui::PopID();
         }
+    }
 
-        ImGui::Spacing();
-        ImGui::Text("Lighting");
-        ImGui::Separator();
+    void VFXPropertyPanel::drawLightingProperties(vfx::VFXNode& node)
+    {
+        float inputWidth = 80.0f;
+
+        int currentRenderMode = 0;
+        auto rmIt = node.properties.find("renderMode");
+        if (rmIt != node.properties.end())
+        {
+            if (auto* val = std::get_if<int32_t>(&rmIt->second.value))
+                currentRenderMode = std::clamp(*val, 0, 4);
+        }
 
         struct LightEntry { const char* key; const char* label; };
         static constexpr LightEntry lightEntries[] = {
@@ -344,11 +664,11 @@ namespace editor::vfxeditor
                 }
             }
         }
+    }
 
-        ImGui::Spacing();
-        ImGui::Text("Distortion");
-        ImGui::Separator();
-
+    void VFXPropertyPanel::drawDistortionProperties(vfx::VFXNode& node)
+    {
+        float inputWidth = 80.0f;
         {
             auto enableIt = node.properties.find("distortionEnabled");
             if (enableIt != node.properties.end())
@@ -392,9 +712,11 @@ namespace editor::vfxeditor
                     ImGui::SameLine(100.0f);
                     std::string display = val->empty() ? "(none)"
                         : std::filesystem::path(*val).filename().string();
+                    char buf[256];
+                    std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+                    buf[sizeof(buf) - 1] = '\0';
                     ImGui::SetNextItemWidth(inputWidth * 1.5f);
-                    ImGui::InputText("##distortionTexture", display.data(), display.size() + 1,
-                                     ImGuiInputTextFlags_ReadOnly);
+                    ImGui::InputText("##distortionTexture", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
                     if (auto dropped = windows::acceptAssetDropOnLastItem("DistortionTexDrop", {".vfimage"}))
                     {
                         *val = *dropped;
@@ -429,9 +751,6 @@ namespace editor::vfxeditor
 
     void VFXPropertyPanel::drawBurstProperties(vfx::VFXNode& node, float inputWidth)
     {
-        ImGui::Text("Bursts");
-        ImGui::Separator();
-
         std::vector<vfx::VFXBurst> bursts = vfx::loadBurstsFromNode(node);
         bool changed = false;
         int removeIndex = -1;
@@ -504,9 +823,6 @@ namespace editor::vfxeditor
 
     void VFXPropertyPanel::drawEventsProperties(vfx::VFXNode& node, float inputWidth)
     {
-        ImGui::Text("Events");
-        ImGui::Separator();
-
         struct EventEntry
         {
             const char* enableKey;
@@ -611,9 +927,6 @@ namespace editor::vfxeditor
 
     void VFXPropertyPanel::drawCollisionProperties(vfx::VFXNode& node, float inputWidth)
     {
-        ImGui::Text("Collision");
-        ImGui::Separator();
-
         auto enableIt = node.properties.find("collisionEnabled");
         if (enableIt == node.properties.end()) return;
         auto* enableVal = std::get_if<bool>(&enableIt->second.value);

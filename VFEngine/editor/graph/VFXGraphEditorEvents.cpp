@@ -1,4 +1,5 @@
 #include "VFXGraphEditor.hpp"
+#include "vfx/VFXShapeProperties.hpp"
 #include "vfx/VFXShapeTypes.hpp"
 #include "imgui.h"
 #include <algorithm>
@@ -452,11 +453,6 @@ namespace editor::graph
 
     void VFXGraphEditor::initializeShapeProperties(vfx::VFXNode& node, vfx::ShapeType shapeType)
     {
-        node.properties["shapeType"] = vfx::VFXProperty{
-            "shapeType", vfx::VFXPropertyType::String,
-            std::string(vfx::shapeTypeToString(shapeType)), 0.0f, 1.0f
-        };
-
         node.properties["emitFrom"] = vfx::VFXProperty{
             "emitFrom", vfx::VFXPropertyType::String,
             std::string("Volume"), 0.0f, 1.0f
@@ -467,55 +463,7 @@ namespace editor::graph
             false, 0.0f, 1.0f
         };
 
-        switch (shapeType)
-        {
-        case vfx::ShapeType::Sphere:
-            node.properties["radius"] = vfx::VFXProperty{
-                "radius", vfx::VFXPropertyType::Float,
-                vfx::ShapeDefaults::SPHERE_RADIUS, 0.01f, 100.0f
-            };
-            break;
-
-        case vfx::ShapeType::Cone:
-            node.properties["radius"] = vfx::VFXProperty{
-                "radius", vfx::VFXPropertyType::Float,
-                vfx::ShapeDefaults::CONE_BASE_RADIUS, 0.01f, 100.0f
-            };
-            node.properties["height"] = vfx::VFXProperty{
-                "height", vfx::VFXPropertyType::Float,
-                vfx::ShapeDefaults::CONE_HEIGHT, 0.01f, 100.0f
-            };
-            node.properties["angle"] = vfx::VFXProperty{
-                "angle", vfx::VFXPropertyType::Float,
-                vfx::ShapeDefaults::CONE_ANGLE, 0.0f, 1.57f // 0 to 90 degrees in radians
-            };
-            break;
-
-        case vfx::ShapeType::Box:
-            node.properties["halfExtents"] = vfx::VFXProperty{
-                "halfExtents", vfx::VFXPropertyType::Vec3,
-                glm::vec3(vfx::ShapeDefaults::BOX_HALF_EXTENT_X,
-                          vfx::ShapeDefaults::BOX_HALF_EXTENT_Y,
-                          vfx::ShapeDefaults::BOX_HALF_EXTENT_Z),
-                0.01f, 100.0f
-            };
-            break;
-
-        case vfx::ShapeType::Torus:
-            node.properties["majorRadius"] = vfx::VFXProperty{
-                "majorRadius", vfx::VFXPropertyType::Float,
-                vfx::ShapeDefaults::TORUS_MAJOR_RADIUS, 0.01f, 100.0f
-            };
-            node.properties["minorRadius"] = vfx::VFXProperty{
-                "minorRadius", vfx::VFXPropertyType::Float,
-                vfx::ShapeDefaults::TORUS_MINOR_RADIUS, 0.01f, 50.0f
-            };
-            break;
-
-        case vfx::ShapeType::Point:
-        default:
-            break;
-        }
+        vfx::applyShapeTypeProperties(node, shapeType);
     }
 
     void VFXGraphEditor::addNode(vfx::VFXNodeType type)

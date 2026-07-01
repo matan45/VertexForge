@@ -77,6 +77,10 @@ namespace editor::vfxeditor
     private:
         void drawCurveEditor(vfx::VFXCurve& curve, const vfx::VFXProperty& prop);
         void drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label);
+        bool drawScalarProperty(const char* label, vfx::VFXProperty& prop, float inputWidth, float step = 0.1f);
+        void drawCoreProperties(vfx::VFXNode& node);
+        void drawForceProperties(vfx::VFXNode& node);
+        void drawShapeProperties(vfx::VFXNode& node);
         void drawFlipbookProperties(vfx::VFXNode& node);
         void drawRenderingProperties(vfx::VFXNode& node);
         void drawMeshPathSelector(vfx::VFXNode& node, float inputWidth);
@@ -84,7 +88,9 @@ namespace editor::vfxeditor
         void drawUVScrollProperties(vfx::VFXNode& node, float inputWidth);
         void drawBurstProperties(vfx::VFXNode& node, float inputWidth);
         void drawEventsProperties(vfx::VFXNode& node, float inputWidth);
+        void drawLightingProperties(vfx::VFXNode& node);
         void drawCollisionProperties(vfx::VFXNode& node, float inputWidth);
+        void drawDistortionProperties(vfx::VFXNode& node);
         void notifyChanged();
     };
 }
