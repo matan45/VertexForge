@@ -6,6 +6,7 @@
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../events/physics/SocketEvents.hpp"
+#include <vfx/VFXRuntimeDiagnostics.hpp>
 #include <algorithm>
 
 namespace services
@@ -99,6 +100,9 @@ namespace services
                 result.poolWarmSlots = bs.poolWarmSlots;
                 result.poolUsedSlots = bs.poolUsedSlots;
                 result.poolTotalSlots = bs.poolTotalSlots;
+                result.culledEmitters = bs.culledEmitters;
+                result.throttledEmitters = bs.throttledEmitters;
+                result.vfxCullDistance = bs.vfxCullDistance;
                 return result;
             });
 
@@ -129,6 +133,82 @@ namespace services
                     config.transitionZone = cmd.transitionZone;
                     vfxProvider->setLODConfig(config);
                 }
+            });
+
+        // ============================================================
+        // VK-1453 (Phase 4) — pre-cull state, quality tier, debug snapshots
+        // ============================================================
+
+        dispatcher.registerQueryHandler<events::vfxruntime::GetVFXCullStateQuery>(
+            [this](const events::vfxruntime::GetVFXCullStateQuery&)
+            {
+                events::vfxruntime::VFXCullStateResult result;
+                if (vfxProvider)
+                {
+                    const auto cs = vfxProvider->getCullState();
+                    result.valid = cs.valid;
+                    result.viewProj = cs.viewProj;
+                    result.cameraPos = cs.cameraPos;
+                    result.distanceCullEnabled = cs.distanceCullEnabled;
+                    result.maxDrawDistance = cs.maxDrawDistance;
+                }
+                return result;
+            });
+
+        dispatcher.registerCommandHandler<events::vfxruntime::SetVFXQualityTierCommand>(
+            [this](const events::vfxruntime::SetVFXQualityTierCommand& cmd)
+            {
+                currentTier = cmd.tier;
+                if (vfxProvider)
+                    vfxProvider->setQualityTier(cmd.tier);
+            });
+
+        dispatcher.registerQueryHandler<events::vfxruntime::GetVFXQualityTierQuery>(
+            [this](const events::vfxruntime::GetVFXQualityTierQuery&)
+            {
+                return currentTier;
+            });
+
+        dispatcher.registerQueryHandler<events::vfxruntime::GetVFXInstanceDebugQuery>(
+            [this](const events::vfxruntime::GetVFXInstanceDebugQuery&)
+            {
+                events::vfxruntime::VFXInstanceDebugResult result;
+                if (vfxProvider)
+                {
+                    const auto infos = vfxProvider->getInstanceDebugInfo();
+                    result.instances.reserve(infos.size());
+                    for (const auto& info : infos)
+                    {
+                        events::vfxruntime::VFXInstanceDebugEntry entry;
+                        entry.id = info.id;
+                        entry.worldPosition = info.worldPosition;
+                        entry.extents = info.extents;
+                        entry.inFrustum = info.inFrustum;
+                        entry.lod = info.lod;
+                        entry.particleCount = info.particleCount;
+                        entry.priority = info.priority;
+                        result.instances.push_back(entry);
+                    }
+                }
+                return result;
+            });
+
+        dispatcher.registerQueryHandler<events::vfxruntime::GetVFXRecentWarningsQuery>(
+            [](const events::vfxruntime::GetVFXRecentWarningsQuery&)
+            {
+                events::vfxruntime::VFXRecentWarningsResult result;
+                const auto warnings = vfx::VFXRuntimeDiagnostics::instance().recent(64);
+                result.warnings.reserve(warnings.size());
+                for (const auto& w : warnings)
+                {
+                    events::vfxruntime::VFXWarningInfo info;
+                    info.source = w.source;
+                    info.message = w.message;
+                    info.count = w.count;
+                    info.lastSeq = w.lastSeq;
+                    result.warnings.push_back(std::move(info));
+                }
+                return result;
             });
 
         dispatcher.registerQueryHandler<::events::vfx::snapshot::CaptureVFXSnapshotQuery>(
@@ -286,6 +366,9 @@ namespace services
             stats.poolWarmSlots = ps.poolWarmSlots;
             stats.poolUsedSlots = ps.poolUsedSlots;
             stats.poolTotalSlots = ps.poolTotalSlots;
+            stats.culledEmitters = ps.culledEmitters;
+            stats.throttledEmitters = ps.throttledEmitters;
+            stats.vfxCullDistance = ps.vfxCullDistance;
         }
         return stats;
     }

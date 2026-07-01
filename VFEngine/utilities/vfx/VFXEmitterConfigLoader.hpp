@@ -187,6 +187,10 @@ namespace vfx
             getFloat(*emitterNode, "distortionStrength", 0.1f), 0.0f, 2.0f);
         config.distortionTexturePath = getString(*emitterNode, "distortionTexture", "");
 
+        // VK-1453 (Phase 4) — carry the per-asset scalability profile (CPU-only,
+        // disabled by default so it resolves to a neutral level).
+        config.scalability = data.scalability;
+
         return config;
     }
 }

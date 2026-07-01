@@ -3,6 +3,7 @@
 #include "../preview/PreviewWindowChrome.hpp"
 #include <vfx/VFXSequenceTypes.hpp>
 #include <providers/vfx/IVFXPreviewProvider.hpp>
+#include <math/Frustum.hpp>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -70,6 +71,8 @@ namespace windows
         ImVec2 initialSize{0.0f, 0.0f};
         bool sizeSaved = false;
 
+        bool showBounds = false; // VK-1453 — toggle the aggregate-bounds overlay
+
     public:
         explicit VFXSequenceEditorWindow(const std::string& seqPath);
         ~VFXSequenceEditorWindow() override;    // out-of-line (VFXPreviewPanel is incomplete here)
@@ -97,6 +100,11 @@ namespace windows
         // Build the full composited descriptor from the current sequence data
         // (loads each step's .vfVFX, applies overrides, attaches timing + derived seed).
         services::VFXSequencePreviewDesc buildSequenceDesc() const;
+
+        // VK-1453 — aggregate bounds over the steps (union of each child's resolved
+        // bounds transformed by its local placement); recalc captures it as Fixed.
+        math::AABB computeSequenceBoundsUnion() const;
+        void recalcSequenceBounds();
 
         void loadSocketNames();             // read sockets from socketMeshPath
         void drawSocketField(vfx::VFXSequenceStep& step); // dropdown if a mesh is set, else text

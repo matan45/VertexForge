@@ -3,6 +3,8 @@
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include <memory>
+#include <mutex>
+#include <string>
 #include <vector>
 
 namespace controllers
@@ -27,6 +29,11 @@ namespace core
         uint32_t cachedMaxColliders = 32;
         uint32_t colliderSettingsRefreshCounter = 0;
         std::vector<events::SubscriptionToken> terrainSubscriptions;
+
+        // VK-1453 — config-cache invalidations queued from the AssetSaved notification
+        // (published on the editor thread) and applied on the update thread.
+        std::mutex configInvalidationMutex;
+        std::vector<std::string> pendingConfigInvalidations;
 
         // Cached lighting layouts (set before renderer exists)
         vk::DescriptorSetLayout pendingLightBufferLayout;
@@ -94,5 +101,10 @@ namespace core
 
         std::optional<PlaybackState> capturePlaybackState(services::VFXInstanceId id) const override;
         void seekInstance(services::VFXInstanceId id, float emissionTime, float spawnAccumulator) override;
+
+        // VK-1453 (Phase 4)
+        CullState getCullState() const override;
+        void setQualityTier(vfx::VFXQualityTier tier) override;
+        std::vector<InstanceDebugInfo> getInstanceDebugInfo() const override;
     };
 }

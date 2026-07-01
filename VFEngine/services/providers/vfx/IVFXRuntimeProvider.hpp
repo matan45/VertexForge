@@ -4,6 +4,7 @@
 #include <optional>
 #include <vector>
 #include "../../data/VFXTypes.hpp"
+#include <vfx/VFXScalability.hpp>
 
 namespace services
 {
@@ -101,6 +102,10 @@ namespace services
             uint32_t poolWarmSlots = 0;
             uint32_t poolUsedSlots = 0;
             uint32_t poolTotalSlots = 0;
+            // VK-1453 (Phase 4)
+            uint32_t culledEmitters = 0;    // emitters skipped by frustum/distance cull this frame
+            uint32_t throttledEmitters = 0; // emitters whose sim was skipped by updateInterval
+            float vfxCullDistance = 0.0f;   // active max VFX draw distance (0 => unlimited)
         };
         virtual BudgetStats getBudgetStats() const = 0;
 
@@ -114,5 +119,35 @@ namespace services
         };
         virtual LODConfig getLODConfig() const = 0;
         virtual void setLODConfig(const LODConfig& config) = 0;
+
+        // VK-1453 (Phase 4) — camera/cull state for service-side pre-spawn culling.
+        // The renderer owns the camera; the combo service queries this once per update
+        // to decide whether an off-screen fire-and-forget effect should be skipped.
+        // Default (valid=false) => callers never cull (safe when there is no renderer).
+        struct CullState
+        {
+            bool valid = false;
+            glm::mat4 viewProj{1.0f};
+            glm::vec3 cameraPos{0.0f};
+            bool distanceCullEnabled = false;
+            float maxDrawDistance = 0.0f;
+        };
+        virtual CullState getCullState() const { return {}; }
+
+        // Global VFX quality tier applied to scalability profiles at instance creation.
+        virtual void setQualityTier(vfx::VFXQualityTier tier) { (void)tier; }
+
+        // Per-instance debug snapshot for the VFX debug window (capped by the impl).
+        struct InstanceDebugInfo
+        {
+            VFXInstanceId id = 0;
+            glm::vec3 worldPosition{0.0f};
+            glm::vec3 extents{0.0f};
+            bool inFrustum = true;
+            uint8_t lod = 0;
+            uint32_t particleCount = 0;
+            uint8_t priority = 2;
+        };
+        virtual std::vector<InstanceDebugInfo> getInstanceDebugInfo() const { return {}; }
     };
 }

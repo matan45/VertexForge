@@ -16,6 +16,7 @@
 #include <vfx/VFXSequenceValidation.hpp>
 #include <vfx/VFXComboTimeline.hpp>
 #include <vfx/VFXAsset.hpp>
+#include <vfx/VFXBoundsUtil.hpp>
 #include <vfx/VFXParameterRegistry.hpp>
 #include <asset/AssetRef.hpp>
 #include <resource/MeshStreamHandle.hpp>
@@ -389,6 +390,14 @@ namespace windows
         }
         ImGui::SameLine();
         maximizer.drawButton();
+        ImGui::SameLine();
+        ImGui::TextDisabled("|");
+        ImGui::SameLine();
+        if (ImGui::Button("Recalc Bounds"))
+            recalcSequenceBounds();
+        ImGui::SetItemTooltip("Union each step's bounds (transformed by its placement) and capture as the sequence's Fixed bounds.");
+        ImGui::SameLine();
+        ImGui::Checkbox("Show Bounds", &showBounds);
 
         ImGui::Separator();
     }
@@ -1040,6 +1049,63 @@ namespace windows
         return desc;
     }
 
+    math::AABB VFXSequenceEditorWindow::computeSequenceBoundsUnion() const
+    {
+        if (!data)
+            return math::AABB(glm::vec3(-1.0f), glm::vec3(1.0f));
+
+        bool any = false;
+        math::AABB result;
+        for (const auto& step : data->steps)
+        {
+            if (!step.vfxRef.isValid())
+                continue;
+            const std::string path = step.vfxRef.resolve();
+            if (path.empty())
+                continue;
+
+            std::shared_ptr<vfx::VFXData> vfxData;
+            if (auto it = vfxCache.find(path); it != vfxCache.end())
+                vfxData = it->second;
+            else
+            {
+                if (auto loaded = vfx::VFXAsset::load(path))
+                    vfxData = std::make_shared<vfx::VFXData>(std::move(*loaded));
+                vfxCache[path] = vfxData; // cache nulls too, so a bad path isn't retried
+            }
+            if (!vfxData)
+                continue;
+
+            const math::AABB local = vfx::resolveBounds(vfxData->bounds, *vfxData);
+            const math::AABB world = local.getTransformed(vfx::VFXComboTimeline::composeStepLocal(step));
+            if (!any)
+            {
+                result = world;
+                any = true;
+            }
+            else
+            {
+                result.expand(world.min);
+                result.expand(world.max);
+            }
+        }
+
+        if (!any)
+            return math::AABB(glm::vec3(-1.0f), glm::vec3(1.0f));
+        return result;
+    }
+
+    void VFXSequenceEditorWindow::recalcSequenceBounds()
+    {
+        if (!data)
+            return;
+        const math::AABB a = computeSequenceBoundsUnion();
+        data->bounds.mode = vfx::VFXBoundsMode::Fixed;
+        data->bounds.center = a.getCenter();
+        data->bounds.extents = a.getExtents();
+        isDirty = true;
+    }
+
     void VFXSequenceEditorWindow::drawPreviewViewport()
     {
         if (!previewPanel)
@@ -1068,6 +1134,22 @@ namespace windows
             ImGui::TextDisabled("Add steps to preview the composited combo");
         else
             ImGui::Text("Composited preview — %d step(s)", data ? static_cast<int>(data->steps.size()) : 0);
+
+        if (showBounds && data)
+        {
+            const auto& b = data->bounds;
+            math::AABB ov;
+            if (b.mode == vfx::VFXBoundsMode::Fixed &&
+                (b.extents.x > 0.0f || b.extents.y > 0.0f || b.extents.z > 0.0f))
+                ov = math::AABB(b.center - b.extents, b.center + b.extents);
+            else
+                ov = computeSequenceBoundsUnion();
+            previewPanel->setBoundsOverlay(true, ov);
+        }
+        else
+        {
+            previewPanel->setBoundsOverlay(false, math::AABB{});
+        }
 
         previewPanel->draw();
     }

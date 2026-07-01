@@ -62,8 +62,23 @@ namespace controllers
             if (!instance.gpuDriven || !instance.active)
                 continue;
 
-            if (!isEmitterInFrustum(instance))
+            // VK-1453: skip simulating emitters that are off-screen or beyond the cull
+            // distance (per-instance override honored inside isEmitterDistanceCulled).
+            if (!isEmitterInFrustum(instance) || isEmitterDistanceCulled(instance))
+            {
+                ++culledEmittersThisFrame;
                 continue;
+            }
+
+            // VK-1453: temporal throttling — simulate downscaled effects only every Nth
+            // frame (the phase offset spreads throttled emitters across frames).
+            if (instance.updateInterval > 1 &&
+                (frameNumber + static_cast<uint32_t>(instance.updatePhase)) %
+                    static_cast<uint32_t>(instance.updateInterval) != 0)
+            {
+                ++throttledEmittersThisFrame;
+                continue;
+            }
 
             gpuComputePipeline->dispatch(
                 cmd,
@@ -88,13 +103,9 @@ namespace controllers
         {
             if (instance.gpuDriven && instance.active)
             {
-                if (distanceCullingEnabled && maxVFXDistSq > 0.0f)
-                {
-                    glm::vec3 emitterPos = glm::vec3(instance.worldTransform[3]);
-                    glm::vec3 diff = emitterPos - currentCameraPos;
-                    if (glm::dot(diff, diff) > maxVFXDistSq)
-                        continue;
-                }
+                // VK-1453: honors the per-instance scalability cull-distance override.
+                if (isEmitterDistanceCulled(instance))
+                    continue;
                 activeGPUEmitters++;
             }
         }
@@ -260,6 +271,30 @@ namespace controllers
                 return false;
         }
         return true;
+    }
+
+    bool VFXSceneRenderer::isEmitterDistanceCulled(const VFXRuntimeInstance& instance) const
+    {
+        // Camera-relative effects follow the camera and are never distance-culled.
+        if (instance.cameraRelative)
+            return false;
+
+        // VK-1453: a per-instance scalability cull distance (>=0) wins over the global one
+        // and applies even when global distance culling is off; otherwise fall back to the
+        // global toggle + distance.
+        float distSq = instance.cullDistanceSqOverride;
+        if (distSq < 0.0f)
+        {
+            if (!distanceCullingEnabled || maxVFXDistSq <= 0.0f)
+                return false;
+            distSq = maxVFXDistSq;
+        }
+        if (distSq <= 0.0f)
+            return false;
+
+        glm::vec3 emitterPos = glm::vec3(instance.worldTransform[3]);
+        glm::vec3 diff = emitterPos - currentCameraPos;
+        return glm::dot(diff, diff) > distSq;
     }
 
     void VFXSceneRenderer::updateInstanceLOD(VFXRuntimeInstance& instance) const

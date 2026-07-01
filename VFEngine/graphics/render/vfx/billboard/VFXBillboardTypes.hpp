@@ -10,6 +10,7 @@
 #include "vfx/VFXShapeTypes.hpp"
 #include "vfx/VFXEventTypes.hpp"
 #include "vfx/VFXBurstTypes.hpp"
+#include "vfx/VFXScalability.hpp"
 
 namespace render::vfx
 {
@@ -268,6 +269,10 @@ namespace render::vfx
         bool distortionEnabled = false;
         float distortionStrength = 0.1f;
         std::string distortionTexturePath;
+
+        // VK-1453 (Phase 4) — per-quality-tier scalability profile (CPU-only; disabled
+        // by default so the resolved level is neutral and runtime behavior is unchanged).
+        ::vfx::VFXScalability scalability;
     };
 
     struct VFXFlipbookConfig

@@ -9,13 +9,18 @@
 #include "../../data/VFXOverrideApplier.hpp"
 #include "asset/AssetDatabase.hpp"
 #include "vfx/VFXSequenceAsset.hpp"
+#include "vfx/VFXAsset.hpp"
+#include "vfx/VFXBoundsUtil.hpp"
+#include "vfx/VFXRuntimeDiagnostics.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <exception>
 #include <filesystem>
 #include <random>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -42,6 +47,15 @@ namespace services
                            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 #endif
             return normalized;
+        }
+
+        // VK-1453 (AC6) — route combo warnings through the deduplicating diagnostics
+        // collector so a repeating condition only logs once and repeats bump a count
+        // (surfaced in the editor VFX debug window via GetVFXRecentWarningsQuery).
+        void reportWarning(const std::string& msg)
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report("VFXSequence", msg))
+                vfLogWarning("{}", msg);
         }
     }
 
@@ -116,6 +130,32 @@ namespace services
         dispatcher.registerQueryHandler<events::vfxsequence::IsVFXComboInstancePlayingQuery>(
             [this](const events::vfxsequence::IsVFXComboInstancePlayingQuery& q) { return isComboPlaying(q.comboId); });
 
+        dispatcher.registerQueryHandler<events::vfxsequence::GetVFXComboStatsQuery>(
+            [this](const events::vfxsequence::GetVFXComboStatsQuery&)
+            {
+                events::vfxsequence::VFXComboStatsResult result;
+                result.activeCombos = static_cast<uint32_t>(combos.size());
+                for (const auto& [id, combo] : combos)
+                {
+                    bool anyLive = false;
+                    for (const auto& step : combo.steps)
+                    {
+                        if (step.childId != 0)
+                        {
+                            anyLive = true;
+                            ++result.liveChildInstances;
+                        }
+                    }
+                    // "Playing" = still driving output: explicitly playing, a child alive,
+                    // or steps still pending their spawn time.
+                    if (combo.playing || anyLive || !combo.timeline.allStepsSpawned())
+                        ++result.playingCombos;
+                }
+                result.culledSpawns = culledSpawns;
+                result.pooledReuses = pooledReuses;
+                return result;
+            });
+
         if (assetSavedToken.isValid())
             dispatcher.unsubscribe(assetSavedToken);
         assetSavedToken = dispatcher.subscribe<::events::resource::AssetSavedNotification>(
@@ -145,6 +185,63 @@ namespace services
         return shared;
     }
 
+    const VFXSequenceRuntimeServiceImpl::ChildVFXInfo&
+    VFXSequenceRuntimeServiceImpl::loadChildInfo(const std::string& path)
+    {
+        auto it = childCache.find(path);
+        if (it != childCache.end())
+            return it->second;
+
+        ChildVFXInfo info;
+        if (auto data = vfx::VFXAsset::load(path))
+        {
+            info.valid = true;
+            info.cullEligible = data->cullEligible;
+            info.scal = data->scalability;
+            info.bounds = vfx::resolveBounds(data->bounds, *data);
+        }
+        // A failed load caches info.valid=false so we neither cull nor re-read the file on
+        // every spawn; the actual missing-asset warning is emitted by spawnStep's create path.
+        return childCache.emplace(path, std::move(info)).first->second;
+    }
+
+    VFXSequenceRuntimeServiceImpl::CachedCull VFXSequenceRuntimeServiceImpl::queryCullState() const
+    {
+        // EventDispatcher::query throws when no renderer registered the handler (headless /
+        // no graphics). Treat any failure as "no cull state" so combos never cull.
+        try
+        {
+            const auto r = ::events::EventDispatcher::instance().query(events::vfxruntime::GetVFXCullStateQuery{});
+            CachedCull c;
+            c.valid = r.valid;
+            c.viewProj = r.viewProj;
+            c.cameraPos = r.cameraPos;
+            c.distanceCullEnabled = r.distanceCullEnabled;
+            c.maxDrawDistance = r.maxDrawDistance;
+            return c;
+        }
+        catch (const std::exception&)
+        {
+            return {};
+        }
+    }
+
+    VFXSequenceRuntimeServiceImpl::CachedTier VFXSequenceRuntimeServiceImpl::queryQualityTier() const
+    {
+        // Same headless-safe contract as queryCullState: a throw (no renderer) => invalid,
+        // which disables the tier scalability gate so nothing is skipped without a renderer.
+        try
+        {
+            const vfx::VFXQualityTier tier =
+                ::events::EventDispatcher::instance().query(events::vfxruntime::GetVFXQualityTierQuery{});
+            return {true, tier};
+        }
+        catch (const std::exception&)
+        {
+            return {};
+        }
+    }
+
     void VFXSequenceRuntimeServiceImpl::invalidateSequence(const std::string& path)
     {
         const std::string target = normalizeSequenceCachePath(path);
@@ -155,6 +252,15 @@ namespace services
         {
             if (normalizeSequenceCachePath(it->first) == target)
                 it = sequenceCache.erase(it);
+            else
+                ++it;
+        }
+        // The saved asset may be a child .vfVFX referenced by steps — drop its cached cull
+        // metadata too so the next spawn re-reads bounds/cullEligible from disk.
+        for (auto it = childCache.begin(); it != childCache.end();)
+        {
+            if (normalizeSequenceCachePath(it->first) == target)
+                it = childCache.erase(it);
             else
                 ++it;
         }
@@ -178,8 +284,8 @@ namespace services
         {
             if (!combo.socketWarned)
             {
-                vfLogWarning("[VFXSequence] combo {} socket '{}' not found; using last known transform",
-                             combo.id, combo.attachSocket);
+                reportWarning("[VFXSequence] combo " + std::to_string(combo.id) + " socket '" +
+                              combo.attachSocket + "' not found; using last known transform");
                 combo.socketWarned = true;
             }
             return combo.parentTransform;
@@ -238,25 +344,83 @@ namespace services
         const std::string path = step.def->vfxRef.resolve();
         if (path.empty())
         {
-            vfLogWarning("[VFXSequence] combo {} step '{}' has an unresolved/missing .vfVFX asset; skipping",
-                         combo.id, step.def->label);
+            reportWarning("[VFXSequence] combo " + std::to_string(combo.id) + " step '" +
+                          step.def->label + "' has an unresolved/missing .vfVFX asset; skipping");
             return;
+        }
+
+        // Compose the child's world transform once — reused for the cull test and the spawn.
+        const glm::mat4 stepWorld = composeStepWorldTransform(step, stepParent);
+
+        // VK-1453 — pre-spawn gate. Two independent skips, each of which marks the step
+        // spawned (never retried) with no child, no warning, and ++culledSpawns:
+        //   (1) tier-disabled — GLOBAL: the child's scalability profile is renderer-disabled
+        //       at the active quality tier. The renderer returns id 0 for such an instance,
+        //       which would otherwise log a false "failed create", so we must skip it for
+        //       EVERY step (looping, socketed and attached included).
+        //   (2) frustum/distance cull — fire-and-forget only (non-looping, non-socket step of
+        //       a non-attached combo; combo children are never camera-relative).
+        // We only read the child asset once a renderer is present (a valid cull state OR tier);
+        // headless/no-provider leaves both invalid => no disk read => byte-identical behavior.
+        if (combo.cachedCull.valid || combo.cachedTier.valid)
+        {
+            const ChildVFXInfo& childInfo = loadChildInfo(path);
+            if (childInfo.valid)
+            {
+                // (1) Tier scalability gate — camera-independent, applies to all steps.
+                if (combo.cachedTier.valid && childInfo.scal.enabled)
+                {
+                    const vfx::VFXScalabilityLevel level =
+                        vfx::resolveScalability(childInfo.scal, combo.cachedTier.tier);
+                    if (!level.rendererEnabled)
+                    {
+                        ++culledSpawns; // step.spawned already true; leave childId=0, no warning
+                        return;
+                    }
+                }
+
+                // (2) Frustum / distance cull — fire-and-forget only, needs a valid cull state.
+                const bool structurallyCullable =
+                    !step.def->loop && step.def->socketName.empty() && !combo.attached;
+                if (structurallyCullable && childInfo.cullEligible && combo.cachedCull.valid)
+                {
+                    const math::AABB worldBounds = childInfo.bounds.getTransformed(stepWorld);
+                    math::Frustum frustum;
+                    frustum.extractFromMatrix(combo.cachedCull.viewProj);
+                    bool culled = !frustum.intersectsAABB(worldBounds);
+                    if (!culled && combo.cachedCull.distanceCullEnabled && combo.cachedCull.maxDrawDistance > 0.0f)
+                    {
+                        const float dist = glm::distance(worldBounds.getCenter(), combo.cachedCull.cameraPos);
+                        culled = dist > combo.cachedCull.maxDrawDistance;
+                    }
+                    if (culled)
+                    {
+                        ++culledSpawns; // step.spawned already true; leave childId=0, emit no warning
+                        return;
+                    }
+                }
+            }
         }
 
         auto& dispatcher = ::events::EventDispatcher::instance();
         events::vfxruntime::CreateVFXInstanceCommand createCmd;
         createCmd.params.vfxAssetPath = path;
-        createCmd.params.worldTransform = composeStepWorldTransform(step, stepParent);
+        createCmd.params.worldTransform = stepWorld;
         createCmd.params.loop = step.def->loop;
         createCmd.params.autoDestroy = !step.def->loop; // non-looping children self-destruct when done
         createCmd.params.priority = VFXEmitterPriority::Normal;
         createCmd.params.cameraRelative = false;
         createCmd.params.seed = combo.timeline.derivedSeed(stepIndex); // VK-1451 deterministic child seed
+        // VK-1453 — fire-and-forget children opt into renderer-side instance pooling
+        // (autoDestroy && no socket && not camera-relative).
+        createCmd.params.poolable = createCmd.params.autoDestroy && step.def->socketName.empty() &&
+                                    !createCmd.params.cameraRelative;
 
         const VFXInstanceId childId = dispatcher.execute(createCmd);
         if (childId == 0)
         {
-            vfLogWarning("[VFXSequence] combo {} step '{}' failed to create instance", combo.id, step.def->label);
+            reportWarning("[VFXSequence] combo " + std::to_string(combo.id) + " step '" +
+                          step.def->label + "' failed to create instance");
             return;
         }
 
@@ -289,7 +453,8 @@ namespace services
         auto data = loadSequence(sequenceAssetPath);
         if (!data || data->steps.empty())
         {
-            vfLogWarning("[VFXSequence] cannot create combo from '{}' (load failed or no steps)", sequenceAssetPath);
+            reportWarning("[VFXSequence] cannot create combo from '" + sequenceAssetPath +
+                          "' (load failed or no steps)");
             return 0;
         }
 
@@ -608,9 +773,16 @@ namespace services
         auto& dispatcher = ::events::EventDispatcher::instance();
         std::vector<vfx::ComboEvent> events;
 
+        // VK-1453 — snapshot the renderer's cull state and quality tier once per tick; every
+        // combo reads them in spawnStep to pre-cull off-screen steps and skip tier-disabled ones.
+        const CachedCull tickCull = queryCullState();
+        const CachedTier tickTier = queryQualityTier();
+
         for (auto it = combos.begin(); it != combos.end();)
         {
             ComboInstance& combo = it->second;
+            combo.cachedCull = tickCull;
+            combo.cachedTier = tickTier;
             const glm::mat4 comboParent = resolveComboParent(combo);
 
             if (combo.playing && !combo.paused && deltaTime > 0.0f)

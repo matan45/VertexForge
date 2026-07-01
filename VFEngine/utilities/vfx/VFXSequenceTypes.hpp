@@ -2,6 +2,7 @@
 
 #include "../asset/AssetRef.hpp"
 #include "VFXParameterRegistry.hpp"
+#include "VFXTypes.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <string>
@@ -72,5 +73,9 @@ namespace vfx
         float    fixedStep = 0.0f;  // 0 => variable step (Phase-1 behavior)
         float    prewarm = 0.0f;    // seconds to fast-forward when the combo starts
         std::vector<VFXSequenceEventMarker> eventMarkers;
+
+        // VK-1453 (Phase 4) — aggregate bounds over the sequence's steps. Additive
+        // with a neutral default (Auto) so existing .vfVFXSequence files are unaffected.
+        VFXBounds bounds;
     };
 }

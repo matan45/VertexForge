@@ -1,6 +1,7 @@
 #pragma once
 #include "../../data/VFXTypes.hpp"
 #include "../../data/EntityHandle.hpp"
+#include <vfx/VFXScalability.hpp>
 #include <string>
 #include <unordered_map>
 
@@ -12,6 +13,10 @@ namespace services
     {
     private:
         IVFXRuntimeProvider* vfxProvider = nullptr;
+
+        // VK-1453 (Phase 4) — cached global VFX quality tier. SetVFXQualityTierCommand
+        // updates this (and forwards to the provider); GetVFXQualityTierQuery returns it.
+        vfx::VFXQualityTier currentTier = vfx::VFXQualityTier::High;
 
         // VFX instances attached to entity sockets. Each frame, before the
         // provider updates instance transforms, the attached instance's world
@@ -57,6 +62,10 @@ namespace services
             uint32_t poolWarmSlots = 0;
             uint32_t poolUsedSlots = 0;
             uint32_t poolTotalSlots = 0;
+            // VK-1453 (Phase 4) — mirror the provider's new cull/throttle telemetry.
+            uint32_t culledEmitters = 0;
+            uint32_t throttledEmitters = 0;
+            float vfxCullDistance = 0.0f;
         };
         BudgetStats getBudgetStats() const;
     };

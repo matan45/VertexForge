@@ -1,6 +1,7 @@
 #pragma once
 
 #include <providers/vfx/IVFXPreviewProvider.hpp>
+#include <math/Frustum.hpp>
 #include <memory>
 #include <functional>
 
@@ -46,6 +47,16 @@ namespace editor::vfxeditor
         // panel's built-in Play/Stop/Restart row.
         void setBuiltInControls(bool show) { builtInControls = show; }
 
+        // VK-1453 — draw a local-space AABB wireframe over the preview image (bounds
+        // visualization). The caller passes the resolved bounds each frame; the panel
+        // projects the 8 corners with its preview camera. Off by default.
+        void setBoundsOverlay(bool show, const math::AABB& localBounds)
+        {
+            showBounds = show;
+            overlayBounds = localBounds;
+            hasOverlayBounds = true;
+        }
+
         void play();
         void pause();
         void stop();
@@ -54,7 +65,12 @@ namespace editor::vfxeditor
     private:
         void handleInput();
         void drawPlaybackControls();
+        void drawBoundsOverlay(float imageMinX, float imageMinY, float imageSizeX, float imageSizeY);
 
         bool builtInControls = true;
+
+        bool showBounds = false;
+        bool hasOverlayBounds = false;
+        math::AABB overlayBounds;
     };
 }

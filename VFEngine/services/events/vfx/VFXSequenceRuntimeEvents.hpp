@@ -132,4 +132,22 @@ namespace services::events::vfxsequence
         VFXComboInstanceId comboId = 0;
         std::string_view getName() const override { return "IsVFXComboInstancePlaying"; }
     };
+
+    // ============================================================
+    // VK-1453 (Phase 4) — combo debug stats for the VFX debug window
+    // ============================================================
+
+    struct VFXComboStatsResult
+    {
+        uint32_t activeCombos = 0;        // combos currently tracked by the service
+        uint32_t playingCombos = 0;       // combos with steps still to spawn / children live
+        uint32_t liveChildInstances = 0;  // child VFX instances currently owned by combos
+        uint32_t culledSpawns = 0;        // steps skipped by pre-spawn cull (cumulative)
+        uint32_t pooledReuses = 0;        // child spawns satisfied from the instance pool (cumulative)
+    };
+
+    struct GetVFXComboStatsQuery : ::events::IQuery<VFXComboStatsResult>
+    {
+        std::string_view getName() const override { return "GetVFXComboStats"; }
+    };
 }

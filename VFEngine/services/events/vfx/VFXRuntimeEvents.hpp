@@ -2,9 +2,12 @@
 
 #include "../EventTypes.hpp"
 #include "../../data/VFXTypes.hpp"
+#include <vfx/VFXScalability.hpp>
 #include <glm/glm.hpp>
 #include <optional>
 #include <string>
+#include <vector>
+#include <cstdint>
 
 namespace services::events::vfxruntime
 {
@@ -97,6 +100,10 @@ namespace services::events::vfxruntime
         uint32_t poolWarmSlots = 0;
         uint32_t poolUsedSlots = 0;
         uint32_t poolTotalSlots = 0;
+        // VK-1453 (Phase 4)
+        uint32_t culledEmitters = 0;
+        uint32_t throttledEmitters = 0;
+        float vfxCullDistance = 0.0f;
     };
 
     struct GetVFXBudgetStatsQuery : ::events::IQuery<VFXBudgetStatsResult>
@@ -124,6 +131,79 @@ namespace services::events::vfxruntime
         float lod2Distance = 200.0f;
         float transitionZone = 10.0f;
         std::string_view getName() const override { return "SetVFXLODConfig"; }
+    };
+
+    // ============================================================
+    // VK-1453 (Phase 4) — pre-cull, scalability tier, debug snapshots
+    // ============================================================
+
+    // Camera + cull configuration snapshot, sourced from the renderer, used by the
+    // combo service to pre-cull off-screen fire-and-forget effects before spawning.
+    struct VFXCullStateResult
+    {
+        bool valid = false;
+        glm::mat4 viewProj{1.0f};
+        glm::vec3 cameraPos{0.0f};
+        bool distanceCullEnabled = false;
+        float maxDrawDistance = 0.0f;
+    };
+
+    struct GetVFXCullStateQuery : ::events::IQuery<VFXCullStateResult>
+    {
+        std::string_view getName() const override { return "GetVFXCullState"; }
+    };
+
+    // Global VFX quality tier (drives per-asset scalability profiles).
+    struct SetVFXQualityTierCommand : ::events::ICommand<void>
+    {
+        vfx::VFXQualityTier tier = vfx::VFXQualityTier::High;
+        std::string_view getName() const override { return "SetVFXQualityTier"; }
+    };
+
+    struct GetVFXQualityTierQuery : ::events::IQuery<vfx::VFXQualityTier>
+    {
+        std::string_view getName() const override { return "GetVFXQualityTier"; }
+    };
+
+    // Per-instance debug snapshot for the VFX debug window (bounds/cull table).
+    struct VFXInstanceDebugEntry
+    {
+        uint32_t id = 0;
+        glm::vec3 worldPosition{0.0f};
+        glm::vec3 extents{0.0f};
+        bool inFrustum = true;
+        uint8_t lod = 0;
+        uint32_t particleCount = 0;
+        uint8_t priority = 2;
+    };
+
+    struct VFXInstanceDebugResult
+    {
+        std::vector<VFXInstanceDebugEntry> instances;
+    };
+
+    struct GetVFXInstanceDebugQuery : ::events::IQuery<VFXInstanceDebugResult>
+    {
+        std::string_view getName() const override { return "GetVFXInstanceDebug"; }
+    };
+
+    // Recent deduplicated VFX runtime warnings (AC6) for the debug window.
+    struct VFXWarningInfo
+    {
+        std::string source;
+        std::string message;
+        uint32_t count = 0;
+        uint64_t lastSeq = 0;
+    };
+
+    struct VFXRecentWarningsResult
+    {
+        std::vector<VFXWarningInfo> warnings;
+    };
+
+    struct GetVFXRecentWarningsQuery : ::events::IQuery<VFXRecentWarningsResult>
+    {
+        std::string_view getName() const override { return "GetVFXRecentWarnings"; }
     };
 
 }

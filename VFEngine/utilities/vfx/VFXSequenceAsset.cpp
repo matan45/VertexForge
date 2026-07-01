@@ -569,6 +569,18 @@ namespace vfx
                 }
             }
 
+            // VK-1453 (Phase 4) — aggregate bounds (tolerant; absent => Auto default).
+            if (j.contains("bounds") && j["bounds"].is_object())
+            {
+                const auto& boundsJson = j["bounds"];
+                data.bounds.mode = static_cast<VFXBoundsMode>(
+                    static_cast<uint8_t>(boundsJson.value("mode", 0)));
+                if (boundsJson.contains("center"))
+                    data.bounds.center = jsonToVec3(boundsJson["center"], glm::vec3(0.0f));
+                if (boundsJson.contains("extents"))
+                    data.bounds.extents = jsonToVec3(boundsJson["extents"], glm::vec3(0.0f));
+            }
+
             if (warningCount > 0)
                 vfLogWarning("Loaded VFX sequence '{}' with {} warning(s)", data.name, warningCount);
 
@@ -618,6 +630,15 @@ namespace vfx
             markersJson.push_back(std::move(m));
         }
         j["eventMarkers"] = markersJson;
+
+        // VK-1453 (Phase 4) — aggregate bounds over the sequence's steps.
+        {
+            json boundsJson;
+            boundsJson["mode"] = static_cast<int>(static_cast<uint8_t>(data.bounds.mode));
+            boundsJson["center"] = vec3ToJson(data.bounds.center);
+            boundsJson["extents"] = vec3ToJson(data.bounds.extents);
+            j["bounds"] = std::move(boundsJson);
+        }
 
         try
         {
