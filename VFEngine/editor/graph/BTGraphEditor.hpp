@@ -3,8 +3,10 @@
 #include <imgui.h>
 #include <imgui_node_editor.h>
 #include "../../utilities/behaviortree/BehaviorTreeTypes.hpp"
+#include "../../utilities/behaviortree/BehaviorTreeValidation.hpp"
 #include <functional>
 #include <string>
+#include <unordered_map>
 
 namespace ax::NodeEditor
 {
@@ -27,6 +29,7 @@ namespace editor::graph
 
         // Live per-node statuses while debugging a running tree (owned by the window, null when idle)
         const std::unordered_map<uint32_t, behaviortree::BTNodeStatus>* liveStatuses = nullptr;
+        const std::unordered_map<uint32_t, behaviortree::validation::Severity>* validationSeverities = nullptr;
 
         // ID offsets
         static constexpr uintptr_t NODE_ID_OFFSET = 100000;
@@ -46,9 +49,15 @@ namespace editor::graph
         void setOnGraphChanged(BTGraphChangedCallback callback);
         uint32_t getSelectedNodeId() const { return selectedNodeId; }
         void navigateToContent();
+        void selectNode(uint32_t nodeId);
         void setLiveStatus(const std::unordered_map<uint32_t, behaviortree::BTNodeStatus>* statuses)
         {
             liveStatuses = statuses;
+        }
+        void setValidationSeverities(
+            const std::unordered_map<uint32_t, behaviortree::validation::Severity>* severities)
+        {
+            validationSeverities = severities;
         }
 
     private:

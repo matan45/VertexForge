@@ -8,6 +8,7 @@
 #include "../../../services/events/scene/EntityTransformEvents.hpp"
 #include "../../../services/events/physics/PhysicsEvents.hpp"
 #include "print/Log.hpp"
+#include "behaviortree/BehaviorTreeValidation.hpp"
 #include <algorithm>
 
 namespace core
@@ -28,6 +29,45 @@ namespace core
         return path;
     }
 
+    static void logValidationDiagnostics(const std::string& treePath,
+                                         const behaviortree::validation::ValidationReport& report)
+    {
+        for (const auto& diagnostic : report.diagnostics)
+        {
+            if (diagnostic.severity == behaviortree::validation::Severity::Info)
+                continue;
+
+            const std::string nodePrefix = diagnostic.nodeId == 0
+                                               ? std::string{}
+                                               : "node " + std::to_string(diagnostic.nodeId) + ": ";
+            if (diagnostic.severity == behaviortree::validation::Severity::Error)
+            {
+                vfLogError("BT validation error in '{}': {}{}", treePath, nodePrefix, diagnostic.message);
+            }
+            else
+            {
+                vfLogWarning("BT validation warning in '{}': {}{}", treePath, nodePrefix, diagnostic.message);
+            }
+        }
+    }
+
+    static bool validateExpandedOrLog(const BehaviorTreeData& data, const std::string& treePath)
+    {
+        behaviortree::validation::ValidationContext context;
+        context.allowSubTrees = false;
+
+        auto report = behaviortree::validation::validateBehaviorTree(data, context);
+        logValidationDiagnostics(treePath, report);
+
+        if (report.hasErrors())
+        {
+            vfLogError("BT validation refused '{}': {} error(s), {} warning(s)",
+                       treePath, report.errorCount(), report.warningCount());
+            return false;
+        }
+        return true;
+    }
+
     std::shared_ptr<const BehaviorTreeData> BehaviorTreeAdapter::getOrLoadTree(const std::string& treePath)
     {
         auto cacheIt = assetCache.find(treePath);
@@ -37,6 +77,8 @@ namespace core
         std::vector<std::string> dependencies;
         auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies);
         if (!dataOpt.has_value())
+            return nullptr;
+        if (!validateExpandedOrLog(dataOpt.value(), treePath))
             return nullptr;
 
         auto shared = std::make_shared<const BehaviorTreeData>(std::move(dataOpt.value()));
@@ -50,14 +92,14 @@ namespace core
         if (!entity.isValid() || treePath.empty())
             return false;
 
-        detachTree(entity);
-
         auto treeData = getOrLoadTree(treePath);
         if (!treeData)
         {
             vfLogError("Failed to load behavior tree: {}", treePath);
             return false;
         }
+
+        detachTree(entity);
 
         RuntimeInstance instance;
         instance.runtime = std::make_unique<BehaviorTreeRuntime>();
@@ -221,6 +263,11 @@ namespace core
             if (!dataOpt.has_value())
             {
                 vfLogError("BT hot reload: failed to load '{}', keeping old tree", treePath);
+                continue;
+            }
+            if (!validateExpandedOrLog(dataOpt.value(), treePath))
+            {
+                vfLogError("BT hot reload: validation failed for '{}', keeping old tree", treePath);
                 continue;
             }
 

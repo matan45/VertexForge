@@ -50,6 +50,18 @@ namespace editor::graph
         }
     }
 
+    void BTGraphEditor::selectNode(uint32_t nodeId)
+    {
+        selectedNodeId = nodeId;
+        if (!editorContext || nodeId == 0) return;
+
+        ed::SetCurrentEditor(editorContext);
+        ed::ClearSelection();
+        ed::SelectNode(toEditorNodeId(nodeId));
+        ed::NavigateToSelection(false);
+        ed::SetCurrentEditor(nullptr);
+    }
+
     void BTGraphEditor::draw()
     {
         if (!editorContext || !currentGraph) return;

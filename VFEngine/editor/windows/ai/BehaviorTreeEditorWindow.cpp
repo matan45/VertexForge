@@ -1,12 +1,16 @@
 #include "BehaviorTreeEditorWindow.hpp"
+#include "BTValueWidgets.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 #include "events/ai/BehaviorTreeEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
+#include "print/Log.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <array>
 #include <algorithm>
+#include <cstring>
+#include <string>
 
 using namespace behaviortree;
 
@@ -58,6 +62,7 @@ namespace editor::windows
         }
 
         graphEditor.setGraph(&treeData->graph);
+        revalidate();
         graphEditor.navigateToContent();
         isDirty = false;
     }
@@ -77,12 +82,25 @@ namespace editor::windows
             events::ai::ReloadBehaviorTreeAssetCommand reloadCmd;
             reloadCmd.treePath = treePath;
             events::EventDispatcher::instance().execute(reloadCmd);
+
+            revalidate();
+            if (validationReport.hasErrors())
+            {
+                vfLogError("Saved behavior tree '{}' with {} validation error(s) and {} warning(s)",
+                           treePath, validationReport.errorCount(), validationReport.warningCount());
+            }
+            else if (validationReport.hasWarnings())
+            {
+                vfLogWarning("Saved behavior tree '{}' with {} validation warning(s)",
+                             treePath, validationReport.warningCount());
+            }
         }
     }
 
     void BehaviorTreeEditorWindow::onGraphChanged()
     {
         isDirty = true;
+        revalidate();
     }
 
     void BehaviorTreeEditorWindow::draw()
@@ -129,6 +147,8 @@ namespace editor::windows
         ImGui::SameLine(0.0f, 0.0f);
 
         ImGui::BeginChild("BTRightPanel", ImVec2(rightPanelWidth, 0), ImGuiChildFlags_None);
+
+        drawValidationPanel();
 
         float halfHeight = ImGui::GetContentRegionAvail().y * 0.5f;
         ImGui::BeginChild("BTPropertyPanel", ImVec2(0, halfHeight), ImGuiChildFlags_Borders);
@@ -199,6 +219,39 @@ namespace editor::windows
         {
             std::replace(path.begin(), path.end(), '\\', '/');
             return path;
+        }
+
+        const char* severityLabel(validation::Severity severity)
+        {
+            switch (severity)
+            {
+            case validation::Severity::Error: return "Error";
+            case validation::Severity::Warning: return "Warning";
+            case validation::Severity::Info: return "Info";
+            default: return "Info";
+            }
+        }
+
+        ImVec4 severityColor(validation::Severity severity)
+        {
+            switch (severity)
+            {
+            case validation::Severity::Error: return ImVec4(0.95f, 0.25f, 0.25f, 1.0f);
+            case validation::Severity::Warning: return ImVec4(1.0f, 0.70f, 0.20f, 1.0f);
+            case validation::Severity::Info: return ImVec4(0.35f, 0.65f, 1.0f, 1.0f);
+            default: return ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
+            }
+        }
+
+        std::string diagnosticLabel(const validation::Diagnostic& diagnostic)
+        {
+            std::string label = std::string("[") + severityLabel(diagnostic.severity) + "] ";
+            if (diagnostic.nodeId != 0)
+            {
+                label += "Node " + std::to_string(diagnostic.nodeId) + ": ";
+            }
+            label += diagnostic.message;
+            return label;
         }
     }
 
@@ -312,6 +365,90 @@ namespace editor::windows
         propertyPanel.draw(selectedNode, &treeData->graph);
     }
 
+    void BehaviorTreeEditorWindow::revalidate()
+    {
+        validationReport = {};
+        validationSeverities.clear();
+
+        if (!treeData)
+        {
+            graphEditor.setValidationSeverities(nullptr);
+            return;
+        }
+
+        validation::ValidationContext context;
+        context.subtreeExists = [](std::string_view path)
+        {
+            return BehaviorTreeAsset::exists(path);
+        };
+
+        validationReport = validation::validateBehaviorTree(*treeData, context);
+        validationSeverities = validationReport.worstByNode();
+        graphEditor.setValidationSeverities(&validationSeverities);
+    }
+
+    void BehaviorTreeEditorWindow::drawValidationPanel()
+    {
+        if (!treeData) return;
+
+        const int errors = validationReport.errorCount();
+        const int warnings = validationReport.warningCount();
+        std::string summary = "Validation: Valid";
+        validation::Severity summarySeverity = validation::Severity::Info;
+
+        if (errors > 0)
+        {
+            summary = "Validation: " + std::to_string(errors) + " error(s), " +
+                      std::to_string(warnings) + " warning(s)";
+            summarySeverity = validation::Severity::Error;
+        }
+        else if (warnings > 0)
+        {
+            summary = "Validation: " + std::to_string(warnings) + " warning(s)";
+            summarySeverity = validation::Severity::Warning;
+        }
+
+        ImGui::PushStyleColor(ImGuiCol_Text, severityColor(summarySeverity));
+        ImGuiTreeNodeFlags flags = (errors > 0 || warnings > 0) ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;
+        bool open = ImGui::CollapsingHeader(summary.c_str(), flags);
+        ImGui::PopStyleColor();
+
+        if (!open) return;
+
+        const float childHeight = std::clamp(ImGui::GetContentRegionAvail().y * 0.25f, 80.0f, 180.0f);
+        ImGui::BeginChild("BTValidationDiagnostics", ImVec2(0, childHeight), true);
+
+        if (validationReport.diagnostics.empty())
+        {
+            ImGui::TextDisabled("No diagnostics");
+        }
+        else
+        {
+            for (int i = 0; i < static_cast<int>(validationReport.diagnostics.size()); ++i)
+            {
+                const auto& diagnostic = validationReport.diagnostics[static_cast<size_t>(i)];
+                const std::string label = diagnosticLabel(diagnostic);
+                ImGui::PushID(i);
+                ImGui::PushStyleColor(ImGuiCol_Text, severityColor(diagnostic.severity));
+                if (diagnostic.nodeId != 0)
+                {
+                    if (ImGui::Selectable(label.c_str(), graphEditor.getSelectedNodeId() == diagnostic.nodeId))
+                    {
+                        graphEditor.selectNode(diagnostic.nodeId);
+                    }
+                }
+                else
+                {
+                    ImGui::TextWrapped("%s", label.c_str());
+                }
+                ImGui::PopStyleColor();
+                ImGui::PopID();
+            }
+        }
+
+        ImGui::EndChild();
+    }
+
     void BehaviorTreeEditorWindow::drawLiveBlackboardPanel()
     {
         ImGui::TextDisabled("Live values - tick %llu",
@@ -324,53 +461,8 @@ namespace editor::windows
         {
             ImGui::PushID(key.c_str());
 
-            bool changed = false;
             behaviortree::BlackboardValue newValue = value;
-
-            if (std::holds_alternative<float>(value))
-            {
-                float v = std::get<float>(value);
-                ImGui::SetNextItemWidth(130.0f);
-                if (ImGui::DragFloat(key.c_str(), &v, 0.1f)) { newValue = v; changed = true; }
-            }
-            else if (std::holds_alternative<int32_t>(value))
-            {
-                int v = std::get<int32_t>(value);
-                ImGui::SetNextItemWidth(130.0f);
-                if (ImGui::DragInt(key.c_str(), &v)) { newValue = static_cast<int32_t>(v); changed = true; }
-            }
-            else if (std::holds_alternative<bool>(value))
-            {
-                bool v = std::get<bool>(value);
-                if (ImGui::Checkbox(key.c_str(), &v)) { newValue = v; changed = true; }
-            }
-            else if (std::holds_alternative<std::string>(value))
-            {
-                char buf[128];
-                strncpy(buf, std::get<std::string>(value).c_str(), sizeof(buf) - 1);
-                buf[sizeof(buf) - 1] = '\0';
-                ImGui::SetNextItemWidth(130.0f);
-                if (ImGui::InputText(key.c_str(), buf, sizeof(buf),
-                                     ImGuiInputTextFlags_EnterReturnsTrue))
-                {
-                    newValue = std::string(buf);
-                    changed = true;
-                }
-            }
-            else if (std::holds_alternative<glm::vec3>(value))
-            {
-                glm::vec3 v = std::get<glm::vec3>(value);
-                ImGui::SetNextItemWidth(180.0f);
-                if (ImGui::DragFloat3(key.c_str(), &v.x, 0.1f)) { newValue = v; changed = true; }
-            }
-            else if (std::holds_alternative<services::EntityHandle>(value))
-            {
-                auto handle = std::get<services::EntityHandle>(value);
-                ImGui::Text("%s: entity %llu", key.c_str(),
-                            static_cast<unsigned long long>(handle.id));
-            }
-
-            if (changed)
+            if (bt::drawBlackboardValueWidget(key.c_str(), bt::typeOfValue(value), newValue))
             {
                 events::ai::SetBlackboardValueCommand cmd;
                 cmd.entity = debugTarget;
@@ -439,15 +531,14 @@ namespace editor::windows
             if (ImGui::Combo("##type", &currentType, typeNames.data(), static_cast<int>(typeNames.size())))
             {
                 key.type = static_cast<BlackboardValueType>(currentType);
-                switch (key.type)
-                {
-                case BlackboardValueType::Float: key.defaultValue = 0.0f; break;
-                case BlackboardValueType::Int: key.defaultValue = 0; break;
-                case BlackboardValueType::Bool: key.defaultValue = false; break;
-                case BlackboardValueType::String: key.defaultValue = std::string{}; break;
-                case BlackboardValueType::Vec3: key.defaultValue = glm::vec3{0.0f}; break;
-                case BlackboardValueType::Entity: key.defaultValue = services::EntityHandle::invalid(); break;
-                }
+                key.defaultValue = bt::defaultValueForType(key.type);
+                onGraphChanged();
+            }
+
+            ImGui::SameLine();
+
+            if (bt::drawBlackboardValueWidget("##default", key.type, key.defaultValue))
+            {
                 onGraphChanged();
             }
 

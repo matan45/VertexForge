@@ -313,7 +313,7 @@ namespace behaviortree
         return data;
     }
 
-    static std::optional<json> readJsonFromFile(std::string_view path)
+    static std::optional<fs::path> resolveExistingBehaviorTreePath(std::string_view path)
     {
         fs::path filePath(path);
         if (!fs::exists(filePath)) {
@@ -328,9 +328,19 @@ namespace behaviortree
             }
         }
         if (!fs::exists(filePath)) {
+            return std::nullopt;
+        }
+        return filePath;
+    }
+
+    static std::optional<json> readJsonFromFile(std::string_view path)
+    {
+        auto filePathOpt = resolveExistingBehaviorTreePath(path);
+        if (!filePathOpt.has_value()) {
             vfLogError("Behavior tree file not found: {}", path);
             return std::nullopt;
         }
+        const fs::path& filePath = filePathOpt.value();
 
         std::error_code ec;
         auto fileSize = fs::file_size(filePath, ec);
@@ -446,6 +456,11 @@ namespace behaviortree
             vfLogError("Unexpected error loading behavior tree '{}': {}", path, e.what());
             return std::nullopt;
         }
+    }
+
+    bool BehaviorTreeAsset::exists(std::string_view path)
+    {
+        return resolveExistingBehaviorTreePath(path).has_value();
     }
 
     bool BehaviorTreeAsset::save(std::string_view path, const BehaviorTreeData& data)

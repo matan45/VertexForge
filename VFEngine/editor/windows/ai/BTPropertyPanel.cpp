@@ -1,4 +1,5 @@
 #include "BTPropertyPanel.hpp"
+#include "BTValueWidgets.hpp"
 #include <imgui.h>
 #include <array>
 
@@ -6,6 +7,34 @@ using namespace behaviortree;
 
 namespace editor::windows
 {
+    namespace
+    {
+        BlackboardValueType resolveSelectedKeyType(const BTGraph* graph, const std::string& key)
+        {
+            return bt::resolveKeyType(graph, key);
+        }
+
+        bool drawTypedNodeValue(BTNode& node,
+                                const char* propertyName,
+                                const char* label,
+                                BlackboardValueType type)
+        {
+            BlackboardValue value = bt::defaultValueForType(type);
+            auto it = node.properties.find(propertyName);
+            if (it != node.properties.end())
+            {
+                value = it->second;
+            }
+
+            if (bt::drawBlackboardValueWidget(label, type, value))
+            {
+                node.properties[propertyName] = value;
+                return true;
+            }
+            return false;
+        }
+    }
+
     void BTPropertyPanel::notifyChanged()
     {
         if (onPropertyChanged) onPropertyChanged();
@@ -288,6 +317,7 @@ namespace editor::windows
                     if (ImGui::Selectable(keyDef.name.c_str(), selected))
                     {
                         node.properties["key"] = keyDef.name;
+                        node.properties["value"] = bt::defaultValueForType(keyDef.type);
                         notifyChanged();
                     }
                 }
@@ -306,15 +336,8 @@ namespace editor::windows
             }
         }
 
-        // Value (simple float for now)
-        float val = 0.0f;
-        auto valIt = node.properties.find("value");
-        if (valIt != node.properties.end() && std::holds_alternative<float>(valIt->second))
-            val = std::get<float>(valIt->second);
-
-        if (ImGui::DragFloat("Value", &val, 0.1f))
+        if (drawTypedNodeValue(node, "value", "Value", resolveSelectedKeyType(graph, key)))
         {
-            node.properties["value"] = val;
             notifyChanged();
         }
     }
@@ -337,6 +360,7 @@ namespace editor::windows
                     if (ImGui::Selectable(keyDef.name.c_str(), selected))
                     {
                         node.properties["key"] = keyDef.name;
+                        node.properties["compareValue"] = bt::defaultValueForType(keyDef.type);
                         notifyChanged();
                     }
                 }
@@ -373,15 +397,8 @@ namespace editor::windows
             notifyChanged();
         }
 
-        // Compare value
-        float compareVal = 0.0f;
-        auto cvIt = node.properties.find("compareValue");
-        if (cvIt != node.properties.end() && std::holds_alternative<float>(cvIt->second))
-            compareVal = std::get<float>(cvIt->second);
-
-        if (ImGui::DragFloat("Compare Value", &compareVal, 0.1f))
+        if (drawTypedNodeValue(node, "compareValue", "Compare Value", resolveSelectedKeyType(graph, key)))
         {
-            node.properties["compareValue"] = compareVal;
             notifyChanged();
         }
     }
@@ -404,6 +421,7 @@ namespace editor::windows
                     if (ImGui::Selectable(keyDef.name.c_str(), selected))
                     {
                         node.properties["key"] = keyDef.name;
+                        node.properties["compareValue"] = bt::defaultValueForType(keyDef.type);
                         notifyChanged();
                     }
                 }
@@ -440,15 +458,8 @@ namespace editor::windows
             notifyChanged();
         }
 
-        // Compare value
-        float compareVal = 0.0f;
-        auto cvIt = node.properties.find("compareValue");
-        if (cvIt != node.properties.end() && std::holds_alternative<float>(cvIt->second))
-            compareVal = std::get<float>(cvIt->second);
-
-        if (ImGui::DragFloat("Compare Value", &compareVal, 0.1f))
+        if (drawTypedNodeValue(node, "compareValue", "Compare Value", resolveSelectedKeyType(graph, key)))
         {
-            node.properties["compareValue"] = compareVal;
             notifyChanged();
         }
 

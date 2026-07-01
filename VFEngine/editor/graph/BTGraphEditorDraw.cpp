@@ -50,16 +50,35 @@ namespace editor::graph
         }
     }
 
+    static bool validationBorder(
+        const std::unordered_map<uint32_t, validation::Severity>* severities,
+        uint32_t nodeId,
+        ImVec4& outColor)
+    {
+        if (!severities) return false;
+        auto it = severities->find(nodeId);
+        if (it == severities->end()) return false;
+
+        switch (it->second)
+        {
+        case validation::Severity::Error: outColor = ImVec4(0.95f, 0.25f, 0.25f, 1.0f); return true;
+        case validation::Severity::Warning: outColor = ImVec4(1.0f, 0.70f, 0.20f, 1.0f); return true;
+        case validation::Severity::Info: outColor = ImVec4(0.35f, 0.65f, 1.0f, 1.0f); return true;
+        default: return false;
+        }
+    }
+
     void BTGraphEditor::drawNode(BTNode& node)
     {
         ImU32 nodeColor = getNodeColor(node.type);
 
         ImVec4 borderColor(0.78f, 0.78f, 0.78f, 0.39f);
         bool hasLiveStatus = liveStatusBorder(liveStatuses, node.id, borderColor);
+        bool hasValidationStatus = !hasLiveStatus && validationBorder(validationSeverities, node.id, borderColor);
 
         ed::PushStyleColor(ed::StyleColor_NodeBg, ImGui::ColorConvertU32ToFloat4(nodeColor));
         ed::PushStyleColor(ed::StyleColor_NodeBorder, borderColor);
-        if (hasLiveStatus)
+        if (hasLiveStatus || hasValidationStatus)
             ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 3.0f);
 
         ed::BeginNode(toEditorNodeId(node.id));
@@ -96,7 +115,7 @@ namespace editor::graph
 
         ed::EndNode();
 
-        if (hasLiveStatus)
+        if (hasLiveStatus || hasValidationStatus)
             ed::PopStyleVar();
         ed::PopStyleColor(2);
     }

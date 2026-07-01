@@ -42,7 +42,7 @@
             "type": "SubTree",
             "name": "Engage",
             "position": [700.0, 590.0],
-            "properties": { "treePath": "assets/behaviortrees/Engage.bt" }
+            "properties": { "treePath": "assets/behaviortrees/Engage.vfBehaviorTree" }
         },
         {
             "id": 11,

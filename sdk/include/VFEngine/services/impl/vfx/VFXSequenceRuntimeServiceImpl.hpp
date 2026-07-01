@@ -10,6 +10,7 @@
 #include <math/Frustum.hpp>
 #include <glm/glm.hpp>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -92,6 +93,13 @@ namespace services
         std::unordered_map<VFXComboInstanceId, ComboInstance> combos;
         VFXComboInstanceId nextComboId = 1;
         ::events::SubscriptionToken assetSavedToken;
+
+        // VK-1460: AssetSaved is delivered on the publishing (editor) thread; queue the
+        // saved paths here and apply them on the update thread (drained at the top of
+        // update()) so sequenceCache/childCache are never mutated concurrently with the
+        // spawnStep reads. Mirrors VFXRuntimeAdapter's pendingConfigInvalidations pattern.
+        std::mutex sequenceInvalidationMutex;
+        std::vector<std::string> pendingSequenceInvalidations;
 
         // Sequence assets are cached as shared_ptr so each combo's step pointers stay valid.
         std::unordered_map<std::string, std::shared_ptr<const vfx::VFXSequenceData>> sequenceCache;

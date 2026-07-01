@@ -17,6 +17,7 @@ namespace behaviortree
 
         static std::optional<BehaviorTreeData> load(std::string_view path);
         static bool save(std::string_view path, const BehaviorTreeData& data);
+        static bool exists(std::string_view path);
         static BehaviorTreeData createDefault(const std::string& name = "New Behavior Tree");
 
         // Inline every SubTree node by splicing the referenced graph in with
