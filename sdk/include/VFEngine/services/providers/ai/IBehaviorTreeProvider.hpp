@@ -38,10 +38,22 @@ namespace services {
                                                                   const std::string& key) = 0;
         virtual bool hasBlackboardKey(EntityHandle entity, const std::string& key) const = 0;
 
+        // === Dynamic subtree (VK-1457) ===
+        // Bind an injection tag to a tree path for one entity's DynamicSubTree nodes; empty path clears it.
+        virtual void setDynamicSubtree(EntityHandle entity, const std::string& tag,
+                                       const std::string& treePath) = 0;
+
         // === Debug ===
         // Enable per-tick snapshot capture for one entity (invalid handle disables)
         virtual void setDebugTarget(EntityHandle entity) = 0;
         virtual behaviortree::BTRuntimeSnapshot getRuntimeSnapshot(EntityHandle entity) const = 0;
+
+        // === Debug controls (VK-1457, editor-session only) ===
+        // Freeze/resume ticking of the current debug target; step advances it one tick while paused.
+        virtual void setDebugPaused(bool paused) = 0;
+        virtual void stepDebug() = 0;
+        // Replace the debug target's breakpoint set (node ids that auto-pause when they become Running).
+        virtual void setBreakpoints(EntityHandle entity, const std::vector<uint32_t>& nodeIds) = 0;
     };
 
 }

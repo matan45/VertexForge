@@ -107,7 +107,8 @@ namespace behaviortree
                type == BTNodeType::MoveTo || type == BTNodeType::PlayAnimation ||
                type == BTNodeType::SetBlackboardValue || type == BTNodeType::CheckBlackboardValue ||
                type == BTNodeType::ScriptTask || type == BTNodeType::EnvironmentQuery ||
-               type == BTNodeType::LineOfSight || type == BTNodeType::SubTree;
+               type == BTNodeType::LineOfSight || type == BTNodeType::SubTree ||
+               type == BTNodeType::DynamicSubTree;
     }
 
     bool isRootNode(BTNodeType type)
@@ -115,9 +116,14 @@ namespace behaviortree
         return type == BTNodeType::Root;
     }
 
+    bool isServiceNode(BTNodeType type)
+    {
+        return type == BTNodeType::Service;
+    }
+
     bool hasOutputPin(BTNodeType type)
     {
-        // Tasks (leaves) have no children
+        // Tasks (leaves) have no children; Service is its own (non-task) category, so it keeps a pin.
         return !isTaskNode(type);
     }
 
@@ -146,6 +152,8 @@ namespace behaviortree
         case BTNodeType::EnvironmentQuery: return "EnvironmentQuery";
         case BTNodeType::LineOfSight: return "LineOfSight";
         case BTNodeType::SubTree: return "SubTree";
+        case BTNodeType::Service: return "Service";
+        case BTNodeType::DynamicSubTree: return "DynamicSubTree";
         default: return "Unknown";
         }
     }
@@ -173,6 +181,8 @@ namespace behaviortree
         if (str == "EnvironmentQuery") return BTNodeType::EnvironmentQuery;
         if (str == "LineOfSight") return BTNodeType::LineOfSight;
         if (str == "SubTree") return BTNodeType::SubTree;
+        if (str == "Service") return BTNodeType::Service;
+        if (str == "DynamicSubTree") return BTNodeType::DynamicSubTree;
         return BTNodeType::Sequence;
     }
 
@@ -281,5 +291,24 @@ namespace behaviortree
         if (str == "RequireAll") return ParallelPolicy::RequireAll;
         if (str == "RequireOne") return ParallelPolicy::RequireOne;
         return ParallelPolicy::RequireAll;
+    }
+
+    const char* mappingDirectionToString(MappingDirection direction)
+    {
+        switch (direction)
+        {
+        case MappingDirection::In: return "In";
+        case MappingDirection::Out: return "Out";
+        case MappingDirection::InOut: return "InOut";
+        default: return "In";
+        }
+    }
+
+    MappingDirection stringToMappingDirection(const std::string& str)
+    {
+        if (str == "In") return MappingDirection::In;
+        if (str == "Out") return MappingDirection::Out;
+        if (str == "InOut") return MappingDirection::InOut;
+        return MappingDirection::In;
     }
 }

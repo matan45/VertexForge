@@ -5,21 +5,37 @@ Scripts they reference live in `assets/scripts/game/ai/` (run **Build Scripts** 
 
 | Tree | Behavior |
 |------|----------|
-| `Guard.bt` | Order slot (move order preempts everything) → engage visible enemies → idle |
-| `Patrol.bt` | Walk patrolA↔patrolB, drop into Engage when an enemy is spotted |
-| `HarvesterLoop.bt` | Gather/deposit loop, flees from enemies instead of fighting |
-| `Engage.bt` | Shared chase+attack subtree (placeholder damage), referenced by Guard/Patrol |
+| `Guard.vfBehaviorTree` | Service-driven sensing (EQS acquire + LoS visibility) → order slot / engage / idle |
+| `Patrol.vfBehaviorTree` | Walk patrolA↔patrolB, drop into Engage when an enemy is spotted |
+| `HarvesterLoop.vfBehaviorTree` | Gather/deposit loop, flees from enemies instead of fighting |
+| `Engage.vfBehaviorTree` | Shared chase+attack subtree (placeholder damage), referenced by Guard/Patrol |
 
 ## Setup
 
-1. Add a **BehaviorTreeComponent** to the unit and point it at one of these `.bt` files.
+1. Add a **BehaviorTreeComponent** to the unit and point it at one of these `.vfBehaviorTree` files.
 2. The unit needs a **NavmeshAgent** component and a baked navmesh.
 3. Perception finds entities by name: name hostile entities `Enemy` (or change the
    `enemyName` blackboard default in the tree).
 4. Patrol/Harvester routes: edit the `patrolA`/`patrolB` / `resourcePos`/`homePos`
    blackboard defaults, or write them at runtime via `Blackboard.mt` natives.
 
-## Order-slot pattern (Guard.bt)
+## Service-driven sensing (Guard.vfBehaviorTree)
+
+Guard's brain is headed by two **Service** nodes instead of a `Parallel + RepeatUntilFail`
+perception loop. A Service is a single-child passthrough that runs on an interval while its
+branch is active, so the sensing cost is decoupled from the tick rate:
+
+- `Acquire Target (EQS)` runs the `NearestEnemy` EQS query every ~0.25s and writes the best
+  position to `enemyPos` (author the query like you would a `.mt` script; a missing query is a
+  graceful no-op).
+- `Refresh Visibility (LoS)` raycasts toward `enemyPos` every ~0.25s and writes `enemyVisible`.
+
+Each write bumps the blackboard key's version, so the `Enemy Visible?` `BlackboardCondition`
+(abort mode `Both`) reacts the moment visibility changes — the sense→react loop with no polling
+task. Add more services (or a `FocusUpdate` service writing a focus point) by chaining them
+above the branch they should serve.
+
+## Order-slot pattern (Guard.vfBehaviorTree)
 
 Player command code issues an order by writing two blackboard keys:
 

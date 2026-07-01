@@ -1,4 +1,5 @@
 #include "BTPropertyPanel.hpp"
+#include "BTValueWidgets.hpp"
 #include <imgui.h>
 #include <array>
 
@@ -6,6 +7,34 @@ using namespace behaviortree;
 
 namespace editor::windows
 {
+    namespace
+    {
+        BlackboardValueType resolveSelectedKeyType(const BTGraph* graph, const std::string& key)
+        {
+            return bt::resolveKeyType(graph, key);
+        }
+
+        bool drawTypedNodeValue(BTNode& node,
+                                const char* propertyName,
+                                const char* label,
+                                BlackboardValueType type)
+        {
+            BlackboardValue value = bt::defaultValueForType(type);
+            auto it = node.properties.find(propertyName);
+            if (it != node.properties.end())
+            {
+                value = it->second;
+            }
+
+            if (bt::drawBlackboardValueWidget(label, type, value))
+            {
+                node.properties[propertyName] = value;
+                return true;
+            }
+            return false;
+        }
+    }
+
     void BTPropertyPanel::notifyChanged()
     {
         if (onPropertyChanged) onPropertyChanged();
@@ -53,6 +82,8 @@ namespace editor::windows
         case BTNodeType::BlackboardCondition: drawBlackboardConditionProperties(*node, graph); break;
         case BTNodeType::EnvironmentQuery: drawEnvironmentQueryProperties(*node, graph); break;
         case BTNodeType::SubTree: drawSubTreeProperties(*node); break;
+        case BTNodeType::DynamicSubTree: drawDynamicSubTreeProperties(*node); break;
+        case BTNodeType::Service: drawServiceProperties(*node, graph); break;
         default: break;
         }
     }
@@ -109,42 +140,10 @@ namespace editor::windows
 
     void BTPropertyPanel::drawMoveToProperties(BTNode& node, const BTGraph* graph)
     {
-        // Target key dropdown from blackboard keys
-        std::string targetKey = "target";
-        auto keyIt = node.properties.find("targetKey");
-        if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
-            targetKey = std::get<std::string>(keyIt->second);
-
-        if (graph && !graph->blackboardKeys.empty())
-        {
-            if (ImGui::BeginCombo("Target Key", targetKey.c_str()))
-            {
-                for (const auto& keyDef : graph->blackboardKeys)
-                {
-                    if (keyDef.type == BlackboardValueType::Vec3)
-                    {
-                        bool selected = (keyDef.name == targetKey);
-                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
-                        {
-                            node.properties["targetKey"] = keyDef.name;
-                            notifyChanged();
-                        }
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-        else
-        {
-            char keyBuf[64];
-            strncpy(keyBuf, targetKey.c_str(), sizeof(keyBuf) - 1);
-            keyBuf[sizeof(keyBuf) - 1] = '\0';
-            if (ImGui::InputText("Target Key", keyBuf, sizeof(keyBuf)))
-            {
-                node.properties["targetKey"] = std::string(keyBuf);
-                notifyChanged();
-            }
-        }
+        // Target key dropdown from blackboard keys (Vec3), free-text fallback when none exist.
+        const auto isVec3 = [](BlackboardValueType t) { return t == BlackboardValueType::Vec3; };
+        if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isVec3))
+            notifyChanged();
 
         float arrivalDist = 0.5f;
         auto distIt = node.properties.find("arrivalDistance");
@@ -285,9 +284,15 @@ namespace editor::windows
                 for (const auto& keyDef : graph->blackboardKeys)
                 {
                     bool selected = (keyDef.name == key);
-                    if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                    // Only reset the stored value on a GENUINE key change, and only when the existing
+                    // value can't hold the new key's type — re-selecting the same key (Selectable fires on
+                    // every click) must not wipe a configured value (VK-1457 fix).
+                    if (ImGui::Selectable(keyDef.name.c_str(), selected) && keyDef.name != key)
                     {
                         node.properties["key"] = keyDef.name;
+                        auto valIt = node.properties.find("value");
+                        if (valIt == node.properties.end() || bt::typeOfValue(valIt->second) != keyDef.type)
+                            node.properties["value"] = bt::defaultValueForType(keyDef.type);
                         notifyChanged();
                     }
                 }
@@ -306,15 +311,8 @@ namespace editor::windows
             }
         }
 
-        // Value (simple float for now)
-        float val = 0.0f;
-        auto valIt = node.properties.find("value");
-        if (valIt != node.properties.end() && std::holds_alternative<float>(valIt->second))
-            val = std::get<float>(valIt->second);
-
-        if (ImGui::DragFloat("Value", &val, 0.1f))
+        if (drawTypedNodeValue(node, "value", "Value", resolveSelectedKeyType(graph, key)))
         {
-            node.properties["value"] = val;
             notifyChanged();
         }
     }
@@ -334,9 +332,14 @@ namespace editor::windows
                 for (const auto& keyDef : graph->blackboardKeys)
                 {
                     bool selected = (keyDef.name == key);
-                    if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                    // Only reset compareValue on a GENUINE key change, and only when the existing value
+                    // can't hold the new key's type — re-selecting the same key must not wipe it (VK-1457).
+                    if (ImGui::Selectable(keyDef.name.c_str(), selected) && keyDef.name != key)
                     {
                         node.properties["key"] = keyDef.name;
+                        auto valIt = node.properties.find("compareValue");
+                        if (valIt == node.properties.end() || bt::typeOfValue(valIt->second) != keyDef.type)
+                            node.properties["compareValue"] = bt::defaultValueForType(keyDef.type);
                         notifyChanged();
                     }
                 }
@@ -373,15 +376,8 @@ namespace editor::windows
             notifyChanged();
         }
 
-        // Compare value
-        float compareVal = 0.0f;
-        auto cvIt = node.properties.find("compareValue");
-        if (cvIt != node.properties.end() && std::holds_alternative<float>(cvIt->second))
-            compareVal = std::get<float>(cvIt->second);
-
-        if (ImGui::DragFloat("Compare Value", &compareVal, 0.1f))
+        if (drawTypedNodeValue(node, "compareValue", "Compare Value", resolveSelectedKeyType(graph, key)))
         {
-            node.properties["compareValue"] = compareVal;
             notifyChanged();
         }
     }
@@ -401,9 +397,14 @@ namespace editor::windows
                 for (const auto& keyDef : graph->blackboardKeys)
                 {
                     bool selected = (keyDef.name == key);
-                    if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                    // Only reset compareValue on a GENUINE key change, and only when the existing value
+                    // can't hold the new key's type — re-selecting the same key must not wipe it (VK-1457).
+                    if (ImGui::Selectable(keyDef.name.c_str(), selected) && keyDef.name != key)
                     {
                         node.properties["key"] = keyDef.name;
+                        auto valIt = node.properties.find("compareValue");
+                        if (valIt == node.properties.end() || bt::typeOfValue(valIt->second) != keyDef.type)
+                            node.properties["compareValue"] = bt::defaultValueForType(keyDef.type);
                         notifyChanged();
                     }
                 }
@@ -440,15 +441,8 @@ namespace editor::windows
             notifyChanged();
         }
 
-        // Compare value
-        float compareVal = 0.0f;
-        auto cvIt = node.properties.find("compareValue");
-        if (cvIt != node.properties.end() && std::holds_alternative<float>(cvIt->second))
-            compareVal = std::get<float>(cvIt->second);
-
-        if (ImGui::DragFloat("Compare Value", &compareVal, 0.1f))
+        if (drawTypedNodeValue(node, "compareValue", "Compare Value", resolveSelectedKeyType(graph, key)))
         {
-            node.properties["compareValue"] = compareVal;
             notifyChanged();
         }
 
@@ -490,42 +484,10 @@ namespace editor::windows
             notifyChanged();
         }
 
-        // Result key (Vec3 blackboard keys)
-        std::string resultKey = "eqsResult";
-        auto rIt = node.properties.find("resultKey");
-        if (rIt != node.properties.end() && std::holds_alternative<std::string>(rIt->second))
-            resultKey = std::get<std::string>(rIt->second);
-
-        if (graph && !graph->blackboardKeys.empty())
-        {
-            if (ImGui::BeginCombo("Result Key", resultKey.c_str()))
-            {
-                for (const auto& keyDef : graph->blackboardKeys)
-                {
-                    if (keyDef.type == BlackboardValueType::Vec3)
-                    {
-                        bool selected = (keyDef.name == resultKey);
-                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
-                        {
-                            node.properties["resultKey"] = keyDef.name;
-                            notifyChanged();
-                        }
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-        else
-        {
-            char keyBuf[64];
-            strncpy(keyBuf, resultKey.c_str(), sizeof(keyBuf) - 1);
-            keyBuf[sizeof(keyBuf) - 1] = '\0';
-            if (ImGui::InputText("Result Key", keyBuf, sizeof(keyBuf)))
-            {
-                node.properties["resultKey"] = std::string(keyBuf);
-                notifyChanged();
-            }
-        }
+        // Result key (Vec3 blackboard keys), free-text fallback when none exist.
+        const auto isVec3 = [](BlackboardValueType t) { return t == BlackboardValueType::Vec3; };
+        if (bt::drawKeyDropdown(node, graph, "Result Key", "resultKey", "eqsResult", isVec3))
+            notifyChanged();
         ImGui::TextDisabled("Best query position is written to the result key");
     }
 
@@ -549,44 +511,103 @@ namespace editor::windows
         ImGui::TextDisabled("(parent wins on name collision)");
     }
 
-    void BTPropertyPanel::drawLineOfSightProperties(BTNode& node, const BTGraph* graph)
+    void BTPropertyPanel::drawDynamicSubTreeProperties(BTNode& node)
     {
-        // Target key (Entity or Vec3 from blackboard)
-        std::string targetKey = "target";
-        auto keyIt = node.properties.find("targetKey");
-        if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
-            targetKey = std::get<std::string>(keyIt->second);
+        auto editStringProp = [this, &node](const char* label, const char* key)
+        {
+            std::string current;
+            auto it = node.properties.find(key);
+            if (it != node.properties.end() && std::holds_alternative<std::string>(it->second))
+                current = std::get<std::string>(it->second);
 
-        if (graph && !graph->blackboardKeys.empty())
-        {
-            if (ImGui::BeginCombo("Target Key", targetKey.c_str()))
+            char buf[256];
+            strncpy(buf, current.c_str(), sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            if (ImGui::InputText(label, buf, sizeof(buf)))
             {
-                for (const auto& keyDef : graph->blackboardKeys)
-                {
-                    if (keyDef.type == BlackboardValueType::Entity || keyDef.type == BlackboardValueType::Vec3)
-                    {
-                        bool selected = (keyDef.name == targetKey);
-                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
-                        {
-                            node.properties["targetKey"] = keyDef.name;
-                            notifyChanged();
-                        }
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-        else
-        {
-            char keyBuf[64];
-            strncpy(keyBuf, targetKey.c_str(), sizeof(keyBuf) - 1);
-            keyBuf[sizeof(keyBuf) - 1] = '\0';
-            if (ImGui::InputText("Target Key", keyBuf, sizeof(keyBuf)))
-            {
-                node.properties["targetKey"] = std::string(keyBuf);
+                node.properties[key] = std::string(buf);
                 notifyChanged();
             }
+        };
+
+        // Resolution order (highest priority first): selection key > injection tag > default path.
+        editStringProp("Selection Key", "selectionKey");
+        editStringProp("Injection Tag", "injectionTag");
+        editStringProp("Default Tree Path", "defaultTreePath");
+        ImGui::TextDisabled("Resolves: blackboard[Selection Key] >");
+        ImGui::TextDisabled("injection[Tag] > Default Tree Path");
+
+        ImGui::Separator();
+        ImGui::Text("Blackboard Mappings");
+        ImGui::TextDisabled("Explicit parent<->child value bindings");
+
+        static const std::array<const char*, 3> directionNames = {"In", "Out", "InOut"};
+
+        int removeIdx = -1;
+        for (int i = 0; i < static_cast<int>(node.blackboardMappings.size()); ++i)
+        {
+            ImGui::PushID(i);
+            auto& mapping = node.blackboardMappings[static_cast<size_t>(i)];
+
+            char parentBuf[64];
+            strncpy(parentBuf, mapping.parentKey.c_str(), sizeof(parentBuf) - 1);
+            parentBuf[sizeof(parentBuf) - 1] = '\0';
+            ImGui::SetNextItemWidth(90.0f);
+            if (ImGui::InputText("##parent", parentBuf, sizeof(parentBuf)))
+            {
+                mapping.parentKey = parentBuf;
+                notifyChanged();
+            }
+
+            ImGui::SameLine();
+            int dir = static_cast<int>(mapping.direction);
+            ImGui::SetNextItemWidth(70.0f);
+            if (ImGui::Combo("##dir", &dir, directionNames.data(), static_cast<int>(directionNames.size())))
+            {
+                mapping.direction = static_cast<MappingDirection>(dir);
+                notifyChanged();
+            }
+
+            ImGui::SameLine();
+            char childBuf[64];
+            strncpy(childBuf, mapping.childKey.c_str(), sizeof(childBuf) - 1);
+            childBuf[sizeof(childBuf) - 1] = '\0';
+            ImGui::SetNextItemWidth(90.0f);
+            if (ImGui::InputText("##child", childBuf, sizeof(childBuf)))
+            {
+                mapping.childKey = childBuf;
+                notifyChanged();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+            {
+                removeIdx = i;
+            }
+
+            ImGui::PopID();
         }
+
+        if (removeIdx >= 0)
+        {
+            node.blackboardMappings.erase(node.blackboardMappings.begin() + removeIdx);
+            notifyChanged();
+        }
+
+        if (ImGui::Button("+ Add Mapping"))
+        {
+            node.blackboardMappings.push_back({"parentKey", "childKey", MappingDirection::In});
+            notifyChanged();
+        }
+    }
+
+    void BTPropertyPanel::drawLineOfSightProperties(BTNode& node, const BTGraph* graph)
+    {
+        // Target key (Entity or Vec3 from blackboard), free-text fallback when none exist.
+        const auto isEntityOrVec3 = [](BlackboardValueType t)
+        { return t == BlackboardValueType::Entity || t == BlackboardValueType::Vec3; };
+        if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isEntityOrVec3))
+            notifyChanged();
 
         // Max distance
         float maxDist = 50.0f;
@@ -612,5 +633,126 @@ namespace editor::windows
             notifyChanged();
         }
         ImGui::TextDisabled("Height offset for ray origin (eye level)");
+    }
+
+    void BTPropertyPanel::drawServiceProperties(BTNode& node, const BTGraph* graph)
+    {
+        // Blackboard-key dropdowns for this service use the shared bt::drawKeyDropdown helper (below).
+
+        // Interval
+        float interval = 0.5f;
+        auto intervalIt = node.properties.find("interval");
+        if (intervalIt != node.properties.end() && std::holds_alternative<float>(intervalIt->second))
+            interval = std::get<float>(intervalIt->second);
+        if (ImGui::DragFloat("Interval (s)", &interval, 0.05f, 0.01f, 60.0f))
+        {
+            node.properties["interval"] = interval;
+            notifyChanged();
+        }
+
+        // Random deviation
+        float deviation = 0.0f;
+        auto devIt = node.properties.find("randomDeviation");
+        if (devIt != node.properties.end() && std::holds_alternative<float>(devIt->second))
+            deviation = std::get<float>(devIt->second);
+        if (ImGui::DragFloat("Random Deviation (s)", &deviation, 0.05f, 0.0f, 60.0f))
+        {
+            node.properties["randomDeviation"] = deviation;
+            notifyChanged();
+        }
+
+        // Run on activation
+        bool runOnActivation = false;
+        auto runIt = node.properties.find("runOnActivation");
+        if (runIt != node.properties.end() && std::holds_alternative<bool>(runIt->second))
+            runOnActivation = std::get<bool>(runIt->second);
+        if (ImGui::Checkbox("Run On Activation", &runOnActivation))
+        {
+            node.properties["runOnActivation"] = runOnActivation;
+            notifyChanged();
+        }
+
+        ImGui::Separator();
+
+        // Service type
+        std::string typeStr = "EQSRefresh";
+        auto typeIt = node.properties.find("serviceType");
+        if (typeIt != node.properties.end() && std::holds_alternative<std::string>(typeIt->second))
+            typeStr = std::get<std::string>(typeIt->second);
+
+        static const std::array<const char*, 3> serviceTypes = {"EQSRefresh", "LineOfSightRefresh", "FocusUpdate"};
+        int currentType = 0;
+        for (int i = 0; i < static_cast<int>(serviceTypes.size()); ++i)
+        {
+            if (typeStr == serviceTypes[i]) { currentType = i; break; }
+        }
+        if (ImGui::Combo("Service Type", &currentType, serviceTypes.data(), static_cast<int>(serviceTypes.size())))
+        {
+            node.properties["serviceType"] = std::string(serviceTypes[currentType]);
+            notifyChanged();
+        }
+
+        const auto isVec3 = [](BlackboardValueType t) { return t == BlackboardValueType::Vec3; };
+        const auto isBool = [](BlackboardValueType t) { return t == BlackboardValueType::Bool; };
+        const auto isEntityOrVec3 = [](BlackboardValueType t)
+        { return t == BlackboardValueType::Entity || t == BlackboardValueType::Vec3; };
+
+        if (typeStr == "EQSRefresh")
+        {
+            std::string queryName;
+            auto qIt = node.properties.find("queryName");
+            if (qIt != node.properties.end() && std::holds_alternative<std::string>(qIt->second))
+                queryName = std::get<std::string>(qIt->second);
+            char queryBuf[128];
+            strncpy(queryBuf, queryName.c_str(), sizeof(queryBuf) - 1);
+            queryBuf[sizeof(queryBuf) - 1] = '\0';
+            if (ImGui::InputText("Query Name", queryBuf, sizeof(queryBuf)))
+            {
+                node.properties["queryName"] = std::string(queryBuf);
+                notifyChanged();
+            }
+            if (bt::drawKeyDropdown(node, graph, "Result Key", "resultKey", "eqsResult", isVec3))
+                notifyChanged();
+            ImGui::TextDisabled("Refreshes an EQS query on interval; best position -> result key");
+        }
+        else if (typeStr == "LineOfSightRefresh")
+        {
+            if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isEntityOrVec3))
+                notifyChanged();
+            if (bt::drawKeyDropdown(node, graph, "Visibility Key", "visibilityKey", "targetVisible", isBool))
+                notifyChanged();
+
+            float maxDist = 50.0f;
+            auto distIt = node.properties.find("maxDistance");
+            if (distIt != node.properties.end() && std::holds_alternative<float>(distIt->second))
+                maxDist = std::get<float>(distIt->second);
+            if (ImGui::DragFloat("Max Distance", &maxDist, 1.0f, 0.0f, 500.0f))
+            {
+                node.properties["maxDistance"] = maxDist;
+                notifyChanged();
+            }
+
+            float eyeOffset = 1.6f;
+            auto eyeIt = node.properties.find("eyeOffset");
+            if (eyeIt != node.properties.end() && std::holds_alternative<float>(eyeIt->second))
+                eyeOffset = std::get<float>(eyeIt->second);
+            if (ImGui::DragFloat("Eye Offset", &eyeOffset, 0.1f, 0.0f, 10.0f))
+            {
+                node.properties["eyeOffset"] = eyeOffset;
+                notifyChanged();
+            }
+            ImGui::TextDisabled("Refreshes line-of-sight on interval; bool -> visibility key");
+        }
+        else if (typeStr == "FocusUpdate")
+        {
+            if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isEntityOrVec3))
+                notifyChanged();
+            if (bt::drawKeyDropdown(node, graph, "Focus Key", "focusKey", "focusPoint", isVec3))
+                notifyChanged();
+            ImGui::TextDisabled("Writes the target's world position to the focus key on interval");
+        }
+
+        ImGui::Separator();
+        ImGui::TextDisabled("Runs while its branch is active; passes through to its single child");
     }
 }

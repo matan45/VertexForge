@@ -3,8 +3,12 @@
 #include <imgui.h>
 #include <imgui_node_editor.h>
 #include "../../utilities/behaviortree/BehaviorTreeTypes.hpp"
+#include "../../utilities/behaviortree/BehaviorTreeValidation.hpp"
 #include <functional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace ax::NodeEditor
 {
@@ -27,6 +31,10 @@ namespace editor::graph
 
         // Live per-node statuses while debugging a running tree (owned by the window, null when idle)
         const std::unordered_map<uint32_t, behaviortree::BTNodeStatus>* liveStatuses = nullptr;
+        const std::unordered_map<uint32_t, behaviortree::validation::Severity>* validationSeverities = nullptr;
+        // VK-1457: the active execution spine (bolder highlight) and breakpoint markers (owned by window)
+        const std::vector<uint32_t>* activePath = nullptr;
+        const std::unordered_set<uint32_t>* breakpoints = nullptr;
 
         // ID offsets
         static constexpr uintptr_t NODE_ID_OFFSET = 100000;
@@ -46,10 +54,18 @@ namespace editor::graph
         void setOnGraphChanged(BTGraphChangedCallback callback);
         uint32_t getSelectedNodeId() const { return selectedNodeId; }
         void navigateToContent();
+        void selectNode(uint32_t nodeId);
         void setLiveStatus(const std::unordered_map<uint32_t, behaviortree::BTNodeStatus>* statuses)
         {
             liveStatuses = statuses;
         }
+        void setValidationSeverities(
+            const std::unordered_map<uint32_t, behaviortree::validation::Severity>* severities)
+        {
+            validationSeverities = severities;
+        }
+        void setActivePath(const std::vector<uint32_t>* path) { activePath = path; }
+        void setBreakpoints(const std::unordered_set<uint32_t>* bps) { breakpoints = bps; }
 
     private:
         ax::NodeEditor::NodeId toEditorNodeId(uint32_t nodeId) const;

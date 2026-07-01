@@ -4,6 +4,7 @@
 #include "../../../utilities/behaviortree/BehaviorTreeAsset.hpp"
 #include "../../../utilities/eqs/EQSTypes.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <optional>
 #include <mutex>
@@ -44,8 +45,15 @@ namespace core
                                                           const std::string& key) override;
         bool hasBlackboardKey(services::EntityHandle entity, const std::string& key) const override;
 
+        void setDynamicSubtree(services::EntityHandle entity, const std::string& tag,
+                               const std::string& treePath) override;
+
         void setDebugTarget(services::EntityHandle entity) override;
         behaviortree::BTRuntimeSnapshot getRuntimeSnapshot(services::EntityHandle entity) const override;
+
+        void setDebugPaused(bool paused) override;
+        void stepDebug() override;
+        void setBreakpoints(services::EntityHandle entity, const std::vector<uint32_t>& nodeIds) override;
 
         // === IBTTaskExecutor ===
         behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle entity,
@@ -81,6 +89,13 @@ namespace core
                                                        behaviortree::Blackboard& blackboard) override;
 
         void onAbort(services::EntityHandle entity, const behaviortree::BTNode& node) override;
+
+        // Service hooks (VK-1456): dispatch on the node's "serviceType" property. onServiceStart uses
+        // the base no-op — the built-ins need no start-time setup.
+        void onServiceTick(services::EntityHandle entity, const behaviortree::BTNode& node,
+                           behaviortree::Blackboard& blackboard, float deltaTime) override;
+        void onServiceEnd(services::EntityHandle entity, const behaviortree::BTNode& node,
+                          behaviortree::Blackboard& blackboard) override;
 
     private:
         struct RuntimeInstance
@@ -122,6 +137,10 @@ namespace core
         // tree spliced into its expansion (so saving a subtree rebinds its parents).
         std::unordered_map<std::string, std::shared_ptr<const behaviortree::BehaviorTreeData>> assetCache;
         std::unordered_map<std::string, std::vector<std::string>> assetDependencies;
+        // VK-1457 debugger: per-tree map of authored static-SubTree node id -> expanded entry node id,
+        // captured during expansion. Copied into the debug target's snapshot so the editor can map
+        // breakpoints/live status onto SubTree nodes (removed from the expanded id space).
+        std::unordered_map<std::string, std::unordered_map<uint32_t, uint32_t>> subtreeEntryMaps;
 
         // Hot-reload requests queued from the editor thread, applied between ticks in updateAll
         std::vector<std::string> pendingReloads;
@@ -134,10 +153,31 @@ namespace core
         behaviortree::BTRuntimeSnapshot debugSnapshot;
         uint64_t tickCounter = 0;
 
+        // VK-1457 debug controls (editor-session only). Main thread writes, worker tick reads.
+        std::atomic<bool> debugPaused{false};
+        std::atomic<bool> stepRequested{false};
+        mutable std::mutex breakpointMutex;
+        std::unordered_set<uint32_t> breakpoints; // node ids on the debug target that auto-pause when Running
+
         std::shared_ptr<const behaviortree::BehaviorTreeData> getOrLoadTree(const std::string& treePath);
         void applyPendingReloads();
-        void captureDebugSnapshot(const behaviortree::BehaviorTreeRuntime& runtime);
-        void cleanupScriptInstances(uint64_t entityId, const behaviortree::BehaviorTreeData& treeData);
+        void captureDebugSnapshot(const behaviortree::BehaviorTreeRuntime& runtime, const std::string& treePath);
+        // Tick the debug target and apply post-tick breakpoint rising-edge detection (may set debugPaused).
+        void tickDebugTarget(RuntimeInstance& instance, float deltaTime);
+        void cleanupScriptInstances(uint64_t entityId);
         void cancelPendingEQSQueriesForEntity(uint64_t entityId);
+
+        // Shared sensing delegation, reused by both the task methods and the built-in services so the
+        // task behavior stays identical.
+        eqs::EQSContext buildEQSContext(services::EntityHandle entity) const;
+        eqs::EQSQueryHandle submitEQS(services::EntityHandle entity, const std::string& queryName) const;
+        eqs::EQSResult pollEQS(const eqs::EQSQueryHandle& handle) const;
+        void cancelEQS(const eqs::EQSQueryHandle& handle) const;
+        std::optional<glm::vec3> resolveTargetPosition(const std::string& targetKey,
+                                                       behaviortree::Blackboard& blackboard,
+                                                       float eyeOffset) const;
+        bool computeLineOfSight(services::EntityHandle entity, const std::string& targetKey,
+                                float maxDistance, float eyeOffset,
+                                behaviortree::Blackboard& blackboard) const;
     };
 }

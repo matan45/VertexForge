@@ -8,7 +8,11 @@
 #include "../../../services/events/scene/EntityTransformEvents.hpp"
 #include "../../../services/events/physics/PhysicsEvents.hpp"
 #include "print/Log.hpp"
+#include "behaviortree/BehaviorTreeValidation.hpp"
+#include "behaviortree/BehaviorTreeDynamic.hpp"
 #include <algorithm>
+#include <any>
+#include <unordered_set>
 
 namespace core
 {
@@ -28,6 +32,57 @@ namespace core
         return path;
     }
 
+    // getServiceProp was folded into the shared behaviortree::getNodeProperty<T> (BehaviorTreeTypes.hpp).
+
+    // Service EQS queries key off the node's ADDRESS, not its id (VK-1457): a parent tree and a nested
+    // dynamic subtree have independent id spaces (both start at 1), so keying by id would let two live
+    // Service nodes on one entity clobber each other's pending handle. The cached BehaviorTreeData is
+    // immutable for the session, so node addresses are stable; the "{entityId}:" prefix is preserved so
+    // cancelPendingEQSQueriesForEntity() still sweeps them.
+    static std::string eqsServiceKey(uint64_t entityId, const BTNode& node)
+    {
+        return std::to_string(entityId) + ":svc:" + std::to_string(reinterpret_cast<uintptr_t>(&node));
+    }
+
+    static void logValidationDiagnostics(const std::string& treePath,
+                                         const behaviortree::validation::ValidationReport& report)
+    {
+        for (const auto& diagnostic : report.diagnostics)
+        {
+            if (diagnostic.severity == behaviortree::validation::Severity::Info)
+                continue;
+
+            const std::string nodePrefix = diagnostic.nodeId == 0
+                                               ? std::string{}
+                                               : "node " + std::to_string(diagnostic.nodeId) + ": ";
+            if (diagnostic.severity == behaviortree::validation::Severity::Error)
+            {
+                vfLogError("BT validation error in '{}': {}{}", treePath, nodePrefix, diagnostic.message);
+            }
+            else
+            {
+                vfLogWarning("BT validation warning in '{}': {}{}", treePath, nodePrefix, diagnostic.message);
+            }
+        }
+    }
+
+    static bool validateExpandedOrLog(const BehaviorTreeData& data, const std::string& treePath)
+    {
+        behaviortree::validation::ValidationContext context;
+        context.allowSubTrees = false;
+
+        auto report = behaviortree::validation::validateBehaviorTree(data, context);
+        logValidationDiagnostics(treePath, report);
+
+        if (report.hasErrors())
+        {
+            vfLogError("BT validation refused '{}': {} error(s), {} warning(s)",
+                       treePath, report.errorCount(), report.warningCount());
+            return false;
+        }
+        return true;
+    }
+
     std::shared_ptr<const BehaviorTreeData> BehaviorTreeAdapter::getOrLoadTree(const std::string& treePath)
     {
         auto cacheIt = assetCache.find(treePath);
@@ -35,13 +90,19 @@ namespace core
             return cacheIt->second;
 
         std::vector<std::string> dependencies;
-        auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies);
+        std::unordered_map<uint32_t, uint32_t> subtreeEntryMap;
+        auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies, &subtreeEntryMap);
         if (!dataOpt.has_value())
             return nullptr;
+        // Validation is advisory at attach time: log any errors/warnings but still attach. The runtime
+        // degrades gracefully (a malformed branch returns Failure), so refusing to load would disable the
+        // entity's entire AI over one bad branch (VK-1457 regression). Hot reload keeps its stricter gate.
+        validateExpandedOrLog(dataOpt.value(), treePath);
 
         auto shared = std::make_shared<const BehaviorTreeData>(std::move(dataOpt.value()));
         assetCache[treePath] = shared;
         assetDependencies[treePath] = std::move(dependencies);
+        subtreeEntryMaps[treePath] = std::move(subtreeEntryMap);
         return shared;
     }
 
@@ -50,8 +111,6 @@ namespace core
         if (!entity.isValid() || treePath.empty())
             return false;
 
-        detachTree(entity);
-
         auto treeData = getOrLoadTree(treePath);
         if (!treeData)
         {
@@ -59,9 +118,15 @@ namespace core
             return false;
         }
 
+        detachTree(entity);
+
         RuntimeInstance instance;
         instance.runtime = std::make_unique<BehaviorTreeRuntime>();
         instance.runtime->init(treeData, entity);
+        // VK-1457: dynamic subtrees resolve their target through the same cache as static loads, and the
+        // cycle/depth guard is seeded with this root's normalized path.
+        instance.runtime->setTreeResolver([this](const std::string& path) { return getOrLoadTree(path); });
+        instance.runtime->setNestingContext(0, {normalizeBTPath(treePath)});
         instance.treePath = treePath;
         instance.enabled = true;
 
@@ -70,25 +135,25 @@ namespace core
         return true;
     }
 
-    void BehaviorTreeAdapter::cleanupScriptInstances(uint64_t entityId, const BehaviorTreeData& treeData)
+    // Destroy + unload every script instance owned by this entity (VK-1457). Sweeping by entity id rather
+    // than walking a single graph covers parent + nested dynamic-subtree + swapped-out scripts uniformly.
+    void BehaviorTreeAdapter::cleanupScriptInstances(uint64_t entityId)
     {
         if (!scriptingProvider) return;
 
-        for (const auto& node : treeData.graph.nodes)
+        for (auto sit = scriptInstances.begin(); sit != scriptInstances.end(); )
         {
-            if (node.type != BTNodeType::ScriptTask || node.scriptPath.empty())
-                continue;
-
-            auto sit = scriptInstances.find({entityId, node.scriptPath});
-            if (sit != scriptInstances.end())
+            if (sit->first.entityId != entityId)
             {
-                if (scriptingProvider->isScriptLoaded(sit->second))
-                {
-                    scriptingProvider->callOnDestroy(sit->second);
-                    scriptingProvider->unloadScript(sit->second);
-                }
-                scriptInstances.erase(sit);
+                ++sit;
+                continue;
             }
+            if (scriptingProvider->isScriptLoaded(sit->second))
+            {
+                scriptingProvider->callOnDestroy(sit->second);
+                scriptingProvider->unloadScript(sit->second);
+            }
+            sit = scriptInstances.erase(sit);
         }
     }
 
@@ -114,10 +179,13 @@ namespace core
         auto it = runtimes.find(entity.id);
         if (it == runtimes.end()) return;
 
-        if (it->second.runtime && it->second.runtime->hasTreeData())
+        // Abort in-flight work first (fires onAbort for running tasks incl. scripts + flushes services,
+        // recursing into nested dynamic subtrees), THEN destroy the scripts, THEN sweep service EQS.
+        if (it->second.runtime)
         {
-            cleanupScriptInstances(entity.id, it->second.runtime->getTreeData());
+            it->second.runtime->abortAll(this);
         }
+        cleanupScriptInstances(entity.id);
         cancelPendingEQSQueriesForEntity(entity.id);
 
         runtimes.erase(it);
@@ -127,7 +195,13 @@ namespace core
     {
         auto it = runtimes.find(entity.id);
         if (it != runtimes.end())
+        {
+            // A disabled runtime stops being ticked, so flush its services now (the end-of-tick
+            // diff can't run while it's not ticking).
+            if (!enabled && it->second.runtime)
+                it->second.runtime->endAllServices(this);
             it->second.enabled = enabled;
+        }
     }
 
     bool BehaviorTreeAdapter::hasTree(services::EntityHandle entity) const
@@ -217,28 +291,33 @@ namespace core
         for (const auto& treePath : rootsToReload)
         {
             std::vector<std::string> dependencies;
-            auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies);
+            std::unordered_map<uint32_t, uint32_t> subtreeEntryMap;
+            auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies, &subtreeEntryMap);
             if (!dataOpt.has_value())
             {
                 vfLogError("BT hot reload: failed to load '{}', keeping old tree", treePath);
+                continue;
+            }
+            if (!validateExpandedOrLog(dataOpt.value(), treePath))
+            {
+                vfLogError("BT hot reload: validation failed for '{}', keeping old tree", treePath);
                 continue;
             }
 
             auto newData = std::make_shared<const BehaviorTreeData>(std::move(dataOpt.value()));
             assetCache[treePath] = newData;
             assetDependencies[treePath] = std::move(dependencies);
+            subtreeEntryMaps[treePath] = std::move(subtreeEntryMap);
 
             int rebound = 0;
             for (auto& [entityId, instance] : runtimes)
             {
                 if (instance.treePath != treePath || !instance.runtime) continue;
 
-                // Old node ids/scripts are invalid against the new graph
-                if (instance.runtime->hasTreeData())
-                {
-                    cleanupScriptInstances(entityId, instance.runtime->getTreeData());
-                }
+                // Old node ids/scripts/nested subtrees are invalid against the new graph
+                cleanupScriptInstances(entityId);
                 cancelPendingEQSQueriesForEntity(entityId);
+                instance.runtime->endAllServices(this);
 
                 auto savedBlackboard = instance.runtime->getBlackboard().getAll();
                 services::EntityHandle owner = instance.runtime->getOwnerEntity();
@@ -274,26 +353,71 @@ namespace core
         }
     }
 
-    void BehaviorTreeAdapter::captureDebugSnapshot(const BehaviorTreeRuntime& runtime)
+    void BehaviorTreeAdapter::captureDebugSnapshot(const BehaviorTreeRuntime& runtime, const std::string& treePath)
     {
+        if (!runtime.hasTreeData()) return;
+
         BTRuntimeSnapshot snapshot;
         snapshot.valid = true;
         snapshot.tickIndex = tickCounter;
 
-        const auto& nodeStates = runtime.getNodeStates();
-        snapshot.nodeStatuses.reserve(nodeStates.size());
-        for (const auto& [nodeId, state] : nodeStates)
-            snapshot.nodeStatuses[nodeId] = state.lastStatus;
+        // VK-1457: hand the editor the authored-SubTree -> expanded-entry id map for this tree so it can
+        // translate breakpoints and mirror live status onto SubTree nodes (empty for trees with none).
+        auto mapIt = subtreeEntryMaps.find(treePath);
+        if (mapIt != subtreeEntryMaps.end())
+            snapshot.subtreeEntryMap = mapIt->second;
 
-        const auto& blackboardValues = runtime.getBlackboard().getAll();
-        snapshot.blackboard.reserve(blackboardValues.size());
-        for (const auto& [key, value] : blackboardValues)
-            snapshot.blackboard.emplace_back(key, value);
-        std::sort(snapshot.blackboard.begin(), snapshot.blackboard.end(),
-                  [](const auto& a, const auto& b) { return a.first < b.first; });
+        // Per-node statuses / child indices / elapsed / last results / active path + sorted blackboard.
+        const BTGraph& graph = runtime.getTreeData().graph;
+        behaviortree::captureSnapshotCore(graph, runtime.getNodeStates(), runtime.getBlackboard(),
+                                          graph.rootNodeId, snapshot);
+
+        // Bounded history + aborts + which dynamic subtree is running are recorded by the runtime itself
+        // (only while debugRecording is enabled, i.e. for this target).
+        snapshot.abortRecords = runtime.getAbortRecords();
+        snapshot.executionEvents = runtime.getExecutionEvents();
+        snapshot.activeDynamicSubtreePath = runtime.getActiveDynamicSubtreePath();
+        snapshot.paused = debugPaused.load(std::memory_order_relaxed);
 
         std::lock_guard<std::mutex> lock(snapshotMutex);
         debugSnapshot = std::move(snapshot);
+    }
+
+    void BehaviorTreeAdapter::tickDebugTarget(RuntimeInstance& instance, float deltaTime)
+    {
+        // Copy the breakpoint set under the lock (the editor may replace it on the main thread).
+        std::unordered_set<uint32_t> bps;
+        {
+            std::lock_guard<std::mutex> lock(breakpointMutex);
+            bps = breakpoints;
+        }
+
+        // Which breakpointed nodes were already Running BEFORE this tick (for rising-edge detection).
+        std::unordered_set<uint32_t> runningBefore;
+        if (!bps.empty())
+        {
+            for (const auto& [nodeId, state] : instance.runtime->getNodeStates())
+            {
+                if (state.lastStatus == BTNodeStatus::Running && bps.count(nodeId))
+                    runningBefore.insert(nodeId);
+            }
+        }
+
+        instance.lastTickStatus = instance.runtime->tick(deltaTime, this);
+
+        // Rising edge: a breakpointed node became Running that wasn't before -> freeze at end of tick.
+        if (!bps.empty())
+        {
+            for (const auto& [nodeId, state] : instance.runtime->getNodeStates())
+            {
+                if (state.lastStatus == BTNodeStatus::Running && bps.count(nodeId) &&
+                    runningBefore.find(nodeId) == runningBefore.end())
+                {
+                    debugPaused.store(true, std::memory_order_relaxed);
+                    break;
+                }
+            }
+        }
     }
 
     void BehaviorTreeAdapter::updateAll(float deltaTime)
@@ -307,6 +431,7 @@ namespace core
             entityIds.push_back(entityId);
 
         uint64_t debugId = debugTargetEntityId.load(std::memory_order_relaxed);
+        const bool paused = debugPaused.load(std::memory_order_relaxed);
 
         for (uint64_t entityId : entityIds)
         {
@@ -316,19 +441,74 @@ namespace core
             auto& instance = it->second;
             if (!instance.enabled || !instance.runtime) continue;
 
-            instance.lastTickStatus = instance.runtime->tick(deltaTime, this);
+            const bool isTarget = (entityId == debugId);
+            instance.runtime->setDebugRecording(isTarget); // only the target records history (worker-side)
 
-            if (entityId == debugId)
-                captureDebugSnapshot(*instance.runtime);
+            if (!isTarget)
+            {
+                instance.lastTickStatus = instance.runtime->tick(deltaTime, this);
+                continue;
+            }
+
+            if (paused)
+            {
+                // Frozen: advance only on an explicit step. Refresh the snapshot either way so the editor
+                // sees live blackboard edits and the paused flag.
+                if (stepRequested.exchange(false, std::memory_order_relaxed))
+                    tickDebugTarget(instance, deltaTime);
+            }
+            else
+            {
+                tickDebugTarget(instance, deltaTime); // may trip a breakpoint and set debugPaused
+            }
+            captureDebugSnapshot(*instance.runtime, instance.treePath);
         }
+    }
+
+    void BehaviorTreeAdapter::setDynamicSubtree(services::EntityHandle entity, const std::string& tag,
+                                                const std::string& treePath)
+    {
+        auto it = runtimes.find(entity.id);
+        if (it == runtimes.end() || !it->second.runtime) return;
+
+        if (treePath.empty())
+            it->second.runtime->clearDynamicInjection(tag);
+        else
+            it->second.runtime->setDynamicInjection(tag, treePath);
     }
 
     void BehaviorTreeAdapter::setDebugTarget(services::EntityHandle entity)
     {
         debugTargetEntityId.store(entity.isValid() ? entity.id : 0);
 
+        // Switching (or clearing) the target starts a fresh debug session.
+        debugPaused.store(false, std::memory_order_relaxed);
+        stepRequested.store(false, std::memory_order_relaxed);
+        {
+            std::lock_guard<std::mutex> lock(breakpointMutex);
+            breakpoints.clear();
+        }
+
         std::lock_guard<std::mutex> lock(snapshotMutex);
         debugSnapshot = {};
+    }
+
+    void BehaviorTreeAdapter::setDebugPaused(bool paused)
+    {
+        debugPaused.store(paused, std::memory_order_relaxed);
+    }
+
+    void BehaviorTreeAdapter::stepDebug()
+    {
+        stepRequested.store(true, std::memory_order_relaxed);
+    }
+
+    void BehaviorTreeAdapter::setBreakpoints(services::EntityHandle entity, const std::vector<uint32_t>& nodeIds)
+    {
+        (void)entity; // breakpoints only apply to the current debug target
+        std::lock_guard<std::mutex> lock(breakpointMutex);
+        breakpoints.clear();
+        breakpoints.insert(nodeIds.begin(), nodeIds.end());
     }
 
     BTRuntimeSnapshot BehaviorTreeAdapter::getRuntimeSnapshot(services::EntityHandle entity) const
@@ -342,14 +522,22 @@ namespace core
 
     void BehaviorTreeAdapter::stopAll()
     {
-        for (auto& [_, instance] : runtimes)
+        for (auto& [entityId, instance] : runtimes)
         {
             if (instance.runtime)
+            {
+                // Abort in-flight work (cancels nav/EQS/scripts + flushes nested services), destroy the
+                // entity's scripts, then reset the tree for a clean next play session.
+                instance.runtime->abortAll(this);
+                cleanupScriptInstances(entityId);
+                cancelPendingEQSQueriesForEntity(entityId);
                 instance.runtime->reset();
+            }
         }
         // Play session over: drop cached assets so the next session reloads from disk
         assetCache.clear();
         assetDependencies.clear();
+        subtreeEntryMaps.clear();
 
         setDebugTarget(services::EntityHandle::invalid());
     }
@@ -487,8 +675,16 @@ namespace core
         std::string result = scriptingProvider->callMethodWithReturn(
             it->second, "tick", {std::any(deltaTime)});
 
+        // VK-1457: fire the optional onEnd(success) completion hook when the task returns a terminal
+        // status. onAbort covers the preempted path; onEnd covers natural success/failure completion.
+        const bool running = (result == "running");
+        if (!running && scriptingProvider->hasMethod(it->second, "onEnd"))
+        {
+            scriptingProvider->callMethodWithReturn(it->second, "onEnd", {std::any(result == "success")});
+        }
+
         if (result == "success") return BTNodeStatus::Success;
-        if (result == "running") return BTNodeStatus::Running;
+        if (running) return BTNodeStatus::Running;
         return BTNodeStatus::Failure;
     }
 
@@ -516,31 +712,9 @@ namespace core
             return BTNodeStatus::Failure;
         }
 
-        auto& dispatcher = events::EventDispatcher::instance();
-
         if (isFirstTick)
         {
-            // Build EQS context from entity transform
-            eqs::EQSContext context;
-            context.querierEntityId = entity.id;
-
-            events::scene::GetWorldTransformQuery transformQuery;
-            transformQuery.entity = entity;
-            auto transformOpt = dispatcher.query(transformQuery);
-            if (transformOpt.has_value())
-            {
-                context.querierPosition = transformOpt->position;
-                // Derive forward from rotation (Y-axis euler rotation)
-                float yaw = glm::radians(transformOpt->rotation.y);
-                context.querierForward = glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw));
-            }
-
-            // Submit the EQS query
-            events::ai::SubmitEQSQueryCommand submitCmd;
-            submitCmd.queryName = queryName;
-            submitCmd.context = context;
-            auto handle = dispatcher.execute(submitCmd);
-
+            auto handle = submitEQS(entity, queryName);
             if (!handle.isValid())
             {
                 vfLogWarning("BT EnvironmentQuery: failed to submit query '{}' for entity {}", queryName, entity.id);
@@ -560,9 +734,7 @@ namespace core
             return BTNodeStatus::Failure;
         }
 
-        events::ai::GetEQSQueryResultQuery resultQuery;
-        resultQuery.handle = it->second;
-        eqs::EQSResult result = dispatcher.query(resultQuery);
+        eqs::EQSResult result = pollEQS(it->second);
 
         switch (result.status)
         {
@@ -613,9 +785,7 @@ namespace core
             auto it = pendingEQSQueries.find(eqsKey);
             if (it != pendingEQSQueries.end())
             {
-                events::ai::CancelEQSQueryCommand cancelCmd;
-                cancelCmd.handle = it->second;
-                dispatcher.execute(cancelCmd);
+                cancelEQS(it->second);
                 pendingEQSQueries.erase(it);
             }
             break;
@@ -644,52 +814,110 @@ namespace core
                                                           float eyeOffset,
                                                           Blackboard& blackboard)
     {
+        return computeLineOfSight(entity, targetKey, maxDistance, eyeOffset, blackboard)
+                   ? BTNodeStatus::Success
+                   : BTNodeStatus::Failure;
+    }
+
+    // === Shared sensing helpers (reused by task methods and built-in services) ===
+
+    eqs::EQSContext BehaviorTreeAdapter::buildEQSContext(services::EntityHandle entity) const
+    {
+        eqs::EQSContext context;
+        context.querierEntityId = entity.id;
+
+        events::scene::GetWorldTransformQuery transformQuery;
+        transformQuery.entity = entity;
+        auto transformOpt = events::EventDispatcher::instance().query(transformQuery);
+        if (transformOpt.has_value())
+        {
+            context.querierPosition = transformOpt->position;
+            // Derive forward from rotation (Y-axis euler rotation)
+            float yaw = glm::radians(transformOpt->rotation.y);
+            context.querierForward = glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw));
+        }
+        return context;
+    }
+
+    eqs::EQSQueryHandle BehaviorTreeAdapter::submitEQS(services::EntityHandle entity, const std::string& queryName) const
+    {
+        events::ai::SubmitEQSQueryCommand submitCmd;
+        submitCmd.queryName = queryName;
+        submitCmd.context = buildEQSContext(entity);
+        return events::EventDispatcher::instance().execute(submitCmd);
+    }
+
+    eqs::EQSResult BehaviorTreeAdapter::pollEQS(const eqs::EQSQueryHandle& handle) const
+    {
+        events::ai::GetEQSQueryResultQuery resultQuery;
+        resultQuery.handle = handle;
+        return events::EventDispatcher::instance().query(resultQuery);
+    }
+
+    void BehaviorTreeAdapter::cancelEQS(const eqs::EQSQueryHandle& handle) const
+    {
+        events::ai::CancelEQSQueryCommand cancelCmd;
+        cancelCmd.handle = handle;
+        events::EventDispatcher::instance().execute(cancelCmd);
+    }
+
+    std::optional<glm::vec3> BehaviorTreeAdapter::resolveTargetPosition(const std::string& targetKey,
+                                                                        Blackboard& blackboard,
+                                                                        float eyeOffset) const
+    {
+        if (!blackboard.has(targetKey))
+            return std::nullopt;
+
+        auto val = blackboard.get(targetKey);
+        if (std::holds_alternative<services::EntityHandle>(val))
+        {
+            events::scene::GetWorldTransformQuery targetTransformQuery;
+            targetTransformQuery.entity = std::get<services::EntityHandle>(val);
+            auto targetTransform = events::EventDispatcher::instance().query(targetTransformQuery);
+            if (!targetTransform.has_value())
+                return std::nullopt;
+            return targetTransform->position + glm::vec3(0.0f, eyeOffset, 0.0f);
+        }
+        if (std::holds_alternative<glm::vec3>(val))
+        {
+            return std::get<glm::vec3>(val);
+        }
+
+        vfLogWarning("BT: blackboard key '{}' is not Entity or Vec3", targetKey);
+        return std::nullopt;
+    }
+
+    bool BehaviorTreeAdapter::computeLineOfSight(services::EntityHandle entity,
+                                                 const std::string& targetKey,
+                                                 float maxDistance,
+                                                 float eyeOffset,
+                                                 Blackboard& blackboard) const
+    {
         if (!blackboard.has(targetKey))
         {
             vfLogWarning("BT LineOfSight: blackboard key '{}' not found", targetKey);
-            return BTNodeStatus::Failure;
+            return false;
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Get owner position
         events::scene::GetWorldTransformQuery ownerTransformQuery;
         ownerTransformQuery.entity = entity;
         auto ownerTransform = dispatcher.query(ownerTransformQuery);
         if (!ownerTransform.has_value())
-            return BTNodeStatus::Failure;
+            return false;
 
         glm::vec3 origin = ownerTransform->position + glm::vec3(0.0f, eyeOffset, 0.0f);
 
-        // Get target position from blackboard (Entity or Vec3)
-        glm::vec3 targetPos;
-        auto val = blackboard.get(targetKey);
+        auto targetPosOpt = resolveTargetPosition(targetKey, blackboard, eyeOffset);
+        if (!targetPosOpt.has_value())
+            return false;
 
-        if (std::holds_alternative<services::EntityHandle>(val))
-        {
-            auto targetEntity = std::get<services::EntityHandle>(val);
-            events::scene::GetWorldTransformQuery targetTransformQuery;
-            targetTransformQuery.entity = targetEntity;
-            auto targetTransform = dispatcher.query(targetTransformQuery);
-            if (!targetTransform.has_value())
-                return BTNodeStatus::Failure;
-            targetPos = targetTransform->position + glm::vec3(0.0f, eyeOffset, 0.0f);
-        }
-        else if (std::holds_alternative<glm::vec3>(val))
-        {
-            targetPos = std::get<glm::vec3>(val);
-        }
-        else
-        {
-            vfLogWarning("BT LineOfSight: key '{}' is not Entity or Vec3", targetKey);
-            return BTNodeStatus::Failure;
-        }
-
-        glm::vec3 toTarget = targetPos - origin;
+        glm::vec3 toTarget = *targetPosOpt - origin;
         float distance = glm::length(toTarget);
 
         if (distance > maxDistance || distance < 0.001f)
-            return BTNodeStatus::Failure;
+            return false;
 
         glm::vec3 direction = toTarget / distance;
 
@@ -701,10 +929,84 @@ namespace core
         auto hit = dispatcher.query(rayQuery);
 
         // If nothing was hit, or the hit is beyond the target, line of sight is clear
-        if (!hit.hit || hit.distance >= distance - 0.1f)
-            return BTNodeStatus::Success;
+        return !hit.hit || hit.distance >= distance - 0.1f;
+    }
 
-        // Something is blocking the view
-        return BTNodeStatus::Failure;
+    // === Service hooks (VK-1456) ===
+
+    void BehaviorTreeAdapter::onServiceTick(services::EntityHandle entity, const BTNode& node,
+                                            Blackboard& blackboard, float deltaTime)
+    {
+        (void)deltaTime;
+        const std::string serviceType = getNodeProperty<std::string>(node, "serviceType", std::string("EQSRefresh"));
+
+        if (serviceType == "EQSRefresh")
+        {
+            const std::string queryName = getNodeProperty<std::string>(node, "queryName", std::string{});
+            const std::string resultKey = getNodeProperty<std::string>(node, "resultKey", std::string("eqsResult"));
+            if (queryName.empty())
+                return;
+
+            const std::string key = eqsServiceKey(entity.id, node);
+            auto it = pendingEQSQueries.find(key);
+            if (it != pendingEQSQueries.end())
+            {
+                eqs::EQSResult result = pollEQS(it->second);
+                if (result.status == eqs::EQSQueryStatus::Completed)
+                {
+                    if (result.hasResults())
+                        blackboard.set(resultKey, result.getBestPosition());
+                    pendingEQSQueries.erase(it);
+                }
+                else if (result.status == eqs::EQSQueryStatus::Failed)
+                {
+                    pendingEQSQueries.erase(it);
+                }
+                else
+                {
+                    return; // still in flight — wait for it before resubmitting
+                }
+            }
+
+            auto handle = submitEQS(entity, queryName);
+            if (handle.isValid())
+                pendingEQSQueries[key] = handle;
+        }
+        else if (serviceType == "LineOfSightRefresh")
+        {
+            const std::string targetKey = getNodeProperty<std::string>(node, "targetKey", std::string("target"));
+            const std::string visibilityKey = getNodeProperty<std::string>(node, "visibilityKey", std::string("targetVisible"));
+            const float maxDistance = getNodeProperty<float>(node, "maxDistance", 50.0f);
+            const float eyeOffset = getNodeProperty<float>(node, "eyeOffset", 1.6f);
+            const bool visible = computeLineOfSight(entity, targetKey, maxDistance, eyeOffset, blackboard);
+            blackboard.set(visibilityKey, visible);
+        }
+        else if (serviceType == "FocusUpdate")
+        {
+            const std::string targetKey = getNodeProperty<std::string>(node, "targetKey", std::string("target"));
+            const std::string focusKey = getNodeProperty<std::string>(node, "focusKey", std::string("focusPoint"));
+            auto pos = resolveTargetPosition(targetKey, blackboard, 0.0f);
+            if (pos.has_value())
+                blackboard.set(focusKey, *pos);
+        }
+    }
+
+    void BehaviorTreeAdapter::onServiceEnd(services::EntityHandle entity, const BTNode& node,
+                                           Blackboard& blackboard)
+    {
+        (void)blackboard;
+        // Only EQSRefresh holds in-flight async work to cancel. Sensory result keys are left intact
+        // so downstream logic keeps the last known value after the branch deactivates.
+        const std::string serviceType = getNodeProperty<std::string>(node, "serviceType", std::string("EQSRefresh"));
+        if (serviceType != "EQSRefresh")
+            return;
+
+        const std::string key = eqsServiceKey(entity.id, node);
+        auto it = pendingEQSQueries.find(key);
+        if (it != pendingEQSQueries.end())
+        {
+            cancelEQS(it->second);
+            pendingEQSQueries.erase(it);
+        }
     }
 }

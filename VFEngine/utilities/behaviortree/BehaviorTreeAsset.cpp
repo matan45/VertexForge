@@ -151,6 +151,20 @@ namespace behaviortree
             j["scriptClassName"] = node.scriptClassName;
         }
 
+        // Explicit blackboard parameter mappings (VK-1457). Emitted only when present so old-shaped
+        // assets stay byte-identical. A dedicated array — properties can only carry scalars/strings/vec3.
+        if (!node.blackboardMappings.empty())
+        {
+            json mappings = json::array();
+            for (const auto& m : node.blackboardMappings)
+            {
+                mappings.push_back({{"parent", m.parentKey},
+                                    {"child", m.childKey},
+                                    {"dir", mappingDirectionToString(m.direction)}});
+            }
+            j["blackboardMappings"] = std::move(mappings);
+        }
+
         return j;
     }
 
@@ -174,6 +188,20 @@ namespace behaviortree
 
         node.scriptPath = j.value("scriptPath", "");
         node.scriptClassName = j.value("scriptClassName", "");
+
+        // Explicit blackboard parameter mappings (VK-1457). Absent in pre-1.2 assets -> empty.
+        if (j.contains("blackboardMappings") && j["blackboardMappings"].is_array())
+        {
+            for (const auto& m : j["blackboardMappings"])
+            {
+                if (!m.is_object()) continue;
+                BlackboardMapping mapping;
+                mapping.parentKey = m.value("parent", "");
+                mapping.childKey = m.value("child", "");
+                mapping.direction = stringToMappingDirection(m.value("dir", "In"));
+                node.blackboardMappings.push_back(std::move(mapping));
+            }
+        }
 
         return node;
     }
@@ -313,7 +341,7 @@ namespace behaviortree
         return data;
     }
 
-    static std::optional<json> readJsonFromFile(std::string_view path)
+    static std::optional<fs::path> resolveExistingBehaviorTreePath(std::string_view path)
     {
         fs::path filePath(path);
         if (!fs::exists(filePath)) {
@@ -328,9 +356,19 @@ namespace behaviortree
             }
         }
         if (!fs::exists(filePath)) {
+            return std::nullopt;
+        }
+        return filePath;
+    }
+
+    static std::optional<json> readJsonFromFile(std::string_view path)
+    {
+        auto filePathOpt = resolveExistingBehaviorTreePath(path);
+        if (!filePathOpt.has_value()) {
             vfLogError("Behavior tree file not found: {}", path);
             return std::nullopt;
         }
+        const fs::path& filePath = filePathOpt.value();
 
         std::error_code ec;
         auto fileSize = fs::file_size(filePath, ec);
@@ -448,6 +486,11 @@ namespace behaviortree
         }
     }
 
+    bool BehaviorTreeAsset::exists(std::string_view path)
+    {
+        return resolveExistingBehaviorTreePath(path).has_value();
+    }
+
     bool BehaviorTreeAsset::save(std::string_view path, const BehaviorTreeData& data)
     {
         json j = buildBehaviorTreeJson(data);
@@ -485,7 +528,8 @@ namespace behaviortree
                                    const BehaviorTreeAsset::TreeLoader& loader,
                                    std::vector<std::string>& pathStack,
                                    int maxDepth,
-                                   std::vector<std::string>* outDependencies = nullptr)
+                                   std::vector<std::string>* outDependencies = nullptr,
+                                   std::unordered_map<uint32_t, uint32_t>* outSubtreeEntryMap = nullptr)
     {
         if (static_cast<int>(pathStack.size()) > maxDepth)
         {
@@ -549,7 +593,9 @@ namespace behaviortree
 
             BehaviorTreeData child = std::move(childOpt.value());
             pathStack.push_back(normalized);
-            bool expanded = expandSubTreesInto(child, loader, pathStack, maxDepth, outDependencies);
+            // Nested SubTree ids are not editor-visible, so only the top-level call records the entry
+            // map (it receives a non-null pointer; recursion passes nullptr).
+            bool expanded = expandSubTreesInto(child, loader, pathStack, maxDepth, outDependencies, nullptr);
             pathStack.pop_back();
             if (!expanded) return false;
 
@@ -567,6 +613,13 @@ namespace behaviortree
             {
                 if (childNode.id == child.graph.rootNodeId) continue;
                 idMap[childNode.id] = data.graph.nextNodeId++;
+            }
+
+            // VK-1457 debugger: record where this authored SubTree node's body begins in the expanded
+            // graph, so the editor can map breakpoints/live status onto the (now-removed) SubTree node.
+            if (outSubtreeEntryMap)
+            {
+                (*outSubtreeEntryMap)[nodeId] = idMap[entryOldId];
             }
 
             for (const auto& childNode : child.graph.nodes)
@@ -624,14 +677,17 @@ namespace behaviortree
     }
 
     bool BehaviorTreeAsset::expandSubTrees(BehaviorTreeData& data, const TreeLoader& loader,
-                                           int maxDepth)
+                                           int maxDepth,
+                                           std::unordered_map<uint32_t, uint32_t>* outSubtreeEntryMap)
     {
         std::vector<std::string> pathStack;
-        return expandSubTreesInto(data, loader, pathStack, maxDepth);
+        return expandSubTreesInto(data, loader, pathStack, maxDepth, nullptr, outSubtreeEntryMap);
     }
 
-    std::optional<BehaviorTreeData> BehaviorTreeAsset::loadExpanded(std::string_view path,
-                                                                    std::vector<std::string>* outDependencies)
+    std::optional<BehaviorTreeData> BehaviorTreeAsset::loadExpanded(
+        std::string_view path,
+        std::vector<std::string>* outDependencies,
+        std::unordered_map<uint32_t, uint32_t>* outSubtreeEntryMap)
     {
         auto dataOpt = load(path);
         if (!dataOpt.has_value())
@@ -649,7 +705,7 @@ namespace behaviortree
         pathStack.push_back(std::move(rootPath));
         if (!expandSubTreesInto(dataOpt.value(),
                                 [](const std::string& p) { return load(p); },
-                                pathStack, 8, outDependencies))
+                                pathStack, 8, outDependencies, outSubtreeEntryMap))
         {
             vfLogError("Behavior tree '{}' failed SubTree expansion", path);
             return std::nullopt;

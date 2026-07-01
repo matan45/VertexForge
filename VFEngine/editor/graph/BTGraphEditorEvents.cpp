@@ -179,6 +179,13 @@ namespace editor::graph
                 if (ImGui::MenuItem("Environment Query")) createNode(BTNodeType::EnvironmentQuery, newNodePosition);
                 if (ImGui::MenuItem("Line Of Sight")) createNode(BTNodeType::LineOfSight, newNodePosition);
                 if (ImGui::MenuItem("Run Subtree")) createNode(BTNodeType::SubTree, newNodePosition);
+                if (ImGui::MenuItem("Run Dynamic Subtree")) createNode(BTNodeType::DynamicSubTree, newNodePosition);
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Services"))
+            {
+                if (ImGui::MenuItem("Service")) createNode(BTNodeType::Service, newNodePosition);
                 ImGui::EndMenu();
             }
 
@@ -247,10 +254,23 @@ namespace editor::graph
         case BTNodeType::SubTree:
             node.properties["treePath"] = std::string("");
             break;
+        case BTNodeType::DynamicSubTree:
+            node.properties["selectionKey"] = std::string("");
+            node.properties["injectionTag"] = std::string("");
+            node.properties["defaultTreePath"] = std::string("");
+            break;
         case BTNodeType::LineOfSight:
             node.properties["targetKey"] = std::string("target");
             node.properties["maxDistance"] = 50.0f;
             node.properties["eyeOffset"] = 1.6f;
+            break;
+        case BTNodeType::Service:
+            node.properties["interval"] = 0.5f;
+            node.properties["randomDeviation"] = 0.0f;
+            node.properties["runOnActivation"] = false;
+            node.properties["serviceType"] = std::string("EQSRefresh");
+            node.properties["queryName"] = std::string("");
+            node.properties["resultKey"] = std::string("eqsResult");
             break;
         default:
             break;

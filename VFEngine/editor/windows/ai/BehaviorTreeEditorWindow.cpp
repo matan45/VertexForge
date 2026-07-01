@@ -1,12 +1,16 @@
 #include "BehaviorTreeEditorWindow.hpp"
+#include "BTValueWidgets.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 #include "events/ai/BehaviorTreeEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
+#include "print/Log.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <array>
 #include <algorithm>
+#include <cstring>
+#include <string>
 
 using namespace behaviortree;
 
@@ -58,6 +62,7 @@ namespace editor::windows
         }
 
         graphEditor.setGraph(&treeData->graph);
+        revalidate();
         graphEditor.navigateToContent();
         isDirty = false;
     }
@@ -77,12 +82,27 @@ namespace editor::windows
             events::ai::ReloadBehaviorTreeAssetCommand reloadCmd;
             reloadCmd.treePath = treePath;
             events::EventDispatcher::instance().execute(reloadCmd);
+
+            revalidate();
+            if (validationReport.hasErrors())
+            {
+                vfLogError("Saved behavior tree '{}' with {} validation error(s) and {} warning(s)",
+                           treePath, validationReport.errorCount(), validationReport.warningCount());
+            }
+            else if (validationReport.hasWarnings())
+            {
+                vfLogWarning("Saved behavior tree '{}' with {} validation warning(s)",
+                             treePath, validationReport.warningCount());
+            }
         }
     }
 
     void BehaviorTreeEditorWindow::onGraphChanged()
     {
         isDirty = true;
+        // VK-1457 perf: defer the (heavy, allocation-y) full-graph revalidate. onGraphChanged fires every
+        // frame a slider/text field is held; draw() flushes this once the widget is released.
+        validationDirty = true;
     }
 
     void BehaviorTreeEditorWindow::draw()
@@ -112,6 +132,14 @@ namespace editor::windows
         drawToolbar();
         updateDebugState();
 
+        // VK-1457 perf: coalesce a continuous edit (slider drag / typing) into a single full-graph
+        // revalidate when the active widget is released, rather than revalidating every frame.
+        if (validationDirty && !ImGui::IsAnyItemActive())
+        {
+            revalidate();
+            validationDirty = false;
+        }
+
         static float rightPanelWidth = 300.0f;
         const float splitterThickness = 5.0f;
         ImVec2 contentRegion = ImGui::GetContentRegionAvail();
@@ -129,6 +157,16 @@ namespace editor::windows
         ImGui::SameLine(0.0f, 0.0f);
 
         ImGui::BeginChild("BTRightPanel", ImVec2(rightPanelWidth, 0), ImGuiChildFlags_None);
+
+        drawValidationPanel();
+
+        if (debugActive)
+        {
+            if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                drawDebugPanel();
+            }
+        }
 
         float halfHeight = ImGui::GetContentRegionAvail().y * 0.5f;
         ImGui::BeginChild("BTPropertyPanel", ImVec2(0, halfHeight), ImGuiChildFlags_Borders);
@@ -200,6 +238,71 @@ namespace editor::windows
             std::replace(path.begin(), path.end(), '\\', '/');
             return path;
         }
+
+        const char* severityLabel(validation::Severity severity)
+        {
+            switch (severity)
+            {
+            case validation::Severity::Error: return "Error";
+            case validation::Severity::Warning: return "Warning";
+            case validation::Severity::Info: return "Info";
+            default: return "Info";
+            }
+        }
+
+        ImVec4 severityColor(validation::Severity severity)
+        {
+            switch (severity)
+            {
+            case validation::Severity::Error: return ImVec4(0.95f, 0.25f, 0.25f, 1.0f);
+            case validation::Severity::Warning: return ImVec4(1.0f, 0.70f, 0.20f, 1.0f);
+            case validation::Severity::Info: return ImVec4(0.35f, 0.65f, 1.0f, 1.0f);
+            default: return ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
+            }
+        }
+
+        std::string diagnosticLabel(const validation::Diagnostic& diagnostic)
+        {
+            std::string label = std::string("[") + severityLabel(diagnostic.severity) + "] ";
+            if (diagnostic.nodeId != 0)
+            {
+                label += "Node " + std::to_string(diagnostic.nodeId) + ": ";
+            }
+            label += diagnostic.message;
+            return label;
+        }
+
+        const char* btEventTypeLabel(behaviortree::BTEventType type)
+        {
+            switch (type)
+            {
+            case behaviortree::BTEventType::Enter: return "Enter";
+            case behaviortree::BTEventType::Exit: return "Exit";
+            case behaviortree::BTEventType::Abort: return "Abort";
+            case behaviortree::BTEventType::ServiceFire: return "Service";
+            default: return "?";
+            }
+        }
+
+        const char* btStatusLabel(behaviortree::BTNodeStatus status)
+        {
+            switch (status)
+            {
+            case behaviortree::BTNodeStatus::Success: return "Success";
+            case behaviortree::BTNodeStatus::Failure: return "Failure";
+            case behaviortree::BTNodeStatus::Running: return "Running";
+            default: return "?";
+            }
+        }
+
+        // Resolve a node id to a readable "Name (id)" using the authored graph.
+        std::string nodeLabel(const behaviortree::BTGraph& graph, uint32_t nodeId)
+        {
+            const behaviortree::BTNode* node = graph.findNodeById(nodeId);
+            std::string name = node ? (node->name.empty() ? behaviortree::nodeTypeToString(node->type) : node->name)
+                                    : std::string("<gone>");
+            return name + " (" + std::to_string(nodeId) + ")";
+        }
     }
 
     void BehaviorTreeEditorWindow::drawDebugMenu()
@@ -266,12 +369,68 @@ namespace editor::windows
             events::ai::GetTreeRuntimeSnapshotQuery snapshotQuery;
             snapshotQuery.entity = debugTarget;
             debugSnapshot = dispatcher.query(snapshotQuery);
-            graphEditor.setLiveStatus(debugSnapshot.valid ? &debugSnapshot.nodeStatuses : nullptr);
+            const bool valid = debugSnapshot.valid;
+
+            if (valid)
+            {
+                // VK-1457: static SubTree nodes are spliced out of the runtime's expanded graph, so the
+                // snapshot reports their bodies under re-mapped ids. Mirror each SubTree node's entry-node
+                // status/active state back onto the authored id, and re-push breakpoints translated to
+                // entry ids once the map arrives (it's empty for trees with no static SubTree nodes).
+                subtreeEntryMap = debugSnapshot.subtreeEntryMap;
+                buildAugmentedDebugViews();
+                if (!subtreeEntryMap.empty() && !subtreeMapApplied)
+                {
+                    pushBreakpointsToRuntime();
+                    subtreeMapApplied = true;
+                }
+            }
+
+            graphEditor.setLiveStatus(valid ? &augmentedNodeStatuses : nullptr);
+            graphEditor.setActivePath(valid ? &augmentedActivePath : nullptr);
+            graphEditor.setBreakpoints(&breakpoints);
         }
         else
         {
             graphEditor.setLiveStatus(nullptr);
+            graphEditor.setActivePath(nullptr);
+            graphEditor.setBreakpoints(nullptr);
         }
+    }
+
+    void BehaviorTreeEditorWindow::buildAugmentedDebugViews()
+    {
+        // Start from the raw snapshot; add a mirrored entry for each authored SubTree node so it lights up
+        // and joins the active spine when its inlined body is running. No-op when there are no SubTrees.
+        augmentedNodeStatuses = debugSnapshot.nodeStatuses;
+        augmentedActivePath = debugSnapshot.activePath;
+
+        for (const auto& [subTreeId, entryId] : subtreeEntryMap)
+        {
+            auto statusIt = debugSnapshot.nodeStatuses.find(entryId);
+            if (statusIt != debugSnapshot.nodeStatuses.end())
+                augmentedNodeStatuses[subTreeId] = statusIt->second;
+
+            if (std::find(debugSnapshot.activePath.begin(), debugSnapshot.activePath.end(), entryId)
+                != debugSnapshot.activePath.end())
+                augmentedActivePath.push_back(subTreeId);
+        }
+    }
+
+    void BehaviorTreeEditorWindow::pushBreakpointsToRuntime()
+    {
+        events::ai::SetTreeBreakpointsCommand cmd;
+        cmd.entity = debugTarget;
+        // VK-1457: a breakpoint on a static SubTree node must be sent under the expanded entry id it was
+        // spliced into (the authored id doesn't exist in the runtime's expanded graph). Non-SubTree ids
+        // pass through unchanged. The map arrives with the first snapshot, so updateDebugState re-pushes.
+        cmd.nodeIds.reserve(breakpoints.size());
+        for (uint32_t id : breakpoints)
+        {
+            auto it = subtreeEntryMap.find(id);
+            cmd.nodeIds.push_back(it != subtreeEntryMap.end() ? it->second : id);
+        }
+        events::EventDispatcher::instance().execute(cmd);
     }
 
     void BehaviorTreeEditorWindow::startDebugging(services::EntityHandle entity)
@@ -279,10 +438,15 @@ namespace editor::windows
         debugActive = true;
         debugTarget = entity;
         debugSnapshot = {};
+        // Re-push breakpoints (translated) once the SubTree entry map arrives with the first snapshot.
+        subtreeMapApplied = false;
 
         events::ai::SetTreeDebugTargetCommand cmd;
         cmd.entity = entity;
         events::EventDispatcher::instance().execute(cmd);
+
+        // The runtime cleared its breakpoint set when the target changed; re-apply the editor's set.
+        pushBreakpointsToRuntime();
     }
 
     void BehaviorTreeEditorWindow::stopDebugging()
@@ -290,7 +454,11 @@ namespace editor::windows
         debugActive = false;
         debugTarget = services::EntityHandle::invalid();
         debugSnapshot = {};
+        subtreeEntryMap.clear();
+        subtreeMapApplied = false;
         graphEditor.setLiveStatus(nullptr);
+        graphEditor.setActivePath(nullptr);
+        graphEditor.setBreakpoints(nullptr);
 
         events::ai::SetTreeDebugTargetCommand cmd;
         cmd.entity = services::EntityHandle::invalid();
@@ -312,6 +480,90 @@ namespace editor::windows
         propertyPanel.draw(selectedNode, &treeData->graph);
     }
 
+    void BehaviorTreeEditorWindow::revalidate()
+    {
+        validationReport = {};
+        validationSeverities.clear();
+
+        if (!treeData)
+        {
+            graphEditor.setValidationSeverities(nullptr);
+            return;
+        }
+
+        validation::ValidationContext context;
+        context.subtreeExists = [](std::string_view path)
+        {
+            return BehaviorTreeAsset::exists(path);
+        };
+
+        validationReport = validation::validateBehaviorTree(*treeData, context);
+        validationSeverities = validationReport.worstByNode();
+        graphEditor.setValidationSeverities(&validationSeverities);
+    }
+
+    void BehaviorTreeEditorWindow::drawValidationPanel()
+    {
+        if (!treeData) return;
+
+        const int errors = validationReport.errorCount();
+        const int warnings = validationReport.warningCount();
+        std::string summary = "Validation: Valid";
+        validation::Severity summarySeverity = validation::Severity::Info;
+
+        if (errors > 0)
+        {
+            summary = "Validation: " + std::to_string(errors) + " error(s), " +
+                      std::to_string(warnings) + " warning(s)";
+            summarySeverity = validation::Severity::Error;
+        }
+        else if (warnings > 0)
+        {
+            summary = "Validation: " + std::to_string(warnings) + " warning(s)";
+            summarySeverity = validation::Severity::Warning;
+        }
+
+        ImGui::PushStyleColor(ImGuiCol_Text, severityColor(summarySeverity));
+        ImGuiTreeNodeFlags flags = (errors > 0 || warnings > 0) ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;
+        bool open = ImGui::CollapsingHeader(summary.c_str(), flags);
+        ImGui::PopStyleColor();
+
+        if (!open) return;
+
+        const float childHeight = std::clamp(ImGui::GetContentRegionAvail().y * 0.25f, 80.0f, 180.0f);
+        ImGui::BeginChild("BTValidationDiagnostics", ImVec2(0, childHeight), true);
+
+        if (validationReport.diagnostics.empty())
+        {
+            ImGui::TextDisabled("No diagnostics");
+        }
+        else
+        {
+            for (int i = 0; i < static_cast<int>(validationReport.diagnostics.size()); ++i)
+            {
+                const auto& diagnostic = validationReport.diagnostics[static_cast<size_t>(i)];
+                const std::string label = diagnosticLabel(diagnostic);
+                ImGui::PushID(i);
+                ImGui::PushStyleColor(ImGuiCol_Text, severityColor(diagnostic.severity));
+                if (diagnostic.nodeId != 0)
+                {
+                    if (ImGui::Selectable(label.c_str(), graphEditor.getSelectedNodeId() == diagnostic.nodeId))
+                    {
+                        graphEditor.selectNode(diagnostic.nodeId);
+                    }
+                }
+                else
+                {
+                    ImGui::TextWrapped("%s", label.c_str());
+                }
+                ImGui::PopStyleColor();
+                ImGui::PopID();
+            }
+        }
+
+        ImGui::EndChild();
+    }
+
     void BehaviorTreeEditorWindow::drawLiveBlackboardPanel()
     {
         ImGui::TextDisabled("Live values - tick %llu",
@@ -324,53 +576,8 @@ namespace editor::windows
         {
             ImGui::PushID(key.c_str());
 
-            bool changed = false;
             behaviortree::BlackboardValue newValue = value;
-
-            if (std::holds_alternative<float>(value))
-            {
-                float v = std::get<float>(value);
-                ImGui::SetNextItemWidth(130.0f);
-                if (ImGui::DragFloat(key.c_str(), &v, 0.1f)) { newValue = v; changed = true; }
-            }
-            else if (std::holds_alternative<int32_t>(value))
-            {
-                int v = std::get<int32_t>(value);
-                ImGui::SetNextItemWidth(130.0f);
-                if (ImGui::DragInt(key.c_str(), &v)) { newValue = static_cast<int32_t>(v); changed = true; }
-            }
-            else if (std::holds_alternative<bool>(value))
-            {
-                bool v = std::get<bool>(value);
-                if (ImGui::Checkbox(key.c_str(), &v)) { newValue = v; changed = true; }
-            }
-            else if (std::holds_alternative<std::string>(value))
-            {
-                char buf[128];
-                strncpy(buf, std::get<std::string>(value).c_str(), sizeof(buf) - 1);
-                buf[sizeof(buf) - 1] = '\0';
-                ImGui::SetNextItemWidth(130.0f);
-                if (ImGui::InputText(key.c_str(), buf, sizeof(buf),
-                                     ImGuiInputTextFlags_EnterReturnsTrue))
-                {
-                    newValue = std::string(buf);
-                    changed = true;
-                }
-            }
-            else if (std::holds_alternative<glm::vec3>(value))
-            {
-                glm::vec3 v = std::get<glm::vec3>(value);
-                ImGui::SetNextItemWidth(180.0f);
-                if (ImGui::DragFloat3(key.c_str(), &v.x, 0.1f)) { newValue = v; changed = true; }
-            }
-            else if (std::holds_alternative<services::EntityHandle>(value))
-            {
-                auto handle = std::get<services::EntityHandle>(value);
-                ImGui::Text("%s: entity %llu", key.c_str(),
-                            static_cast<unsigned long long>(handle.id));
-            }
-
-            if (changed)
+            if (bt::drawBlackboardValueWidget(key.c_str(), bt::typeOfValue(value), newValue))
             {
                 events::ai::SetBlackboardValueCommand cmd;
                 cmd.entity = debugTarget;
@@ -385,6 +592,111 @@ namespace editor::windows
         if (debugSnapshot.blackboard.empty())
         {
             ImGui::TextDisabled("(blackboard is empty)");
+        }
+    }
+
+    void BehaviorTreeEditorWindow::drawDebugPanel()
+    {
+        if (!treeData) return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // --- Transport: pause / resume / step ---
+        const bool paused = debugSnapshot.paused;
+        if (paused)
+        {
+            if (ImGui::Button("Resume"))
+            {
+                events::ai::SetTreeDebugPausedCommand cmd;
+                cmd.paused = false;
+                dispatcher.execute(cmd);
+            }
+        }
+        else
+        {
+            if (ImGui::Button("Pause"))
+            {
+                events::ai::SetTreeDebugPausedCommand cmd;
+                cmd.paused = true;
+                dispatcher.execute(cmd);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Step"))
+        {
+            dispatcher.execute(events::ai::StepTreeDebugCommand{});
+        }
+        ImGui::SameLine();
+        ImGui::TextColored(paused ? ImVec4(1.0f, 0.6f, 0.2f, 1.0f) : ImVec4(0.3f, 0.85f, 0.4f, 1.0f),
+                           paused ? "PAUSED" : "RUNNING");
+
+        // --- Breakpoint toggle for the selected node ---
+        const uint32_t selectedId = graphEditor.getSelectedNodeId();
+        if (selectedId != 0)
+        {
+            const bool isBp = breakpoints.count(selectedId) != 0;
+            std::string btnLabel = (isBp ? "Remove breakpoint on " : "Add breakpoint on ") +
+                                   nodeLabel(treeData->graph, selectedId);
+            if (ImGui::Button(btnLabel.c_str()))
+            {
+                if (isBp) breakpoints.erase(selectedId);
+                else breakpoints.insert(selectedId);
+                pushBreakpointsToRuntime();
+            }
+        }
+        else
+        {
+            ImGui::TextDisabled("Select a node to toggle a breakpoint");
+        }
+        if (!breakpoints.empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Clear BPs"))
+            {
+                breakpoints.clear();
+                pushBreakpointsToRuntime();
+            }
+        }
+
+        if (!debugSnapshot.activeDynamicSubtreePath.empty())
+        {
+            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Dynamic subtree: %s",
+                               debugSnapshot.activeDynamicSubtreePath.c_str());
+        }
+
+        // --- Aborts / interruptions ---
+        if (!debugSnapshot.abortRecords.empty() &&
+            ImGui::CollapsingHeader("Aborts / Interruptions"))
+        {
+            ImGui::BeginChild("BTAborts", ImVec2(0, 90.0f), true);
+            for (const auto& record : debugSnapshot.abortRecords)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.45f, 0.35f, 1.0f));
+                ImGui::TextWrapped("t%llu  %s  %s", static_cast<unsigned long long>(record.tickIndex),
+                                   nodeLabel(treeData->graph, record.nodeId).c_str(), record.reason.c_str());
+                ImGui::PopStyleColor();
+            }
+            ImGui::EndChild();
+        }
+
+        // --- Execution history (most recent last) ---
+        if (ImGui::CollapsingHeader("Execution History", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::BeginChild("BTHistory", ImVec2(0, 140.0f), true);
+            if (debugSnapshot.executionEvents.empty())
+            {
+                ImGui::TextDisabled("(no events)");
+            }
+            for (const auto& ev : debugSnapshot.executionEvents)
+            {
+                ImGui::Text("t%llu  %-8s %-8s %s", static_cast<unsigned long long>(ev.tickIndex),
+                            btEventTypeLabel(ev.type), btStatusLabel(ev.status),
+                            nodeLabel(treeData->graph, ev.nodeId).c_str());
+            }
+            // Keep the newest events in view.
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f)
+                ImGui::SetScrollHereY(1.0f);
+            ImGui::EndChild();
         }
     }
 
@@ -439,15 +751,14 @@ namespace editor::windows
             if (ImGui::Combo("##type", &currentType, typeNames.data(), static_cast<int>(typeNames.size())))
             {
                 key.type = static_cast<BlackboardValueType>(currentType);
-                switch (key.type)
-                {
-                case BlackboardValueType::Float: key.defaultValue = 0.0f; break;
-                case BlackboardValueType::Int: key.defaultValue = 0; break;
-                case BlackboardValueType::Bool: key.defaultValue = false; break;
-                case BlackboardValueType::String: key.defaultValue = std::string{}; break;
-                case BlackboardValueType::Vec3: key.defaultValue = glm::vec3{0.0f}; break;
-                case BlackboardValueType::Entity: key.defaultValue = services::EntityHandle::invalid(); break;
-                }
+                key.defaultValue = bt::defaultValueForType(key.type);
+                onGraphChanged();
+            }
+
+            ImGui::SameLine();
+
+            if (bt::drawBlackboardValueWidget("##default", key.type, key.defaultValue))
+            {
                 onGraphChanged();
             }
 

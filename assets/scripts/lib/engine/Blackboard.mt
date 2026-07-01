@@ -85,4 +85,26 @@ public class Blackboard {
     public static function getStatus(int entityId): string {
         return _native_bt_getStatus(entityId);
     }
+
+    // === Dynamic subtrees (VK-1457) ===
+
+    // Bind a DynamicSubTree injection tag to a tree path at runtime, so a "Run Dynamic Subtree" node
+    // carrying that tag will run the given .vfBehaviorTree. Pass an empty path to clear the binding.
+    // A DynamicSubTree resolves its target in this order: blackboard selection key > injection tag >
+    // authoring-time default path. Use this to swap an agent's behavior (e.g. combat vs. patrol brain)
+    // without editing the tree.
+    public static function setDynamicSubtree(int entityId, string tag, string treePath): void {
+        _native_bt_setDynamicSubtree(entityId, tag, treePath);
+    }
 }
+
+// ============================================================================
+// ScriptTask lifecycle (VK-1457) — a @Script used as a behavior-tree ScriptTask node may implement:
+//   onStart()            called once, lazily, the first time the task is loaded for an entity
+//   tick(float): string  called every Running tick; return "running" | "success" | "failure"
+//   onAbort()            called when the running task is preempted/aborted by the tree
+//   onEnd(bool success)  called when the task completes naturally (returns "success" or "failure")
+//   onDestroy()          called when the tree is detached / play stops (instance unloaded)
+// Instances are shared per (entity, scriptPath): onStart fires once per load (not per activation), and
+// two ScriptTask nodes referencing the same script on one entity share a single instance.
+// ============================================================================
