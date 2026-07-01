@@ -140,42 +140,10 @@ namespace editor::windows
 
     void BTPropertyPanel::drawMoveToProperties(BTNode& node, const BTGraph* graph)
     {
-        // Target key dropdown from blackboard keys
-        std::string targetKey = "target";
-        auto keyIt = node.properties.find("targetKey");
-        if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
-            targetKey = std::get<std::string>(keyIt->second);
-
-        if (graph && !graph->blackboardKeys.empty())
-        {
-            if (ImGui::BeginCombo("Target Key", targetKey.c_str()))
-            {
-                for (const auto& keyDef : graph->blackboardKeys)
-                {
-                    if (keyDef.type == BlackboardValueType::Vec3)
-                    {
-                        bool selected = (keyDef.name == targetKey);
-                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
-                        {
-                            node.properties["targetKey"] = keyDef.name;
-                            notifyChanged();
-                        }
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-        else
-        {
-            char keyBuf[64];
-            strncpy(keyBuf, targetKey.c_str(), sizeof(keyBuf) - 1);
-            keyBuf[sizeof(keyBuf) - 1] = '\0';
-            if (ImGui::InputText("Target Key", keyBuf, sizeof(keyBuf)))
-            {
-                node.properties["targetKey"] = std::string(keyBuf);
-                notifyChanged();
-            }
-        }
+        // Target key dropdown from blackboard keys (Vec3), free-text fallback when none exist.
+        const auto isVec3 = [](BlackboardValueType t) { return t == BlackboardValueType::Vec3; };
+        if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isVec3))
+            notifyChanged();
 
         float arrivalDist = 0.5f;
         auto distIt = node.properties.find("arrivalDistance");
@@ -316,10 +284,15 @@ namespace editor::windows
                 for (const auto& keyDef : graph->blackboardKeys)
                 {
                     bool selected = (keyDef.name == key);
-                    if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                    // Only reset the stored value on a GENUINE key change, and only when the existing
+                    // value can't hold the new key's type — re-selecting the same key (Selectable fires on
+                    // every click) must not wipe a configured value (VK-1457 fix).
+                    if (ImGui::Selectable(keyDef.name.c_str(), selected) && keyDef.name != key)
                     {
                         node.properties["key"] = keyDef.name;
-                        node.properties["value"] = bt::defaultValueForType(keyDef.type);
+                        auto valIt = node.properties.find("value");
+                        if (valIt == node.properties.end() || bt::typeOfValue(valIt->second) != keyDef.type)
+                            node.properties["value"] = bt::defaultValueForType(keyDef.type);
                         notifyChanged();
                     }
                 }
@@ -359,10 +332,14 @@ namespace editor::windows
                 for (const auto& keyDef : graph->blackboardKeys)
                 {
                     bool selected = (keyDef.name == key);
-                    if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                    // Only reset compareValue on a GENUINE key change, and only when the existing value
+                    // can't hold the new key's type — re-selecting the same key must not wipe it (VK-1457).
+                    if (ImGui::Selectable(keyDef.name.c_str(), selected) && keyDef.name != key)
                     {
                         node.properties["key"] = keyDef.name;
-                        node.properties["compareValue"] = bt::defaultValueForType(keyDef.type);
+                        auto valIt = node.properties.find("compareValue");
+                        if (valIt == node.properties.end() || bt::typeOfValue(valIt->second) != keyDef.type)
+                            node.properties["compareValue"] = bt::defaultValueForType(keyDef.type);
                         notifyChanged();
                     }
                 }
@@ -420,10 +397,14 @@ namespace editor::windows
                 for (const auto& keyDef : graph->blackboardKeys)
                 {
                     bool selected = (keyDef.name == key);
-                    if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                    // Only reset compareValue on a GENUINE key change, and only when the existing value
+                    // can't hold the new key's type — re-selecting the same key must not wipe it (VK-1457).
+                    if (ImGui::Selectable(keyDef.name.c_str(), selected) && keyDef.name != key)
                     {
                         node.properties["key"] = keyDef.name;
-                        node.properties["compareValue"] = bt::defaultValueForType(keyDef.type);
+                        auto valIt = node.properties.find("compareValue");
+                        if (valIt == node.properties.end() || bt::typeOfValue(valIt->second) != keyDef.type)
+                            node.properties["compareValue"] = bt::defaultValueForType(keyDef.type);
                         notifyChanged();
                     }
                 }
@@ -503,42 +484,10 @@ namespace editor::windows
             notifyChanged();
         }
 
-        // Result key (Vec3 blackboard keys)
-        std::string resultKey = "eqsResult";
-        auto rIt = node.properties.find("resultKey");
-        if (rIt != node.properties.end() && std::holds_alternative<std::string>(rIt->second))
-            resultKey = std::get<std::string>(rIt->second);
-
-        if (graph && !graph->blackboardKeys.empty())
-        {
-            if (ImGui::BeginCombo("Result Key", resultKey.c_str()))
-            {
-                for (const auto& keyDef : graph->blackboardKeys)
-                {
-                    if (keyDef.type == BlackboardValueType::Vec3)
-                    {
-                        bool selected = (keyDef.name == resultKey);
-                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
-                        {
-                            node.properties["resultKey"] = keyDef.name;
-                            notifyChanged();
-                        }
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-        else
-        {
-            char keyBuf[64];
-            strncpy(keyBuf, resultKey.c_str(), sizeof(keyBuf) - 1);
-            keyBuf[sizeof(keyBuf) - 1] = '\0';
-            if (ImGui::InputText("Result Key", keyBuf, sizeof(keyBuf)))
-            {
-                node.properties["resultKey"] = std::string(keyBuf);
-                notifyChanged();
-            }
-        }
+        // Result key (Vec3 blackboard keys), free-text fallback when none exist.
+        const auto isVec3 = [](BlackboardValueType t) { return t == BlackboardValueType::Vec3; };
+        if (bt::drawKeyDropdown(node, graph, "Result Key", "resultKey", "eqsResult", isVec3))
+            notifyChanged();
         ImGui::TextDisabled("Best query position is written to the result key");
     }
 
@@ -654,42 +603,11 @@ namespace editor::windows
 
     void BTPropertyPanel::drawLineOfSightProperties(BTNode& node, const BTGraph* graph)
     {
-        // Target key (Entity or Vec3 from blackboard)
-        std::string targetKey = "target";
-        auto keyIt = node.properties.find("targetKey");
-        if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
-            targetKey = std::get<std::string>(keyIt->second);
-
-        if (graph && !graph->blackboardKeys.empty())
-        {
-            if (ImGui::BeginCombo("Target Key", targetKey.c_str()))
-            {
-                for (const auto& keyDef : graph->blackboardKeys)
-                {
-                    if (keyDef.type == BlackboardValueType::Entity || keyDef.type == BlackboardValueType::Vec3)
-                    {
-                        bool selected = (keyDef.name == targetKey);
-                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
-                        {
-                            node.properties["targetKey"] = keyDef.name;
-                            notifyChanged();
-                        }
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-        else
-        {
-            char keyBuf[64];
-            strncpy(keyBuf, targetKey.c_str(), sizeof(keyBuf) - 1);
-            keyBuf[sizeof(keyBuf) - 1] = '\0';
-            if (ImGui::InputText("Target Key", keyBuf, sizeof(keyBuf)))
-            {
-                node.properties["targetKey"] = std::string(keyBuf);
-                notifyChanged();
-            }
-        }
+        // Target key (Entity or Vec3 from blackboard), free-text fallback when none exist.
+        const auto isEntityOrVec3 = [](BlackboardValueType t)
+        { return t == BlackboardValueType::Entity || t == BlackboardValueType::Vec3; };
+        if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isEntityOrVec3))
+            notifyChanged();
 
         // Max distance
         float maxDist = 50.0f;
@@ -719,51 +637,7 @@ namespace editor::windows
 
     void BTPropertyPanel::drawServiceProperties(BTNode& node, const BTGraph* graph)
     {
-        // Blackboard-key dropdown filtered by a type predicate; falls back to free text when no key of
-        // the wanted type exists (mirrors the MoveTo/EnvironmentQuery/LineOfSight drawers).
-        auto keyDropdown = [&](const char* label, const char* prop, const std::string& def, auto typeMatches)
-        {
-            std::string current = def;
-            auto it = node.properties.find(prop);
-            if (it != node.properties.end() && std::holds_alternative<std::string>(it->second))
-                current = std::get<std::string>(it->second);
-
-            bool anyKeys = false;
-            if (graph)
-            {
-                for (const auto& keyDef : graph->blackboardKeys)
-                    if (typeMatches(keyDef.type)) { anyKeys = true; break; }
-            }
-
-            if (anyKeys)
-            {
-                if (ImGui::BeginCombo(label, current.c_str()))
-                {
-                    for (const auto& keyDef : graph->blackboardKeys)
-                    {
-                        if (!typeMatches(keyDef.type)) continue;
-                        bool selected = (keyDef.name == current);
-                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
-                        {
-                            node.properties[prop] = keyDef.name;
-                            notifyChanged();
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
-            }
-            else
-            {
-                char keyBuf[64];
-                strncpy(keyBuf, current.c_str(), sizeof(keyBuf) - 1);
-                keyBuf[sizeof(keyBuf) - 1] = '\0';
-                if (ImGui::InputText(label, keyBuf, sizeof(keyBuf)))
-                {
-                    node.properties[prop] = std::string(keyBuf);
-                    notifyChanged();
-                }
-            }
-        };
+        // Blackboard-key dropdowns for this service use the shared bt::drawKeyDropdown helper (below).
 
         // Interval
         float interval = 0.5f;
@@ -837,13 +711,16 @@ namespace editor::windows
                 node.properties["queryName"] = std::string(queryBuf);
                 notifyChanged();
             }
-            keyDropdown("Result Key", "resultKey", "eqsResult", isVec3);
+            if (bt::drawKeyDropdown(node, graph, "Result Key", "resultKey", "eqsResult", isVec3))
+                notifyChanged();
             ImGui::TextDisabled("Refreshes an EQS query on interval; best position -> result key");
         }
         else if (typeStr == "LineOfSightRefresh")
         {
-            keyDropdown("Target Key", "targetKey", "target", isEntityOrVec3);
-            keyDropdown("Visibility Key", "visibilityKey", "targetVisible", isBool);
+            if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isEntityOrVec3))
+                notifyChanged();
+            if (bt::drawKeyDropdown(node, graph, "Visibility Key", "visibilityKey", "targetVisible", isBool))
+                notifyChanged();
 
             float maxDist = 50.0f;
             auto distIt = node.properties.find("maxDistance");
@@ -868,8 +745,10 @@ namespace editor::windows
         }
         else if (typeStr == "FocusUpdate")
         {
-            keyDropdown("Target Key", "targetKey", "target", isEntityOrVec3);
-            keyDropdown("Focus Key", "focusKey", "focusPoint", isVec3);
+            if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isEntityOrVec3))
+                notifyChanged();
+            if (bt::drawKeyDropdown(node, graph, "Focus Key", "focusKey", "focusPoint", isVec3))
+                notifyChanged();
             ImGui::TextDisabled("Writes the target's world position to the focus key on interval");
         }
 

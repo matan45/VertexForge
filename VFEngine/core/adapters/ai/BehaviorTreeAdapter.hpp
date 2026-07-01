@@ -137,6 +137,10 @@ namespace core
         // tree spliced into its expansion (so saving a subtree rebinds its parents).
         std::unordered_map<std::string, std::shared_ptr<const behaviortree::BehaviorTreeData>> assetCache;
         std::unordered_map<std::string, std::vector<std::string>> assetDependencies;
+        // VK-1457 debugger: per-tree map of authored static-SubTree node id -> expanded entry node id,
+        // captured during expansion. Copied into the debug target's snapshot so the editor can map
+        // breakpoints/live status onto SubTree nodes (removed from the expanded id space).
+        std::unordered_map<std::string, std::unordered_map<uint32_t, uint32_t>> subtreeEntryMaps;
 
         // Hot-reload requests queued from the editor thread, applied between ticks in updateAll
         std::vector<std::string> pendingReloads;
@@ -157,7 +161,7 @@ namespace core
 
         std::shared_ptr<const behaviortree::BehaviorTreeData> getOrLoadTree(const std::string& treePath);
         void applyPendingReloads();
-        void captureDebugSnapshot(const behaviortree::BehaviorTreeRuntime& runtime);
+        void captureDebugSnapshot(const behaviortree::BehaviorTreeRuntime& runtime, const std::string& treePath);
         // Tick the debug target and apply post-tick breakpoint rising-edge detection (may set debugPaused).
         void tickDebugTarget(RuntimeInstance& instance, float deltaTime);
         void cleanupScriptInstances(uint64_t entityId);

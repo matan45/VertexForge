@@ -136,6 +136,18 @@ namespace behaviortree
         std::vector<BlackboardMapping> blackboardMappings;
     };
 
+    // Typed lookup into a node's property map: returns the stored value when the key exists and holds
+    // exactly T, else defaultVal. Shared by the runtime, the adapter services, and the dynamic resolver
+    // (VK-1457 dedup — was triplicated as getNodeProperty/getServiceProp/getStringProperty).
+    template <typename T>
+    inline T getNodeProperty(const BTNode& node, const std::string& key, T defaultVal)
+    {
+        auto it = node.properties.find(key);
+        if (it != node.properties.end() && std::holds_alternative<T>(it->second))
+            return std::get<T>(it->second);
+        return defaultVal;
+    }
+
     struct BTLink
     {
         uint32_t id = 0;
@@ -220,6 +232,13 @@ namespace behaviortree
         std::vector<BTExecutionEvent> executionEvents;          // bounded history ring
         bool paused = false;                                    // debugger pause state for this target
         std::string activeDynamicSubtreePath;                   // path of the running dynamic subtree, if any
+
+        // VK-1457: maps each authored static-SubTree node id (as seen in the editor's UNEXPANDED graph)
+        // to the expanded entry node id it was spliced into. Lets the editor debugger translate
+        // breakpoints and mirror live status/active-path onto SubTree nodes, which are removed during
+        // loadExpanded and so never appear in the runtime's expanded id space. Empty when the tree has
+        // no static SubTree nodes. Populated by the adapter for the debug target only.
+        std::unordered_map<uint32_t, uint32_t> subtreeEntryMap;
     };
 
     bool isCompositeNode(BTNodeType type);

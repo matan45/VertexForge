@@ -5,25 +5,14 @@
 
 namespace behaviortree
 {
-    namespace
-    {
-        std::string getStringProperty(const BTNode& node, const std::string& key)
-        {
-            auto it = node.properties.find(key);
-            if (it != node.properties.end() && std::holds_alternative<std::string>(it->second))
-            {
-                return std::get<std::string>(it->second);
-            }
-            return {};
-        }
-    }
+    // getStringProperty was folded into the shared getNodeProperty<std::string> in BehaviorTreeTypes.hpp.
 
     std::string resolveDynamicSubtreePath(const BTNode& node,
                                           const Blackboard& blackboard,
                                           const std::unordered_map<std::string, std::string>& injections)
     {
         // 1. Blackboard selection key (string value) — highest priority, fully runtime-driven.
-        const std::string selectionKey = getStringProperty(node, "selectionKey");
+        const std::string selectionKey = getNodeProperty<std::string>(node, "selectionKey", std::string{});
         if (!selectionKey.empty() && blackboard.has(selectionKey))
         {
             const BlackboardValue value = blackboard.get(selectionKey);
@@ -35,7 +24,7 @@ namespace behaviortree
         }
 
         // 2. External injection by tag (SetDynamicSubtree).
-        const std::string injectionTag = getStringProperty(node, "injectionTag");
+        const std::string injectionTag = getNodeProperty<std::string>(node, "injectionTag", std::string{});
         if (!injectionTag.empty())
         {
             auto it = injections.find(injectionTag);
@@ -46,7 +35,7 @@ namespace behaviortree
         }
 
         // 3. Authoring-time default.
-        return getStringProperty(node, "defaultTreePath");
+        return getNodeProperty<std::string>(node, "defaultTreePath", std::string{});
     }
 
     void applyMappingsIn(const std::vector<BlackboardMapping>& mappings,

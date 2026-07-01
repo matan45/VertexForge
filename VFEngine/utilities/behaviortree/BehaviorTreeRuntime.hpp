@@ -218,7 +218,7 @@ namespace behaviortree
         void recordAbort(uint32_t nodeId, const std::string& reason);
 
         BTNodeRuntime& getNodeState(uint32_t nodeId);
-        void resetSubtreeState(uint32_t nodeId);
+        void resetSubtreeState(uint32_t nodeId, IBTTaskExecutor* executor);
         void abortSubtree(uint32_t nodeId, IBTTaskExecutor* executor);
         bool evaluateCondition(const BTNode& node) const;
 

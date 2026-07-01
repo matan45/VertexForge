@@ -528,7 +528,8 @@ namespace behaviortree
                                    const BehaviorTreeAsset::TreeLoader& loader,
                                    std::vector<std::string>& pathStack,
                                    int maxDepth,
-                                   std::vector<std::string>* outDependencies = nullptr)
+                                   std::vector<std::string>* outDependencies = nullptr,
+                                   std::unordered_map<uint32_t, uint32_t>* outSubtreeEntryMap = nullptr)
     {
         if (static_cast<int>(pathStack.size()) > maxDepth)
         {
@@ -592,7 +593,9 @@ namespace behaviortree
 
             BehaviorTreeData child = std::move(childOpt.value());
             pathStack.push_back(normalized);
-            bool expanded = expandSubTreesInto(child, loader, pathStack, maxDepth, outDependencies);
+            // Nested SubTree ids are not editor-visible, so only the top-level call records the entry
+            // map (it receives a non-null pointer; recursion passes nullptr).
+            bool expanded = expandSubTreesInto(child, loader, pathStack, maxDepth, outDependencies, nullptr);
             pathStack.pop_back();
             if (!expanded) return false;
 
@@ -610,6 +613,13 @@ namespace behaviortree
             {
                 if (childNode.id == child.graph.rootNodeId) continue;
                 idMap[childNode.id] = data.graph.nextNodeId++;
+            }
+
+            // VK-1457 debugger: record where this authored SubTree node's body begins in the expanded
+            // graph, so the editor can map breakpoints/live status onto the (now-removed) SubTree node.
+            if (outSubtreeEntryMap)
+            {
+                (*outSubtreeEntryMap)[nodeId] = idMap[entryOldId];
             }
 
             for (const auto& childNode : child.graph.nodes)
@@ -667,14 +677,17 @@ namespace behaviortree
     }
 
     bool BehaviorTreeAsset::expandSubTrees(BehaviorTreeData& data, const TreeLoader& loader,
-                                           int maxDepth)
+                                           int maxDepth,
+                                           std::unordered_map<uint32_t, uint32_t>* outSubtreeEntryMap)
     {
         std::vector<std::string> pathStack;
-        return expandSubTreesInto(data, loader, pathStack, maxDepth);
+        return expandSubTreesInto(data, loader, pathStack, maxDepth, nullptr, outSubtreeEntryMap);
     }
 
-    std::optional<BehaviorTreeData> BehaviorTreeAsset::loadExpanded(std::string_view path,
-                                                                    std::vector<std::string>* outDependencies)
+    std::optional<BehaviorTreeData> BehaviorTreeAsset::loadExpanded(
+        std::string_view path,
+        std::vector<std::string>* outDependencies,
+        std::unordered_map<uint32_t, uint32_t>* outSubtreeEntryMap)
     {
         auto dataOpt = load(path);
         if (!dataOpt.has_value())
@@ -692,7 +705,7 @@ namespace behaviortree
         pathStack.push_back(std::move(rootPath));
         if (!expandSubTreesInto(dataOpt.value(),
                                 [](const std::string& p) { return load(p); },
-                                pathStack, 8, outDependencies))
+                                pathStack, 8, outDependencies, outSubtreeEntryMap))
         {
             vfLogError("Behavior tree '{}' failed SubTree expansion", path);
             return std::nullopt;

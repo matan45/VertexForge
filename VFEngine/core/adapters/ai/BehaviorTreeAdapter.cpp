@@ -32,14 +32,7 @@ namespace core
         return path;
     }
 
-    template <typename T>
-    static T getServiceProp(const BTNode& node, const std::string& key, T defaultVal)
-    {
-        auto it = node.properties.find(key);
-        if (it != node.properties.end() && std::holds_alternative<T>(it->second))
-            return std::get<T>(it->second);
-        return defaultVal;
-    }
+    // getServiceProp was folded into the shared behaviortree::getNodeProperty<T> (BehaviorTreeTypes.hpp).
 
     // Service EQS queries key off the node's ADDRESS, not its id (VK-1457): a parent tree and a nested
     // dynamic subtree have independent id spaces (both start at 1), so keying by id would let two live
@@ -97,15 +90,19 @@ namespace core
             return cacheIt->second;
 
         std::vector<std::string> dependencies;
-        auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies);
+        std::unordered_map<uint32_t, uint32_t> subtreeEntryMap;
+        auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies, &subtreeEntryMap);
         if (!dataOpt.has_value())
             return nullptr;
-        if (!validateExpandedOrLog(dataOpt.value(), treePath))
-            return nullptr;
+        // Validation is advisory at attach time: log any errors/warnings but still attach. The runtime
+        // degrades gracefully (a malformed branch returns Failure), so refusing to load would disable the
+        // entity's entire AI over one bad branch (VK-1457 regression). Hot reload keeps its stricter gate.
+        validateExpandedOrLog(dataOpt.value(), treePath);
 
         auto shared = std::make_shared<const BehaviorTreeData>(std::move(dataOpt.value()));
         assetCache[treePath] = shared;
         assetDependencies[treePath] = std::move(dependencies);
+        subtreeEntryMaps[treePath] = std::move(subtreeEntryMap);
         return shared;
     }
 
@@ -294,7 +291,8 @@ namespace core
         for (const auto& treePath : rootsToReload)
         {
             std::vector<std::string> dependencies;
-            auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies);
+            std::unordered_map<uint32_t, uint32_t> subtreeEntryMap;
+            auto dataOpt = BehaviorTreeAsset::loadExpanded(treePath, &dependencies, &subtreeEntryMap);
             if (!dataOpt.has_value())
             {
                 vfLogError("BT hot reload: failed to load '{}', keeping old tree", treePath);
@@ -309,6 +307,7 @@ namespace core
             auto newData = std::make_shared<const BehaviorTreeData>(std::move(dataOpt.value()));
             assetCache[treePath] = newData;
             assetDependencies[treePath] = std::move(dependencies);
+            subtreeEntryMaps[treePath] = std::move(subtreeEntryMap);
 
             int rebound = 0;
             for (auto& [entityId, instance] : runtimes)
@@ -354,13 +353,19 @@ namespace core
         }
     }
 
-    void BehaviorTreeAdapter::captureDebugSnapshot(const BehaviorTreeRuntime& runtime)
+    void BehaviorTreeAdapter::captureDebugSnapshot(const BehaviorTreeRuntime& runtime, const std::string& treePath)
     {
         if (!runtime.hasTreeData()) return;
 
         BTRuntimeSnapshot snapshot;
         snapshot.valid = true;
         snapshot.tickIndex = tickCounter;
+
+        // VK-1457: hand the editor the authored-SubTree -> expanded-entry id map for this tree so it can
+        // translate breakpoints and mirror live status onto SubTree nodes (empty for trees with none).
+        auto mapIt = subtreeEntryMaps.find(treePath);
+        if (mapIt != subtreeEntryMaps.end())
+            snapshot.subtreeEntryMap = mapIt->second;
 
         // Per-node statuses / child indices / elapsed / last results / active path + sorted blackboard.
         const BTGraph& graph = runtime.getTreeData().graph;
@@ -456,7 +461,7 @@ namespace core
             {
                 tickDebugTarget(instance, deltaTime); // may trip a breakpoint and set debugPaused
             }
-            captureDebugSnapshot(*instance.runtime);
+            captureDebugSnapshot(*instance.runtime, instance.treePath);
         }
     }
 
@@ -532,6 +537,7 @@ namespace core
         // Play session over: drop cached assets so the next session reloads from disk
         assetCache.clear();
         assetDependencies.clear();
+        subtreeEntryMaps.clear();
 
         setDebugTarget(services::EntityHandle::invalid());
     }
@@ -932,12 +938,12 @@ namespace core
                                             Blackboard& blackboard, float deltaTime)
     {
         (void)deltaTime;
-        const std::string serviceType = getServiceProp<std::string>(node, "serviceType", std::string("EQSRefresh"));
+        const std::string serviceType = getNodeProperty<std::string>(node, "serviceType", std::string("EQSRefresh"));
 
         if (serviceType == "EQSRefresh")
         {
-            const std::string queryName = getServiceProp<std::string>(node, "queryName", std::string{});
-            const std::string resultKey = getServiceProp<std::string>(node, "resultKey", std::string("eqsResult"));
+            const std::string queryName = getNodeProperty<std::string>(node, "queryName", std::string{});
+            const std::string resultKey = getNodeProperty<std::string>(node, "resultKey", std::string("eqsResult"));
             if (queryName.empty())
                 return;
 
@@ -968,17 +974,17 @@ namespace core
         }
         else if (serviceType == "LineOfSightRefresh")
         {
-            const std::string targetKey = getServiceProp<std::string>(node, "targetKey", std::string("target"));
-            const std::string visibilityKey = getServiceProp<std::string>(node, "visibilityKey", std::string("targetVisible"));
-            const float maxDistance = getServiceProp<float>(node, "maxDistance", 50.0f);
-            const float eyeOffset = getServiceProp<float>(node, "eyeOffset", 1.6f);
+            const std::string targetKey = getNodeProperty<std::string>(node, "targetKey", std::string("target"));
+            const std::string visibilityKey = getNodeProperty<std::string>(node, "visibilityKey", std::string("targetVisible"));
+            const float maxDistance = getNodeProperty<float>(node, "maxDistance", 50.0f);
+            const float eyeOffset = getNodeProperty<float>(node, "eyeOffset", 1.6f);
             const bool visible = computeLineOfSight(entity, targetKey, maxDistance, eyeOffset, blackboard);
             blackboard.set(visibilityKey, visible);
         }
         else if (serviceType == "FocusUpdate")
         {
-            const std::string targetKey = getServiceProp<std::string>(node, "targetKey", std::string("target"));
-            const std::string focusKey = getServiceProp<std::string>(node, "focusKey", std::string("focusPoint"));
+            const std::string targetKey = getNodeProperty<std::string>(node, "targetKey", std::string("target"));
+            const std::string focusKey = getNodeProperty<std::string>(node, "focusKey", std::string("focusPoint"));
             auto pos = resolveTargetPosition(targetKey, blackboard, 0.0f);
             if (pos.has_value())
                 blackboard.set(focusKey, *pos);
@@ -991,7 +997,7 @@ namespace core
         (void)blackboard;
         // Only EQSRefresh holds in-flight async work to cancel. Sensory result keys are left intact
         // so downstream logic keeps the last known value after the branch deactivates.
-        const std::string serviceType = getServiceProp<std::string>(node, "serviceType", std::string("EQSRefresh"));
+        const std::string serviceType = getNodeProperty<std::string>(node, "serviceType", std::string("EQSRefresh"));
         if (serviceType != "EQSRefresh")
             return;
 

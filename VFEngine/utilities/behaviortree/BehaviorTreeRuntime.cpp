@@ -14,6 +14,10 @@ namespace behaviortree
         constexpr int kMaxNestingDepth = 8;             // matches static SubTree expansion maxDepth
         constexpr std::size_t kMaxExecutionEvents = 128; // bounded debugger history ring
         constexpr std::size_t kMaxAbortRecords = 32;
+        // VK-1457: cap service catch-up fires per tick. A large dt (frame hitch / first frame) or a
+        // sub-millisecond interval could otherwise drain the accumulator hundreds of times in one frame,
+        // stalling on synchronous work (e.g. LineOfSightRefresh raycasts). Normal ticks fire 0-1 times.
+        constexpr int kMaxServiceFiresPerTick = 4;
 
         std::string normalizeRuntimePath(std::string path)
         {
@@ -84,17 +88,19 @@ namespace behaviortree
         }
     }
 
-    void BehaviorTreeRuntime::resetSubtreeState(uint32_t nodeId)
+    void BehaviorTreeRuntime::resetSubtreeState(uint32_t nodeId, IBTTaskExecutor* executor)
     {
         nodeStates.erase(nodeId);
-        // VK-1457: only reached for already-terminal subtrees (a completing composite/repeater resets its
-        // children), by which point a DynamicSubTree has already torn its nested runtime down. Drop any
-        // lingering nested defensively (no executor here — see abortAll's orphan sweep for the full flush).
-        nestedRuntimes.erase(nodeId);
+        // VK-1457: a completing composite/repeater resets its children, but a still-Running DynamicSubTree
+        // can reach here when a Parallel left it Running (Parallel does not reset its children on
+        // completion). Tear its nested runtime down THROUGH the executor so in-flight nav/EQS/scripts get
+        // onAbort and nested services fire onServiceEnd — a bare erase leaked them. No-op when there is no
+        // nested runtime, so the common terminal-reset path is unchanged.
+        teardownNested(nodeId, executor);
         auto children = treeData->graph.getChildren(nodeId);
         for (const auto* child : children)
         {
-            resetSubtreeState(child->id);
+            resetSubtreeState(child->id, executor);
         }
     }
 
@@ -157,14 +163,7 @@ namespace behaviortree
         return BTNodeStatus::Failure;
     }
 
-    template <typename T>
-    static T getNodeProperty(const BTNode& node, const std::string& key, T defaultVal)
-    {
-        auto it = node.properties.find(key);
-        if (it != node.properties.end() && std::holds_alternative<T>(it->second))
-            return std::get<T>(it->second);
-        return defaultVal;
-    }
+    // getNodeProperty<T> lives in BehaviorTreeTypes.hpp (shared with the adapter + dynamic resolver).
 
     bool BehaviorTreeRuntime::evaluateCondition(const BTNode& node) const
     {
@@ -291,12 +290,12 @@ namespace behaviortree
                 if (childStatus == BTNodeStatus::Failure)
                 {
                     state.currentChildIndex = 0;
-                    for (const auto* child : children) resetSubtreeState(child->id);
+                    for (const auto* child : children) resetSubtreeState(child->id, executor);
                     return BTNodeStatus::Failure;
                 }
             }
             state.currentChildIndex = 0;
-            for (const auto* child : children) resetSubtreeState(child->id);
+            for (const auto* child : children) resetSubtreeState(child->id, executor);
             return BTNodeStatus::Success;
         }
 
@@ -333,12 +332,12 @@ namespace behaviortree
                 if (childStatus == BTNodeStatus::Success)
                 {
                     state.currentChildIndex = 0;
-                    for (const auto* child : children) resetSubtreeState(child->id);
+                    for (const auto* child : children) resetSubtreeState(child->id, executor);
                     return BTNodeStatus::Success;
                 }
             }
             state.currentChildIndex = 0;
-            for (const auto* child : children) resetSubtreeState(child->id);
+            for (const auto* child : children) resetSubtreeState(child->id, executor);
             return BTNodeStatus::Failure;
         }
 
@@ -424,7 +423,7 @@ namespace behaviortree
 
             state.repeatCount++;
 
-            resetSubtreeState(children[0]->id);
+            resetSubtreeState(children[0]->id, executor);
 
             if (maxRepeats <= 0 || state.repeatCount < maxRepeats)
             {
@@ -607,6 +606,7 @@ namespace behaviortree
 
         // The activation frame accumulates too, so the first scheduled fire lands one interval later.
         svc.accumulator += dt;
+        int firesThisTick = 0;
         while (svc.currentInterval > 0.0f && svc.accumulator >= svc.currentInterval)
         {
             svc.accumulator -= svc.currentInterval;
@@ -617,6 +617,12 @@ namespace behaviortree
             recordExecutionEvent(BTEventType::ServiceFire, node.id, BTNodeStatus::Running);
             ++svc.fireCount;
             svc.currentInterval = computeServiceInterval(node, svc.fireCount);
+            if (++firesThisTick >= kMaxServiceFiresPerTick)
+            {
+                // Drop the remaining backlog so a large dt / tiny interval can't spiral this frame.
+                svc.accumulator = 0.0f;
+                break;
+            }
         }
 
         // Passthrough: service runs BEFORE its child, so a sensing service above a Selector feeds
@@ -861,10 +867,12 @@ namespace behaviortree
         }
 
         // 4. On terminal, drop the nested so the next entry re-selects (and re-copies IN) fresh.
+        //    The nested tree may still hold a Running task (e.g. a RequireOne Parallel whose sibling
+        //    succeeded first), so abort it — not just endAllServices — to cancel that task's in-flight
+        //    nav/EQS before dropping it. teardownNested re-finds by node.id and erases.
         if (status != BTNodeStatus::Running)
         {
-            it->second.runtime->endAllServices(executor);
-            nestedRuntimes.erase(it);
+            teardownNested(node.id, executor);
         }
         return status;
     }

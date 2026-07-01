@@ -1433,4 +1433,144 @@ TEST_CASE("Debug recording captures enter/exit and abort events only when enable
     CHECK(runtime.getAbortRecords().back().nodeId == 2);
 }
 
+// ============================================================
+// VK-1457 code-review fixes
+// ============================================================
+
+TEST_CASE("DynamicSubTree: a nested task still Running at terminal completion is aborted (VK-1457 #3)") {
+    using namespace behaviortree;
+    // child "combat": Root -> Parallel(RequireOne)[ MoveTo (Running forever), Log (Success) ].
+    // The Parallel returns Success on the Log while the MoveTo is still Running.
+    auto child = std::make_shared<BehaviorTreeData>();
+    child->graph.rootNodeId = 1;
+    child->graph.nodes.push_back(makeBTNode(1, BTNodeType::Root));
+    auto par = makeBTNode(2, BTNodeType::Parallel);
+    par.properties["policy"] = std::string("RequireOne");
+    child->graph.nodes.push_back(par);
+    child->graph.nodes.push_back(makeBTNode(3, BTNodeType::MoveTo)); // executor returns Running
+    child->graph.nodes.push_back(makeBTNode(4, BTNodeType::Log));    // executor returns Success
+    linkBTNodes(child->graph, 1, 2, 0);
+    linkBTNodes(child->graph, 2, 3, 0);
+    linkBTNodes(child->graph, 2, 4, 1);
+    finalizeGraphIds(child->graph);
+
+    TreeMap trees;
+    trees["combat"] = child;
+
+    BehaviorTreeData parent;
+    parent.graph.rootNodeId = 1;
+    parent.graph.nodes.push_back(makeBTNode(1, BTNodeType::Root));
+    auto dyn = makeBTNode(2, BTNodeType::DynamicSubTree);
+    dyn.properties["defaultTreePath"] = std::string("combat");
+    parent.graph.nodes.push_back(dyn);
+    linkBTNodes(parent.graph, 1, 2, 0);
+    finalizeGraphIds(parent.graph);
+
+    BehaviorTreeRuntime runtime;
+    runtime.init(std::make_shared<BehaviorTreeData>(parent), services::EntityHandle{1});
+    runtime.setTreeResolver(makeResolver(trees));
+    runtime.setNestingContext(0, {"parent"});
+
+    AbortRecorder exec;
+    // The nested tree returns Success this tick while its MoveTo is Running; the terminal teardown must
+    // abort that MoveTo (pre-fix it called only endAllServices and leaked the nav order).
+    CHECK(runtime.tick(0.1f, &exec) == BTNodeStatus::Success);
+    REQUIRE(exec.aborts.size() == 1);
+    CHECK(exec.aborts[0].second == BTNodeType::MoveTo);
+}
+
+TEST_CASE("DynamicSubTree: reset by a completing ancestor aborts a still-Running nested task (VK-1457 #2)") {
+    using namespace behaviortree;
+    // child "combat": Root -> MoveTo (Running forever).
+    auto child = std::make_shared<BehaviorTreeData>();
+    child->graph.rootNodeId = 1;
+    child->graph.nodes.push_back(makeBTNode(1, BTNodeType::Root));
+    child->graph.nodes.push_back(makeBTNode(2, BTNodeType::MoveTo)); // executor returns Running
+    linkBTNodes(child->graph, 1, 2, 0);
+    finalizeGraphIds(child->graph);
+
+    TreeMap trees;
+    trees["combat"] = child;
+
+    // parent: Root -> Sequence[ Parallel(RequireOne)[ DynamicSubTree("combat"), Log ], Log ].
+    // The Parallel completes (RequireOne) while the DynamicSubTree stays Running, then the Sequence
+    // completes and resets its children — walking onto the still-Running DynamicSubTree.
+    BehaviorTreeData parent;
+    parent.graph.rootNodeId = 1;
+    parent.graph.nodes.push_back(makeBTNode(1, BTNodeType::Root));
+    parent.graph.nodes.push_back(makeBTNode(2, BTNodeType::Sequence));
+    auto par = makeBTNode(3, BTNodeType::Parallel);
+    par.properties["policy"] = std::string("RequireOne");
+    parent.graph.nodes.push_back(par);
+    auto dyn = makeBTNode(4, BTNodeType::DynamicSubTree);
+    dyn.properties["defaultTreePath"] = std::string("combat");
+    parent.graph.nodes.push_back(dyn);
+    parent.graph.nodes.push_back(makeBTNode(5, BTNodeType::Log)); // Parallel's 2nd child -> Success
+    parent.graph.nodes.push_back(makeBTNode(6, BTNodeType::Log)); // Sequence's 2nd child -> Success
+    linkBTNodes(parent.graph, 1, 2, 0);
+    linkBTNodes(parent.graph, 2, 3, 0); // Sequence -> Parallel
+    linkBTNodes(parent.graph, 2, 6, 1); // Sequence -> Log(6)
+    linkBTNodes(parent.graph, 3, 4, 0); // Parallel -> DynamicSubTree
+    linkBTNodes(parent.graph, 3, 5, 1); // Parallel -> Log(5)
+    finalizeGraphIds(parent.graph);
+
+    BehaviorTreeRuntime runtime;
+    runtime.init(std::make_shared<BehaviorTreeData>(parent), services::EntityHandle{1});
+    runtime.setTreeResolver(makeResolver(trees));
+    runtime.setNestingContext(0, {"parent"});
+
+    AbortRecorder exec;
+    // Whole tree completes in one tick; the reset must abort the nested MoveTo (pre-fix resetSubtreeState
+    // dropped the nested runtime with no executor, leaking the nav order).
+    CHECK(runtime.tick(0.1f, &exec) == BTNodeStatus::Success);
+    REQUIRE(exec.aborts.size() == 1);
+    CHECK(exec.aborts[0].second == BTNodeType::MoveTo);
+}
+
+TEST_CASE("Service: a large dt is capped, not fired hundreds of times in one tick (VK-1457 #5)") {
+    behaviortree::BehaviorTreeRuntime runtime;
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeServiceTree(0.5f, 0.0f, false)),
+                 services::EntityHandle{});
+    ServiceRecorder executor;
+
+    // One tick with a huge dt (frame hitch). Pre-fix this drained ~200 fires (100 / 0.5); the per-tick
+    // cap bounds it to a small constant.
+    CHECK(runtime.tick(100.0f, &executor) == behaviortree::BTNodeStatus::Running);
+    CHECK(executor.count("tick") >= 1);
+    CHECK(executor.count("tick") <= 4);
+}
+
+TEST_CASE("getNodeProperty: typed lookup returns the value on type match, default otherwise (VK-1457 #10)") {
+    using namespace behaviortree;
+    BTNode node;
+    node.properties["f"] = 2.5f;
+    node.properties["i"] = int32_t{7};
+    node.properties["s"] = std::string("hi");
+
+    CHECK(getNodeProperty<float>(node, "f", 0.0f) == doctest::Approx(2.5f));
+    CHECK(getNodeProperty<int32_t>(node, "i", -1) == 7);
+    CHECK(getNodeProperty<std::string>(node, "s", std::string{}) == "hi");
+    CHECK(getNodeProperty<float>(node, "missing", 9.0f) == doctest::Approx(9.0f)); // absent -> default
+    CHECK(getNodeProperty<int32_t>(node, "f", -1) == -1);                          // type mismatch -> default
+}
+
+TEST_CASE("SubTree expansion: entry map records where each authored SubTree node was spliced (VK-1457 #6)") {
+    auto parent = makeParentTree(); // Root -> Sequence[ Wait, SubTree(4 -> "child.bt") ]
+    auto loader = [](const std::string& path) -> std::optional<behaviortree::BehaviorTreeData> {
+        if (path == "child.bt") return makeChildTree(); // Root -> Selector -> Wait
+        return std::nullopt;
+    };
+
+    std::unordered_map<uint32_t, uint32_t> entryMap;
+    REQUIRE(behaviortree::BehaviorTreeAsset::expandSubTrees(parent, loader, 8, &entryMap));
+
+    // Authored SubTree node 4 maps to the spliced entry node (the child's Selector), now under a
+    // re-mapped id in the expanded graph; the original SubTree node id is gone.
+    REQUIRE(entryMap.count(4) == 1);
+    const behaviortree::BTNode* entry = parent.graph.findNodeById(entryMap.at(4));
+    REQUIRE(entry != nullptr);
+    CHECK(entry->type == behaviortree::BTNodeType::Selector);
+    CHECK(parent.graph.findNodeById(4) == nullptr);
+}
+
 } // TEST_SUITE

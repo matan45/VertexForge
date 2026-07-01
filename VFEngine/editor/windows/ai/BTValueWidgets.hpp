@@ -92,7 +92,13 @@ namespace editor::windows::bt
             std::strncpy(buffer, text.c_str(), sizeof(buffer) - 1);
             buffer[sizeof(buffer) - 1] = '\0';
             ImGui::SetNextItemWidth(150.0f);
-            if (ImGui::InputText(label, buffer, sizeof(buffer)))
+            // Commit on Enter or focus-loss, not per keystroke (VK-1457). The live-blackboard debugger
+            // dispatches a SetBlackboardValueCommand on every `true`, so a plain InputText would push each
+            // half-typed prefix into the running runtime. IsItemDeactivatedAfterEdit keeps click-away
+            // commit working for authoring.
+            bool committed = ImGui::InputText(label, buffer, sizeof(buffer), ImGuiInputTextFlags_EnterReturnsTrue);
+            committed |= ImGui::IsItemDeactivatedAfterEdit();
+            if (committed)
             {
                 value = std::string(buffer);
                 return true;
@@ -130,5 +136,60 @@ namespace editor::windows::bt
         default:
             return false;
         }
+    }
+
+    // Blackboard-key picker filtered by a type predicate, with a free-text fallback when no key of the
+    // wanted type exists. Writes the chosen key into node.properties[prop]; returns true on change.
+    // Shared by BTPropertyPanel's MoveTo / EnvironmentQuery / LineOfSight / Service drawers (VK-1457 dedup).
+    template <typename TypePredicate>
+    inline bool drawKeyDropdown(behaviortree::BTNode& node,
+                                const behaviortree::BTGraph* graph,
+                                const char* label,
+                                const char* prop,
+                                const std::string& defaultKey,
+                                TypePredicate typeMatches)
+    {
+        std::string current = defaultKey;
+        auto it = node.properties.find(prop);
+        if (it != node.properties.end() && std::holds_alternative<std::string>(it->second))
+            current = std::get<std::string>(it->second);
+
+        bool anyKeys = false;
+        if (graph)
+        {
+            for (const auto& keyDef : graph->blackboardKeys)
+                if (typeMatches(keyDef.type)) { anyKeys = true; break; }
+        }
+
+        bool changed = false;
+        if (anyKeys)
+        {
+            if (ImGui::BeginCombo(label, current.c_str()))
+            {
+                for (const auto& keyDef : graph->blackboardKeys)
+                {
+                    if (!typeMatches(keyDef.type)) continue;
+                    bool selected = (keyDef.name == current);
+                    if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                    {
+                        node.properties[prop] = keyDef.name;
+                        changed = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
+        else
+        {
+            char keyBuf[64];
+            std::strncpy(keyBuf, current.c_str(), sizeof(keyBuf) - 1);
+            keyBuf[sizeof(keyBuf) - 1] = '\0';
+            if (ImGui::InputText(label, keyBuf, sizeof(keyBuf)))
+            {
+                node.properties[prop] = std::string(keyBuf);
+                changed = true;
+            }
+        }
+        return changed;
     }
 }

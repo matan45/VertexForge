@@ -100,7 +100,9 @@ namespace editor::windows
     void BehaviorTreeEditorWindow::onGraphChanged()
     {
         isDirty = true;
-        revalidate();
+        // VK-1457 perf: defer the (heavy, allocation-y) full-graph revalidate. onGraphChanged fires every
+        // frame a slider/text field is held; draw() flushes this once the widget is released.
+        validationDirty = true;
     }
 
     void BehaviorTreeEditorWindow::draw()
@@ -129,6 +131,14 @@ namespace editor::windows
 
         drawToolbar();
         updateDebugState();
+
+        // VK-1457 perf: coalesce a continuous edit (slider drag / typing) into a single full-graph
+        // revalidate when the active widget is released, rather than revalidating every frame.
+        if (validationDirty && !ImGui::IsAnyItemActive())
+        {
+            revalidate();
+            validationDirty = false;
+        }
 
         static float rightPanelWidth = 300.0f;
         const float splitterThickness = 5.0f;
@@ -360,8 +370,24 @@ namespace editor::windows
             snapshotQuery.entity = debugTarget;
             debugSnapshot = dispatcher.query(snapshotQuery);
             const bool valid = debugSnapshot.valid;
-            graphEditor.setLiveStatus(valid ? &debugSnapshot.nodeStatuses : nullptr);
-            graphEditor.setActivePath(valid ? &debugSnapshot.activePath : nullptr);
+
+            if (valid)
+            {
+                // VK-1457: static SubTree nodes are spliced out of the runtime's expanded graph, so the
+                // snapshot reports their bodies under re-mapped ids. Mirror each SubTree node's entry-node
+                // status/active state back onto the authored id, and re-push breakpoints translated to
+                // entry ids once the map arrives (it's empty for trees with no static SubTree nodes).
+                subtreeEntryMap = debugSnapshot.subtreeEntryMap;
+                buildAugmentedDebugViews();
+                if (!subtreeEntryMap.empty() && !subtreeMapApplied)
+                {
+                    pushBreakpointsToRuntime();
+                    subtreeMapApplied = true;
+                }
+            }
+
+            graphEditor.setLiveStatus(valid ? &augmentedNodeStatuses : nullptr);
+            graphEditor.setActivePath(valid ? &augmentedActivePath : nullptr);
             graphEditor.setBreakpoints(&breakpoints);
         }
         else
@@ -372,11 +398,38 @@ namespace editor::windows
         }
     }
 
+    void BehaviorTreeEditorWindow::buildAugmentedDebugViews()
+    {
+        // Start from the raw snapshot; add a mirrored entry for each authored SubTree node so it lights up
+        // and joins the active spine when its inlined body is running. No-op when there are no SubTrees.
+        augmentedNodeStatuses = debugSnapshot.nodeStatuses;
+        augmentedActivePath = debugSnapshot.activePath;
+
+        for (const auto& [subTreeId, entryId] : subtreeEntryMap)
+        {
+            auto statusIt = debugSnapshot.nodeStatuses.find(entryId);
+            if (statusIt != debugSnapshot.nodeStatuses.end())
+                augmentedNodeStatuses[subTreeId] = statusIt->second;
+
+            if (std::find(debugSnapshot.activePath.begin(), debugSnapshot.activePath.end(), entryId)
+                != debugSnapshot.activePath.end())
+                augmentedActivePath.push_back(subTreeId);
+        }
+    }
+
     void BehaviorTreeEditorWindow::pushBreakpointsToRuntime()
     {
         events::ai::SetTreeBreakpointsCommand cmd;
         cmd.entity = debugTarget;
-        cmd.nodeIds.assign(breakpoints.begin(), breakpoints.end());
+        // VK-1457: a breakpoint on a static SubTree node must be sent under the expanded entry id it was
+        // spliced into (the authored id doesn't exist in the runtime's expanded graph). Non-SubTree ids
+        // pass through unchanged. The map arrives with the first snapshot, so updateDebugState re-pushes.
+        cmd.nodeIds.reserve(breakpoints.size());
+        for (uint32_t id : breakpoints)
+        {
+            auto it = subtreeEntryMap.find(id);
+            cmd.nodeIds.push_back(it != subtreeEntryMap.end() ? it->second : id);
+        }
         events::EventDispatcher::instance().execute(cmd);
     }
 
@@ -385,6 +438,8 @@ namespace editor::windows
         debugActive = true;
         debugTarget = entity;
         debugSnapshot = {};
+        // Re-push breakpoints (translated) once the SubTree entry map arrives with the first snapshot.
+        subtreeMapApplied = false;
 
         events::ai::SetTreeDebugTargetCommand cmd;
         cmd.entity = entity;
@@ -399,6 +454,8 @@ namespace editor::windows
         debugActive = false;
         debugTarget = services::EntityHandle::invalid();
         debugSnapshot = {};
+        subtreeEntryMap.clear();
+        subtreeMapApplied = false;
         graphEditor.setLiveStatus(nullptr);
         graphEditor.setActivePath(nullptr);
         graphEditor.setBreakpoints(nullptr);
