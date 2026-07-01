@@ -115,9 +115,14 @@ namespace behaviortree
         return type == BTNodeType::Root;
     }
 
+    bool isServiceNode(BTNodeType type)
+    {
+        return type == BTNodeType::Service;
+    }
+
     bool hasOutputPin(BTNodeType type)
     {
-        // Tasks (leaves) have no children
+        // Tasks (leaves) have no children; Service is its own (non-task) category, so it keeps a pin.
         return !isTaskNode(type);
     }
 
@@ -146,6 +151,7 @@ namespace behaviortree
         case BTNodeType::EnvironmentQuery: return "EnvironmentQuery";
         case BTNodeType::LineOfSight: return "LineOfSight";
         case BTNodeType::SubTree: return "SubTree";
+        case BTNodeType::Service: return "Service";
         default: return "Unknown";
         }
     }
@@ -173,6 +179,7 @@ namespace behaviortree
         if (str == "EnvironmentQuery") return BTNodeType::EnvironmentQuery;
         if (str == "LineOfSight") return BTNodeType::LineOfSight;
         if (str == "SubTree") return BTNodeType::SubTree;
+        if (str == "Service") return BTNodeType::Service;
         return BTNodeType::Sequence;
     }
 

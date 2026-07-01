@@ -82,6 +82,7 @@ namespace editor::windows
         case BTNodeType::BlackboardCondition: drawBlackboardConditionProperties(*node, graph); break;
         case BTNodeType::EnvironmentQuery: drawEnvironmentQueryProperties(*node, graph); break;
         case BTNodeType::SubTree: drawSubTreeProperties(*node); break;
+        case BTNodeType::Service: drawServiceProperties(*node, graph); break;
         default: break;
         }
     }
@@ -623,5 +624,165 @@ namespace editor::windows
             notifyChanged();
         }
         ImGui::TextDisabled("Height offset for ray origin (eye level)");
+    }
+
+    void BTPropertyPanel::drawServiceProperties(BTNode& node, const BTGraph* graph)
+    {
+        // Blackboard-key dropdown filtered by a type predicate; falls back to free text when no key of
+        // the wanted type exists (mirrors the MoveTo/EnvironmentQuery/LineOfSight drawers).
+        auto keyDropdown = [&](const char* label, const char* prop, const std::string& def, auto typeMatches)
+        {
+            std::string current = def;
+            auto it = node.properties.find(prop);
+            if (it != node.properties.end() && std::holds_alternative<std::string>(it->second))
+                current = std::get<std::string>(it->second);
+
+            bool anyKeys = false;
+            if (graph)
+            {
+                for (const auto& keyDef : graph->blackboardKeys)
+                    if (typeMatches(keyDef.type)) { anyKeys = true; break; }
+            }
+
+            if (anyKeys)
+            {
+                if (ImGui::BeginCombo(label, current.c_str()))
+                {
+                    for (const auto& keyDef : graph->blackboardKeys)
+                    {
+                        if (!typeMatches(keyDef.type)) continue;
+                        bool selected = (keyDef.name == current);
+                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                        {
+                            node.properties[prop] = keyDef.name;
+                            notifyChanged();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            else
+            {
+                char keyBuf[64];
+                strncpy(keyBuf, current.c_str(), sizeof(keyBuf) - 1);
+                keyBuf[sizeof(keyBuf) - 1] = '\0';
+                if (ImGui::InputText(label, keyBuf, sizeof(keyBuf)))
+                {
+                    node.properties[prop] = std::string(keyBuf);
+                    notifyChanged();
+                }
+            }
+        };
+
+        // Interval
+        float interval = 0.5f;
+        auto intervalIt = node.properties.find("interval");
+        if (intervalIt != node.properties.end() && std::holds_alternative<float>(intervalIt->second))
+            interval = std::get<float>(intervalIt->second);
+        if (ImGui::DragFloat("Interval (s)", &interval, 0.05f, 0.01f, 60.0f))
+        {
+            node.properties["interval"] = interval;
+            notifyChanged();
+        }
+
+        // Random deviation
+        float deviation = 0.0f;
+        auto devIt = node.properties.find("randomDeviation");
+        if (devIt != node.properties.end() && std::holds_alternative<float>(devIt->second))
+            deviation = std::get<float>(devIt->second);
+        if (ImGui::DragFloat("Random Deviation (s)", &deviation, 0.05f, 0.0f, 60.0f))
+        {
+            node.properties["randomDeviation"] = deviation;
+            notifyChanged();
+        }
+
+        // Run on activation
+        bool runOnActivation = false;
+        auto runIt = node.properties.find("runOnActivation");
+        if (runIt != node.properties.end() && std::holds_alternative<bool>(runIt->second))
+            runOnActivation = std::get<bool>(runIt->second);
+        if (ImGui::Checkbox("Run On Activation", &runOnActivation))
+        {
+            node.properties["runOnActivation"] = runOnActivation;
+            notifyChanged();
+        }
+
+        ImGui::Separator();
+
+        // Service type
+        std::string typeStr = "EQSRefresh";
+        auto typeIt = node.properties.find("serviceType");
+        if (typeIt != node.properties.end() && std::holds_alternative<std::string>(typeIt->second))
+            typeStr = std::get<std::string>(typeIt->second);
+
+        static const std::array<const char*, 3> serviceTypes = {"EQSRefresh", "LineOfSightRefresh", "FocusUpdate"};
+        int currentType = 0;
+        for (int i = 0; i < static_cast<int>(serviceTypes.size()); ++i)
+        {
+            if (typeStr == serviceTypes[i]) { currentType = i; break; }
+        }
+        if (ImGui::Combo("Service Type", &currentType, serviceTypes.data(), static_cast<int>(serviceTypes.size())))
+        {
+            node.properties["serviceType"] = std::string(serviceTypes[currentType]);
+            notifyChanged();
+        }
+
+        const auto isVec3 = [](BlackboardValueType t) { return t == BlackboardValueType::Vec3; };
+        const auto isBool = [](BlackboardValueType t) { return t == BlackboardValueType::Bool; };
+        const auto isEntityOrVec3 = [](BlackboardValueType t)
+        { return t == BlackboardValueType::Entity || t == BlackboardValueType::Vec3; };
+
+        if (typeStr == "EQSRefresh")
+        {
+            std::string queryName;
+            auto qIt = node.properties.find("queryName");
+            if (qIt != node.properties.end() && std::holds_alternative<std::string>(qIt->second))
+                queryName = std::get<std::string>(qIt->second);
+            char queryBuf[128];
+            strncpy(queryBuf, queryName.c_str(), sizeof(queryBuf) - 1);
+            queryBuf[sizeof(queryBuf) - 1] = '\0';
+            if (ImGui::InputText("Query Name", queryBuf, sizeof(queryBuf)))
+            {
+                node.properties["queryName"] = std::string(queryBuf);
+                notifyChanged();
+            }
+            keyDropdown("Result Key", "resultKey", "eqsResult", isVec3);
+            ImGui::TextDisabled("Refreshes an EQS query on interval; best position -> result key");
+        }
+        else if (typeStr == "LineOfSightRefresh")
+        {
+            keyDropdown("Target Key", "targetKey", "target", isEntityOrVec3);
+            keyDropdown("Visibility Key", "visibilityKey", "targetVisible", isBool);
+
+            float maxDist = 50.0f;
+            auto distIt = node.properties.find("maxDistance");
+            if (distIt != node.properties.end() && std::holds_alternative<float>(distIt->second))
+                maxDist = std::get<float>(distIt->second);
+            if (ImGui::DragFloat("Max Distance", &maxDist, 1.0f, 0.0f, 500.0f))
+            {
+                node.properties["maxDistance"] = maxDist;
+                notifyChanged();
+            }
+
+            float eyeOffset = 1.6f;
+            auto eyeIt = node.properties.find("eyeOffset");
+            if (eyeIt != node.properties.end() && std::holds_alternative<float>(eyeIt->second))
+                eyeOffset = std::get<float>(eyeIt->second);
+            if (ImGui::DragFloat("Eye Offset", &eyeOffset, 0.1f, 0.0f, 10.0f))
+            {
+                node.properties["eyeOffset"] = eyeOffset;
+                notifyChanged();
+            }
+            ImGui::TextDisabled("Refreshes line-of-sight on interval; bool -> visibility key");
+        }
+        else if (typeStr == "FocusUpdate")
+        {
+            keyDropdown("Target Key", "targetKey", "target", isEntityOrVec3);
+            keyDropdown("Focus Key", "focusKey", "focusPoint", isVec3);
+            ImGui::TextDisabled("Writes the target's world position to the focus key on interval");
+        }
+
+        ImGui::Separator();
+        ImGui::TextDisabled("Runs while its branch is active; passes through to its single child");
     }
 }

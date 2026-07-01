@@ -161,6 +161,7 @@ namespace editor::graph
         if (isRootNode(type)) return IM_COL32(80, 80, 80, 255);
         if (isCompositeNode(type)) return IM_COL32(50, 80, 140, 255);
         if (isDecoratorNode(type)) return IM_COL32(160, 100, 40, 255);
+        if (isServiceNode(type)) return IM_COL32(120, 60, 150, 255);
         if (isTaskNode(type)) return IM_COL32(50, 120, 60, 255);
         return IM_COL32(100, 100, 100, 255);
     }
@@ -171,6 +172,7 @@ namespace editor::graph
         if (isRootNode(type)) return "Root";
         if (isCompositeNode(type)) return "Composite";
         if (isDecoratorNode(type)) return "Decorator";
+        if (isServiceNode(type)) return "Service";
         if (isTaskNode(type)) return "Task";
         return "Unknown";
     }
@@ -194,6 +196,13 @@ namespace editor::graph
 
         // Decorators can have only one child
         if (behaviortree::isDecoratorNode(sourceNode->type))
+        {
+            auto children = currentGraph->getChildren(sourceNodeId);
+            if (!children.empty()) return false;
+        }
+
+        // Services are single-child passthroughs (they are their own category, not decorators)
+        if (behaviortree::isServiceNode(sourceNode->type))
         {
             auto children = currentGraph->getChildren(sourceNodeId);
             if (!children.empty()) return false;

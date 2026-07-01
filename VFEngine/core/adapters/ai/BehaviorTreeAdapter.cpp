@@ -29,6 +29,22 @@ namespace core
         return path;
     }
 
+    template <typename T>
+    static T getServiceProp(const BTNode& node, const std::string& key, T defaultVal)
+    {
+        auto it = node.properties.find(key);
+        if (it != node.properties.end() && std::holds_alternative<T>(it->second))
+            return std::get<T>(it->second);
+        return defaultVal;
+    }
+
+    // Service EQS queries key off the node id so multiple EQS services on one entity don't collide;
+    // the "{entityId}:" prefix means cancelPendingEQSQueriesForEntity() still sweeps them.
+    static std::string eqsServiceKey(uint64_t entityId, uint32_t nodeId)
+    {
+        return std::to_string(entityId) + ":svc:" + std::to_string(nodeId);
+    }
+
     static void logValidationDiagnostics(const std::string& treePath,
                                          const behaviortree::validation::ValidationReport& report)
     {
@@ -160,6 +176,10 @@ namespace core
         {
             cleanupScriptInstances(entity.id, it->second.runtime->getTreeData());
         }
+        if (it->second.runtime)
+        {
+            it->second.runtime->endAllServices(this);
+        }
         cancelPendingEQSQueriesForEntity(entity.id);
 
         runtimes.erase(it);
@@ -169,7 +189,13 @@ namespace core
     {
         auto it = runtimes.find(entity.id);
         if (it != runtimes.end())
+        {
+            // A disabled runtime stops being ticked, so flush its services now (the end-of-tick
+            // diff can't run while it's not ticking).
+            if (!enabled && it->second.runtime)
+                it->second.runtime->endAllServices(this);
             it->second.enabled = enabled;
+        }
     }
 
     bool BehaviorTreeAdapter::hasTree(services::EntityHandle entity) const
@@ -286,6 +312,7 @@ namespace core
                     cleanupScriptInstances(entityId, instance.runtime->getTreeData());
                 }
                 cancelPendingEQSQueriesForEntity(entityId);
+                instance.runtime->endAllServices(this);
 
                 auto savedBlackboard = instance.runtime->getBlackboard().getAll();
                 services::EntityHandle owner = instance.runtime->getOwnerEntity();
@@ -392,7 +419,10 @@ namespace core
         for (auto& [_, instance] : runtimes)
         {
             if (instance.runtime)
+            {
+                instance.runtime->endAllServices(this);
                 instance.runtime->reset();
+            }
         }
         // Play session over: drop cached assets so the next session reloads from disk
         assetCache.clear();
@@ -563,31 +593,9 @@ namespace core
             return BTNodeStatus::Failure;
         }
 
-        auto& dispatcher = events::EventDispatcher::instance();
-
         if (isFirstTick)
         {
-            // Build EQS context from entity transform
-            eqs::EQSContext context;
-            context.querierEntityId = entity.id;
-
-            events::scene::GetWorldTransformQuery transformQuery;
-            transformQuery.entity = entity;
-            auto transformOpt = dispatcher.query(transformQuery);
-            if (transformOpt.has_value())
-            {
-                context.querierPosition = transformOpt->position;
-                // Derive forward from rotation (Y-axis euler rotation)
-                float yaw = glm::radians(transformOpt->rotation.y);
-                context.querierForward = glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw));
-            }
-
-            // Submit the EQS query
-            events::ai::SubmitEQSQueryCommand submitCmd;
-            submitCmd.queryName = queryName;
-            submitCmd.context = context;
-            auto handle = dispatcher.execute(submitCmd);
-
+            auto handle = submitEQS(entity, queryName);
             if (!handle.isValid())
             {
                 vfLogWarning("BT EnvironmentQuery: failed to submit query '{}' for entity {}", queryName, entity.id);
@@ -607,9 +615,7 @@ namespace core
             return BTNodeStatus::Failure;
         }
 
-        events::ai::GetEQSQueryResultQuery resultQuery;
-        resultQuery.handle = it->second;
-        eqs::EQSResult result = dispatcher.query(resultQuery);
+        eqs::EQSResult result = pollEQS(it->second);
 
         switch (result.status)
         {
@@ -660,9 +666,7 @@ namespace core
             auto it = pendingEQSQueries.find(eqsKey);
             if (it != pendingEQSQueries.end())
             {
-                events::ai::CancelEQSQueryCommand cancelCmd;
-                cancelCmd.handle = it->second;
-                dispatcher.execute(cancelCmd);
+                cancelEQS(it->second);
                 pendingEQSQueries.erase(it);
             }
             break;
@@ -691,52 +695,110 @@ namespace core
                                                           float eyeOffset,
                                                           Blackboard& blackboard)
     {
+        return computeLineOfSight(entity, targetKey, maxDistance, eyeOffset, blackboard)
+                   ? BTNodeStatus::Success
+                   : BTNodeStatus::Failure;
+    }
+
+    // === Shared sensing helpers (reused by task methods and built-in services) ===
+
+    eqs::EQSContext BehaviorTreeAdapter::buildEQSContext(services::EntityHandle entity) const
+    {
+        eqs::EQSContext context;
+        context.querierEntityId = entity.id;
+
+        events::scene::GetWorldTransformQuery transformQuery;
+        transformQuery.entity = entity;
+        auto transformOpt = events::EventDispatcher::instance().query(transformQuery);
+        if (transformOpt.has_value())
+        {
+            context.querierPosition = transformOpt->position;
+            // Derive forward from rotation (Y-axis euler rotation)
+            float yaw = glm::radians(transformOpt->rotation.y);
+            context.querierForward = glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw));
+        }
+        return context;
+    }
+
+    eqs::EQSQueryHandle BehaviorTreeAdapter::submitEQS(services::EntityHandle entity, const std::string& queryName) const
+    {
+        events::ai::SubmitEQSQueryCommand submitCmd;
+        submitCmd.queryName = queryName;
+        submitCmd.context = buildEQSContext(entity);
+        return events::EventDispatcher::instance().execute(submitCmd);
+    }
+
+    eqs::EQSResult BehaviorTreeAdapter::pollEQS(const eqs::EQSQueryHandle& handle) const
+    {
+        events::ai::GetEQSQueryResultQuery resultQuery;
+        resultQuery.handle = handle;
+        return events::EventDispatcher::instance().query(resultQuery);
+    }
+
+    void BehaviorTreeAdapter::cancelEQS(const eqs::EQSQueryHandle& handle) const
+    {
+        events::ai::CancelEQSQueryCommand cancelCmd;
+        cancelCmd.handle = handle;
+        events::EventDispatcher::instance().execute(cancelCmd);
+    }
+
+    std::optional<glm::vec3> BehaviorTreeAdapter::resolveTargetPosition(const std::string& targetKey,
+                                                                        Blackboard& blackboard,
+                                                                        float eyeOffset) const
+    {
+        if (!blackboard.has(targetKey))
+            return std::nullopt;
+
+        auto val = blackboard.get(targetKey);
+        if (std::holds_alternative<services::EntityHandle>(val))
+        {
+            events::scene::GetWorldTransformQuery targetTransformQuery;
+            targetTransformQuery.entity = std::get<services::EntityHandle>(val);
+            auto targetTransform = events::EventDispatcher::instance().query(targetTransformQuery);
+            if (!targetTransform.has_value())
+                return std::nullopt;
+            return targetTransform->position + glm::vec3(0.0f, eyeOffset, 0.0f);
+        }
+        if (std::holds_alternative<glm::vec3>(val))
+        {
+            return std::get<glm::vec3>(val);
+        }
+
+        vfLogWarning("BT: blackboard key '{}' is not Entity or Vec3", targetKey);
+        return std::nullopt;
+    }
+
+    bool BehaviorTreeAdapter::computeLineOfSight(services::EntityHandle entity,
+                                                 const std::string& targetKey,
+                                                 float maxDistance,
+                                                 float eyeOffset,
+                                                 Blackboard& blackboard) const
+    {
         if (!blackboard.has(targetKey))
         {
             vfLogWarning("BT LineOfSight: blackboard key '{}' not found", targetKey);
-            return BTNodeStatus::Failure;
+            return false;
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Get owner position
         events::scene::GetWorldTransformQuery ownerTransformQuery;
         ownerTransformQuery.entity = entity;
         auto ownerTransform = dispatcher.query(ownerTransformQuery);
         if (!ownerTransform.has_value())
-            return BTNodeStatus::Failure;
+            return false;
 
         glm::vec3 origin = ownerTransform->position + glm::vec3(0.0f, eyeOffset, 0.0f);
 
-        // Get target position from blackboard (Entity or Vec3)
-        glm::vec3 targetPos;
-        auto val = blackboard.get(targetKey);
+        auto targetPosOpt = resolveTargetPosition(targetKey, blackboard, eyeOffset);
+        if (!targetPosOpt.has_value())
+            return false;
 
-        if (std::holds_alternative<services::EntityHandle>(val))
-        {
-            auto targetEntity = std::get<services::EntityHandle>(val);
-            events::scene::GetWorldTransformQuery targetTransformQuery;
-            targetTransformQuery.entity = targetEntity;
-            auto targetTransform = dispatcher.query(targetTransformQuery);
-            if (!targetTransform.has_value())
-                return BTNodeStatus::Failure;
-            targetPos = targetTransform->position + glm::vec3(0.0f, eyeOffset, 0.0f);
-        }
-        else if (std::holds_alternative<glm::vec3>(val))
-        {
-            targetPos = std::get<glm::vec3>(val);
-        }
-        else
-        {
-            vfLogWarning("BT LineOfSight: key '{}' is not Entity or Vec3", targetKey);
-            return BTNodeStatus::Failure;
-        }
-
-        glm::vec3 toTarget = targetPos - origin;
+        glm::vec3 toTarget = *targetPosOpt - origin;
         float distance = glm::length(toTarget);
 
         if (distance > maxDistance || distance < 0.001f)
-            return BTNodeStatus::Failure;
+            return false;
 
         glm::vec3 direction = toTarget / distance;
 
@@ -748,10 +810,84 @@ namespace core
         auto hit = dispatcher.query(rayQuery);
 
         // If nothing was hit, or the hit is beyond the target, line of sight is clear
-        if (!hit.hit || hit.distance >= distance - 0.1f)
-            return BTNodeStatus::Success;
+        return !hit.hit || hit.distance >= distance - 0.1f;
+    }
 
-        // Something is blocking the view
-        return BTNodeStatus::Failure;
+    // === Service hooks (VK-1456) ===
+
+    void BehaviorTreeAdapter::onServiceTick(services::EntityHandle entity, const BTNode& node,
+                                            Blackboard& blackboard, float deltaTime)
+    {
+        (void)deltaTime;
+        const std::string serviceType = getServiceProp<std::string>(node, "serviceType", std::string("EQSRefresh"));
+
+        if (serviceType == "EQSRefresh")
+        {
+            const std::string queryName = getServiceProp<std::string>(node, "queryName", std::string{});
+            const std::string resultKey = getServiceProp<std::string>(node, "resultKey", std::string("eqsResult"));
+            if (queryName.empty())
+                return;
+
+            const std::string key = eqsServiceKey(entity.id, node.id);
+            auto it = pendingEQSQueries.find(key);
+            if (it != pendingEQSQueries.end())
+            {
+                eqs::EQSResult result = pollEQS(it->second);
+                if (result.status == eqs::EQSQueryStatus::Completed)
+                {
+                    if (result.hasResults())
+                        blackboard.set(resultKey, result.getBestPosition());
+                    pendingEQSQueries.erase(it);
+                }
+                else if (result.status == eqs::EQSQueryStatus::Failed)
+                {
+                    pendingEQSQueries.erase(it);
+                }
+                else
+                {
+                    return; // still in flight — wait for it before resubmitting
+                }
+            }
+
+            auto handle = submitEQS(entity, queryName);
+            if (handle.isValid())
+                pendingEQSQueries[key] = handle;
+        }
+        else if (serviceType == "LineOfSightRefresh")
+        {
+            const std::string targetKey = getServiceProp<std::string>(node, "targetKey", std::string("target"));
+            const std::string visibilityKey = getServiceProp<std::string>(node, "visibilityKey", std::string("targetVisible"));
+            const float maxDistance = getServiceProp<float>(node, "maxDistance", 50.0f);
+            const float eyeOffset = getServiceProp<float>(node, "eyeOffset", 1.6f);
+            const bool visible = computeLineOfSight(entity, targetKey, maxDistance, eyeOffset, blackboard);
+            blackboard.set(visibilityKey, visible);
+        }
+        else if (serviceType == "FocusUpdate")
+        {
+            const std::string targetKey = getServiceProp<std::string>(node, "targetKey", std::string("target"));
+            const std::string focusKey = getServiceProp<std::string>(node, "focusKey", std::string("focusPoint"));
+            auto pos = resolveTargetPosition(targetKey, blackboard, 0.0f);
+            if (pos.has_value())
+                blackboard.set(focusKey, *pos);
+        }
+    }
+
+    void BehaviorTreeAdapter::onServiceEnd(services::EntityHandle entity, const BTNode& node,
+                                           Blackboard& blackboard)
+    {
+        (void)blackboard;
+        // Only EQSRefresh holds in-flight async work to cancel. Sensory result keys are left intact
+        // so downstream logic keeps the last known value after the branch deactivates.
+        const std::string serviceType = getServiceProp<std::string>(node, "serviceType", std::string("EQSRefresh"));
+        if (serviceType != "EQSRefresh")
+            return;
+
+        const std::string key = eqsServiceKey(entity.id, node.id);
+        auto it = pendingEQSQueries.find(key);
+        if (it != pendingEQSQueries.end())
+        {
+            cancelEQS(it->second);
+            pendingEQSQueries.erase(it);
+        }
     }
 }

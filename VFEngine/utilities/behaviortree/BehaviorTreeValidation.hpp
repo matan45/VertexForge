@@ -170,6 +170,11 @@ namespace behaviortree::validation
             return level == "Info" || level == "Warn" || level == "Error";
         }
 
+        inline bool isValidServiceType(const std::string& type)
+        {
+            return type == "EQSRefresh" || type == "LineOfSightRefresh" || type == "FocusUpdate";
+        }
+
         inline void validateStringEnumProperty(ValidationReport& report,
                                                const BTNode& node,
                                                const std::string& key,
@@ -470,6 +475,19 @@ namespace behaviortree::validation
                         "Decorator node has more than one child; runtime uses the first child.");
                 }
             }
+            else if (isServiceNode(node.type))
+            {
+                if (childCount == 0)
+                {
+                    detail::add(report, Severity::Error, node.id,
+                        "Service node has no child.");
+                }
+                else if (childCount > 1)
+                {
+                    detail::add(report, Severity::Warning, node.id,
+                        "Service node has more than one child; runtime uses the first child.");
+                }
+            }
             else if (isTaskNode(node.type) && childCount > 0)
             {
                 detail::add(report, Severity::Warning, node.id,
@@ -563,6 +581,64 @@ namespace behaviortree::validation
                     detail::add(report, Severity::Warning, node.id, "ScriptTask has an empty scriptClassName.");
                 }
                 break;
+            case BTNodeType::Service:
+            {
+                float interval = 0.0f;
+                bool hasInterval = false;
+                {
+                    auto it = node.properties.find("interval");
+                    if (it != node.properties.end() && std::holds_alternative<float>(it->second))
+                    {
+                        interval = std::get<float>(it->second);
+                        hasInterval = true;
+                    }
+                }
+                if (!hasInterval)
+                {
+                    detail::add(report, Severity::Error, node.id, "Service node is missing a float 'interval' property.");
+                }
+                else if (interval <= 0.0f)
+                {
+                    detail::add(report, Severity::Error, node.id, "Service 'interval' must be greater than zero.");
+                }
+
+                float deviation = 0.0f;
+                {
+                    auto it = node.properties.find("randomDeviation");
+                    if (it != node.properties.end() && std::holds_alternative<float>(it->second))
+                        deviation = std::get<float>(it->second);
+                }
+                if (deviation < 0.0f)
+                {
+                    detail::add(report, Severity::Warning, node.id,
+                        "Service 'randomDeviation' is negative; runtime treats it as no deviation.");
+                }
+                else if (hasInterval && interval > 0.0f && deviation >= interval)
+                {
+                    detail::add(report, Severity::Warning, node.id,
+                        "Service 'randomDeviation' >= 'interval' can yield near-zero fire intervals.");
+                }
+
+                detail::validateStringEnumProperty(report, node, "serviceType", "Service", detail::isValidServiceType);
+
+                std::string serviceType;
+                detail::hasStringProperty(node, "serviceType", serviceType);
+                if (serviceType == "EQSRefresh")
+                {
+                    detail::validateReferencedKey(report, graph, node, "resultKey");
+                }
+                else if (serviceType == "LineOfSightRefresh")
+                {
+                    detail::validateReferencedKey(report, graph, node, "targetKey");
+                    detail::validateReferencedKey(report, graph, node, "visibilityKey");
+                }
+                else if (serviceType == "FocusUpdate")
+                {
+                    detail::validateReferencedKey(report, graph, node, "targetKey");
+                    detail::validateReferencedKey(report, graph, node, "focusKey");
+                }
+                break;
+            }
             default:
                 break;
             }

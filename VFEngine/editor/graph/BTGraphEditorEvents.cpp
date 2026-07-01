@@ -182,6 +182,12 @@ namespace editor::graph
                 ImGui::EndMenu();
             }
 
+            if (ImGui::BeginMenu("Services"))
+            {
+                if (ImGui::MenuItem("Service")) createNode(BTNodeType::Service, newNodePosition);
+                ImGui::EndMenu();
+            }
+
             ImGui::EndPopup();
         }
 
@@ -251,6 +257,14 @@ namespace editor::graph
             node.properties["targetKey"] = std::string("target");
             node.properties["maxDistance"] = 50.0f;
             node.properties["eyeOffset"] = 1.6f;
+            break;
+        case BTNodeType::Service:
+            node.properties["interval"] = 0.5f;
+            node.properties["randomDeviation"] = 0.0f;
+            node.properties["runOnActivation"] = false;
+            node.properties["serviceType"] = std::string("EQSRefresh");
+            node.properties["queryName"] = std::string("");
+            node.properties["resultKey"] = std::string("eqsResult");
             break;
         default:
             break;

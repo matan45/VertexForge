@@ -1,5 +1,8 @@
 ﻿#include "BehaviorTreeRuntime.hpp"
 #include <cmath>
+#include <vector>
+#include <algorithm>
+#include <cstdint>
 
 namespace behaviortree
 {
@@ -13,6 +16,8 @@ namespace behaviortree
             blackboard.initializeFromGraph(treeData->graph);
         }
         nodeStates.clear();
+        serviceStates.clear();
+        conditionCache.clear();
     }
 
     BTNodeStatus BehaviorTreeRuntime::tick(float deltaTime, IBTTaskExecutor* executor)
@@ -22,12 +27,25 @@ namespace behaviortree
             return BTNodeStatus::Failure;
         }
 
-        return tickNode(treeData->graph.rootNodeId, deltaTime, executor);
+        // Mark all services unvisited; tickService re-marks the ones reached this frame.
+        for (auto& [id, svc] : serviceStates)
+        {
+            svc.tickedThisFrame = false;
+        }
+
+        BTNodeStatus status = tickNode(treeData->graph.rootNodeId, deltaTime, executor);
+
+        // Any service not visited this frame left the active path -> fire onServiceEnd and drop it.
+        endInactiveServices(executor);
+
+        return status;
     }
 
     void BehaviorTreeRuntime::reset()
     {
         nodeStates.clear();
+        serviceStates.clear();
+        conditionCache.clear();
         if (treeData)
         {
             blackboard.initializeFromGraph(treeData->graph);
@@ -120,6 +138,23 @@ namespace behaviortree
         return compareBlackboardValues(blackboard.get(key), compareValIt->second, op) == BTNodeStatus::Success;
     }
 
+    bool BehaviorTreeRuntime::observeCondition(const BTNode& node)
+    {
+        // evaluateCondition depends only on immutable node props + the watched key's presence/value,
+        // and every blackboard change bumps that key's version, so memoizing by version is exact.
+        const uint64_t version = blackboard.getVersion(getNodeProperty<std::string>(node, "key", std::string{}));
+
+        auto it = conditionCache.find(node.id);
+        if (it != conditionCache.end() && it->second.version == version)
+        {
+            return it->second.result;
+        }
+
+        const bool result = evaluateCondition(node);
+        conditionCache[node.id] = ConditionCacheEntry{version, result};
+        return result;
+    }
+
     BTNodeRuntime& BehaviorTreeRuntime::getNodeState(uint32_t nodeId)
     {
         return nodeStates[nodeId];
@@ -154,6 +189,10 @@ namespace behaviortree
         else if (isDecoratorNode(node->type))
         {
             status = tickDecorator(*node, dt, executor);
+        }
+        else if (isServiceNode(node->type))
+        {
+            status = tickService(*node, dt, executor);
         }
         else
         {
@@ -215,7 +254,7 @@ namespace behaviortree
                     AbortMode mode = stringToAbortMode(
                         getNodeProperty<std::string>(*candidate, "abortMode", std::string("None")));
                     if (mode != AbortMode::LowerPriority && mode != AbortMode::Both) continue;
-                    if (!evaluateCondition(*candidate)) continue;
+                    if (!observeCondition(*candidate)) continue;
 
                     abortSubtree(children[state.currentChildIndex]->id, executor);
                     state.currentChildIndex = i;
@@ -393,7 +432,7 @@ namespace behaviortree
                 return tickNode(children[0]->id, dt, executor);
             }
 
-            if (!evaluateCondition(node))
+            if (!observeCondition(node))
             {
                 if (childRunning)
                 {
@@ -439,6 +478,138 @@ namespace behaviortree
         default:
             return BTNodeStatus::Failure;
         }
+    }
+
+    static uint64_t splitmix64(uint64_t x)
+    {
+        x += 0x9E3779B97F4A7C15ULL;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+        return x ^ (x >> 31);
+    }
+
+    float BehaviorTreeRuntime::computeServiceInterval(const BTNode& node, uint32_t fireCount) const
+    {
+        constexpr float minInterval = 0.001f;
+        const float base = getNodeProperty<float>(node, "interval", 0.5f);
+        const float deviation = getNodeProperty<float>(node, "randomDeviation", 0.0f);
+
+        if (deviation <= 0.0f)
+        {
+            return base < minInterval ? minInterval : base;
+        }
+
+        // Reproducible factor in [-1, 1) from (entity, node, fireCount): deterministic across runs.
+        uint64_t seed = splitmix64(ownerEntity.id);
+        seed = splitmix64(seed ^ (static_cast<uint64_t>(node.id) + 0x9E3779B97F4A7C15ULL));
+        seed = splitmix64(seed ^ static_cast<uint64_t>(fireCount));
+        const double unit = static_cast<double>(seed >> 11) * (1.0 / 9007199254740992.0); // [0,1)
+        const float factor = static_cast<float>(unit) * 2.0f - 1.0f;
+
+        const float interval = base + deviation * factor;
+        return interval < minInterval ? minInterval : interval;
+    }
+
+    BTNodeStatus BehaviorTreeRuntime::tickService(const BTNode& node, float dt, IBTTaskExecutor* executor)
+    {
+        auto children = treeData->graph.getChildren(node.id);
+        if (children.empty())
+        {
+            return BTNodeStatus::Failure;
+        }
+
+        const bool newlyActive = serviceStates.find(node.id) == serviceStates.end();
+        ServiceState& svc = serviceStates[node.id];
+        svc.tickedThisFrame = true;
+
+        if (newlyActive)
+        {
+            svc.accumulator = 0.0f;
+            svc.fireCount = 0;
+            svc.currentInterval = computeServiceInterval(node, 0);
+            if (executor)
+            {
+                executor->onServiceStart(ownerEntity, node, blackboard);
+            }
+
+            const bool runOnActivation = getNodeProperty<bool>(node, "runOnActivation", false);
+            if (runOnActivation)
+            {
+                if (executor)
+                {
+                    executor->onServiceTick(ownerEntity, node, blackboard, dt);
+                }
+                ++svc.fireCount;
+                svc.currentInterval = computeServiceInterval(node, svc.fireCount);
+            }
+        }
+
+        // The activation frame accumulates too, so the first scheduled fire lands one interval later.
+        svc.accumulator += dt;
+        while (svc.currentInterval > 0.0f && svc.accumulator >= svc.currentInterval)
+        {
+            svc.accumulator -= svc.currentInterval;
+            if (executor)
+            {
+                executor->onServiceTick(ownerEntity, node, blackboard, dt);
+            }
+            ++svc.fireCount;
+            svc.currentInterval = computeServiceInterval(node, svc.fireCount);
+        }
+
+        // Passthrough: service runs BEFORE its child, so a sensing service above a Selector feeds
+        // the reactive condition in the same frame.
+        return tickNode(children[0]->id, dt, executor);
+    }
+
+    void BehaviorTreeRuntime::endInactiveServices(IBTTaskExecutor* executor)
+    {
+        std::vector<uint32_t> ended;
+        for (const auto& [id, svc] : serviceStates)
+        {
+            if (!svc.tickedThisFrame)
+            {
+                ended.push_back(id);
+            }
+        }
+        std::sort(ended.begin(), ended.end()); // deterministic onServiceEnd order
+
+        for (uint32_t id : ended)
+        {
+            if (executor && treeData)
+            {
+                const BTNode* node = treeData->graph.findNodeById(id);
+                if (node)
+                {
+                    executor->onServiceEnd(ownerEntity, *node, blackboard);
+                }
+            }
+            serviceStates.erase(id);
+        }
+    }
+
+    void BehaviorTreeRuntime::endAllServices(IBTTaskExecutor* executor)
+    {
+        std::vector<uint32_t> ids;
+        ids.reserve(serviceStates.size());
+        for (const auto& [id, svc] : serviceStates)
+        {
+            ids.push_back(id);
+        }
+        std::sort(ids.begin(), ids.end());
+
+        for (uint32_t id : ids)
+        {
+            if (executor && treeData)
+            {
+                const BTNode* node = treeData->graph.findNodeById(id);
+                if (node)
+                {
+                    executor->onServiceEnd(ownerEntity, *node, blackboard);
+                }
+            }
+        }
+        serviceStates.clear();
     }
 
     BTNodeStatus BehaviorTreeRuntime::tickTask(const BTNode& node, float dt, IBTTaskExecutor* executor)

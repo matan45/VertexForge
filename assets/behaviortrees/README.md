@@ -5,7 +5,7 @@ Scripts they reference live in `assets/scripts/game/ai/` (run **Build Scripts** 
 
 | Tree | Behavior |
 |------|----------|
-| `Guard.vfBehaviorTree` | Order slot (move order preempts everything) → engage visible enemies → idle |
+| `Guard.vfBehaviorTree` | Service-driven sensing (EQS acquire + LoS visibility) → order slot / engage / idle |
 | `Patrol.vfBehaviorTree` | Walk patrolA↔patrolB, drop into Engage when an enemy is spotted |
 | `HarvesterLoop.vfBehaviorTree` | Gather/deposit loop, flees from enemies instead of fighting |
 | `Engage.vfBehaviorTree` | Shared chase+attack subtree (placeholder damage), referenced by Guard/Patrol |
@@ -18,6 +18,22 @@ Scripts they reference live in `assets/scripts/game/ai/` (run **Build Scripts** 
    `enemyName` blackboard default in the tree).
 4. Patrol/Harvester routes: edit the `patrolA`/`patrolB` / `resourcePos`/`homePos`
    blackboard defaults, or write them at runtime via `Blackboard.mt` natives.
+
+## Service-driven sensing (Guard.vfBehaviorTree)
+
+Guard's brain is headed by two **Service** nodes instead of a `Parallel + RepeatUntilFail`
+perception loop. A Service is a single-child passthrough that runs on an interval while its
+branch is active, so the sensing cost is decoupled from the tick rate:
+
+- `Acquire Target (EQS)` runs the `NearestEnemy` EQS query every ~0.25s and writes the best
+  position to `enemyPos` (author the query like you would a `.mt` script; a missing query is a
+  graceful no-op).
+- `Refresh Visibility (LoS)` raycasts toward `enemyPos` every ~0.25s and writes `enemyVisible`.
+
+Each write bumps the blackboard key's version, so the `Enemy Visible?` `BlackboardCondition`
+(abort mode `Both`) reacts the moment visibility changes — the sense→react loop with no polling
+task. Add more services (or a `FocusUpdate` service writing a focus point) by chaining them
+above the branch they should serve.
 
 ## Order-slot pattern (Guard.vfBehaviorTree)
 

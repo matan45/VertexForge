@@ -2,6 +2,7 @@
 #include <behaviortree/BehaviorTreeTypes.hpp>
 #include <behaviortree/BehaviorTreeRuntime.hpp>
 #include <behaviortree/BehaviorTreeAsset.hpp>
+#include <behaviortree/BehaviorTreeValidation.hpp>
 #include <behaviortree/Blackboard.hpp>
 #include <string>
 #include <vector>
@@ -566,6 +567,330 @@ TEST_CASE("SubTree expansion: missing reference fails") {
 TEST_CASE("Node classification: SubTree is a task (leaf)") {
     CHECK(behaviortree::isTaskNode(behaviortree::BTNodeType::SubTree) == true);
     CHECK(behaviortree::hasOutputPin(behaviortree::BTNodeType::SubTree) == false);
+}
+
+// ============================================================
+// VK-1456: reactive blackboard + branch-scoped services
+// ============================================================
+
+// ---- Blackboard key-change versioning ----
+
+TEST_CASE("Blackboard: version semantics") {
+    behaviortree::Blackboard bb;
+    CHECK(bb.getVersion("k") == 0); // absent -> 0
+
+    bb.set("k", 1.0f);
+    uint64_t v1 = bb.getVersion("k");
+    CHECK(v1 != 0);
+
+    // get() does not bump the version
+    (void)bb.get("k");
+    CHECK(bb.getVersion("k") == v1);
+
+    // set-to-same-value still bumps (no false negatives for observers)
+    bb.set("k", 1.0f);
+    uint64_t v2 = bb.getVersion("k");
+    CHECK(v2 > v1);
+
+    // remove drops the version back to 0 (absence is observable)
+    bb.remove("k");
+    CHECK(bb.getVersion("k") == 0);
+
+    bb.set("a", 1.0f);
+    bb.set("b", 2.0f);
+    bb.clear();
+    CHECK(bb.getVersion("a") == 0);
+    CHECK(bb.getVersion("b") == 0);
+}
+
+TEST_CASE("Blackboard: initializeFromGraph stamps non-zero versions") {
+    // Regression guard: a default key left present-with-version-0 would let a later remove()/clear()
+    // flip has() true->false without a version change, leaving a stale cached observer result.
+    behaviortree::BTGraph graph;
+    graph.blackboardKeys.push_back({"ok", behaviortree::BlackboardValueType::Bool, true});
+
+    behaviortree::Blackboard bb;
+    bb.initializeFromGraph(graph);
+    CHECK(bb.has("ok"));
+    CHECK(bb.getVersion("ok") != 0);
+
+    bb.remove("ok");
+    CHECK(bb.getVersion("ok") == 0);
+}
+
+TEST_CASE("BlackboardCondition Self: version-gated observation reacts to real changes only") {
+    behaviortree::BehaviorTreeRuntime runtime;
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeGuardedWaitTree("Self", true)), services::EntityHandle{});
+    AbortRecorder executor;
+
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
+    CHECK(executor.aborts.empty());
+
+    // Re-setting the same value bumps the version but the condition stays true: no spurious abort
+    runtime.getBlackboard().set("ok", true);
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
+    CHECK(executor.aborts.empty());
+
+    // A real change aborts exactly once
+    runtime.getBlackboard().set("ok", false);
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Failure);
+    REQUIRE(executor.aborts.size() == 1);
+
+    // Stable while unchanged: no repeated aborts
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Failure);
+    CHECK(executor.aborts.size() == 1);
+}
+
+// ---- Service nodes ----
+
+namespace {
+
+// Records service lifecycle calls; inherits the pure-virtual task impls + onAbort from AbortRecorder.
+struct ServiceRecorder : AbortRecorder {
+    std::vector<std::pair<uint32_t, std::string>> events;
+
+    void onServiceStart(services::EntityHandle, const behaviortree::BTNode& node, behaviortree::Blackboard&) override {
+        events.emplace_back(node.id, std::string("start"));
+    }
+    void onServiceTick(services::EntityHandle, const behaviortree::BTNode& node, behaviortree::Blackboard&, float) override {
+        events.emplace_back(node.id, std::string("tick"));
+    }
+    void onServiceEnd(services::EntityHandle, const behaviortree::BTNode& node, behaviortree::Blackboard&) override {
+        events.emplace_back(node.id, std::string("end"));
+    }
+
+    int count(const std::string& kind) const {
+        int c = 0;
+        for (const auto& e : events) if (e.second == kind) ++c;
+        return c;
+    }
+};
+
+behaviortree::BTNode makeServiceNode(uint32_t id, const std::string& serviceType,
+                                     float interval, float deviation, bool runOnActivation) {
+    auto node = makeBTNode(id, behaviortree::BTNodeType::Service);
+    node.properties["serviceType"] = serviceType;
+    node.properties["interval"] = interval;
+    node.properties["randomDeviation"] = deviation;
+    node.properties["runOnActivation"] = runOnActivation;
+    return node;
+}
+
+// root(1) -> service(2) -> wait(3, effectively forever)
+behaviortree::BehaviorTreeData makeServiceTree(float interval, float deviation, bool runOnActivation) {
+    behaviortree::BehaviorTreeData data;
+    data.name = "ServiceTree";
+    data.graph.rootNodeId = 1;
+    data.graph.nodes.push_back(makeBTNode(1, behaviortree::BTNodeType::Root));
+    data.graph.nodes.push_back(makeServiceNode(2, "EQSRefresh", interval, deviation, runOnActivation));
+    data.graph.nodes.push_back(makeWaitNode(3, 1000.0f));
+    linkBTNodes(data.graph, 1, 2, 0);
+    linkBTNodes(data.graph, 2, 3, 0);
+    finalizeGraphIds(data.graph);
+    return data;
+}
+
+} // namespace
+
+TEST_CASE("Node classification: Service is its own category with an output pin") {
+    using namespace behaviortree;
+    CHECK(isServiceNode(BTNodeType::Service));
+    CHECK_FALSE(isTaskNode(BTNodeType::Service));
+    CHECK_FALSE(isDecoratorNode(BTNodeType::Service));
+    CHECK_FALSE(isCompositeNode(BTNodeType::Service));
+    CHECK(hasOutputPin(BTNodeType::Service)); // not a task -> keeps a child pin
+    CHECK(std::string(nodeTypeToString(BTNodeType::Service)) == "Service");
+    CHECK(stringToNodeType("Service") == BTNodeType::Service);
+}
+
+TEST_CASE("Service: fires at a deterministic fixed interval while its branch is active") {
+    behaviortree::BehaviorTreeRuntime runtime;
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeServiceTree(0.5f, 0.0f, false)), services::EntityHandle{});
+    ServiceRecorder executor;
+
+    // 20 ticks of 0.1s -> fires at cumulative 0.5/1.0/1.5/2.0 = 4 fires (runOnActivation off)
+    for (int i = 0; i < 20; ++i)
+        CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
+
+    CHECK(executor.count("start") == 1);
+    CHECK(executor.count("tick") == 4);
+    CHECK(executor.count("end") == 0); // still active (child never completes)
+}
+
+TEST_CASE("Service: runOnActivation fires immediately, otherwise first fire is after one interval") {
+    SUBCASE("runOnActivation = true") {
+        behaviortree::BehaviorTreeRuntime runtime;
+        runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeServiceTree(0.5f, 0.0f, true)), services::EntityHandle{});
+        ServiceRecorder executor;
+        runtime.tick(0.1f, &executor); // activation frame
+        CHECK(executor.count("start") == 1);
+        CHECK(executor.count("tick") == 1);
+    }
+    SUBCASE("runOnActivation = false") {
+        behaviortree::BehaviorTreeRuntime runtime;
+        runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeServiceTree(0.5f, 0.0f, false)), services::EntityHandle{});
+        ServiceRecorder executor;
+        for (int i = 0; i < 4; ++i) runtime.tick(0.1f, &executor); // cumulative 0.4 < 0.5
+        CHECK(executor.count("tick") == 0);
+        runtime.tick(0.1f, &executor); // cumulative 0.5 -> first fire
+        CHECK(executor.count("tick") == 1);
+    }
+}
+
+TEST_CASE("Service: interval sequence is deterministic across runtimes with the same ids") {
+    auto data = std::make_shared<const behaviortree::BehaviorTreeData>(makeServiceTree(0.5f, 0.2f, false));
+    behaviortree::BehaviorTreeRuntime ra, rb;
+    ra.init(data, services::EntityHandle{7});
+    rb.init(data, services::EntityHandle{7});
+    ServiceRecorder a, b;
+
+    // Lockstep: identical (entity id, node id) -> identical fire timing every tick
+    for (int i = 0; i < 50; ++i) {
+        ra.tick(0.1f, &a);
+        rb.tick(0.1f, &b);
+        CHECK(a.count("tick") == b.count("tick"));
+    }
+    CHECK(a.count("tick") > 0);
+}
+
+TEST_CASE("Service: stops with onServiceEnd exactly once when its branch self-aborts") {
+    // root(1) -> condition(2,"go",Self) -> service(3) -> wait(4, forever)
+    behaviortree::BehaviorTreeData data;
+    data.name = "SelfAbortService";
+    data.graph.rootNodeId = 1;
+    data.graph.nodes.push_back(makeBTNode(1, behaviortree::BTNodeType::Root));
+    data.graph.nodes.push_back(makeConditionNode(2, "go", "Self"));
+    data.graph.nodes.push_back(makeServiceNode(3, "EQSRefresh", 0.5f, 0.0f, true));
+    data.graph.nodes.push_back(makeWaitNode(4, 1000.0f));
+    linkBTNodes(data.graph, 1, 2, 0);
+    linkBTNodes(data.graph, 2, 3, 0);
+    linkBTNodes(data.graph, 3, 4, 0);
+    data.graph.blackboardKeys.push_back({"go", behaviortree::BlackboardValueType::Bool, true});
+    finalizeGraphIds(data.graph);
+
+    behaviortree::BehaviorTreeRuntime runtime;
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(std::move(data)), services::EntityHandle{});
+    ServiceRecorder executor;
+
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
+    CHECK(executor.count("start") == 1);
+    CHECK(executor.count("end") == 0);
+
+    runtime.getBlackboard().set("go", false);
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Failure);
+    CHECK(executor.count("end") == 1); // deactivated the same frame the branch was aborted
+
+    // No further start/end churn
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Failure);
+    CHECK(executor.count("start") == 1);
+    CHECK(executor.count("end") == 1);
+}
+
+TEST_CASE("Service: deactivates the first frame after its Sequence branch advances") {
+    // root(1) -> sequence(2) -> [ service(3)->wait(4, short), wait(5, forever) ]
+    behaviortree::BehaviorTreeData data;
+    data.name = "SequenceAdvanceService";
+    data.graph.rootNodeId = 1;
+    data.graph.nodes.push_back(makeBTNode(1, behaviortree::BTNodeType::Root));
+    data.graph.nodes.push_back(makeBTNode(2, behaviortree::BTNodeType::Sequence));
+    data.graph.nodes.push_back(makeServiceNode(3, "EQSRefresh", 0.5f, 0.0f, false));
+    data.graph.nodes.push_back(makeWaitNode(4, 0.05f));
+    data.graph.nodes.push_back(makeWaitNode(5, 1000.0f));
+    linkBTNodes(data.graph, 1, 2, 0);
+    linkBTNodes(data.graph, 2, 3, 0);
+    linkBTNodes(data.graph, 2, 5, 1);
+    linkBTNodes(data.graph, 3, 4, 0);
+    finalizeGraphIds(data.graph);
+
+    behaviortree::BehaviorTreeRuntime runtime;
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(std::move(data)), services::EntityHandle{});
+    ServiceRecorder executor;
+
+    // Frame 1: wait(4) completes -> sequence advances to wait(5); service was still visited this frame
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
+    CHECK(executor.count("start") == 1);
+    CHECK(executor.count("end") == 0);
+
+    // Frame 2: service branch no longer visited -> ends on the first not-visited frame
+    CHECK(runtime.tick(0.1f, &executor) == behaviortree::BTNodeStatus::Running);
+    CHECK(executor.count("end") == 1);
+}
+
+TEST_CASE("Service: endAllServices flushes active services (detach/reset path)") {
+    behaviortree::BehaviorTreeRuntime runtime;
+    runtime.init(std::make_shared<behaviortree::BehaviorTreeData>(makeServiceTree(0.5f, 0.0f, true)), services::EntityHandle{});
+    ServiceRecorder executor;
+
+    runtime.tick(0.1f, &executor);
+    CHECK(executor.count("start") == 1);
+    CHECK(executor.count("end") == 0);
+
+    runtime.endAllServices(&executor);
+    CHECK(executor.count("end") == 1);
+
+    // Idempotent: nothing left to end
+    runtime.endAllServices(&executor);
+    CHECK(executor.count("end") == 1);
+}
+
+// ---- Service validation ----
+
+namespace {
+
+behaviortree::BehaviorTreeData makeServiceValidationTree(const behaviortree::BTNode& service, bool withChild) {
+    behaviortree::BehaviorTreeData data;
+    data.graph.rootNodeId = 1;
+    data.graph.nodes.push_back(makeBTNode(1, behaviortree::BTNodeType::Root));
+    data.graph.nodes.push_back(service);
+    linkBTNodes(data.graph, 1, service.id, 0);
+    if (withChild) {
+        data.graph.nodes.push_back(makeWaitNode(3, 1.0f));
+        linkBTNodes(data.graph, service.id, 3, 0);
+    }
+    data.graph.blackboardKeys.push_back({"eqsResult", behaviortree::BlackboardValueType::Vec3, glm::vec3{0.0f}});
+    finalizeGraphIds(data.graph);
+    return data;
+}
+
+} // namespace
+
+TEST_CASE("Validation: Service node rules") {
+    using namespace behaviortree;
+
+    SUBCASE("valid service passes") {
+        auto svc = makeServiceNode(2, "EQSRefresh", 0.5f, 0.0f, false);
+        svc.properties["resultKey"] = std::string("eqsResult");
+        auto report = validation::validateBehaviorTree(makeServiceValidationTree(svc, true));
+        CHECK_FALSE(report.hasErrors());
+    }
+
+    SUBCASE("no child is an error") {
+        auto svc = makeServiceNode(2, "EQSRefresh", 0.5f, 0.0f, false);
+        svc.properties["resultKey"] = std::string("eqsResult");
+        auto report = validation::validateBehaviorTree(makeServiceValidationTree(svc, false));
+        CHECK(report.hasErrors());
+    }
+
+    SUBCASE("non-positive interval is an error") {
+        auto svc = makeServiceNode(2, "EQSRefresh", 0.0f, 0.0f, false);
+        svc.properties["resultKey"] = std::string("eqsResult");
+        auto report = validation::validateBehaviorTree(makeServiceValidationTree(svc, true));
+        CHECK(report.hasErrors());
+    }
+
+    SUBCASE("unknown service type is a warning") {
+        auto svc = makeServiceNode(2, "Bogus", 0.5f, 0.0f, false);
+        auto report = validation::validateBehaviorTree(makeServiceValidationTree(svc, true));
+        CHECK(report.warningCount() > 0);
+    }
+
+    SUBCASE("deviation >= interval is a warning") {
+        auto svc = makeServiceNode(2, "EQSRefresh", 0.5f, 0.5f, false);
+        svc.properties["resultKey"] = std::string("eqsResult");
+        auto report = validation::validateBehaviorTree(makeServiceValidationTree(svc, true));
+        CHECK_FALSE(report.hasErrors());
+        CHECK(report.warningCount() > 0);
+    }
 }
 
 } // TEST_SUITE

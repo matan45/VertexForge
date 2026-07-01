@@ -5,6 +5,7 @@ namespace behaviortree
     void Blackboard::set(const std::string& key, const BlackboardValue& value)
     {
         values[key] = value;
+        keyVersions[key] = ++globalVersion;
     }
 
     BlackboardValue Blackboard::get(const std::string& key) const
@@ -24,12 +25,24 @@ namespace behaviortree
 
     void Blackboard::remove(const std::string& key)
     {
-        values.erase(key);
+        if (values.erase(key) > 0)
+        {
+            keyVersions.erase(key);
+            ++globalVersion;
+        }
     }
 
     void Blackboard::clear()
     {
         values.clear();
+        keyVersions.clear();
+        ++globalVersion;
+    }
+
+    uint64_t Blackboard::getVersion(const std::string& key) const
+    {
+        auto it = keyVersions.find(key);
+        return it != keyVersions.end() ? it->second : 0;
     }
 
     void Blackboard::initializeFromGraph(const BTGraph& graph)
@@ -37,7 +50,10 @@ namespace behaviortree
         clear();
         for (const auto& keyDef : graph.blackboardKeys)
         {
-            values[keyDef.name] = keyDef.defaultValue;
+            // Route through set() so each default key is stamped with a non-zero version. A key left
+            // present-with-version-0 would let a later remove()/clear() flip has() true->false without
+            // a version change, leaving a stale cached observer result. (VK-1456 correctness invariant.)
+            set(keyDef.name, keyDef.defaultValue);
         }
     }
 

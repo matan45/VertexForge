@@ -35,7 +35,11 @@ namespace behaviortree
         ScriptTask,
         EnvironmentQuery,
         LineOfSight,
-        SubTree
+        SubTree,
+
+        // Branch-scoped service (VK-1456): a single-child passthrough that runs periodic service
+        // logic (EQS/perception refresh) while its branch is on the active tick path.
+        Service
     };
 
     enum class BTNodeStatus : uint8_t
@@ -158,6 +162,7 @@ namespace behaviortree
     bool isDecoratorNode(BTNodeType type);
     bool isTaskNode(BTNodeType type);
     bool isRootNode(BTNodeType type);
+    bool isServiceNode(BTNodeType type);
     bool hasOutputPin(BTNodeType type);
 
     const char* nodeTypeToString(BTNodeType type);

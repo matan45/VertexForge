@@ -82,6 +82,13 @@ namespace core
 
         void onAbort(services::EntityHandle entity, const behaviortree::BTNode& node) override;
 
+        // Service hooks (VK-1456): dispatch on the node's "serviceType" property. onServiceStart uses
+        // the base no-op — the built-ins need no start-time setup.
+        void onServiceTick(services::EntityHandle entity, const behaviortree::BTNode& node,
+                           behaviortree::Blackboard& blackboard, float deltaTime) override;
+        void onServiceEnd(services::EntityHandle entity, const behaviortree::BTNode& node,
+                          behaviortree::Blackboard& blackboard) override;
+
     private:
         struct RuntimeInstance
         {
@@ -139,5 +146,18 @@ namespace core
         void captureDebugSnapshot(const behaviortree::BehaviorTreeRuntime& runtime);
         void cleanupScriptInstances(uint64_t entityId, const behaviortree::BehaviorTreeData& treeData);
         void cancelPendingEQSQueriesForEntity(uint64_t entityId);
+
+        // Shared sensing delegation, reused by both the task methods and the built-in services so the
+        // task behavior stays identical.
+        eqs::EQSContext buildEQSContext(services::EntityHandle entity) const;
+        eqs::EQSQueryHandle submitEQS(services::EntityHandle entity, const std::string& queryName) const;
+        eqs::EQSResult pollEQS(const eqs::EQSQueryHandle& handle) const;
+        void cancelEQS(const eqs::EQSQueryHandle& handle) const;
+        std::optional<glm::vec3> resolveTargetPosition(const std::string& targetKey,
+                                                       behaviortree::Blackboard& blackboard,
+                                                       float eyeOffset) const;
+        bool computeLineOfSight(services::EntityHandle entity, const std::string& targetKey,
+                                float maxDistance, float eyeOffset,
+                                behaviortree::Blackboard& blackboard) const;
     };
 }

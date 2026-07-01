@@ -32,6 +32,7 @@ namespace editor::windows
         void drawBlackboardConditionProperties(behaviortree::BTNode& node, const behaviortree::BTGraph* graph);
         void drawEnvironmentQueryProperties(behaviortree::BTNode& node, const behaviortree::BTGraph* graph);
         void drawSubTreeProperties(behaviortree::BTNode& node);
+        void drawServiceProperties(behaviortree::BTNode& node, const behaviortree::BTGraph* graph);
 
         void notifyChanged();
     };

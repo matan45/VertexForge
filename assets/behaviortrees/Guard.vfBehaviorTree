@@ -6,82 +6,83 @@
         { "id": 1, "type": "Root", "name": "Root", "position": [500.0, 50.0] },
         {
             "id": 2,
-            "type": "Parallel",
-            "name": "Brain",
-            "position": [500.0, 180.0],
-            "properties": { "policy": "RequireAll" }
-        },
-        { "id": 3, "type": "RepeatUntilFail", "name": "Perception Loop", "position": [250.0, 320.0] },
-        { "id": 4, "type": "Succeeder", "name": "Never Fail", "position": [250.0, 440.0] },
-        { "id": 5, "type": "Sequence", "name": "Sense", "position": [250.0, 560.0] },
-        {
-            "id": 6,
-            "type": "ScriptTask",
-            "name": "Find Nearest Enemy",
-            "position": [150.0, 690.0],
-            "scriptPath": "game/ai/FindNearestEnemy.mt",
-            "scriptClassName": "FindNearestEnemy"
+            "type": "Service",
+            "name": "Acquire Target (EQS)",
+            "position": [500.0, 170.0],
+            "properties": {
+                "serviceType": "EQSRefresh",
+                "interval": 0.25,
+                "randomDeviation": 0.05,
+                "runOnActivation": true,
+                "queryName": "NearestEnemy",
+                "resultKey": "enemyPos"
+            }
         },
         {
-            "id": 7,
-            "type": "Wait",
-            "name": "Sense Interval",
-            "position": [360.0, 690.0],
-            "properties": { "duration": 0.25 }
+            "id": 3,
+            "type": "Service",
+            "name": "Refresh Visibility (LoS)",
+            "position": [500.0, 290.0],
+            "properties": {
+                "serviceType": "LineOfSightRefresh",
+                "interval": 0.25,
+                "randomDeviation": 0.05,
+                "runOnActivation": true,
+                "targetKey": "enemyPos",
+                "visibilityKey": "enemyVisible",
+                "maxDistance": 25.0,
+                "eyeOffset": 1.6
+            }
         },
-        { "id": 8, "type": "Selector", "name": "Decide", "position": [800.0, 320.0] },
+        { "id": 8, "type": "Selector", "name": "Decide", "position": [500.0, 410.0] },
         {
             "id": 9,
             "type": "BlackboardCondition",
             "name": "Has Order?",
-            "position": [620.0, 460.0],
+            "position": [280.0, 540.0],
             "properties": { "key": "hasOrder", "compareOp": "==", "compareValue": true, "abortMode": "Both" }
         },
-        { "id": 10, "type": "Sequence", "name": "Execute Order", "position": [620.0, 590.0] },
+        { "id": 10, "type": "Sequence", "name": "Execute Order", "position": [280.0, 670.0] },
         {
             "id": 11,
             "type": "MoveTo",
             "name": "Move To Order",
-            "position": [540.0, 720.0],
+            "position": [200.0, 800.0],
             "properties": { "targetKey": "orderPos", "arrivalDistance": 1.5 }
         },
         {
             "id": 12,
             "type": "SetBlackboardValue",
             "name": "Clear Order",
-            "position": [720.0, 720.0],
+            "position": [380.0, 800.0],
             "properties": { "key": "hasOrder", "value": false }
         },
         {
             "id": 13,
             "type": "BlackboardCondition",
             "name": "Enemy Visible?",
-            "position": [880.0, 460.0],
+            "position": [560.0, 540.0],
             "properties": { "key": "enemyVisible", "compareOp": "==", "compareValue": true, "abortMode": "Both" }
         },
         {
             "id": 14,
             "type": "SubTree",
             "name": "Engage",
-            "position": [880.0, 590.0],
+            "position": [560.0, 670.0],
             "properties": { "treePath": "assets/behaviortrees/Engage.vfBehaviorTree" }
         },
         {
             "id": 15,
             "type": "Wait",
             "name": "Idle",
-            "position": [1080.0, 460.0],
+            "position": [800.0, 540.0],
             "properties": { "duration": 1.0 }
         }
     ],
     "links": [
         { "id": 1, "source": 1, "target": 2, "sortOrder": 0 },
         { "id": 2, "source": 2, "target": 3, "sortOrder": 0 },
-        { "id": 3, "source": 2, "target": 8, "sortOrder": 1 },
-        { "id": 4, "source": 3, "target": 4, "sortOrder": 0 },
-        { "id": 5, "source": 4, "target": 5, "sortOrder": 0 },
-        { "id": 6, "source": 5, "target": 6, "sortOrder": 0 },
-        { "id": 7, "source": 5, "target": 7, "sortOrder": 1 },
+        { "id": 3, "source": 3, "target": 8, "sortOrder": 0 },
         { "id": 8, "source": 8, "target": 9, "sortOrder": 0 },
         { "id": 9, "source": 8, "target": 13, "sortOrder": 1 },
         { "id": 10, "source": 8, "target": 15, "sortOrder": 2 },
