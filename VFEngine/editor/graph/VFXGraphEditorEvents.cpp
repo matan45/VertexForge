@@ -487,14 +487,14 @@ namespace editor::graph
         if (onGraphChanged) onGraphChanged();
     }
 
-    void VFXGraphEditor::addShapeNode(vfx::ShapeType shapeType, const std::string& name)
+    void VFXGraphEditor::addShapeNode()
     {
         vfx::VFXNode newNode;
         newNode.id = currentGraph->nextNodeId++;
         newNode.type = vfx::VFXNodeType::Shape;
-        newNode.name = name;
+        newNode.name = "Shape";
         newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-        initializeShapeProperties(newNode, shapeType);
+        initializeShapeProperties(newNode, vfx::ShapeType::Point);
         currentGraph->nodes.push_back(std::move(newNode));
         if (onGraphChanged) onGraphChanged();
     }
@@ -537,15 +537,7 @@ namespace editor::graph
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Shapes"))
-            {
-                if (ImGui::MenuItem("Point")) addShapeNode(vfx::ShapeType::Point, "Point");
-                if (ImGui::MenuItem("Sphere")) addShapeNode(vfx::ShapeType::Sphere, "Sphere");
-                if (ImGui::MenuItem("Cone")) addShapeNode(vfx::ShapeType::Cone, "Cone");
-                if (ImGui::MenuItem("Box")) addShapeNode(vfx::ShapeType::Box, "Box");
-                if (ImGui::MenuItem("Torus")) addShapeNode(vfx::ShapeType::Torus, "Torus");
-                ImGui::EndMenu();
-            }
+            if (ImGui::MenuItem("Shape")) addShapeNode();
 
             ImGui::EndPopup();
         }
