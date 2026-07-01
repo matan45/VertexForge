@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engine Research"
+  short_description: "Trace VertexForge engine architecture"
+  default_prompt: "Use $engine-research to investigate this VertexForge engine change before planning."

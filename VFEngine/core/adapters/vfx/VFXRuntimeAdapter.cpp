@@ -13,6 +13,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include "print/Log.hpp"
+#include "asset/AssetDatabase.hpp"  // VK-1460: canonicalize AssetSaved paths for config-cache invalidation
 
 namespace core
 {
@@ -178,7 +179,13 @@ namespace core
             }
             for (const auto& path : invalidations)
             {
-                renderer->invalidateConfigCache(path);
+                // VK-1460: the config cache is keyed by the spawn path (vfxRef.resolve() =
+                // canonical getPath(guid)), but AssetSaved carries the editor's raw save
+                // path. Canonicalize to the same form (resolveAssetPath is idempotent) so
+                // the erase actually matches — otherwise edited effects keep rendering the
+                // stale config until the scene is reloaded.
+                renderer->invalidateConfigCache(
+                    asset::AssetDatabase::instance().resolveAssetPath(path));
             }
 
             updateSceneColliders();

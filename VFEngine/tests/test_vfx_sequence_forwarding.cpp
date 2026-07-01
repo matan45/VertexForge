@@ -52,6 +52,7 @@ namespace
             bool autoDestroy = false;
             glm::mat4 worldTransform{1.0f};
             uint32_t seed = 0; // VK-1451 deterministic child seed
+            bool poolable = false; // VK-1460 — combo children must never opt into pooling
         };
 
         std::vector<CreateRecord> creates;
@@ -75,7 +76,8 @@ namespace
                 {
                     VFXInstanceId id = nextId++;
                     creates.push_back({id, c.params.vfxAssetPath, c.params.loop,
-                                       c.params.autoDestroy, c.params.worldTransform, c.params.seed});
+                                       c.params.autoDestroy, c.params.worldTransform, c.params.seed,
+                                       c.params.poolable});
                     live.insert(id);
                     return id;
                 });
@@ -644,6 +646,38 @@ TEST_SUITE("VFXSequenceForwarding")
         CHECK(mock.creates[1].seed == vfx::VFXComboTimeline::deriveSeed(12345u, 1));
         CHECK(mock.creates[0].seed != mock.creates[1].seed);
         CHECK(mock.creates[0].seed != 0u);
+    }
+
+    // -------- VK-1460: combo children never opt into the dormant instance pool --------
+    TEST_CASE("spawned combo children are created non-poolable (VK-1460)")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        // A non-looping (autoDestroy), no-socket, non-camera-relative step is exactly the
+        // shape that USED to opt into renderer pooling. Combo children must NOT, because a
+        // combo retains the child id across frames and the pool re-issues ids with no
+        // generation tag (cross-combo aliasing). Assert poolable is false despite that shape.
+        vfx::VFXSequenceData data;
+        data.name = "nopool";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF0D0, "assets/vfx/np.vfVFX");
+        s.startTime = 0.0f;
+        s.loop = false;    // autoDestroy == true
+        s.socketName = ""; // no socket
+        data.steps.push_back(s);
+
+        std::string path = saveSequence("Combo_NoPool.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+        svc.update(0.1f);
+
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].autoDestroy == true); // the former pooling precondition holds
+        CHECK(mock.creates[0].poolable == false);   // ...yet the child is not poolable
     }
 
     // -------- pause halts spawns; resume re-enables them --------

@@ -289,6 +289,12 @@ TEST_SUITE("VFXSequenceRuntimeFoundation")
         saved.filePath = sequencePath;
         ::events::EventDispatcher::instance().publish(saved);
 
+        // VK-1460: AssetSaved now QUEUES the invalidation; update() applies it on the update
+        // thread so sequenceCache/childCache are never mutated concurrently with spawnStep
+        // reads. Pump one update to flush the pending invalidation before the next createCombo
+        // reads the cache (in the real runtime an update() always runs between save and spawn).
+        svc.update(0.0f);
+
         const auto combo2 = svc.createCombo(sequencePath, glm::mat4(1.0f), 0, false);
         REQUIRE(combo2 != 0);
         svc.playCombo(combo2);
@@ -310,6 +316,7 @@ TEST_SUITE("VFXSequenceRuntimeFoundation")
         REQUIRE(vfx::VFXSequenceAsset::save(singleStepSequence(refA), missingPath));
         saved.filePath = missingPath;
         ::events::EventDispatcher::instance().publish(saved);
+        svc.update(0.0f); // VK-1460: flush the deferred negative-cache invalidation
         CHECK(svc.createCombo(missingPath, glm::mat4(1.0f), 0, false) != 0);
     }
 

@@ -204,6 +204,8 @@ namespace vfx
 
         VFXPropertyValue deserializePropertyValue(const json& j, VFXPropertyType type)
         {
+            try
+            {
             switch (type)
             {
             case VFXPropertyType::Float:
@@ -259,6 +261,13 @@ namespace vfx
                 return gradient;
             }
             default:
+                return 0.0f;
+            }
+            }
+            catch (const json::exception&)
+            {
+                // Match VFXAsset::deserializePropertyValue — a single malformed value
+                // defaults to 0.0f instead of failing the entire sequence load.
                 return 0.0f;
             }
         }

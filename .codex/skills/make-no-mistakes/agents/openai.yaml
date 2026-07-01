@@ -1,0 +1,4 @@
+interface:
+  display_name: "Make No Mistakes"
+  short_description: "Extra rigor and source verification"
+  default_prompt: "Use $make-no-mistakes for this task and verify each important claim against source."

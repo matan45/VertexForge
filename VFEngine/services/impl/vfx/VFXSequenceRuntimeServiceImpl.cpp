@@ -161,7 +161,11 @@ namespace services
         assetSavedToken = dispatcher.subscribe<::events::resource::AssetSavedNotification>(
             [this](const ::events::resource::AssetSavedNotification& n)
             {
-                invalidateSequence(n.filePath);
+                // VK-1460: this fires on the publishing (editor) thread. Do NOT touch the
+                // cache maps here — just queue the path and let update() invalidate on the
+                // update thread, where spawnStep reads them (see pendingSequenceInvalidations).
+                std::lock_guard<std::mutex> lock(sequenceInvalidationMutex);
+                pendingSequenceInvalidations.push_back(n.filePath);
             });
     }
 
@@ -411,10 +415,15 @@ namespace services
         createCmd.params.priority = VFXEmitterPriority::Normal;
         createCmd.params.cameraRelative = false;
         createCmd.params.seed = combo.timeline.derivedSeed(stepIndex); // VK-1451 deterministic child seed
-        // VK-1453 — fire-and-forget children opt into renderer-side instance pooling
-        // (autoDestroy && no socket && not camera-relative).
-        createCmd.params.poolable = createCmd.params.autoDestroy && step.def->socketName.empty() &&
-                                    !createCmd.params.cameraRelative;
+        // VK-1460: combo children must NOT use the renderer's dormant instance pool. A combo
+        // retains step.childId across frames and later drives/reaps/destroys it, but the pool
+        // re-issues the same instance id to a new owner (VFXHandlePool has no generation tag),
+        // so a revived id would be driven/destroyed by the wrong combo (teleport / early
+        // vanish / leaked combo). Fresh ids are monotonic (VFXSceneRenderer nextInstanceId++),
+        // so a non-poolable child gets a unique, never-reused id and the aliasing is
+        // structurally impossible. Fire-and-forget spawns (VFX.spawnAt) keep pooling — they
+        // never retain the id, which is the pool's intended "fire-and-forget only" use.
+        createCmd.params.poolable = false;
 
         const VFXInstanceId childId = dispatcher.execute(createCmd);
         if (childId == 0)
@@ -767,6 +776,20 @@ namespace services
 
     void VFXSequenceRuntimeServiceImpl::update(float deltaTime)
     {
+        // VK-1460: apply AssetSaved invalidations queued from the editor thread here, on the
+        // update thread, so sequenceCache/childCache are only mutated where spawnStep reads
+        // them. Drained before the empty-combos early-out so a later createCombo sees a
+        // fresh cache. Mirrors VFXRuntimeAdapter::update.
+        {
+            std::vector<std::string> invalidations;
+            {
+                std::lock_guard<std::mutex> lock(sequenceInvalidationMutex);
+                invalidations.swap(pendingSequenceInvalidations);
+            }
+            for (const auto& p : invalidations)
+                invalidateSequence(p);
+        }
+
         if (combos.empty())
             return;
 

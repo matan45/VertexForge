@@ -247,6 +247,14 @@ namespace services
                 cmd.lod2Distance = vfxLOD.lod2Distance;
                 cmd.transitionZone = vfxLOD.transitionZone;
                 disp.execute(cmd);
+
+                // VK-1460: also drive the scalability quality tier from the render
+                // preset (mirrors the LOD forwarding above). Without this the
+                // SetVFXQualityTierCommand handler is never invoked and currentTier
+                // stays permanently High regardless of the selected preset.
+                events::vfxruntime::SetVFXQualityTierCommand tierCmd;
+                tierCmd.tier = settings.vfxQualityTier;
+                disp.execute(tierCmd);
             });
     }
 

@@ -383,6 +383,57 @@ TEST_SUITE("VFXSequenceAsset")
         CHECK(loaded.steps[1].vfxRef.toHexString() == "ffffffff22223333");
     }
 
+    TEST_CASE("a malformed override value defaults instead of failing the whole load (VK-1460)")
+    {
+        resetSequenceTestRoot();
+
+        // Build a valid step carrying a single Vec3 override, save it (so the typed-override
+        // format + type string come from the codec itself), then corrupt ONLY that override's
+        // value into a wrong-shaped array of strings. The Vec3 branch passes the
+        // is_array()/size()>=3 gate but throws on element .get<float>().
+        vfx::VFXSequenceData data;
+        data.version = vfx::VFX_SEQUENCE_FORMAT_VERSION;
+        data.uuid = "malformed-override";
+        data.name = "MalformedOverride";
+        {
+            vfx::VFXSequenceStep step;
+            step.vfxRef = asset::AssetRef::fromHexString("00000000aaaa1111");
+            step.label = "step0";
+            step.overrides.push_back(vfx::VFXParamOverride{"myVec", glm::vec3(1.0f, 2.0f, 3.0f)});
+            data.steps.push_back(step);
+        }
+
+        const fs::path path = sequenceTestRoot() / "MalformedOverride.vfVFXSequence";
+        REQUIRE(vfx::VFXSequenceAsset::save(data, path.string()));
+
+        json j;
+        {
+            std::ifstream in(path);
+            REQUIRE(in.is_open());
+            in >> j;
+        }
+        REQUIRE(j["steps"].is_array());
+        REQUIRE(j["steps"][0]["overrides"].is_array());
+        REQUIRE(j["steps"][0]["overrides"][0].is_array());
+        j["steps"][0]["overrides"][0][2] = json::array({"x", "y", "z"}); // was [1,2,3]
+        {
+            std::ofstream out(path);
+            REQUIRE(out.is_open());
+            out << j.dump(4);
+        }
+
+        // Before VK-1460 the json::exception escaped to the file-level catch and load()
+        // returned nullopt — the ENTIRE sequence failed over one bad value. Now the value
+        // defaults (matching VFXAsset::deserializePropertyValue -> 0.0f) and the step loads.
+        auto loadedOpt = vfx::VFXSequenceAsset::load(path.string());
+        REQUIRE(loadedOpt.has_value());
+        REQUIRE(loadedOpt->steps.size() == 1);
+        REQUIRE(loadedOpt->steps[0].overrides.size() == 1);
+        CHECK(loadedOpt->steps[0].overrides[0].name == "myVec");
+        CHECK(std::holds_alternative<float>(loadedOpt->steps[0].overrides[0].value));
+        CHECK(std::get<float>(loadedOpt->steps[0].overrides[0].value) == doctest::Approx(0.0f));
+    }
+
     TEST_CASE("load of a non-existent path returns nullopt")
     {
         resetSequenceTestRoot();

@@ -40,7 +40,31 @@ namespace controllers
 
         gpuBufferManager->clearParticleBufferIfNeeded(cmd);
         gpuBufferManager->uploadStateBuffer(cmd);
-        gpuBufferManager->clearDrawCommands(cmd);
+
+        // VK-1460: selective draw-command clear (replaces the wholesale per-frame clear).
+        // Each emitter's draw command points at its persistent per-emitter particle region
+        // and is only (re)written by the compute dispatch; a temporally-throttled emitter
+        // skips dispatch on off-frames, so zeroing the whole buffer would blank it -> flicker.
+        // Keep the command for every emitter that should still be visible (active, in-frustum,
+        // not distance-culled -- whether it dispatches this frame or is throttle-skipped) and
+        // only zero slots that transitioned to hidden (culled/inactive) since last frame.
+        {
+            std::unordered_set<uint32_t> keepSlots;
+            for (const auto& [id, instance] : instances)
+            {
+                if (!instance.gpuDriven || !instance.active)
+                    continue;
+                if (!isEmitterInFrustum(instance) || isEmitterDistanceCulled(instance))
+                    continue;
+                keepSlots.insert(instance.gpuEmitterIndex);
+            }
+            for (uint32_t slot : liveDrawSlots)
+            {
+                if (keepSlots.find(slot) == keepSlots.end())
+                    gpuBufferManager->clearDrawCommand(cmd, slot);
+            }
+            liveDrawSlots = std::move(keepSlots);
+        }
 
         gpuComputePipeline->insertTransferToTransferBarrier(
             cmd, gpuBufferManager->getStateBuffer()
@@ -188,6 +212,13 @@ namespace controllers
                 if (sub.parentId == parentId && !sub.finished)
                     parentSubCount++;
             }
+
+            // VK-1460: restore dev behavior — suppress BOTH the sub-emitter spawn and the
+            // VFXParticleEventNotification when there is no sub-VFX path or the per-parent
+            // cap is reached (dev `continue`d in both cases). Publishing past the cap
+            // spammed subscribed gameplay/script listeners every frame.
+            if (vfxPath.empty() || parentSubCount >= MAX_SUB_EMITTERS_PER_PARENT)
+                continue;
 
             if (!vfxPath.empty() && parentSubCount < MAX_SUB_EMITTERS_PER_PARENT)
             {

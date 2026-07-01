@@ -1,0 +1,4 @@
+interface:
+  display_name: "C++ Pro"
+  short_description: "Modern C++ implementation and review"
+  default_prompt: "Use $cpp-pro to implement or review modern C++ code."

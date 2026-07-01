@@ -1037,7 +1037,11 @@ namespace windows
             services::applyToPreviewParams(ps.params, services::toEmitterOverrides(step.overrides));
 
             ps.localTransform = vfx::VFXComboTimeline::composeStepLocal(step);
-            ps.seed = vfx::VFXComboTimeline::deriveSeed(comboSeed, static_cast<int>(desc.steps.size()));
+            // Seed by the SOURCE step index i, not the compacted output count, so a
+            // skipped (invalid/empty) earlier step doesn't desync the preview from the
+            // runtime, which seeds via combo.timeline.derivedSeed(stepIndex) over the
+            // 1:1 combo.steps built from data->steps.
+            ps.seed = vfx::VFXComboTimeline::deriveSeed(comboSeed, static_cast<int>(i));
             ps.startTime = step.startTime;
             ps.duration = step.duration;
             ps.loop = step.loop;

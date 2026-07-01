@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <cstdint>
 #include <string>
@@ -135,6 +136,12 @@ namespace controllers
 
         std::unordered_map<VFXInstanceId, VFXRuntimeInstance> instances;
         std::unordered_map<uint32_t, VFXInstanceId> emitterIndexToInstanceId;
+
+        // VK-1460: emitter slots whose draw command was left live last frame. Used by the
+        // selective draw-command clear in recordComputeCommands so a temporally-throttled
+        // emitter keeps its (persistent, per-emitter) command on frames it skips dispatch,
+        // while slots that transitioned to hidden (culled/inactive) are zeroed.
+        std::unordered_set<uint32_t> liveDrawSlots;
 
         // VK-1453 (Phase 4) — parsed-config cache (skip re-reading .vfVFX on repeat
         // spawns) + dormant fire-and-forget instance pool for cheap reuse.

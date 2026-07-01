@@ -394,6 +394,11 @@ namespace controllers
         {
             instance.particleSystem = std::make_unique<render::vfx::VFXParticleSystem>();
             instance.particleSystem->setEmitterConfig(instance.config);
+            // VK-1460: apply the stable per-instance seed on the CPU fallback too (the
+            // GPU path already feeds instance.seed via toGPUConfig). Without this,
+            // spawnComboSeeded / explicit seeds are non-deterministic for CPU-simulated
+            // effects — setSeed was otherwise only called in the preview controller.
+            instance.particleSystem->setSeed(instance.seed);
             instance.active = false;
         }
     }
