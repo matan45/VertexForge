@@ -33,7 +33,7 @@ public class Navmesh {
     // Rate limited: max 50 path queries per frame
     public static function findPath(Vec3f start, Vec3f end): Vec3f[] {
         float[] raw = _native_navmesh_findPath(start.x, start.y, start.z, end.x, end.y, end.z);
-        int count = toInt(raw[0]);
+        int count = (int)raw[0];
         if (count <= 0) {
             return new Vec3f[0];
         }
@@ -99,7 +99,7 @@ public class Navmesh {
 
     public static function getGroupCorridor(int groupId): Vec3f[] {
         float[] raw = _native_navmesh_getGroupCorridor(groupId);
-        int count = toInt(raw[0]);
+        int count = (int)raw[0];
         Vec3f[] points = new Vec3f[count];
         for (int i = 0; i < count; i = i + 1) {
             int base = 1 + i * 3;
