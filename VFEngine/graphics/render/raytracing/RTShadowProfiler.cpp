@@ -1,4 +1,5 @@
 #include "RTShadowProfiler.hpp"
+#include "RTShadowBudget.hpp"
 #include "../../core/Device.hpp"
 #include "../../../utilities/print/Log.hpp"
 #include <algorithm>
@@ -48,8 +49,15 @@ namespace render::raytracing
         uint32_t prevFI = (frameIndex + core::MAX_FRAMES_IN_FLIGHT - 1) % core::MAX_FRAMES_IN_FLIGHT;
         if (!frameSlotReady[prevFI]) return;
 
+        // VK-1479 C5: read exactly the original six directional + AS-build slots (0..5). The
+        // shared query pool now also holds the spot/point slots (6..11), which are unwritten
+        // whenever spot/point RT is inactive (the default); capping the read here keeps those
+        // unavailable queries from making this non-blocking read return VK_NOT_READY. This branch
+        // is byte-identical to pre-C5 behavior.
         std::vector<uint64_t> timestamps;
-        if (!queryPool.readResults(logicalDevice, prevFI, timestamps)) return;
+        if (!queryPool.readResults(logicalDevice, prevFI, timestamps,
+                                   RTShadowTimestamp::BeforeSpotDispatch))
+            return;
 
         // Ray dispatch timing
         float rayMs = queryPool.toMilliseconds(
@@ -61,11 +69,8 @@ namespace render::raytracing
             timestamps[RTShadowTimestamp::AfterRayDispatch],
             timestamps[RTShadowTimestamp::AfterDenoiser]);
 
-        float totalMs = rayMs + denoiserMs;
-
         updateEMA(rayMs, emaRayMs);
         updateEMA(denoiserMs, emaDenoiserMs);
-        updateEMA(totalMs, emaTotalMs);
 
         // BLAS/TLAS build timing (only when builds occurred)
         if (blasBuiltThisFrame)
@@ -82,6 +87,45 @@ namespace render::raytracing
                 timestamps[RTShadowTimestamp::AfterTLASBuild]);
             updateEMA(tlasMs, emaTlasBuildMs);
         }
+
+        // VK-1479 C5: additively fold in the spot/point trace+denoise cost so the adaptive budget
+        // sees the full RT-shadow bill. Only attempted when spot/point RT is active — the default
+        // path does zero extra reads and totalMs stays directional-only (byte-identical). A slot's
+        // availability implies its pass ran last frame (reset-but-unwritten queries stay
+        // unavailable), so a successful prefix read is itself the gate on the EMA update.
+        // Limitation: prefix-only reads can't isolate point from spot, so point cost is folded only
+        // when spot RT also ran that frame (otherwise it is conservatively omitted — never
+        // over-counted). See the note in dispatchRTPointShadow / the C5 handoff.
+        float spotMs = 0.0f;
+        float pointMs = 0.0f;
+        if (spotActive || pointActive)
+        {
+            std::vector<uint64_t> ext;
+            if (queryPool.readResults(logicalDevice, prevFI, ext, RTShadowTimestamp::Count))
+            {
+                // Slots 0..11 all available: both spot and point ran last frame.
+                spotMs = queryPool.toMilliseconds(
+                    ext[RTShadowTimestamp::BeforeSpotDispatch],
+                    ext[RTShadowTimestamp::AfterSpotDenoiser]);
+                pointMs = queryPool.toMilliseconds(
+                    ext[RTShadowTimestamp::BeforePointDispatch],
+                    ext[RTShadowTimestamp::AfterPointDenoiser]);
+                updateEMA(spotMs, emaSpotMs);
+                updateEMA(pointMs, emaPointMs);
+            }
+            else if (queryPool.readResults(logicalDevice, prevFI, ext,
+                                           RTShadowTimestamp::BeforePointDispatch))
+            {
+                // Slots 0..8 available: spot ran, point did not (or its slots aren't ready).
+                spotMs = queryPool.toMilliseconds(
+                    ext[RTShadowTimestamp::BeforeSpotDispatch],
+                    ext[RTShadowTimestamp::AfterSpotDenoiser]);
+                updateEMA(spotMs, emaSpotMs);
+            }
+        }
+
+        float totalMs = rayMs + denoiserMs + spotMs + pointMs;
+        updateEMA(totalMs, emaTotalMs);
 
         emaInitialized = true;
 
@@ -119,58 +163,48 @@ namespace render::raytracing
 
         if (!adaptiveEnabled || !emaInitialized) return action;
 
-        // Throttle down: reduce quality when over budget for sustained period
-        if (consecutiveOverBudget >= HYSTERESIS_FRAMES_DOWN)
-        {
-            if (appliedSpatialPasses > 1)
-            {
-                action.newSpatialPasses = appliedSpatialPasses - 1;
-            }
-            else if (appliedMaxRayDistance > baseMaxRayDistance * 0.25f)
-            {
-                action.newMaxRayDistance = appliedMaxRayDistance * 0.75f;
-            }
-            else
-            {
-                action.skipFrame = true;
-            }
-            consecutiveOverBudget = 0; // Reset after taking action
-        }
-        // Restore quality when under budget for sustained period
-        else if (consecutiveUnderBudget >= HYSTERESIS_FRAMES_UP)
-        {
-            if (skipNextFrame)
-            {
-                action.skipFrame = false;
-            }
-            else if (appliedMaxRayDistance < baseMaxRayDistance)
-            {
-                float step = (baseMaxRayDistance - appliedMaxRayDistance) * 0.1f;
-                action.newMaxRayDistance = appliedMaxRayDistance + std::max(step, 10.0f);
-                if (action.newMaxRayDistance.value() > baseMaxRayDistance)
-                    action.newMaxRayDistance = baseMaxRayDistance;
-            }
-            else if (appliedSpatialPasses < baseSpatialPasses)
-            {
-                action.newSpatialPasses = appliedSpatialPasses + 1;
-            }
-            consecutiveUnderBudget = 0; // Reset after taking action
-        }
+        // VK-1479 C5: the degrade/upgrade decision is now the pure, CPU-testable evaluateBudgetCore
+        // (validated by test_rt_shadow_budget). This method only marshals current state in, applies
+        // the result, and translates it to the AdaptiveAction the caller consumes.
+        BudgetInputs in{};
+        in.adaptiveEnabled = adaptiveEnabled;
+        in.emaInitialized = emaInitialized;
+        in.emaTotalMs = emaTotalMs;
+        in.budgetMs = budgetMs;
+        in.restoreThreshold = RESTORE_THRESHOLD;
+        in.framesOverBudget = consecutiveOverBudget;
+        in.framesUnderBudget = consecutiveUnderBudget;
+        in.hysteresisFramesDown = HYSTERESIS_FRAMES_DOWN;
+        in.hysteresisFramesUp = HYSTERESIS_FRAMES_UP;
+        in.baseMaxRayDistance = baseMaxRayDistance;
+        in.appliedMaxRayDistance = appliedMaxRayDistance;
+        in.baseSpatialPasses = baseSpatialPasses;
+        in.appliedSpatialPasses = appliedSpatialPasses;
+        in.spotActive = spotActive;
+        in.baseSpotBudget = baseSpotBudget;
+        in.appliedSpotBudget = appliedSpotBudget;
+        in.pointActive = pointActive;
+        in.basePointBudget = basePointBudget;
+        in.appliedPointBudget = appliedPointBudget;
+        in.skipActive = skipNextFrame;
 
-        // Update applied state so next evaluation uses current values
-        if (action.newMaxRayDistance.has_value())
-            appliedMaxRayDistance = action.newMaxRayDistance.value();
-        if (action.newSpatialPasses.has_value())
-            appliedSpatialPasses = action.newSpatialPasses.value();
-        if (action.skipFrame)
-            skipNextFrame = true;
-        else if (skipNextFrame && !action.skipFrame)
-            skipNextFrame = false;
+        BudgetDecision d = evaluateBudgetCore(in);
 
-        throttled = (appliedMaxRayDistance < baseMaxRayDistance ||
-                     appliedSpatialPasses < baseSpatialPasses ||
-                     skipNextFrame);
+        // Write applied state back so the next evaluation uses current values.
+        appliedMaxRayDistance = d.appliedMaxRayDistance;
+        appliedSpatialPasses = d.appliedSpatialPasses;
+        appliedSpotBudget = d.appliedSpotBudget;
+        appliedPointBudget = d.appliedPointBudget;
+        skipNextFrame = d.skipActive;
+        throttled = d.throttled;
+        consecutiveOverBudget = d.framesOverBudget;
+        consecutiveUnderBudget = d.framesUnderBudget;
 
+        action.newMaxRayDistance = d.newMaxRayDistance;
+        action.newSpatialPasses = d.newSpatialPasses;
+        action.newSpotBudget = d.newSpotBudget;
+        action.newPointBudget = d.newPointBudget;
+        action.skipFrame = d.skipFrame;
         return action;
     }
 
@@ -193,6 +227,16 @@ namespace render::raytracing
         budgetMs = settings.budgetMs;
         adaptiveEnabled = settings.adaptiveBudgetEnabled;
         asMemoryBudgetBytes = settings.asMemoryBudgetMB * 1024.0f * 1024.0f;
+
+        // VK-1479 C5: capture the RT spot/point light-count budgets so the adaptive path can shrink
+        // them when RT shadows blow the frame budget. Applied resets to base on a settings change,
+        // mirroring how setBaseSettings resets the directional applied values.
+        spotActive = settings.spotEnabled;
+        pointActive = settings.pointEnabled;
+        baseSpotBudget = settings.spotBudget;
+        basePointBudget = settings.pointBudget;
+        appliedSpotBudget = settings.spotBudget;
+        appliedPointBudget = settings.pointBudget;
     }
 
     types::RTShadowStats RTShadowProfiler::getStats(const ASMemoryBudget& asBudget) const

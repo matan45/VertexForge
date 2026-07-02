@@ -355,22 +355,15 @@ namespace render::shadow
             uint32_t pagesY = ld->vsmPagesY;
             uint32_t ptOffset = ld->vsmPageTableOffset;
 
-            if (ld->type == ShadowMapType::PointCube)
+            // C8: point-cube faces and directional clipmap levels share the SAME tall-block layout —
+            // pagesPerUnit x pagesPerUnit per face/level, with cascadeIndex selecting the face/level.
+            // (Spot uses the pagesX/pagesY set above.)
+            if (ld->type == ShadowMapType::PointCube || ld->type == ShadowMapType::Directional)
             {
-                // Each face gets pagesPerFace x pagesPerFace pages
-                uint32_t pagesPerFace = ld->vsmPagesX;
-                pagesX = pagesPerFace;
-                pagesY = pagesPerFace;
-                ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * pagesPerFace * pagesPerFace;
-            }
-            else if (ld->type == ShadowMapType::Directional)
-            {
-                // Each clipmap level gets pagesPerLevel x pagesPerLevel pages in the tall
-                // block; cascadeIndex selects the level (mirrors the point-light layout).
-                uint32_t pagesPerLevel = ld->vsmPagesX;
-                pagesX = pagesPerLevel;
-                pagesY = pagesPerLevel;
-                ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * pagesPerLevel * pagesPerLevel;
+                uint32_t pagesPerUnit = ld->vsmPagesX;
+                pagesX = pagesPerUnit;
+                pagesY = pagesPerUnit;
+                ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * pagesPerUnit * pagesPerUnit;
             }
 
             gpu.pageTableInfo = glm::ivec4(

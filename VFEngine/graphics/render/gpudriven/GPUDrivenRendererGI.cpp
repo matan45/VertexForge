@@ -1370,7 +1370,13 @@ namespace render::gpudriven
         glm::vec3 camPos = glm::vec3(camData.cameraPosition);
 
         // Pick the closest/brightest spot lights, assign mask slices; reassigned slices reset history.
-        std::vector<uint32_t> reassigned = lightBufferManager->assignRTSpotSlices(camPos, rtSpotShadowBudget);
+        // C5: honor the adaptive spot budget (the profiler shrinks it under sustained RT load).
+        // getAppliedSpotBudget() falls back to the base budget when adaptive throttling is off, so
+        // this is inert unless the budget evaluator actually engaged this frame.
+        uint32_t spotBudget = rtSpotShadowBudget;
+        if (rtShadowProfiler)
+            spotBudget = std::min<uint32_t>(spotBudget, rtShadowProfiler->getAppliedSpotBudget());
+        std::vector<uint32_t> reassigned = lightBufferManager->assignRTSpotSlices(camPos, spotBudget);
 
         const auto& sliceLights = lightBufferManager->getRTSpotSliceLights();
         const auto& sliceValid = lightBufferManager->getRTSpotSliceValid();
@@ -1404,6 +1410,17 @@ namespace render::gpudriven
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
         auto [tw, th] = rtShadowTraceDims(w, h);
 
+        // VK-1479 C5: time the spot RT-shadow trace+denoise into the shared profiler pool (slots
+        // 6..8) so its cost feeds the adaptive budget. Mirrors the directional path in
+        // dispatchRTShadow; the profiler folds these in additively without disturbing the
+        // directional readback.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::BeforeSpotDispatch,
+                vk::PipelineStageFlagBits::eComputeShader);
+        }
+
         rtSpotShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
             depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
@@ -1412,6 +1429,13 @@ namespace render::gpudriven
             tw, th, dispatchList,
             useDenoiser, // skip final transitions when the denoiser consumes the raw mask
             fi);
+
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterSpotDispatch,
+                vk::PipelineStageFlagBits::eComputeShader);
+        }
 
         if (useDenoiser)
         {
@@ -1435,6 +1459,15 @@ namespace render::gpudriven
             if (rtShadowHalfResolution && rtSpotShadowUpsample && rtSpotShadowUpsample->isInitialized())
                 upsampleLayeredRTShadow(cmd, *rtSpotShadowUpsample, *rtSpotShadowDenoiser,
                                         dispatchList, tw, th, w, h, fi);
+        }
+
+        // VK-1479 C5: close the spot trace+denoise span (slot 8). Written unconditionally — like the
+        // directional AfterDenoiser — so the span is valid whether or not the denoiser ran.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterSpotDenoiser,
+                vk::PipelineStageFlagBits::eComputeShader);
         }
     }
 
@@ -1580,7 +1613,11 @@ namespace render::gpudriven
         glm::vec3 camPos = glm::vec3(camData.cameraPosition);
 
         // Pick the closest/brightest point lights, assign mask slices; reassigned slices reset history.
-        std::vector<uint32_t> reassigned = lightBufferManager->assignRTPointSlices(camPos, rtPointShadowBudget);
+        // C5: honor the adaptive point budget (inert unless the profiler shrank it this frame).
+        uint32_t pointBudget = rtPointShadowBudget;
+        if (rtShadowProfiler)
+            pointBudget = std::min<uint32_t>(pointBudget, rtShadowProfiler->getAppliedPointBudget());
+        std::vector<uint32_t> reassigned = lightBufferManager->assignRTPointSlices(camPos, pointBudget);
 
         const auto& sliceLights = lightBufferManager->getRTPointSliceLights();
         const auto& sliceValid = lightBufferManager->getRTPointSliceValid();
@@ -1615,6 +1652,17 @@ namespace render::gpudriven
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
         auto [tw, th] = rtShadowTraceDims(w, h);
 
+        // VK-1479 C5: time the point RT-shadow trace+denoise into the shared profiler pool (slots
+        // 9..11). Because the shared query pool only supports prefix reads, the profiler folds
+        // point cost into the adaptive budget only when spot RT also ran that frame; otherwise the
+        // point cost is conservatively omitted (never over-counted). See RTShadowProfiler.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::BeforePointDispatch,
+                vk::PipelineStageFlagBits::eComputeShader);
+        }
+
         rtPointShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
             depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
@@ -1623,6 +1671,13 @@ namespace render::gpudriven
             tw, th, dispatchList,
             useDenoiser, // skip final transitions when the denoiser consumes the raw mask
             fi);
+
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterPointDispatch,
+                vk::PipelineStageFlagBits::eComputeShader);
+        }
 
         if (useDenoiser)
         {
@@ -1645,6 +1700,14 @@ namespace render::gpudriven
             if (rtShadowHalfResolution && rtPointShadowUpsample && rtPointShadowUpsample->isInitialized())
                 upsampleLayeredRTShadow(cmd, *rtPointShadowUpsample, *rtPointShadowDenoiser,
                                         dispatchList, tw, th, w, h, fi);
+        }
+
+        // VK-1479 C5: close the point trace+denoise span (slot 11), written unconditionally.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterPointDenoiser,
+                vk::PipelineStageFlagBits::eComputeShader);
         }
     }
 
