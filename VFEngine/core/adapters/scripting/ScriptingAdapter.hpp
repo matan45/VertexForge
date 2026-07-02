@@ -157,5 +157,15 @@ namespace core
 
         std::string extractClassName(const std::string& scriptPath);
         std::string getLibraryPath(const std::string& manifestPath) const;
+
+        // VK-1458 OOP layer: true when className's inheritance chain reaches
+        // the script-side Behaviour base class.
+        bool classExtendsBehaviour(const std::string& className) const;
+
+        // Writes the instance's entity id into Behaviour.vfEntityId (gated on
+        // classExtendsBehaviour). Called after createObject and again after a
+        // @Saveable state restore, which would otherwise clobber the live id
+        // with a stale persisted one.
+        void injectBehaviourEntityId(uint64_t instanceId);
     };
 }

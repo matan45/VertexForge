@@ -26,7 +26,7 @@ public class VolumetricNav {
     // Returns Vec3f[] of waypoints, empty array if no path found
     public static function findPath3D(Vec3f start, Vec3f end): Vec3f[] {
         float[] raw = _native_volumetric_findPath3D(start.x, start.y, start.z, end.x, end.y, end.z);
-        int count = toInt(raw[0]);
+        int count = (int)raw[0];
         if (count <= 0) {
             return new Vec3f[0];
         }

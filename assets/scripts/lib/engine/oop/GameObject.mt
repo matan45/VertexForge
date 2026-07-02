@@ -59,8 +59,8 @@ public class GameObject {
 
     public static function findAll(string name): GameObject[] {
         int[] ids = Entity::findAll(name);
-        GameObject[] objects = new GameObject[ids.length()];
-        for (int i = 0; i < ids.length(); i = i + 1) {
+        GameObject[] objects = new GameObject[ids.length];
+        for (int i = 0; i < ids.length; i = i + 1) {
             objects[i] = new GameObject(ids[i]);
         }
         return objects;
@@ -129,8 +129,8 @@ public class GameObject {
 
     public function children(): GameObject[] {
         int[] ids = Entity::getChildren(this.id);
-        GameObject[] objects = new GameObject[ids.length()];
-        for (int i = 0; i < ids.length(); i = i + 1) {
+        GameObject[] objects = new GameObject[ids.length];
+        for (int i = 0; i < ids.length; i = i + 1) {
             objects[i] = new GameObject(ids[i]);
         }
         return objects;

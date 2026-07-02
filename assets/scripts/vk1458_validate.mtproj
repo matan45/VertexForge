@@ -1,9 +1,0 @@
-<Project Name="VK1458Validate" Version="1.0.0">
-  <Source>
-    <Include>game/examples/**/*.mt</Include>
-  </Source>
-  <Output Directory="compiled_vk1458_validate" />
-  <Imports>
-    <SearchPath>lib</SearchPath>
-  </Imports>
-</Project>

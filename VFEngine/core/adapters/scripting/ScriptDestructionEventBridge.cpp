@@ -30,7 +30,8 @@ namespace core
 
                 auto interfaceIt = instanceToInterfaces.find(instanceId);
                 if (interfaceIt == instanceToInterfaces.end() ||
-                    interfaceIt->second.find(kDestructionListener) == interfaceIt->second.end())
+                    interfaceIt->second.find(ScriptDestructionEventBridge::kDestructionListener)
+                        == interfaceIt->second.end())
                     continue;
 
                 auto objIt = instanceToObject.find(instanceId);
