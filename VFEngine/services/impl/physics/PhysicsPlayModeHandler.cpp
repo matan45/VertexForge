@@ -52,6 +52,7 @@ namespace services
             [this](const ::events::physics::RigidBodyRemovedNotification& notification)
             {
                 activePhysicsBodies.erase(notification.entity);
+                activeVehicleEntities.erase(notification.entity);
             });
 
         // VK-1437: a prefab instantiated AFTER Play started gets no physics-animation state from the
@@ -92,6 +93,12 @@ namespace services
                     physicsProvider->hasPhysicsAnimation(notification.entity))
                 {
                     physicsProvider->destroyPhysicsAnimation(notification.entity);
+                }
+
+                if (activeVehicleEntities.erase(notification.entity) > 0 ||
+                    physicsProvider->hasVehicle(notification.entity))
+                {
+                    physicsProvider->destroyVehicle(notification.entity);
                 }
             });
     }
@@ -148,6 +155,7 @@ namespace services
 
         cleanupPhysicsAnimations();
         cleanupCharacterControllers();
+        cleanupVehicles();
 
         if (oceanService)
         {
@@ -162,6 +170,7 @@ namespace services
         physicsProvider->setPostStepCallback(nullptr);
 
         activePhysicsBodies.clear();
+        activeVehicleEntities.clear();
         rootMotionLastSyncPos.clear();
         {
             std::lock_guard<std::mutex> lock(pendingMutex);
@@ -306,6 +315,30 @@ namespace services
         transform.isDirty = true;
     }
 
+    void PhysicsPlayModeHandler::initializeVehicles()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::VehicleComponent, components::TransformComponent>();
+
+        std::vector<EntityHandle> candidates;
+        for (auto entity : view)
+        {
+            candidates.push_back(internal::toHandle(entity));
+        }
+
+        initializeVehiclesFor(candidates);
+    }
+
+    void PhysicsPlayModeHandler::cleanupVehicles()
+    {
+        if (!physicsProvider) return;
+
+        for (const auto& handle : activeVehicleEntities)
+            physicsProvider->destroyVehicle(handle);
+
+        activeVehicleEntities.clear();
+    }
+
     void PhysicsPlayModeHandler::initializePhysicsAnimations()
     {
         // Play-entry full pass: every physics-animation entity currently in the scene.
@@ -345,7 +378,55 @@ namespace services
         }
 
         if (!candidates.empty())
+        {
+            initializeVehiclesFor(candidates);
             initializePhysicsAnimationsFor(candidates);
+        }
+    }
+
+    void PhysicsPlayModeHandler::initializeVehiclesFor(const std::vector<EntityHandle>& candidates)
+    {
+        if (!physicsProvider)
+        {
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        size_t createdCount = 0;
+
+        for (const auto& handle : candidates)
+        {
+            if (activeVehicleEntities.contains(handle))
+                continue;
+
+            entt::entity entity = internal::fromHandle(handle);
+            if (!registry.valid(entity) ||
+                !registry.all_of<components::VehicleComponent, components::TransformComponent>(entity))
+            {
+                continue;
+            }
+
+            if (!physicsProvider->hasRigidBody(handle))
+                continue;
+
+            const auto& vehicle = registry.get<components::VehicleComponent>(entity);
+            if (physicsProvider->createVehicle(handle, vehicle.config))
+            {
+                activeVehicleEntities.insert(handle);
+                ++createdCount;
+            }
+            else
+            {
+                const std::string entityName = registry.all_of<components::NameComponent>(entity)
+                    ? registry.get<components::NameComponent>(entity).name : "Unknown";
+                vfLogWarning("Failed to create vehicle for entity '{}'", entityName);
+            }
+        }
+
+        if (createdCount > 0)
+        {
+            vfLogInfo("Initialized {} vehicle entities", createdCount);
+        }
     }
 
     void PhysicsPlayModeHandler::initializePhysicsAnimationsFor(const std::vector<EntityHandle>& candidates)

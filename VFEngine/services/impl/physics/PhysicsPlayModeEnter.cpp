@@ -86,6 +86,7 @@ namespace services
             activePhysicsBodies.insert(handle);
         }
 
+        initializeVehicles();
         initializePhysicsAnimations();
         initializeCharacterControllers();
 
@@ -98,7 +99,7 @@ namespace services
         }
 
         physicsActive = true;
-        vfLogInfo("Physics play mode started with {} bodies, {} characters",
-                  activePhysicsBodies.size(), activeCharacterControllers.size());
+        vfLogInfo("Physics play mode started with {} bodies, {} vehicles, {} characters",
+                  activePhysicsBodies.size(), activeVehicleEntities.size(), activeCharacterControllers.size());
     }
 }

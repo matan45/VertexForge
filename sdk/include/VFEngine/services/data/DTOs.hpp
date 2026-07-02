@@ -3,6 +3,7 @@
 #include "types/PhysicsTypes.hpp"
 #include "types/AudioEffectTypes.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
+#include "types/VehicleTypes.hpp"
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <asset/AssetRef.hpp>
 #include <resource/AssetTypes.hpp>
@@ -265,6 +266,11 @@ namespace services
         bool freezeRotationX = false;
         bool freezeRotationY = false;
         bool freezeRotationZ = false;
+    };
+
+    struct VehicleComponentData
+    {
+        types::VehicleConfig config = types::VehicleConfig::createFourWheelCar();
     };
 
     struct BuoyancyComponentData

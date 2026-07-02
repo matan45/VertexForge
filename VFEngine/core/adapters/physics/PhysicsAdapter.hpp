@@ -56,6 +56,13 @@ namespace core
         void addCollider(services::EntityHandle entity, const services::ColliderData& data) override;
         void removeCollider(services::EntityHandle entity) override;
 
+        bool createVehicle(services::EntityHandle entity, const types::VehicleConfig& config) override;
+        void destroyVehicle(services::EntityHandle entity) override;
+        bool hasVehicle(services::EntityHandle entity) const override;
+        void setVehicleInput(services::EntityHandle entity, float throttle, float steer, float brake, float handbrake) override;
+        std::vector<types::WheelState> getVehicleWheelStates(services::EntityHandle entity) const override;
+        std::optional<types::WheelState> getVehicleWheelState(services::EntityHandle entity, int wheelIndex) const override;
+
         void applyForce(services::EntityHandle entity, const glm::vec3& force) override;
         void applyForceAtPosition(services::EntityHandle entity, const glm::vec3& force,
                                   const glm::vec3& position) override;

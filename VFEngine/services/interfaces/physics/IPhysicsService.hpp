@@ -1,6 +1,7 @@
 #pragma once
 #include "../../data/EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
+#include "types/VehicleTypes.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <optional>
@@ -73,6 +74,20 @@ namespace services {
         virtual void addCollider(EntityHandle entity, const ColliderData& data) = 0;
         
         virtual void removeCollider(EntityHandle entity) = 0;
+
+        // === Vehicle Operations ===
+
+        virtual bool createVehicle(EntityHandle entity, bool rebuild = false) = 0;
+
+        virtual bool destroyVehicle(EntityHandle entity) = 0;
+
+        virtual bool hasVehicle(EntityHandle entity) const = 0;
+
+        virtual void setVehicleInput(EntityHandle entity, float throttle, float steer, float brake, float handbrake) = 0;
+
+        virtual std::vector<types::WheelState> getVehicleWheelStates(EntityHandle entity) const = 0;
+
+        virtual std::optional<types::WheelState> getVehicleWheelState(EntityHandle entity, int wheelIndex) const = 0;
 
         // === Force and Impulse ===
         

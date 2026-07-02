@@ -37,6 +37,13 @@ namespace services {
         std::optional<RigidBodyComponentData> getRigidBodyData(EntityHandle entity) const;
         bool setRigidBodyData(EntityHandle entity, const RigidBodyComponentData& rigidBodyData);
 
+        // Vehicle Component Operations
+        bool addVehicleComponent(EntityHandle entity);
+        bool removeVehicleComponent(EntityHandle entity);
+        bool hasVehicleComponent(EntityHandle entity) const;
+        std::optional<VehicleComponentData> getVehicleData(EntityHandle entity) const;
+        bool setVehicleData(EntityHandle entity, const VehicleComponentData& vehicleData);
+
         // Buoyancy Component Operations
         bool addBuoyancyComponent(EntityHandle entity);
         bool removeBuoyancyComponent(EntityHandle entity);

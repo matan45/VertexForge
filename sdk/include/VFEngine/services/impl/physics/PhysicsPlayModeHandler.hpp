@@ -27,6 +27,7 @@ namespace services
         ::events::SubscriptionToken prefabInstantiatedToken;
         ::events::SubscriptionToken entityDeletedToken;
         std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsBodies;
+        std::unordered_set<EntityHandle, EntityHandle::Hash> activeVehicleEntities;
         std::atomic<bool> physicsActive{false};
         std::mutex pendingMutex;
         std::vector<EntityHandle> pendingPrefabRoots;
@@ -59,6 +60,9 @@ namespace services
         void syncTransformsFromPhysics();
         void syncRootMotionEntity(EntityHandle handle);
         void syncStandardPhysicsEntity(EntityHandle handle);
+        void initializeVehicles();
+        void initializeVehiclesFor(const std::vector<EntityHandle>& candidates);
+        void cleanupVehicles();
         void initializePhysicsAnimations();
         void drainPendingPrefabRoots();
         // VK-1437: idempotent per-entity physics-animation init over an explicit candidate set. Skips

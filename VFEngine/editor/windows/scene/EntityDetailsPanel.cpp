@@ -90,6 +90,7 @@ namespace windows
         
         bool hasCollider = colliderDrawer.draw(handle);
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
+        bool hasVehicle = vehicleDrawer.draw(handle);
         bool hasBuoyancy = buoyancyDrawer.draw(handle);
         bool hasDestructible = destructibleDrawer.draw(handle);
         bool hasPhysicsAnimation = physicsAnimationDrawer.draw(handle);
@@ -152,7 +153,7 @@ namespace windows
         metaComponentDrawer.draw(handle);
 
         addComponentPopup.draw({handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
-                                hasCollider, hasRigidBody, hasPhysicsAnimation, hasVFX, hasVFXSequence,
+                                hasCollider, hasRigidBody, hasVehicle, hasPhysicsAnimation, hasVFX, hasVFXSequence,
                                 hasBillboard,
                                 hasText, hasDirectionalLight, hasPointLight, hasSpotLight,
                                 hasUICanvas, hasUIRect, hasUIImage, hasUILabel,

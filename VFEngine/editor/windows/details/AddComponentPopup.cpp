@@ -298,6 +298,18 @@ namespace windows::details
                 ImGui::SetTooltip("Physics body for dynamics simulation");
         }
 
+        if (!c.hasVehicle && matchesFilter("Vehicle", filter))
+        {
+            if (ImGui::Selectable("  Vehicle"))
+            {
+                events::scene::AddVehicleComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Jolt vehicle constraint driven by a rigid-body chassis");
+        }
+
         if (!c.hasBuoyancy && matchesFilter("Buoyancy", filter))
         {
             if (ImGui::Selectable("  Buoyancy"))

@@ -150,6 +150,41 @@ namespace events::scene {
     };
 
     // ============================================
+    // Vehicle Component Events
+    // ============================================
+
+    struct AddVehicleComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddVehicleComponent"; }
+    };
+
+    struct RemoveVehicleComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveVehicleComponent"; }
+    };
+
+    struct SetVehicleDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::VehicleComponentData vehicleData;
+
+        std::string_view getName() const override { return "SetVehicleData"; }
+    };
+
+    struct HasVehicleComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasVehicleComponent"; }
+    };
+
+    struct GetVehicleDataQuery : IQuery<std::optional<services::VehicleComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetVehicleData"; }
+    };
+
+    // ============================================
     // Buoyancy Component Events
     // ============================================
 

@@ -4,6 +4,7 @@
 #include "../../interfaces/physics/IPhysicsService.hpp"
 #include "types/PhysicsTypes.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
+#include "types/VehicleTypes.hpp"
 #include "resource/Types.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -75,6 +76,13 @@ namespace services
 
         virtual void addCollider(EntityHandle entity, const ColliderData& data) = 0;
         virtual void removeCollider(EntityHandle entity) = 0;
+
+        virtual bool createVehicle(EntityHandle entity, const types::VehicleConfig& config) = 0;
+        virtual void destroyVehicle(EntityHandle entity) = 0;
+        virtual bool hasVehicle(EntityHandle entity) const = 0;
+        virtual void setVehicleInput(EntityHandle entity, float throttle, float steer, float brake, float handbrake) = 0;
+        virtual std::vector<types::WheelState> getVehicleWheelStates(EntityHandle entity) const = 0;
+        virtual std::optional<types::WheelState> getVehicleWheelState(EntityHandle entity, int wheelIndex) const = 0;
 
         virtual void applyForce(EntityHandle entity, const glm::vec3& force) = 0;
         virtual void applyForceAtPosition(EntityHandle entity, const glm::vec3& force,

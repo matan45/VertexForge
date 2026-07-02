@@ -236,6 +236,96 @@ namespace services
         return true;
     }
 
+    // ========== VEHICLE COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addVehicleComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::VehicleComponent>())
+        {
+            sceneEntity.addComponent<components::VehicleComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeVehicleComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::VehicleComponent>())
+        {
+            sceneEntity.removeComponent<components::VehicleComponent>();
+            events::physics::DestroyVehicleCommand destroyCmd;
+            destroyCmd.entity = entity;
+            ::events::EventDispatcher::instance().execute(destroyCmd);
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasVehicleComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::VehicleComponent>();
+    }
+
+    std::optional<VehicleComponentData> PhysicsComponentService::getVehicleData(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::VehicleComponent>())
+        {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::VehicleComponent>();
+        VehicleComponentData data;
+        data.config = comp.config;
+        return data;
+    }
+
+    bool PhysicsComponentService::setVehicleData(EntityHandle entity, const VehicleComponentData& vehicleData)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::VehicleComponent>())
+        {
+            sceneEntity.addComponent<components::VehicleComponent>();
+        }
+
+        auto& comp = sceneEntity.getComponent<components::VehicleComponent>();
+        comp.config = vehicleData.config;
+        return true;
+    }
+
     // ========== BUOYANCY COMPONENT OPERATIONS ==========
 
     bool PhysicsComponentService::addBuoyancyComponent(EntityHandle entity)
@@ -533,6 +623,37 @@ namespace services
             [this](const events::scene::GetRigidBodyDataQuery& query)
             {
                 return getRigidBodyData(query.entity);
+            });
+
+        // Vehicle component handlers
+        dispatcher.registerCommandHandler<events::scene::AddVehicleComponentCommand>(
+            [this](const events::scene::AddVehicleComponentCommand& cmd)
+            {
+                return addVehicleComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveVehicleComponentCommand>(
+            [this](const events::scene::RemoveVehicleComponentCommand& cmd)
+            {
+                return removeVehicleComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetVehicleDataCommand>(
+            [this](const events::scene::SetVehicleDataCommand& cmd)
+            {
+                return setVehicleData(cmd.entity, cmd.vehicleData);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasVehicleComponentQuery>(
+            [this](const events::scene::HasVehicleComponentQuery& query)
+            {
+                return hasVehicleComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetVehicleDataQuery>(
+            [this](const events::scene::GetVehicleDataQuery& query)
+            {
+                return getVehicleData(query.entity);
             });
 
         // Buoyancy component handlers

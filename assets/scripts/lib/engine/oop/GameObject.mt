@@ -19,6 +19,7 @@ import * from "../ScriptCallback.mt";
 import * from "Transform.mt";
 import * from "RigidBody.mt";
 import * from "Collider.mt";
+import * from "VehicleComponent.mt";
 import * from "CameraComponent.mt";
 import * from "AnimatorComponent.mt";
 import * from "AudioSource.mt";
@@ -183,6 +184,10 @@ public class GameObject {
 
     public function collider(): Collider {
         return new Collider(this.id);
+    }
+
+    public function vehicle(): VehicleComponent {
+        return new VehicleComponent(this.id);
     }
 
     public function camera(): CameraComponent {

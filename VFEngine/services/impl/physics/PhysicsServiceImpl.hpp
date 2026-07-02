@@ -31,6 +31,13 @@ namespace services {
         void addCollider(EntityHandle entity, const ColliderData& data) override;
         void removeCollider(EntityHandle entity) override;
 
+        bool createVehicle(EntityHandle entity, bool rebuild = false) override;
+        bool destroyVehicle(EntityHandle entity) override;
+        bool hasVehicle(EntityHandle entity) const override;
+        void setVehicleInput(EntityHandle entity, float throttle, float steer, float brake, float handbrake) override;
+        std::vector<types::WheelState> getVehicleWheelStates(EntityHandle entity) const override;
+        std::optional<types::WheelState> getVehicleWheelState(EntityHandle entity, int wheelIndex) const override;
+
         // === Force and Impulse ===
 
         void applyForce(EntityHandle entity, const glm::vec3& force) override;

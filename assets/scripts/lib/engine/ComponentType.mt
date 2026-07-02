@@ -28,6 +28,7 @@ public class ComponentType {
     // Physics components
     public static final string COLLIDER = "Collider";
     public static final string RIGID_BODY = "RigidBody";
+    public static final string VEHICLE = "Vehicle";
 
     // Animation and effects
     public static final string ANIMATOR = "Animator";

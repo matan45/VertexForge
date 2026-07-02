@@ -3,6 +3,7 @@
 #include <string>
 #include <cstdint>
 #include "../types/PhysicsTypes.hpp"
+#include "../types/VehicleTypes.hpp"
 #include "../asset/AssetRef.hpp"
 
 namespace components
@@ -59,5 +60,10 @@ namespace components
         bool freezeRotationX = false;
         bool freezeRotationY = false;
         bool freezeRotationZ = false;
+    };
+
+    struct VehicleComponent
+    {
+        types::VehicleConfig config = types::VehicleConfig::createFourWheelCar();
     };
 }
