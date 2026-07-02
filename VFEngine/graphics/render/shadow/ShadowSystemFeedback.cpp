@@ -109,8 +109,12 @@ namespace render::shadow
         dynamicPageRenderList.clear();
         tileCopyList.clear();
         lastCacheStats = {};
-        binActiveThisFrame = false; // B1: recomputed per frame by buildClipmapPageRenderList
-        binBuiltThisFrame = false;
+        // B1/B2: reset per-frame bin state; finalizeBinPages() (after the per-light loop) assigns slots.
+        binActiveThisFrame = false;
+        binViews.clear();
+        binNextPageBaseOffset = 0;
+        binGlobalRequests.clear();
+        binEntryIndices.clear();
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
@@ -147,6 +151,9 @@ namespace render::shadow
             else
                 buildSingleViewPageRenderList(data);
         }
+
+        // B1/B2: assign render slots over the global page space of all binned views.
+        finalizeBinPages();
 
         lastCacheStats.tileCopiesThisFrame = static_cast<uint32_t>(tileCopyList.size());
         for (const auto& [entityId, data] : lightShadowData)
@@ -289,6 +296,12 @@ namespace render::shadow
                 data.vsmPageDirty[i] = true;
         }
 
+        // B2: the spot light is one binned view.
+        uint32_t viewBase = UINT32_MAX;
+        if (shadowCullEnabled)
+            viewBase = registerBinView(view.viewProjectionMatrix, view, data.vsmPagesX, data.vsmPagesY);
+        const bool binThisView = shadowCullEnabled && viewBase != UINT32_MAX;
+
         for (uint32_t py = 0; py < data.vsmPagesY; ++py)
         {
             for (uint32_t px = 0; px < data.vsmPagesX; ++px)
@@ -297,7 +310,11 @@ namespace render::shadow
                 if (pageIdx >= data.vsmPhysicalTiles.size())
                     continue;
                 glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, data.vsmPagesX, data.vsmPagesY);
-                addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, false);
+                glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
+                if (binThisView)
+                    addBinPage(data, pageIdx, viewBase + py * data.vsmPagesX + px, cropVP, view, false);
+                else
+                    addPageToRenderLists(data, pageIdx, cropVP, view, false);
             }
         }
     }
@@ -323,6 +340,12 @@ namespace render::shadow
         {
             const auto& view = data.views[face];
 
+            // B2: each cube face is a binned view.
+            uint32_t viewBase = UINT32_MAX;
+            if (shadowCullEnabled)
+                viewBase = registerBinView(view.viewProjectionMatrix, view, pagesPerFace, faceHeight);
+            const bool binThisView = shadowCullEnabled && viewBase != UINT32_MAX;
+
             for (uint32_t fy = 0; fy < faceHeight; ++fy)
             {
                 for (uint32_t fx = 0; fx < pagesPerFace; ++fx)
@@ -332,7 +355,11 @@ namespace render::shadow
                         continue;
 
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(fx, fy, pagesPerFace, faceHeight);
-                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, lightMoved);
+                    glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
+                    if (binThisView)
+                        addBinPage(data, pageIdx, viewBase + fy * pagesPerFace + fx, cropVP, view, lightMoved);
+                    else
+                        addPageToRenderLists(data, pageIdx, cropVP, view, lightMoved);
                 }
             }
         }
@@ -348,10 +375,31 @@ namespace render::shadow
         notifySceneChanged();
     }
 
-    bool ShadowSystem::addBinPage(LightShadowData& data, uint32_t pageIdx, uint32_t pageLinear,
-                                  const glm::mat4& cropVP, const ShadowView& view, bool isDirty,
-                                  std::vector<uint32_t>& outPageLinears,
-                                  std::vector<size_t>& outEntryIndices)
+    uint32_t ShadowSystem::registerBinView(const glm::mat4& vp, const ShadowView& view,
+                                           uint32_t pagesX, uint32_t pagesY, float lodBias)
+    {
+        const uint32_t pageCount = pagesX * pagesY;
+        if (pageCount == 0 ||
+            binNextPageBaseOffset + pageCount > MAX_BIN_PAGE_TABLE_ENTRIES)
+            return UINT32_MAX; // global page table full -> this view falls back to legacy
+
+        ShadowBinView bv;
+        bv.viewProjection = vp;
+        bv.depthBias = view.depthBias;
+        bv.slopeBias = view.slopeBias;
+        bv.normalBias = view.normalBias;
+        bv.lodBias = lodBias;
+        bv.pagesX = pagesX;
+        bv.pagesY = pagesY;
+        bv.pageBaseOffset = binNextPageBaseOffset;
+        binViews.push_back(bv);
+
+        binNextPageBaseOffset += pageCount;
+        return bv.pageBaseOffset;
+    }
+
+    bool ShadowSystem::addBinPage(LightShadowData& data, uint32_t pageIdx, uint32_t globalPageIndex,
+                                  const glm::mat4& cropVP, const ShadowView& view, bool isDirty)
     {
         uint32_t physTile = data.vsmPhysicalTiles[pageIdx];
         if (physTile == vsm::INVALID_TILE)
@@ -378,14 +426,35 @@ namespace render::shadow
         entry.slopeBias = view.slopeBias;
         entry.normalBias = view.normalBias;
         entry.layer = ShadowLayer::All;
-        // entry.binSlot stays INVALID_BIN_SLOT until back-filled after buildPageBinBase.
-        outEntryIndices.push_back(pageRenderList.size());
+        // entry.binSlot stays INVALID_BIN_SLOT until back-filled by finalizeBinPages().
+        binEntryIndices.push_back(pageRenderList.size());
         pageRenderList.push_back(entry);
-        outPageLinears.push_back(pageLinear);
+        binGlobalRequests.push_back(globalPageIndex);
         ++lastCacheStats.renderedPages;
         if (!forceRender)
             data.vsmPageDirty[pageIdx] = false;
         return true;
+    }
+
+    void ShadowSystem::finalizeBinPages()
+    {
+        if (binNextPageBaseOffset == 0)
+        {
+            binActiveThisFrame = false;
+            return;
+        }
+
+        std::vector<gpudriven::ShadowBinPageRequest> requests;
+        requests.reserve(binGlobalRequests.size());
+        for (uint32_t gi : binGlobalRequests)
+            requests.push_back({gi});
+
+        std::vector<uint32_t> assigned;
+        uint32_t used = gpudriven::buildPageBinBase(requests, binNextPageBaseOffset,
+                                                    binPageBase, &assigned);
+        for (size_t i = 0; i < binEntryIndices.size(); ++i)
+            pageRenderList[binEntryIndices[i]].binSlot = assigned[i];
+        binActiveThisFrame = used > 0;
     }
 
     void ShadowSystem::buildClipmapPageRenderList(LightShadowData& data)
@@ -428,15 +497,20 @@ namespace render::shadow
             }
         }
 
-        // B1: the first directional light this frame renders as single-layer "All" bin pages
-        // (per-page GPU cull). Additional directional lights (rare) fall back to the legacy path.
-        const bool binMode = shadowCullEnabled && !binBuiltThisFrame;
-        std::vector<uint32_t> binPageLinears;
-        std::vector<size_t> binEntryIndices;
-
+        // B1/B2: each clipmap level is a binned VIEW (single-layer "All" per-page GPU cull).
+        // finalizeBinPages() (called once from buildPageRenderList after all lights) assigns slots.
         for (uint32_t level = 0; level < levelCount; ++level)
         {
             const auto& view = data.views[level];
+
+            // B3: coarser clipmap levels have larger texels, so bias their LOD coarser (level 0,
+            // the nearest/sharpest shell, stays unbiased). Conservative 0.5 LOD-steps per level.
+            constexpr float kShadowLevelLodBias = 0.5f;
+            uint32_t viewBase = UINT32_MAX;
+            if (shadowCullEnabled)
+                viewBase = registerBinView(view.viewProjectionMatrix, view, pagesPerLevel, pagesPerLevel,
+                                           static_cast<float>(level) * kShadowLevelLodBias);
+            const bool binThisView = shadowCullEnabled && viewBase != UINT32_MAX;
 
             for (uint32_t fy = 0; fy < pagesPerLevel; ++fy)
             {
@@ -448,32 +522,12 @@ namespace render::shadow
 
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(fx, fy, pagesPerLevel, pagesPerLevel);
                     glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
-                    if (binMode)
-                        addBinPage(data, pageIdx, pageIdx, cropVP, view, levelMoved[level],
-                                   binPageLinears, binEntryIndices);
+                    if (binThisView)
+                        addBinPage(data, pageIdx, viewBase + fy * pagesPerLevel + fx, cropVP, view, levelMoved[level]);
                     else
                         addPageToRenderLists(data, pageIdx, cropVP, view, levelMoved[level]);
                 }
             }
-        }
-
-        if (binMode)
-        {
-            binBuiltThisFrame = true;
-            binPagesPerLevel = pagesPerLevel;
-            binLevelCount = levelCount;
-            const uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
-
-            std::vector<gpudriven::ShadowBinPageRequest> requests;
-            requests.reserve(binPageLinears.size());
-            for (uint32_t pl : binPageLinears)
-                requests.push_back({pl});
-
-            std::vector<uint32_t> assigned;
-            uint32_t used = gpudriven::buildPageBinBase(requests, totalPages, binPageBase, &assigned);
-            for (size_t i = 0; i < binEntryIndices.size(); ++i)
-                pageRenderList[binEntryIndices[i]].binSlot = assigned[i];
-            binActiveThisFrame = used > 0;
         }
     }
 

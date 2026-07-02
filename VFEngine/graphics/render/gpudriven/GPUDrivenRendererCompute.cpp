@@ -312,8 +312,7 @@ namespace render::gpudriven
         // Never bin in an RTT pre-pass (the shadow pass itself is skipped there — see the RTT guard
         // in dispatchCompute); binning would waste work and read a per-RTT camera.
         if (GPUDrivenRenderer::getThreadLocalCullDescriptorSet() != nullptr) return false;
-        return shadowSystem->getShadowBinLevelCount() > 0 &&
-               shadowSystem->getShadowBinPagesPerLevel() > 0;
+        return !shadowSystem->getShadowBinViews().empty();
     }
 
     void GPUDrivenRenderer::prepareShadowBinCull(vk::CommandBuffer cmd)
@@ -322,17 +321,16 @@ namespace render::gpudriven
 
         shadowPageBinner->advanceStagingFrame();
 
-        const auto& dirViews = shadowSystem->getDirectionalShadowViews();
-        const uint32_t levelCount = shadowSystem->getShadowBinLevelCount();
-
+        // B2: one GPU view per binned view (directional level / spot / point face).
+        const auto& binViews = shadowSystem->getShadowBinViews();
         std::vector<ShadowLevelData> levels;
-        levels.reserve(levelCount);
-        for (uint32_t i = 0; i < levelCount && i < dirViews.size(); ++i)
+        levels.reserve(binViews.size());
+        for (const auto& v : binViews)
         {
             ShadowLevelData ld{};
-            ld.viewProjection = dirViews[i].viewProjectionMatrix;
-            ld.bias = glm::vec4(dirViews[i].depthBias, dirViews[i].slopeBias, dirViews[i].normalBias, 0.0f);
-            ld.params = glm::vec4(0.0f);
+            ld.viewProjection = v.viewProjection;
+            ld.bias = glm::vec4(v.depthBias, v.slopeBias, v.normalBias, v.lodBias); // .w = B3 per-view LOD bias
+            ld.gridInfo = glm::uvec4(v.pagesX, v.pagesY, v.pageBaseOffset, 0u);
             levels.push_back(ld);
         }
 
@@ -353,12 +351,11 @@ namespace render::gpudriven
 
         uint32_t flags = 0;
         flags |= 1u; // distance cull on (shadows respect category max-distance)
-        // bit1 occlusion stays off in B1 (camera Hi-Z is wrong for shadow views; B3 adds shadow Hi-Z)
+        // bit1 occlusion stays off in B1/B2 (camera Hi-Z is wrong for shadow views; B3 adds shadow Hi-Z)
         if (culling.lodSelectionEnabled) flags |= 4u;
 
         shadowPageBinner->dispatch(cmd, stats.totalObjects,
-                                   shadowSystem->getShadowBinLevelCount(),
-                                   shadowSystem->getShadowBinPagesPerLevel(), flags);
+                                   static_cast<uint32_t>(shadowSystem->getShadowBinViews().size()), flags);
         shadowPageBinner->recordPostBarrier(cmd);
     }
 

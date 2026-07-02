@@ -50,17 +50,18 @@ namespace render::gpudriven
     };
     static_assert(sizeof(ShadowLevelData) == 96, "ShadowLevelData must be 96 bytes");
 
-    // Push constants for gpu_cull_shadow_bin.glsl.
+    // Push constants for gpu_cull_shadow_bin.glsl. Per-view page grids live in ShadowLevelData
+    // (B2), so only the total counts + flags are pushed.
     struct ShadowBinPushConstants
     {
         uint32_t objectCount;   // == the main cull's objectCount (stats.totalObjects)
-        uint32_t levelCount;
-        uint32_t pagesPerLevel; // clipmapPagesPerLevel()
+        uint32_t viewCount;     // total binned views (directional levels + spot + point faces)
         uint32_t binCapacity;   // SHADOW_BIN_CAPACITY
         uint32_t flags;         // bit0 distanceCull, bit1 occlusionCull (0 in B1), bit2 lodEnabled
         uint32_t pad0;
         uint32_t pad1;
         uint32_t pad2;
+        uint32_t pad3;
     };
 
     // Read-back diagnostics surfaced in the shadow stats panel (Jira #15141 mandate).
@@ -102,8 +103,9 @@ namespace render::gpudriven
 
         void recordReset(vk::CommandBuffer cmd);   // clear per-page counts + overflow stats
         void recordUpload(vk::CommandBuffer cmd);  // copy ring staging -> device local (pre-barrier)
-        void dispatch(vk::CommandBuffer cmd, uint32_t objectCount, uint32_t levelCount,
-                      uint32_t pagesPerLevel, uint32_t flags);
+        // B2: one dispatch row per binned VIEW (directional level / spot / point face); each view
+        // carries its own page grid + pageBaseOffset in ShadowLevelData.
+        void dispatch(vk::CommandBuffer cmd, uint32_t objectCount, uint32_t viewCount, uint32_t flags);
         void recordPostBarrier(vk::CommandBuffer cmd); // compute-write -> indirect/task read
 
         void advanceStagingFrame() { currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT; }

@@ -18,11 +18,12 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-// Mirror of ShadowLevelData in ShadowPageBinner.hpp (96 bytes, std430).
+// Mirror of ShadowLevelData in ShadowPageBinner.hpp (96 bytes, std430). One binned VIEW: a
+// directional clipmap level, the spot view, or a point-cube face (B2).
 struct ShadowLevelData {
     mat4 viewProjection;
-    vec4 bias;   // depthBias, slopeBias, normalBias, unused
-    vec4 params; // levelExtent, unused, unused, unused
+    vec4 bias;      // depthBias, slopeBias, normalBias, unused
+    uvec4 gridInfo; // pagesX, pagesY, pageBaseOffset (into pageBinBase), unused
 };
 
 // set 0 — must match ShadowPageBinner::createComputePipeline()'s descriptor set layout.
@@ -64,13 +65,13 @@ layout(std430, set = 0, binding = 8) buffer OverflowBuffer {
 
 layout(push_constant) uniform PushConstants {
     uint objectCount;
-    uint levelCount;
-    uint pagesPerLevel;
+    uint viewCount;   // total binned views (per-view page grid lives in levels[].gridInfo)
     uint binCapacity;
     uint flags;       // bit0 distanceCull, bit1 occlusionCull (reserved/off in B1), bit2 lodEnabled
     uint pad0;
     uint pad1;
     uint pad2;
+    uint pad3;
 } pc;
 
 // Local copies of gpu_cull_lod.glsl's projectSphereToScreen / selectLOD — shadows use them
@@ -98,10 +99,13 @@ void main() {
     if (tid >= pc.objectCount) {
         return;
     }
-    uint level = gl_GlobalInvocationID.y;
-    if (level >= pc.levelCount) {
+    uint viewIndex = gl_GlobalInvocationID.y;
+    if (viewIndex >= pc.viewCount) {
         return;
     }
+    uint pagesX = levels[viewIndex].gridInfo.x;
+    uint pagesY = levels[viewIndex].gridInfo.y;
+    uint pageBaseOffset = levels[viewIndex].gridInfo.z;
 
     uint objectIndex = activeIndices[tid];
     GPUObjectData obj = objects[objectIndex];
@@ -120,7 +124,7 @@ void main() {
     vec3 worldCenter = (worldAabbMin + worldAabbMax) * 0.5;
     float worldRadius = length(worldAabbMax - worldCenter);
 
-    mat4 lvp = levels[level].viewProjection;
+    mat4 lvp = levels[viewIndex].viewProjection;
 
     if (!isInstanced) {
         vec4 planes[6];
@@ -170,7 +174,9 @@ void main() {
             vec4 viewSphere = camera.view * vec4(worldCenter, 1.0);
             viewSphere.w = worldRadius;
             float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
-            targetLOD = selectLOD(screenPixels, obj.lodThresholds, camera.globalLodBias);
+            // B3: per-view LOD bias (bias.w) coarsens LOD on the coarser clipmap shells.
+            float lodBias = camera.globalLodBias + levels[viewIndex].bias.w;
+            targetLOD = selectLOD(screenPixels, obj.lodThresholds, lodBias);
         }
 
         lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);
@@ -202,19 +208,19 @@ void main() {
                                        meshletOffset, meshletCount,
                                        baseVertexOffset, instanceCount);
 
-    // Overlapped page range within this level's page grid.
+    // Overlapped page range within this view's page grid.
     PageRange range;
     if (isInstanced) {
-        // Conservative: an instanced object's instances may land anywhere in the level. B3 tightens
-        // this via a per-instance path; here we bin into every page of the level.
+        // Conservative: an instanced object's instances may land anywhere in the view. B3 tightens
+        // this via a per-instance path; here we bin into every page of the view.
         range.fx0 = 0u;
         range.fy0 = 0u;
-        range.fx1 = pc.pagesPerLevel - 1u;
-        range.fy1 = pc.pagesPerLevel - 1u;
+        range.fx1 = pagesX - 1u;
+        range.fy1 = pagesY - 1u;
         range.valid = true;
     } else {
         range = overlappedPages(obj.aabbMin.xyz, obj.aabbMax.xyz, lvp * obj.modelMatrix,
-                                pc.pagesPerLevel, pc.pagesPerLevel);
+                                pagesX, pagesY);
     }
     if (!range.valid) {
         return;
@@ -222,9 +228,9 @@ void main() {
 
     for (uint fy = range.fy0; fy <= range.fy1; ++fy) {
         for (uint fx = range.fx0; fx <= range.fx1; ++fx) {
-            // Matches ShadowSystemFeedback's page-grid linearization: (level*ppl + fy)*ppl + fx.
-            uint pageLinear = (level * pc.pagesPerLevel + fy) * pc.pagesPerLevel + fx;
-            uint renderSlot = pageBinBase[pageLinear];
+            // Global pageBinBase index: this view's block base + local (fy*pagesX + fx).
+            uint pageIndex = pageBaseOffset + fy * pagesX + fx;
+            uint renderSlot = pageBinBase[pageIndex];
             if (renderSlot == 0xFFFFFFFFu) {
                 continue; // page not rendering this frame (or overflowed the arena -> legacy fallback)
             }

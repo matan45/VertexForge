@@ -14,8 +14,9 @@ namespace render::gpudriven
 {
     namespace
     {
-        // Directional Ultra clipmap uses up to 16 levels; levelDataBuffer is sized for the max.
-        constexpr uint32_t kMaxShadowLevels = 16;
+        // B2: a binned VIEW is a directional level, the spot view, or a point-cube face. Sized to
+        // cover many binned lights (directional levels + spot + up to a few point lights * 6 faces).
+        constexpr uint32_t kMaxShadowViews = 256;
     }
 
     ShadowPageBinner::ShadowPageBinner(core::Device& device)
@@ -37,9 +38,10 @@ namespace render::gpudriven
 
         vfLogInfo("ShadowPageBinner: Initializing...");
 
-        // 8x8 pages/level * up to 16 directional clipmap levels (covers directional; B2 spot/point
-        // reuse the arena within MAX_RENDERED_SHADOW_PAGES).
-        maxPageTableEntries = 1024;
+        // B2: global page-index space across ALL binned views (directional levels + spot + point
+        // faces). Each view occupies a contiguous [pageBaseOffset, +pagesX*pagesY) block; the sum
+        // is capped here (lights whose block would overflow fall back to legacy for that light).
+        maxPageTableEntries = 8192;
         drawSetLayout = perDrawLayout;
 
         createBuffers();
@@ -145,7 +147,7 @@ namespace render::gpudriven
                         overflowBuffer, overflowAlloc);
 
         // Per-level view-projection + biases (device-local target of the ring copy).
-        makeDeviceLocal(static_cast<vk::DeviceSize>(kMaxShadowLevels) * sizeof(ShadowLevelData),
+        makeDeviceLocal(static_cast<vk::DeviceSize>(kMaxShadowViews) * sizeof(ShadowLevelData),
                         vk::BufferUsageFlagBits::eStorageBuffer |
                         vk::BufferUsageFlagBits::eTransferDst,
                         levelDataBuffer, levelDataAlloc);
@@ -161,7 +163,7 @@ namespace render::gpudriven
         {
             {
                 core::BufferInfoRequest request(logicalDevice, physicalDevice);
-                request.size = static_cast<vk::DeviceSize>(kMaxShadowLevels) * sizeof(ShadowLevelData);
+                request.size = static_cast<vk::DeviceSize>(kMaxShadowViews) * sizeof(ShadowLevelData);
                 request.usage = vk::BufferUsageFlagBits::eTransferSrc;
                 request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                     vk::MemoryPropertyFlagBits::eHostCoherent;
@@ -359,7 +361,7 @@ namespace render::gpudriven
     {
         StagingFrame& sf = stagingFrames[currentStagingFrame];
 
-        stagedLevelCount = std::min(static_cast<uint32_t>(levels.size()), kMaxShadowLevels);
+        stagedLevelCount = std::min(static_cast<uint32_t>(levels.size()), kMaxShadowViews);
         stagedPageCount = std::min(static_cast<uint32_t>(pageBinBase.size()), maxPageTableEntries);
 
         if (sf.levelMapped && stagedLevelCount > 0)
@@ -473,23 +475,25 @@ namespace render::gpudriven
         // These transfer writes ride the caller's transfer->compute barrier before dispatch().
     }
 
-    void ShadowPageBinner::dispatch(vk::CommandBuffer cmd, uint32_t objectCount, uint32_t levelCount,
-                                    uint32_t pagesPerLevel, uint32_t flags)
+    void ShadowPageBinner::dispatch(vk::CommandBuffer cmd, uint32_t objectCount, uint32_t viewCount,
+                                    uint32_t flags)
     {
-        if (!initialized || objectCount == 0 || levelCount == 0)
+        if (!initialized || objectCount == 0 || viewCount == 0)
         {
             return;
         }
 
+        viewCount = std::min(viewCount, kMaxShadowViews);
+
         ShadowBinPushConstants pushData{};
         pushData.objectCount = objectCount;
-        pushData.levelCount = levelCount;
-        pushData.pagesPerLevel = pagesPerLevel;
+        pushData.viewCount = viewCount;
         pushData.binCapacity = SHADOW_BIN_CAPACITY;
         pushData.flags = flags;
         pushData.pad0 = 0;
         pushData.pad1 = 0;
         pushData.pad2 = 0;
+        pushData.pad3 = 0;
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, computePipelineLayout, 0,
@@ -498,7 +502,7 @@ namespace render::gpudriven
                           sizeof(pushData), &pushData);
 
         uint32_t groupCountX = (objectCount + 63u) / 64u;
-        cmd.dispatch(groupCountX, levelCount, 1);
+        cmd.dispatch(groupCountX, viewCount, 1);
     }
 
     void ShadowPageBinner::recordPostBarrier(vk::CommandBuffer cmd)
