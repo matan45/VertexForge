@@ -734,189 +734,10 @@ namespace render::raytracing
                                                   uint32_t objectCount,
                                                   const gpudriven::MergedMeshBuffer& mergedBuffer)
     {
-        if (!initialized || objectCount == 0 || blasCache.empty()) return;
-
-        // Deferred deletions handled by DeferredDeletionQueue
-
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        // Build instance array
-        std::vector<vk::AccelerationStructureInstanceKHR> instances;
-        instances.reserve(objectCount);
-
-        for (uint32_t i = 0; i < objectCount; ++i)
-        {
-            const auto& obj = objects[i];
-
-            // Skip transparent/additive objects - they don't cast RT shadows
-            if (obj.flags & (gpudriven::ObjectFlags::Translucent | gpudriven::ObjectFlags::AdditiveBlend))
-                continue;
-
-            // Skip terrain tiles - they have their own BLAS path (VK-1151)
-            if (obj.flags & gpudriven::ObjectFlags::TerrainTile)
-                continue;
-
-            // Look up BLAS for this object via its LOD 0 vertex/index offsets
-            uint32_t vertexOffset = obj.lod0Data.x;
-            uint32_t indexOffset = obj.lod0Data.y;
-            uint64_t offsetKey = makeGeometryOffsetKey(vertexOffset, indexOffset);
-
-            auto keyIt = geometryOffsetToSubmeshKey.find(offsetKey);
-            if (keyIt == geometryOffsetToSubmeshKey.end()) continue;
-
-            auto blasIt = blasCache.find(keyIt->second);
-            if (blasIt == blasCache.end() || blasIt->second.deviceAddress == 0) continue;
-
-            // Convert glm::mat4 to VkTransformMatrixKHR (3x4 row-major)
-            const glm::mat4& m = obj.modelMatrix;
-            vk::TransformMatrixKHR transform{};
-            transform.matrix[0][0] = m[0][0]; transform.matrix[0][1] = m[1][0]; transform.matrix[0][2] = m[2][0]; transform.matrix[0][3] = m[3][0];
-            transform.matrix[1][0] = m[0][1]; transform.matrix[1][1] = m[1][1]; transform.matrix[1][2] = m[2][1]; transform.matrix[1][3] = m[3][1];
-            transform.matrix[2][0] = m[0][2]; transform.matrix[2][1] = m[1][2]; transform.matrix[2][2] = m[2][2]; transform.matrix[2][3] = m[3][2];
-
-            vk::AccelerationStructureInstanceKHR inst{};
-            inst.transform = transform;
-            inst.instanceCustomIndex = i;
-            inst.mask = 0xFF;
-            inst.instanceShaderBindingTableRecordOffset = 0;
-            inst.flags = static_cast<VkGeometryInstanceFlagsKHR>(
-                vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
-            inst.accelerationStructureReference = blasIt->second.deviceAddress;
-
-            instances.push_back(inst);
-        }
-
-        if (instances.empty()) return;
-
-        // Protect shared TLAS/instance/scratch buffers from cross-frame races
-        insertTLASCrossFrameBarrier(cmd);
-
-        uint32_t instanceCount = static_cast<uint32_t>(instances.size());
-        vk::DeviceSize instanceDataSize = sizeof(vk::AccelerationStructureInstanceKHR) * instanceCount;
-
-        // Ensure buffers are large enough
-        ensureInstanceBuffer(instanceDataSize);
-
-        auto& staging = instanceStagingBuffers[currentStagingFrame];
-        ensureStagingBuffer(staging, instanceDataSize);
-
-        // Upload instance data via staging
-        memcpy(staging.allocation.mappedPtr, instances.data(), instanceDataSize);
-
-        vk::BufferCopy copyRegion{};
-        copyRegion.size = instanceDataSize;
-        cmd.copyBuffer(staging.buffer, instanceBuffer, 1, &copyRegion);
-
-        // Barrier: transfer -> AS build
-        vk::MemoryBarrier copyBarrier{
-            vk::AccessFlagBits::eTransferWrite,
-            vk::AccessFlagBits::eAccelerationStructureReadKHR
-        };
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eTransfer,
-            vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
-            vk::DependencyFlags{},
-            1, &copyBarrier, 0, nullptr, 0, nullptr);
-
-        // Configure TLAS build
-        vk::DeviceAddress instanceAddress = vkDevice.getBufferAddress({instanceBuffer});
-
-        vk::AccelerationStructureGeometryInstancesDataKHR instancesData{};
-        instancesData.arrayOfPointers = VK_FALSE;
-        instancesData.data.deviceAddress = instanceAddress;
-
-        vk::AccelerationStructureGeometryKHR tlasGeometry{};
-        tlasGeometry.geometryType = vk::GeometryTypeKHR::eInstances;
-        tlasGeometry.geometry.instances = instancesData;
-
-        // A BLAS compaction this frame replaces a BLAS device address; the TLAS must be
-        // rebuilt (not refit) so it picks up the new acceleration structure references.
-        bool canUpdate = tlasBuilt && (currentInstanceCount == instanceCount) && !forceNextTlasRebuild;
-
-        vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
-        buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
-        buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace |
-                          vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
-        buildInfo.mode = canUpdate ? vk::BuildAccelerationStructureModeKHR::eUpdate
-                                   : vk::BuildAccelerationStructureModeKHR::eBuild;
-        buildInfo.geometryCount = 1;
-        buildInfo.pGeometries = &tlasGeometry;
-
-        // Query sizes
-        vk::AccelerationStructureBuildSizesInfoKHR sizeInfo{};
-        vkDevice.getAccelerationStructureBuildSizesKHR(
-            vk::AccelerationStructureBuildTypeKHR::eDevice,
-            &buildInfo, &instanceCount, &sizeInfo);
-
-        // Rebuild TLAS structure if needed
-        if (!canUpdate)
-        {
-            if (tlas)
-                deferTLASDestruction(tlas, tlasBuffer, tlasAllocation);
-            tlas = nullptr;
-            tlasBuffer = nullptr;
-            tlasAllocation = {};
-
-            {
-                core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
-                request.size = sizeInfo.accelerationStructureSize;
-                request.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-                                vk::BufferUsageFlagBits::eShaderDeviceAddress;
-                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::BufferUtilities::createBuffer(request, tlasBuffer, tlasAllocation, device.getMemoryManager());
-            }
-
-            vk::AccelerationStructureCreateInfoKHR tlasCreateInfo{};
-            tlasCreateInfo.buffer = tlasBuffer;
-            tlasCreateInfo.size = sizeInfo.accelerationStructureSize;
-            tlasCreateInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
-            tlas = vkDevice.createAccelerationStructureKHR(tlasCreateInfo);
-
-            buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
-
-            memoryBudget.tlasTotalBytes = sizeInfo.accelerationStructureSize;
-        }
-
-        // Ensure TLAS scratch buffer
-        vk::DeviceSize requiredScratch = std::max(sizeInfo.buildScratchSize, sizeInfo.updateScratchSize);
-        ensureTlasScratch(requiredScratch);
-
-        vk::DeviceAddress scratchAddress = vkDevice.getBufferAddress({tlasScratchBuffer});
-
-        if (canUpdate)
-        {
-            buildInfo.srcAccelerationStructure = tlas;
-        }
-        buildInfo.dstAccelerationStructure = tlas;
-        buildInfo.scratchData.deviceAddress = scratchAddress;
-
-        vk::AccelerationStructureBuildRangeInfoKHR rangeInfo{};
-        rangeInfo.primitiveCount = instanceCount;
-        const vk::AccelerationStructureBuildRangeInfoKHR* pRangeInfo = &rangeInfo;
-
-        cmd.buildAccelerationStructuresKHR(1, &buildInfo, &pRangeInfo);
-
-        // Barrier: AS build -> compute/fragment shader reads
-        vk::MemoryBarrier barrier{
-            vk::AccessFlagBits::eAccelerationStructureWriteKHR,
-            vk::AccessFlagBits::eAccelerationStructureReadKHR
-        };
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
-            vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eFragmentShader,
-            vk::DependencyFlags{},
-            1, &barrier, 0, nullptr, 0, nullptr);
-
-        currentInstanceCount = instanceCount;
-        tlasBuilt = true;
-        memoryBudget.tlasInstanceCount = instanceCount;
-
-        // The TLAS build above consumed any compaction-driven rebuild request.
-        forceNextTlasRebuild = false;
-
-        currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT;
-
-        updateDescriptor();
+        // VK-1479 A9: forward to buildTLASWithTerrain with an empty terrain list so the mesh
+        // instance-gather logic lives in exactly one place. An empty terrain list + count 0
+        // makes the terrain loop a no-op, so behavior is identical to the original buildTLAS.
+        buildTLASWithTerrain(cmd, objects, objectCount, mergedBuffer, {}, 0);
     }
 
     void AccelerationStructureManager::ensureInstanceBuffer(vk::DeviceSize requiredSize)
@@ -1296,13 +1117,40 @@ namespace render::raytracing
         std::vector<vk::AccelerationStructureInstanceKHR> instances;
         instances.reserve(objectCount + terrainTileCount);
 
-        // Mesh object instances (same as buildTLAS)
+        // A single-instance TLAS entry from a model matrix + BLAS device address. Shared by the
+        // mesh and terrain gather paths, and (for instanced objects) invoked per instance below.
+        auto makeInstance = [](const glm::mat4& m, vk::DeviceAddress blasAddress, uint32_t customIndex)
+        {
+            // Convert glm::mat4 to VkTransformMatrixKHR (3x4 row-major)
+            vk::TransformMatrixKHR transform{};
+            transform.matrix[0][0] = m[0][0]; transform.matrix[0][1] = m[1][0]; transform.matrix[0][2] = m[2][0]; transform.matrix[0][3] = m[3][0];
+            transform.matrix[1][0] = m[0][1]; transform.matrix[1][1] = m[1][1]; transform.matrix[1][2] = m[2][1]; transform.matrix[1][3] = m[3][1];
+            transform.matrix[2][0] = m[0][2]; transform.matrix[2][1] = m[1][2]; transform.matrix[2][2] = m[2][2]; transform.matrix[2][3] = m[3][2];
+
+            vk::AccelerationStructureInstanceKHR inst{};
+            inst.transform = transform;
+            inst.instanceCustomIndex = customIndex;
+            inst.mask = 0xFF;
+            inst.instanceShaderBindingTableRecordOffset = 0;
+            inst.flags = static_cast<VkGeometryInstanceFlagsKHR>(
+                vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
+            inst.accelerationStructureReference = blasAddress;
+            return inst;
+        };
+
+        const std::vector<gpudriven::GPUInstanceTransform>& cpuInstanceTransforms =
+            mergedBuffer.getCPUInstanceTransforms();
+
+        // Mesh object instances. Instanced objects (VK-1479 A8) contribute one TLAS instance per
+        // instance transform so every instance casts RT shadows, not just the first.
         for (uint32_t i = 0; i < objectCount; ++i)
         {
             const auto& obj = objects[i];
 
+            // Skip transparent/additive objects - they don't cast RT shadows
             if (obj.flags & (gpudriven::ObjectFlags::Translucent | gpudriven::ObjectFlags::AdditiveBlend))
                 continue;
+            // Skip terrain tiles - they have their own BLAS path (VK-1151)
             if (obj.flags & gpudriven::ObjectFlags::TerrainTile)
                 continue;
 
@@ -1316,21 +1164,31 @@ namespace render::raytracing
             auto blasIt = blasCache.find(keyIt->second);
             if (blasIt == blasCache.end() || blasIt->second.deviceAddress == 0) continue;
 
-            const glm::mat4& m = obj.modelMatrix;
-            vk::TransformMatrixKHR transform{};
-            transform.matrix[0][0] = m[0][0]; transform.matrix[0][1] = m[1][0]; transform.matrix[0][2] = m[2][0]; transform.matrix[0][3] = m[3][0];
-            transform.matrix[1][0] = m[0][1]; transform.matrix[1][1] = m[1][1]; transform.matrix[1][2] = m[2][1]; transform.matrix[1][3] = m[3][1];
-            transform.matrix[2][0] = m[0][2]; transform.matrix[2][1] = m[1][2]; transform.matrix[2][2] = m[2][2]; transform.matrix[2][3] = m[3][2];
+            vk::DeviceAddress blasAddress = blasIt->second.deviceAddress;
 
-            vk::AccelerationStructureInstanceKHR inst{};
-            inst.transform = transform;
-            inst.instanceCustomIndex = i;
-            inst.mask = 0xFF;
-            inst.instanceShaderBindingTableRecordOffset = 0;
-            inst.flags = static_cast<VkGeometryInstanceFlagsKHR>(
-                vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
-            inst.accelerationStructureReference = blasIt->second.deviceAddress;
-            instances.push_back(inst);
+            // instanceCount is packed into aabbMax.w as a uint (MergedMeshBufferScene), and the
+            // per-instance model matrices live in the merged buffer's cpuInstanceTransforms. The
+            // TLAS custom index stays the object index i — the shader resolves object data by it.
+            uint32_t instanceCount = 0;
+            memcpy(&instanceCount, &obj.aabbMax.w, sizeof(uint32_t));
+
+            if ((obj.flags & gpudriven::ObjectFlags::Instanced) && instanceCount > 1)
+            {
+                // Emit one TLAS instance per instance transform. Clamp the range to the transform
+                // vector (size_t math avoids uint32 overflow) so a stale count can't read OOB.
+                uint32_t instanceOffset = obj.instanceData.w;
+                size_t begin = std::min<size_t>(instanceOffset, cpuInstanceTransforms.size());
+                size_t end = std::min<size_t>(static_cast<size_t>(instanceOffset) + instanceCount,
+                                              cpuInstanceTransforms.size());
+                for (size_t k = begin; k < end; ++k)
+                    instances.push_back(makeInstance(cpuInstanceTransforms[k].modelMatrix, blasAddress, i));
+            }
+            else
+            {
+                // Non-instanced, or instanced with count <= 1: obj.modelMatrix already holds the
+                // (single) instance transform.
+                instances.push_back(makeInstance(obj.modelMatrix, blasAddress, i));
+            }
         }
 
         // Terrain tile instances
@@ -1345,21 +1203,7 @@ namespace render::raytracing
             auto blasIt = terrainBlasCache.find(tileKey);
             if (blasIt == terrainBlasCache.end() || blasIt->second.deviceAddress == 0) continue;
 
-            const glm::mat4& m = tile.modelMatrix;
-            vk::TransformMatrixKHR transform{};
-            transform.matrix[0][0] = m[0][0]; transform.matrix[0][1] = m[1][0]; transform.matrix[0][2] = m[2][0]; transform.matrix[0][3] = m[3][0];
-            transform.matrix[1][0] = m[0][1]; transform.matrix[1][1] = m[1][1]; transform.matrix[1][2] = m[2][1]; transform.matrix[1][3] = m[3][1];
-            transform.matrix[2][0] = m[0][2]; transform.matrix[2][1] = m[1][2]; transform.matrix[2][2] = m[2][2]; transform.matrix[2][3] = m[3][2];
-
-            vk::AccelerationStructureInstanceKHR inst{};
-            inst.transform = transform;
-            inst.instanceCustomIndex = objectCount + i;
-            inst.mask = 0xFF;
-            inst.instanceShaderBindingTableRecordOffset = 0;
-            inst.flags = static_cast<VkGeometryInstanceFlagsKHR>(
-                vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
-            inst.accelerationStructureReference = blasIt->second.deviceAddress;
-            instances.push_back(inst);
+            instances.push_back(makeInstance(tile.modelMatrix, blasIt->second.deviceAddress, objectCount + i));
         }
 
         if (instances.empty()) return;
@@ -1367,7 +1211,7 @@ namespace render::raytracing
         // Protect shared TLAS/instance/scratch buffers from cross-frame races
         insertTLASCrossFrameBarrier(cmd);
 
-        // The rest is identical to buildTLAS — upload instances, build/update TLAS
+        // Upload instances, then build/update the TLAS.
         uint32_t instanceCount = static_cast<uint32_t>(instances.size());
         vk::DeviceSize instanceDataSize = sizeof(vk::AccelerationStructureInstanceKHR) * instanceCount;
 

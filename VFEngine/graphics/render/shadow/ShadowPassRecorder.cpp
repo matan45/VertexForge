@@ -69,6 +69,22 @@ namespace render::shadow
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics,
                          ctx.shadowPassPipeline->getPipeline());
 
+        if (ctx.params.shadowCullEnabled)
+        {
+            // B1: set 0 (per-draw data) is chosen per page in recordTileCommands (bin PerDrawData
+            // for bin pages, main PerDrawData for legacy-fallback pages), so bind only sets 1-4 here.
+            std::array<vk::DescriptorSet, 4> descriptorSets = {
+                ctx.params.meshletDataDescSet, ctx.params.vertexDataDescSet,
+                ctx.params.boneMatrixDescSet, ctx.params.cameraDescSet
+            };
+            cmd.bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics,
+                ctx.shadowPassPipeline->getPipelineLayout(),
+                1, static_cast<uint32_t>(descriptorSets.size()),
+                descriptorSets.data(), 0, nullptr);
+            return;
+        }
+
         std::array<vk::DescriptorSet, 5> descriptorSets = {
             ctx.params.perDrawDataDescSet, ctx.params.meshletDataDescSet,
             ctx.params.vertexDataDescSet, ctx.params.boneMatrixDescSet,
@@ -79,6 +95,34 @@ namespace render::shadow
             ctx.shadowPassPipeline->getPipelineLayout(),
             0, static_cast<uint32_t>(descriptorSets.size()),
             descriptorSets.data(), 0, nullptr);
+    }
+
+    void ShadowPassRecorder::dispatchBinnedPage(
+        vk::CommandBuffer cmd, const ShadowPassContext& ctx, const PageRenderEntry& page)
+    {
+        ShadowPushConstants pc = buildTilePushConstants(page);
+        pc.baseDrawIndex = page.binSlot * ctx.params.binCapacity;
+        // B1 bins are single-layer (all casters), so no static/dynamic filter (B3 splits them).
+        pc.objectFilterMask = 0;
+        pc.objectFilterValue = 0;
+
+        cmd.pushConstants(
+            ctx.shadowPassPipeline->getPipelineLayout(),
+            vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+            0, sizeof(ShadowPushConstants), &pc);
+
+        const vk::DeviceSize cmdOffset =
+            static_cast<vk::DeviceSize>(page.binSlot) * ctx.params.binCapacity *
+            sizeof(vk::DrawMeshTasksIndirectCommandEXT);
+        const vk::DeviceSize cntOffset =
+            static_cast<vk::DeviceSize>(page.binSlot) * sizeof(uint32_t);
+
+        render::FrameDrawStats::count(render::DrawCategory::Shadows);
+        cmd.drawMeshTasksIndirectCountEXT(
+            ctx.params.binCommandBuffer, cmdOffset,
+            ctx.params.binCountBuffer, cntOffset,
+            ctx.params.binCapacity,
+            sizeof(vk::DrawMeshTasksIndirectCommandEXT));
     }
 
     void ShadowPassRecorder::executeTileCopies(
@@ -168,6 +212,12 @@ namespace render::shadow
             for (uint32_t batch = 0; batch < ctx.params.batchCount; ++batch)
             {
                 uint32_t section = batch * ctx.params.shaderGroupCount + sg;
+                // A4: skip sections with no candidates (matches the main draw / depth-prepass loops).
+                // Occupancy is a camera-independent superset, so an empty section casts nothing.
+                if (ctx.params.sectionOccupancy &&
+                    section < ctx.params.sectionOccupancy->size() &&
+                    (*ctx.params.sectionOccupancy)[section] == 0)
+                    continue;
                 pc.baseDrawIndex = section * ctx.params.commandsPerSection;
 
                 cmd.pushConstants(
@@ -262,12 +312,36 @@ namespace render::shadow
 
         cmd.setDepthBias(page.depthBias, 0.0f, page.slopeBias);
 
-        const bool legacyReady = ctx.params.batchCount > 0 && ctx.params.commandsPerSection > 0 &&
-                                 ctx.params.drawCommandBuffer && ctx.params.drawCountBuffer;
-        if (legacyReady)
+        const bool binPath = ctx.params.shadowCullEnabled &&
+                             page.binSlot != INVALID_BIN_SLOT &&
+                             ctx.params.binCommandBuffer && ctx.params.binPerDrawDataDescSet;
+
+        // B1: when the flag is on, bindShadowPipelineAndSets bound only sets 1-4, so bind set 0 per
+        // page here — the bin PerDrawData set for bin pages, the main set for legacy-fallback pages.
+        if (ctx.params.shadowCullEnabled)
         {
-            ShadowPushConstants pc = buildTilePushConstants(page);
-            dispatchLegacyMeshBatches(cmd, ctx, pc);
+            vk::DescriptorSet set0 = binPath ? ctx.params.binPerDrawDataDescSet
+                                             : ctx.params.perDrawDataDescSet;
+            if (set0)
+                cmd.bindDescriptorSets(
+                    vk::PipelineBindPoint::eGraphics,
+                    ctx.shadowPassPipeline->getPipelineLayout(),
+                    0, 1, &set0, 0, nullptr);
+        }
+
+        if (binPath)
+        {
+            dispatchBinnedPage(cmd, ctx, page);
+        }
+        else
+        {
+            const bool legacyReady = ctx.params.batchCount > 0 && ctx.params.commandsPerSection > 0 &&
+                                     ctx.params.drawCommandBuffer && ctx.params.drawCountBuffer;
+            if (legacyReady)
+            {
+                ShadowPushConstants pc = buildTilePushConstants(page);
+                dispatchLegacyMeshBatches(cmd, ctx, pc);
+            }
         }
 
         dispatchTerrainShadow(cmd, ctx, page.cropViewProjection,

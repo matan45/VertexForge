@@ -44,7 +44,8 @@ namespace serialization
                 {"pointResolution", s.pointResolution},
                 {"clipmapLevelCount", s.clipmapLevelCount},
                 {"clipmapBaseExtent", s.clipmapBaseExtent},
-                {"clipmapDepthRange", s.clipmapDepthRange}
+                {"clipmapDepthRange", s.clipmapDepthRange},
+                {"perViewCulling", s.perViewCulling}
             };
         }
 
@@ -78,6 +79,8 @@ namespace serialization
                 settings.clipmapBaseExtent = shadows["clipmapBaseExtent"].get<float>();
             if (shadows.contains("clipmapDepthRange") && shadows["clipmapDepthRange"].is_number())
                 settings.clipmapDepthRange = shadows["clipmapDepthRange"].get<float>();
+            if (shadows.contains("perViewCulling") && shadows["perViewCulling"].is_boolean())
+                settings.perViewCulling = shadows["perViewCulling"].get<bool>();
         }
 
         json serializeRTShadowSettings(const types::RTShadowSettings& s)

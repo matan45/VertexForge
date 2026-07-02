@@ -395,78 +395,14 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex)
+    void GPUDrivenRenderer::buildAccelerationStructures(vk::CommandBuffer cmd, uint32_t imageIndex)
     {
-        // VK-1398: record the image index of this submission for per-image RT-mask ring binding.
-        currentImageIndex = imageIndex;
-        if (!initialized || !enabled) return;
-
-        // Lazy-init profiler if RT shadow pipeline exists (or will be created this frame).
-        // Must happen before any timestamp writes in this function or dispatchRTShadow.
-        if (!rtShadowProfiler && rtShadowEnabled && accelStructManager && accelStructManager->isInitialized())
-        {
-            rtShadowProfiler = std::make_unique<raytracing::RTShadowProfiler>();
-            rtShadowProfiler->init(device);
-        }
-
-        // Reset profiler query pool at the start of the frame (before any timestamp writes).
-        // Both dispatchGraphicsCompute (BLAS/TLAS) and dispatchRTShadow write into this pool.
-        if (rtShadowProfiler && rtShadowProfiler->isValid())
-        {
-            uint32_t profilerFI = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
-            rtShadowProfiler->resetFrame(cmd, profilerFI);
-        }
-
-        // Lazy init acceleration structures for RT shadows (independent of GI)
-        initAccelerationStructures();
-
-        if (mergedBuffer) mergedBuffer->flushPendingTransfers();
-        if (meshletBuffer) meshletBuffer->flushPendingTransfers();
-        if (terrain.meshBuffer) terrain.meshBuffer->flushPendingTransfers();
-
-        batchManager->resetAllBatches(cmd);
-        if (meshShaderPipeline) meshShaderPipeline->resetStats(cmd);
-
-        updateLightCullingState(cmd);
-
-        bool hasMeshObjects = stats.totalObjects > 0;
-        bool hasTerrainTiles = terrain.renderingEnabled && terrain.pipeline &&
-                               terrain.pipeline->getCurrentTileCount() > 0;
-
-        if (!hasMeshObjects && !hasTerrainTiles) return;
-
-        if (hasMeshObjects)
-        {
-            if (mergedBuffer->isPersistentMode())
-            {
-                // VK-1418: repoint RTT-bound material slots to this image's bindless slot before
-                // the dirty upload so the change rides the existing transfer→shader barrier.
-                patchRenderTextureMaterialSlots(imageIndex);
-                mergedBuffer->uploadDirtyObjects(cmd);
-                mergedBuffer->uploadActiveIndices(cmd);
-            }
-            else
-            {
-                mergedBuffer->uploadObjects(cmd);
-            }
-            if (mergedBuffer->getInstanceCount() > 0)
-                mergedBuffer->uploadInstances(cmd);
-        }
-
-        if (boneMatrixManager) boneMatrixManager->uploadToGPU(cmd);
-        buildAndDispatchLightOcclusion(cmd);
-        if (clusterGridManager) clusterGridManager->uploadToGPU(cmd);
-
-        vk::MemoryBarrier memBarrier{vk::AccessFlagBits::eTransferWrite,
-            vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite};
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader,
-                            vk::DependencyFlags{}, 1, &memBarrier, 0, nullptr, 0, nullptr);
-
-        // Build/update acceleration structures for RT shadows and GI. Only do the (expensive)
+        // A7: build/update acceleration structures for RT shadows and GI. Only do the (expensive)
         // BLAS/per-frame-TLAS work when something actually consumes the structure: RT shadows
         // enabled, or GI (radiance cascades) active. Otherwise skip it entirely even if a
         // manager object lingers (e.g. created during the pre-settings window where
         // rtShadowEnabled defaults true, or left over after RT was toggled off).
+        // Must run AFTER the transfer->compute barrier (both dispatch paths satisfy this).
         bool accelStructNeeded = rtShadowEnabled || rtSpotShadowEnabled || rtPointShadowEnabled || (giCascadeManager != nullptr);
         if (accelStructNeeded && accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
         {
@@ -536,6 +472,79 @@ namespace render::gpudriven
                 }
             }
         }
+    }
+
+    void GPUDrivenRenderer::dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex)
+    {
+        // VK-1398: record the image index of this submission for per-image RT-mask ring binding.
+        currentImageIndex = imageIndex;
+        if (!initialized || !enabled) return;
+
+        // Lazy-init profiler if RT shadow pipeline exists (or will be created this frame).
+        // Must happen before any timestamp writes in this function or dispatchRTShadow.
+        if (!rtShadowProfiler && rtShadowEnabled && accelStructManager && accelStructManager->isInitialized())
+        {
+            rtShadowProfiler = std::make_unique<raytracing::RTShadowProfiler>();
+            rtShadowProfiler->init(device);
+        }
+
+        // Reset profiler query pool at the start of the frame (before any timestamp writes).
+        // Both dispatchGraphicsCompute (BLAS/TLAS) and dispatchRTShadow write into this pool.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            uint32_t profilerFI = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+            rtShadowProfiler->resetFrame(cmd, profilerFI);
+        }
+
+        // Lazy init acceleration structures for RT shadows (independent of GI)
+        initAccelerationStructures();
+
+        if (mergedBuffer) mergedBuffer->flushPendingTransfers();
+        if (meshletBuffer) meshletBuffer->flushPendingTransfers();
+        if (terrain.meshBuffer) terrain.meshBuffer->flushPendingTransfers();
+
+        batchManager->resetAllBatches(cmd);
+        if (meshShaderPipeline) meshShaderPipeline->resetStats(cmd);
+
+        updateLightCullingState(cmd);
+
+        bool hasMeshObjects = stats.totalObjects > 0;
+        bool hasTerrainTiles = terrain.renderingEnabled && terrain.pipeline &&
+                               terrain.pipeline->getCurrentTileCount() > 0;
+
+        if (!hasMeshObjects && !hasTerrainTiles) return;
+
+        if (hasMeshObjects)
+        {
+            if (mergedBuffer->isPersistentMode())
+            {
+                // VK-1418: repoint RTT-bound material slots to this image's bindless slot before
+                // the dirty upload so the change rides the existing transfer→shader barrier.
+                patchRenderTextureMaterialSlots(imageIndex);
+                mergedBuffer->uploadDirtyObjects(cmd);
+                mergedBuffer->uploadActiveIndices(cmd);
+            }
+            else
+            {
+                mergedBuffer->uploadObjects(cmd);
+            }
+            if (mergedBuffer->getInstanceCount() > 0)
+                mergedBuffer->uploadInstances(cmd);
+        }
+
+        if (boneMatrixManager) boneMatrixManager->uploadToGPU(cmd);
+        buildAndDispatchLightOcclusion(cmd);
+        if (clusterGridManager) clusterGridManager->uploadToGPU(cmd);
+
+        // B1: stage + reset the shadow bins before the barrier so the cull sees zeroed counts.
+        prepareShadowBinCull(cmd);
+
+        vk::MemoryBarrier memBarrier{vk::AccessFlagBits::eTransferWrite,
+            vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite};
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader,
+                            vk::DependencyFlags{}, 1, &memBarrier, 0, nullptr, 0, nullptr);
+
+        buildAccelerationStructures(cmd, imageIndex);
 
         // VK-1334: pick per-RTT cull descriptor when this thread is recording an RTT pre-pass.
         // Defaults to nullptr on the main render thread, so main keeps using the cull pipeline's
@@ -551,6 +560,8 @@ namespace render::gpudriven
                 cullPipeline->dispatch(cmd, stats.totalObjects);
             }
         }
+        // B1: cull into the shadow bins right after the main cull (same objectCount + activeIndices).
+        dispatchShadowBinCull(cmd);
         batchManager->insertBarriersAfterCompute(cmd);
         recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
         dispatchVolumetricFog(cmd);

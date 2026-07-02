@@ -167,6 +167,12 @@ namespace types
         uint32_t clipmapLevelCount = 4;
         float clipmapBaseExtent = 32.0f;
         float clipmapDepthRange = 4000.0f;
+
+        // VK-1479 B1: page-binned directional shadow cull. When on, the directional VSM clipmap
+        // pages are drawn from a per-page GPU cull (frustum + LOD + distance per level, off-screen
+        // casters recovered) instead of replaying the main camera's occlusion-culled draw list once
+        // per page. Default OFF — opt-in, requires GPU bring-up; the legacy path stays the fallback.
+        bool perViewCulling = false;
     };
 
     struct CullingSettings

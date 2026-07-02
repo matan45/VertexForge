@@ -352,6 +352,18 @@ namespace render::shadow
         return true;
     }
 
+    void ShadowSystem::ensureEvictionHeap()
+    {
+        // A2: build the O(all resident pages) heap lazily. beginFrame only marks it dirty; the
+        // rebuild happens here, on the first eviction request of the frame (reached only when the
+        // physical tile pool is exhausted during light registration). Built with current state,
+        // which is fresher than the old unconditional beginFrame-time rebuild.
+        if (!evictionHeapDirty)
+            return;
+        buildEvictionHeap();
+        evictionHeapDirty = false;
+    }
+
     void ShadowSystem::buildEvictionHeap()
     {
         evictionHeap.clear();
@@ -373,6 +385,7 @@ namespace render::shadow
 
     uint32_t ShadowSystem::evictLowestPriorityPage(float requestingPriority)
     {
+        ensureEvictionHeap();
         float threshold = requestingPriority * 0.5f;
 
         while (!evictionHeap.empty())
@@ -524,10 +537,6 @@ namespace render::shadow
         data.vsmPagesX = 0;
         data.vsmPagesY = 0;
         data.vsmPageTableOffset = 0;
-    }
-
-    void ShadowSystem::setDeletionQueue(core::DeferredDeletionQueue* queue)
-    {
     }
 
     void ShadowSystem::invalidateStaticShadow(uint32_t entityId)

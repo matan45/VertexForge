@@ -171,7 +171,6 @@ namespace render::shadow
 
         // Shadow streaming priority (computed per frame based on distance/importance)
         float shadowPriority = 1.0f;
-        uint32_t maxPagesOverride = 0;
 
         // VSM page tracking
         uint32_t vsmLightIndex = 0;

@@ -11,6 +11,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <cstring>
 #include <thread>
 
 #ifdef MemoryBarrier
@@ -128,6 +129,9 @@ namespace render::gpudriven
         shadowSystem->uploadToGPU(cmd);
 
         shadow::ShadowPassParams shadowParams{};
+        // A4: per-section occupancy so the legacy shadow loop skips empty sections. Kept alive for
+        // the whole recordShadowPass call below (same scope as shadowParams).
+        std::vector<uint8_t> shadowSectionOccupancy;
         if (hasMeshObjects && meshShaderPipeline && boneMatrixManager && batchManager)
         {
             shadowParams.perDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
@@ -142,6 +146,30 @@ namespace render::gpudriven
             shadowParams.shaderGroupCount = batchManager->getShaderGroupCount();
             shadowParams.transparentGroupIndex = SHADER_GROUP_TRANSPARENT;
             shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
+
+            const uint32_t sgCount = batchManager->getShaderGroupCount();
+            const uint32_t bCount = batchManager->getBatchCount();
+            shadowSectionOccupancy.resize(static_cast<size_t>(bCount) * sgCount, 0);
+            for (uint32_t batch = 0; batch < bCount; ++batch)
+                for (uint32_t sg = 0; sg < sgCount; ++sg)
+                    shadowSectionOccupancy[batch * sgCount + sg] =
+                        batchManager->sectionHasCandidates(batch, sg) ? 1 : 0;
+            shadowParams.sectionOccupancy = &shadowSectionOccupancy;
+        }
+
+        // B1: when the page-binned cull produced bins this frame, hand the recorder the bin buffers
+        // + draw descriptor set. Directional bin pages draw from these; everything else (and any
+        // overflow-fallback page) still uses the legacy fields above. Only the main pass bins (RTT
+        // skips recordShadowPasses / the bin dispatch).
+        if (shadowPageBinner && shadowPageBinner->isInitialized() &&
+            shadowSystem->isShadowBinActive() &&
+            GPUDrivenRenderer::getThreadLocalCullDescriptorSet() == nullptr)
+        {
+            shadowParams.shadowCullEnabled = true;
+            shadowParams.binPerDrawDataDescSet = shadowPageBinner->getDrawDescriptorSet();
+            shadowParams.binCommandBuffer = shadowPageBinner->getBinCommandBuffer();
+            shadowParams.binCountBuffer = shadowPageBinner->getBinCountBuffer();
+            shadowParams.binCapacity = shadowPageBinner->getBinCapacity();
         }
 
         shadow::TerrainShadowPassParams terrainShadowParams{};
@@ -191,6 +219,11 @@ namespace render::gpudriven
             shadowSystem->setDirectionalRTOverrideActive(
                 lightBufferManager && lightBufferManager->getRTShadowActive());
 
+            // A1: refresh dynamic shadow-caster bounds from resolved object data (mergedBuffer is
+            // current here — updateScene ran before dispatchCompute) so determineDynamicPages marks
+            // only overlapped pages inside the beginFrame call below.
+            gatherDynamicShadowCasterBounds();
+
             std::unordered_set<uint32_t> shadowVisibleLights;
             bool hasShadowFilter = false;
             collectShadowVisibleLights(shadowVisibleLights, hasShadowFilter);
@@ -211,6 +244,122 @@ namespace render::gpudriven
                 lightBufferManager->updateFromScene();
             lightBufferManager->uploadToGPU(cmd);
         }
+    }
+
+    void GPUDrivenRenderer::gatherDynamicShadowCasterBounds()
+    {
+        if (!shadowSystem) return;
+        auto& dst = shadowSystem->mutableDynamicCasterBounds();
+        dst.clear();
+        if (!mergedBuffer) return;
+
+        const auto& objects = mergedBuffer->getCPUObjectData();
+        const auto& instanceXf = mergedBuffer->getCPUInstanceTransforms();
+
+        // A dynamic caster = a shadow-casting object whose shadow is NOT cacheable-static. Skip
+        // static (ShadowStatic) casters, terrain, and the non-opaque groups the shadow pass never
+        // draws. Over-inclusion would only mark a few extra pages dynamic; under-inclusion would
+        // drop a caster's dynamic shadow, so err toward including.
+        constexpr uint32_t kSkipMask = ObjectFlags::ShadowStatic | ObjectFlags::TerrainTile |
+                                       ObjectFlags::Translucent | ObjectFlags::AdditiveBlend |
+                                       ObjectFlags::MultiplyBlend;
+
+        auto consider = [&](uint32_t i)
+        {
+            if (i >= objects.size()) return;
+            const auto& obj = objects[i];
+            if (obj.flags & kSkipMask) return;
+
+            const glm::vec3 localMin(obj.aabbMin);
+            const glm::vec3 localMax(obj.aabbMax);
+
+            if (obj.flags & ObjectFlags::Instanced)
+            {
+                uint32_t instanceCount = 0;
+                std::memcpy(&instanceCount, &obj.aabbMax.w, sizeof(uint32_t)); // aabbMax.w is a uint, not float
+                uint32_t instanceOffset = obj.instanceData.w;
+                if (instanceCount > 1 &&
+                    static_cast<size_t>(instanceOffset) + instanceCount <= instanceXf.size())
+                {
+                    for (uint32_t k = 0; k < instanceCount; ++k)
+                        dst.push_back({localMin, localMax, instanceXf[instanceOffset + k].modelMatrix});
+                    return;
+                }
+            }
+            dst.push_back({localMin, localMax, obj.modelMatrix});
+        };
+
+        // Persistent (streaming) mode leaves stale data in freed slots, so iterate only active
+        // slots; editor/non-streaming mode is dense [0, objectCount).
+        if (mergedBuffer->isPersistentMode())
+        {
+            for (uint32_t idx : mergedBuffer->getActiveObjectIndices())
+                consider(idx);
+        }
+        else
+        {
+            const uint32_t count = mergedBuffer->getObjectCount();
+            for (uint32_t i = 0; i < count; ++i)
+                consider(i);
+        }
+    }
+
+    bool GPUDrivenRenderer::shadowBinCullReady() const
+    {
+        if (!shadowPageBinner || !shadowPageBinner->isInitialized()) return false;
+        if (!shadowSystem || !shadowSystem->isShadowBinActive()) return false;
+        if (!mergedBuffer || stats.totalObjects == 0) return false;
+        // Never bin in an RTT pre-pass (the shadow pass itself is skipped there — see the RTT guard
+        // in dispatchCompute); binning would waste work and read a per-RTT camera.
+        if (GPUDrivenRenderer::getThreadLocalCullDescriptorSet() != nullptr) return false;
+        return shadowSystem->getShadowBinLevelCount() > 0 &&
+               shadowSystem->getShadowBinPagesPerLevel() > 0;
+    }
+
+    void GPUDrivenRenderer::prepareShadowBinCull(vk::CommandBuffer cmd)
+    {
+        if (!shadowBinCullReady()) return;
+
+        shadowPageBinner->advanceStagingFrame();
+
+        const auto& dirViews = shadowSystem->getDirectionalShadowViews();
+        const uint32_t levelCount = shadowSystem->getShadowBinLevelCount();
+
+        std::vector<ShadowLevelData> levels;
+        levels.reserve(levelCount);
+        for (uint32_t i = 0; i < levelCount && i < dirViews.size(); ++i)
+        {
+            ShadowLevelData ld{};
+            ld.viewProjection = dirViews[i].viewProjectionMatrix;
+            ld.bias = glm::vec4(dirViews[i].depthBias, dirViews[i].slopeBias, dirViews[i].normalBias, 0.0f);
+            ld.params = glm::vec4(0.0f);
+            levels.push_back(ld);
+        }
+
+        shadowPageBinner->updateFrameData(levels, shadowSystem->getShadowBinPageBase());
+        // SAME handles the main cull binds (GPUDrivenRendererScene.cpp updateDescriptors) — the bin
+        // cull must see exactly the objects/activeIndices the main cull did (anti-desync).
+        shadowPageBinner->updateComputeDescriptors(
+            mergedBuffer->getObjectBuffer(), cameraBuffer->getBuffer(),
+            mergedBuffer->getInstanceTransformBuffer(), mergedBuffer->getActiveIndexBuffer());
+
+        shadowPageBinner->recordReset(cmd);
+        shadowPageBinner->recordUpload(cmd); // rides the caller's transfer->compute barrier
+    }
+
+    void GPUDrivenRenderer::dispatchShadowBinCull(vk::CommandBuffer cmd)
+    {
+        if (!shadowBinCullReady()) return;
+
+        uint32_t flags = 0;
+        flags |= 1u; // distance cull on (shadows respect category max-distance)
+        // bit1 occlusion stays off in B1 (camera Hi-Z is wrong for shadow views; B3 adds shadow Hi-Z)
+        if (culling.lodSelectionEnabled) flags |= 4u;
+
+        shadowPageBinner->dispatch(cmd, stats.totalObjects,
+                                   shadowSystem->getShadowBinLevelCount(),
+                                   shadowSystem->getShadowBinPagesPerLevel(), flags);
+        shadowPageBinner->recordPostBarrier(cmd);
     }
 
     void GPUDrivenRenderer::dispatchVolumetricFog(vk::CommandBuffer cmd)
@@ -279,6 +428,11 @@ namespace render::gpudriven
             rtShadowProfiler->resetFrame(cmd, profilerFI);
         }
 
+        // A7: lazy-init the acceleration structures here too (the async path does it in
+        // dispatchGraphicsCompute). Without this the sync path never creates the manager, so
+        // buildAccelerationStructures below would no-op and RT shadows would stay dead.
+        initAccelerationStructures();
+
         if (mergedBuffer) mergedBuffer->flushPendingTransfers();
         if (meshletBuffer) meshletBuffer->flushPendingTransfers();
         if (terrain.meshBuffer) terrain.meshBuffer->flushPendingTransfers();
@@ -316,12 +470,19 @@ namespace render::gpudriven
         buildAndDispatchLightOcclusion(cmd);
         if (clusterGridManager) clusterGridManager->uploadToGPU(cmd);
 
+        // B1: stage + reset the shadow bins before the barrier so the cull sees zeroed counts.
+        prepareShadowBinCull(cmd);
+
         vk::MemoryBarrier memBarrier{
             vk::AccessFlagBits::eTransferWrite,
             vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
         };
         cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader,
                             vk::DependencyFlags{}, 1, &memBarrier, 0, nullptr, 0, nullptr);
+
+        // A7: build BLAS/TLAS on the sync path too (mirrors dispatchGraphicsCompute). Runs after the
+        // transfer->compute barrier so vertex/index/object uploads are visible to the AS build.
+        buildAccelerationStructures(cmd, imageIndex);
 
         if (lightCullingPipeline && lightBufferManager)
         {
@@ -341,6 +502,8 @@ namespace render::gpudriven
                 cullPipeline->dispatch(cmd, stats.totalObjects);
             }
         }
+        // B1: cull into the shadow bins right after the main cull (same objectCount + activeIndices).
+        dispatchShadowBinCull(cmd);
         batchManager->insertBarriersAfterCompute(cmd);
 
         // VK-1380: the shadow pass uses the process-wide shared ShadowSystem command pool. In an
