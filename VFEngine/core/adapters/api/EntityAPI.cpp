@@ -358,6 +358,39 @@ namespace core::api
                         [](services::TransformData& t, float x, float y, float z)
                         { t.scale = {x, y, z}; }, "setScale");
                 }});
+
+            // World-space reads (VK-1458 OOP Transform). The local get/set
+            // natives above operate on the entity's own TransformComponent;
+            // these resolve the scene-graph world transform, which differs
+            // for parented entities.
+            interpreter->registerNativeFunction("_native_entity_getWorldPosition",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.empty()) return makeVec3Array(glm::vec3(0.0f));
+                    int64_t id = extractInt64(args[0]);
+                    if (id < 0) return makeVec3Array(glm::vec3(0.0f));
+
+                    events::scene::GetWorldTransformQuery query;
+                    query.entity = intToEntity(id);
+                    auto result = dispatcher.query(query);
+                    return makeVec3Array(result.has_value() ? result->position
+                                                            : glm::vec3(0.0f));
+                }});
+
+            // Euler angles in degrees, same convention as _native_entity_getRotation.
+            interpreter->registerNativeFunction("_native_entity_getWorldRotation",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.empty()) return makeVec3Array(glm::vec3(0.0f));
+                    int64_t id = extractInt64(args[0]);
+                    if (id < 0) return makeVec3Array(glm::vec3(0.0f));
+
+                    events::scene::GetWorldTransformQuery query;
+                    query.entity = intToEntity(id);
+                    auto result = dispatcher.query(query);
+                    return makeVec3Array(result.has_value() ? result->rotation
+                                                            : glm::vec3(0.0f));
+                }});
         }
 
         void registerParentChildFunctions(services::ScriptInterpreter* interpreter,

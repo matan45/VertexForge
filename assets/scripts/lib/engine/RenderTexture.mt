@@ -39,9 +39,23 @@ public class RenderTexture {
         _native_rtt_resize(entityId, width, height);
     }
 
-    // Assign a camera to this RTT. Reads view/projection from the camera entity.
+    // Assign a camera to this RTT. One-shot: pushes the camera's CURRENT
+    // view/projection once. Use setSourceCamera for a persistent binding.
     public static function setCamera(int rttEntityId, int cameraEntityId): void {
         _native_rtt_setCamera(rttEntityId, cameraEntityId);
+    }
+
+    // Persistently bind a source camera to this RTT: the play-mode handler
+    // re-reads the camera's view/projection every frame, so the texture
+    // follows a moving camera (security-camera feed, mirror, minimap).
+    public static function setSourceCamera(int rttEntityId, int cameraEntityId): void {
+        _native_rtt_setSourceCamera(rttEntityId, cameraEntityId);
+    }
+
+    // Clear the persistent source-camera binding (revert to the RTT entity's
+    // own one-shot/legacy camera behavior).
+    public static function clearSourceCamera(int rttEntityId): void {
+        _native_rtt_setSourceCamera(rttEntityId, -1);
     }
 
     // Set the rendering priority (higher renders first).

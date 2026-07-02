@@ -73,7 +73,7 @@ namespace core
     void ScriptWeatherEventBridge::dispatchGlobalCallback(
         const char* methodName, const std::vector<value::Value>& args)
     {
-        const std::string requiredInterface = "IWeatherEventListener";
+        const std::string requiredInterface = kWeatherEventListener;
 
         for (const auto& [instanceId, entityHandle] : instanceToEntity)
         {
@@ -87,7 +87,7 @@ namespace core
 
             try
             {
-                NativeAPIRegistry::setCurrentEntity(entityHandle);
+                AmbientScriptContext ctx(entityHandle, instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, methodName, args);
             }
@@ -101,7 +101,7 @@ namespace core
     void ScriptWeatherEventBridge::dispatchEntityCallback(
         const char* methodName, uint32_t entityId)
     {
-        const std::string requiredInterface = "IWeatherEventListener";
+        const std::string requiredInterface = kWeatherEventListener;
 
         for (const auto& [instanceId, entityHandle] : instanceToEntity)
         {
@@ -117,7 +117,7 @@ namespace core
 
             try
             {
-                NativeAPIRegistry::setCurrentEntity(entityHandle);
+                AmbientScriptContext ctx(entityHandle, instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, methodName, {});
             }

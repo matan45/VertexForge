@@ -81,20 +81,20 @@ namespace core
     {
         for (const auto& [instanceId, interfaces] : instanceToInterfaces)
         {
-            if (interfaces.find("ISceneEventListener") == interfaces.end())
+            if (interfaces.find(kSceneEventListener) == interfaces.end())
                 continue;
 
             auto objIt = instanceToObject.find(instanceId);
             if (objIt == instanceToObject.end()) continue;
 
             auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt != instanceToEntity.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-            }
+            auto entity = entityIt != instanceToEntity.end()
+                ? entityIt->second
+                : ::services::EntityHandle::invalid();
 
             try
             {
+                AmbientScriptContext ctx(entity, instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, methodName, {value::Value(sceneName)});
             }

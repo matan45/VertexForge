@@ -26,8 +26,7 @@ namespace core
             auto objIt = instanceToObject.find(instanceId);
             if (objIt == instanceToObject.end()) return;
 
-            NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-            NativeAPIRegistry::setCurrentInstanceId(instanceId);
+            AmbientScriptContext ctx(instanceToEntity[instanceId], instanceId);
             auto& instance = std::any_cast<value::Value&>(objIt->second);
             interpreter->callMethod(instance, methodName, args);
         }
@@ -192,7 +191,7 @@ namespace core
 
         try
         {
-            NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
+            AmbientScriptContext ctx(instanceToEntity[instanceId], instanceId);
             auto& instance = std::any_cast<value::Value&>(objIt->second);
 
             std::vector<value::Value> valueArgs;

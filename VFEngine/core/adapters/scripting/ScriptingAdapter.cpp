@@ -117,6 +117,26 @@ namespace core
             oceanEventBridge = std::make_unique<ScriptOceanEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
+            // Aggregate every bridge's dispatched interfaces into the set
+            // loadScript probes. New bridges only have to declare their
+            // kRequiredInterfaces — no second list to keep in sync.
+            checkedInterfaces.clear();
+            auto collectInterfaces = [this](const auto& required)
+            {
+                for (const char* name : required) checkedInterfaces.insert(name);
+            };
+            collectInterfaces(ScriptUIEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptPhysicsEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptAnimationEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptSocketEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptVFXEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptNavigationEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptInputActionEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptSceneEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptWeatherEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptDestructionEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptOceanEventBridge::kRequiredInterfaces);
+
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
             animationEventBridge->subscribeAll();
@@ -414,22 +434,11 @@ namespace core
             instanceToEntity[instanceId] = entity;
             instanceToObject[instanceId] = std::any(instance);
 
-            // Cache implemented interfaces for collision/trigger/UI callbacks
-            static constexpr std::array<const char*, 16> kCheckedInterfaces = {
-                "ICollisionListener", "ITriggerListener",
-                "IUIButtonListener", "IUITextInputListener", "IUICheckboxListener",
-                "IUIDropdownListener", "IUITabsListener", "IUISliderListener",
-                "IUIProgressBarListener", "IUIDragDropListener",
-                "IAnimationEventListener",
-                "ISocketAttachmentListener",
-                "IVFXEventListener",
-                "INavigationEventListener",
-                "IInputActionListener",
-                "IWeatherEventListener"
-            };
-
+            // Cache implemented interfaces for the event bridges. The probe
+            // set is the union of every bridge's kRequiredInterfaces,
+            // aggregated in init() — never a hand-maintained list here.
             std::unordered_set<std::string> interfaces;
-            for (const auto* iface : kCheckedInterfaces)
+            for (const auto& iface : checkedInterfaces)
             {
                 if (interpreter->classImplementsInterface(className, iface))
                     interfaces.insert(iface);

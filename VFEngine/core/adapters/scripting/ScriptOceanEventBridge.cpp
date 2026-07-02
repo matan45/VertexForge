@@ -60,7 +60,7 @@ namespace core
     {
         for (const auto& [instanceId, interfaces] : instanceToInterfaces)
         {
-            if (interfaces.find("IWaterListener") == interfaces.end()) continue;
+            if (interfaces.find(kWaterListener) == interfaces.end()) continue;
 
             auto entityIt = instanceToEntity.find(instanceId);
             bool isSelf = entityIt != instanceToEntity.end() && entityIt->second.id == entity.id;
@@ -70,8 +70,10 @@ namespace core
 
             try
             {
-                if (entityIt != instanceToEntity.end())
-                    NativeAPIRegistry::setCurrentEntity(entityIt->second);
+                AmbientScriptContext ctx(
+                    entityIt != instanceToEntity.end() ? entityIt->second
+                                                       : ::services::EntityHandle::invalid(),
+                    instanceId);
 
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 if (isSelf)
@@ -95,7 +97,7 @@ namespace core
     {
         for (const auto& [instanceId, interfaces] : instanceToInterfaces)
         {
-            if (interfaces.find("IWaterListener") == interfaces.end()) continue;
+            if (interfaces.find(kWaterListener) == interfaces.end()) continue;
 
             auto entityIt = instanceToEntity.find(instanceId);
             bool isSelf = entityIt != instanceToEntity.end() && entityIt->second.id == entity.id;
@@ -105,8 +107,10 @@ namespace core
 
             try
             {
-                if (entityIt != instanceToEntity.end())
-                    NativeAPIRegistry::setCurrentEntity(entityIt->second);
+                AmbientScriptContext ctx(
+                    entityIt != instanceToEntity.end() ? entityIt->second
+                                                       : ::services::EntityHandle::invalid(),
+                    instanceId);
 
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 if (isSelf)

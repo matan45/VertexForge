@@ -63,6 +63,13 @@ namespace core
         std::unordered_map<uint64_t, ::services::ScriptPlaybackState> instanceToPlaybackState;
         std::unordered_map<uint64_t, int> instanceToPriority;
 
+        // Union of every event bridge's kRequiredInterfaces, aggregated in
+        // init(). loadScript probes exactly this set when caching a class's
+        // implemented interfaces — a bridge that dispatches on an interface
+        // missing from its own kRequiredInterfaces silently never fires
+        // (test_script_listener_coverage guards that invariant).
+        std::unordered_set<std::string> checkedInterfaces;
+
         // Engine-plugin script natives registered via the mType C ABI: the
         // bindings own the {fn, userData} pair the host trampoline dereferences
         // on every call, so they must outlive the registration (erased on

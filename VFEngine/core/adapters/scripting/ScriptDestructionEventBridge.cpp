@@ -30,7 +30,7 @@ namespace core
 
                 auto interfaceIt = instanceToInterfaces.find(instanceId);
                 if (interfaceIt == instanceToInterfaces.end() ||
-                    interfaceIt->second.find("IDestructionListener") == interfaceIt->second.end())
+                    interfaceIt->second.find(kDestructionListener) == interfaceIt->second.end())
                     continue;
 
                 auto objIt = instanceToObject.find(instanceId);
@@ -38,7 +38,7 @@ namespace core
 
                 try
                 {
-                    NativeAPIRegistry::setCurrentEntity(entity);
+                    AmbientScriptContext ctx(entity, instanceId);
                     auto& instance = std::any_cast<value::Value&>(objIt->second);
                     interpreter->callMethod(instance, methodName, args);
                 }
