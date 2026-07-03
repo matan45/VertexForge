@@ -737,70 +737,69 @@ namespace editor::graph
 
             ImGui::Separator();
 
-            if (createdPaletteNode)
+            if (!createdPaletteNode)
             {
-                // The popup is closing; avoid rendering against cleared filter state.
-            }
-            else if (hasFilter)
-            {
-                bool anyMatch = false;
-                for (const auto& entry : kNodePaletteEntries)
+                if (hasFilter)
                 {
-                    if (!matchesPaletteFilter(entry, nodePaletteFilter))
+                    bool anyMatch = false;
+                    for (const auto& entry : kNodePaletteEntries)
                     {
-                        continue;
+                        if (!matchesPaletteFilter(entry, nodePaletteFilter))
+                        {
+                            continue;
+                        }
+
+                        anyMatch = true;
+                        std::string menuLabel;
+                        if (entry.category[0] != '\0')
+                        {
+                            menuLabel = std::string(entry.category) + " / " + entry.label;
+                        }
+                        else
+                        {
+                            menuLabel = entry.label;
+                        }
+
+                        if (ImGui::MenuItem(menuLabel.c_str()))
+                        {
+                            createPaletteNode(entry);
+                            createdPaletteNode = true;
+                            break;
+                        }
                     }
 
-                    anyMatch = true;
-                    std::string menuLabel;
-                    if (entry.category[0] != '\0')
+                    if (!anyMatch && !createdPaletteNode)
                     {
-                        menuLabel = std::string(entry.category) + " / " + entry.label;
-                    }
-                    else
-                    {
-                        menuLabel = entry.label;
-                    }
-
-                    if (ImGui::MenuItem(menuLabel.c_str()))
-                    {
-                        createPaletteNode(entry);
-                        createdPaletteNode = true;
-                        break;
+                        ImGui::TextDisabled("No matching nodes");
                     }
                 }
-
-                if (!anyMatch && !createdPaletteNode)
+                else
                 {
-                    ImGui::TextDisabled("No matching nodes");
-                }
-            }
-            else
-            {
-                if (ImGui::BeginMenu("Modifiers"))
-                {
-                    if (ImGui::MenuItem("Color Over Lifetime")) addNode(vfx::VFXNodeType::ColorOverLifetime);
-                    if (ImGui::MenuItem("Size Over Lifetime")) addNode(vfx::VFXNodeType::SizeOverLifetime);
-                    if (ImGui::MenuItem("Speed Over Lifetime")) addNode(vfx::VFXNodeType::SpeedOverLifetime);
-                    if (ImGui::MenuItem("Rotation Over Lifetime")) addNode(vfx::VFXNodeType::RotationOverLifetime);
-                    if (ImGui::MenuItem("Glow Over Lifetime")) addNode(vfx::VFXNodeType::GlowOverLifetime);
-                    ImGui::EndMenu();
-                }
+                    if (ImGui::BeginMenu("Modifiers"))
+                    {
+                        if (ImGui::MenuItem("Color Over Lifetime")) addNode(vfx::VFXNodeType::ColorOverLifetime);
+                        if (ImGui::MenuItem("Size Over Lifetime")) addNode(vfx::VFXNodeType::SizeOverLifetime);
+                        if (ImGui::MenuItem("Speed Over Lifetime")) addNode(vfx::VFXNodeType::SpeedOverLifetime);
+                        if (ImGui::MenuItem("Rotation Over Lifetime")) addNode(vfx::VFXNodeType::RotationOverLifetime);
+                        if (ImGui::MenuItem("Glow Over Lifetime")) addNode(vfx::VFXNodeType::GlowOverLifetime);
+                        ImGui::EndMenu();
+                    }
 
-                if (ImGui::BeginMenu("Forces"))
-                {
-                    if (ImGui::MenuItem("Gravity")) addNode(vfx::VFXNodeType::ForceGravity);
-                    if (ImGui::MenuItem("Wind")) addNode(vfx::VFXNodeType::ForceWind);
-                    if (ImGui::MenuItem("Turbulence")) addNode(vfx::VFXNodeType::ForceTurbulence);
-                    if (ImGui::MenuItem("Vortex")) addNode(vfx::VFXNodeType::ForceVortex);
-                    if (ImGui::MenuItem("Drag")) addNode(vfx::VFXNodeType::ForceDrag);
-                    if (ImGui::MenuItem("Point Attractor")) addNode(vfx::VFXNodeType::ForcePointAttractor);
-                    if (ImGui::MenuItem("Curl Noise")) addNode(vfx::VFXNodeType::ForceCurlNoise);
-                    if (ImGui::MenuItem("Kill Volume")) addNode(vfx::VFXNodeType::ForceKillVolume);
-                    ImGui::EndMenu();
-                }
+                    if (ImGui::BeginMenu("Forces"))
+                    {
+                        if (ImGui::MenuItem("Gravity")) addNode(vfx::VFXNodeType::ForceGravity);
+                        if (ImGui::MenuItem("Wind")) addNode(vfx::VFXNodeType::ForceWind);
+                        if (ImGui::MenuItem("Turbulence")) addNode(vfx::VFXNodeType::ForceTurbulence);
+                        if (ImGui::MenuItem("Vortex")) addNode(vfx::VFXNodeType::ForceVortex);
+                        if (ImGui::MenuItem("Drag")) addNode(vfx::VFXNodeType::ForceDrag);
+                        if (ImGui::MenuItem("Point Attractor")) addNode(vfx::VFXNodeType::ForcePointAttractor);
+                        if (ImGui::MenuItem("Curl Noise")) addNode(vfx::VFXNodeType::ForceCurlNoise);
+                        if (ImGui::MenuItem("Kill Volume")) addNode(vfx::VFXNodeType::ForceKillVolume);
+                        ImGui::EndMenu();
+                    }
 
-                if (ImGui::MenuItem("Shape")) addShapeNode();
+                    if (ImGui::MenuItem("Shape")) addShapeNode();
+                }
             }
 
             ImGui::EndPopup();
