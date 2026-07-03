@@ -49,6 +49,7 @@ namespace controllers
             config.flipbookColumns = params.flipbookColumns;
             config.flipbookFrameRate = params.flipbookFrameRate;
             config.flipbookRandomStart = params.flipbookRandomStart;
+            config.flipbookFrameBlend = params.flipbookFrameBlend;
             config.alphaClipThreshold = params.alphaClipThreshold;
             config.additiveBlend = params.additiveBlend;
             config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
@@ -129,6 +130,8 @@ namespace controllers
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
         fbConfig.uvScrollSpeedU = currentParams.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = currentParams.uvScrollSpeedV;
+        fbConfig.frameBlend = currentParams.flipbookFrameBlend;
+        fbConfig.frameRate = currentParams.flipbookFrameRate;
         pipeline->setFlipbookConfig(fbConfig);
 
         if (!currentParams.meshPath.empty())
@@ -239,6 +242,8 @@ namespace controllers
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
         fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = params.uvScrollSpeedV;
+        fbConfig.frameBlend = params.flipbookFrameBlend;
+        fbConfig.frameRate = params.flipbookFrameRate;
 
         if (pipeline && pipeline->isInitialized())
         {
@@ -615,6 +620,8 @@ namespace controllers
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
         fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = params.uvScrollSpeedV;
+        fbConfig.frameBlend = params.flipbookFrameBlend;
+        fbConfig.frameRate = params.flipbookFrameRate;
 
         if (renderMode == render::vfx::VFXRenderMode::Ribbon)
         {

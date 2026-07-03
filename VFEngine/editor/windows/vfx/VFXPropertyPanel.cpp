@@ -280,7 +280,7 @@ namespace editor::vfxeditor
                 "rotationVariance", "angularVelocityVariance",
                 "colorValueVariance", "alphaVariance",
                 "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
-                "flipbookRandomStart", "alphaClipThreshold", "additiveBlend", "meshPath",
+                "flipbookRandomStart", "flipbookFrameBlend", "alphaClipThreshold", "additiveBlend", "meshPath",
                 "renderMode", "softParticleDistance", "stretchMultiplier",
                 "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
                 "uvScrollSpeedU", "uvScrollSpeedV",

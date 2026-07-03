@@ -63,6 +63,7 @@ namespace core
         controllerParams.flipbookColumns = params.flipbookColumns;
         controllerParams.flipbookFrameRate = params.flipbookFrameRate;
         controllerParams.flipbookRandomStart = params.flipbookRandomStart;
+        controllerParams.flipbookFrameBlend = params.flipbookFrameBlend;
         controllerParams.alphaClipThreshold = params.alphaClipThreshold;
         controllerParams.additiveBlend = params.additiveBlend;
         controllerParams.renderMode = params.renderMode;

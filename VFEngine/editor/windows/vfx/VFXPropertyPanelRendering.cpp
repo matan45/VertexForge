@@ -471,6 +471,7 @@ namespace editor::vfxeditor
             {"flipbookRows",        "Rows"},
             {"flipbookFrameRate",   "Frame Rate"},
             {"flipbookRandomStart", "Random Start"},
+            {"flipbookFrameBlend",  "Frame Blending"},
         };
 
         float inputWidth = 80.0f;

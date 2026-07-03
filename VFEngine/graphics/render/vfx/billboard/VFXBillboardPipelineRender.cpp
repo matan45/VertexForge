@@ -95,6 +95,7 @@ namespace render::vfx
         flipbookPC.glowColorB = config.glowColor.b;
         flipbookPC.uvScrollSpeedU = config.uvScrollSpeedU;
         flipbookPC.uvScrollSpeedV = config.uvScrollSpeedV;
+        flipbookPC.frameBlendMode = frameBlendModeFor(config.frameBlend, config.frameRate);
     }
 
     void VFXBillboardPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,

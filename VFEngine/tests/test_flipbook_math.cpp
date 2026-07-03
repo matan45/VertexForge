@@ -9,6 +9,7 @@
 // gather path and the GPU shader agree on frame selection.
 // ============================================================
 
+using render::computeFlipbookBlendFrame;
 using render::computeFlipbookFrame;
 using render::flipbookFinished;
 using render::pulseScale;
@@ -121,6 +122,78 @@ TEST_CASE("FlipbookMath: play-once clamps to the last frame and holds")
         auto f4 = computeFlipbookFrame(0.8f, frameRate, cols, rows);
         CHECK(f4.uvOffset.x == doctest::Approx(0.0f));
         CHECK(f4.uvOffset.y == doctest::Approx(0.0f));
+    }
+}
+
+TEST_CASE("FlipbookMath: frame blending returns current + next cell and blend factor")
+{
+    const int cols = 4;
+    const int rows = 2; // 8 frames total
+    const float tileX = 0.25f; // 1/cols
+    const float tileY = 0.5f;  // 1/rows
+
+    // Mid-frame: fi=2.5 -> current frame 2 (col 2,row 0), next frame 3 (col 3,row 0), blend 0.5
+    {
+        auto f = computeFlipbookBlendFrame(2.5f, cols, rows, true);
+        CHECK(f.uvOffsetCurr.x == doctest::Approx(0.5f));
+        CHECK(f.uvOffsetCurr.y == doctest::Approx(0.0f));
+        CHECK(f.uvOffsetNext.x == doctest::Approx(0.75f));
+        CHECK(f.uvOffsetNext.y == doctest::Approx(0.0f));
+        CHECK(f.uvScale.x == doctest::Approx(tileX));
+        CHECK(f.uvScale.y == doctest::Approx(tileY));
+        CHECK(f.uvBlend == doctest::Approx(0.5f));
+    }
+
+    // Wrap boundary (loop): fi=7.5 -> current frame 7 (col 3,row 1), next wraps to frame 0
+    {
+        auto f = computeFlipbookBlendFrame(7.5f, cols, rows, true);
+        CHECK(f.uvOffsetCurr.x == doctest::Approx(0.75f));
+        CHECK(f.uvOffsetCurr.y == doctest::Approx(0.5f));
+        CHECK(f.uvOffsetNext.x == doctest::Approx(0.0f)); // wraps to frame 0
+        CHECK(f.uvOffsetNext.y == doctest::Approx(0.0f));
+        CHECK(f.uvBlend == doctest::Approx(0.5f));
+    }
+
+    // Clamp boundary (one-shot): fi=7.5 -> current frame 7, next HOLDS frame 7 (no wrap)
+    {
+        auto f = computeFlipbookBlendFrame(7.5f, cols, rows, false);
+        CHECK(f.uvOffsetCurr.x == doctest::Approx(0.75f));
+        CHECK(f.uvOffsetCurr.y == doctest::Approx(0.5f));
+        CHECK(f.uvOffsetNext.x == doctest::Approx(0.75f)); // holds last tile
+        CHECK(f.uvOffsetNext.y == doctest::Approx(0.5f));
+        CHECK(f.uvBlend == doctest::Approx(0.5f));
+    }
+
+    // Integer boundary: fi=3.0 -> blend 0, next advances to frame 4 (col 0,row 1)
+    {
+        auto f = computeFlipbookBlendFrame(3.0f, cols, rows, true);
+        CHECK(f.uvOffsetCurr.x == doctest::Approx(0.75f)); // frame 3
+        CHECK(f.uvOffsetCurr.y == doctest::Approx(0.0f));
+        CHECK(f.uvOffsetNext.x == doctest::Approx(0.0f));  // frame 4 -> col 0,row 1
+        CHECK(f.uvOffsetNext.y == doctest::Approx(0.5f));
+        CHECK(f.uvBlend == doctest::Approx(0.0f));
+    }
+
+    // Fraction near the top of the range: fi=7.9 -> blend ~0.9, next wraps to frame 0
+    {
+        auto f = computeFlipbookBlendFrame(7.9f, cols, rows, true);
+        CHECK(f.uvOffsetCurr.x == doctest::Approx(0.75f));
+        CHECK(f.uvOffsetCurr.y == doctest::Approx(0.5f));
+        CHECK(f.uvOffsetNext.x == doctest::Approx(0.0f));
+        CHECK(f.uvOffsetNext.y == doctest::Approx(0.0f));
+        CHECK(f.uvBlend == doctest::Approx(0.9f));
+    }
+
+    // Single frame (1x1): no crossfade, full rect, blend 0.
+    {
+        auto f = computeFlipbookBlendFrame(0.0f, 1, 1, true);
+        CHECK(f.uvOffsetCurr.x == doctest::Approx(0.0f));
+        CHECK(f.uvOffsetCurr.y == doctest::Approx(0.0f));
+        CHECK(f.uvOffsetNext.x == doctest::Approx(0.0f));
+        CHECK(f.uvOffsetNext.y == doctest::Approx(0.0f));
+        CHECK(f.uvScale.x == doctest::Approx(1.0f));
+        CHECK(f.uvScale.y == doctest::Approx(1.0f));
+        CHECK(f.uvBlend == doctest::Approx(0.0f));
     }
 }
 

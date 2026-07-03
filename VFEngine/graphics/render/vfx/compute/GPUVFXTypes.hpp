@@ -72,6 +72,7 @@ namespace render::vfx
     namespace FlipbookFlags
     {
         inline constexpr uint32_t RandomStart = 1 << 14;
+        inline constexpr uint32_t FrameBlend = 1 << 21; // VK-1469: crossfade current->next cell
     }
 
     namespace RenderModeFlags
@@ -417,5 +418,6 @@ namespace render::vfx
         float glowColorB = 1.0f;
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
+        uint32_t frameBlendMode = 0; // VK-1469: 0 = off, 1 = loop (wrap), 2 = clamp (one-shot)
     };
 }

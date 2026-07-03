@@ -473,6 +473,8 @@ namespace controllers
         gpuConfig.flipbookFrameRate = cpuConfig.flipbookFrameRate;
         if (cpuConfig.flipbookRandomStart)
             gpuConfig.modifierFlags |= render::vfx::FlipbookFlags::RandomStart;
+        if (cpuConfig.flipbookFrameBlend)
+            gpuConfig.modifierFlags |= render::vfx::FlipbookFlags::FrameBlend;
 
         gpuConfig.renderMode = static_cast<uint32_t>(cpuConfig.renderMode);
         gpuConfig.softParticleDistance = cpuConfig.softParticleDistance;

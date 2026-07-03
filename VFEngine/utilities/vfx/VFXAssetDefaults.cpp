@@ -59,6 +59,10 @@ namespace vfx
                 "flipbookRandomStart", VFXPropertyType::Bool,
                 EmitterDefaults::FLIPBOOK_RANDOM_START, 0.0f, 1.0f
             };
+            node.properties["flipbookFrameBlend"] = VFXProperty{
+                "flipbookFrameBlend", VFXPropertyType::Bool,
+                EmitterDefaults::FLIPBOOK_FRAME_BLEND, 0.0f, 1.0f
+            };
         }
 
         void addVarianceProperties(VFXNode& node)

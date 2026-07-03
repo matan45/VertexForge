@@ -241,6 +241,7 @@ namespace render::vfx
         int flipbookColumns = 1;
         float flipbookFrameRate = 0.0f;
         bool flipbookRandomStart = false;
+        bool flipbookFrameBlend = false; // VK-1469: linear crossfade between current and next cell
 
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
@@ -298,7 +299,19 @@ namespace render::vfx
         glm::vec3 glowColor{1.0f};
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
+        bool frameBlend = false;   // VK-1469: crossfade current->next flipbook cell
+        float frameRate = 0.0f;    // needed to resolve loop (wrap) vs clamp (one-shot) mode
     };
+
+    // Resolves the per-emitter frame-blend push-constant mode for the CPU-sim preview
+    // path: 0 = off (discrete), 1 = loop (wrap last->first), 2 = clamp (one-shot, hold
+    // last). Mirrors the GPU-sim shader's loop rule (loop == frameRate > 0).
+    inline uint32_t frameBlendModeFor(bool enabled, float frameRate)
+    {
+        if (!enabled)
+            return 0u;
+        return frameRate > 0.0f ? 1u : 2u;
+    }
 
     namespace VFXConstants
     {

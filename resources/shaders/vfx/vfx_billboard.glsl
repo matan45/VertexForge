@@ -18,6 +18,8 @@ layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out float fragGlowIntensity;
+layout(location = 4) out vec2 fragTexCoordNext;
+layout(location = 5) out float fragBlend;
 
 layout(binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -38,6 +40,7 @@ layout(push_constant) uniform FlipbookPC {
     float glowColorB;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
+    uint frameBlendMode; // VK-1469: 0 = off, 1 = loop (wrap), 2 = clamp (one-shot)
 } pc;
 
 void main() {
@@ -78,6 +81,23 @@ void main() {
 
     fragTexCoord += vec2(pc.uvScrollSpeedU, pc.uvScrollSpeedV) * camera.time;
 
+    // VK-1469: optional crossfade current->next flipbook cell (mirrors vfx_billboard_gpu.glsl).
+    // frameBlendMode: 1 = loop (wrap last->first), 2 = clamp (one-shot, hold last).
+    float totalFrames = pc.flipbookColumns * pc.flipbookRows;
+    if (pc.frameBlendMode != 0u && totalFrames > 1.0) {
+        bool loop = (pc.frameBlendMode == 1u);
+        float nxt = loop ? mod(frameIndex + 1.0, totalFrames)
+                         : min(frameIndex + 1.0, totalFrames - 1.0);
+        float ncol = mod(nxt, pc.flipbookColumns);
+        float nrow = floor(nxt / pc.flipbookColumns);
+        fragTexCoordNext = (vec2(ncol, nrow) + inTexCoord) * tileSize
+                         + vec2(pc.uvScrollSpeedU, pc.uvScrollSpeedV) * camera.time;
+        fragBlend = fract(inFlipbookFrameIndex);
+    } else {
+        fragTexCoordNext = fragTexCoord;
+        fragBlend = 0.0;
+    }
+
     fragColor = inColor;
     fragLifetimeRatio = inLifetimeRatio;
     fragGlowIntensity = inGlowIntensity;
@@ -90,6 +110,8 @@ layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColor;
 layout(location = 2) in float fragLifetimeRatio;
 layout(location = 3) in float fragGlowIntensity;
+layout(location = 4) in vec2 fragTexCoordNext;
+layout(location = 5) in float fragBlend;
 
 layout(location = 0) out vec4 outColor;
 
@@ -107,10 +129,14 @@ layout(push_constant) uniform FlipbookPC {
     float glowColorB;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
+    uint frameBlendMode;
 } pc;
 
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
+    if (fragBlend > 0.0) {
+        texColor = mix(texColor, texture(particleTexture, fragTexCoordNext), fragBlend);
+    }
     vec4 finalColor = texColor * fragColor;
 
     float fadeStart = 0.8;

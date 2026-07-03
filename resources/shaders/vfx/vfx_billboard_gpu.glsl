@@ -10,10 +10,13 @@ layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out float fragViewDepth;
 layout(location = 4) out float fragGlowIntensity;
 layout(location = 5) out vec3 fragWorldPos;
+layout(location = 6) out vec2 fragTexCoordNext;
+layout(location = 7) out float fragBlend;
 
 #include "vfx_gpu_types.glsl"
 
 const uint FLIPBOOK_RANDOM_START = (1u << 14u);
+const uint FLIPBOOK_FRAME_BLEND = (1u << 21u);
 
 const uint RENDER_MODE_BILLBOARD = 0u;
 const uint RENDER_MODE_STRETCHED = 1u;
@@ -55,6 +58,8 @@ void main() {
         fragViewDepth = 0.0;
         fragGlowIntensity = 0.0;
         fragWorldPos = vec3(0.0);
+        fragTexCoordNext = vec2(0.0);
+        fragBlend = 0.0;
         return;
     }
 
@@ -138,6 +143,24 @@ void main() {
 
     fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
 
+    // VK-1469: optional crossfade between the current flipbook cell and the next.
+    // loop (frameRate > 0) wraps last->first; one-shot (frameRate == 0) clamps/holds
+    // the last cell. UV scroll is applied identically to both sampled cells.
+    if ((config.modifierFlags & FLIPBOOK_FRAME_BLEND) != 0u && totalFrames > 1.0) {
+        float cur = floor(frameIndex);
+        bool loop = config.flipbookFrameRate > 0.0;
+        float nxt = loop ? mod(cur + 1.0, totalFrames)
+                         : min(cur + 1.0, totalFrames - 1.0);
+        float ncol = mod(nxt, config.flipbookColumns);
+        float nrow = floor(nxt / config.flipbookColumns);
+        fragTexCoordNext = (vec2(ncol, nrow) + inTexCoord) * tileSize
+                         + vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
+        fragBlend = fract(frameIndex);
+    } else {
+        fragTexCoordNext = fragTexCoord;
+        fragBlend = 0.0;
+    }
+
     fragColor = p.color;
     fragLifetimeRatio = lifetimeRatio;
     fragGlowIntensity = p.glowIntensity;
@@ -153,6 +176,8 @@ layout(location = 2) in float fragLifetimeRatio;
 layout(location = 3) in float fragViewDepth;
 layout(location = 4) in float fragGlowIntensity;
 layout(location = 5) in vec3 fragWorldPos;
+layout(location = 6) in vec2 fragTexCoordNext;
+layout(location = 7) in float fragBlend;
 
 layout(location = 0) out vec4 outColor;
 
@@ -224,6 +249,9 @@ layout(push_constant) uniform PushConstants {
 
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
+    if (fragBlend > 0.0) {
+        texColor = mix(texColor, texture(particleTexture, fragTexCoordNext), fragBlend);
+    }
 
     vec4 finalColor = texColor * fragColor;
 

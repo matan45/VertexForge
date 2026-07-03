@@ -19,6 +19,16 @@ namespace render
         glm::vec2 uvScale;  // size of a single tile within the [0,1] atlas
     };
 
+    // Current + next flipbook cell plus the fractional blend factor, for frame
+    // crossfading (VK-1469). uvScale is the single-tile size (same for both cells).
+    struct FlipbookBlendFrame
+    {
+        glm::vec2 uvOffsetCurr; // current tile origin within the [0,1] atlas
+        glm::vec2 uvOffsetNext; // next tile origin (wrapped or clamped)
+        glm::vec2 uvScale;      // size of a single tile within the [0,1] atlas
+        float uvBlend;          // fractional frame position in [0,1)
+    };
+
     // Returns the sub-rect (offset + scale) for the current flipbook frame.
     // Mirrors the VFX/billboard flipbook math: totalFrames = cols*rows, frame
     // advances at frameRate frames/sec. When loop==true the frame wraps via mod();
@@ -67,6 +77,37 @@ namespace render
     inline FlipbookFrame computeFlipbookFrame(float time, float frameRate, int cols, int rows)
     {
         return computeFlipbookFrame(time, frameRate, cols, rows, true);
+    }
+
+    // Crossfade variant of the flipbook transform used by VFX frame blending
+    // (VK-1469). frameIndex is the post-wrap frame position in [0, cols*rows) —
+    // exactly what the VFX billboard shaders hold at their blend point. Returns the
+    // tile origins for the current AND next cell plus the fractional blend factor,
+    // so the caller can mix() between the two cells. loop==true wraps the next cell
+    // (last->first); loop==false clamps it to the last tile so a one-shot/play-once
+    // flipbook HOLDS its final frame. When there is a single frame (<=1) the full
+    // [0,1] rect is returned with blend 0 (no crossfade). Keep in lockstep with the
+    // blend blocks in resources/shaders/vfx/vfx_billboard_gpu.glsl and
+    // resources/shaders/vfx/vfx_billboard.glsl.
+    inline FlipbookBlendFrame computeFlipbookBlendFrame(float frameIndex, int cols, int rows, bool loop)
+    {
+        const int totalFrames = cols * rows;
+        if (totalFrames <= 1)
+        {
+            return {glm::vec2(0.0f, 0.0f), glm::vec2(0.0f, 0.0f), glm::vec2(1.0f, 1.0f), 0.0f};
+        }
+
+        const float total = static_cast<float>(totalFrames);
+        const float colsF = static_cast<float>(cols);
+        const float curr = std::floor(frameIndex);
+        const float blend = frameIndex - curr;
+        const float next = loop ? std::fmod(curr + 1.0f, total)
+                                : std::min(curr + 1.0f, total - 1.0f);
+
+        const glm::vec2 tileSize(1.0f / colsF, 1.0f / static_cast<float>(rows));
+        const glm::vec2 offCurr(std::fmod(curr, colsF), std::floor(curr / colsF));
+        const glm::vec2 offNext(std::fmod(next, colsF), std::floor(next / colsF));
+        return {offCurr * tileSize, offNext * tileSize, tileSize, blend};
     }
 
     // True only when a one-shot (loop==false) flipbook has reached the end of its
