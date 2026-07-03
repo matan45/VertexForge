@@ -3,13 +3,16 @@
 #include "../../dragdrop/AssetDropTarget.hpp"
 #include <nfd/FileDialog.hpp>
 #include <vfx/VFXBurstTypes.hpp>
+#include <vfx/VFXEmitterSections.hpp>
 #include <vfx/VFXKillVolume.hpp>
 #include <vfx/VFXShapeProperties.hpp>
 #include <vfx/VFXShapeTypes.hpp>
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
+#include <unordered_set>
 
 namespace editor::vfxeditor
 {
@@ -1096,6 +1099,185 @@ namespace editor::vfxeditor
                 if (ImGui::SliderFloat("##slider", val, 0.0f, 1.0f, "%.2f"))
                     notifyChanged();
                 ImGui::PopID();
+            }
+        }
+    }
+
+    namespace
+    {
+        bool moduleMatchesFilter(const char* label, const char* filter)
+        {
+            if (!filter || filter[0] == '\0') return true;
+            std::string hay(label);
+            std::string needle(filter);
+            auto lower = [](std::string& s) {
+                std::transform(s.begin(), s.end(), s.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            };
+            lower(hay);
+            lower(needle);
+            return hay.find(needle) != std::string::npos;
+        }
+    }
+
+    // Draws every enabled "module" section in canonical order. Each addable section
+    // uses the CollapsingHeader(&visible) overload so its built-in "x" removes it.
+    void VFXPropertyPanel::drawEmitterSections(vfx::VFXNode& node)
+    {
+        std::string toRemove;
+        for (const auto& s : vfx::kEmitterSections)
+        {
+            if (!vfx::sectionEnabled(node, s.id))
+                continue;
+
+            bool visible = true;
+            if (ImGui::CollapsingHeader(s.label, &visible))
+                drawEmitterSection(node, s.id);
+            if (!visible)
+                toRemove = s.id;
+        }
+
+        if (!toRemove.empty())
+        {
+            auto& v = node.enabledSections;
+            v.erase(std::remove(v.begin(), v.end(), toRemove), v.end());
+            notifyChanged();
+        }
+    }
+
+    void VFXPropertyPanel::drawEmitterSection(vfx::VFXNode& node, const std::string& sectionId)
+    {
+        if (sectionId == "spawnVariance") drawSpawnVarianceProperties(node);
+        else if (sectionId == "flipbook") drawFlipbookProperties(node);
+        else if (sectionId == "rendering") drawRenderingProperties(node);
+        else if (sectionId == "ribbon") drawRibbonProperties(node, 80.0f);
+        else if (sectionId == "uvScroll") drawUVScrollProperties(node, 80.0f);
+        else if (sectionId == "bursts") drawBurstProperties(node, 80.0f);
+        else if (sectionId == "events") drawEventsProperties(node, 80.0f);
+        else if (sectionId == "lighting") drawLightingProperties(node);
+        else if (sectionId == "collision") drawCollisionProperties(node, 80.0f);
+        else if (sectionId == "distortion") drawDistortionProperties(node);
+        else if (sectionId == "advanced") drawAdvancedProperties(node);
+    }
+
+    void VFXPropertyPanel::drawAddModulePopup(vfx::VFXNode& node)
+    {
+        ImGui::Spacing();
+        if (ImGui::Button("+ Add Module", ImVec2(-1.0f, 0.0f)))
+        {
+            moduleSearch[0] = '\0';
+            ImGui::OpenPopup("VFXAddModule");
+        }
+
+        if (ImGui::BeginPopup("VFXAddModule"))
+        {
+            ImGui::SetNextItemWidth(200.0f);
+            ImGui::InputTextWithHint("##vfxModSearch", "Search...", moduleSearch, sizeof(moduleSearch));
+            ImGui::Separator();
+
+            const char* filter = moduleSearch[0] != '\0' ? moduleSearch : nullptr;
+            bool anyShown = false;
+            for (const auto& s : vfx::kEmitterSections)
+            {
+                if (vfx::sectionEnabled(node, s.id))   // already added -> hide from the list
+                    continue;
+                if (!moduleMatchesFilter(s.label, filter))
+                    continue;
+
+                anyShown = true;
+                if (ImGui::Selectable(s.label))
+                {
+                    node.enabledSections.emplace_back(s.id);
+                    notifyChanged();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!anyShown)
+                ImGui::TextDisabled("No modules");
+
+            ImGui::EndPopup();
+        }
+    }
+
+    // Fallback section: any emitter property not owned by a dedicated section above
+    // (e.g. inheritVelocityRatio, proxy-light emission). Moved verbatim out of draw().
+    void VFXPropertyPanel::drawAdvancedProperties(vfx::VFXNode& node)
+    {
+        static const std::unordered_set<std::string> handledProperties = {
+            "spawnRate", "lifetime", "startSize", "startVelocity",
+            "startColor", "looping", "texture",
+            "sizeVariance", "lifetimeVariance", "speedVariance",
+            "rotationVariance", "angularVelocityVariance",
+            "colorValueVariance", "alphaVariance",
+            "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
+            "flipbookRandomStart", "flipbookFrameBlend", "alphaClipThreshold", "additiveBlend", "meshPath",
+            "renderMode", "softParticleDistance", "stretchMultiplier",
+            "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
+            "uvScrollSpeedU", "uvScrollSpeedV",
+            "lightingInfluence", "ambientAmount", "normalMode",
+            "distortionEnabled", "distortionStrength", "distortionTexture"
+        };
+
+        float labelWidth = 160.0f;
+        float inputWidth = 80.0f;
+
+        for (auto& [propName, prop] : node.properties)
+        {
+            if (handledProperties.count(propName)) continue;
+            if (propName.rfind("flipbook", 0) == 0) continue;
+            if (propName.rfind("event", 0) == 0) continue;
+            if (propName.rfind("collision", 0) == 0) continue;
+            if (propName.rfind("burst", 0) == 0) continue;
+
+            std::string widgetId = "##adv" + propName + std::to_string(node.id);
+
+            switch (prop.type)
+            {
+            case vfx::VFXPropertyType::Float: {
+                float* val = std::get_if<float>(&prop.value);
+                if (val) {
+                    ImGui::Text("%s", propName.c_str());
+                    ImGui::SameLine(labelWidth);
+                    ImGui::PushItemWidth(inputWidth);
+                    if (ImGui::DragFloat(widgetId.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
+                        notifyChanged();
+                    ImGui::PopItemWidth();
+                }
+                break;
+            }
+            case vfx::VFXPropertyType::Int: {
+                int32_t* val = std::get_if<int32_t>(&prop.value);
+                if (val) {
+                    ImGui::Text("%s", propName.c_str());
+                    ImGui::SameLine(labelWidth);
+                    ImGui::PushItemWidth(inputWidth);
+                    if (ImGui::DragInt(widgetId.c_str(), val, 1,
+                            static_cast<int>(prop.min), static_cast<int>(prop.max)))
+                        notifyChanged();
+                    ImGui::PopItemWidth();
+                }
+                break;
+            }
+            case vfx::VFXPropertyType::Bool: {
+                bool* val = std::get_if<bool>(&prop.value);
+                if (val) {
+                    ImGui::Text("%s", propName.c_str());
+                    ImGui::SameLine(labelWidth);
+                    if (ImGui::Checkbox(widgetId.c_str(), val))
+                        notifyChanged();
+                }
+                break;
+            }
+            case vfx::VFXPropertyType::String: {
+                std::string* val = std::get_if<std::string>(&prop.value);
+                if (val) {
+                    ImGui::Text("%s", propName.c_str());
+                    ImGui::SameLine(labelWidth);
+                    ImGui::TextDisabled("%s", val->empty() ? "(none)" : val->c_str());
+                }
+                break;
+            }
+            default: break;
             }
         }
     }

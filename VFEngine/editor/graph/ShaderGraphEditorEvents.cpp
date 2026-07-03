@@ -2,10 +2,112 @@
 #include "nodes/ShaderNode.hpp"
 #include "imgui.h"
 #include <algorithm>
+#include <array>
+#include <cctype>
+#include <string>
 
 namespace ed = ax::NodeEditor;
 
 namespace editor::graph {
+
+    namespace
+    {
+        struct NodePaletteEntry
+        {
+            const char* category;
+            const char* label;
+            material::NodeType type;
+        };
+
+        constexpr std::array<NodePaletteEntry, 48> kNodePaletteEntries = {{
+            // Constants
+            {"Constants", "Scalar", material::NodeType::ConstantScalar},
+            {"Constants", "Vector2", material::NodeType::ConstantVec2},
+            {"Constants", "Vector3", material::NodeType::ConstantVec3},
+            {"Constants", "Color", material::NodeType::ConstantColor},
+            // Math
+            {"Math", "Add", material::NodeType::Add},
+            {"Math", "Subtract", material::NodeType::Subtract},
+            {"Math", "Multiply", material::NodeType::Multiply},
+            {"Math", "Divide", material::NodeType::Divide},
+            {"Math", "Power", material::NodeType::Power},
+            {"Math", "Lerp", material::NodeType::Lerp},
+            {"Math", "Mix Color", material::NodeType::MixColor},
+            {"Math", "Clamp", material::NodeType::Clamp},
+            {"Math", "Saturate", material::NodeType::Saturate},
+            {"Math", "One Minus", material::NodeType::OneMinus},
+            {"Math", "Abs", material::NodeType::Abs},
+            // Trigonometry
+            {"Trigonometry", "Sin", material::NodeType::Sin},
+            {"Trigonometry", "Cos", material::NodeType::Cos},
+            // Vector
+            {"Vector", "Make Vec2", material::NodeType::MakeVec2},
+            {"Vector", "Make Vec3", material::NodeType::MakeVec3},
+            {"Vector", "Normalize", material::NodeType::Normalize},
+            {"Vector", "Length", material::NodeType::Length},
+            {"Vector", "Dot", material::NodeType::Dot},
+            {"Vector", "Cross", material::NodeType::Cross},
+            {"Vector", "Fresnel", material::NodeType::Fresnel},
+            // Inputs
+            {"Inputs", "UV", material::NodeType::VertexUV},
+            {"Inputs", "Normal", material::NodeType::VertexNormal},
+            {"Inputs", "World Position", material::NodeType::WorldPosition},
+            {"Inputs", "Time", material::NodeType::Time},
+            // Utility
+            {"Utility", "Panner", material::NodeType::Panner},
+            {"Utility", "UV Transform", material::NodeType::UVTransform},
+            {"Utility", "Remap", material::NodeType::Remap},
+            {"Utility", "Flipbook", material::NodeType::Flipbook},
+            {"Utility", "Rotator", material::NodeType::Rotator},
+            {"Utility", "Custom Rotator", material::NodeType::CustomRotator},
+            // Texture
+            {"Texture", "Texture Sample", material::NodeType::TextureSample},
+            {"Texture", "ORM Sample", material::NodeType::OrmSample},
+            // Conversion (nested two-level menu flattened into searchable labels)
+            {"Conversion", "Float to Vec2", material::NodeType::FloatToVec2},
+            {"Conversion", "Float to Vec3", material::NodeType::FloatToVec3},
+            {"Conversion", "Float to Vec4", material::NodeType::FloatToVec4},
+            {"Conversion", "Vec2 to Float", material::NodeType::Vec2ToFloat},
+            {"Conversion", "Vec2 to Vec3", material::NodeType::Vec2ToVec3},
+            {"Conversion", "Vec2 to Vec4", material::NodeType::Vec2ToVec4},
+            {"Conversion", "Vec3 to Float", material::NodeType::Vec3ToFloat},
+            {"Conversion", "Vec3 to Vec2", material::NodeType::Vec3ToVec2},
+            {"Conversion", "Vec3 to Vec4", material::NodeType::Vec3ToVec4},
+            {"Conversion", "Vec4 to Float", material::NodeType::Vec4ToFloat},
+            {"Conversion", "Vec4 to Vec2", material::NodeType::Vec4ToVec2},
+            {"Conversion", "Vec4 to Vec3", material::NodeType::Vec4ToVec3},
+        }};
+
+        bool containsCaseInsensitive(const char* text, const char* filter)
+        {
+            if (!filter || filter[0] == '\0')
+            {
+                return true;
+            }
+
+            if (!text)
+            {
+                return false;
+            }
+
+            auto toLower = [](unsigned char c)
+            {
+                return static_cast<char>(std::tolower(c));
+            };
+
+            std::string haystack(text);
+            std::string needle(filter);
+            std::transform(haystack.begin(), haystack.end(), haystack.begin(), toLower);
+            std::transform(needle.begin(), needle.end(), needle.begin(), toLower);
+            return haystack.find(needle) != std::string::npos;
+        }
+
+        bool matchesPaletteFilter(const NodePaletteEntry& entry, const char* filter)
+        {
+            return containsCaseInsensitive(entry.label, filter) ||
+                   containsCaseInsensitive(entry.category, filter);
+        }
+    }
 
     void ShaderGraphEditor::handleCreation() {
         if (ed::BeginCreate()) {
@@ -133,12 +235,81 @@ namespace editor::graph {
     }
 
     void ShaderGraphEditor::handleContextMenu() {
+        static char nodePaletteFilter[128] = {};
+        static bool focusNodePaletteFilter = false;
+
+        auto createPaletteNode = [this](const NodePaletteEntry& entry) {
+            createNode(entry.type, newNodePosition);
+            nodePaletteFilter[0] = '\0';
+            ImGui::CloseCurrentPopup();
+        };
+
         if (showCreateNodeMenu) {
+            nodePaletteFilter[0] = '\0';
+            focusNodePaletteFilter = true;
             ImGui::OpenPopup("AddNode");
             showCreateNodeMenu = false;
         }
 
         if (ImGui::BeginPopup("AddNode")) {
+            ImGui::TextDisabled("Add Node");
+
+            if (focusNodePaletteFilter) {
+                ImGui::SetKeyboardFocusHere();
+                focusNodePaletteFilter = false;
+            }
+            ImGui::SetNextItemWidth(240.0f);
+            bool searchSubmitted = ImGui::InputTextWithHint(
+                "##ShaderNodePaletteSearch",
+                "Search nodes...",
+                nodePaletteFilter,
+                sizeof(nodePaletteFilter),
+                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+
+            bool hasFilter = nodePaletteFilter[0] != '\0';
+            if (hasFilter && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                nodePaletteFilter[0] = '\0';
+                focusNodePaletteFilter = true;
+                hasFilter = false;
+            }
+
+            const NodePaletteEntry* firstMatch = nullptr;
+            if (hasFilter) {
+                for (const auto& entry : kNodePaletteEntries) {
+                    if (matchesPaletteFilter(entry, nodePaletteFilter)) {
+                        firstMatch = &entry;
+                        break;
+                    }
+                }
+            }
+
+            bool createdPaletteNode = false;
+            if (hasFilter && searchSubmitted && firstMatch) {
+                createPaletteNode(*firstMatch);
+                createdPaletteNode = true;
+            }
+
+            ImGui::Separator();
+
+            if (!createdPaletteNode && hasFilter) {
+                bool anyMatch = false;
+                for (const auto& entry : kNodePaletteEntries) {
+                    if (!matchesPaletteFilter(entry, nodePaletteFilter)) {
+                        continue;
+                    }
+                    anyMatch = true;
+                    std::string menuLabel = (entry.category[0] != '\0')
+                        ? std::string(entry.category) + " / " + entry.label
+                        : std::string(entry.label);
+                    if (ImGui::MenuItem(menuLabel.c_str())) {
+                        createPaletteNode(entry);
+                        break;
+                    }
+                }
+                if (!anyMatch) {
+                    ImGui::TextDisabled("No matching nodes");
+                }
+            } else if (!createdPaletteNode) {
             // Constants
             if (ImGui::BeginMenu("Constants")) {
                 if (ImGui::MenuItem("Scalar")) {
@@ -380,6 +551,7 @@ namespace editor::graph {
                     ImGui::EndMenu();
                 }
                 ImGui::EndMenu();
+            }
             }
 
             ImGui::EndPopup();

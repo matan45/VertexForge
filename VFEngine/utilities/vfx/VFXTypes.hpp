@@ -123,6 +123,11 @@ namespace vfx
         glm::vec2 position{0.0f, 0.0f};
 
         std::map<std::string, VFXProperty> properties;
+
+        // Emitter UI (editor-only): which addable "module" sections are shown in the
+        // property panel. Empty = Core only. Persisted additively in .vfVFX; runtime
+        // ignores it. Absence of the JSON key on load triggers auto-detect migration.
+        std::vector<std::string> enabledSections;
     };
 
     struct VFXNodeLink

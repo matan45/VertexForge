@@ -69,6 +69,7 @@ namespace editor::vfxeditor
 
         uint32_t lastSelectedNodeId = 0;
         std::string lastPropertyKey;
+        char moduleSearch[128] = {}; // Add-Module popup search filter
 
     public:
         void draw(vfx::VFXGraph* graph, uint32_t selectedNodeId);
@@ -92,6 +93,10 @@ namespace editor::vfxeditor
         void drawLightingProperties(vfx::VFXNode& node);
         void drawCollisionProperties(vfx::VFXNode& node, float inputWidth);
         void drawDistortionProperties(vfx::VFXNode& node);
+        void drawAdvancedProperties(vfx::VFXNode& node);
+        void drawEmitterSections(vfx::VFXNode& node);
+        void drawEmitterSection(vfx::VFXNode& node, const std::string& sectionId);
+        void drawAddModulePopup(vfx::VFXNode& node);
         void notifyChanged();
     };
 }
