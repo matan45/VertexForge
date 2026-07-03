@@ -446,6 +446,48 @@ namespace editor::graph
             };
             break;
 
+        case vfx::VFXNodeType::ForceDrag:
+            node.properties["linearCoeff"] = vfx::VFXProperty{
+                "linearCoeff", vfx::VFXPropertyType::Float,
+                vfx::ForceDefaults::DRAG_LINEAR_COEFF, 0.0f, 10.0f
+            };
+            node.properties["quadraticCoeff"] = vfx::VFXProperty{
+                "quadraticCoeff", vfx::VFXPropertyType::Float,
+                vfx::ForceDefaults::DRAG_QUADRATIC_COEFF, 0.0f, 10.0f
+            };
+            node.properties["localSpace"] = vfx::VFXProperty{
+                "localSpace", vfx::VFXPropertyType::Bool,
+                false, 0.0f, 1.0f
+            };
+            break;
+
+        case vfx::VFXNodeType::ForcePointAttractor:
+            node.properties["position"] = vfx::VFXProperty{
+                "position", vfx::VFXPropertyType::Vec3,
+                vfx::ForceDefaults::ATTRACTOR_POSITION, -100.0f, 100.0f
+            };
+            node.properties["strength"] = vfx::VFXProperty{
+                "strength", vfx::VFXPropertyType::Float,
+                vfx::ForceDefaults::ATTRACTOR_STRENGTH, -50.0f, 50.0f
+            };
+            node.properties["radius"] = vfx::VFXProperty{
+                "radius", vfx::VFXPropertyType::Float,
+                vfx::ForceDefaults::ATTRACTOR_RADIUS, 0.0f, 100.0f
+            };
+            node.properties["falloff"] = vfx::VFXProperty{
+                "falloff", vfx::VFXPropertyType::Float,
+                vfx::ForceDefaults::ATTRACTOR_FALLOFF, 0.0f, 10.0f
+            };
+            node.properties["killAtCenter"] = vfx::VFXProperty{
+                "killAtCenter", vfx::VFXPropertyType::Bool,
+                vfx::ForceDefaults::ATTRACTOR_KILL_AT_CENTER, 0.0f, 1.0f
+            };
+            node.properties["localSpace"] = vfx::VFXProperty{
+                "localSpace", vfx::VFXPropertyType::Bool,
+                false, 0.0f, 1.0f
+            };
+            break;
+
         default:
             break;
         }
@@ -534,6 +576,8 @@ namespace editor::graph
                 if (ImGui::MenuItem("Wind")) addNode(vfx::VFXNodeType::ForceWind);
                 if (ImGui::MenuItem("Turbulence")) addNode(vfx::VFXNodeType::ForceTurbulence);
                 if (ImGui::MenuItem("Vortex")) addNode(vfx::VFXNodeType::ForceVortex);
+                if (ImGui::MenuItem("Drag")) addNode(vfx::VFXNodeType::ForceDrag);
+                if (ImGui::MenuItem("Point Attractor")) addNode(vfx::VFXNodeType::ForcePointAttractor);
                 ImGui::EndMenu();
             }
 

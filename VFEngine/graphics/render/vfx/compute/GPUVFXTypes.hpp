@@ -52,6 +52,9 @@ namespace render::vfx
         inline constexpr uint32_t Wind = 1 << 5;
         inline constexpr uint32_t Turbulence = 1 << 6;
         inline constexpr uint32_t Vortex = 1 << 7;
+        inline constexpr uint32_t Drag = 1 << 16;
+        inline constexpr uint32_t Attractor = 1 << 17;
+        inline constexpr uint32_t AttractorKill = 1 << 18; // kill particles that reach the attractor center
     }
 
     namespace ShapeFlags
@@ -155,8 +158,13 @@ namespace render::vfx
         float _variancePad0 = 0.0f;
         float _variancePad1 = 0.0f;
         float _variancePad2 = 0.0f;
+
+        // Forces added in VK-1465 (flags ForceFlags::Drag / Attractor / AttractorKill).
+        // Two vec4s, independent lanes so both forces can be active at once.
+        glm::vec4 attractorParams{0.0f};     // xyz = center (world space), w = strength
+        glm::vec4 dragAttractorExtra{0.0f};  // x = drag linear, y = drag quadratic, z = attractor radius, w = attractor falloff
     };
-    static_assert(sizeof(GPUEmitterConfig) == 384, "GPUEmitterConfig must be 384 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 416, "GPUEmitterConfig must be 416 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -213,6 +221,8 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, _variancePad0) == 372, "GPUEmitterConfig::_variancePad0 offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, _variancePad1) == 376, "GPUEmitterConfig::_variancePad1 offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, _variancePad2) == 380, "GPUEmitterConfig::_variancePad2 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, attractorParams) == 384, "GPUEmitterConfig::attractorParams offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, dragAttractorExtra) == 400, "GPUEmitterConfig::dragAttractorExtra offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {

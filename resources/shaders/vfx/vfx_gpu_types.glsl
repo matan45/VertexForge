@@ -91,4 +91,8 @@ struct GPUEmitterConfig
     float _variancePad0;
     float _variancePad1;
     float _variancePad2;
+
+    // Forces added in VK-1465 (mirror of C++ GPUEmitterConfig).
+    vec4 attractorParams;     // xyz = center (world space), w = strength
+    vec4 dragAttractorExtra;  // x = drag linear, y = drag quadratic, z = attractor radius, w = attractor falloff
 };

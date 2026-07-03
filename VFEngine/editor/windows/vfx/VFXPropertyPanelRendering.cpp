@@ -243,6 +243,31 @@ namespace editor::vfxeditor
             drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
             break;
         }
+        case vfx::VFXNodeType::ForceDrag: {
+            ImGui::Text("Drag");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"linearCoeff",    "Linear",      0.05f},
+                {"quadraticCoeff", "Quadratic",   0.05f},
+                {"localSpace",     "Local Space", 0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::VFXNodeType::ForcePointAttractor: {
+            ImGui::Text("Point Attractor");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"position",     "Position",       0.1f},
+                {"strength",     "Strength",       0.1f},
+                {"radius",       "Radius",         0.1f},
+                {"falloff",      "Falloff",        0.05f},
+                {"killAtCenter", "Kill At Center", 0.1f},
+                {"localSpace",   "Local Space",    0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
         default:
             break;
         }

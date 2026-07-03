@@ -348,6 +348,24 @@ namespace render::vfx
 
         particle.position += particle.velocity * deltaTime;
         particle.rotation += particle.angularVelocity * deltaTime;
+
+        // Kill-at-center (mirror GPU): kill any particle that reached the center of an
+        // attractor flagged killAtCenter, checked after the position update.
+        for (const auto& force : config.forces.forces)
+        {
+            if (auto* attractor = std::get_if<::vfx::PointAttractorForceConfig>(&force))
+            {
+                if (attractor->killAtCenter)
+                {
+                    float killRadius = std::max(0.05f, attractor->radius * 0.05f);
+                    if (glm::length(attractor->position - particle.position) < killRadius)
+                    {
+                        particle.active = false;
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     VFXParticle* VFXParticleSystem::findInactiveParticle()
@@ -404,11 +422,22 @@ namespace render::vfx
 
     void VFXParticleSystem::applyForces(VFXParticle& particle, float deltaTime)
     {
+        // Apply all non-drag (position-based) forces first, then drag last. This mirrors
+        // the GPU, where forces accumulate into totalForce, velocity integrates once, and
+        // drag then divides the fully-integrated velocity.
         for (const auto& force : config.forces.forces)
         {
+            if (std::holds_alternative<::vfx::DragForceConfig>(force))
+                continue;
             std::visit([&](const auto& f) {
                 applyForce(particle, f, deltaTime);
             }, force);
+        }
+
+        for (const auto& force : config.forces.forces)
+        {
+            if (auto* drag = std::get_if<::vfx::DragForceConfig>(&force))
+                applyForce(particle, *drag, deltaTime);
         }
     }
 
@@ -489,6 +518,27 @@ namespace render::vfx
                 glm::vec3 radialDir = glm::normalize(radial);
                 particle.velocity += radialDir * force.radialPull * deltaTime;
             }
+        }
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::DragForceConfig& force, float deltaTime)
+    {
+        // Multiplicative (semi-implicit) form: never reverses velocity, even when k*dt > 1.
+        // Must match vfx_particle_sim.glsl exactly.
+        float k = force.linearCoeff + force.quadraticCoeff * glm::length(particle.velocity);
+        particle.velocity /= (1.0f + std::max(k, 0.0f) * deltaTime);
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::PointAttractorForceConfig& force, float deltaTime)
+    {
+        // Pull toward a world-space point with radius/falloff. Matches vfx_particle_sim.glsl.
+        glm::vec3 toCenter = force.position - particle.position;
+        float dist = glm::length(toCenter);
+        if (dist > 1e-4f && dist < force.radius)
+        {
+            float t = glm::clamp(1.0f - dist / force.radius, 0.0f, 1.0f);
+            float falloff = std::pow(t, force.falloff);
+            particle.velocity += (toCenter / dist) * force.strength * falloff * deltaTime;
         }
     }
 

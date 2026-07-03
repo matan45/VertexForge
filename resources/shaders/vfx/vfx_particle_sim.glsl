@@ -15,6 +15,9 @@ const uint FORCE_GRAVITY = 16u;
 const uint FORCE_WIND = 32u;
 const uint FORCE_TURBULENCE = 64u;
 const uint FORCE_VORTEX = 128u;
+const uint FORCE_DRAG = 65536u;          // 1 << 16
+const uint FORCE_ATTRACTOR = 131072u;    // 1 << 17
+const uint FORCE_ATTRACTOR_KILL = 262144u; // 1 << 18
 
 const uint SHAPE_SPHERE = 256u;
 const uint SHAPE_CONE = 512u;
@@ -500,7 +503,28 @@ void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
         }
     }
 
+    if ((config.modifierFlags & FORCE_ATTRACTOR) != 0u)
+    {
+        vec3 toCenter = config.attractorParams.xyz - p.position;
+        float dist = length(toCenter);
+        float radius = config.dragAttractorExtra.z;
+        if (dist > 1e-4 && dist < radius)
+        {
+            float t = clamp(1.0 - dist / radius, 0.0, 1.0);
+            float falloff = pow(t, config.dragAttractorExtra.w);
+            totalForce += (toCenter / dist) * config.attractorParams.w * falloff;
+        }
+    }
+
     p.velocity += totalForce * config.deltaTime;
+
+    // Drag is applied multiplicatively AFTER integration so it can never reverse
+    // velocity, even when (k * dt) > 1. (Explicit v -= k*v*dt would overshoot.)
+    if ((config.modifierFlags & FORCE_DRAG) != 0u)
+    {
+        float k = config.dragAttractorExtra.x + config.dragAttractorExtra.y * length(p.velocity);
+        p.velocity /= (1.0 + max(k, 0.0) * config.deltaTime);
+    }
 }
 
 vec4 sampleLUT(uint baseOffset, uint channelIndex, uint stride, float t)
@@ -915,6 +939,23 @@ void main()
                 if (prevRatio < config.lifetimeThreshold && lifetimeRatio >= config.lifetimeThreshold)
                 {
                     emitEvent(3u, p.position, p.velocity, pc.emitterIndex);
+                }
+            }
+
+            // Kill-at-center: run after modifiers so a SizeOverLifetime modifier can't
+            // resurrect size. isActive gates the activeCount increment below.
+            if ((config.modifierFlags & FORCE_ATTRACTOR) != 0u &&
+                (config.modifierFlags & FORCE_ATTRACTOR_KILL) != 0u)
+            {
+                float killRadius = max(0.05, config.dragAttractorExtra.z * 0.05);
+                if (distance(p.position, config.attractorParams.xyz) < killRadius)
+                {
+                    if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
+                    {
+                        emitEvent(1u, p.position, p.velocity, pc.emitterIndex);
+                    }
+                    p.size = 0.0;
+                    isActive = false;
                 }
             }
         }

@@ -19,6 +19,8 @@ namespace vfx
         static WindForceConfig extractWindConfig(const VFXNode& node);
         static TurbulenceForceConfig extractTurbulenceConfig(const VFXNode& node);
         static VortexForceConfig extractVortexConfig(const VFXNode& node);
+        static DragForceConfig extractDragConfig(const VFXNode& node);
+        static PointAttractorForceConfig extractPointAttractorConfig(const VFXNode& node);
 
         static float getFloat(const VFXNode& node, const std::string& propName, float defaultValue);
         static int getInt(const VFXNode& node, const std::string& propName, int defaultValue);

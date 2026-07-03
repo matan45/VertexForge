@@ -58,6 +58,8 @@ namespace vfx
         ForceWind,
         ForceTurbulence,
         ForceVortex,
+        ForceDrag,
+        ForcePointAttractor,
         Shape
     };
 
@@ -75,7 +77,9 @@ namespace vfx
         return type == VFXNodeType::ForceGravity ||
                type == VFXNodeType::ForceWind ||
                type == VFXNodeType::ForceTurbulence ||
-               type == VFXNodeType::ForceVortex;
+               type == VFXNodeType::ForceVortex ||
+               type == VFXNodeType::ForceDrag ||
+               type == VFXNodeType::ForcePointAttractor;
     }
 
     inline bool isShapeNode(VFXNodeType type)
@@ -249,6 +253,15 @@ namespace vfx
         inline const glm::vec3 VORTEX_CENTER{0.0f, 0.0f, 0.0f};
         inline constexpr float VORTEX_STRENGTH = 1.0f;
         inline constexpr float VORTEX_RADIAL_PULL = 0.0f;
+
+        inline constexpr float DRAG_LINEAR_COEFF = 1.0f;
+        inline constexpr float DRAG_QUADRATIC_COEFF = 0.0f;
+
+        inline const glm::vec3 ATTRACTOR_POSITION{0.0f, 0.0f, 0.0f};
+        inline constexpr float ATTRACTOR_STRENGTH = 5.0f;
+        inline constexpr float ATTRACTOR_RADIUS = 10.0f;
+        inline constexpr float ATTRACTOR_FALLOFF = 1.0f;
+        inline constexpr bool ATTRACTOR_KILL_AT_CENTER = false;
     }
 
     const char* propertyTypeToString(VFXPropertyType type);

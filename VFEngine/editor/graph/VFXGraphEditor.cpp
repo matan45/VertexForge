@@ -178,6 +178,8 @@ namespace editor::graph
         case vfx::VFXNodeType::ForceWind:
         case vfx::VFXNodeType::ForceTurbulence:
         case vfx::VFXNodeType::ForceVortex:
+        case vfx::VFXNodeType::ForceDrag:
+        case vfx::VFXNodeType::ForcePointAttractor:
             return IM_COL32(80, 200, 200, 255);   // Cyan
         case vfx::VFXNodeType::Shape:
             return IM_COL32(200, 100, 180, 255);  // Magenta
@@ -201,6 +203,8 @@ namespace editor::graph
         case vfx::VFXNodeType::ForceWind: return "Wind";
         case vfx::VFXNodeType::ForceTurbulence: return "Turbulence";
         case vfx::VFXNodeType::ForceVortex: return "Vortex";
+        case vfx::VFXNodeType::ForceDrag: return "Drag";
+        case vfx::VFXNodeType::ForcePointAttractor: return "Point Attractor";
         case vfx::VFXNodeType::Shape: return "Shape";
         default: return "Unknown";
         }

@@ -91,6 +91,10 @@ namespace vfx
             return extractTurbulenceConfig(node);
         case VFXNodeType::ForceVortex:
             return extractVortexConfig(node);
+        case VFXNodeType::ForceDrag:
+            return extractDragConfig(node);
+        case VFXNodeType::ForcePointAttractor:
+            return extractPointAttractorConfig(node);
         default:
             return GravityForceConfig{};
         }
@@ -134,6 +138,27 @@ namespace vfx
         config.center = getVec3(node, "center", ForceDefaults::VORTEX_CENTER);
         config.strength = getFloat(node, "strength", ForceDefaults::VORTEX_STRENGTH);
         config.radialPull = getFloat(node, "radialPull", ForceDefaults::VORTEX_RADIAL_PULL);
+        config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
+        return config;
+    }
+
+    DragForceConfig VFXForceConfigLoader::extractDragConfig(const VFXNode& node)
+    {
+        DragForceConfig config;
+        config.linearCoeff = getFloat(node, "linearCoeff", ForceDefaults::DRAG_LINEAR_COEFF);
+        config.quadraticCoeff = getFloat(node, "quadraticCoeff", ForceDefaults::DRAG_QUADRATIC_COEFF);
+        config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
+        return config;
+    }
+
+    PointAttractorForceConfig VFXForceConfigLoader::extractPointAttractorConfig(const VFXNode& node)
+    {
+        PointAttractorForceConfig config;
+        config.position = getVec3(node, "position", ForceDefaults::ATTRACTOR_POSITION);
+        config.strength = getFloat(node, "strength", ForceDefaults::ATTRACTOR_STRENGTH);
+        config.radius = getFloat(node, "radius", ForceDefaults::ATTRACTOR_RADIUS);
+        config.falloff = getFloat(node, "falloff", ForceDefaults::ATTRACTOR_FALLOFF);
+        config.killAtCenter = getBool(node, "killAtCenter", ForceDefaults::ATTRACTOR_KILL_AT_CENTER);
         config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
         return config;
     }

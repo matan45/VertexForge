@@ -374,6 +374,8 @@ namespace controllers
         gpuConfig.turbulence = glm::vec4(0.0f);
         gpuConfig.vortexAxis = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
         gpuConfig.vortexCenter = glm::vec4(0.0f);
+        gpuConfig.attractorParams = glm::vec4(0.0f);
+        gpuConfig.dragAttractorExtra = glm::vec4(0.0f);
 
         for (const auto& force : cpuConfig.forces.forces)
         {
@@ -400,6 +402,21 @@ namespace controllers
                     gpuConfig.modifierFlags |= render::vfx::ForceFlags::Vortex;
                     gpuConfig.vortexAxis = glm::vec4(glm::normalize(f.axis), f.strength);
                     gpuConfig.vortexCenter = glm::vec4(f.center, f.radialPull);
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::DragForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Drag;
+                    gpuConfig.dragAttractorExtra.x = f.linearCoeff;
+                    gpuConfig.dragAttractorExtra.y = f.quadraticCoeff;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::PointAttractorForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Attractor;
+                    if (f.killAtCenter)
+                        gpuConfig.modifierFlags |= render::vfx::ForceFlags::AttractorKill;
+                    gpuConfig.attractorParams = glm::vec4(f.position, f.strength);
+                    gpuConfig.dragAttractorExtra.z = f.radius;
+                    gpuConfig.dragAttractorExtra.w = f.falloff;
                 }
             }, force);
         }

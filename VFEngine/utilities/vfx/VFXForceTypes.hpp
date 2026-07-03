@@ -46,11 +46,33 @@ namespace vfx
         ForceSpace space = ForceSpace::World;
     };
 
+    // Velocity damping: v /= (1 + (linearCoeff + quadraticCoeff * |v|) * dt).
+    // Applied multiplicatively (semi-implicit) so it never reverses velocity, even at large dt.
+    struct DragForceConfig
+    {
+        float linearCoeff = 1.0f;
+        float quadraticCoeff = 0.0f;
+        ForceSpace space = ForceSpace::World; // stored for parity; damping is space-independent
+    };
+
+    // Pull toward a world-space point. Negative strength = repulsor.
+    struct PointAttractorForceConfig
+    {
+        glm::vec3 position{0.0f, 0.0f, 0.0f}; // world-space (like VortexForceConfig::center)
+        float strength = 5.0f;
+        float radius = 10.0f;                 // influence cutoff; no force beyond
+        float falloff = 1.0f;                 // 1 = linear, 2 = quadratic ease toward center
+        bool killAtCenter = false;            // kill particles that reach the center
+        ForceSpace space = ForceSpace::World; // stored for parity; center is authored in world space
+    };
+
     using VFXForceConfig = std::variant<
         GravityForceConfig,
         WindForceConfig,
         TurbulenceForceConfig,
-        VortexForceConfig
+        VortexForceConfig,
+        DragForceConfig,
+        PointAttractorForceConfig
     >;
 
     struct VFXForceChain

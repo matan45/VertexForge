@@ -91,6 +91,8 @@ namespace vfx
         case VFXNodeType::ForceWind:          return "ForceWind";
         case VFXNodeType::ForceTurbulence:    return "ForceTurbulence";
         case VFXNodeType::ForceVortex:        return "ForceVortex";
+        case VFXNodeType::ForceDrag:          return "ForceDrag";
+        case VFXNodeType::ForcePointAttractor: return "ForcePointAttractor";
         case VFXNodeType::Shape:              return "Shape";
         default: return "Emitter";
         }
@@ -109,6 +111,8 @@ namespace vfx
         if (str == "ForceWind")          return VFXNodeType::ForceWind;
         if (str == "ForceTurbulence")    return VFXNodeType::ForceTurbulence;
         if (str == "ForceVortex")        return VFXNodeType::ForceVortex;
+        if (str == "ForceDrag")          return VFXNodeType::ForceDrag;
+        if (str == "ForcePointAttractor") return VFXNodeType::ForcePointAttractor;
         if (str == "Shape")              return VFXNodeType::Shape;
         return VFXNodeType::Emitter;
     }
