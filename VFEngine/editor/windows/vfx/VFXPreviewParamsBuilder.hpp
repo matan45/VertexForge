@@ -71,6 +71,15 @@ namespace editor::vfxeditor
         params.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         params.looping = getBool(*emitterNode, "looping", vfx::EmitterDefaults::LOOPING);
         params.texturePath = getString(*emitterNode, "texture", "");
+        params.sizeVariance = std::clamp(getFloat(*emitterNode, "sizeVariance", vfx::EmitterDefaults::SIZE_VARIANCE), 0.0f, 1.0f);
+        params.lifetimeVariance = std::clamp(getFloat(*emitterNode, "lifetimeVariance", vfx::EmitterDefaults::LIFETIME_VARIANCE), 0.0f, 1.0f);
+        params.speedVariance = std::clamp(getFloat(*emitterNode, "speedVariance", vfx::EmitterDefaults::SPEED_VARIANCE), 0.0f, 1.0f);
+        params.rotationVariance = glm::radians(std::max(0.0f,
+            getFloat(*emitterNode, "rotationVariance", vfx::EmitterDefaults::ROTATION_VARIANCE_DEGREES)));
+        params.angularVelocityVariance = glm::radians(std::max(0.0f,
+            getFloat(*emitterNode, "angularVelocityVariance", vfx::EmitterDefaults::ANGULAR_VELOCITY_VARIANCE_DEGREES)));
+        params.colorValueVariance = std::clamp(getFloat(*emitterNode, "colorValueVariance", vfx::EmitterDefaults::COLOR_VALUE_VARIANCE), 0.0f, 1.0f);
+        params.alphaVariance = std::clamp(getFloat(*emitterNode, "alphaVariance", vfx::EmitterDefaults::ALPHA_VARIANCE), 0.0f, 1.0f);
 
         params.modifiers = vfx::VFXModifierConfigLoader::fromGraph(vfxData.graph);
         params.forces = vfx::VFXForceConfigLoader::fromGraph(vfxData.graph);

@@ -48,6 +48,13 @@ namespace core
         controllerParams.emitDirection = params.emitDirection;
         controllerParams.texturePath = params.texturePath;
         controllerParams.looping = params.looping;
+        controllerParams.sizeVariance = params.sizeVariance;
+        controllerParams.lifetimeVariance = params.lifetimeVariance;
+        controllerParams.speedVariance = params.speedVariance;
+        controllerParams.rotationVariance = params.rotationVariance;
+        controllerParams.angularVelocityVariance = params.angularVelocityVariance;
+        controllerParams.colorValueVariance = params.colorValueVariance;
+        controllerParams.alphaVariance = params.alphaVariance;
         controllerParams.modifiers = params.modifiers;
         controllerParams.forces = params.forces;
         controllerParams.shape = params.shape;

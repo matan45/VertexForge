@@ -3,22 +3,8 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-struct GPUParticle
-{
-    vec3 position;
-    float lifetime;
-    vec3 velocity;
-    float maxLifetime;
-    vec4 color;
-    float size;
-    float rotation;
-    float initialSize;
-    float initialSpeed;
-    uint spawnSeed;
-    float glowIntensity;
-    float _pad2;
-    float _pad3;
-};
+#include "vfx_gpu_types.glsl"
+#include "vfx_variance.glsl"
 
 const uint MODIFIER_COLOR_OVER_LIFETIME = 1u;
 const uint MODIFIER_SIZE_OVER_LIFETIME = 2u;
@@ -38,74 +24,6 @@ const uint SHAPE_EMIT_FROM_SURFACE = 4096u;
 const uint SHAPE_RANDOM_DIRECTION = 8192u;
 
 const uint MODIFIER_GLOW_OVER_LIFETIME = 32768u;
-
-struct GPUEmitterConfig
-{
-    vec4 emitDirection;
-    vec4 startColor;
-    float spawnRate;
-    float lifetime;
-    float startSize;
-    float startSpeed;
-    uint maxParticles;
-    uint seed;
-    float deltaTime;
-    uint modifierFlags;
-
-    vec4 colorStart;
-    vec4 colorEnd;
-    float sizeStartMult;
-    float sizeEndMult;
-    float speedStartMult;
-    float speedEndMult;
-    float angularVelocity;
-    uint lutBaseOffset;
-    uint lutChannelStride;
-    uint lutFlags;
-
-    vec4 gravityDir;
-    vec4 windDir;
-    vec4 windNoise;
-    vec4 turbulence;
-    vec4 vortexAxis;
-    vec4 vortexCenter;
-
-    vec4 shapeDimensions;
-    uint shapeFlags;
-    float flipbookColumns;
-    float flipbookRows;
-    float flipbookFrameRate;
-
-    uint renderMode;
-    float softParticleDistance;
-    float stretchMultiplier;
-    uint drawIndexCount;
-
-    uint maxTrailPoints;
-    float ribbonWidth;
-    float ribbonMinDistance;
-    float uvScrollSpeedU;
-    float uvScrollSpeedV;
-    uint eventFlags;
-    float lifetimeThreshold;
-    uint colliderCount;
-    float collisionBounce;
-    float collisionFriction;
-    float collisionLifetimeLoss;
-    uint terrainCollisionEnabled;
-
-    // Lighting
-    float lightingInfluence;
-    uint normalMode;
-    float ambientAmount;
-    float _lightPad0;
-
-    // Distortion
-    uint distortionEnabled;
-    float distortionStrength;
-    float _distortionPad0;
-    float _distortionPad1;
-};
 
 struct GPUEmitterState
 {
@@ -610,6 +528,9 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         {
             p.color = mix(config.colorStart, config.colorEnd, lifetimeRatio);
         }
+        vec2 colorMult = unpackHalf2x16(p.packedColorMult);
+        p.color.rgb *= colorMult.x;
+        p.color.a *= colorMult.y;
     }
 
     if ((config.modifierFlags & MODIFIER_SIZE_OVER_LIFETIME) != 0u)
@@ -967,6 +888,7 @@ void main()
             applyForces(p, config, time);
 
             p.position += p.velocity * config.deltaTime;
+            p.rotation += p.angularVelocity * config.deltaTime;
 
             bool collisionEventFired = false;
             applyCollisions(p, config, pc.emitterIndex, collisionEventFired);
@@ -983,7 +905,7 @@ void main()
                 if (lifetimeRatio > FADE_START)
                 {
                     float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
-                    p.color.a = config.startColor.a * (1.0 - fadeProgress);
+                    p.color.a = config.startColor.a * unpackHalf2x16(p.packedColorMult).y * (1.0 - fadeProgress);
                 }
             }
 
@@ -1020,18 +942,36 @@ void main()
             p.position = spawnOrigin + rotation * localPos;
 
             p.lifetime = 0.0;
-            p.maxLifetime = config.lifetime;
-            p.size = config.startSize;
-            p.color = config.startColor;
-            p.rotation = 0.0;
-
-            p.initialSize = config.startSize;
-            p.initialSpeed = config.startSpeed;
             p.spawnSeed = seed;
             p.glowIntensity = 0.0;
+            uint varianceSeed = p.spawnSeed;
+            float sizeMult = max(0.0, 1.0 + config.sizeVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_SIZE));
+            float lifetimeMult = max(0.01, 1.0 + config.lifetimeVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_LIFETIME));
+            float speedMult = max(0.0, 1.0 + config.speedVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_SPEED));
+            float colorValueMult = 1.0 + config.colorValueVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_COLOR_VALUE);
+            float alphaMult = 1.0 + config.alphaVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ALPHA);
+
+            p.maxLifetime = config.lifetime * lifetimeMult;
+            p.size = config.startSize * sizeMult;
+            p.color = config.startColor;
+            p.color.rgb *= colorValueMult;
+            p.color.a *= alphaMult;
+            p.rotation = config.rotationVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ROTATION);
+            p.angularVelocity = config.angularVelocityVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ANGULAR_VELOCITY);
+            p.packedColorMult = packHalf2x16(vec2(colorValueMult, alphaMult));
+
+            p.initialSize = p.size;
+            p.initialSpeed = config.startSpeed * speedMult;
 
             vec3 dir = generateDirectionFromShape(seed, localPos, config);
-            p.velocity = dir * config.startSpeed;
+            p.velocity = dir * p.initialSpeed;
 
             p.velocity = rotation * p.velocity;
 

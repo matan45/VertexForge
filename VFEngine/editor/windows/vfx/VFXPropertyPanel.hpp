@@ -79,6 +79,7 @@ namespace editor::vfxeditor
         void drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label);
         bool drawScalarProperty(const char* label, vfx::VFXProperty& prop, float inputWidth, float step = 0.1f);
         void drawCoreProperties(vfx::VFXNode& node);
+        void drawSpawnVarianceProperties(vfx::VFXNode& node);
         void drawForceProperties(vfx::VFXNode& node);
         void drawShapeProperties(vfx::VFXNode& node);
         void drawFlipbookProperties(vfx::VFXNode& node);

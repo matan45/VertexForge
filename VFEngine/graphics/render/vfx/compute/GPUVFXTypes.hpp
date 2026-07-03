@@ -19,8 +19,8 @@ namespace render::vfx
         float initialSpeed;
         uint32_t spawnSeed;
         float glowIntensity = 0.0f;
-        float _pad2 = 0.0f;
-        float _pad3 = 0.0f;
+        float angularVelocity = 0.0f;
+        uint32_t packedColorMult = 0;
     };
     static_assert(sizeof(GPUParticle) == 80, "GPUParticle must be 80 bytes for GPU alignment");
     static_assert(offsetof(GPUParticle, position) == 0, "GPUParticle::position offset mismatch");
@@ -33,6 +33,9 @@ namespace render::vfx
     static_assert(offsetof(GPUParticle, initialSize) == 56, "GPUParticle::initialSize offset mismatch");
     static_assert(offsetof(GPUParticle, initialSpeed) == 60, "GPUParticle::initialSpeed offset mismatch");
     static_assert(offsetof(GPUParticle, spawnSeed) == 64, "GPUParticle::spawnSeed offset mismatch");
+    static_assert(offsetof(GPUParticle, glowIntensity) == 68, "GPUParticle::glowIntensity offset mismatch");
+    static_assert(offsetof(GPUParticle, angularVelocity) == 72, "GPUParticle::angularVelocity offset mismatch");
+    static_assert(offsetof(GPUParticle, packedColorMult) == 76, "GPUParticle::packedColorMult offset mismatch");
 
     namespace ModifierFlags
     {
@@ -140,10 +143,20 @@ namespace render::vfx
         // Distortion
         uint32_t distortionEnabled = 0;
         float distortionStrength = 0.0f;
-        float _distortionPad0 = 0.0f;
-        float _distortionPad1 = 0.0f;
+        float sizeVariance = 0.0f;
+        float lifetimeVariance = 0.0f;
+
+        // Spawn variance
+        float speedVariance = 0.0f;
+        float rotationVariance = 0.0f;          // radians
+        float angularVelocityVariance = 0.0f;   // radians / second
+        float colorValueVariance = 0.0f;
+        float alphaVariance = 0.0f;
+        float _variancePad0 = 0.0f;
+        float _variancePad1 = 0.0f;
+        float _variancePad2 = 0.0f;
     };
-    static_assert(sizeof(GPUEmitterConfig) == 352, "GPUEmitterConfig must be 352 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 384, "GPUEmitterConfig must be 384 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -190,6 +203,16 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, ambientAmount) == 328, "GPUEmitterConfig::ambientAmount offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, distortionEnabled) == 336, "GPUEmitterConfig::distortionEnabled offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, distortionStrength) == 340, "GPUEmitterConfig::distortionStrength offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, sizeVariance) == 344, "GPUEmitterConfig::sizeVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, lifetimeVariance) == 348, "GPUEmitterConfig::lifetimeVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, speedVariance) == 352, "GPUEmitterConfig::speedVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, rotationVariance) == 356, "GPUEmitterConfig::rotationVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, angularVelocityVariance) == 360, "GPUEmitterConfig::angularVelocityVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, colorValueVariance) == 364, "GPUEmitterConfig::colorValueVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, alphaVariance) == 368, "GPUEmitterConfig::alphaVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, _variancePad0) == 372, "GPUEmitterConfig::_variancePad0 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, _variancePad1) == 376, "GPUEmitterConfig::_variancePad1 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, _variancePad2) == 380, "GPUEmitterConfig::_variancePad2 offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {

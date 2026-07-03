@@ -61,6 +61,38 @@ namespace vfx
             };
         }
 
+        void addVarianceProperties(VFXNode& node)
+        {
+            node.properties["sizeVariance"] = VFXProperty{
+                "sizeVariance", VFXPropertyType::Float,
+                EmitterDefaults::SIZE_VARIANCE, 0.0f, 1.0f
+            };
+            node.properties["lifetimeVariance"] = VFXProperty{
+                "lifetimeVariance", VFXPropertyType::Float,
+                EmitterDefaults::LIFETIME_VARIANCE, 0.0f, 1.0f
+            };
+            node.properties["speedVariance"] = VFXProperty{
+                "speedVariance", VFXPropertyType::Float,
+                EmitterDefaults::SPEED_VARIANCE, 0.0f, 1.0f
+            };
+            node.properties["rotationVariance"] = VFXProperty{
+                "rotationVariance", VFXPropertyType::Float,
+                EmitterDefaults::ROTATION_VARIANCE_DEGREES, 0.0f, 180.0f
+            };
+            node.properties["angularVelocityVariance"] = VFXProperty{
+                "angularVelocityVariance", VFXPropertyType::Float,
+                EmitterDefaults::ANGULAR_VELOCITY_VARIANCE_DEGREES, 0.0f, 720.0f
+            };
+            node.properties["colorValueVariance"] = VFXProperty{
+                "colorValueVariance", VFXPropertyType::Float,
+                EmitterDefaults::COLOR_VALUE_VARIANCE, 0.0f, 1.0f
+            };
+            node.properties["alphaVariance"] = VFXProperty{
+                "alphaVariance", VFXPropertyType::Float,
+                EmitterDefaults::ALPHA_VARIANCE, 0.0f, 1.0f
+            };
+        }
+
         void addRenderingProperties(VFXNode& node)
         {
             node.properties["alphaClipThreshold"] = VFXProperty{
@@ -218,6 +250,7 @@ namespace vfx
             emitterNode.position = glm::vec2(100.0f, 200.0f);
 
             addCoreProperties(emitterNode);
+            addVarianceProperties(emitterNode);
             addFlipbookProperties(emitterNode);
             addRenderingProperties(emitterNode);
             addRibbonProperties(emitterNode);

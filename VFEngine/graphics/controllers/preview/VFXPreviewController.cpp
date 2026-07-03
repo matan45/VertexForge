@@ -21,6 +21,57 @@
 
 namespace controllers
 {
+    namespace
+    {
+        render::vfx::VFXEmitterConfig buildEmitterConfig(const VFXPreviewParams& params)
+        {
+            render::vfx::VFXEmitterConfig config;
+            config.spawnRate = params.spawnRate;
+            config.lifetime = params.lifetime;
+            config.startSize = params.startSize;
+            config.startSpeed = params.startSpeed;
+            config.startColor = params.startColor;
+            config.emitDirection = params.emitDirection;
+            config.texturePath = params.texturePath;
+            config.looping = params.looping;
+            config.sizeVariance = params.sizeVariance;
+            config.lifetimeVariance = params.lifetimeVariance;
+            config.speedVariance = params.speedVariance;
+            config.rotationVariance = params.rotationVariance;
+            config.angularVelocityVariance = params.angularVelocityVariance;
+            config.colorValueVariance = params.colorValueVariance;
+            config.alphaVariance = params.alphaVariance;
+            config.modifiers = params.modifiers;
+            config.forces = params.forces;
+            config.shape = params.shape;
+            config.bursts = params.bursts;
+            config.flipbookRows = params.flipbookRows;
+            config.flipbookColumns = params.flipbookColumns;
+            config.flipbookFrameRate = params.flipbookFrameRate;
+            config.flipbookRandomStart = params.flipbookRandomStart;
+            config.alphaClipThreshold = params.alphaClipThreshold;
+            config.additiveBlend = params.additiveBlend;
+            config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
+            config.softParticleDistance = params.softParticleDistance;
+            config.stretchMultiplier = params.stretchMultiplier;
+            config.meshPath = params.meshPath;
+            config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
+            config.ribbonWidth = params.ribbonWidth;
+            config.ribbonMinDistance = params.ribbonMinDistance;
+            config.uvScrollSpeedU = params.uvScrollSpeedU;
+            config.uvScrollSpeedV = params.uvScrollSpeedV;
+            config.events = params.events;
+            config.collisionEnabled = params.collisionEnabled;
+            config.collisionBounce = params.collisionBounce;
+            config.collisionFriction = params.collisionFriction;
+            config.collisionLifetimeLoss = params.collisionLifetimeLoss;
+            config.lightingInfluence = params.lightingInfluence;
+            config.normalMode = params.normalMode;
+            config.ambientAmount = params.ambientAmount;
+            return config;
+        }
+    }
+
     VFXPreviewController::VFXPreviewController()
         : swapChain{*core::VulkanContext::getSwapChain()}
         , device{*core::VulkanContext::getDevice()}
@@ -61,30 +112,7 @@ namespace controllers
         ribbonPipeline = std::make_unique<render::vfx::VFXRibbonPreviewPipeline>(device, swapChain, offscreenResources);
         ribbonPipeline->init();
 
-        render::vfx::VFXEmitterConfig config;
-        config.spawnRate = currentParams.spawnRate;
-        config.lifetime = currentParams.lifetime;
-        config.startSize = currentParams.startSize;
-        config.startSpeed = currentParams.startSpeed;
-        config.startColor = currentParams.startColor;
-        config.emitDirection = currentParams.emitDirection;
-        config.texturePath = currentParams.texturePath;
-        config.looping = currentParams.looping;
-        config.modifiers = currentParams.modifiers;
-        config.forces = currentParams.forces;
-        config.shape = currentParams.shape;
-        config.flipbookRows = currentParams.flipbookRows;
-        config.flipbookColumns = currentParams.flipbookColumns;
-        config.flipbookFrameRate = currentParams.flipbookFrameRate;
-        config.flipbookRandomStart = currentParams.flipbookRandomStart;
-        config.alphaClipThreshold = currentParams.alphaClipThreshold;
-        config.additiveBlend = currentParams.additiveBlend;
-        config.renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
-        config.softParticleDistance = currentParams.softParticleDistance;
-        config.stretchMultiplier = currentParams.stretchMultiplier;
-        config.maxTrailPoints = static_cast<uint32_t>(currentParams.maxTrailPoints);
-        config.ribbonWidth = currentParams.ribbonWidth;
-        config.ribbonMinDistance = currentParams.ribbonMinDistance;
+        render::vfx::VFXEmitterConfig config = buildEmitterConfig(currentParams);
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
@@ -197,39 +225,7 @@ namespace controllers
 
         if (particleSystem)
         {
-            render::vfx::VFXEmitterConfig config;
-            config.spawnRate = params.spawnRate;
-            config.lifetime = params.lifetime;
-            config.startSize = params.startSize;
-            config.startSpeed = params.startSpeed;
-            config.startColor = params.startColor;
-            config.emitDirection = params.emitDirection;
-            config.texturePath = params.texturePath;
-            config.looping = params.looping;
-            config.modifiers = params.modifiers;
-            config.forces = params.forces;
-            config.shape = params.shape;
-            config.bursts = params.bursts;
-            config.flipbookRows = params.flipbookRows;
-            config.flipbookColumns = params.flipbookColumns;
-            config.flipbookFrameRate = params.flipbookFrameRate;
-            config.flipbookRandomStart = params.flipbookRandomStart;
-            config.alphaClipThreshold = params.alphaClipThreshold;
-            config.additiveBlend = params.additiveBlend;
-            config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
-            config.softParticleDistance = params.softParticleDistance;
-            config.stretchMultiplier = params.stretchMultiplier;
-            config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
-            config.ribbonWidth = params.ribbonWidth;
-            config.ribbonMinDistance = params.ribbonMinDistance;
-            config.events = params.events;
-            config.collisionEnabled = params.collisionEnabled;
-            config.collisionBounce = params.collisionBounce;
-            config.collisionFriction = params.collisionFriction;
-            config.collisionLifetimeLoss = params.collisionLifetimeLoss;
-            config.lightingInfluence = params.lightingInfluence;
-            config.normalMode = params.normalMode;
-            config.ambientAmount = params.ambientAmount;
+            render::vfx::VFXEmitterConfig config = buildEmitterConfig(params);
             particleSystem->setEmitterConfig(config);
         }
 
@@ -585,39 +581,7 @@ namespace controllers
     void VFXPreviewController::configureSystemFromParams(render::vfx::VFXParticleSystem& system,
                                                          const VFXPreviewParams& params) const
     {
-        render::vfx::VFXEmitterConfig config;
-        config.spawnRate = params.spawnRate;
-        config.lifetime = params.lifetime;
-        config.startSize = params.startSize;
-        config.startSpeed = params.startSpeed;
-        config.startColor = params.startColor;
-        config.emitDirection = params.emitDirection;
-        config.texturePath = params.texturePath;
-        config.looping = params.looping;
-        config.modifiers = params.modifiers;
-        config.forces = params.forces;
-        config.shape = params.shape;
-        config.bursts = params.bursts;
-        config.flipbookRows = params.flipbookRows;
-        config.flipbookColumns = params.flipbookColumns;
-        config.flipbookFrameRate = params.flipbookFrameRate;
-        config.flipbookRandomStart = params.flipbookRandomStart;
-        config.alphaClipThreshold = params.alphaClipThreshold;
-        config.additiveBlend = params.additiveBlend;
-        config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
-        config.softParticleDistance = params.softParticleDistance;
-        config.stretchMultiplier = params.stretchMultiplier;
-        config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
-        config.ribbonWidth = params.ribbonWidth;
-        config.ribbonMinDistance = params.ribbonMinDistance;
-        config.events = params.events;
-        config.collisionEnabled = params.collisionEnabled;
-        config.collisionBounce = params.collisionBounce;
-        config.collisionFriction = params.collisionFriction;
-        config.collisionLifetimeLoss = params.collisionLifetimeLoss;
-        config.lightingInfluence = params.lightingInfluence;
-        config.normalMode = params.normalMode;
-        config.ambientAmount = params.ambientAmount;
+        render::vfx::VFXEmitterConfig config = buildEmitterConfig(params);
         system.setEmitterConfig(config);
     }
 

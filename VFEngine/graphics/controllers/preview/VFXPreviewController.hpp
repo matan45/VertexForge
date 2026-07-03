@@ -46,6 +46,13 @@ namespace controllers
         glm::vec3 emitDirection{0.0f, 1.0f, 0.0f};
         std::string texturePath;
         bool looping = true;
+        float sizeVariance = 0.0f;
+        float lifetimeVariance = 0.0f;
+        float speedVariance = 0.0f;
+        float rotationVariance = 0.0f;
+        float angularVelocityVariance = 0.0f;
+        float colorValueVariance = 0.0f;
+        float alphaVariance = 0.0f;
 
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;

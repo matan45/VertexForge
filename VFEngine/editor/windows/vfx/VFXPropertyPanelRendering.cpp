@@ -144,6 +144,33 @@ namespace editor::vfxeditor
         }
     }
 
+    void VFXPropertyPanel::drawSpawnVarianceProperties(vfx::VFXNode& node)
+    {
+        constexpr float inputWidth = 80.0f;
+
+        struct VarianceEntry { const char* key; const char* label; float step; };
+        static constexpr VarianceEntry entries[] = {
+            {"sizeVariance",            "Size +/-",       0.01f},
+            {"lifetimeVariance",        "Lifetime +/-",   0.01f},
+            {"speedVariance",           "Speed +/-",      0.01f},
+            {"rotationVariance",        "Rotation +/-",   1.0f},
+            {"angularVelocityVariance", "Ang Vel +/-",    1.0f},
+            {"colorValueVariance",      "Color Val +/-",  0.01f},
+            {"alphaVariance",           "Alpha +/-",      0.01f},
+        };
+
+        for (const auto& entry : entries)
+        {
+            auto it = node.properties.find(entry.key);
+            if (it == node.properties.end()) continue;
+
+            ImGui::PushID(entry.key);
+            if (drawScalarProperty(entry.label, it->second, inputWidth, entry.step))
+                notifyChanged();
+            ImGui::PopID();
+        }
+    }
+
     void VFXPropertyPanel::drawForceProperties(vfx::VFXNode& node)
     {
         struct ForceEntry { const char* key; const char* label; float step; };

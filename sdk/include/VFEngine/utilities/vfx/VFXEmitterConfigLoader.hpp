@@ -109,6 +109,20 @@ namespace vfx
         config.texturePath = getString(*emitterNode, "texture", "");
         config.inheritVelocityRatio = std::clamp(
             getFloat(*emitterNode, "inheritVelocityRatio", EmitterDefaults::INHERIT_VELOCITY_RATIO), 0.0f, 1.0f);
+        config.sizeVariance = std::clamp(
+            getFloat(*emitterNode, "sizeVariance", EmitterDefaults::SIZE_VARIANCE), 0.0f, 1.0f);
+        config.lifetimeVariance = std::clamp(
+            getFloat(*emitterNode, "lifetimeVariance", EmitterDefaults::LIFETIME_VARIANCE), 0.0f, 1.0f);
+        config.speedVariance = std::clamp(
+            getFloat(*emitterNode, "speedVariance", EmitterDefaults::SPEED_VARIANCE), 0.0f, 1.0f);
+        config.rotationVariance = glm::radians(std::max(0.0f,
+            getFloat(*emitterNode, "rotationVariance", EmitterDefaults::ROTATION_VARIANCE_DEGREES)));
+        config.angularVelocityVariance = glm::radians(std::max(0.0f,
+            getFloat(*emitterNode, "angularVelocityVariance", EmitterDefaults::ANGULAR_VELOCITY_VARIANCE_DEGREES)));
+        config.colorValueVariance = std::clamp(
+            getFloat(*emitterNode, "colorValueVariance", EmitterDefaults::COLOR_VALUE_VARIANCE), 0.0f, 1.0f);
+        config.alphaVariance = std::clamp(
+            getFloat(*emitterNode, "alphaVariance", EmitterDefaults::ALPHA_VARIANCE), 0.0f, 1.0f);
 
         config.modifiers = VFXModifierConfigLoader::fromGraph(data.graph);
         config.forces = VFXForceConfigLoader::fromGraph(data.graph);

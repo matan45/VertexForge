@@ -1,5 +1,6 @@
 #include "VFXParticleSystem.hpp"
 #include "threading/JobSystem.hpp"
+#include "vfx/VFXVariance.hpp"
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/noise.hpp>
@@ -272,6 +273,34 @@ namespace render::vfx
 
         particle->spawnSeed = rng();
 
+        const uint32_t spawnSeed = particle->spawnSeed;
+        const float sizeMult = std::max(0.0f, 1.0f + config.sizeVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Size));
+        const float lifetimeMult = std::max(0.01f, 1.0f + config.lifetimeVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Lifetime));
+        const float speedMult = std::max(0.0f, 1.0f + config.speedVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Speed));
+        particle->colorValueMult = 1.0f + config.colorValueVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::ColorValue);
+        particle->alphaMult = 1.0f + config.alphaVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Alpha);
+
+        particle->maxLifetime = config.lifetime * lifetimeMult;
+        particle->size = config.startSize * sizeMult;
+        particle->initialSize = particle->size;
+        particle->initialSpeed = config.startSpeed * speedMult;
+        particle->rotation = config.rotationVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Rotation);
+        particle->angularVelocity = config.angularVelocityVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::AngularVelocity);
+        particle->velocity = direction * particle->initialSpeed;
+        particle->color = config.startColor;
+        particle->color.r *= particle->colorValueMult;
+        particle->color.g *= particle->colorValueMult;
+        particle->color.b *= particle->colorValueMult;
+        particle->color.a *= particle->alphaMult;
+        particle->initialColor = particle->color;
+
         if (config.renderMode == VFXRenderMode::Ribbon && config.maxTrailPoints > 0)
         {
             if (ribbonRing.size() != config.maxTrailPoints)
@@ -308,7 +337,7 @@ namespace render::vfx
             if (lifetimeRatio > fadeStart)
             {
                 float fadeProgress = (lifetimeRatio - fadeStart) / (1.0f - fadeStart);
-                particle.color.a = config.startColor.a * (1.0f - fadeProgress);
+                particle.color.a = config.startColor.a * particle.alphaMult * (1.0f - fadeProgress);
             }
         }
 
@@ -318,6 +347,7 @@ namespace render::vfx
         }
 
         particle.position += particle.velocity * deltaTime;
+        particle.rotation += particle.angularVelocity * deltaTime;
     }
 
     VFXParticle* VFXParticleSystem::findInactiveParticle()
@@ -345,6 +375,10 @@ namespace render::vfx
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::ColorOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
         particle.color = mod.gradient.evaluate(t);
+        particle.color.r *= particle.colorValueMult;
+        particle.color.g *= particle.colorValueMult;
+        particle.color.b *= particle.colorValueMult;
+        particle.color.a *= particle.alphaMult;
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float /*deltaTime*/)

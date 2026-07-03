@@ -449,6 +449,13 @@ namespace controllers
         gpuConfig.ambientAmount = cpuConfig.ambientAmount;
         gpuConfig.distortionEnabled = cpuConfig.distortionEnabled ? 1u : 0u;
         gpuConfig.distortionStrength = cpuConfig.distortionStrength;
+        gpuConfig.sizeVariance = cpuConfig.sizeVariance;
+        gpuConfig.lifetimeVariance = cpuConfig.lifetimeVariance;
+        gpuConfig.speedVariance = cpuConfig.speedVariance;
+        gpuConfig.rotationVariance = cpuConfig.rotationVariance;
+        gpuConfig.angularVelocityVariance = cpuConfig.angularVelocityVariance;
+        gpuConfig.colorValueVariance = cpuConfig.colorValueVariance;
+        gpuConfig.alphaVariance = cpuConfig.alphaVariance;
 
         return gpuConfig;
     }

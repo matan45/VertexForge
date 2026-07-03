@@ -41,6 +41,9 @@ namespace render::vfx
 
         uint32_t spawnSeed = 0;
         float glowIntensity = 0.0f;
+        float angularVelocity = 0.0f;
+        float colorValueMult = 1.0f;
+        float alphaMult = 1.0f;
     };
 
     struct VFXInstanceData
@@ -219,6 +222,15 @@ namespace render::vfx
         bool looping = true;
         // Fraction of the emitter's own world velocity passed to new particles (0..1)
         float inheritVelocityRatio = 0.0f;
+
+        // Spawn variance. Fraction fields are 0..1; rotation fields are radians.
+        float sizeVariance = 0.0f;
+        float lifetimeVariance = 0.0f;
+        float speedVariance = 0.0f;
+        float rotationVariance = 0.0f;
+        float angularVelocityVariance = 0.0f;
+        float colorValueVariance = 0.0f;
+        float alphaVariance = 0.0f;
 
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;

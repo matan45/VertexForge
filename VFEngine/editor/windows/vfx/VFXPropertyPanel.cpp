@@ -276,6 +276,9 @@ namespace editor::vfxeditor
             static const std::unordered_set<std::string> handledProperties = {
                 "spawnRate", "lifetime", "startSize", "startVelocity",
                 "startColor", "looping", "texture",
+                "sizeVariance", "lifetimeVariance", "speedVariance",
+                "rotationVariance", "angularVelocityVariance",
+                "colorValueVariance", "alphaVariance",
                 "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
                 "flipbookRandomStart", "alphaClipThreshold", "additiveBlend", "meshPath",
                 "renderMode", "softParticleDistance", "stretchMultiplier",
@@ -287,6 +290,8 @@ namespace editor::vfxeditor
 
             if (ImGui::CollapsingHeader("Core", ImGuiTreeNodeFlags_DefaultOpen))
                 drawCoreProperties(*node);
+            if (ImGui::CollapsingHeader("Spawn Variance"))
+                drawSpawnVarianceProperties(*node);
             if (ImGui::CollapsingHeader("Flipbook"))
                 drawFlipbookProperties(*node);
             if (ImGui::CollapsingHeader("Rendering"))
