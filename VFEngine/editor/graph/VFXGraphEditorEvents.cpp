@@ -4,12 +4,73 @@
 #include "vfx/VFXKillVolume.hpp"
 #include "imgui.h"
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <map>
+#include <string>
 
 namespace ed = ax::NodeEditor;
 
 namespace editor::graph
 {
+    namespace
+    {
+        struct NodePaletteEntry
+        {
+            const char* category;
+            const char* label;
+            vfx::VFXNodeType type;
+            bool useShapeFactory;
+        };
+
+        constexpr std::array<NodePaletteEntry, 14> kNodePaletteEntries = {{
+            {"Modifiers", "Color Over Lifetime", vfx::VFXNodeType::ColorOverLifetime, false},
+            {"Modifiers", "Size Over Lifetime", vfx::VFXNodeType::SizeOverLifetime, false},
+            {"Modifiers", "Speed Over Lifetime", vfx::VFXNodeType::SpeedOverLifetime, false},
+            {"Modifiers", "Rotation Over Lifetime", vfx::VFXNodeType::RotationOverLifetime, false},
+            {"Modifiers", "Glow Over Lifetime", vfx::VFXNodeType::GlowOverLifetime, false},
+            {"Forces", "Gravity", vfx::VFXNodeType::ForceGravity, false},
+            {"Forces", "Wind", vfx::VFXNodeType::ForceWind, false},
+            {"Forces", "Turbulence", vfx::VFXNodeType::ForceTurbulence, false},
+            {"Forces", "Vortex", vfx::VFXNodeType::ForceVortex, false},
+            {"Forces", "Drag", vfx::VFXNodeType::ForceDrag, false},
+            {"Forces", "Point Attractor", vfx::VFXNodeType::ForcePointAttractor, false},
+            {"Forces", "Curl Noise", vfx::VFXNodeType::ForceCurlNoise, false},
+            {"Forces", "Kill Volume", vfx::VFXNodeType::ForceKillVolume, false},
+            {"", "Shape", vfx::VFXNodeType::Shape, true},
+        }};
+
+        bool containsCaseInsensitive(const char* text, const char* filter)
+        {
+            if (!filter || filter[0] == '\0')
+            {
+                return true;
+            }
+
+            if (!text)
+            {
+                return false;
+            }
+
+            auto toLower = [](unsigned char c)
+            {
+                return static_cast<char>(std::tolower(c));
+            };
+
+            std::string haystack(text);
+            std::string needle(filter);
+            std::transform(haystack.begin(), haystack.end(), haystack.begin(), toLower);
+            std::transform(needle.begin(), needle.end(), needle.begin(), toLower);
+            return haystack.find(needle) != std::string::npos;
+        }
+
+        bool matchesPaletteFilter(const NodePaletteEntry& entry, const char* filter)
+        {
+            return containsCaseInsensitive(entry.label, filter) ||
+                   containsCaseInsensitive(entry.category, filter);
+        }
+    }
+
     bool VFXGraphEditor::canCreateLink(uint32_t startPinId, uint32_t endPinId) const
     {
         bool startIsShapePin = isShapePin(startPinId);
@@ -598,8 +659,28 @@ namespace editor::graph
 
     void VFXGraphEditor::handleContextMenu()
     {
+        static char nodePaletteFilter[128] = {};
+        static bool focusNodePaletteFilter = false;
+
+        auto createPaletteNode = [this](const NodePaletteEntry& entry)
+        {
+            if (entry.useShapeFactory)
+            {
+                addShapeNode();
+            }
+            else
+            {
+                addNode(entry.type);
+            }
+
+            nodePaletteFilter[0] = '\0';
+            ImGui::CloseCurrentPopup();
+        };
+
         if (showContextMenu)
         {
+            nodePaletteFilter[0] = '\0';
+            focusNodePaletteFilter = true;
             ImGui::OpenPopup("VFXContextMenu");
             showContextMenu = false;
         }
@@ -613,32 +694,114 @@ namespace editor::graph
             ImGui::Separator();
 
             ImGui::TextDisabled("Add Node");
+            if (focusNodePaletteFilter)
+            {
+                ImGui::SetKeyboardFocusHere();
+                focusNodePaletteFilter = false;
+            }
+            ImGui::SetNextItemWidth(240.0f);
+            bool searchSubmitted = ImGui::InputTextWithHint(
+                "##VFXNodePaletteSearch",
+                "Search nodes...",
+                nodePaletteFilter,
+                sizeof(nodePaletteFilter),
+                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+
+            bool hasFilter = nodePaletteFilter[0] != '\0';
+            if (hasFilter && ImGui::IsKeyPressed(ImGuiKey_Escape))
+            {
+                nodePaletteFilter[0] = '\0';
+                focusNodePaletteFilter = true;
+                hasFilter = false;
+            }
+
+            const NodePaletteEntry* firstMatch = nullptr;
+            if (hasFilter)
+            {
+                for (const auto& entry : kNodePaletteEntries)
+                {
+                    if (matchesPaletteFilter(entry, nodePaletteFilter))
+                    {
+                        firstMatch = &entry;
+                        break;
+                    }
+                }
+            }
+
+            bool createdPaletteNode = false;
+            if (hasFilter && searchSubmitted && firstMatch)
+            {
+                createPaletteNode(*firstMatch);
+                createdPaletteNode = true;
+            }
+
             ImGui::Separator();
 
-            if (ImGui::BeginMenu("Modifiers"))
+            if (createdPaletteNode)
             {
-                if (ImGui::MenuItem("Color Over Lifetime")) addNode(vfx::VFXNodeType::ColorOverLifetime);
-                if (ImGui::MenuItem("Size Over Lifetime")) addNode(vfx::VFXNodeType::SizeOverLifetime);
-                if (ImGui::MenuItem("Speed Over Lifetime")) addNode(vfx::VFXNodeType::SpeedOverLifetime);
-                if (ImGui::MenuItem("Rotation Over Lifetime")) addNode(vfx::VFXNodeType::RotationOverLifetime);
-                if (ImGui::MenuItem("Glow Over Lifetime")) addNode(vfx::VFXNodeType::GlowOverLifetime);
-                ImGui::EndMenu();
+                // The popup is closing; avoid rendering against cleared filter state.
             }
-
-            if (ImGui::BeginMenu("Forces"))
+            else if (hasFilter)
             {
-                if (ImGui::MenuItem("Gravity")) addNode(vfx::VFXNodeType::ForceGravity);
-                if (ImGui::MenuItem("Wind")) addNode(vfx::VFXNodeType::ForceWind);
-                if (ImGui::MenuItem("Turbulence")) addNode(vfx::VFXNodeType::ForceTurbulence);
-                if (ImGui::MenuItem("Vortex")) addNode(vfx::VFXNodeType::ForceVortex);
-                if (ImGui::MenuItem("Drag")) addNode(vfx::VFXNodeType::ForceDrag);
-                if (ImGui::MenuItem("Point Attractor")) addNode(vfx::VFXNodeType::ForcePointAttractor);
-                if (ImGui::MenuItem("Curl Noise")) addNode(vfx::VFXNodeType::ForceCurlNoise);
-                if (ImGui::MenuItem("Kill Volume")) addNode(vfx::VFXNodeType::ForceKillVolume);
-                ImGui::EndMenu();
-            }
+                bool anyMatch = false;
+                for (const auto& entry : kNodePaletteEntries)
+                {
+                    if (!matchesPaletteFilter(entry, nodePaletteFilter))
+                    {
+                        continue;
+                    }
 
-            if (ImGui::MenuItem("Shape")) addShapeNode();
+                    anyMatch = true;
+                    std::string menuLabel;
+                    if (entry.category[0] != '\0')
+                    {
+                        menuLabel = std::string(entry.category) + " / " + entry.label;
+                    }
+                    else
+                    {
+                        menuLabel = entry.label;
+                    }
+
+                    if (ImGui::MenuItem(menuLabel.c_str()))
+                    {
+                        createPaletteNode(entry);
+                        createdPaletteNode = true;
+                        break;
+                    }
+                }
+
+                if (!anyMatch && !createdPaletteNode)
+                {
+                    ImGui::TextDisabled("No matching nodes");
+                }
+            }
+            else
+            {
+                if (ImGui::BeginMenu("Modifiers"))
+                {
+                    if (ImGui::MenuItem("Color Over Lifetime")) addNode(vfx::VFXNodeType::ColorOverLifetime);
+                    if (ImGui::MenuItem("Size Over Lifetime")) addNode(vfx::VFXNodeType::SizeOverLifetime);
+                    if (ImGui::MenuItem("Speed Over Lifetime")) addNode(vfx::VFXNodeType::SpeedOverLifetime);
+                    if (ImGui::MenuItem("Rotation Over Lifetime")) addNode(vfx::VFXNodeType::RotationOverLifetime);
+                    if (ImGui::MenuItem("Glow Over Lifetime")) addNode(vfx::VFXNodeType::GlowOverLifetime);
+                    ImGui::EndMenu();
+                }
+
+                if (ImGui::BeginMenu("Forces"))
+                {
+                    if (ImGui::MenuItem("Gravity")) addNode(vfx::VFXNodeType::ForceGravity);
+                    if (ImGui::MenuItem("Wind")) addNode(vfx::VFXNodeType::ForceWind);
+                    if (ImGui::MenuItem("Turbulence")) addNode(vfx::VFXNodeType::ForceTurbulence);
+                    if (ImGui::MenuItem("Vortex")) addNode(vfx::VFXNodeType::ForceVortex);
+                    if (ImGui::MenuItem("Drag")) addNode(vfx::VFXNodeType::ForceDrag);
+                    if (ImGui::MenuItem("Point Attractor")) addNode(vfx::VFXNodeType::ForcePointAttractor);
+                    if (ImGui::MenuItem("Curl Noise")) addNode(vfx::VFXNodeType::ForceCurlNoise);
+                    if (ImGui::MenuItem("Kill Volume")) addNode(vfx::VFXNodeType::ForceKillVolume);
+                    ImGui::EndMenu();
+                }
+
+                if (ImGui::MenuItem("Shape")) addShapeNode();
+            }
 
             ImGui::EndPopup();
         }
