@@ -165,12 +165,10 @@ namespace render::shadow
 
         void recordStaticPhase(vk::CommandBuffer cmd,
                                const ShadowPassContext& ctx,
-                               const ShadowPassPrerequisites& prereq,
                                bool clearDepth);
 
         void recordDynamicPhase(vk::CommandBuffer cmd,
-                                const ShadowPassContext& ctx,
-                                const ShadowPassPrerequisites& prereq);
+                                const ShadowPassContext& ctx);
 
         void dispatchLegacyMeshBatches(vk::CommandBuffer cmd,
                                        const ShadowPassContext& ctx,
@@ -192,7 +190,6 @@ namespace render::shadow
         {
             vk::CommandBuffer primaryCmd;
             const ShadowPassContext* ctx;
-            const ShadowPassPrerequisites* prereq;
             core::ThreadCommandPoolManager* threadPoolManager;
             uint32_t frameIndex;
         };

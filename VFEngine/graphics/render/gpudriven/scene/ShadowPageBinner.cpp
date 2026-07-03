@@ -136,6 +136,7 @@ namespace render::gpudriven
         // Per-page draw counts (atomic).
         makeDeviceLocal(static_cast<vk::DeviceSize>(MAX_RENDERED_SHADOW_PAGES) * sizeof(uint32_t),
                         vk::BufferUsageFlagBits::eStorageBuffer |
+                        vk::BufferUsageFlagBits::eIndirectBuffer |
                         vk::BufferUsageFlagBits::eTransferDst,
                         binCountBuffer, binCountAlloc);
 

@@ -314,11 +314,19 @@ namespace render::shadow
 
         const bool binPath = ctx.params.shadowCullEnabled &&
                              page.binSlot != INVALID_BIN_SLOT &&
-                             ctx.params.binCommandBuffer && ctx.params.binPerDrawDataDescSet;
+                             ctx.params.binCommandBuffer && ctx.params.binCountBuffer &&
+                             ctx.params.binPerDrawDataDescSet && ctx.params.binCapacity > 0;
+
+        const bool legacyReady = ctx.params.batchCount > 0 && ctx.params.commandsPerSection > 0 &&
+                                 ctx.params.drawCommandBuffer && ctx.params.drawCountBuffer;
+        const bool hasMeshDraw = binPath || legacyReady;
+
+        if (hasMeshDraw)
+            bindShadowPipelineAndSets(cmd, ctx);
 
         // B1: when the flag is on, bindShadowPipelineAndSets bound only sets 1-4, so bind set 0 per
         // page here — the bin PerDrawData set for bin pages, the main set for legacy-fallback pages.
-        if (ctx.params.shadowCullEnabled)
+        if (ctx.params.shadowCullEnabled && hasMeshDraw)
         {
             vk::DescriptorSet set0 = binPath ? ctx.params.binPerDrawDataDescSet
                                              : ctx.params.perDrawDataDescSet;
@@ -335,8 +343,6 @@ namespace render::shadow
         }
         else
         {
-            const bool legacyReady = ctx.params.batchCount > 0 && ctx.params.commandsPerSection > 0 &&
-                                     ctx.params.drawCommandBuffer && ctx.params.drawCountBuffer;
             if (legacyReady)
             {
                 ShadowPushConstants pc = buildTilePushConstants(page);
@@ -350,7 +356,7 @@ namespace render::shadow
 
     void ShadowPassRecorder::recordStaticPhase(
         vk::CommandBuffer cmd, const ShadowPassContext& ctx,
-        const ShadowPassPrerequisites& prereq, bool clearDepth)
+        bool clearDepth)
     {
         bool hasLegacyOrStaticPages = !ctx.pageRenderList.empty() ||
                                       !ctx.staticPageRenderList.empty();
@@ -358,9 +364,6 @@ namespace render::shadow
             return;
 
         beginDynamicShadowPass(cmd, ctx.tilePool, clearDepth);
-
-        if (prereq.hasMeshBatches)
-            bindShadowPipelineAndSets(cmd, ctx);
 
         bool loadPass = !clearDepth;
         for (const auto& page : ctx.pageRenderList)
@@ -373,16 +376,12 @@ namespace render::shadow
     }
 
     void ShadowPassRecorder::recordDynamicPhase(
-        vk::CommandBuffer cmd, const ShadowPassContext& ctx,
-        const ShadowPassPrerequisites& prereq)
+        vk::CommandBuffer cmd, const ShadowPassContext& ctx)
     {
         if (ctx.dynamicPageRenderList.empty())
             return;
 
         beginDynamicShadowPass(cmd, ctx.tilePool, false);
-
-        if (prereq.hasMeshBatches)
-            bindShadowPipelineAndSets(cmd, ctx);
 
         for (const auto& page : ctx.dynamicPageRenderList)
             recordTileCommands(cmd, page, ctx, true);
@@ -407,12 +406,12 @@ namespace render::shadow
             transitionPoolToDepthAttachment(cmd, ctx.tilePool, ctx.poolFirstUse);
             bool clearDepth = ctx.poolFirstUse;
 
-            recordStaticPhase(cmd, ctx, prereq, clearDepth);
+            recordStaticPhase(cmd, ctx, clearDepth);
 
             if (!ctx.tileCopyList.empty())
                 executeTileCopies(cmd, ctx.tilePool, ctx.tileCopyList);
 
-            recordDynamicPhase(cmd, ctx, prereq);
+            recordDynamicPhase(cmd, ctx);
 
             transitionPoolToShaderRead(cmd, ctx.tilePool);
         }

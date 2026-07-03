@@ -245,7 +245,7 @@ namespace render::shadow
         // Tiles were just allocated eagerly above (no first-frame gap); after WARMUP_FRAMES the
         // feedback path evicts pages the screen never samples, so only the spot's visible
         // footprint renders. Point lights stay eager — the VSM feedback shader skips cube faces.
-        // (Directional already sets feedbackDriven in allocateDirectionalBlock.)
+        // Directional clipmaps stay resident to avoid feedback-latency holes while the camera pans.
         if (type == ShadowMapType::Spot2D && !data.isStatic)
             data.feedbackDriven = true;
 
@@ -456,18 +456,20 @@ namespace render::shadow
         data.vsmPageTableOffset = offset;
         data.vsmLightIndex = nextVSMLightIndex++;
         data.vsmPhysicalTiles.assign(totalPages, vsm::INVALID_TILE);
-        data.vsmPageLastUsedFrame.assign(totalPages, 0);
+        data.vsmPageLastUsedFrame.assign(totalPages, frameCounter + EVICTION_THRESHOLD + 120);
         data.vsmPageDirty.assign(totalPages, true);
-        data.feedbackDriven = true;
+        data.feedbackDriven = false;
 
-        // Seed level 0 (the finest, always near-camera shell) eagerly so directional
-        // shadows are present on the very first frame, before feedback has any results.
-        uint32_t level0Pages = pagesPerLevel * pagesPerLevel;
-        for (uint32_t i = 0; i < level0Pages && i < totalPages; ++i)
+        // Keep the full directional clipmap resident. The current clipmap sizes are small
+        // relative to the physical tile pool, and this avoids one-frame missing pages while
+        // the play camera pans.
+        for (uint32_t i = 0; i < totalPages; ++i)
         {
             uint32_t tile = tilePool->allocateTile();
             if (tile == vsm::INVALID_TILE)
-                break; // best-effort; feedback will retry
+                tile = evictLowestPriorityPage(data.shadowPriority);
+            if (tile == vsm::INVALID_TILE)
+                break; // best-effort; the eager non-feedback path will retry later
             data.vsmPhysicalTiles[i] = tile;
             pageTable->mapPage(offset, i % pagesPerLevel, i / pagesPerLevel, pagesPerLevel, tile);
         }
