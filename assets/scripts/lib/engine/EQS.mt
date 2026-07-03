@@ -40,8 +40,8 @@ public class EQS {
     // forward: forward direction (XZ only, Y ignored)
     public static function submitQuery(string queryName, int querierEntityId,
                                         Vec3f position, Vec3f forward): int {
-        return toInt(_native_eqs_submitQuery(queryName, querierEntityId,
-            position.x, position.y, position.z, forward.x, forward.z));
+        return (int)_native_eqs_submitQuery(queryName, querierEntityId,
+            position.x, position.y, position.z, forward.x, forward.z);
     }
 
     // ============================================

@@ -384,6 +384,42 @@ public class UI {
     }
 
     // ============================================
+    // Text Input State Constants
+    // ============================================
+    public static final int TEXTINPUT_NORMAL = 0;
+    public static final int TEXTINPUT_HOVERED = 1;
+    public static final int TEXTINPUT_FOCUSED = 2;
+    public static final int TEXTINPUT_DISABLED = 3;
+
+    // ============================================
+    // Text Input Queries
+    // ============================================
+
+    // Get the current text of a text input (empty string if no component)
+    public static function getTextInputText(int entityId): string {
+        return _native_ui_getTextInputText(entityId);
+    }
+
+    // Get the current state of a text input (TEXTINPUT_* constant, -1 if no component)
+    public static function getTextInputState(int entityId): int {
+        return _native_ui_getTextInputState(entityId);
+    }
+
+    // ============================================
+    // Text Input Control
+    // ============================================
+
+    // Set the text of a text input
+    public static function setTextInputText(int entityId, string text): void {
+        _native_ui_setTextInputText(entityId, text);
+    }
+
+    // Set whether a text input is interactable (enabled/disabled)
+    public static function setTextInputInteractable(int entityId, bool interactable): void {
+        _native_ui_setTextInputInteractable(entityId, interactable);
+    }
+
+    // ============================================
     // Tabs Bar Position Constants
     // ============================================
     public static final int TAB_BAR_TOP = 0;
@@ -672,5 +708,35 @@ public class UI {
     // Select an item by index (-1 clears). Fires IUIListViewListener.
     public static function setListSelectedIndex(int entityId, int index): bool {
         return _native_ui_setListSelectedIndex(entityId, index);
+    }
+
+    // ============================================
+    // UI Animation
+    // ============================================
+    // Controls the UIAnimationComponent on the given element.
+
+    // Start (or restart) the element's UI animation
+    public static function playAnimation(int entityId): void {
+        _native_ui_playAnimation(entityId);
+    }
+
+    // Stop the animation and reset it to the beginning
+    public static function stopAnimation(int entityId): void {
+        _native_ui_stopAnimation(entityId);
+    }
+
+    // Pause the animation at its current time
+    public static function pauseAnimation(int entityId): void {
+        _native_ui_pauseAnimation(entityId);
+    }
+
+    // Resume a paused animation
+    public static function resumeAnimation(int entityId): void {
+        _native_ui_resumeAnimation(entityId);
+    }
+
+    // True while the element's animation is playing
+    public static function isAnimationPlaying(int entityId): bool {
+        return _native_ui_isAnimationPlaying(entityId);
     }
 }

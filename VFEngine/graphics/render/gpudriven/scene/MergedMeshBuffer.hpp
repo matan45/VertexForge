@@ -182,6 +182,7 @@ namespace render::gpudriven
         vk::Buffer getObjectBuffer() const { return objectBuffer; }
         vk::Buffer getInstanceTransformBuffer() const { return instanceTransformBuffer; }
         const std::vector<GPUObjectData>& getCPUObjectData() const { return cpuObjectData; }
+        const std::vector<GPUInstanceTransform>& getCPUInstanceTransforms() const { return cpuInstanceTransforms; }
         uint32_t getInstanceCount() const { return currentInstanceCount; }
 
         uint32_t getTotalVertexCount() const { return totalVertexCount; }
@@ -217,6 +218,7 @@ namespace render::gpudriven
         void uploadDirtyObjects(vk::CommandBuffer cmd);
         void uploadActiveIndices(vk::CommandBuffer cmd);
         uint32_t getActiveObjectCount() const { return activeObjectCount; }
+        const std::vector<uint32_t>& getActiveObjectIndices() const { return activeObjectIndices; }
         vk::Buffer getActiveIndexBuffer() const { return activeIndexBuffer; }
         void mapEntityToSlot(uint64_t entityUUID, uint32_t slot) { entityToSlot[entityUUID] = slot; }
         void unmapEntitySlot(uint64_t entityUUID) { entityToSlot.erase(entityUUID); }

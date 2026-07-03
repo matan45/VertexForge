@@ -3,6 +3,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/providers/scripting/IScriptingProvider.hpp"
 #include <value/ValueType.hpp>
+#include <array>
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
@@ -20,6 +21,27 @@ namespace core
     class ScriptUIEventBridge
     {
     public:
+        // Listener interfaces this bridge dispatches to. ScriptingAdapter
+        // aggregates every bridge's kRequiredInterfaces into the set it probes
+        // at loadScript time — dispatch gates must use these constants, never
+        // fresh string literals, or the callback silently never fires.
+        static constexpr const char* kButtonListener = "IUIButtonListener";
+        static constexpr const char* kTextInputListener = "IUITextInputListener";
+        static constexpr const char* kCheckboxListener = "IUICheckboxListener";
+        static constexpr const char* kDropdownListener = "IUIDropdownListener";
+        static constexpr const char* kTabsListener = "IUITabsListener";
+        static constexpr const char* kSliderListener = "IUISliderListener";
+        static constexpr const char* kProgressBarListener = "IUIProgressBarListener";
+        static constexpr const char* kDragDropListener = "IUIDragDropListener";
+        static constexpr const char* kWindowListener = "IUIWindowListener";
+        static constexpr const char* kListViewListener = "IUIListViewListener";
+        static constexpr std::array<const char*, 10> kRequiredInterfaces = {
+            kButtonListener, kTextInputListener, kCheckboxListener,
+            kDropdownListener, kTabsListener, kSliderListener,
+            kProgressBarListener, kDragDropListener, kWindowListener,
+            kListViewListener
+        };
+
         ScriptUIEventBridge(
             ::services::ScriptInterpreter* interpreter,
             const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces,

@@ -140,7 +140,6 @@ namespace render::gpudriven
 
             if (core::RenderManager::getGlobalDeletionQueue())
             {
-                shadowSystem->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
                 if (textureStreamManager)
                 {
                     textureStreamManager->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
@@ -178,6 +177,11 @@ namespace render::gpudriven
                 meshShaderPipeline->getVertexDataLayout(),
                 boneMatrixManager->getDescriptorSetLayout()
             );
+
+            // VK-1479 B1: the page-binned shadow cull allocates its draw descriptor set from the
+            // shared mesh per-draw layout (so the recorder can bind bin PerDrawData at set 0).
+            shadowPageBinner = std::make_unique<ShadowPageBinner>(device);
+            shadowPageBinner->init(meshShaderPipeline->getPerDrawDataLayout());
 
             if (meshStreamManager)
             {
@@ -315,6 +319,7 @@ namespace render::gpudriven
         if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->cleanup();
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
         if (shadowSystem) shadowSystem->cleanup();
+        if (shadowPageBinner) shadowPageBinner->cleanup();
         if (lightCullingPipeline) lightCullingPipeline->cleanup();
         if (clusterGridManager) clusterGridManager->cleanup();
         if (lightBufferManager) lightBufferManager->cleanup();
@@ -353,6 +358,7 @@ namespace render::gpudriven
         transparentMeshShaderPipeline.reset();
         meshShaderPipeline.reset();
         shadowSystem.reset();
+        shadowPageBinner.reset();
         lightCullingPipeline.reset();
         clusterGridManager.reset();
         lightBufferManager.reset();

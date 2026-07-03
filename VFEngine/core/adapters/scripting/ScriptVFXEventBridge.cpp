@@ -63,7 +63,7 @@ namespace core
         {
             auto interfaceIt = instanceToInterfaces.find(instanceId);
             if (interfaceIt == instanceToInterfaces.end() ||
-                interfaceIt->second.find("IVFXEventListener") == interfaceIt->second.end())
+                interfaceIt->second.find(kVFXEventListener) == interfaceIt->second.end())
                 continue;
 
             auto objIt = instanceToObject.find(instanceId);
@@ -71,7 +71,7 @@ namespace core
 
             try
             {
-                NativeAPIRegistry::setCurrentEntity(entityHandle);
+                AmbientScriptContext ctx(entityHandle, instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, "onVFXParticleEvent",
                                         {value::Value(static_cast<int>(eventType)),

@@ -28,6 +28,7 @@
 #include <runtime/EventLoop.hpp>
 #include <vm/runtime/VirtualMachine.hpp>
 #include <environment/Environment.hpp>
+#include <environment/registry/ClassDefinition.hpp>
 #include <environment/registry/NativeRegistry.hpp>
 #include <plugin/PluginHost.hpp>
 #include <json/JsonSerializer.hpp>
@@ -116,6 +117,26 @@ namespace core
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
             oceanEventBridge = std::make_unique<ScriptOceanEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
+            // Aggregate every bridge's dispatched interfaces into the set
+            // loadScript probes. New bridges only have to declare their
+            // kRequiredInterfaces — no second list to keep in sync.
+            checkedInterfaces.clear();
+            auto collectInterfaces = [this](const auto& required)
+            {
+                for (const char* name : required) checkedInterfaces.insert(name);
+            };
+            collectInterfaces(ScriptUIEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptPhysicsEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptAnimationEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptSocketEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptVFXEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptNavigationEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptInputActionEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptSceneEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptWeatherEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptDestructionEventBridge::kRequiredInterfaces);
+            collectInterfaces(ScriptOceanEventBridge::kRequiredInterfaces);
 
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
@@ -414,22 +435,18 @@ namespace core
             instanceToEntity[instanceId] = entity;
             instanceToObject[instanceId] = std::any(instance);
 
-            // Cache implemented interfaces for collision/trigger/UI callbacks
-            static constexpr std::array<const char*, 16> kCheckedInterfaces = {
-                "ICollisionListener", "ITriggerListener",
-                "IUIButtonListener", "IUITextInputListener", "IUICheckboxListener",
-                "IUIDropdownListener", "IUITabsListener", "IUISliderListener",
-                "IUIProgressBarListener", "IUIDragDropListener",
-                "IAnimationEventListener",
-                "ISocketAttachmentListener",
-                "IVFXEventListener",
-                "INavigationEventListener",
-                "IInputActionListener",
-                "IWeatherEventListener"
-            };
+            // VK-1458: bind entity identity onto Behaviour-derived instances.
+            // Behaviour's accessors fall back to the ambient Entity::self()
+            // when unbound, but the injected field survives cross-script
+            // direct method calls and coroutine resumption, where the ambient
+            // context belongs to someone else (or nobody).
+            injectBehaviourEntityId(instanceId);
 
+            // Cache implemented interfaces for the event bridges. The probe
+            // set is the union of every bridge's kRequiredInterfaces,
+            // aggregated in init() — never a hand-maintained list here.
             std::unordered_set<std::string> interfaces;
-            for (const auto* iface : kCheckedInterfaces)
+            for (const auto& iface : checkedInterfaces)
             {
                 if (interpreter->classImplementsInterface(className, iface))
                     interfaces.insert(iface);
@@ -655,6 +672,11 @@ namespace core
                     {
                         liveObj->setField(fieldName, fieldValue);
                     }
+
+                    // The copy above may have restored a STALE persisted
+                    // vfEntityId (the serializer round-trips every field);
+                    // re-inject the live entity binding for Behaviours.
+                    injectBehaviourEntityId(instanceId);
                     return true;
                 }
             }
@@ -664,6 +686,70 @@ namespace core
         {
             vfLogError("[ScriptingAdapter] setInstanceState failed for {}: {}", instanceId, e.what());
             return false;
+        }
+    }
+
+    bool ScriptingAdapter::classExtendsBehaviour(const std::string& className) const
+    {
+        if (!interpreter) return false;
+
+        try
+        {
+            auto env = interpreter->getEnvironment();
+            if (!env) return false;
+
+            auto classDef = env->findClass(className);
+            // Walk the parent chain (bounded — mirrors mType's own
+            // MAX_INHERITANCE_DEPTH) looking for the OOP base class.
+            int depth = 0;
+            auto current = classDef ? classDef->getParentClass() : nullptr;
+            while (current && depth < 32)
+            {
+                if (current->getName() == "Behaviour") return true;
+                current = current->getParentClass();
+                ++depth;
+            }
+        }
+        catch (const std::exception&) {}
+        return false;
+    }
+
+    void ScriptingAdapter::injectBehaviourEntityId(uint64_t instanceId)
+    {
+        auto classIt = instanceToClassName.find(instanceId);
+        auto objIt = instanceToObject.find(instanceId);
+        auto entityIt = instanceToEntity.find(instanceId);
+        if (classIt == instanceToClassName.end() ||
+            objIt == instanceToObject.end() ||
+            entityIt == instanceToEntity.end())
+            return;
+
+        if (!classExtendsBehaviour(classIt->second)) return;
+
+        try
+        {
+            auto& instanceValue = std::any_cast<value::Value&>(objIt->second);
+            if (!value::isObject(instanceValue)) return;
+
+            // Field storage is flat per-instance (inherited fields included),
+            // so setting the base-class field on the leaf instance works.
+            const auto& instanceObj = value::asObject(instanceValue);
+            instanceObj->setField(
+                "vfEntityId",
+                value::Value(static_cast<int64_t>(entityIt->second.id)));
+
+            // Behaviour lazily caches gameObject()/transform() wrappers that
+            // embed the entity id; a @Saveable restore round-trips those fields
+            // and pins them to the save-time id. Drop the caches so the next
+            // gameObject()/transform() rebuilds from the corrected vfEntityId.
+            // No-op right after construction (fields already null).
+            instanceObj->setField("vfGameObject", value::Value(nullptr));
+            instanceObj->setField("vfTransform", value::Value(nullptr));
+        }
+        catch (const std::exception& e)
+        {
+            vfLogWarning("[ScriptingAdapter] Behaviour entity injection failed for {}: {}",
+                         instanceId, e.what());
         }
     }
 

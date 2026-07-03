@@ -10,6 +10,7 @@
 #include "../asset/AssetRef.hpp"
 #include "../material/MaterialTypes.hpp"
 #include "../types/PhysicsTypes.hpp"
+#include "../types/VehicleTypes.hpp"
 #include "../types/PhysicsAnimationTypes.hpp"
 #include "../types/NavmeshTypes.hpp"
 #include "../types/AudioTypes.hpp"
@@ -230,6 +231,9 @@ namespace serialization
         static json serializeRigidBody(const components::RigidBodyComponent& rigidBody);
         static void deserializeRigidBody(const json& j, components::RigidBodyComponent& rigidBody);
 
+        static json serializeVehicle(const components::VehicleComponent& vehicle);
+        static void deserializeVehicle(const json& j, components::VehicleComponent& vehicle);
+
         static json serializeBuoyancy(const components::BuoyancyComponent& buoyancy);
         static void deserializeBuoyancy(const json& j, components::BuoyancyComponent& buoyancy);
 
@@ -277,6 +281,10 @@ namespace serialization
 
         static std::string rigidBodyTypeToString(components::RigidBodyType type);
         static components::RigidBodyType stringToRigidBodyType(const std::string& str);
+        static std::string vehicleControllerTypeToString(types::VehicleControllerType type);
+        static types::VehicleControllerType stringToVehicleControllerType(const std::string& str);
+        static std::string vehicleCollisionTesterTypeToString(types::VehicleCollisionTesterType type);
+        static types::VehicleCollisionTesterType stringToVehicleCollisionTesterType(const std::string& str);
 
     public:
         static std::string colliderShapeToString(components::ColliderShape shape);

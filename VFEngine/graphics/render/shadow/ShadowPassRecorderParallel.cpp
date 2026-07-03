@@ -19,7 +19,6 @@ namespace render::shadow
         std::vector<bool>& threadUsed)
     {
         const auto& ctx = *args.ctx;
-        const auto& prereq = *args.prereq;
         uint32_t tileCount = static_cast<uint32_t>(pages.size());
         if (tileCount == 0)
             return;
@@ -65,9 +64,6 @@ namespace render::shadow
                                      vk::CommandBufferUsageFlagBits::eRenderPassContinue;
                     beginInfo.pInheritanceInfo = &inheritance;
                     secondary.begin(beginInfo);
-
-                    if (prereq.hasMeshBatches)
-                        bindShadowPipelineAndSets(secondary, ctx);
 
                     for (uint32_t i = tileBegin; i < tileEnd; ++i)
                         recordTileCommands(secondary, pages[i], ctx, clearTiles);
@@ -182,8 +178,7 @@ namespace render::shadow
             return;
         }
 
-        ParallelDispatchArgs args{primaryCmd, &ctx, &prereq,
-                                  threadPoolManager, frameIndex};
+        ParallelDispatchArgs args{primaryCmd, &ctx, threadPoolManager, frameIndex};
 
         if (prereq.hasPageViews)
         {

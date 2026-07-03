@@ -64,7 +64,7 @@ namespace core
             static_cast<entt::entity>(entity.id));
         if (!scriptComp) return;
 
-        const std::string requiredInterface = "INavigationEventListener";
+        const std::string requiredInterface = kNavigationEventListener;
 
         for (const auto& [instanceId, entityHandle] : instanceToEntity)
         {
@@ -80,7 +80,7 @@ namespace core
 
             try
             {
-                NativeAPIRegistry::setCurrentEntity(entity);
+                AmbientScriptContext ctx(entity, instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, methodName, {});
             }

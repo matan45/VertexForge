@@ -76,6 +76,7 @@ namespace core::physics
 
         // Initialize managers
         rigidBodyManager.init(&context, &bodyRegistry);
+        vehicleManager.init(&context, &bodyRegistry);
         terrainManager.init(&context);
         ragdollManager.init(&context, &bodyRegistry);
         characterManager.init(&context);
@@ -90,6 +91,7 @@ namespace core::physics
     {
         if (!initialized) return;
 
+        vehicleManager.cleanUp();
         ragdollManager.cleanUp();
         characterManager.cleanUp();
         terrainManager.cleanUp();
@@ -192,11 +194,15 @@ namespace core::physics
 
     void PhysicsWorld::removeRigidBody(JPH::BodyID bodyId)
     {
+        const uint64_t entityId = bodyRegistry.getEntityForBody(bodyId);
+        if (entityId != 0)
+            vehicleManager.destroyVehicle(entityId);
         rigidBodyManager.removeRigidBody(bodyId);
     }
 
     void PhysicsWorld::removeRigidBodyByEntity(uint64_t entityId)
     {
+        vehicleManager.destroyVehicle(entityId);
         ragdollManager.destroyKinematicBoneBodies(entityId);
         ragdollManager.destroyRagdoll(entityId);
 
@@ -218,6 +224,41 @@ namespace core::physics
 
         rigidBodyManager.setPosition(bodyId, position);
         rigidBodyManager.setRotation(bodyId, rotation);
+    }
+
+    bool PhysicsWorld::createVehicle(uint64_t entityId, const types::VehicleConfig& config)
+    {
+        return vehicleManager.createVehicle(entityId, config);
+    }
+
+    void PhysicsWorld::destroyVehicle(uint64_t entityId)
+    {
+        vehicleManager.destroyVehicle(entityId);
+    }
+
+    bool PhysicsWorld::hasVehicle(uint64_t entityId) const
+    {
+        return vehicleManager.hasVehicle(entityId);
+    }
+
+    void PhysicsWorld::setVehicleInput(uint64_t entityId, float throttle, float steer, float brake, float handbrake)
+    {
+        vehicleManager.setInput(entityId, throttle, steer, brake, handbrake);
+    }
+
+    void PhysicsWorld::applyPendingVehicleInputs()
+    {
+        vehicleManager.applyPendingInputs();
+    }
+
+    std::vector<types::WheelState> PhysicsWorld::getVehicleWheelStates(uint64_t entityId) const
+    {
+        return vehicleManager.getWheelStates(entityId);
+    }
+
+    std::optional<types::WheelState> PhysicsWorld::getVehicleWheelState(uint64_t entityId, int wheelIndex) const
+    {
+        return vehicleManager.getWheelState(entityId, wheelIndex);
     }
 
     glm::vec3 PhysicsWorld::getPosition(JPH::BodyID bodyId) const { return rigidBodyManager.getPosition(bodyId); }

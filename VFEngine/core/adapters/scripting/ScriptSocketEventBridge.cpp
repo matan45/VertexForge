@@ -74,7 +74,7 @@ namespace core
 
                 auto interfaceIt = instanceToInterfaces.find(instanceId);
                 if (interfaceIt == instanceToInterfaces.end() ||
-                    interfaceIt->second.find("ISocketAttachmentListener") == interfaceIt->second.end())
+                    interfaceIt->second.find(kSocketAttachmentListener) == interfaceIt->second.end())
                     continue;
 
                 auto objIt = instanceToObject.find(instanceId);
@@ -82,7 +82,7 @@ namespace core
 
                 try
                 {
-                    NativeAPIRegistry::setCurrentEntity(targetEntity);
+                    AmbientScriptContext ctx(targetEntity, instanceId);
                     auto& instance = std::any_cast<value::Value&>(objIt->second);
                     // Args: (childId, parentId, socketName)
                     interpreter->callMethod(instance, methodName,

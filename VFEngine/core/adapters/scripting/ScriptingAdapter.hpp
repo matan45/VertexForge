@@ -63,6 +63,13 @@ namespace core
         std::unordered_map<uint64_t, ::services::ScriptPlaybackState> instanceToPlaybackState;
         std::unordered_map<uint64_t, int> instanceToPriority;
 
+        // Union of every event bridge's kRequiredInterfaces, aggregated in
+        // init(). loadScript probes exactly this set when caching a class's
+        // implemented interfaces — a bridge that dispatches on an interface
+        // missing from its own kRequiredInterfaces silently never fires
+        // (test_script_listener_coverage guards that invariant).
+        std::unordered_set<std::string> checkedInterfaces;
+
         // Engine-plugin script natives registered via the mType C ABI: the
         // bindings own the {fn, userData} pair the host trampoline dereferences
         // on every call, so they must outlive the registration (erased on
@@ -150,5 +157,15 @@ namespace core
 
         std::string extractClassName(const std::string& scriptPath);
         std::string getLibraryPath(const std::string& manifestPath) const;
+
+        // VK-1458 OOP layer: true when className's inheritance chain reaches
+        // the script-side Behaviour base class.
+        bool classExtendsBehaviour(const std::string& className) const;
+
+        // Writes the instance's entity id into Behaviour.vfEntityId (gated on
+        // classExtendsBehaviour). Called after createObject and again after a
+        // @Saveable state restore, which would otherwise clobber the live id
+        // with a stale persisted one.
+        void injectBehaviourEntityId(uint64_t instanceId);
     };
 }

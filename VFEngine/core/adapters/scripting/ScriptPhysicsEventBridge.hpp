@@ -2,6 +2,7 @@
 
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/providers/scripting/IScriptingProvider.hpp"
+#include <array>
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
@@ -18,6 +19,17 @@ namespace core
     class ScriptPhysicsEventBridge
     {
     public:
+        // Listener interfaces this bridge dispatches to. ScriptingAdapter
+        // aggregates every bridge's kRequiredInterfaces into the set it probes
+        // at loadScript time — dispatch gates must use these constants, never
+        // fresh string literals, or the callback silently never fires.
+        static constexpr const char* kCollisionListener = "ICollisionListener";
+        static constexpr const char* kTriggerListener = "ITriggerListener";
+        static constexpr const char* kRagdollListener = "IRagdollListener";
+        static constexpr std::array<const char*, 3> kRequiredInterfaces = {
+            kCollisionListener, kTriggerListener, kRagdollListener
+        };
+
         ScriptPhysicsEventBridge(
             ::services::ScriptInterpreter* interpreter,
             const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces,

@@ -281,7 +281,7 @@ namespace render::shadow
         if (!shadowsEnabled) return;
         ++frameCounter;
         newPagesAllocatedThisFrame = 0;
-        buildEvictionHeap();
+        markEvictionHeapDirty(); // A2: rebuilt lazily on the first eviction request, if any
 
         glm::vec3 camPos = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
         lastCameraPosition = camPos;

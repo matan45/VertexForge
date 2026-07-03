@@ -3,6 +3,8 @@
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_ray_query : require
 
+#include "rt_shadow_trace_common.glsl"
+
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 // Set 0: TLAS (shared with the directional RT path, VK-1150)
@@ -85,21 +87,9 @@ void main() {
     // Stop the ray at the light, not beyond it: geometry behind the light must not occlude.
     float tMax = max(dist - tMin, tMin);
 
-    rayQueryEXT rq;
-    rayQueryInitializeEXT(rq, topLevelAS,
+    float shadow = traceRTShadowRay(topLevelAS,
         gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
-        0xFF,
-        biasedPos,
-        tMin,
-        rayDir,
-        tMax);
-
-    while (rayQueryProceedEXT(rq)) {}
-
-    float shadow = 1.0; // fully lit
-    if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
-        shadow = 0.0; // occluded
-    }
+        biasedPos, tMin, rayDir, tMax);
 
     // Fade the shadow back to "lit" at the cone edge so the RT result transitions seamlessly into the
     // VSM/unlit region just outside the cone. coneT == 1.0 for point lights, so this is a no-op there.

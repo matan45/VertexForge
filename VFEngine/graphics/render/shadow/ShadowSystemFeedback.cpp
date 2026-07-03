@@ -1,38 +1,104 @@
 #include "ShadowSystem.hpp"
+#include "ShadowPageOverlap.hpp"
+#include "../gpudriven/scene/ShadowBinPacking.hpp" // B1: buildPageBinBase + INVALID_SHADOW_BIN_SLOT
 #include "../../core/RenderManager.hpp"
 #include "../../core/ThreadCommandPoolManager.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
 
 namespace render::shadow
 {
-    // Phase 1 (conservative): marks ALL pages as having dynamic content if any dynamic entity exists.
-    // This over-allocates dynamic tiles but is correct. Phase 2 optimization: per-page frustum-AABB
-    // testing to only mark pages where dynamic objects actually overlap the page's shadow frustum.
+    // A1: per-page dynamic marking. Previously ONE moving entity marked EVERY page of every
+    // non-static VSM light dynamic (up to 144 dynamic-tile copies + re-renders/frame from a single
+    // walking unit). Now each dynamic caster's bounds (dynamicCasterBounds, filled by the renderer
+    // from resolved GPU object data before beginFrame) are projected into each light view's page
+    // grid via the shared ShadowPageOverlap math, marking only the pages actually overlapped.
     void ShadowSystem::determineDynamicPages()
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        bool hasDynamicObjects = false;
-        auto view = registry.view<components::TransformComponent, components::MeshComponent>();
-        for (auto entity : view)
-        {
-            const auto& transform = view.get<components::TransformComponent>(entity);
-            if (!transform.isStatic)
-            {
-                hasDynamicObjects = true;
-                break;
-            }
-        }
-
         for (auto& [entityId, data] : lightShadowData)
         {
             if (data.isStatic || !data.usesVSM()) continue;
             uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
             if (data.vsmPageHasDynamic.size() != totalPages)
-                data.vsmPageHasDynamic.resize(totalPages, false);
-            for (uint32_t i = 0; i < totalPages; ++i)
-                data.vsmPageHasDynamic[i] = hasDynamicObjects;
+                data.vsmPageHasDynamic.assign(totalPages, false);
+            else
+                std::fill(data.vsmPageHasDynamic.begin(), data.vsmPageHasDynamic.end(), false);
+        }
+
+        if (dynamicCasterBounds.empty())
+            return;
+
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (data.isStatic || !data.usesVSM()) continue;
+            if (data.vsmPagesX == 0 || data.views.empty()) continue;
+            if (data.vsmPageHasDynamic.empty()) continue;
+            markDynamicPagesForLight(data);
+        }
+    }
+
+    // Mirror the per-type page layout of build{Clipmap,SingleView,Point}PageRenderList: project
+    // each dynamic caster's local AABB by (view VP * modelMatrix) into that view's page block and
+    // OR-mark every overlapped page.
+    void ShadowSystem::markDynamicPagesForLight(LightShadowData& data)
+    {
+        auto markPage = [&](uint32_t pageIdx)
+        {
+            if (pageIdx < data.vsmPageHasDynamic.size())
+                data.vsmPageHasDynamic[pageIdx] = true;
+        };
+
+        const uint32_t viewCount = static_cast<uint32_t>(data.views.size());
+
+        if (data.type == ShadowMapType::Directional)
+        {
+            const uint32_t ppl = data.vsmPagesX; // pagesPerLevel (square blocks stacked per level)
+            for (uint32_t level = 0; level < viewCount; ++level)
+            {
+                const glm::mat4& vp = data.views[level].viewProjectionMatrix;
+                for (const auto& caster : dynamicCasterBounds)
+                {
+                    PageRange r = ShadowPageOverlap::overlappedPages(
+                        caster.localMin, caster.localMax, vp * caster.modelMatrix, ppl, ppl);
+                    if (!r.valid) continue;
+                    for (uint32_t fy = r.fy0; fy <= r.fy1; ++fy)
+                        for (uint32_t fx = r.fx0; fx <= r.fx1; ++fx)
+                            markPage((level * ppl + fy) * ppl + fx);
+                }
+            }
+        }
+        else if (data.type == ShadowMapType::PointCube)
+        {
+            const uint32_t ppf = data.vsmPagesX; // pagesPerFace (square, 6 faces stacked)
+            for (uint32_t face = 0; face < ShadowConstants::CUBE_FACE_COUNT && face < viewCount; ++face)
+            {
+                const glm::mat4& vp = data.views[face].viewProjectionMatrix;
+                for (const auto& caster : dynamicCasterBounds)
+                {
+                    PageRange r = ShadowPageOverlap::overlappedPages(
+                        caster.localMin, caster.localMax, vp * caster.modelMatrix, ppf, ppf);
+                    if (!r.valid) continue;
+                    for (uint32_t fy = r.fy0; fy <= r.fy1; ++fy)
+                        for (uint32_t fx = r.fx0; fx <= r.fx1; ++fx)
+                            markPage((face * ppf + fy) * ppf + fx);
+                }
+            }
+        }
+        else // Spot2D: single view, vsmPagesX x vsmPagesY grid
+        {
+            const glm::mat4& vp = data.views[0].viewProjectionMatrix;
+            for (const auto& caster : dynamicCasterBounds)
+            {
+                PageRange r = ShadowPageOverlap::overlappedPages(
+                    caster.localMin, caster.localMax, vp * caster.modelMatrix,
+                    data.vsmPagesX, data.vsmPagesY);
+                if (!r.valid) continue;
+                for (uint32_t fy = r.fy0; fy <= r.fy1; ++fy)
+                    for (uint32_t fx = r.fx0; fx <= r.fx1; ++fx)
+                        markPage(fy * data.vsmPagesX + fx);
+            }
         }
     }
 
@@ -43,6 +109,12 @@ namespace render::shadow
         dynamicPageRenderList.clear();
         tileCopyList.clear();
         lastCacheStats = {};
+        // B1/B2: reset per-frame bin state; finalizeBinPages() (after the per-light loop) assigns slots.
+        binActiveThisFrame = false;
+        binViews.clear();
+        binNextPageBaseOffset = 0;
+        binGlobalRequests.clear();
+        binEntryIndices.clear();
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
@@ -79,6 +151,9 @@ namespace render::shadow
             else
                 buildSingleViewPageRenderList(data);
         }
+
+        // B1/B2: assign render slots over the global page space of all binned views.
+        finalizeBinPages();
 
         lastCacheStats.tileCopiesThisFrame = static_cast<uint32_t>(tileCopyList.size());
         for (const auto& [entityId, data] : lightShadowData)
@@ -127,13 +202,20 @@ namespace render::shadow
         if (data.vsmDynamicTiles[pageIdx] == vsm::INVALID_TILE)
             return;
 
+        // This page has no dynamic caster this frame (A1). Point the page table back at the static
+        // tile IMMEDIATELY so the page shows the fresh static shadow instead of the stale dynamic
+        // tile (which still holds the caster's last position) during the cooldown window. Under the
+        // old mark-every-page scheme this branch only ran when the scene had zero dynamic objects,
+        // so the eager remap was unnecessary; with per-page marking a page a caster just left needs
+        // it every frame until the dynamic tile is actually freed below.
+        uint32_t px = pageIdx % data.vsmPagesX;
+        uint32_t py = pageIdx / data.vsmPagesX;
+        pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, physTile);
+
         if (frameCounter - data.vsmDynamicTileLastUsedFrame[pageIdx] > DYNAMIC_TILE_COOLDOWN)
         {
             tilePool->freeTile(data.vsmDynamicTiles[pageIdx]);
             data.vsmDynamicTiles[pageIdx] = vsm::INVALID_TILE;
-            uint32_t px = pageIdx % data.vsmPagesX;
-            uint32_t py = pageIdx / data.vsmPagesX;
-            pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, physTile);
         }
     }
 
@@ -214,6 +296,12 @@ namespace render::shadow
                 data.vsmPageDirty[i] = true;
         }
 
+        // B2: the spot light is one binned view.
+        uint32_t viewBase = UINT32_MAX;
+        if (shadowCullEnabled)
+            viewBase = registerBinView(view.viewProjectionMatrix, view, data.vsmPagesX, data.vsmPagesY);
+        const bool binThisView = shadowCullEnabled && viewBase != UINT32_MAX;
+
         for (uint32_t py = 0; py < data.vsmPagesY; ++py)
         {
             for (uint32_t px = 0; px < data.vsmPagesX; ++px)
@@ -222,7 +310,11 @@ namespace render::shadow
                 if (pageIdx >= data.vsmPhysicalTiles.size())
                     continue;
                 glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, data.vsmPagesX, data.vsmPagesY);
-                addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, false);
+                glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
+                if (binThisView)
+                    addBinPage(data, pageIdx, viewBase + py * data.vsmPagesX + px, cropVP, view, false);
+                else
+                    addPageToRenderLists(data, pageIdx, cropVP, view, false);
             }
         }
     }
@@ -248,6 +340,12 @@ namespace render::shadow
         {
             const auto& view = data.views[face];
 
+            // B2: each cube face is a binned view.
+            uint32_t viewBase = UINT32_MAX;
+            if (shadowCullEnabled)
+                viewBase = registerBinView(view.viewProjectionMatrix, view, pagesPerFace, faceHeight);
+            const bool binThisView = shadowCullEnabled && viewBase != UINT32_MAX;
+
             for (uint32_t fy = 0; fy < faceHeight; ++fy)
             {
                 for (uint32_t fx = 0; fx < pagesPerFace; ++fx)
@@ -257,10 +355,121 @@ namespace render::shadow
                         continue;
 
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(fx, fy, pagesPerFace, faceHeight);
-                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, lightMoved);
+                    glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
+                    if (binThisView)
+                        addBinPage(data, pageIdx, viewBase + fy * pagesPerFace + fx, cropVP, view, lightMoved);
+                    else
+                        addPageToRenderLists(data, pageIdx, cropVP, view, lightMoved);
                 }
             }
         }
+    }
+
+    void ShadowSystem::setShadowCullEnabled(bool enabled)
+    {
+        if (shadowCullEnabled == enabled)
+            return;
+        shadowCullEnabled = enabled;
+        // Toggling changes how directional pages render (single-layer bin vs dual-layer) and what
+        // the page table points at; invalidate every page so the next frame re-renders + re-maps.
+        notifySceneChanged();
+    }
+
+    uint32_t ShadowSystem::registerBinView(const glm::mat4& vp, const ShadowView& view,
+                                           uint32_t pagesX, uint32_t pagesY, float lodBias)
+    {
+        const uint32_t pageCount = pagesX * pagesY;
+        if (pageCount == 0 ||
+            binNextPageBaseOffset + pageCount > MAX_BIN_PAGE_TABLE_ENTRIES)
+            return UINT32_MAX; // global page table full -> this view falls back to legacy
+
+        ShadowBinView bv;
+        bv.viewProjection = vp;
+        bv.depthBias = view.depthBias;
+        bv.slopeBias = view.slopeBias;
+        bv.normalBias = view.normalBias;
+        bv.lodBias = lodBias;
+        bv.pagesX = pagesX;
+        bv.pagesY = pagesY;
+        bv.pageBaseOffset = binNextPageBaseOffset;
+        binViews.push_back(bv);
+
+        binNextPageBaseOffset += pageCount;
+        return bv.pageBaseOffset;
+    }
+
+    bool ShadowSystem::addBinPage(LightShadowData& data, uint32_t pageIdx, uint32_t globalPageIndex,
+                                  const glm::mat4& cropVP, const ShadowView& view, bool isDirty)
+    {
+        uint32_t physTile = data.vsmPhysicalTiles[pageIdx];
+        if (physTile == vsm::INVALID_TILE)
+            return false;
+        ++lastCacheStats.totalPages;
+
+        // Bin pages render into the STATIC tile; keep the page table pointed there so a page that
+        // was previously dual-layer (mapped to a dynamic tile) samples the fresh bin render.
+        uint32_t px = pageIdx % data.vsmPagesX;
+        uint32_t py = pageIdx / data.vsmPagesX;
+        pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, physTile);
+
+        // A bin page re-renders when the light view moved (isDirty), the page is dirty, during
+        // warmup, OR a dynamic caster overlaps it this frame (vsmPageHasDynamic, from A1's
+        // determineDynamicPages). The last case is what makes a moving object's shadow update while
+        // the camera is still — B1/B2 are single-layer, so the whole page (all casters) re-renders
+        // for a dynamic page; static-only pages stay cached until the view moves. (B3's static/
+        // dynamic bin sublists would restore the dual-layer split so only dynamic casters re-render.)
+        bool forceRender = data.renderedFrameCount < 3;
+        bool hasDynamic = pageIdx < data.vsmPageHasDynamic.size() && data.vsmPageHasDynamic[pageIdx];
+        if (!isDirty && !data.vsmPageDirty[pageIdx] && !forceRender && !hasDynamic)
+        {
+            ++lastCacheStats.cachedPages;
+            return false;
+        }
+
+        PageRenderEntry entry;
+        entry.physicalTileIndex = physTile;
+        entry.cropViewProjection = cropVP;
+        entry.depthBias = view.depthBias;
+        entry.slopeBias = view.slopeBias;
+        entry.normalBias = view.normalBias;
+        entry.layer = ShadowLayer::All;
+        // entry.binSlot stays INVALID_BIN_SLOT until back-filled by finalizeBinPages().
+        binEntryIndices.push_back(pageRenderList.size());
+        pageRenderList.push_back(entry);
+        binGlobalRequests.push_back(globalPageIndex);
+        ++lastCacheStats.renderedPages;
+
+        // Dirty bookkeeping (single-layer): keep a dynamic page marked dirty so it re-renders next
+        // frame too — if the caster then leaves, that render clears the page (there is no separate
+        // dynamic tile to revert to, unlike the legacy dual-layer path, so a still page would keep
+        // the caster's last shadow baked in). Non-dynamic pages clear the flag (cached until the
+        // view moves). Warmup pages keep re-rendering regardless.
+        if (hasDynamic)
+            data.vsmPageDirty[pageIdx] = true;
+        else if (!forceRender)
+            data.vsmPageDirty[pageIdx] = false;
+        return true;
+    }
+
+    void ShadowSystem::finalizeBinPages()
+    {
+        if (binNextPageBaseOffset == 0)
+        {
+            binActiveThisFrame = false;
+            return;
+        }
+
+        std::vector<gpudriven::ShadowBinPageRequest> requests;
+        requests.reserve(binGlobalRequests.size());
+        for (uint32_t gi : binGlobalRequests)
+            requests.push_back({gi});
+
+        std::vector<uint32_t> assigned;
+        uint32_t used = gpudriven::buildPageBinBase(requests, binNextPageBaseOffset,
+                                                    binPageBase, &assigned);
+        for (size_t i = 0; i < binEntryIndices.size(); ++i)
+            pageRenderList[binEntryIndices[i]].binSlot = assigned[i];
+        binActiveThisFrame = used > 0;
     }
 
     void ShadowSystem::buildClipmapPageRenderList(LightShadowData& data)
@@ -303,9 +512,20 @@ namespace render::shadow
             }
         }
 
+        // B1/B2: each clipmap level is a binned VIEW (single-layer "All" per-page GPU cull).
+        // finalizeBinPages() (called once from buildPageRenderList after all lights) assigns slots.
         for (uint32_t level = 0; level < levelCount; ++level)
         {
             const auto& view = data.views[level];
+
+            // B3: coarser clipmap levels have larger texels, so bias their LOD coarser (level 0,
+            // the nearest/sharpest shell, stays unbiased). Conservative 0.5 LOD-steps per level.
+            constexpr float kShadowLevelLodBias = 0.5f;
+            uint32_t viewBase = UINT32_MAX;
+            if (shadowCullEnabled)
+                viewBase = registerBinView(view.viewProjectionMatrix, view, pagesPerLevel, pagesPerLevel,
+                                           static_cast<float>(level) * kShadowLevelLodBias);
+            const bool binThisView = shadowCullEnabled && viewBase != UINT32_MAX;
 
             for (uint32_t fy = 0; fy < pagesPerLevel; ++fy)
             {
@@ -316,7 +536,11 @@ namespace render::shadow
                         continue;
 
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(fx, fy, pagesPerLevel, pagesPerLevel);
-                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, levelMoved[level]);
+                    glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
+                    if (binThisView)
+                        addBinPage(data, pageIdx, viewBase + fy * pagesPerLevel + fx, cropVP, view, levelMoved[level]);
+                    else
+                        addPageToRenderLists(data, pageIdx, cropVP, view, levelMoved[level]);
                 }
             }
         }
@@ -448,8 +672,13 @@ namespace render::shadow
         for (uint32_t i = 0; i < totalPages; ++i)
         {
             if (data.vsmPhysicalTiles[i] != vsm::INVALID_TILE) continue;
+            // A3: cap new-page allocations per frame. Remaining pages are retried next frame
+            // (this runs every frame and skips already-allocated tiles), which smooths the
+            // camera-cut / scene-load spike instead of allocating a whole clipmap at once.
+            if (newPagesAllocatedThisFrame >= MAX_NEW_PAGES_PER_FRAME) break;
             uint32_t tile = tilePool->allocateTile();
             if (tile == vsm::INVALID_TILE) continue;
+            ++newPagesAllocatedThisFrame;
             data.vsmPhysicalTiles[i] = tile;
             uint32_t px = i % data.vsmPagesX;
             uint32_t py = i / data.vsmPagesX;
@@ -474,11 +703,16 @@ namespace render::shadow
             if (prevFrameFeedback[feedbackIdx] > 0)
             {
                 data.vsmPageLastUsedFrame[i] = frameCounter;
-                if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE)
+                // A3: cap new-page allocations per frame; still-requested pages are re-served
+                // next frame (feedback keeps them > 0), so streaming self-amortizes. Guard only
+                // the allocate sub-branch so the eviction path below still runs for other pages.
+                if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE &&
+                    newPagesAllocatedThisFrame < MAX_NEW_PAGES_PER_FRAME)
                 {
                     uint32_t tile = tilePool->allocateTile();
                     if (tile != vsm::INVALID_TILE)
                     {
+                        ++newPagesAllocatedThisFrame;
                         data.vsmPhysicalTiles[i] = tile;
                         pageTable->mapPage(data.vsmPageTableOffset, i % data.vsmPagesX,
                                            i / data.vsmPagesX, data.vsmPagesX, tile);

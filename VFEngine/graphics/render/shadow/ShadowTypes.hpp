@@ -157,10 +157,9 @@ namespace render::shadow
         uint32_t lightEntityId = 0;
 
         bool isStatic = false;
-        // Directional clipmaps move with the camera every frame (never "static"), but must
-        // allocate physical tiles on demand from screen-space feedback rather than eagerly
-        // (a full clipmap is thousands of virtual pages). This flag routes them through the
-        // feedback allocation path instead of the eager non-static path.
+        // Directional clipmaps move with the camera every frame (never "static"). Keep their
+        // current physical-page residency policy explicit so camera-panning clipmaps do not
+        // accidentally route through the feedback-delayed spot-light path.
         bool feedbackDriven = false;
         bool shadowCached = false;
         uint32_t lastRenderedFrame = 0;
@@ -171,7 +170,6 @@ namespace render::shadow
 
         // Shadow streaming priority (computed per frame based on distance/importance)
         float shadowPriority = 1.0f;
-        uint32_t maxPagesOverride = 0;
 
         // VSM page tracking
         uint32_t vsmLightIndex = 0;

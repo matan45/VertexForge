@@ -34,6 +34,20 @@ namespace render::shadow
         uint32_t shaderGroupCount;
         uint32_t transparentGroupIndex;
         uint32_t drawCountStructSize;
+        // A4: per-section (batch*shaderGroupCount + sg) occupancy superset from the batch manager.
+        // When non-null, the legacy shadow loop skips sections with no candidates — occupancy is
+        // camera-independent so it is valid for shadow views. null => draw every section (legacy).
+        const std::vector<uint8_t>* sectionOccupancy = nullptr;
+
+        // VK-1479 B1: page-binned shadow cull. When shadowCullEnabled, a PageRenderEntry with a
+        // valid binSlot is drawn from binCommandBuffer/binCountBuffer (one indirect-count draw at
+        // offset binSlot*binCapacity) with binPerDrawDataDescSet bound at set 0 (b0 -> bin
+        // PerDrawData). Legacy fields above stay the fallback for INVALID binSlots / flag off.
+        bool shadowCullEnabled = false;
+        vk::DescriptorSet binPerDrawDataDescSet;
+        vk::Buffer binCommandBuffer;
+        vk::Buffer binCountBuffer;
+        uint32_t binCapacity = 0;
     };
 
     enum class ShadowLayer : uint8_t
@@ -43,6 +57,10 @@ namespace render::shadow
         Dynamic
     };
 
+    // Matches render::gpudriven::INVALID_SHADOW_BIN_SLOT. A PageRenderEntry with this binSlot is
+    // drawn via the legacy path; any other value selects its GPU bin (B1).
+    inline constexpr uint32_t INVALID_BIN_SLOT = 0xFFFFFFFFu;
+
     struct PageRenderEntry
     {
         uint32_t physicalTileIndex;
@@ -51,6 +69,10 @@ namespace render::shadow
         float slopeBias;
         float normalBias;
         ShadowLayer layer = ShadowLayer::All;
+        // VK-1479 B1: when != INVALID_BIN_SLOT and the page-binned cull flag is on, this page is
+        // drawn from its GPU bin (baseDrawIndex = binSlot * binCapacity) instead of the legacy
+        // per-page replay. Directional pages only in B1; INVALID => legacy path.
+        uint32_t binSlot = INVALID_BIN_SLOT;
     };
 
     struct TileCopyEntry
@@ -143,16 +165,20 @@ namespace render::shadow
 
         void recordStaticPhase(vk::CommandBuffer cmd,
                                const ShadowPassContext& ctx,
-                               const ShadowPassPrerequisites& prereq,
                                bool clearDepth);
 
         void recordDynamicPhase(vk::CommandBuffer cmd,
-                                const ShadowPassContext& ctx,
-                                const ShadowPassPrerequisites& prereq);
+                                const ShadowPassContext& ctx);
 
         void dispatchLegacyMeshBatches(vk::CommandBuffer cmd,
                                        const ShadowPassContext& ctx,
                                        ShadowPushConstants& pc);
+
+        // VK-1479 B1: draw one page from its GPU bin (one indirect-count draw at the page's bin
+        // region). Set 0 (bin PerDrawData / instance / objects) is bound by recordTileCommands.
+        void dispatchBinnedPage(vk::CommandBuffer cmd,
+                                const ShadowPassContext& ctx,
+                                const PageRenderEntry& page);
 
         void dispatchTerrainShadow(vk::CommandBuffer cmd,
                                    const ShadowPassContext& ctx,
@@ -164,7 +190,6 @@ namespace render::shadow
         {
             vk::CommandBuffer primaryCmd;
             const ShadowPassContext* ctx;
-            const ShadowPassPrerequisites* prereq;
             core::ThreadCommandPoolManager* threadPoolManager;
             uint32_t frameIndex;
         };

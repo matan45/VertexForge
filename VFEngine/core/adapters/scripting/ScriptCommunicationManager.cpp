@@ -83,11 +83,10 @@ namespace core
             try
             {
                 auto entityIt = instanceToEntity.find(instId);
-                if (entityIt != instanceToEntity.end())
-                {
-                    NativeAPIRegistry::setCurrentEntity(entityIt->second);
-                    NativeAPIRegistry::setCurrentInstanceId(instId);
-                }
+                AmbientScriptContext ctx(
+                    entityIt != instanceToEntity.end() ? entityIt->second
+                                                       : ::services::EntityHandle::invalid(),
+                    instId);
 
                 // Build args: script object + extra args
                 auto& scriptObj = std::any_cast<const value::Value&>(objIt->second);
@@ -169,11 +168,10 @@ namespace core
             try
             {
                 auto entityIt = instanceToEntity.find(listener.ownerInstanceId);
-                if (entityIt != instanceToEntity.end())
-                {
-                    NativeAPIRegistry::setCurrentEntity(entityIt->second);
-                    NativeAPIRegistry::setCurrentInstanceId(listener.ownerInstanceId);
-                }
+                AmbientScriptContext ctx(
+                    entityIt != instanceToEntity.end() ? entityIt->second
+                                                       : ::services::EntityHandle::invalid(),
+                    listener.ownerInstanceId);
 
                 interpreter->callLambda(listener.callback, args);
             }

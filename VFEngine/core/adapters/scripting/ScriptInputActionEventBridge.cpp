@@ -129,7 +129,7 @@ namespace core
         consumedQuery.actionName = actionName;
         if (dispatcher.query(consumedQuery)) return;
 
-        const std::string requiredInterface = "IInputActionListener";
+        const std::string requiredInterface = kInputActionListener;
 
         // Collect eligible instances with priority
         struct DispatchEntry
@@ -168,8 +168,7 @@ namespace core
 
             try
             {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-                NativeAPIRegistry::setCurrentInstanceId(instanceId);
+                AmbientScriptContext ctx(entityIt->second, instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 auto result = interpreter->callMethod(instance, methodName, {value::Value(actionName)});
 

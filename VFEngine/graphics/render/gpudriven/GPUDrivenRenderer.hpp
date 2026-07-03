@@ -15,6 +15,7 @@
 #include "scene/MeshletBuffer.hpp"
 #include "scene/TextureStreamManager.hpp"
 #include "scene/BoneMatrixManager.hpp"
+#include "scene/ShadowPageBinner.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
@@ -154,6 +155,7 @@ namespace render::gpudriven
         std::unique_ptr<MeshShaderPipeline> wboitMeshShaderPipeline;
         std::unique_ptr<MeshletBuffer> meshletBuffer;
         std::unique_ptr<BoneMatrixManager> boneMatrixManager;
+        std::unique_ptr<ShadowPageBinner> shadowPageBinner; // VK-1479 B1 (null until shadow init)
         std::unique_ptr<lighting::GPULightBufferManager> lightBufferManager;
         std::unique_ptr<lighting::ClusterGridManager> clusterGridManager;
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
@@ -332,6 +334,12 @@ namespace render::gpudriven
         // Split compute dispatch for async compute queue support
         // Records uploads, light occlusion, object culling, shadows, volumetric fog on graphics queue
         void dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex = 0);
+
+        // A7: build/update BLAS+TLAS for RT shadows/GI. Extracted so BOTH the async graphics-compute
+        // path AND the sync dispatchCompute path build the acceleration structures — previously only
+        // the async path did, so RT shadows were silently dead whenever async compute was off.
+        // Pure code motion; must be called after the transfer->compute barrier.
+        void buildAccelerationStructures(vk::CommandBuffer cmd, uint32_t imageIndex);
         // Records light culling, grass compute, GI probe update on async compute queue
         void dispatchAsyncCompute(vk::CommandBuffer asyncCmd);
 
@@ -364,6 +372,10 @@ namespace render::gpudriven
 
         void setOcclusionCullingEnabled(bool enabled) { culling.occlusionCullingEnabled = enabled; }
         bool isOcclusionCullingEnabled() const { return culling.occlusionCullingEnabled; }
+
+        // VK-1479 B1: page-binned directional shadow cull (default OFF).
+        void setShadowCullEnabled(bool enabled) { if (shadowSystem) shadowSystem->setShadowCullEnabled(enabled); }
+        bool isShadowCullEnabled() const { return shadowSystem && shadowSystem->isShadowCullEnabled(); }
 
         void setMeshletFrustumCullingEnabled(bool enabled) { culling.meshletFrustumCullingEnabled = enabled; }
         bool isMeshletFrustumCullingEnabled() const { return culling.meshletFrustumCullingEnabled; }
@@ -681,6 +693,17 @@ namespace render::gpudriven
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);
         void recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles);
         void updateLightCullingState(vk::CommandBuffer cmd);
+        // VK-1479 B1: page-binned shadow cull, split around the transfer->compute barrier so it
+        // rides the existing barrier. prepare = advance ring, stage per-level data + pageBinBase,
+        // reset counts, upload (before the barrier); dispatch = cull + post-barrier (after the main
+        // cull). Both gated on active bin pages + not an RTT pass, and use the SAME objectCount +
+        // activeIndices as the main cull (the anti-desync guarantee).
+        void prepareShadowBinCull(vk::CommandBuffer cmd);
+        void dispatchShadowBinCull(vk::CommandBuffer cmd);
+        [[nodiscard]] bool shadowBinCullReady() const;
+        // A1: fill the shadow system's reused dynamic-caster-bounds buffer from resolved GPU
+        // object data (world matrix + local AABB + flags) so it marks only overlapped pages.
+        void gatherDynamicShadowCasterBounds();
         void dispatchVolumetricFog(vk::CommandBuffer cmd);
         void dispatchGIProbeUpdate(vk::CommandBuffer cmd);
 

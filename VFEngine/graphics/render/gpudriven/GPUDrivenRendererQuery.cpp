@@ -224,10 +224,6 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::setDeletionQueue(core::DeferredDeletionQueue* queue)
     {
-        if (shadowSystem)
-        {
-            shadowSystem->setDeletionQueue(queue);
-        }
         if (textureStreamManager)
         {
             textureStreamManager->setDeletionQueue(queue);

@@ -103,7 +103,7 @@ namespace core
 
             auto interfaceIt = instanceToInterfaces.find(instanceId);
             if (interfaceIt == instanceToInterfaces.end() ||
-                interfaceIt->second.find("IRagdollListener") == interfaceIt->second.end())
+                interfaceIt->second.find(kRagdollListener) == interfaceIt->second.end())
                 continue;
 
             auto objIt = instanceToObject.find(instanceId);
@@ -111,7 +111,7 @@ namespace core
 
             try
             {
-                NativeAPIRegistry::setCurrentEntity(self);
+                AmbientScriptContext ctx(self, instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, methodName, {});
             }
@@ -136,9 +136,9 @@ namespace core
         std::string requiredInterface;
         std::string methodStr(methodName);
         if (methodStr == "onCollisionEnter" || methodStr == "onCollisionExit")
-            requiredInterface = "ICollisionListener";
+            requiredInterface = kCollisionListener;
         else if (methodStr == "onTriggerEnter" || methodStr == "onTriggerExit")
-            requiredInterface = "ITriggerListener";
+            requiredInterface = kTriggerListener;
         else
             return;
 
@@ -156,7 +156,7 @@ namespace core
 
             try
             {
-                NativeAPIRegistry::setCurrentEntity(self);
+                AmbientScriptContext ctx(self, instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, methodName,
                                         {value::Value(static_cast<int>(other.id))});

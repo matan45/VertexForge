@@ -121,6 +121,19 @@ public class Entity {
         _native_entity_setScale(entityId, scale, scale, scale);
     }
 
+    // Get world-space position (differs from getPosition for parented entities)
+    public static function getWorldPosition(int entityId): Vec3f {
+        float[] v = _native_entity_getWorldPosition(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
+    }
+
+    // Get world-space rotation (Euler angles in degrees, decomposed from the
+    // scene-graph world matrix)
+    public static function getWorldRotation(int entityId): Vec3f {
+        float[] v = _native_entity_getWorldRotation(entityId);
+        return new Vec3f(v[0], v[1], v[2]);
+    }
+
     // ============================================
     // Component Queries
     // ============================================

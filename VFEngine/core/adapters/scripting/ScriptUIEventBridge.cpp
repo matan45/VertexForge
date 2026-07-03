@@ -1,4 +1,4 @@
-// mType headers must come first to avoid Windows macro conflicts
+﻿// mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
 
 #include "ScriptUIEventBridge.hpp"
@@ -39,13 +39,13 @@ namespace core
             }
 
             auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt != instanceToEntity.end())
-            {
-                NativeAPIRegistry::setCurrentEntity(entityIt->second);
-            }
+            auto entity = entityIt != instanceToEntity.end()
+                ? entityIt->second
+                : ::services::EntityHandle::invalid();
 
             try
             {
+                AmbientScriptContext ctx(entity, instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, methodName, buildArgs());
             }
@@ -65,7 +65,7 @@ namespace core
         ::services::EntityHandle entity,
         const std::string& entityName)
     {
-        dispatchToListeners("IUIButtonListener", methodName, [&]()
+        dispatchToListeners(kButtonListener, methodName, [&]()
         {
             return std::vector<value::Value>{
                 value::Value(static_cast<int>(entity.id)),
@@ -84,7 +84,7 @@ namespace core
         const std::string& entityName,
         const std::string& text)
     {
-        dispatchToListeners("IUITextInputListener", methodName, [&]()
+        dispatchToListeners(kTextInputListener, methodName, [&]()
         {
             std::string_view method(methodName);
             if (text.empty() &&
@@ -113,7 +113,7 @@ namespace core
         const std::string& entityName,
         bool newState, bool previousState)
     {
-        dispatchToListeners("IUICheckboxListener", methodName, [&]()
+        dispatchToListeners(kCheckboxListener, methodName, [&]()
         {
             std::string_view method(methodName);
             if (method == "onCheckboxToggled")
@@ -142,7 +142,7 @@ namespace core
         const std::string& entityName,
         int previousIndex, int newIndex)
     {
-        dispatchToListeners("IUIDropdownListener", methodName, [&]()
+        dispatchToListeners(kDropdownListener, methodName, [&]()
         {
             std::string_view method(methodName);
             if (method == "onDropdownSelectionChanged")
@@ -171,7 +171,7 @@ namespace core
         const std::string& entityName,
         int tabIndex, int previousTabIndex)
     {
-        dispatchToListeners("IUITabsListener", methodName, [&]()
+        dispatchToListeners(kTabsListener, methodName, [&]()
         {
             std::string_view method(methodName);
             if (method == "onTabChanged")
@@ -201,7 +201,7 @@ namespace core
         const std::string& entityName,
         float newValue, float previousValue, float finalValue)
     {
-        dispatchToListeners("IUISliderListener", methodName, [&]()
+        dispatchToListeners(kSliderListener, methodName, [&]()
         {
             std::string_view method(methodName);
             if (method == "onSliderValueChanged")
@@ -238,7 +238,7 @@ namespace core
         const std::string& entityName,
         float newValue, float previousValue)
     {
-        dispatchToListeners("IUIProgressBarListener", methodName, [&]()
+        dispatchToListeners(kProgressBarListener, methodName, [&]()
         {
             std::string_view method(methodName);
             if (method == "onProgressBarValueChanged")
@@ -267,7 +267,7 @@ namespace core
         bool wasDropped)
     {
         // Safe to capture methodName (const char*) by reference: dispatchToListeners is synchronous
-        dispatchToListeners("IUIDragDropListener", methodName, [&]()
+        dispatchToListeners(kDragDropListener, methodName, [&]()
         {
             std::string_view method(methodName);
             if (method == "onDragStart")
@@ -312,7 +312,7 @@ namespace core
         ::services::EntityHandle entity,
         const std::string& entityName)
     {
-        dispatchToListeners("IUIWindowListener", methodName, [&]()
+        dispatchToListeners(kWindowListener, methodName, [&]()
         {
             return std::vector<value::Value>{
                 value::Value(static_cast<int>(entity.id)),
@@ -331,7 +331,7 @@ namespace core
         const std::string& entityName,
         int previousIndex, int newIndex)
     {
-        dispatchToListeners("IUIListViewListener", methodName, [&]()
+        dispatchToListeners(kListViewListener, methodName, [&]()
         {
             return std::vector<value::Value>{
                 value::Value(static_cast<int>(entity.id)),

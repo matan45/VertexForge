@@ -141,6 +141,21 @@ namespace services {
                 return true;
             });
 
+        dispatcher.registerCommandHandler<events::physics::CreateVehicleCommand>(
+            [this](const events::physics::CreateVehicleCommand& cmd) -> bool {
+                return createVehicle(cmd.entity, cmd.rebuild);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::DestroyVehicleCommand>(
+            [this](const events::physics::DestroyVehicleCommand& cmd) -> bool {
+                return destroyVehicle(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetVehicleInputCommand>(
+            [this](const events::physics::SetVehicleInputCommand& cmd) {
+                setVehicleInput(cmd.entity, cmd.throttle, cmd.steer, cmd.brake, cmd.handbrake);
+            });
+
         // Static Jolt height-field body from raw samples (plugin/runtime custom terrain).
         // Reuses the terrain-tile collider machinery, keyed by (entity, tileX, tileZ).
         dispatcher.registerCommandHandler<events::physics::CreateHeightFieldBodyCommand>(
@@ -379,6 +394,21 @@ namespace services {
                 return physicsProvider->isBodySleeping(query.entity);
             });
 
+        dispatcher.registerQueryHandler<events::physics::HasVehicleQuery>(
+            [this](const events::physics::HasVehicleQuery& query) -> bool {
+                return hasVehicle(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetVehicleWheelStatesQuery>(
+            [this](const events::physics::GetVehicleWheelStatesQuery& query) {
+                return getVehicleWheelStates(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetVehicleWheelStateQuery>(
+            [this](const events::physics::GetVehicleWheelStateQuery& query) {
+                return getVehicleWheelState(query.entity, query.wheelIndex);
+            });
+
         // === Physics Settings Commands ===
 
         dispatcher.registerCommandHandler<events::physics::ApplyPhysicsSettingsCommand>(
@@ -536,6 +566,54 @@ namespace services {
 
     void PhysicsServiceImpl::removeCollider(EntityHandle entity) {
         physicsProvider->removeCollider(entity);
+    }
+
+    bool PhysicsServiceImpl::createVehicle(EntityHandle entity, bool rebuild) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) return false;
+
+        entt::entity enttEntity = internal::fromHandle(entity);
+        if (!registry.all_of<components::VehicleComponent>(enttEntity)) return false;
+
+        if (physicsProvider->hasVehicle(entity)) {
+            if (!rebuild) return false;
+            physicsProvider->destroyVehicle(entity);
+        }
+
+        if (!physicsProvider->hasRigidBody(entity)) {
+            events::physics::CreatePhysicsBodyCommand bodyCmd;
+            bodyCmd.entity = entity;
+            bodyCmd.rebuild = false;
+            if (!::events::EventDispatcher::instance().execute(bodyCmd) ||
+                !physicsProvider->hasRigidBody(entity)) {
+                return false;
+            }
+        }
+
+        const auto& vehicle = registry.get<components::VehicleComponent>(enttEntity);
+        return physicsProvider->createVehicle(entity, vehicle.config);
+    }
+
+    bool PhysicsServiceImpl::destroyVehicle(EntityHandle entity) {
+        if (!physicsProvider->hasVehicle(entity)) return false;
+        physicsProvider->destroyVehicle(entity);
+        return true;
+    }
+
+    bool PhysicsServiceImpl::hasVehicle(EntityHandle entity) const {
+        return physicsProvider->hasVehicle(entity);
+    }
+
+    void PhysicsServiceImpl::setVehicleInput(EntityHandle entity, float throttle, float steer, float brake, float handbrake) {
+        physicsProvider->setVehicleInput(entity, throttle, steer, brake, handbrake);
+    }
+
+    std::vector<types::WheelState> PhysicsServiceImpl::getVehicleWheelStates(EntityHandle entity) const {
+        return physicsProvider->getVehicleWheelStates(entity);
+    }
+
+    std::optional<types::WheelState> PhysicsServiceImpl::getVehicleWheelState(EntityHandle entity, int wheelIndex) const {
+        return physicsProvider->getVehicleWheelState(entity, wheelIndex);
     }
 
     void PhysicsServiceImpl::applyForce(EntityHandle entity, const glm::vec3& force) {

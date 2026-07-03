@@ -169,6 +169,7 @@ namespace core
 
         // Swap buffers: previous write becomes read (previous frame state)
         physicsWorld->swapStateBuffers();
+        physicsWorld->applyPendingVehicleInputs();
 
         asyncStepFuture = threading::JobSystem::instance().submit(
             [this, deltaTime]() -> physics::FixedTimestepResult

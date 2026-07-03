@@ -53,6 +53,26 @@ namespace events::physics {
         std::string_view getName() const override { return "DestroyPhysicsBody"; }
     };
 
+    struct CreateVehicleCommand : ::events::ICommand<bool> {
+        services::EntityHandle entity;
+        bool rebuild = false;
+        std::string_view getName() const override { return "CreateVehicle"; }
+    };
+
+    struct DestroyVehicleCommand : ::events::ICommand<bool> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "DestroyVehicle"; }
+    };
+
+    struct SetVehicleInputCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        float throttle = 0.0f;
+        float steer = 0.0f;
+        float brake = 0.0f;
+        float handbrake = 0.0f;
+        std::string_view getName() const override { return "SetVehicleInput"; }
+    };
+
     // Create a static Jolt height-field body from raw height samples (square
     // row-major sampleCount x sampleCount grid of absolute Y heights). Reuses the
     // terrain-tile collider machinery; tileX/tileZ key multiple fields per entity.
@@ -229,6 +249,22 @@ namespace events::physics {
     struct IsBodySleepingQuery : ::events::IQuery<bool> {
         services::EntityHandle entity;
         std::string_view getName() const override { return "IsBodySleeping"; }
+    };
+
+    struct HasVehicleQuery : ::events::IQuery<bool> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "HasVehicle"; }
+    };
+
+    struct GetVehicleWheelStatesQuery : ::events::IQuery<std::vector<types::WheelState>> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetVehicleWheelStates"; }
+    };
+
+    struct GetVehicleWheelStateQuery : ::events::IQuery<std::optional<types::WheelState>> {
+        services::EntityHandle entity;
+        int wheelIndex = 0;
+        std::string_view getName() const override { return "GetVehicleWheelState"; }
     };
 
     struct RigidBodyAddedNotification : ::events::INotification {

@@ -83,6 +83,12 @@ namespace windows
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Enable/disable PCSS contact-hardening soft shadows globally.\nWhen off, hard shadows are used (single tap).");
 
+        // VK-1479 B1: page-binned directional shadow cull (experimental, default OFF).
+        if (ImGui::Checkbox("Page-Binned Shadow Cull (experimental)", &settings.shadows.perViewCulling))
+            markDirty();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Directional VSM clipmap pages are drawn from a per-page GPU cull\n(off-screen casters recovered) instead of replaying the main draw list per page.\nExperimental; legacy path is the fallback when off.");
+
 
         if (ImGui::DragFloat("Light Size", &settings.shadows.globalLightSize, 0.01f, 0.01f, 10.0f))
             markDirty();

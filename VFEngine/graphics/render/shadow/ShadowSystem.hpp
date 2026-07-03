@@ -37,8 +37,6 @@ namespace render
         private:
             core::Device& device;
 
-            static constexpr float FRAME_BUDGET_WARNING_MS = 16.0f;
-
             // Shadow streaming: per-frame tile allocation budget
             static constexpr uint32_t MAX_NEW_PAGES_PER_FRAME = 32;
             uint32_t newPagesAllocatedThisFrame = 0;
@@ -72,6 +70,18 @@ namespace render
             std::vector<shadow::PageRenderEntry> dynamicPageRenderList;   // dual-layer: dynamic-only objects
             std::vector<shadow::TileCopyEntry> tileCopyList;              // dual-layer: static->dynamic tile copies
 
+            // A1: bounds of dynamic (non-ShadowStatic) shadow casters, refilled each frame by the
+            // renderer (mutableDynamicCasterBounds) before beginFrame. determineDynamicPages marks
+            // only the VSM pages these overlap as dynamic, instead of every page whenever any
+            // dynamic object exists. Reused across frames (clear + fill, no per-frame realloc).
+            struct DynamicCasterBound
+            {
+                glm::vec3 localMin;
+                glm::vec3 localMax;
+                glm::mat4 modelMatrix;   // clipFromBox = lightViewProjection * modelMatrix
+            };
+            std::vector<DynamicCasterBound> dynamicCasterBounds;
+
             bool shadowsEnabled = true;
             ShadowQuality globalQuality = ShadowQuality::High;
             bool globalSoftShadows = true;
@@ -82,6 +92,33 @@ namespace render
             // directional lights. Set per-frame by the renderer from the GPU light buffer's
             // runtime rtShadowActive flag (true only when RT actually produced a mask).
             bool directionalRTOverrideActive = false;
+
+            // VK-1479 B1/B2: page-binned shadow cull. When on, VSM lights render as single-layer
+            // "All" bin pages (per-page GPU cull) instead of dual-layer. B2 handles every view type
+            // uniformly (directional levels + spot + point faces). Default OFF; legacy is the
+            // byte-identical fallback.
+        public:
+            // One binned view exposed to the renderer to build the GPU ShadowLevelData.
+            struct ShadowBinView
+            {
+                glm::mat4 viewProjection;
+                float depthBias = 0.0f;
+                float slopeBias = 0.0f;
+                float normalBias = 0.0f;
+                float lodBias = 0.0f;        // B3: per-view shadow LOD bias (coarser levels coarser)
+                uint32_t pagesX = 0;
+                uint32_t pagesY = 0;
+                uint32_t pageBaseOffset = 0; // this view's block start in the global pageBinBase
+            };
+        private:
+            static constexpr uint32_t MAX_BIN_PAGE_TABLE_ENTRIES = 8192; // matches ShadowPageBinner
+            bool shadowCullEnabled = false;
+            bool binActiveThisFrame = false;         // any light produced bin pages this frame
+            std::vector<ShadowBinView> binViews;     // all binned views (levels + spot + faces)
+            std::vector<uint32_t> binPageBase;       // global pageBinBase[globalIdx] = renderSlot or INVALID
+            uint32_t binNextPageBaseOffset = 0;      // running global page offset while building
+            std::vector<uint32_t> binGlobalRequests; // global page indices of rendering bin pages (scratch)
+            std::vector<size_t> binEntryIndices;     // pageRenderList indices to back-fill binSlot (scratch)
 
             // Directional clipmap settings (applied at directional-light registration).
             uint32_t clipmapLevelCount = ShadowConstants::DEFAULT_CLIPMAP_LEVELS;
@@ -173,6 +210,20 @@ namespace render
             // the directional clipmap pages are not rendered (RT overrides them full-screen).
             void setDirectionalRTOverrideActive(bool active) { directionalRTOverrideActive = active; }
 
+            // A1: the renderer fills this reused buffer with dynamic shadow-caster bounds
+            // (resolved GPU object data) each frame BEFORE beginFrame(); determineDynamicPages
+            // consumes it to mark only the pages a dynamic caster overlaps.
+            [[nodiscard]] std::vector<DynamicCasterBound>& mutableDynamicCasterBounds() { return dynamicCasterBounds; }
+
+            // VK-1479 B1 page-binned cull. Toggling invalidates all pages so they re-render (and
+            // the page table is repointed at the static tile) on the next frame.
+            void setShadowCullEnabled(bool enabled);
+            [[nodiscard]] bool isShadowCullEnabled() const { return shadowCullEnabled; }
+            // Per-frame bin outputs consumed by the renderer's ShadowPageBinner (valid when active).
+            [[nodiscard]] bool isShadowBinActive() const { return binActiveThisFrame; }
+            [[nodiscard]] const std::vector<ShadowBinView>& getShadowBinViews() const { return binViews; }
+            [[nodiscard]] const std::vector<uint32_t>& getShadowBinPageBase() const { return binPageBase; }
+
             [[nodiscard]] ShadowQuality getGlobalQuality() const { return globalQuality; }
 
             [[nodiscard]] float getGlobalDepthBias() const { return globalDepthBias; }
@@ -200,7 +251,6 @@ namespace render
             [[nodiscard]] bool isInitialized() const { return initialized; }
 
             void setLightBufferManager(lighting::GPULightBufferManager* manager) { lightBufferManager = manager; }
-            void setDeletionQueue(core::DeferredDeletionQueue* queue);
 
             [[nodiscard]] const std::vector<ShadowView>& getDirectionalShadowViews() const { return directionalShadowViews; }
             [[nodiscard]] const std::vector<ShadowView>& getPointShadowViews() const { return pointShadowViews; }
@@ -254,6 +304,12 @@ namespace render
                 }
             };
             std::vector<EvictionCandidate> evictionHeap;
+            // A2: the eviction heap is rebuilt lazily. beginFrame only marks it dirty; the O(all
+            // resident pages) rebuild happens on the first eviction request of a frame (reached
+            // only when the physical tile pool is exhausted), so steady-state cost is zero.
+            bool evictionHeapDirty = true;
+            void markEvictionHeapDirty() { evictionHeapDirty = true; }
+            void ensureEvictionHeap();
             void buildEvictionHeap();
             uint32_t evictLowestPriorityPage(float requestingPriority);
 
@@ -292,6 +348,7 @@ namespace render
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
             void buildPageRenderList();
             void determineDynamicPages();
+            void markDynamicPagesForLight(LightShadowData& data);
             void buildSingleViewPageRenderList(LightShadowData& data);
             void buildPointPageRenderList(LightShadowData& data);
             void buildClipmapPageRenderList(LightShadowData& data);
@@ -304,6 +361,18 @@ namespace render
             void addDualLayerPage(LightShadowData& data, uint32_t pageIdx,
                                    const glm::mat4& cropVP, const ShadowView& view,
                                    bool isDirty, bool forceRender);
+            // B2: register a binned view (directional level / spot / point face); returns its
+            // pageBaseOffset in the global page table, or UINT32_MAX if that would overflow (the
+            // caller then skips binning that view and falls back to legacy for it).
+            uint32_t registerBinView(const glm::mat4& vp, const ShadowView& view,
+                                     uint32_t pagesX, uint32_t pagesY, float lodBias = 0.0f);
+            // Single-layer "All" bin page. Renders into the static tile (repoints the page table
+            // there), records globalPageIndex + the pageRenderList index into the member scratch.
+            // Returns true if it rendered (not cached).
+            bool addBinPage(LightShadowData& data, uint32_t pageIdx, uint32_t globalPageIndex,
+                            const glm::mat4& cropVP, const ShadowView& view, bool isDirty);
+            // After all lights: assign render slots over the global page space, back-fill binSlots.
+            void finalizeBinPages();
             void allocateDynamicTile(LightShadowData& data, uint32_t pageIdx);
             void freeDynamicTileIfExpired(LightShadowData& data, uint32_t pageIdx, uint32_t physTile);
             void allocateNonStaticLightPages(LightShadowData& data);

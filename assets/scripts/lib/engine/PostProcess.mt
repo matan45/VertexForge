@@ -97,34 +97,12 @@ public class PostProcess {
     }
 
     // ============================================
-    // TAA (Temporal Anti-Aliasing)
+    // Anti-Aliasing note
     // ============================================
-
-    public static function isTAAEnabled(): bool {
-        return _native_postprocess_taa_isEnabled();
-    }
-
-    public static function setTAAEnabled(bool enabled): void {
-        _native_postprocess_taa_setEnabled(enabled);
-    }
-
-    // TAA blend factor: lower = more temporal smoothing (0.01 - 0.5)
-    public static function getTAABlendFactor(): float {
-        return _native_postprocess_taa_getBlendFactor();
-    }
-
-    public static function setTAABlendFactor(float value): void {
-        _native_postprocess_taa_setBlendFactor(value);
-    }
-
-    // TAA sharpening strength (0.0 - 1.0)
-    public static function getTAASharpenStrength(): float {
-        return _native_postprocess_taa_getSharpenStrength();
-    }
-
-    public static function setTAASharpenStrength(float value): void {
-        _native_postprocess_taa_setSharpenStrength(value);
-    }
+    // There is no script-facing TAA control: temporal anti-aliasing is
+    // driven by the upscaler (DLSS/FSR) — projection jitter is enabled
+    // automatically when upscaling is active. The former TAA wrappers here
+    // called natives that were never registered and could not work.
 
     // ============================================
     // Bloom

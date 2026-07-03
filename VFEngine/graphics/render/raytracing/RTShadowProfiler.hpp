@@ -22,7 +22,17 @@ namespace render::raytracing
         BeforeBLASBuild = 3,
         AfterBLASBuild = 4,
         AfterTLASBuild = 5,
-        Count = 6
+        // VK-1479 C5: spot + point RT-shadow trace/denoise timing appended AFTER the directional +
+        // AS-build slots so 0..5 keep their indices. The directional readback stays capped to the
+        // first 6 slots, so these (unwritten whenever spot/point RT is inactive — the default)
+        // never poison it with a VK_NOT_READY. See RTShadowProfiler::readbackAndUpdate.
+        BeforeSpotDispatch = 6,
+        AfterSpotDispatch = 7,
+        AfterSpotDenoiser = 8,
+        BeforePointDispatch = 9,
+        AfterPointDispatch = 10,
+        AfterPointDenoiser = 11,
+        Count = 12
     };
 
     /// Result of the adaptive budget evaluation — what to change this frame.
@@ -30,6 +40,11 @@ namespace render::raytracing
     {
         std::optional<float> newMaxRayDistance;
         std::optional<int> newSpatialPasses;
+        // VK-1479 C5: recommended RT spot/point light-count budgets (nullopt == unchanged). The
+        // profiler tracks the applied values internally; consumers read them via
+        // getAppliedSpot/PointBudget when clamping their per-light RT budget.
+        std::optional<uint32_t> newSpotBudget;
+        std::optional<uint32_t> newPointBudget;
         bool skipFrame = false;
     };
 
@@ -75,6 +90,12 @@ namespace render::raytracing
         void markBLASBuilt() { blasBuiltThisFrame = true; }
         void markTLASBuilt() { tlasBuiltThisFrame = true; }
 
+        /// VK-1479 C5: adaptive RT spot/point light-count budgets after the last evaluateBudget.
+        /// Equal to the user's base budget unless the adaptive path has shrunk it. Consumers clamp
+        /// their per-light RT budget to this (e.g. min(userBudget, getAppliedSpotBudget())).
+        uint32_t getAppliedSpotBudget() const { return appliedSpotBudget; }
+        uint32_t getAppliedPointBudget() const { return appliedPointBudget; }
+
         bool isValid() const { return queryPool.isValid(); }
         void invalidateFrameSlots() { for (auto& r : frameSlotReady) r = false; }
 
@@ -88,6 +109,10 @@ namespace render::raytracing
         float emaTotalMs = 0.0f;
         float emaBlasBuildMs = 0.0f;
         float emaTlasBuildMs = 0.0f;
+        // VK-1479 C5: spot/point RT-shadow trace+denoise cost, folded into emaTotalMs so the
+        // adaptive budget accounts for the full RT-shadow bill (not just the directional pass).
+        float emaSpotMs = 0.0f;
+        float emaPointMs = 0.0f;
         bool emaInitialized = false;
 
         // Hysteresis
@@ -111,6 +136,16 @@ namespace render::raytracing
         int appliedSpatialPasses = 3;
         bool throttled = false;
         bool skipNextFrame = false;
+
+        // VK-1479 C5: RT spot/point light-count budgets (base = user setting, applied = after
+        // adaptive shrink). *Active mirrors the spot/point RT enable flags; when both are false the
+        // budget degrade/upgrade ordering collapses to the pre-C5 directional-only order.
+        bool spotActive = false;
+        bool pointActive = false;
+        uint32_t baseSpotBudget = 8;
+        uint32_t basePointBudget = 8;
+        uint32_t appliedSpotBudget = 8;
+        uint32_t appliedPointBudget = 8;
 
         // Per-frame flags for conditional timestamp reads
         bool blasBuiltThisFrame = false;

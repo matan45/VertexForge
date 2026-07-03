@@ -12,6 +12,7 @@
 #include "PhysicsLayers.hpp"
 #include "PhysicsContactListener.hpp"
 #include "PhysicsRigidBodyManager.hpp"
+#include "PhysicsVehicleManager.hpp"
 #include "PhysicsTerrainManager.hpp"
 #include "PhysicsRagdollManager.hpp"
 #include "PhysicsCharacterManager.hpp"
@@ -19,6 +20,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <memory>
+#include <optional>
 #include <vector>
 #include <cstdint>
 
@@ -43,6 +45,7 @@ namespace core::physics
         PhysicsBodyRegistry bodyRegistry;
 
         PhysicsRigidBodyManager rigidBodyManager;
+        PhysicsVehicleManager vehicleManager;
         PhysicsTerrainManager terrainManager;
         PhysicsRagdollManager ragdollManager;
         PhysicsCharacterManager characterManager;
@@ -83,6 +86,15 @@ namespace core::physics
         // entity has no gameplay body.
         void setEntityRigidBodyEnabled(uint64_t entityId, bool enabled);
         void setEntityRigidBodyTransform(uint64_t entityId, const glm::vec3& position, const glm::quat& rotation);
+
+        // Vehicles
+        bool createVehicle(uint64_t entityId, const types::VehicleConfig& config);
+        void destroyVehicle(uint64_t entityId);
+        bool hasVehicle(uint64_t entityId) const;
+        void setVehicleInput(uint64_t entityId, float throttle, float steer, float brake, float handbrake);
+        void applyPendingVehicleInputs();
+        std::vector<types::WheelState> getVehicleWheelStates(uint64_t entityId) const;
+        std::optional<types::WheelState> getVehicleWheelState(uint64_t entityId, int wheelIndex) const;
 
         // Position & rotation
         glm::vec3 getPosition(JPH::BodyID bodyId) const;

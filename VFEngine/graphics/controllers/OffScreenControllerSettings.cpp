@@ -62,6 +62,8 @@ namespace controllers
 
         gpuDriven->applyRTShadowSettings(settings.rtShadows);
 
+        gpuDriven->setShadowCullEnabled(settings.shadows.perViewCulling); // VK-1479 B1 (default OFF)
+
         gpuDriven->setFrustumCullingEnabled(settings.culling.frustumCullingEnabled);
         gpuDriven->setOcclusionCullingEnabled(settings.culling.occlusionCullingEnabled);
         gpuDriven->setLODSelectionEnabled(settings.culling.lodSelectionEnabled);

@@ -33,7 +33,7 @@ namespace components
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
-                                               PhysicsAnimationComponent,
+                                               VehicleComponent, PhysicsAnimationComponent,
                                                VFXComponent, VFXSequenceComponent, DirectionalLightComponent, PointLightComponent,
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent,
                                                OceanComponent, TextComponent,

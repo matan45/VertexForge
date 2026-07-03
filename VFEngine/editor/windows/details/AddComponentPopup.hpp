@@ -13,6 +13,7 @@ namespace windows::details {
         bool hasScript = false;
         bool hasCollider = false;
         bool hasRigidBody = false;
+        bool hasVehicle = false;
         bool hasPhysicsAnimation = false;
         bool hasVFX = false;
         bool hasVFXSequence = false;

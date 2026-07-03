@@ -17,6 +17,7 @@
 import * from "../math/Vec3f.mt";
 import * from "RaycastHit.mt";
 import * from "ScreenPoint.mt";
+import * from "Ray.mt";
 
 public class Picker {
     public constructor() {
@@ -93,6 +94,21 @@ public class Picker {
     // returned ids by a gameplay/selection component.
     public static function pickRegion(float minX, float minY, float maxX, float maxY, string layers): int[] {
         return _native_picker_pickRegion(minX, minY, maxX, maxY, layers);
+    }
+
+    // Raw world-space ray under the screen pixel (origin + normalized direction),
+    // built from the primary camera + active viewport. Returns null when there is
+    // no primary camera. Use this to drive custom raycasts (Physics::raycastHit,
+    // plane intersections, projectile aim) instead of the pre-baked picks above.
+    public static function screenToWorldRay(float screenX, float screenY): Ray? {
+        float[] raw = _native_picker_screenToWorldRay(screenX, screenY);
+        if (raw[0] < 0.5) {
+            return null;
+        }
+        return new Ray(
+            new Vec3f(raw[1], raw[2], raw[3]),
+            new Vec3f(raw[4], raw[5], raw[6])
+        );
     }
 
     // World position -> viewport pixel (inverse of the screen ray; same pixel space

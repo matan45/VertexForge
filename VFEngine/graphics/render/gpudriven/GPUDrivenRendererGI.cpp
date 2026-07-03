@@ -395,78 +395,14 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex)
+    void GPUDrivenRenderer::buildAccelerationStructures(vk::CommandBuffer cmd, uint32_t imageIndex)
     {
-        // VK-1398: record the image index of this submission for per-image RT-mask ring binding.
-        currentImageIndex = imageIndex;
-        if (!initialized || !enabled) return;
-
-        // Lazy-init profiler if RT shadow pipeline exists (or will be created this frame).
-        // Must happen before any timestamp writes in this function or dispatchRTShadow.
-        if (!rtShadowProfiler && rtShadowEnabled && accelStructManager && accelStructManager->isInitialized())
-        {
-            rtShadowProfiler = std::make_unique<raytracing::RTShadowProfiler>();
-            rtShadowProfiler->init(device);
-        }
-
-        // Reset profiler query pool at the start of the frame (before any timestamp writes).
-        // Both dispatchGraphicsCompute (BLAS/TLAS) and dispatchRTShadow write into this pool.
-        if (rtShadowProfiler && rtShadowProfiler->isValid())
-        {
-            uint32_t profilerFI = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
-            rtShadowProfiler->resetFrame(cmd, profilerFI);
-        }
-
-        // Lazy init acceleration structures for RT shadows (independent of GI)
-        initAccelerationStructures();
-
-        if (mergedBuffer) mergedBuffer->flushPendingTransfers();
-        if (meshletBuffer) meshletBuffer->flushPendingTransfers();
-        if (terrain.meshBuffer) terrain.meshBuffer->flushPendingTransfers();
-
-        batchManager->resetAllBatches(cmd);
-        if (meshShaderPipeline) meshShaderPipeline->resetStats(cmd);
-
-        updateLightCullingState(cmd);
-
-        bool hasMeshObjects = stats.totalObjects > 0;
-        bool hasTerrainTiles = terrain.renderingEnabled && terrain.pipeline &&
-                               terrain.pipeline->getCurrentTileCount() > 0;
-
-        if (!hasMeshObjects && !hasTerrainTiles) return;
-
-        if (hasMeshObjects)
-        {
-            if (mergedBuffer->isPersistentMode())
-            {
-                // VK-1418: repoint RTT-bound material slots to this image's bindless slot before
-                // the dirty upload so the change rides the existing transfer→shader barrier.
-                patchRenderTextureMaterialSlots(imageIndex);
-                mergedBuffer->uploadDirtyObjects(cmd);
-                mergedBuffer->uploadActiveIndices(cmd);
-            }
-            else
-            {
-                mergedBuffer->uploadObjects(cmd);
-            }
-            if (mergedBuffer->getInstanceCount() > 0)
-                mergedBuffer->uploadInstances(cmd);
-        }
-
-        if (boneMatrixManager) boneMatrixManager->uploadToGPU(cmd);
-        buildAndDispatchLightOcclusion(cmd);
-        if (clusterGridManager) clusterGridManager->uploadToGPU(cmd);
-
-        vk::MemoryBarrier memBarrier{vk::AccessFlagBits::eTransferWrite,
-            vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite};
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader,
-                            vk::DependencyFlags{}, 1, &memBarrier, 0, nullptr, 0, nullptr);
-
-        // Build/update acceleration structures for RT shadows and GI. Only do the (expensive)
+        // A7: build/update acceleration structures for RT shadows and GI. Only do the (expensive)
         // BLAS/per-frame-TLAS work when something actually consumes the structure: RT shadows
         // enabled, or GI (radiance cascades) active. Otherwise skip it entirely even if a
         // manager object lingers (e.g. created during the pre-settings window where
         // rtShadowEnabled defaults true, or left over after RT was toggled off).
+        // Must run AFTER the transfer->compute barrier (both dispatch paths satisfy this).
         bool accelStructNeeded = rtShadowEnabled || rtSpotShadowEnabled || rtPointShadowEnabled || (giCascadeManager != nullptr);
         if (accelStructNeeded && accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
         {
@@ -536,6 +472,79 @@ namespace render::gpudriven
                 }
             }
         }
+    }
+
+    void GPUDrivenRenderer::dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex)
+    {
+        // VK-1398: record the image index of this submission for per-image RT-mask ring binding.
+        currentImageIndex = imageIndex;
+        if (!initialized || !enabled) return;
+
+        // Lazy-init profiler if RT shadow pipeline exists (or will be created this frame).
+        // Must happen before any timestamp writes in this function or dispatchRTShadow.
+        if (!rtShadowProfiler && rtShadowEnabled && accelStructManager && accelStructManager->isInitialized())
+        {
+            rtShadowProfiler = std::make_unique<raytracing::RTShadowProfiler>();
+            rtShadowProfiler->init(device);
+        }
+
+        // Reset profiler query pool at the start of the frame (before any timestamp writes).
+        // Both dispatchGraphicsCompute (BLAS/TLAS) and dispatchRTShadow write into this pool.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            uint32_t profilerFI = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+            rtShadowProfiler->resetFrame(cmd, profilerFI);
+        }
+
+        // Lazy init acceleration structures for RT shadows (independent of GI)
+        initAccelerationStructures();
+
+        if (mergedBuffer) mergedBuffer->flushPendingTransfers();
+        if (meshletBuffer) meshletBuffer->flushPendingTransfers();
+        if (terrain.meshBuffer) terrain.meshBuffer->flushPendingTransfers();
+
+        batchManager->resetAllBatches(cmd);
+        if (meshShaderPipeline) meshShaderPipeline->resetStats(cmd);
+
+        updateLightCullingState(cmd);
+
+        bool hasMeshObjects = stats.totalObjects > 0;
+        bool hasTerrainTiles = terrain.renderingEnabled && terrain.pipeline &&
+                               terrain.pipeline->getCurrentTileCount() > 0;
+
+        if (!hasMeshObjects && !hasTerrainTiles) return;
+
+        if (hasMeshObjects)
+        {
+            if (mergedBuffer->isPersistentMode())
+            {
+                // VK-1418: repoint RTT-bound material slots to this image's bindless slot before
+                // the dirty upload so the change rides the existing transfer→shader barrier.
+                patchRenderTextureMaterialSlots(imageIndex);
+                mergedBuffer->uploadDirtyObjects(cmd);
+                mergedBuffer->uploadActiveIndices(cmd);
+            }
+            else
+            {
+                mergedBuffer->uploadObjects(cmd);
+            }
+            if (mergedBuffer->getInstanceCount() > 0)
+                mergedBuffer->uploadInstances(cmd);
+        }
+
+        if (boneMatrixManager) boneMatrixManager->uploadToGPU(cmd);
+        buildAndDispatchLightOcclusion(cmd);
+        if (clusterGridManager) clusterGridManager->uploadToGPU(cmd);
+
+        // B1: stage + reset the shadow bins before the barrier so the cull sees zeroed counts.
+        prepareShadowBinCull(cmd);
+
+        vk::MemoryBarrier memBarrier{vk::AccessFlagBits::eTransferWrite,
+            vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite};
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader,
+                            vk::DependencyFlags{}, 1, &memBarrier, 0, nullptr, 0, nullptr);
+
+        buildAccelerationStructures(cmd, imageIndex);
 
         // VK-1334: pick per-RTT cull descriptor when this thread is recording an RTT pre-pass.
         // Defaults to nullptr on the main render thread, so main keeps using the cull pipeline's
@@ -551,6 +560,8 @@ namespace render::gpudriven
                 cullPipeline->dispatch(cmd, stats.totalObjects);
             }
         }
+        // B1: cull into the shadow bins right after the main cull (same objectCount + activeIndices).
+        dispatchShadowBinCull(cmd);
         batchManager->insertBarriersAfterCompute(cmd);
         recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
         dispatchVolumetricFog(cmd);
@@ -1359,7 +1370,13 @@ namespace render::gpudriven
         glm::vec3 camPos = glm::vec3(camData.cameraPosition);
 
         // Pick the closest/brightest spot lights, assign mask slices; reassigned slices reset history.
-        std::vector<uint32_t> reassigned = lightBufferManager->assignRTSpotSlices(camPos, rtSpotShadowBudget);
+        // C5: honor the adaptive spot budget (the profiler shrinks it under sustained RT load).
+        // getAppliedSpotBudget() falls back to the base budget when adaptive throttling is off, so
+        // this is inert unless the budget evaluator actually engaged this frame.
+        uint32_t spotBudget = rtSpotShadowBudget;
+        if (rtShadowProfiler)
+            spotBudget = std::min<uint32_t>(spotBudget, rtShadowProfiler->getAppliedSpotBudget());
+        std::vector<uint32_t> reassigned = lightBufferManager->assignRTSpotSlices(camPos, spotBudget);
 
         const auto& sliceLights = lightBufferManager->getRTSpotSliceLights();
         const auto& sliceValid = lightBufferManager->getRTSpotSliceValid();
@@ -1393,6 +1410,17 @@ namespace render::gpudriven
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
         auto [tw, th] = rtShadowTraceDims(w, h);
 
+        // VK-1479 C5: time the spot RT-shadow trace+denoise into the shared profiler pool (slots
+        // 6..8) so its cost feeds the adaptive budget. Mirrors the directional path in
+        // dispatchRTShadow; the profiler folds these in additively without disturbing the
+        // directional readback.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::BeforeSpotDispatch,
+                vk::PipelineStageFlagBits::eComputeShader);
+        }
+
         rtSpotShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
             depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
@@ -1401,6 +1429,13 @@ namespace render::gpudriven
             tw, th, dispatchList,
             useDenoiser, // skip final transitions when the denoiser consumes the raw mask
             fi);
+
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterSpotDispatch,
+                vk::PipelineStageFlagBits::eComputeShader);
+        }
 
         if (useDenoiser)
         {
@@ -1424,6 +1459,15 @@ namespace render::gpudriven
             if (rtShadowHalfResolution && rtSpotShadowUpsample && rtSpotShadowUpsample->isInitialized())
                 upsampleLayeredRTShadow(cmd, *rtSpotShadowUpsample, *rtSpotShadowDenoiser,
                                         dispatchList, tw, th, w, h, fi);
+        }
+
+        // VK-1479 C5: close the spot trace+denoise span (slot 8). Written unconditionally — like the
+        // directional AfterDenoiser — so the span is valid whether or not the denoiser ran.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterSpotDenoiser,
+                vk::PipelineStageFlagBits::eComputeShader);
         }
     }
 
@@ -1569,7 +1613,11 @@ namespace render::gpudriven
         glm::vec3 camPos = glm::vec3(camData.cameraPosition);
 
         // Pick the closest/brightest point lights, assign mask slices; reassigned slices reset history.
-        std::vector<uint32_t> reassigned = lightBufferManager->assignRTPointSlices(camPos, rtPointShadowBudget);
+        // C5: honor the adaptive point budget (inert unless the profiler shrank it this frame).
+        uint32_t pointBudget = rtPointShadowBudget;
+        if (rtShadowProfiler)
+            pointBudget = std::min<uint32_t>(pointBudget, rtShadowProfiler->getAppliedPointBudget());
+        std::vector<uint32_t> reassigned = lightBufferManager->assignRTPointSlices(camPos, pointBudget);
 
         const auto& sliceLights = lightBufferManager->getRTPointSliceLights();
         const auto& sliceValid = lightBufferManager->getRTPointSliceValid();
@@ -1604,6 +1652,17 @@ namespace render::gpudriven
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
         auto [tw, th] = rtShadowTraceDims(w, h);
 
+        // VK-1479 C5: time the point RT-shadow trace+denoise into the shared profiler pool (slots
+        // 9..11). Because the shared query pool only supports prefix reads, the profiler folds
+        // point cost into the adaptive budget only when spot RT also ran that frame; otherwise the
+        // point cost is conservatively omitted (never over-counted). See RTShadowProfiler.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::BeforePointDispatch,
+                vk::PipelineStageFlagBits::eComputeShader);
+        }
+
         rtPointShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(), depthPrepass->getDepthImage(),
             depthPrepass->getNormalImageView(), depthPrepass->getNormalImage(),
@@ -1612,6 +1671,13 @@ namespace render::gpudriven
             tw, th, dispatchList,
             useDenoiser, // skip final transitions when the denoiser consumes the raw mask
             fi);
+
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterPointDispatch,
+                vk::PipelineStageFlagBits::eComputeShader);
+        }
 
         if (useDenoiser)
         {
@@ -1634,6 +1700,14 @@ namespace render::gpudriven
             if (rtShadowHalfResolution && rtPointShadowUpsample && rtPointShadowUpsample->isInitialized())
                 upsampleLayeredRTShadow(cmd, *rtPointShadowUpsample, *rtPointShadowDenoiser,
                                         dispatchList, tw, th, w, h, fi);
+        }
+
+        // VK-1479 C5: close the point trace+denoise span (slot 11), written unconditionally.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterPointDenoiser,
+                vk::PipelineStageFlagBits::eComputeShader);
         }
     }
 

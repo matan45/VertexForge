@@ -3,6 +3,8 @@
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_ray_query : require
 
+#include "rt_shadow_trace_common.glsl"
+
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 // Set 0: TLAS
@@ -60,21 +62,9 @@ void main() {
     float tMax = lightDirection.w;
 
     // Trace shadow ray using ray query
-    rayQueryEXT rq;
-    rayQueryInitializeEXT(rq, topLevelAS,
+    float shadow = traceRTShadowRay(topLevelAS,
         gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
-        0xFF,
-        biasedPos,
-        tMin,
-        rayDir,
-        tMax);
-
-    while (rayQueryProceedEXT(rq)) {}
-
-    float shadow = 1.0; // fully lit
-    if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
-        shadow = 0.0; // occluded
-    }
+        biasedPos, tMin, rayDir, tMax);
 
     imageStore(shadowMask, pixel, vec4(shadow));
 }

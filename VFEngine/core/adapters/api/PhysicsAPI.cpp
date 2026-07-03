@@ -7,6 +7,7 @@
 #include "PhysicsRigidBodyAPI.hpp"
 #include "PhysicsColliderAPI.hpp"
 #include "PhysicsAnimationAPI.hpp"
+#include "PhysicsVehicleAPI.hpp"
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/physics/PhysicsEvents.hpp"
@@ -84,6 +85,7 @@ namespace core::api
 
         PhysicsRigidBodyAPI::registerAPI(interpreter);
         PhysicsColliderAPI::registerAPI(interpreter);
+        PhysicsVehicleAPI::registerAPI(interpreter);
         PhysicsAnimationAPI::registerAPI(interpreter);
 
         interpreter->registerNativeFunction("_native_physics_raycast",
