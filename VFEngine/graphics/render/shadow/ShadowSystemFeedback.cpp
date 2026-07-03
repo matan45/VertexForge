@@ -412,8 +412,15 @@ namespace render::shadow
         uint32_t py = pageIdx / data.vsmPagesX;
         pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, physTile);
 
+        // A bin page re-renders when the light view moved (isDirty), the page is dirty, during
+        // warmup, OR a dynamic caster overlaps it this frame (vsmPageHasDynamic, from A1's
+        // determineDynamicPages). The last case is what makes a moving object's shadow update while
+        // the camera is still — B1/B2 are single-layer, so the whole page (all casters) re-renders
+        // for a dynamic page; static-only pages stay cached until the view moves. (B3's static/
+        // dynamic bin sublists would restore the dual-layer split so only dynamic casters re-render.)
         bool forceRender = data.renderedFrameCount < 3;
-        if (!isDirty && !data.vsmPageDirty[pageIdx] && !forceRender)
+        bool hasDynamic = pageIdx < data.vsmPageHasDynamic.size() && data.vsmPageHasDynamic[pageIdx];
+        if (!isDirty && !data.vsmPageDirty[pageIdx] && !forceRender && !hasDynamic)
         {
             ++lastCacheStats.cachedPages;
             return false;
@@ -431,7 +438,15 @@ namespace render::shadow
         pageRenderList.push_back(entry);
         binGlobalRequests.push_back(globalPageIndex);
         ++lastCacheStats.renderedPages;
-        if (!forceRender)
+
+        // Dirty bookkeeping (single-layer): keep a dynamic page marked dirty so it re-renders next
+        // frame too — if the caster then leaves, that render clears the page (there is no separate
+        // dynamic tile to revert to, unlike the legacy dual-layer path, so a still page would keep
+        // the caster's last shadow baked in). Non-dynamic pages clear the flag (cached until the
+        // view moves). Warmup pages keep re-rendering regardless.
+        if (hasDynamic)
+            data.vsmPageDirty[pageIdx] = true;
+        else if (!forceRender)
             data.vsmPageDirty[pageIdx] = false;
         return true;
     }
