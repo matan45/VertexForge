@@ -61,6 +61,7 @@ namespace vfx
         ForceDrag,
         ForcePointAttractor,
         ForceCurlNoise,
+        ForceKillVolume,
         Shape
     };
 
@@ -81,7 +82,8 @@ namespace vfx
                type == VFXNodeType::ForceVortex ||
                type == VFXNodeType::ForceDrag ||
                type == VFXNodeType::ForcePointAttractor ||
-               type == VFXNodeType::ForceCurlNoise;
+               type == VFXNodeType::ForceCurlNoise ||
+               type == VFXNodeType::ForceKillVolume;
     }
 
     inline bool isShapeNode(VFXNodeType type)
@@ -269,6 +271,13 @@ namespace vfx
         inline constexpr float CURLNOISE_FREQUENCY = 1.0f;
         inline constexpr float CURLNOISE_SCROLL_SPEED = 0.0f;
         inline constexpr int CURLNOISE_OCTAVES = 1;
+
+        inline constexpr const char* KILLVOLUME_SHAPE = "Plane";
+        inline const glm::vec3 KILLVOLUME_CENTER{0.0f, 0.0f, 0.0f};
+        inline const glm::vec3 KILLVOLUME_NORMAL{0.0f, 1.0f, 0.0f};
+        inline constexpr float KILLVOLUME_RADIUS = 1.0f;
+        inline const glm::vec3 KILLVOLUME_HALF_EXTENTS{1.0f, 1.0f, 1.0f};
+        inline constexpr bool KILLVOLUME_INVERT = false;
     }
 
     const char* propertyTypeToString(VFXPropertyType type);

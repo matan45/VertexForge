@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <vector>
 #include <variant>
 
@@ -77,6 +78,25 @@ namespace vfx
         ForceSpace space = ForceSpace::World; // stored for parity; field is sampled in world space
     };
 
+    enum class KillVolumeShape : uint8_t
+    {
+        Plane = 0,
+        Sphere = 1,
+        Box = 2
+    };
+
+    // Kill predicate force: no acceleration, only deactivates particles after integration.
+    struct KillVolumeForceConfig
+    {
+        KillVolumeShape shape = KillVolumeShape::Plane;
+        glm::vec3 center{0.0f};                 // plane point / sphere center / box center
+        glm::vec3 normal{0.0f, 1.0f, 0.0f};     // plane normal; kills negative side by default
+        float radius = 1.0f;                    // sphere radius
+        glm::vec3 halfExtents{1.0f};            // axis-aligned box half extents
+        bool invert = false;                    // flip the kill side/inside predicate
+        ForceSpace space = ForceSpace::World;
+    };
+
     using VFXForceConfig = std::variant<
         GravityForceConfig,
         WindForceConfig,
@@ -84,7 +104,8 @@ namespace vfx
         VortexForceConfig,
         DragForceConfig,
         PointAttractorForceConfig,
-        CurlNoiseForceConfig
+        CurlNoiseForceConfig,
+        KillVolumeForceConfig
     >;
 
     struct VFXForceChain

@@ -1,6 +1,7 @@
 #include "VFXGraphEditor.hpp"
 #include "vfx/VFXShapeProperties.hpp"
 #include "vfx/VFXShapeTypes.hpp"
+#include "vfx/VFXKillVolume.hpp"
 #include "imgui.h"
 #include <algorithm>
 #include <map>
@@ -511,6 +512,37 @@ namespace editor::graph
             };
             break;
 
+        case vfx::VFXNodeType::ForceKillVolume:
+            node.properties["shape"] = vfx::VFXProperty{
+                "shape", vfx::VFXPropertyType::String,
+                std::string(vfx::ForceDefaults::KILLVOLUME_SHAPE), 0.0f, 1.0f
+            };
+            node.properties["center"] = vfx::VFXProperty{
+                "center", vfx::VFXPropertyType::Vec3,
+                vfx::ForceDefaults::KILLVOLUME_CENTER, -100.0f, 100.0f
+            };
+            node.properties["normal"] = vfx::VFXProperty{
+                "normal", vfx::VFXPropertyType::Vec3,
+                vfx::ForceDefaults::KILLVOLUME_NORMAL, -1.0f, 1.0f
+            };
+            node.properties["radius"] = vfx::VFXProperty{
+                "radius", vfx::VFXPropertyType::Float,
+                vfx::ForceDefaults::KILLVOLUME_RADIUS, 0.0f, 100.0f
+            };
+            node.properties["halfExtents"] = vfx::VFXProperty{
+                "halfExtents", vfx::VFXPropertyType::Vec3,
+                vfx::ForceDefaults::KILLVOLUME_HALF_EXTENTS, 0.0f, 100.0f
+            };
+            node.properties["invert"] = vfx::VFXProperty{
+                "invert", vfx::VFXPropertyType::Bool,
+                vfx::ForceDefaults::KILLVOLUME_INVERT, 0.0f, 1.0f
+            };
+            node.properties["localSpace"] = vfx::VFXProperty{
+                "localSpace", vfx::VFXPropertyType::Bool,
+                false, 0.0f, 1.0f
+            };
+            break;
+
         default:
             break;
         }
@@ -602,6 +634,7 @@ namespace editor::graph
                 if (ImGui::MenuItem("Drag")) addNode(vfx::VFXNodeType::ForceDrag);
                 if (ImGui::MenuItem("Point Attractor")) addNode(vfx::VFXNodeType::ForcePointAttractor);
                 if (ImGui::MenuItem("Curl Noise")) addNode(vfx::VFXNodeType::ForceCurlNoise);
+                if (ImGui::MenuItem("Kill Volume")) addNode(vfx::VFXNodeType::ForceKillVolume);
                 ImGui::EndMenu();
             }
 

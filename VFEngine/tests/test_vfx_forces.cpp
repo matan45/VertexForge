@@ -5,6 +5,7 @@
 #include <vfx/VFXCurlNoise.hpp>
 #include <vfx/VFXForceConfigLoader.hpp>
 #include <vfx/VFXForceTypes.hpp>
+#include <vfx/VFXKillVolume.hpp>
 #include <vfx/VFXTypes.hpp>
 
 #include <glm/glm.hpp>
@@ -78,6 +79,11 @@ namespace
     void setBool(vfx::VFXNode& node, const std::string& name, bool value)
     {
         node.properties[name] = vfx::VFXProperty{name, vfx::VFXPropertyType::Bool, value, 0.0f, 1.0f};
+    }
+
+    void setString(vfx::VFXNode& node, const std::string& name, const std::string& value)
+    {
+        node.properties[name] = vfx::VFXProperty{name, vfx::VFXPropertyType::String, value, 0.0f, 1.0f};
     }
 
     void setInt(vfx::VFXNode& node, const std::string& name, int value, float min = 0.0f, float max = 10.0f)
@@ -528,5 +534,118 @@ TEST_SUITE("VFXForces")
         REQUIRE(pp != nullptr);
         CHECK(std::isfinite(glm::length(pp->velocity)));
         CHECK(glm::length(pp->velocity) > 1e-4f); // curl advected the particle
+    }
+
+    // --- VK-1467 Kill Volume --------------------------------------------------------
+
+    TEST_CASE("kill volume plane predicate kills the negative normal side")
+    {
+        const glm::vec3 center(0.0f);
+        const glm::vec3 normal(0.0f, 1.0f, 0.0f);
+
+        CHECK(vfx::killedByPlane(glm::vec3(0.0f, -0.1f, 0.0f), center, normal, false));
+        CHECK_FALSE(vfx::killedByPlane(glm::vec3(0.0f, 0.1f, 0.0f), center, normal, false));
+        CHECK_FALSE(vfx::killedByPlane(center, center, normal, false));
+
+        CHECK_FALSE(vfx::killedByPlane(glm::vec3(0.0f, -0.1f, 0.0f), center, normal, true));
+        CHECK(vfx::killedByPlane(glm::vec3(0.0f, 0.1f, 0.0f), center, normal, true));
+        CHECK(vfx::killedByPlane(center, center, normal, true));
+    }
+
+    TEST_CASE("kill volume sphere predicate kills inside including boundary")
+    {
+        const glm::vec3 center(1.0f, 2.0f, 3.0f);
+
+        CHECK(vfx::killedBySphere(center, center, 2.0f, false));
+        CHECK(vfx::killedBySphere(center + glm::vec3(2.0f, 0.0f, 0.0f), center, 2.0f, false));
+        CHECK_FALSE(vfx::killedBySphere(center + glm::vec3(2.01f, 0.0f, 0.0f), center, 2.0f, false));
+
+        CHECK_FALSE(vfx::killedBySphere(center, center, 2.0f, true));
+        CHECK(vfx::killedBySphere(center + glm::vec3(2.01f, 0.0f, 0.0f), center, 2.0f, true));
+    }
+
+    TEST_CASE("kill volume box predicate kills inside including boundary")
+    {
+        const glm::vec3 center(1.0f, 2.0f, 3.0f);
+        const glm::vec3 halfExtents(1.0f, 2.0f, 3.0f);
+
+        CHECK(vfx::killedByBox(center, center, halfExtents, false));
+        CHECK(vfx::killedByBox(center + glm::vec3(1.0f, 2.0f, 3.0f), center, halfExtents, false));
+        CHECK_FALSE(vfx::killedByBox(center + glm::vec3(1.01f, 0.0f, 0.0f), center, halfExtents, false));
+
+        CHECK_FALSE(vfx::killedByBox(center, center, halfExtents, true));
+        CHECK(vfx::killedByBox(center + glm::vec3(1.01f, 0.0f, 0.0f), center, halfExtents, true));
+    }
+
+    TEST_CASE("kill volume predicates sanitize invalid authoring values")
+    {
+        CHECK(vfx::killedByPlane(glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f), glm::vec3(0.0f), false));
+        CHECK(vfx::killedBySphere(glm::vec3(0.0f), glm::vec3(0.0f), -1.0f, false));
+        CHECK_FALSE(vfx::killedBySphere(glm::vec3(0.1f, 0.0f, 0.0f), glm::vec3(0.0f), -1.0f, false));
+        CHECK(vfx::killedByBox(glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(-1.0f), false));
+        CHECK_FALSE(vfx::killedByBox(glm::vec3(0.1f, 0.0f, 0.0f), glm::vec3(0.0f), glm::vec3(-1.0f), false));
+    }
+
+    TEST_CASE("force loader round-trips a kill volume config")
+    {
+        vfx::VFXGraph graph;
+        graph.nodes.push_back(makeNode(1, vfx::VFXNodeType::Emitter, "Emitter"));
+
+        vfx::VFXNode killVolume = makeNode(2, vfx::VFXNodeType::ForceKillVolume, "Kill Volume");
+        setString(killVolume, "shape", "Box");
+        setVec3(killVolume, "center", glm::vec3(1.0f, 2.0f, 3.0f));
+        setVec3(killVolume, "normal", glm::vec3(0.0f, 1.0f, 0.0f));
+        setFloat(killVolume, "radius", 4.0f, 0.0f, 100.0f);
+        setVec3(killVolume, "halfExtents", glm::vec3(5.0f, 6.0f, 7.0f), 0.0f, 100.0f);
+        setBool(killVolume, "invert", true);
+        setBool(killVolume, "localSpace", true);
+        graph.nodes.push_back(killVolume);
+
+        graph.nodes.push_back(makeNode(3, vfx::VFXNodeType::OutSystem, "Output"));
+        graph.nodes.push_back(makeNode(4, vfx::VFXNodeType::Shape, "Shape"));
+        graph.links.push_back(makeLink(1, 1, 4, "Shape"));
+        graph.links.push_back(makeLink(2, 1, 2));
+        graph.links.push_back(makeLink(3, 2, 3));
+        graph.nextNodeId = 5;
+        graph.nextLinkId = 4;
+
+        const vfx::VFXForceChain chain = vfx::VFXForceConfigLoader::fromGraph(graph);
+        REQUIRE(chain.forces.size() == 1);
+
+        const auto& cfg = std::get<vfx::KillVolumeForceConfig>(chain.forces[0]);
+        CHECK(cfg.shape == vfx::KillVolumeShape::Box);
+        CHECK(cfg.center.x == doctest::Approx(1.0f));
+        CHECK(cfg.center.y == doctest::Approx(2.0f));
+        CHECK(cfg.center.z == doctest::Approx(3.0f));
+        CHECK(cfg.normal.y == doctest::Approx(1.0f));
+        CHECK(cfg.radius == doctest::Approx(4.0f));
+        CHECK(cfg.halfExtents.x == doctest::Approx(5.0f));
+        CHECK(cfg.halfExtents.y == doctest::Approx(6.0f));
+        CHECK(cfg.halfExtents.z == doctest::Approx(7.0f));
+        CHECK(cfg.invert);
+        CHECK(cfg.space == vfx::ForceSpace::Local);
+    }
+
+    TEST_CASE("kill volume removes particles in CPU simulation")
+    {
+        JobSystemScope jobs;
+
+        render::vfx::VFXEmitterConfig config = singleParticleConfig(0.0f);
+        ::vfx::KillVolumeForceConfig killVolume;
+        killVolume.shape = ::vfx::KillVolumeShape::Sphere;
+        killVolume.center = glm::vec3(0.0f);
+        killVolume.radius = 0.5f;
+        config.forces.forces.push_back(killVolume);
+
+        render::vfx::VFXParticleSystem system;
+        system.setSeed(77);
+        system.setEmitterConfig(config);
+        system.setPlaying(true);
+
+        system.update(0.02f);
+        REQUIRE(firstActive(system) != nullptr);
+
+        system.update(0.02f);
+        CHECK(firstActive(system) == nullptr);
     }
 }

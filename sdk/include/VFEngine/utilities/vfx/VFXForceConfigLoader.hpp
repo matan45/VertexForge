@@ -22,10 +22,12 @@ namespace vfx
         static DragForceConfig extractDragConfig(const VFXNode& node);
         static PointAttractorForceConfig extractPointAttractorConfig(const VFXNode& node);
         static CurlNoiseForceConfig extractCurlNoiseConfig(const VFXNode& node);
+        static KillVolumeForceConfig extractKillVolumeConfig(const VFXNode& node);
 
         static float getFloat(const VFXNode& node, const std::string& propName, float defaultValue);
         static int getInt(const VFXNode& node, const std::string& propName, int defaultValue);
         static bool getBool(const VFXNode& node, const std::string& propName, bool defaultValue);
+        static std::string getString(const VFXNode& node, const std::string& propName, const std::string& defaultValue);
         static glm::vec3 getVec3(const VFXNode& node, const std::string& propName, const glm::vec3& defaultValue);
     };
 }

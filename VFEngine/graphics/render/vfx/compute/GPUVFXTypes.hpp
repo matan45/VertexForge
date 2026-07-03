@@ -56,6 +56,7 @@ namespace render::vfx
         inline constexpr uint32_t Attractor = 1 << 17;
         inline constexpr uint32_t AttractorKill = 1 << 18; // kill particles that reach the attractor center
         inline constexpr uint32_t CurlNoise = 1 << 19;     // divergence-free curl noise force
+        inline constexpr uint32_t KillVolume = 1 << 20;    // kill particles by plane/sphere/box predicate
     }
 
     namespace ShapeFlags
@@ -167,8 +168,12 @@ namespace render::vfx
 
         // Force added in VK-1466 (flag ForceFlags::CurlNoise).
         glm::vec4 curlNoiseParams{0.0f};     // x = strength, y = frequency, z = scroll speed, w = octaves
+
+        // Force added in VK-1467 (flag ForceFlags::KillVolume).
+        glm::vec4 killVolumeParams0{0.0f};   // xyz = center, w = sphere radius
+        glm::vec4 killVolumeParams1{0.0f};   // xyz = plane normal / box half extents, w = packed shape/invert/space
     };
-    static_assert(sizeof(GPUEmitterConfig) == 432, "GPUEmitterConfig must be 432 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 464, "GPUEmitterConfig must be 464 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -228,6 +233,8 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, attractorParams) == 384, "GPUEmitterConfig::attractorParams offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, dragAttractorExtra) == 400, "GPUEmitterConfig::dragAttractorExtra offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, curlNoiseParams) == 416, "GPUEmitterConfig::curlNoiseParams offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, killVolumeParams0) == 432, "GPUEmitterConfig::killVolumeParams0 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, killVolumeParams1) == 448, "GPUEmitterConfig::killVolumeParams1 offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {

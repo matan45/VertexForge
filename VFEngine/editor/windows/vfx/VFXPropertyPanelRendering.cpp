@@ -3,6 +3,7 @@
 #include "../../dragdrop/AssetDropTarget.hpp"
 #include <nfd/FileDialog.hpp>
 #include <vfx/VFXBurstTypes.hpp>
+#include <vfx/VFXKillVolume.hpp>
 #include <vfx/VFXShapeProperties.hpp>
 #include <vfx/VFXShapeTypes.hpp>
 #include <algorithm>
@@ -279,6 +280,73 @@ namespace editor::vfxeditor
                 {"localSpace",  "Local Space",  0.1f},
             };
             drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::VFXNodeType::ForceKillVolume: {
+            constexpr float inputWidth = 80.0f;
+            ImGui::Text("Kill Volume");
+            ImGui::Separator();
+
+            vfx::KillVolumeShape activeShape = vfx::KillVolumeShape::Plane;
+            auto shapeIt = node.properties.find("shape");
+            if (shapeIt != node.properties.end())
+            {
+                if (auto* val = std::get_if<std::string>(&shapeIt->second.value))
+                    activeShape = vfx::stringToKillVolumeShape(*val);
+            }
+
+            const char* shapeItems[] = {"Plane", "Sphere", "Box"};
+            int currentShape = static_cast<int>(activeShape);
+            ImGui::Text("Shape");
+            ImGui::SameLine(120.0f);
+            ImGui::SetNextItemWidth(inputWidth * 1.8f);
+            if (ImGui::Combo("##killVolumeShape", &currentShape, shapeItems, 3))
+            {
+                activeShape = static_cast<vfx::KillVolumeShape>(currentShape);
+                node.properties["shape"] = vfx::VFXProperty{
+                    "shape", vfx::VFXPropertyType::String,
+                    std::string(vfx::killVolumeShapeToString(activeShape)), 0.0f, 1.0f
+                };
+                notifyChanged();
+            }
+
+            static constexpr ForceEntry commonEntries[] = {
+                {"center", "Center", 0.1f},
+            };
+            drawEntries(commonEntries, sizeof(commonEntries) / sizeof(commonEntries[0]));
+
+            switch (activeShape)
+            {
+            case vfx::KillVolumeShape::Plane: {
+                static constexpr ForceEntry entries[] = {
+                    {"normal", "Normal", 0.1f},
+                };
+                drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+                break;
+            }
+            case vfx::KillVolumeShape::Sphere: {
+                static constexpr ForceEntry entries[] = {
+                    {"radius", "Radius", 0.1f},
+                };
+                drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+                break;
+            }
+            case vfx::KillVolumeShape::Box: {
+                static constexpr ForceEntry entries[] = {
+                    {"halfExtents", "Half Extents", 0.1f},
+                };
+                drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+                break;
+            }
+            default:
+                break;
+            }
+
+            static constexpr ForceEntry toggles[] = {
+                {"invert",     "Invert",      0.1f},
+                {"localSpace", "Local Space", 0.1f},
+            };
+            drawEntries(toggles, sizeof(toggles) / sizeof(toggles[0]));
             break;
         }
         default:

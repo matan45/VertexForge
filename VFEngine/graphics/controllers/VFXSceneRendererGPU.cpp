@@ -12,6 +12,7 @@
 #include "../core/RenderManager.hpp"
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
+#include "vfx/VFXKillVolume.hpp"
 #include "vfx/VFXShapeTypes.hpp"
 #include "print/Log.hpp"
 #include <random>
@@ -377,6 +378,8 @@ namespace controllers
         gpuConfig.attractorParams = glm::vec4(0.0f);
         gpuConfig.dragAttractorExtra = glm::vec4(0.0f);
         gpuConfig.curlNoiseParams = glm::vec4(0.0f);
+        gpuConfig.killVolumeParams0 = glm::vec4(0.0f);
+        gpuConfig.killVolumeParams1 = glm::vec4(0.0f);
 
         for (const auto& force : cpuConfig.forces.forces)
         {
@@ -423,6 +426,25 @@ namespace controllers
                 {
                     gpuConfig.modifierFlags |= render::vfx::ForceFlags::CurlNoise;
                     gpuConfig.curlNoiseParams = glm::vec4(f.strength, f.frequency, f.scrollSpeed, static_cast<float>(f.octaves));
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::KillVolumeForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::KillVolume;
+                    gpuConfig.killVolumeParams0 = glm::vec4(f.center, std::max(f.radius, 0.0f));
+
+                    glm::vec3 axisOrExtents(0.0f);
+                    if (f.shape == ::vfx::KillVolumeShape::Plane)
+                        axisOrExtents = ::vfx::sanitizeKillVolumeNormal(f.normal);
+                    else if (f.shape == ::vfx::KillVolumeShape::Box)
+                        axisOrExtents = ::vfx::sanitizeKillVolumeHalfExtents(f.halfExtents);
+
+                    uint32_t packed = static_cast<uint32_t>(f.shape);
+                    if (f.invert)
+                        packed |= 4u;
+                    if (f.space == ::vfx::ForceSpace::Local)
+                        packed |= 8u;
+
+                    gpuConfig.killVolumeParams1 = glm::vec4(axisOrExtents, static_cast<float>(packed));
                 }
             }, force);
         }

@@ -74,6 +74,7 @@ namespace render::vfx
         void applyForce(VFXParticle& particle, const ::vfx::DragForceConfig& force, float deltaTime);
         void applyForce(VFXParticle& particle, const ::vfx::PointAttractorForceConfig& force, float deltaTime);
         void applyForce(VFXParticle& particle, const ::vfx::CurlNoiseForceConfig& force, float deltaTime);
+        void applyForce(VFXParticle& particle, const ::vfx::KillVolumeForceConfig& force, float deltaTime);
 
         glm::vec3 generateSpawnPosition();
         glm::vec3 generatePointPosition();

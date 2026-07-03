@@ -2,6 +2,7 @@
 #include "threading/JobSystem.hpp"
 #include "vfx/VFXVariance.hpp"
 #include "vfx/VFXCurlNoise.hpp"
+#include "vfx/VFXKillVolume.hpp"
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/noise.hpp>
@@ -351,10 +352,19 @@ namespace render::vfx
         particle.rotation += particle.angularVelocity * deltaTime;
 
         // Kill-at-center (mirror GPU): kill any particle that reached the center of an
-        // attractor flagged killAtCenter, checked after the position update.
+        // attractor flagged killAtCenter, checked after the position update. Kill volume
+        // is also checked here; CPU preview has no emitter transform, so Local==World.
         for (const auto& force : config.forces.forces)
         {
-            if (auto* attractor = std::get_if<::vfx::PointAttractorForceConfig>(&force))
+            if (auto* killVolume = std::get_if<::vfx::KillVolumeForceConfig>(&force))
+            {
+                if (::vfx::killedByVolume(particle.position, *killVolume))
+                {
+                    particle.active = false;
+                    return;
+                }
+            }
+            else if (auto* attractor = std::get_if<::vfx::PointAttractorForceConfig>(&force))
             {
                 if (attractor->killAtCenter)
                 {
@@ -552,6 +562,11 @@ namespace render::vfx
         particle.velocity += ::vfx::evalCurlNoise(force.strength, force.frequency, force.scrollSpeed,
                                                   force.octaves, particle.position, timeAccumulator) *
                              deltaTime;
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& /*particle*/, const ::vfx::KillVolumeForceConfig& /*force*/, float /*deltaTime*/)
+    {
+        // Kill Volume is a post-integration predicate, not an acceleration force.
     }
 
 }

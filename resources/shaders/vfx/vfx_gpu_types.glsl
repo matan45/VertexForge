@@ -98,4 +98,8 @@ struct GPUEmitterConfig
 
     // Force added in VK-1466 (mirror of C++ GPUEmitterConfig).
     vec4 curlNoiseParams;     // x = strength, y = frequency, z = scroll speed, w = octaves
+
+    // Force added in VK-1467 (mirror of C++ GPUEmitterConfig).
+    vec4 killVolumeParams0;   // xyz = center, w = sphere radius
+    vec4 killVolumeParams1;   // xyz = plane normal / box half extents, w = packed shape/invert/space
 };

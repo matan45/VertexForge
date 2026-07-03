@@ -1,4 +1,5 @@
 #include "VFXForceConfigLoader.hpp"
+#include "VFXKillVolume.hpp"
 #include <unordered_set>
 #include <algorithm>
 
@@ -97,6 +98,8 @@ namespace vfx
             return extractPointAttractorConfig(node);
         case VFXNodeType::ForceCurlNoise:
             return extractCurlNoiseConfig(node);
+        case VFXNodeType::ForceKillVolume:
+            return extractKillVolumeConfig(node);
         default:
             return GravityForceConfig{};
         }
@@ -107,6 +110,20 @@ namespace vfx
         GravityForceConfig config;
         config.direction = getVec3(node, "direction", ForceDefaults::GRAVITY_DIRECTION);
         config.strength = getFloat(node, "strength", ForceDefaults::GRAVITY_STRENGTH);
+        config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
+        return config;
+    }
+
+    KillVolumeForceConfig VFXForceConfigLoader::extractKillVolumeConfig(const VFXNode& node)
+    {
+        KillVolumeForceConfig config;
+        config.shape = stringToKillVolumeShape(getString(node, "shape", ForceDefaults::KILLVOLUME_SHAPE));
+        config.center = getVec3(node, "center", ForceDefaults::KILLVOLUME_CENTER);
+        config.normal = sanitizeKillVolumeNormal(getVec3(node, "normal", ForceDefaults::KILLVOLUME_NORMAL));
+        config.radius = std::max(0.0f, getFloat(node, "radius", ForceDefaults::KILLVOLUME_RADIUS));
+        config.halfExtents = sanitizeKillVolumeHalfExtents(
+            getVec3(node, "halfExtents", ForceDefaults::KILLVOLUME_HALF_EXTENTS));
+        config.invert = getBool(node, "invert", ForceDefaults::KILLVOLUME_INVERT);
         config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
         return config;
     }
@@ -207,6 +224,18 @@ namespace vfx
             return defaultValue;
 
         if (auto* val = std::get_if<bool>(&it->second.value))
+            return *val;
+
+        return defaultValue;
+    }
+
+    std::string VFXForceConfigLoader::getString(const VFXNode& node, const std::string& propName, const std::string& defaultValue)
+    {
+        auto it = node.properties.find(propName);
+        if (it == node.properties.end())
+            return defaultValue;
+
+        if (auto* val = std::get_if<std::string>(&it->second.value))
             return *val;
 
         return defaultValue;

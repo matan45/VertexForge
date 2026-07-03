@@ -19,6 +19,7 @@ const uint FORCE_DRAG = 65536u;          // 1 << 16
 const uint FORCE_ATTRACTOR = 131072u;    // 1 << 17
 const uint FORCE_ATTRACTOR_KILL = 262144u; // 1 << 18
 const uint FORCE_CURL_NOISE = 524288u;   // 1 << 19
+const uint FORCE_KILL_VOLUME = 1048576u; // 1 << 20
 
 const uint SHAPE_SPHERE = 256u;
 const uint SHAPE_CONE = 512u;
@@ -912,6 +913,49 @@ void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterI
     }
 }
 
+vec3 sanitizeKillVolumeNormal(vec3 normal)
+{
+    float lenSq = dot(normal, normal);
+    if (lenSq <= 1e-8)
+        return vec3(0.0, 1.0, 0.0);
+    return normal * inversesqrt(lenSq);
+}
+
+bool shouldKillByVolume(vec3 particlePos, GPUEmitterConfig config, mat4 worldTransform)
+{
+    uint packed = uint(config.killVolumeParams1.w + 0.5);
+    uint shape = packed & 3u;
+    bool invert = (packed & 4u) != 0u;
+    bool localSpace = (packed & 8u) != 0u;
+
+    vec3 pos = particlePos;
+    if (localSpace)
+        pos = (inverse(worldTransform) * vec4(particlePos, 1.0)).xyz;
+
+    vec3 center = config.killVolumeParams0.xyz;
+    bool killed = false;
+
+    if (shape == 0u)
+    {
+        vec3 normal = sanitizeKillVolumeNormal(config.killVolumeParams1.xyz);
+        killed = dot(normal, pos - center) < 0.0;
+    }
+    else if (shape == 1u)
+    {
+        float radius = max(config.killVolumeParams0.w, 0.0);
+        vec3 delta = pos - center;
+        killed = dot(delta, delta) <= radius * radius;
+    }
+    else if (shape == 2u)
+    {
+        vec3 halfExtents = max(config.killVolumeParams1.xyz, vec3(0.0));
+        vec3 delta = abs(pos - center);
+        killed = all(lessThanEqual(delta, halfExtents));
+    }
+
+    return invert ? !killed : killed;
+}
+
 void main()
 {
     uint localIdx = gl_GlobalInvocationID.x;
@@ -991,7 +1035,8 @@ void main()
 
             // Kill-at-center: run after modifiers so a SizeOverLifetime modifier can't
             // resurrect size. isActive gates the activeCount increment below.
-            if ((config.modifierFlags & FORCE_ATTRACTOR) != 0u &&
+            if (isActive &&
+                (config.modifierFlags & FORCE_ATTRACTOR) != 0u &&
                 (config.modifierFlags & FORCE_ATTRACTOR_KILL) != 0u)
             {
                 float killRadius = max(0.05, config.dragAttractorExtra.z * 0.05);
@@ -1004,6 +1049,18 @@ void main()
                     p.size = 0.0;
                     isActive = false;
                 }
+            }
+
+            if (isActive &&
+                (config.modifierFlags & FORCE_KILL_VOLUME) != 0u &&
+                shouldKillByVolume(p.position, config, worldTransform))
+            {
+                if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
+                {
+                    emitEvent(1u, p.position, p.velocity, pc.emitterIndex);
+                }
+                p.size = 0.0;
+                isActive = false;
             }
         }
     }
