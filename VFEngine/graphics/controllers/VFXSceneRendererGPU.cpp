@@ -376,6 +376,7 @@ namespace controllers
         gpuConfig.vortexCenter = glm::vec4(0.0f);
         gpuConfig.attractorParams = glm::vec4(0.0f);
         gpuConfig.dragAttractorExtra = glm::vec4(0.0f);
+        gpuConfig.curlNoiseParams = glm::vec4(0.0f);
 
         for (const auto& force : cpuConfig.forces.forces)
         {
@@ -417,6 +418,11 @@ namespace controllers
                     gpuConfig.attractorParams = glm::vec4(f.position, f.strength);
                     gpuConfig.dragAttractorExtra.z = f.radius;
                     gpuConfig.dragAttractorExtra.w = f.falloff;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::CurlNoiseForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::CurlNoise;
+                    gpuConfig.curlNoiseParams = glm::vec4(f.strength, f.frequency, f.scrollSpeed, static_cast<float>(f.octaves));
                 }
             }, force);
         }

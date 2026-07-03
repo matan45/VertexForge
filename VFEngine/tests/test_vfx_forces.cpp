@@ -2,6 +2,7 @@
 
 #include <render/vfx/particle/VFXParticleSystem.hpp>
 #include <threading/JobSystem.hpp>
+#include <vfx/VFXCurlNoise.hpp>
 #include <vfx/VFXForceConfigLoader.hpp>
 #include <vfx/VFXForceTypes.hpp>
 #include <vfx/VFXTypes.hpp>
@@ -77,6 +78,11 @@ namespace
     void setBool(vfx::VFXNode& node, const std::string& name, bool value)
     {
         node.properties[name] = vfx::VFXProperty{name, vfx::VFXPropertyType::Bool, value, 0.0f, 1.0f};
+    }
+
+    void setInt(vfx::VFXNode& node, const std::string& name, int value, float min = 0.0f, float max = 10.0f)
+    {
+        node.properties[name] = vfx::VFXProperty{name, vfx::VFXPropertyType::Int, value, min, max};
     }
 
     void setVec3(vfx::VFXNode& node, const std::string& name, const glm::vec3& value,
@@ -368,5 +374,159 @@ TEST_SUITE("VFXForces")
         CHECK(attrCfg.falloff == doctest::Approx(2.0f));
         CHECK(attrCfg.killAtCenter == true);
         CHECK(attrCfg.space == vfx::ForceSpace::World);
+    }
+
+    // --- VK-1466 Curl Noise ----------------------------------------------------------
+
+    TEST_CASE("curl noise velocity field is numerically divergence-free")
+    {
+        // F = curl(Psi) is divergence-free by construction. Measured with central
+        // differences at the SAME step the curl uses (and frequency == 1 so the world
+        // step matches the internal q-space step), the discrete divergence telescopes
+        // to float rounding — expect ~1e-5..1e-4, comfortably below the epsilon.
+        const float h = vfx::kCurlEpsilon;
+        const float inv2h = 1.0f / (2.0f * h);
+        const glm::vec3 dx(h, 0.0f, 0.0f), dy(0.0f, h, 0.0f), dz(0.0f, 0.0f, h);
+
+        auto F = [&](const glm::vec3& p) {
+            return vfx::evalCurlNoise(1.0f, 1.0f, 0.0f, 1, p, 0.0f); // strength=freq=1, no scroll
+        };
+
+        float maxDiv = 0.0f;
+        for (int i = 0; i < 5; ++i)
+            for (int j = 0; j < 5; ++j)
+                for (int k = 0; k < 5; ++k)
+                {
+                    // Offset off the integer lattice so we sample generic interior points.
+                    const glm::vec3 p(0.3f + 0.7f * i, 0.3f + 0.7f * j, 0.3f + 0.7f * k);
+                    const float div = (F(p + dx).x - F(p - dx).x) * inv2h +
+                                      (F(p + dy).y - F(p - dy).y) * inv2h +
+                                      (F(p + dz).z - F(p - dz).z) * inv2h;
+                    CHECK(std::isfinite(div));
+                    maxDiv = std::max(maxDiv, std::abs(div));
+                }
+
+        CHECK(maxDiv < 1e-2f);
+    }
+
+    TEST_CASE("curl noise is deterministic and pure")
+    {
+        // No RNG, no time source, no statics: identical args -> bit-identical result.
+        for (int i = 0; i < 8; ++i)
+        {
+            const glm::vec3 p(0.13f * i, 1.7f - 0.2f * i, -0.5f + 0.4f * i);
+            const glm::vec3 a = vfx::evalCurlNoise(2.0f, 1.5f, 0.3f, 2, p, 1.25f);
+            const glm::vec3 b = vfx::evalCurlNoise(2.0f, 1.5f, 0.3f, 2, p, 1.25f);
+            CHECK(a.x == b.x);
+            CHECK(a.y == b.y);
+            CHECK(a.z == b.z);
+        }
+    }
+
+    TEST_CASE("curl noise produces a live, non-constant rotational field")
+    {
+        float maxMag = 0.0f;
+        glm::vec3 sum(0.0f), sumSq(0.0f);
+        int n = 0;
+        for (int i = 0; i < 5; ++i)
+            for (int j = 0; j < 5; ++j)
+                for (int k = 0; k < 5; ++k)
+                {
+                    const glm::vec3 p(0.3f + 0.7f * i, 0.3f + 0.7f * j, 0.3f + 0.7f * k);
+                    const glm::vec3 f = vfx::evalCurlNoise(1.0f, 1.0f, 0.0f, 1, p, 0.0f);
+                    maxMag = std::max(maxMag, glm::length(f));
+                    sum += f;
+                    sumSq += f * f;
+                    ++n;
+                }
+
+        const glm::vec3 mean = sum / static_cast<float>(n);
+        const glm::vec3 var = sumSq / static_cast<float>(n) - mean * mean;
+        CHECK(maxMag > 0.05f);                          // field is alive
+        CHECK(var.x + var.y + var.z > 1e-3f);           // not a constant field
+    }
+
+    TEST_CASE("force loader round-trips a curl noise config")
+    {
+        vfx::VFXGraph graph;
+        graph.nodes.push_back(makeNode(1, vfx::VFXNodeType::Emitter, "Emitter"));
+
+        vfx::VFXNode curl = makeNode(2, vfx::VFXNodeType::ForceCurlNoise, "Curl Noise");
+        setFloat(curl, "strength", 3.5f, 0.0f, 50.0f);
+        setFloat(curl, "frequency", 0.6f, 0.1f, 10.0f);
+        setFloat(curl, "scrollSpeed", 0.25f, 0.0f, 10.0f);
+        setInt(curl, "octaves", 3, 1.0f, 4.0f);
+        setBool(curl, "localSpace", true);
+        graph.nodes.push_back(curl);
+
+        graph.nodes.push_back(makeNode(3, vfx::VFXNodeType::OutSystem, "Output"));
+        graph.nodes.push_back(makeNode(4, vfx::VFXNodeType::Shape, "Shape"));
+        graph.links.push_back(makeLink(1, 1, 4, "Shape"));
+        graph.links.push_back(makeLink(2, 1, 2));
+        graph.links.push_back(makeLink(3, 2, 3));
+        graph.nextNodeId = 5;
+        graph.nextLinkId = 4;
+
+        const vfx::VFXForceChain chain = vfx::VFXForceConfigLoader::fromGraph(graph);
+        REQUIRE(chain.forces.size() == 1);
+
+        const auto& cfg = std::get<vfx::CurlNoiseForceConfig>(chain.forces[0]);
+        CHECK(cfg.strength == doctest::Approx(3.5f));
+        CHECK(cfg.frequency == doctest::Approx(0.6f));
+        CHECK(cfg.scrollSpeed == doctest::Approx(0.25f));
+        CHECK(cfg.octaves == 3);
+        CHECK(cfg.space == vfx::ForceSpace::Local);
+    }
+
+    TEST_CASE("curl noise loader clamps octaves to [1,4]")
+    {
+        auto octavesFor = [](int authored) {
+            vfx::VFXGraph graph;
+            graph.nodes.push_back(makeNode(1, vfx::VFXNodeType::Emitter, "Emitter"));
+            vfx::VFXNode curl = makeNode(2, vfx::VFXNodeType::ForceCurlNoise, "Curl Noise");
+            setInt(curl, "octaves", authored, 0.0f, 100.0f);
+            graph.nodes.push_back(curl);
+            graph.nodes.push_back(makeNode(3, vfx::VFXNodeType::OutSystem, "Output"));
+            graph.nodes.push_back(makeNode(4, vfx::VFXNodeType::Shape, "Shape"));
+            graph.links.push_back(makeLink(1, 1, 4, "Shape"));
+            graph.links.push_back(makeLink(2, 1, 2));
+            graph.links.push_back(makeLink(3, 2, 3));
+            const vfx::VFXForceChain chain = vfx::VFXForceConfigLoader::fromGraph(graph);
+            REQUIRE(chain.forces.size() == 1);
+            return std::get<vfx::CurlNoiseForceConfig>(chain.forces[0]).octaves;
+        };
+
+        CHECK(octavesFor(100) == 4);
+        CHECK(octavesFor(0) == 1);
+        CHECK(octavesFor(2) == 2);
+    }
+
+    TEST_CASE("curl noise imparts finite non-zero velocity to a particle")
+    {
+        JobSystemScope jobs;
+
+        render::vfx::VFXEmitterConfig config = singleParticleConfig(0.0f); // spawn at rest
+        ::vfx::CurlNoiseForceConfig curl;
+        curl.strength = 5.0f;
+        curl.frequency = 1.0f;
+        curl.scrollSpeed = 0.0f;
+        curl.octaves = 1;
+        config.forces.forces.push_back(curl);
+
+        render::vfx::VFXParticleSystem system;
+        system.setSeed(42);
+        system.setEmitterConfig(config);
+        system.setPlaying(true);
+
+        system.update(0.05f); // spawns the burst particle
+        REQUIRE(firstActive(system) != nullptr);
+
+        for (int i = 0; i < 100; ++i)
+            system.update(0.05f);
+
+        const render::vfx::VFXParticle* pp = firstActive(system);
+        REQUIRE(pp != nullptr);
+        CHECK(std::isfinite(glm::length(pp->velocity)));
+        CHECK(glm::length(pp->velocity) > 1e-4f); // curl advected the particle
     }
 }

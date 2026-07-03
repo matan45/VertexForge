@@ -84,6 +84,19 @@
                 }
             },
             {
+                "id": 8,
+                "type": "ForceCurlNoise",
+                "name": "Curl Noise",
+                "position": [830.0, 260.0],
+                "properties": {
+                    "strength": { "type": "Float", "value": 2.0 },
+                    "frequency": { "type": "Float", "value": 0.6 },
+                    "scrollSpeed": { "type": "Float", "value": 0.4 },
+                    "octaves": { "type": "Int", "value": 2 },
+                    "localSpace": { "type": "Bool", "value": false }
+                }
+            },
+            {
                 "id": 10,
                 "type": "Shape",
                 "name": "Cone",
@@ -109,7 +122,8 @@
             { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
             { "id": 2, "sourceNode": 3, "targetNode": 4, "sourcePin": "Output", "targetPin": "Input" },
             { "id": 3, "sourceNode": 4, "targetNode": 5, "sourcePin": "Output", "targetPin": "Input" },
-            { "id": 4, "sourceNode": 5, "targetNode": 6, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 4, "sourceNode": 5, "targetNode": 8, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 8, "sourceNode": 8, "targetNode": 6, "sourcePin": "Output", "targetPin": "Input" },
             { "id": 5, "sourceNode": 6, "targetNode": 7, "sourcePin": "Output", "targetPin": "Input" },
             { "id": 7, "sourceNode": 7, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" },
             { "id": 6, "sourceNode": 10, "targetNode": 1, "sourcePin": "Output", "targetPin": "Shape" }

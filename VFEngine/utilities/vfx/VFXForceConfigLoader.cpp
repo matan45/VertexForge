@@ -95,6 +95,8 @@ namespace vfx
             return extractDragConfig(node);
         case VFXNodeType::ForcePointAttractor:
             return extractPointAttractorConfig(node);
+        case VFXNodeType::ForceCurlNoise:
+            return extractCurlNoiseConfig(node);
         default:
             return GravityForceConfig{};
         }
@@ -159,6 +161,17 @@ namespace vfx
         config.radius = getFloat(node, "radius", ForceDefaults::ATTRACTOR_RADIUS);
         config.falloff = getFloat(node, "falloff", ForceDefaults::ATTRACTOR_FALLOFF);
         config.killAtCenter = getBool(node, "killAtCenter", ForceDefaults::ATTRACTOR_KILL_AT_CENTER);
+        config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
+        return config;
+    }
+
+    CurlNoiseForceConfig VFXForceConfigLoader::extractCurlNoiseConfig(const VFXNode& node)
+    {
+        CurlNoiseForceConfig config;
+        config.strength = getFloat(node, "strength", ForceDefaults::CURLNOISE_STRENGTH);
+        config.frequency = getFloat(node, "frequency", ForceDefaults::CURLNOISE_FREQUENCY);
+        config.scrollSpeed = getFloat(node, "scrollSpeed", ForceDefaults::CURLNOISE_SCROLL_SPEED);
+        config.octaves = std::clamp(getInt(node, "octaves", ForceDefaults::CURLNOISE_OCTAVES), 1, 4);
         config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
         return config;
     }

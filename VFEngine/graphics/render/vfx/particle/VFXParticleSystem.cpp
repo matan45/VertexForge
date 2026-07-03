@@ -1,6 +1,7 @@
 #include "VFXParticleSystem.hpp"
 #include "threading/JobSystem.hpp"
 #include "vfx/VFXVariance.hpp"
+#include "vfx/VFXCurlNoise.hpp"
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/noise.hpp>
@@ -540,6 +541,17 @@ namespace render::vfx
             float falloff = std::pow(t, force.falloff);
             particle.velocity += (toCenter / dist) * force.strength * falloff * deltaTime;
         }
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::CurlNoiseForceConfig& force, float deltaTime)
+    {
+        // Divergence-free curl noise. Single tested kernel shared with the divergence
+        // doctest; the GPU mirror lives in vfx_particle_sim.glsl. Like Turbulence, the
+        // CPU uses glm::simplex + timeAccumulator while the GPU uses its own simplex +
+        // frameNumber*0.016 (same basis, matches to float rounding).
+        particle.velocity += vfx::evalCurlNoise(force.strength, force.frequency, force.scrollSpeed,
+                                                force.octaves, particle.position, timeAccumulator) *
+                             deltaTime;
     }
 
 }

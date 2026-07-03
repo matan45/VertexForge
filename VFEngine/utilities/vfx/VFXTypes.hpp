@@ -60,6 +60,7 @@ namespace vfx
         ForceVortex,
         ForceDrag,
         ForcePointAttractor,
+        ForceCurlNoise,
         Shape
     };
 
@@ -79,7 +80,8 @@ namespace vfx
                type == VFXNodeType::ForceTurbulence ||
                type == VFXNodeType::ForceVortex ||
                type == VFXNodeType::ForceDrag ||
-               type == VFXNodeType::ForcePointAttractor;
+               type == VFXNodeType::ForcePointAttractor ||
+               type == VFXNodeType::ForceCurlNoise;
     }
 
     inline bool isShapeNode(VFXNodeType type)
@@ -262,6 +264,11 @@ namespace vfx
         inline constexpr float ATTRACTOR_RADIUS = 10.0f;
         inline constexpr float ATTRACTOR_FALLOFF = 1.0f;
         inline constexpr bool ATTRACTOR_KILL_AT_CENTER = false;
+
+        inline constexpr float CURLNOISE_STRENGTH = 1.0f;
+        inline constexpr float CURLNOISE_FREQUENCY = 1.0f;
+        inline constexpr float CURLNOISE_SCROLL_SPEED = 0.0f;
+        inline constexpr int CURLNOISE_OCTAVES = 1;
     }
 
     const char* propertyTypeToString(VFXPropertyType type);

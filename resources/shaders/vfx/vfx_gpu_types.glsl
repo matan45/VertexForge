@@ -95,4 +95,7 @@ struct GPUEmitterConfig
     // Forces added in VK-1465 (mirror of C++ GPUEmitterConfig).
     vec4 attractorParams;     // xyz = center (world space), w = strength
     vec4 dragAttractorExtra;  // x = drag linear, y = drag quadratic, z = attractor radius, w = attractor falloff
+
+    // Force added in VK-1466 (mirror of C++ GPUEmitterConfig).
+    vec4 curlNoiseParams;     // x = strength, y = frequency, z = scroll speed, w = octaves
 };

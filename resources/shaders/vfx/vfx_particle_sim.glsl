@@ -18,6 +18,7 @@ const uint FORCE_VORTEX = 128u;
 const uint FORCE_DRAG = 65536u;          // 1 << 16
 const uint FORCE_ATTRACTOR = 131072u;    // 1 << 17
 const uint FORCE_ATTRACTOR_KILL = 262144u; // 1 << 18
+const uint FORCE_CURL_NOISE = 524288u;   // 1 << 19
 
 const uint SHAPE_SPHERE = 256u;
 const uint SHAPE_CONE = 512u;
@@ -424,6 +425,27 @@ float simplexNoise3D(vec3 v) {
     return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 
+// Curl noise (VK-1466). Mirror of vfx::evalCurlNoise in VFXCurlNoise.hpp.
+const float CURL_EPSILON = 0.01; // finite-difference step, shared with CPU + divergence test
+
+// fBM scalar potential at a decorrelation offset (mirrors the Turbulence octave loop).
+float curlPotential(vec3 q, vec3 offset, int octaves)
+{
+    if (octaves <= 1)
+        return simplexNoise3D(q + offset);
+
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    float sum = 0.0;
+    for (int i = 0; i < octaves && i < 4; ++i)
+    {
+        sum += simplexNoise3D(q * frequency + offset) * amplitude;
+        amplitude *= 0.5;
+        frequency *= 2.0;
+    }
+    return sum;
+}
+
 void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
 {
     vec3 totalForce = vec3(0.0);
@@ -514,6 +536,31 @@ void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
             float falloff = pow(t, config.dragAttractorExtra.w);
             totalForce += (toCenter / dist) * config.attractorParams.w * falloff;
         }
+    }
+
+    if ((config.modifierFlags & FORCE_CURL_NOISE) != 0u)
+    {
+        vec3 q = p.position * config.curlNoiseParams.y + vec3(time * config.curlNoiseParams.z);
+        int octaves = int(config.curlNoiseParams.w);
+        float inv2h = 1.0 / (2.0 * CURL_EPSILON);
+        vec3 dx = vec3(CURL_EPSILON, 0.0, 0.0);
+        vec3 dy = vec3(0.0, CURL_EPSILON, 0.0);
+        vec3 dz = vec3(0.0, 0.0, CURL_EPSILON);
+        vec3 o1 = vec3(0.0);
+        vec3 o2 = vec3(100.0);
+        vec3 o3 = vec3(200.0);
+
+        float dPsi3_dy = (curlPotential(q + dy, o3, octaves) - curlPotential(q - dy, o3, octaves)) * inv2h;
+        float dPsi2_dz = (curlPotential(q + dz, o2, octaves) - curlPotential(q - dz, o2, octaves)) * inv2h;
+        float dPsi1_dz = (curlPotential(q + dz, o1, octaves) - curlPotential(q - dz, o1, octaves)) * inv2h;
+        float dPsi3_dx = (curlPotential(q + dx, o3, octaves) - curlPotential(q - dx, o3, octaves)) * inv2h;
+        float dPsi2_dx = (curlPotential(q + dx, o2, octaves) - curlPotential(q - dx, o2, octaves)) * inv2h;
+        float dPsi1_dy = (curlPotential(q + dy, o1, octaves) - curlPotential(q - dy, o1, octaves)) * inv2h;
+
+        vec3 curlForce = vec3(dPsi3_dy - dPsi2_dz,   // curl.x
+                              dPsi1_dz - dPsi3_dx,   // curl.y
+                              dPsi2_dx - dPsi1_dy);  // curl.z
+        totalForce += curlForce * config.curlNoiseParams.x;
     }
 
     p.velocity += totalForce * config.deltaTime;

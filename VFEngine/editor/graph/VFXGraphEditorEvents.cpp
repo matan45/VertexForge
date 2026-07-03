@@ -488,6 +488,29 @@ namespace editor::graph
             };
             break;
 
+        case vfx::VFXNodeType::ForceCurlNoise:
+            node.properties["strength"] = vfx::VFXProperty{
+                "strength", vfx::VFXPropertyType::Float,
+                vfx::ForceDefaults::CURLNOISE_STRENGTH, 0.0f, 50.0f
+            };
+            node.properties["frequency"] = vfx::VFXProperty{
+                "frequency", vfx::VFXPropertyType::Float,
+                vfx::ForceDefaults::CURLNOISE_FREQUENCY, 0.1f, 10.0f
+            };
+            node.properties["scrollSpeed"] = vfx::VFXProperty{
+                "scrollSpeed", vfx::VFXPropertyType::Float,
+                vfx::ForceDefaults::CURLNOISE_SCROLL_SPEED, 0.0f, 10.0f
+            };
+            node.properties["octaves"] = vfx::VFXProperty{
+                "octaves", vfx::VFXPropertyType::Int,
+                vfx::ForceDefaults::CURLNOISE_OCTAVES, 1.0f, 4.0f
+            };
+            node.properties["localSpace"] = vfx::VFXProperty{
+                "localSpace", vfx::VFXPropertyType::Bool,
+                false, 0.0f, 1.0f
+            };
+            break;
+
         default:
             break;
         }
@@ -578,6 +601,7 @@ namespace editor::graph
                 if (ImGui::MenuItem("Vortex")) addNode(vfx::VFXNodeType::ForceVortex);
                 if (ImGui::MenuItem("Drag")) addNode(vfx::VFXNodeType::ForceDrag);
                 if (ImGui::MenuItem("Point Attractor")) addNode(vfx::VFXNodeType::ForcePointAttractor);
+                if (ImGui::MenuItem("Curl Noise")) addNode(vfx::VFXNodeType::ForceCurlNoise);
                 ImGui::EndMenu();
             }
 

@@ -268,6 +268,19 @@ namespace editor::vfxeditor
             drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
             break;
         }
+        case vfx::VFXNodeType::ForceCurlNoise: {
+            ImGui::Text("Curl Noise");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"strength",    "Strength",     0.1f},
+                {"frequency",   "Frequency",    0.1f},
+                {"scrollSpeed", "Scroll Speed", 0.1f},
+                {"octaves",     "Octaves",      0.1f},
+                {"localSpace",  "Local Space",  0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
         default:
             break;
         }

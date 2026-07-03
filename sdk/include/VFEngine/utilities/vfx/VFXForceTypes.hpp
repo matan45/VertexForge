@@ -66,13 +66,25 @@ namespace vfx
         ForceSpace space = ForceSpace::World; // stored for parity; center is authored in world space
     };
 
+    // Divergence-free curl noise: F = curl of a 3-offset simplex vector potential
+    // (Bridson 2007). Parameters mirror TurbulenceForceConfig. See VFXCurlNoise.hpp.
+    struct CurlNoiseForceConfig
+    {
+        float strength = 1.0f;
+        float frequency = 1.0f;
+        float scrollSpeed = 0.0f;
+        int octaves = 1;
+        ForceSpace space = ForceSpace::World; // stored for parity; field is sampled in world space
+    };
+
     using VFXForceConfig = std::variant<
         GravityForceConfig,
         WindForceConfig,
         TurbulenceForceConfig,
         VortexForceConfig,
         DragForceConfig,
-        PointAttractorForceConfig
+        PointAttractorForceConfig,
+        CurlNoiseForceConfig
     >;
 
     struct VFXForceChain
