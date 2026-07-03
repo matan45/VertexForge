@@ -549,8 +549,8 @@ namespace render::vfx
         // doctest; the GPU mirror lives in vfx_particle_sim.glsl. Like Turbulence, the
         // CPU uses glm::simplex + timeAccumulator while the GPU uses its own simplex +
         // frameNumber*0.016 (same basis, matches to float rounding).
-        particle.velocity += vfx::evalCurlNoise(force.strength, force.frequency, force.scrollSpeed,
-                                                force.octaves, particle.position, timeAccumulator) *
+        particle.velocity += ::vfx::evalCurlNoise(force.strength, force.frequency, force.scrollSpeed,
+                                                  force.octaves, particle.position, timeAccumulator) *
                              deltaTime;
     }
 
