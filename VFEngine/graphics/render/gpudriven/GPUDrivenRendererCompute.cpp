@@ -293,8 +293,14 @@ namespace render::gpudriven
         // slots; editor/non-streaming mode is dense [0, objectCount).
         if (mergedBuffer->isPersistentMode())
         {
-            for (uint32_t idx : mergedBuffer->getActiveObjectIndices())
-                consider(idx);
+            // getActiveObjectIndices() is sized to full buffer capacity
+            // (maxObjectCount); only [0, activeObjectCount) holds live slots —
+            // the tail is stale. Bound the scan the same way uploadActiveIndices
+            // does, or it degenerates to O(maxObjectCount) per frame.
+            const auto& activeIndices = mergedBuffer->getActiveObjectIndices();
+            const uint32_t activeCount = mergedBuffer->getActiveObjectCount();
+            for (uint32_t i = 0; i < activeCount; ++i)
+                consider(activeIndices[i]);
         }
         else
         {

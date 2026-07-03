@@ -42,7 +42,7 @@ public class VehicleComponent extends Component {
         return Vehicle::getWheelState(this.entityId, wheelIndex);
     }
 
-    public function wheelTransform(int wheelIndex): Matrix4f {
+    public function wheelTransform(int wheelIndex): Matrix4f? {
         return Vehicle::getWheelTransform(this.entityId, wheelIndex);
     }
 }

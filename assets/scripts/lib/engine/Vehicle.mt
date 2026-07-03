@@ -54,8 +54,14 @@ public class Vehicle {
         );
     }
 
-    public static function getWheelTransform(int entityId, int wheelIndex): Matrix4f {
+    // Returns null when the wheel state is momentarily unavailable (e.g. an
+    // async physics step is in flight) instead of snapping to the identity
+    // matrix — callers should keep the wheel mesh at its last transform.
+    public static function getWheelTransform(int entityId, int wheelIndex): Matrix4f? {
         VehicleWheelState state = Vehicle::getWheelState(entityId, wheelIndex);
+        if (!state.exists) {
+            return null;
+        }
         return state.worldTransform;
     }
 }

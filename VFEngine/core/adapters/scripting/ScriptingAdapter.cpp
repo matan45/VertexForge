@@ -733,9 +733,18 @@ namespace core
 
             // Field storage is flat per-instance (inherited fields included),
             // so setting the base-class field on the leaf instance works.
-            value::asObject(instanceValue)->setField(
+            const auto& instanceObj = value::asObject(instanceValue);
+            instanceObj->setField(
                 "vfEntityId",
                 value::Value(static_cast<int64_t>(entityIt->second.id)));
+
+            // Behaviour lazily caches gameObject()/transform() wrappers that
+            // embed the entity id; a @Saveable restore round-trips those fields
+            // and pins them to the save-time id. Drop the caches so the next
+            // gameObject()/transform() rebuilds from the corrected vfEntityId.
+            // No-op right after construction (fields already null).
+            instanceObj->setField("vfGameObject", value::Value(nullptr));
+            instanceObj->setField("vfTransform", value::Value(nullptr));
         }
         catch (const std::exception& e)
         {
