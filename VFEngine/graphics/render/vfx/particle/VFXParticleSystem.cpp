@@ -286,6 +286,7 @@ namespace render::vfx
         particle->size = config.startSize;
         particle->color = config.startColor;
         particle->rotation = 0.0f;
+        particle->glowIntensity = 0.0f; // mirror GPU spawn (vfx_particle_sim.glsl): clear stale glow on pooled reuse
 
         particle->initialColor = config.startColor;
         particle->initialSize = config.startSize;
@@ -351,23 +352,10 @@ namespace render::vfx
             return;
         }
 
-        float lifetimeRatio = particle.lifetime / particle.maxLifetime;
-
-        if (!config.modifiers.empty())
-        {
-            applyModifiers(particle, lifetimeRatio, deltaTime);
-        }
-        else
-        {
-            // Default behavior when no modifiers: fade out in last 30% of lifetime
-            float fadeStart = 0.7f;
-            if (lifetimeRatio > fadeStart)
-            {
-                float fadeProgress = (lifetimeRatio - fadeStart) / (1.0f - fadeStart);
-                particle.color.a = config.startColor.a * particle.alphaMult * (1.0f - fadeProgress);
-            }
-        }
-
+        // Mirror the GPU sim step order (vfx_particle_sim.glsl main): forces first, then
+        // position/rotation integration, then modifiers (or the default fade). Position must
+        // integrate BETWEEN forces and modifiers because SpeedOverLifetime rewrites velocity -
+        // the GPU advances position with the post-force / pre-modifier velocity.
         if (!config.forces.empty())
         {
             applyForces(particle, deltaTime);
@@ -375,6 +363,28 @@ namespace render::vfx
 
         particle.position += particle.velocity * deltaTime;
         particle.rotation += particle.angularVelocity * deltaTime;
+
+        float lifetimeRatio = particle.lifetime / particle.maxLifetime;
+
+        // GPU gates the modifier pass on `config.modifierFlags != 0u`; the host OR's a bit for any
+        // modifier, any force, and the flipbook RandomStart/FrameBlend flags. Reconstruct that so a
+        // forces-only or flipbook-only emitter takes the same branch (no courtesy fade).
+        // applyModifiers is a no-op when the modifier chain is empty.
+        if (!config.modifiers.empty() || !config.forces.empty() ||
+            config.flipbookRandomStart || config.flipbookFrameBlend)
+        {
+            applyModifiers(particle, lifetimeRatio, deltaTime);
+        }
+        else
+        {
+            // Default behavior when no modifiers/forces/flipbook: fade out in last 30% of lifetime
+            float fadeStart = 0.7f;
+            if (lifetimeRatio > fadeStart)
+            {
+                float fadeProgress = (lifetimeRatio - fadeStart) / (1.0f - fadeStart);
+                particle.color.a = config.startColor.a * particle.alphaMult * (1.0f - fadeProgress);
+            }
+        }
 
         // Kill-at-center (mirror GPU): kill any particle that reached the center of an
         // attractor flagged killAtCenter, checked after the position update. Kill volume
@@ -484,8 +494,17 @@ namespace render::vfx
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
+        // Rescale the CURRENT (force-deflected) velocity to initialSpeed * curve, preserving
+        // direction - mirrors the GPU MODIFIER_SPEED_OVER_LIFETIME path (vfx_particle_sim.glsl):
+        //   dir = p.velocity / currentSpeed; p.velocity = dir * p.initialSpeed * speedMult;
+        // When |velocity| is ~0 the GPU skips (no direction to preserve); we do the same.
         float multiplier = mod.curve.evaluate(t);
-        particle.velocity = particle.initialDirection * particle.initialSpeed * multiplier;
+        float currentSpeed = glm::length(particle.velocity);
+        if (currentSpeed > 0.001f)
+        {
+            glm::vec3 dir = particle.velocity / currentSpeed;
+            particle.velocity = dir * particle.initialSpeed * multiplier;
+        }
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime)
