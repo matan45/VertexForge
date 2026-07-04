@@ -11,6 +11,7 @@
 #include "vfx/VFXEventTypes.hpp"
 #include "vfx/VFXBurstTypes.hpp"
 #include "vfx/VFXScalability.hpp"
+#include "vfx/VFXBlendMode.hpp"
 
 namespace render::vfx
 {
@@ -244,7 +245,7 @@ namespace render::vfx
         bool flipbookFrameBlend = false; // VK-1469: linear crossfade between current and next cell
 
         float alphaClipThreshold = 0.1f;
-        bool additiveBlend = false;
+        ::vfx::VFXBlendMode blendMode = ::vfx::VFXBlendMode::Alpha; // VK-1472 (replaces legacy additiveBlend bool)
 
         // VK-1471: per-emitter draw-order key. Emitter draws are stable-sorted by
         // sortOrder ascending within each render pipeline (lower = drawn behind).
@@ -299,7 +300,7 @@ namespace render::vfx
         int rows = 1;
         int columns = 1;
         float alphaClipThreshold = 0.1f;
-        bool additiveBlend = false;
+        ::vfx::VFXBlendMode blendMode = ::vfx::VFXBlendMode::Alpha; // VK-1472 (replaces legacy additiveBlend bool)
         VFXRenderMode renderMode = VFXRenderMode::Billboard;
         float stretchMultiplier = 1.0f;
         glm::vec3 glowColor{1.0f};

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VFXBillboardTypes.hpp"
+#include "vfx/VFXBlendMode.hpp"
 #include "../compute/GPUVFXTypes.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <memory>
@@ -30,6 +31,7 @@ namespace render::vfx
         std::shared_ptr<core::Shader> vfxShader;
 
         vk::Pipeline graphicsPipeline;
+        vk::Pipeline multiplyPipeline; // VK-1472: Multiply blend variant (shares pipelineLayout)
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;

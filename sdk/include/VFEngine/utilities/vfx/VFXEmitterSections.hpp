@@ -107,6 +107,7 @@ namespace vfx
                    getBool(n, "flipbookFrameBlend", D::FLIPBOOK_FRAME_BLEND);
         if (id == "rendering")
             return getInt(n, "renderMode", D::RENDER_MODE) != D::RENDER_MODE ||
+                   stringToBlendMode(getString(n, "blendMode")) != VFXBlendMode::Alpha || // VK-1472 (absent -> "" -> Alpha)
                    getBool(n, "additiveBlend", D::ADDITIVE_BLEND) ||
                    getInt(n, "sortOrder", D::SORT_ORDER) != D::SORT_ORDER ||
                    getFloat(n, "softParticleDistance", D::SOFT_PARTICLE_DISTANCE) != D::SOFT_PARTICLE_DISTANCE ||

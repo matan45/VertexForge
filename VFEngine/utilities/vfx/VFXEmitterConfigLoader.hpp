@@ -136,7 +136,14 @@ namespace vfx
         config.flipbookFrameBlend = getBool(*emitterNode, "flipbookFrameBlend", EmitterDefaults::FLIPBOOK_FRAME_BLEND);
 
         config.alphaClipThreshold = getFloat(*emitterNode, "alphaClipThreshold", EmitterDefaults::ALPHA_CLIP_THRESHOLD);
-        config.additiveBlend = getBool(*emitterNode, "additiveBlend", EmitterDefaults::ADDITIVE_BLEND);
+        // VK-1472: optional blendMode string wins when present; legacy assets fall
+        // back to the additiveBlend bool (false->Alpha, true->Additive).
+        {
+            const std::string blendModeStr = getString(*emitterNode, "blendMode", "");
+            config.blendMode = blendModeStr.empty()
+                ? blendModeFromLegacy(getBool(*emitterNode, "additiveBlend", EmitterDefaults::ADDITIVE_BLEND))
+                : stringToBlendMode(blendModeStr);
+        }
         config.sortOrder = std::clamp(getInt(*emitterNode, "sortOrder", EmitterDefaults::SORT_ORDER), -256, 256);
 
         config.renderMode = static_cast<render::vfx::VFXRenderMode>(

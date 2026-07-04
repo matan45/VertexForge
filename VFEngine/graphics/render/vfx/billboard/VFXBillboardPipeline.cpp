@@ -40,6 +40,7 @@ namespace render::vfx
     void VFXBillboardPipeline::recreate()
     {
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+        if (multiplyPipeline) { device.getLogicalDevice().destroyPipeline(multiplyPipeline); multiplyPipeline = nullptr; } // VK-1472
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
 
         createPipeline();
@@ -50,6 +51,7 @@ namespace render::vfx
         auto& dev = device.getLogicalDevice();
 
         if (graphicsPipeline) { dev.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
+        if (multiplyPipeline) { dev.destroyPipeline(multiplyPipeline); multiplyPipeline = nullptr; } // VK-1472
         if (pipelineLayout) { dev.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
 
         if (descriptorPool)

@@ -51,7 +51,7 @@ namespace controllers
             config.flipbookRandomStart = params.flipbookRandomStart;
             config.flipbookFrameBlend = params.flipbookFrameBlend;
             config.alphaClipThreshold = params.alphaClipThreshold;
-            config.additiveBlend = params.additiveBlend;
+            config.blendMode = params.blendMode;
             config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
             config.softParticleDistance = params.softParticleDistance;
             config.stretchMultiplier = params.stretchMultiplier;
@@ -125,7 +125,7 @@ namespace controllers
         fbConfig.rows = currentParams.flipbookRows;
         fbConfig.columns = currentParams.flipbookColumns;
         fbConfig.alphaClipThreshold = currentParams.alphaClipThreshold;
-        fbConfig.additiveBlend = currentParams.additiveBlend;
+        fbConfig.blendMode = currentParams.blendMode;
         fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
         fbConfig.stretchMultiplier = currentParams.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
@@ -144,7 +144,7 @@ namespace controllers
         {
             meshPipeline->setTexture(currentParams.texturePath);
         }
-        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, fbConfig.glowColor,
+        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.blendMode, fbConfig.glowColor,
                                           currentParams.emissiveIntensity,
                                           currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
@@ -152,7 +152,7 @@ namespace controllers
         {
             ribbonPipeline->setTexture(currentParams.texturePath);
         }
-        ribbonPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend,
+        ribbonPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.blendMode,
                                             currentParams.ribbonWidth, fbConfig.glowColor,
                                             currentParams.emissiveIntensity,
                                             currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
@@ -240,7 +240,7 @@ namespace controllers
         fbConfig.rows = params.flipbookRows;
         fbConfig.columns = params.flipbookColumns;
         fbConfig.alphaClipThreshold = params.alphaClipThreshold;
-        fbConfig.additiveBlend = params.additiveBlend;
+        fbConfig.blendMode = params.blendMode;
         fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
         fbConfig.stretchMultiplier = params.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
@@ -260,7 +260,7 @@ namespace controllers
         {
             meshPipeline->setMesh(params.meshPath);
             meshPipeline->setTexture(params.texturePath);
-            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, fbConfig.glowColor,
+            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.blendMode, fbConfig.glowColor,
                                               params.emissiveIntensity,
                                               params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
@@ -268,7 +268,7 @@ namespace controllers
         if (ribbonPipeline && ribbonPipeline->isInitialized())
         {
             ribbonPipeline->setTexture(params.texturePath);
-            ribbonPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
+            ribbonPipeline->setRenderingConfig(params.alphaClipThreshold, params.blendMode,
                                                 params.ribbonWidth, fbConfig.glowColor,
                                                 params.emissiveIntensity,
                                                 params.uvScrollSpeedU, params.uvScrollSpeedV);
@@ -621,7 +621,7 @@ namespace controllers
         fbConfig.rows = params.flipbookRows;
         fbConfig.columns = params.flipbookColumns;
         fbConfig.alphaClipThreshold = params.alphaClipThreshold;
-        fbConfig.additiveBlend = params.additiveBlend;
+        fbConfig.blendMode = params.blendMode;
         fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
         fbConfig.stretchMultiplier = params.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
@@ -637,7 +637,7 @@ namespace controllers
             bundle.ribbon->init();
             if (!params.texturePath.empty())
                 bundle.ribbon->setTexture(params.texturePath);
-            bundle.ribbon->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
+            bundle.ribbon->setRenderingConfig(params.alphaClipThreshold, params.blendMode,
                                                params.ribbonWidth, fbConfig.glowColor,
                                                params.emissiveIntensity,
                                                params.uvScrollSpeedU, params.uvScrollSpeedV);
@@ -653,7 +653,7 @@ namespace controllers
                 bundle.mesh->setMesh(params.meshPath);
             if (!params.texturePath.empty())
                 bundle.mesh->setTexture(params.texturePath);
-            bundle.mesh->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, fbConfig.glowColor,
+            bundle.mesh->setRenderingConfig(params.alphaClipThreshold, params.blendMode, fbConfig.glowColor,
                                             params.emissiveIntensity,
                                             params.uvScrollSpeedU, params.uvScrollSpeedV);
             bundle.mesh->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);

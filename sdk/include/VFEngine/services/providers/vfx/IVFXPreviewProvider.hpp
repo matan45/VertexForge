@@ -6,6 +6,7 @@
 #include <vfx/VFXShapeTypes.hpp>
 #include <vfx/VFXEventTypes.hpp>
 #include <vfx/VFXBurstTypes.hpp>
+#include <vfx/VFXBlendMode.hpp>
 #include <vector>
 #include <glm/glm.hpp>
 #include <string>
@@ -44,7 +45,7 @@ namespace services
         bool flipbookFrameBlend = false;
 
         float alphaClipThreshold = 0.1f;
-        bool additiveBlend = false;
+        ::vfx::VFXBlendMode blendMode = ::vfx::VFXBlendMode::Alpha; // VK-1472 (replaces additiveBlend bool)
 
         int renderMode = 0;
         float softParticleDistance = 0.0f;

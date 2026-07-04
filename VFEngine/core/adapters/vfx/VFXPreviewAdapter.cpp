@@ -65,7 +65,7 @@ namespace core
         controllerParams.flipbookRandomStart = params.flipbookRandomStart;
         controllerParams.flipbookFrameBlend = params.flipbookFrameBlend;
         controllerParams.alphaClipThreshold = params.alphaClipThreshold;
-        controllerParams.additiveBlend = params.additiveBlend;
+        controllerParams.blendMode = params.blendMode; // VK-1472
         controllerParams.renderMode = params.renderMode;
         controllerParams.softParticleDistance = params.softParticleDistance;
         controllerParams.stretchMultiplier = params.stretchMultiplier;

@@ -218,7 +218,7 @@ namespace controllers
             fbConfig.rows = storedConfig.flipbookRows;
             fbConfig.columns = storedConfig.flipbookColumns;
             fbConfig.alphaClipThreshold = storedConfig.alphaClipThreshold;
-            fbConfig.additiveBlend = storedConfig.additiveBlend;
+            fbConfig.blendMode = storedConfig.blendMode; // VK-1472
             fbConfig.renderMode = storedConfig.renderMode;
             fbConfig.stretchMultiplier = storedConfig.stretchMultiplier;
             fbConfig.glowColor = glowColor;
@@ -233,7 +233,7 @@ namespace controllers
             gpuRenderPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
             gpuRenderPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                           storedConfig.alphaClipThreshold,
-                                                          storedConfig.additiveBlend,
+                                                          storedConfig.blendMode,
                                                           glowColor,
                                                           storedConfig.sortOrder);
             gpuRenderPipeline->setEmitterRenderMode(instances[id].gpuEmitterIndex,
@@ -249,7 +249,7 @@ namespace controllers
             gpuMeshPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
             gpuMeshPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                         storedConfig.alphaClipThreshold,
-                                                        storedConfig.additiveBlend,
+                                                        storedConfig.blendMode,
                                                         glowColor,
                                                         storedConfig.sortOrder);
         }
@@ -260,7 +260,7 @@ namespace controllers
             gpuRibbonPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
             gpuRibbonPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                           storedConfig.alphaClipThreshold,
-                                                          storedConfig.additiveBlend,
+                                                          storedConfig.blendMode,
                                                           glowColor,
                                                           storedConfig.sortOrder);
         }

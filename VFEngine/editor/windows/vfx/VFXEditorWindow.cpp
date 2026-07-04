@@ -195,7 +195,13 @@ namespace windows
 
         // Rendering
         params.alphaClipThreshold = getFloat(*emitterNode, "alphaClipThreshold", vfx::EmitterDefaults::ALPHA_CLIP_THRESHOLD);
-        params.additiveBlend = getBool(*emitterNode, "additiveBlend", vfx::EmitterDefaults::ADDITIVE_BLEND);
+        // VK-1472: blendMode string wins; legacy assets fall back to the additiveBlend bool.
+        {
+            const std::string blendModeStr = getString(*emitterNode, "blendMode", "");
+            params.blendMode = blendModeStr.empty()
+                ? vfx::blendModeFromLegacy(getBool(*emitterNode, "additiveBlend", vfx::EmitterDefaults::ADDITIVE_BLEND))
+                : vfx::stringToBlendMode(blendModeStr);
+        }
 
         params.renderMode = getInt(*emitterNode, "renderMode", vfx::EmitterDefaults::RENDER_MODE);
         params.softParticleDistance = getFloat(*emitterNode, "softParticleDistance", vfx::EmitterDefaults::SOFT_PARTICLE_DISTANCE);

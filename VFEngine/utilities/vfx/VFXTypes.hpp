@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include "VFXCurveTypes.hpp"
 #include "VFXScalability.hpp"
+#include "VFXBlendMode.hpp"
 
 namespace vfx
 {
@@ -193,7 +194,8 @@ namespace vfx
 
         // Rendering
         inline constexpr float ALPHA_CLIP_THRESHOLD = 0.1f;
-        inline constexpr bool ADDITIVE_BLEND = false;
+        inline constexpr bool ADDITIVE_BLEND = false; // VK-1472: legacy; superseded by BLEND_MODE, kept for back-compat fallback
+        inline constexpr VFXBlendMode BLEND_MODE = VFXBlendMode::Alpha; // VK-1472
         inline constexpr int SORT_ORDER = 0; // VK-1471: per-emitter draw-order key
 
         inline constexpr int RENDER_MODE = 0;

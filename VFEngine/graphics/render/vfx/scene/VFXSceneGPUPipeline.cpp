@@ -100,6 +100,7 @@ namespace render::vfx
 
         auto vkDevice = device.getLogicalDevice();
         vkDevice.destroyPipeline(graphicsPipeline);
+        if (multiplyPipeline) { vkDevice.destroyPipeline(multiplyPipeline); multiplyPipeline = nullptr; } // VK-1472
         vkDevice.destroyPipelineLayout(pipelineLayout);
 
         createPipeline();
@@ -113,6 +114,12 @@ namespace render::vfx
         {
             vkDevice.destroyPipeline(graphicsPipeline);
             graphicsPipeline = nullptr;
+        }
+
+        if (multiplyPipeline) // VK-1472
+        {
+            vkDevice.destroyPipeline(multiplyPipeline);
+            multiplyPipeline = nullptr;
         }
 
         if (pipelineLayout)

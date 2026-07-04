@@ -681,10 +681,48 @@ namespace editor::vfxeditor
         if (currentRenderMode == 3)
             drawMeshPathSelector(node, inputWidth);
 
+        // VK-1472: Blend Mode dropdown (replaces the legacy "Additive" checkbox).
+        // Resolves from the blendMode string prop, else the legacy additiveBlend bool.
+        {
+            vfx::VFXBlendMode currentBlend = vfx::VFXBlendMode::Alpha;
+            auto bmIt = node.properties.find("blendMode");
+            if (bmIt != node.properties.end())
+            {
+                if (auto* s = std::get_if<std::string>(&bmIt->second.value))
+                    currentBlend = vfx::stringToBlendMode(*s);
+            }
+            else
+            {
+                auto abIt = node.properties.find("additiveBlend");
+                if (abIt != node.properties.end())
+                    if (auto* b = std::get_if<bool>(&abIt->second.value))
+                        currentBlend = vfx::blendModeFromLegacy(*b);
+            }
+
+            ImGui::Text("Blend Mode");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth * 1.5f);
+            const char* blendModes[] = {"Alpha", "Additive", "Premultiplied", "Multiply"};
+            int current = static_cast<int>(currentBlend);
+            if (ImGui::Combo("##panel_blendMode", &current, blendModes, 4))
+            {
+                vfx::VFXBlendMode chosen = static_cast<vfx::VFXBlendMode>(std::clamp(current, 0, 3));
+                node.properties["blendMode"] = vfx::VFXProperty{
+                    "blendMode", vfx::VFXPropertyType::String,
+                    std::string(vfx::blendModeToString(chosen)), 0.0f, 0.0f
+                };
+                // Mirror the legacy bool so old runtimes/tools still read additive-vs-not.
+                node.properties["additiveBlend"] = vfx::VFXProperty{
+                    "additiveBlend", vfx::VFXPropertyType::Bool,
+                    (chosen == vfx::VFXBlendMode::Additive), 0.0f, 1.0f
+                };
+                notifyChanged();
+            }
+        }
+
         struct RenderEntry { const char* key; const char* label; };
         static constexpr RenderEntry entries[] = {
             {"alphaClipThreshold",   "Alpha Clip"},
-            {"additiveBlend",        "Additive"},
             {"sortOrder",            "Sort Order"},
             {"softParticleDistance",  "Soft Distance"},
             {"stretchMultiplier",    "Stretch"},
@@ -1227,7 +1265,7 @@ namespace editor::vfxeditor
             "rotationVariance", "angularVelocityVariance",
             "colorValueVariance", "alphaVariance",
             "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
-            "flipbookRandomStart", "flipbookFrameBlend", "alphaClipThreshold", "additiveBlend", "meshPath",
+            "flipbookRandomStart", "flipbookFrameBlend", "alphaClipThreshold", "additiveBlend", "blendMode", "meshPath",
             "sortOrder", "renderMode", "softParticleDistance", "stretchMultiplier",
             "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
             "uvScrollSpeedU", "uvScrollSpeedV",

@@ -6,6 +6,7 @@
 #include <vfx/VFXShapeTypes.hpp>
 #include <vfx/VFXEventTypes.hpp>
 #include <vfx/VFXBurstTypes.hpp>
+#include <vfx/VFXBlendMode.hpp>
 #include <vfx/VFXComboTimeline.hpp>
 #include <vfx/VFXSequenceTypes.hpp>
 #include <glm/glm.hpp>
@@ -67,8 +68,8 @@ namespace controllers
 
         // Rendering
         float alphaClipThreshold = 0.1f;
-        bool additiveBlend = false;
-        
+        ::vfx::VFXBlendMode blendMode = ::vfx::VFXBlendMode::Alpha; // VK-1472 (replaces additiveBlend bool)
+
         int renderMode = 0;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;

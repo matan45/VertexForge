@@ -220,9 +220,16 @@ void main() {
     }
 
     if (pc.blendMode == 1u) {
-        // Additive blend
+        // Additive: premultiplied rgb, zero alpha -> src.rgb + dst
         outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
-    } else {
+    } else if (pc.blendMode == 2u) {
+        // Premultiplied: straight color + real alpha (fire->smoke gradient)
         outColor = finalColor;
+    } else if (pc.blendMode == 3u) {
+        // Multiply (dst*src): transparent = white so soft/alpha fade to no-op
+        outColor = vec4(mix(vec3(1.0), finalColor.rgb, finalColor.a), finalColor.a);
+    } else {
+        // Alpha: premultiplied-over (identical result to the legacy straight-alpha path)
+        outColor = vec4(finalColor.rgb * finalColor.a, finalColor.a);
     }
 }

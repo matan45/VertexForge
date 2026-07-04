@@ -107,6 +107,12 @@ namespace vfx
                 "additiveBlend", VFXPropertyType::Bool,
                 EmitterDefaults::ADDITIVE_BLEND, 0.0f, 1.0f
             };
+            // VK-1472: blend mode supersedes the legacy additiveBlend bool. When
+            // present it wins in the loader; the bool is kept above for back-compat.
+            node.properties["blendMode"] = VFXProperty{
+                "blendMode", VFXPropertyType::String,
+                std::string(blendModeToString(EmitterDefaults::BLEND_MODE)), 0.0f, 0.0f
+            };
             node.properties["sortOrder"] = VFXProperty{
                 "sortOrder", VFXPropertyType::Int,
                 EmitterDefaults::SORT_ORDER, -256.0f, 256.0f

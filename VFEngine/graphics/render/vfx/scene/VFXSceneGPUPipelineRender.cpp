@@ -238,11 +238,11 @@ namespace render::vfx
     }
 
     void VFXSceneGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
-                                                         float alphaClipThreshold, bool additiveBlend,
+                                                         float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
                                                          const glm::vec3& glowColor, int32_t sortOrder)
     {
         emitterConfigs[emitterIndex].alphaClipThreshold = alphaClipThreshold;
-        emitterConfigs[emitterIndex].blendMode = additiveBlend ? 1u : 0u;
+        emitterConfigs[emitterIndex].blendMode = ::vfx::blendModeToGpuValue(blendMode);
         emitterConfigs[emitterIndex].glowColor = glowColor;
         emitterConfigs[emitterIndex].sortOrder = sortOrder;
     }
@@ -298,6 +298,7 @@ namespace render::vfx
         writeDescriptors();
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        vk::Pipeline lastBoundPipeline = graphicsPipeline; // VK-1472: swapped to Multiply variant per-emitter
 
         // Bind lighting descriptor sets (sets 1-3) if available
         if (lightingAvailable && cachedLightBufferSet && cachedClusterGridSet && cachedClusterLightGridSet)
@@ -369,6 +370,15 @@ namespace render::vfx
                 cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                        0, setToBind, {});
                 lastBoundSet = setToBind;
+            }
+
+            // VK-1472: Multiply emitters bind the dedicated Multiply blend pipeline (shares the
+            // layout, so the descriptor sets + vertex/index bindings above stay valid).
+            vk::Pipeline wantPipeline = (blendMode == 3u && multiplyPipeline) ? multiplyPipeline : graphicsPipeline;
+            if (wantPipeline != lastBoundPipeline)
+            {
+                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, wantPipeline);
+                lastBoundPipeline = wantPipeline;
             }
 
             GPUVFXBillboardPushConstants pushConstants{};

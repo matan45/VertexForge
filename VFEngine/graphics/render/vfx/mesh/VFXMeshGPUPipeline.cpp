@@ -108,6 +108,7 @@ namespace render::vfx
 
         auto vkDevice = device.getLogicalDevice();
         vkDevice.destroyPipeline(graphicsPipeline);
+        if (multiplyPipeline) { vkDevice.destroyPipeline(multiplyPipeline); multiplyPipeline = nullptr; } // VK-1472
         vkDevice.destroyPipelineLayout(pipelineLayout);
 
         createPipeline();
@@ -121,6 +122,12 @@ namespace render::vfx
         {
             vkDevice.destroyPipeline(graphicsPipeline);
             graphicsPipeline = nullptr;
+        }
+
+        if (multiplyPipeline) // VK-1472
+        {
+            vkDevice.destroyPipeline(multiplyPipeline);
+            multiplyPipeline = nullptr;
         }
 
         if (pipelineLayout)
@@ -337,12 +344,21 @@ namespace render::vfx
             .cullMode = vk::CullModeFlagBits::eBack,
             .depthTestEnable = true,
             .depthWriteEnable = false,
-            .blendEnable = true
+            .blendEnable = true,
+            .srcColorBlendFactor = vk::BlendFactor::eOne,            // VK-1472: premultiplied shared state
+            .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         graphicsPipeline = result.pipeline;
         pipelineLayout = result.pipelineLayout;
+
+        // VK-1472: Multiply blend variant (dst*src) reuses the shared layout.
+        core::GraphicsPipelineConfig multiplyConfig = config;
+        multiplyConfig.existingPipelineLayout = pipelineLayout;
+        multiplyConfig.srcColorBlendFactor = vk::BlendFactor::eDstColor;
+        multiplyConfig.dstColorBlendFactor = vk::BlendFactor::eZero;
+        multiplyPipeline = core::PipelineUtilities::createGraphicsPipeline(multiplyConfig).pipeline;
     }
 
     void VFXMeshGPUPipeline::createBuffers()
