@@ -207,6 +207,7 @@ namespace vfx
         inline constexpr float UV_SCROLL_SPEED_V = 0.0f;
 
         // Lighting
+        inline constexpr float EMISSIVE_INTENSITY = 1.0f;
         inline constexpr float LIGHTING_INFLUENCE = 0.0f;
         inline constexpr int NORMAL_MODE = 0;              // 0 = sphere, 1 = view-aligned, 2 = mesh
         inline constexpr float AMBIENT_AMOUNT = 0.3f;

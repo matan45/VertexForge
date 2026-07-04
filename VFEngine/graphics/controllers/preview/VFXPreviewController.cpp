@@ -62,6 +62,7 @@ namespace controllers
             config.uvScrollSpeedU = params.uvScrollSpeedU;
             config.uvScrollSpeedV = params.uvScrollSpeedV;
             config.events = params.events;
+            config.emissiveIntensity = params.emissiveIntensity;
             config.collisionEnabled = params.collisionEnabled;
             config.collisionBounce = params.collisionBounce;
             config.collisionFriction = params.collisionFriction;
@@ -128,6 +129,7 @@ namespace controllers
         fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
         fbConfig.stretchMultiplier = currentParams.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
+        fbConfig.emissiveIntensity = currentParams.emissiveIntensity;
         fbConfig.uvScrollSpeedU = currentParams.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = currentParams.uvScrollSpeedV;
         fbConfig.frameBlend = currentParams.flipbookFrameBlend;
@@ -143,6 +145,7 @@ namespace controllers
             meshPipeline->setTexture(currentParams.texturePath);
         }
         meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, fbConfig.glowColor,
+                                          currentParams.emissiveIntensity,
                                           currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
         if (!currentParams.texturePath.empty())
@@ -151,6 +154,7 @@ namespace controllers
         }
         ribbonPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend,
                                             currentParams.ribbonWidth, fbConfig.glowColor,
+                                            currentParams.emissiveIntensity,
                                             currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
         lastExtent = swapChain.getSwapchainExtent();
@@ -240,6 +244,7 @@ namespace controllers
         fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
         fbConfig.stretchMultiplier = params.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
+        fbConfig.emissiveIntensity = params.emissiveIntensity;
         fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = params.uvScrollSpeedV;
         fbConfig.frameBlend = params.flipbookFrameBlend;
@@ -256,6 +261,7 @@ namespace controllers
             meshPipeline->setMesh(params.meshPath);
             meshPipeline->setTexture(params.texturePath);
             meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, fbConfig.glowColor,
+                                              params.emissiveIntensity,
                                               params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
 
@@ -264,6 +270,7 @@ namespace controllers
             ribbonPipeline->setTexture(params.texturePath);
             ribbonPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
                                                 params.ribbonWidth, fbConfig.glowColor,
+                                                params.emissiveIntensity,
                                                 params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
     }
@@ -618,6 +625,7 @@ namespace controllers
         fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
         fbConfig.stretchMultiplier = params.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
+        fbConfig.emissiveIntensity = params.emissiveIntensity;
         fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = params.uvScrollSpeedV;
         fbConfig.frameBlend = params.flipbookFrameBlend;
@@ -631,6 +639,7 @@ namespace controllers
                 bundle.ribbon->setTexture(params.texturePath);
             bundle.ribbon->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
                                                params.ribbonWidth, fbConfig.glowColor,
+                                               params.emissiveIntensity,
                                                params.uvScrollSpeedU, params.uvScrollSpeedV);
             bundle.ribbon->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
         }
@@ -645,6 +654,7 @@ namespace controllers
             if (!params.texturePath.empty())
                 bundle.mesh->setTexture(params.texturePath);
             bundle.mesh->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, fbConfig.glowColor,
+                                            params.emissiveIntensity,
                                             params.uvScrollSpeedU, params.uvScrollSpeedV);
             bundle.mesh->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
         }

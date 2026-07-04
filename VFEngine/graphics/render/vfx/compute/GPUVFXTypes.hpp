@@ -158,7 +158,7 @@ namespace render::vfx
         float angularVelocityVariance = 0.0f;   // radians / second
         float colorValueVariance = 0.0f;
         float alphaVariance = 0.0f;
-        float _variancePad0 = 0.0f;
+        float emissiveIntensity = 1.0f;
         float _variancePad1 = 0.0f;
         float _variancePad2 = 0.0f;
 
@@ -228,7 +228,7 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, angularVelocityVariance) == 360, "GPUEmitterConfig::angularVelocityVariance offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, colorValueVariance) == 364, "GPUEmitterConfig::colorValueVariance offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, alphaVariance) == 368, "GPUEmitterConfig::alphaVariance offset mismatch");
-    static_assert(offsetof(GPUEmitterConfig, _variancePad0) == 372, "GPUEmitterConfig::_variancePad0 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, emissiveIntensity) == 372, "GPUEmitterConfig::emissiveIntensity offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, _variancePad1) == 376, "GPUEmitterConfig::_variancePad1 offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, _variancePad2) == 380, "GPUEmitterConfig::_variancePad2 offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, attractorParams) == 384, "GPUEmitterConfig::attractorParams offset mismatch");
@@ -416,6 +416,7 @@ namespace render::vfx
         float glowColorR = 1.0f;
         float glowColorG = 1.0f;
         float glowColorB = 1.0f;
+        float emissiveIntensity = 1.0f;
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
         uint32_t frameBlendMode = 0; // VK-1469: 0 = off, 1 = loop (wrap), 2 = clamp (one-shot)

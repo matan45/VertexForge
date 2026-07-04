@@ -223,6 +223,8 @@ namespace windows
             getFloat(*emitterNode, "eventLifetimeThreshold", vfx::EventDefaults::LIFETIME_THRESHOLD), 0.0f, 1.0f);
 
         // Lighting
+        params.emissiveIntensity = std::max(0.0f,
+            getFloat(*emitterNode, "emissiveIntensity", vfx::EmitterDefaults::EMISSIVE_INTENSITY));
         params.lightingInfluence = std::clamp(
             getFloat(*emitterNode, "lightingInfluence", vfx::EmitterDefaults::LIGHTING_INFLUENCE), 0.0f, 1.0f);
         params.normalMode = std::clamp(

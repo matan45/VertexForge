@@ -104,6 +104,8 @@ namespace editor::vfxeditor
         params.uvScrollSpeedU = getFloat(*emitterNode, "uvScrollSpeedU", vfx::EmitterDefaults::UV_SCROLL_SPEED_U);
         params.uvScrollSpeedV = getFloat(*emitterNode, "uvScrollSpeedV", vfx::EmitterDefaults::UV_SCROLL_SPEED_V);
 
+        params.emissiveIntensity = std::max(0.0f,
+            getFloat(*emitterNode, "emissiveIntensity", vfx::EmitterDefaults::EMISSIVE_INTENSITY));
         params.lightingInfluence = std::clamp(getFloat(*emitterNode, "lightingInfluence", vfx::EmitterDefaults::LIGHTING_INFLUENCE), 0.0f, 1.0f);
         params.normalMode = std::clamp(getInt(*emitterNode, "normalMode", vfx::EmitterDefaults::NORMAL_MODE), 0, 2);
         params.ambientAmount = std::clamp(getFloat(*emitterNode, "ambientAmount", vfx::EmitterDefaults::AMBIENT_AMOUNT), 0.0f, 1.0f);

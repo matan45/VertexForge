@@ -32,6 +32,7 @@ layout(push_constant) uniform PushConstants {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float emissiveIntensity;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
 } pc;
@@ -81,6 +82,7 @@ layout(push_constant) uniform PushConstants {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float emissiveIntensity;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
 } pc;
@@ -105,6 +107,7 @@ void main() {
     // Glow: additive emissive color
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
+    finalColor.rgb *= pc.emissiveIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;

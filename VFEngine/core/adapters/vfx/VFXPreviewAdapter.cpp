@@ -76,6 +76,7 @@ namespace core
         controllerParams.uvScrollSpeedU = params.uvScrollSpeedU;
         controllerParams.uvScrollSpeedV = params.uvScrollSpeedV;
         controllerParams.events = params.events;
+        controllerParams.emissiveIntensity = params.emissiveIntensity;
         controllerParams.collisionEnabled = params.collisionEnabled;
         controllerParams.collisionBounce = params.collisionBounce;
         controllerParams.collisionFriction = params.collisionFriction;

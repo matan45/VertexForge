@@ -132,7 +132,8 @@ namespace vfx
                    !getString(n, "eventOnCollisionVFX").empty() ||
                    !getString(n, "eventOnLifetimeThresholdVFX").empty();
         if (id == "lighting")
-            return getFloat(n, "lightingInfluence", D::LIGHTING_INFLUENCE) != D::LIGHTING_INFLUENCE ||
+            return getFloat(n, "emissiveIntensity", D::EMISSIVE_INTENSITY) != D::EMISSIVE_INTENSITY ||
+                   getFloat(n, "lightingInfluence", D::LIGHTING_INFLUENCE) != D::LIGHTING_INFLUENCE ||
                    getFloat(n, "ambientAmount", D::AMBIENT_AMOUNT) != D::AMBIENT_AMOUNT ||
                    getInt(n, "normalMode", D::NORMAL_MODE) != D::NORMAL_MODE ||
                    getBool(n, "lightEmissionEnabled", D::LIGHT_EMISSION_ENABLED);

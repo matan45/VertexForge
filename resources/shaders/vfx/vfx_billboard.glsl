@@ -38,6 +38,7 @@ layout(push_constant) uniform FlipbookPC {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float emissiveIntensity;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
     uint frameBlendMode; // VK-1469: 0 = off, 1 = loop (wrap), 2 = clamp (one-shot)
@@ -127,6 +128,7 @@ layout(push_constant) uniform FlipbookPC {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float emissiveIntensity;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
     uint frameBlendMode;
@@ -148,6 +150,7 @@ void main() {
     // Glow: additive emissive color
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
+    finalColor.rgb *= pc.emissiveIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;

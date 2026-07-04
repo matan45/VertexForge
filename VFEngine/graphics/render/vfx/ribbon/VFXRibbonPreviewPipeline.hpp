@@ -25,6 +25,7 @@ namespace render::vfx
         float glowColorR = 1.0f;
         float glowColorG = 1.0f;
         float glowColorB = 1.0f;
+        float emissiveIntensity = 1.0f;
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
     };
@@ -88,6 +89,7 @@ namespace render::vfx
         void setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
                                 float ribbonWidth,
                                 const glm::vec3& glowColor = glm::vec3(1.0f),
+                                float emissiveIntensity = 1.0f,
                                 float uvScrollSpeedU = 0.0f, float uvScrollSpeedV = 0.0f);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;

@@ -191,6 +191,10 @@ namespace vfx
 
         void addLightingAndCollisionProperties(VFXNode& node)
         {
+            node.properties["emissiveIntensity"] = VFXProperty{
+                "emissiveIntensity", VFXPropertyType::Float,
+                EmitterDefaults::EMISSIVE_INTENSITY, 0.0f, 100.0f
+            };
             node.properties["lightingInfluence"] = VFXProperty{
                 "lightingInfluence", VFXPropertyType::Float,
                 EmitterDefaults::LIGHTING_INFLUENCE, 0.0f, 1.0f

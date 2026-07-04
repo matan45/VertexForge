@@ -131,6 +131,7 @@ namespace render::vfx
 
     void VFXMeshPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
                                                        const glm::vec3& glowColor,
+                                                       float emissiveIntensity,
                                                        float uvScrollSpeedU, float uvScrollSpeedV)
     {
         pushConstants.alphaClipThreshold = alphaClipThreshold;
@@ -138,6 +139,7 @@ namespace render::vfx
         pushConstants.glowColorR = glowColor.r;
         pushConstants.glowColorG = glowColor.g;
         pushConstants.glowColorB = glowColor.b;
+        pushConstants.emissiveIntensity = emissiveIntensity;
         pushConstants.uvScrollSpeedU = uvScrollSpeedU;
         pushConstants.uvScrollSpeedV = uvScrollSpeedV;
     }

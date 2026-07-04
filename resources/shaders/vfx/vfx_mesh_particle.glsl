@@ -213,6 +213,7 @@ void main() {
     // Glow: additive emissive color (applied after lighting)
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
+    finalColor.rgb *= config.emissiveIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;

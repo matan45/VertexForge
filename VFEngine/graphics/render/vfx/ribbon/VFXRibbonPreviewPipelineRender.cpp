@@ -82,6 +82,7 @@ namespace render::vfx
     void VFXRibbonPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
                                                         float ribbonWidth,
                                                         const glm::vec3& glowColor,
+                                                        float emissiveIntensity,
                                                         float uvScrollSpeedU, float uvScrollSpeedV)
     {
         pushConstants.alphaClipThreshold = alphaClipThreshold;
@@ -90,6 +91,7 @@ namespace render::vfx
         pushConstants.glowColorR = glowColor.r;
         pushConstants.glowColorG = glowColor.g;
         pushConstants.glowColorB = glowColor.b;
+        pushConstants.emissiveIntensity = emissiveIntensity;
         pushConstants.uvScrollSpeedU = uvScrollSpeedU;
         pushConstants.uvScrollSpeedV = uvScrollSpeedV;
     }

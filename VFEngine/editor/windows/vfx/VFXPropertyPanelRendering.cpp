@@ -747,6 +747,7 @@ namespace editor::vfxeditor
 
         struct LightEntry { const char* key; const char* label; };
         static constexpr LightEntry lightEntries[] = {
+            {"emissiveIntensity", "Emissive"},
             {"lightingInfluence",  "Light Influence"},
             {"ambientAmount",      "Ambient"},
         };
@@ -1214,7 +1215,7 @@ namespace editor::vfxeditor
             "renderMode", "softParticleDistance", "stretchMultiplier",
             "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
             "uvScrollSpeedU", "uvScrollSpeedV",
-            "lightingInfluence", "ambientAmount", "normalMode",
+            "emissiveIntensity", "lightingInfluence", "ambientAmount", "normalMode",
             "distortionEnabled", "distortionStrength", "distortionTexture"
         };
 

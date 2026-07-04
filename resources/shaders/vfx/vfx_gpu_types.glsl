@@ -88,7 +88,7 @@ struct GPUEmitterConfig
     float angularVelocityVariance;
     float colorValueVariance;
     float alphaVariance;
-    float _variancePad0;
+    float emissiveIntensity;
     float _variancePad1;
     float _variancePad2;
 

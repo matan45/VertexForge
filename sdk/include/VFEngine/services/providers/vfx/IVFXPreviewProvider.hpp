@@ -62,6 +62,7 @@ namespace services
         ::vfx::VFXEventConfig events;
 
         // Lighting
+        float emissiveIntensity = 1.0f;
         float lightingInfluence = 0.0f;
         int normalMode = 0;
         float ambientAmount = 0.3f;

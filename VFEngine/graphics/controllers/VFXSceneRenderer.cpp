@@ -221,6 +221,7 @@ namespace controllers
             fbConfig.renderMode = storedConfig.renderMode;
             fbConfig.stretchMultiplier = storedConfig.stretchMultiplier;
             fbConfig.glowColor = glowColor;
+            fbConfig.emissiveIntensity = storedConfig.emissiveIntensity;
             fbConfig.frameBlend = storedConfig.flipbookFrameBlend;
             fbConfig.frameRate = storedConfig.flipbookFrameRate;
             cpuPipeline->setFlipbookConfig(fbConfig);

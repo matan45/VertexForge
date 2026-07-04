@@ -159,6 +159,8 @@ namespace vfx
 
         // Glow color
         config.glowColor = VFXModifierConfigLoader::getGlowColorFromChain(config.modifiers);
+        config.emissiveIntensity = std::max(0.0f,
+            getFloat(*emitterNode, "emissiveIntensity", EmitterDefaults::EMISSIVE_INTENSITY));
 
         // Events
         config.events.onSpawnEnabled = getBool(*emitterNode, "eventOnSpawnEnabled", false);

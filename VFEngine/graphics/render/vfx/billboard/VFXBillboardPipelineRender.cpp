@@ -93,6 +93,7 @@ namespace render::vfx
         flipbookPC.glowColorR = config.glowColor.r;
         flipbookPC.glowColorG = config.glowColor.g;
         flipbookPC.glowColorB = config.glowColor.b;
+        flipbookPC.emissiveIntensity = config.emissiveIntensity;
         flipbookPC.uvScrollSpeedU = config.uvScrollSpeedU;
         flipbookPC.uvScrollSpeedV = config.uvScrollSpeedV;
         flipbookPC.frameBlendMode = frameBlendModeFor(config.frameBlend, config.frameRate);

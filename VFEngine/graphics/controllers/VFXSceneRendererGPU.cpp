@@ -503,6 +503,7 @@ namespace controllers
         gpuConfig.angularVelocityVariance = cpuConfig.angularVelocityVariance;
         gpuConfig.colorValueVariance = cpuConfig.colorValueVariance;
         gpuConfig.alphaVariance = cpuConfig.alphaVariance;
+        gpuConfig.emissiveIntensity = cpuConfig.emissiveIntensity;
 
         return gpuConfig;
     }

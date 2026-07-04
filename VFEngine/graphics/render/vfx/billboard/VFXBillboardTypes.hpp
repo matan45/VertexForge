@@ -260,6 +260,7 @@ namespace render::vfx
         float uvScrollSpeedV = 0.0f;
         
         glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
+        float emissiveIntensity = 1.0f;
 
         ::vfx::VFXEventConfig events;
 
@@ -297,6 +298,7 @@ namespace render::vfx
         VFXRenderMode renderMode = VFXRenderMode::Billboard;
         float stretchMultiplier = 1.0f;
         glm::vec3 glowColor{1.0f};
+        float emissiveIntensity = 1.0f;
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
         bool frameBlend = false;   // VK-1469: crossfade current->next flipbook cell
