@@ -87,14 +87,16 @@ namespace render::vfx
         flipbookPC.flipbookRows = static_cast<float>(std::max(config.rows, 1));
         flipbookPC.flipbookColumns = static_cast<float>(std::max(config.columns, 1));
         flipbookPC.alphaClipThreshold = config.alphaClipThreshold;
-        flipbookPC.blendMode = config.additiveBlend ? 1u : 0u;
+        flipbookPC.blendMode = ::vfx::blendModeToGpuValue(config.blendMode);
         flipbookPC.renderMode = static_cast<uint32_t>(config.renderMode);
         flipbookPC.stretchMultiplier = config.stretchMultiplier;
         flipbookPC.glowColorR = config.glowColor.r;
         flipbookPC.glowColorG = config.glowColor.g;
         flipbookPC.glowColorB = config.glowColor.b;
+        flipbookPC.emissiveIntensity = config.emissiveIntensity;
         flipbookPC.uvScrollSpeedU = config.uvScrollSpeedU;
         flipbookPC.uvScrollSpeedV = config.uvScrollSpeedV;
+        flipbookPC.frameBlendMode = frameBlendModeFor(config.frameBlend, config.frameRate);
     }
 
     void VFXBillboardPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
@@ -128,7 +130,9 @@ namespace render::vfx
             return;
         }
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        // VK-1472: Multiply emitters bind the dedicated Multiply blend pipeline (shares the layout).
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                   (flipbookPC.blendMode == 3u && multiplyPipeline) ? multiplyPipeline : graphicsPipeline);
 
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                           0, descriptorSet, nullptr);

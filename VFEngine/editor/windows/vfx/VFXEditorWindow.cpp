@@ -3,6 +3,7 @@
 #include "VFXPreviewPanel.hpp"
 #include "../../graph/VFXGraphEditor.hpp"
 #include <vfx/VFXAsset.hpp>
+#include <vfx/VFXEventTypes.hpp>
 #include <vfx/VFXTypes.hpp>
 #include <vfx/VFXBoundsUtil.hpp>
 #include <vfx/VFXModifierConfigLoader.hpp>
@@ -167,6 +168,20 @@ namespace windows
         params.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         params.looping = getBool(*emitterNode, "looping", vfx::EmitterDefaults::LOOPING);
         params.texturePath = getString(*emitterNode, "texture", "");
+        params.sizeVariance = std::clamp(
+            getFloat(*emitterNode, "sizeVariance", vfx::EmitterDefaults::SIZE_VARIANCE), 0.0f, 1.0f);
+        params.lifetimeVariance = std::clamp(
+            getFloat(*emitterNode, "lifetimeVariance", vfx::EmitterDefaults::LIFETIME_VARIANCE), 0.0f, 1.0f);
+        params.speedVariance = std::clamp(
+            getFloat(*emitterNode, "speedVariance", vfx::EmitterDefaults::SPEED_VARIANCE), 0.0f, 1.0f);
+        params.rotationVariance = glm::radians(std::max(0.0f,
+            getFloat(*emitterNode, "rotationVariance", vfx::EmitterDefaults::ROTATION_VARIANCE_DEGREES)));
+        params.angularVelocityVariance = glm::radians(std::max(0.0f,
+            getFloat(*emitterNode, "angularVelocityVariance", vfx::EmitterDefaults::ANGULAR_VELOCITY_VARIANCE_DEGREES)));
+        params.colorValueVariance = std::clamp(
+            getFloat(*emitterNode, "colorValueVariance", vfx::EmitterDefaults::COLOR_VALUE_VARIANCE), 0.0f, 1.0f);
+        params.alphaVariance = std::clamp(
+            getFloat(*emitterNode, "alphaVariance", vfx::EmitterDefaults::ALPHA_VARIANCE), 0.0f, 1.0f);
 
         params.modifiers = vfx::VFXModifierConfigLoader::fromGraph(vfxData->graph);
         params.forces = vfx::VFXForceConfigLoader::fromGraph(vfxData->graph);
@@ -177,10 +192,17 @@ namespace windows
         params.flipbookColumns = std::clamp(getInt(*emitterNode, "flipbookColumns", vfx::EmitterDefaults::FLIPBOOK_COLUMNS), 1, 16);
         params.flipbookFrameRate = getFloat(*emitterNode, "flipbookFrameRate", vfx::EmitterDefaults::FLIPBOOK_FRAME_RATE);
         params.flipbookRandomStart = getBool(*emitterNode, "flipbookRandomStart", vfx::EmitterDefaults::FLIPBOOK_RANDOM_START);
+        params.flipbookFrameBlend = getBool(*emitterNode, "flipbookFrameBlend", vfx::EmitterDefaults::FLIPBOOK_FRAME_BLEND);
 
         // Rendering
         params.alphaClipThreshold = getFloat(*emitterNode, "alphaClipThreshold", vfx::EmitterDefaults::ALPHA_CLIP_THRESHOLD);
-        params.additiveBlend = getBool(*emitterNode, "additiveBlend", vfx::EmitterDefaults::ADDITIVE_BLEND);
+        // VK-1472: blendMode string wins; legacy assets fall back to the additiveBlend bool.
+        {
+            const std::string blendModeStr = getString(*emitterNode, "blendMode", "");
+            params.blendMode = blendModeStr.empty()
+                ? vfx::blendModeFromLegacy(getBool(*emitterNode, "additiveBlend", vfx::EmitterDefaults::ADDITIVE_BLEND))
+                : vfx::stringToBlendMode(blendModeStr);
+        }
 
         params.renderMode = getInt(*emitterNode, "renderMode", vfx::EmitterDefaults::RENDER_MODE);
         params.softParticleDistance = getFloat(*emitterNode, "softParticleDistance", vfx::EmitterDefaults::SOFT_PARTICLE_DISTANCE);
@@ -188,26 +210,29 @@ namespace windows
 
         params.meshPath = getString(*emitterNode, "meshPath", "");
 
+        // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
+        params.meshOrientationMode = vfx::stringToOrientationMode(getString(*emitterNode, "meshOrientationMode", ""));
+        params.meshOrientationAxis = getVec3(*emitterNode, "meshOrientationAxis", glm::vec3(0.0f, 1.0f, 0.0f));
+        params.meshOrientationSpinRate = getFloat(*emitterNode, "meshOrientationSpinRate", vfx::EmitterDefaults::MESH_ORIENTATION_SPIN_RATE);
+
         params.maxTrailPoints = getInt(*emitterNode, "maxTrailPoints", vfx::EmitterDefaults::MAX_TRAIL_POINTS);
         params.ribbonWidth = getFloat(*emitterNode, "ribbonWidth", vfx::EmitterDefaults::RIBBON_WIDTH);
         params.ribbonMinDistance = getFloat(*emitterNode, "ribbonMinDistance", vfx::EmitterDefaults::RIBBON_MIN_DISTANCE);
+        // VK-1474: over-trail width curve + tail gradient (present only when authored).
+        if (auto wcIt = emitterNode->properties.find("ribbonWidthCurve"); wcIt != emitterNode->properties.end())
+            if (auto* c = std::get_if<vfx::VFXCurve>(&wcIt->second.value)) { params.ribbonWidthCurve = *c; params.hasRibbonWidthCurve = true; }
+        if (auto tgIt = emitterNode->properties.find("ribbonTailGradient"); tgIt != emitterNode->properties.end())
+            if (auto* g = std::get_if<vfx::VFXGradient>(&tgIt->second.value)) { params.ribbonTailGradient = *g; params.hasRibbonTailGradient = true; }
 
         params.uvScrollSpeedU = getFloat(*emitterNode, "uvScrollSpeedU", vfx::EmitterDefaults::UV_SCROLL_SPEED_U);
         params.uvScrollSpeedV = getFloat(*emitterNode, "uvScrollSpeedV", vfx::EmitterDefaults::UV_SCROLL_SPEED_V);
 
         // Events
-        params.events.onSpawnEnabled = getBool(*emitterNode, "eventOnSpawnEnabled", false);
-        params.events.onSpawnVFXPath = getString(*emitterNode, "eventOnSpawnVFX", "");
-        params.events.onDeathEnabled = getBool(*emitterNode, "eventOnDeathEnabled", false);
-        params.events.onDeathVFXPath = getString(*emitterNode, "eventOnDeathVFX", "");
-        params.events.onCollisionEnabled = getBool(*emitterNode, "eventOnCollisionEnabled", false);
-        params.events.onCollisionVFXPath = getString(*emitterNode, "eventOnCollisionVFX", "");
-        params.events.onLifetimeThresholdEnabled = getBool(*emitterNode, "eventOnLifetimeThresholdEnabled", false);
-        params.events.onLifetimeThresholdVFXPath = getString(*emitterNode, "eventOnLifetimeThresholdVFX", "");
-        params.events.lifetimeThreshold = std::clamp(
-            getFloat(*emitterNode, "eventLifetimeThreshold", vfx::EventDefaults::LIFETIME_THRESHOLD), 0.0f, 1.0f);
+        params.events = vfx::loadEventConfigFromNode(*emitterNode);
 
         // Lighting
+        params.emissiveIntensity = std::max(0.0f,
+            getFloat(*emitterNode, "emissiveIntensity", vfx::EmitterDefaults::EMISSIVE_INTENSITY));
         params.lightingInfluence = std::clamp(
             getFloat(*emitterNode, "lightingInfluence", vfx::EmitterDefaults::LIGHTING_INFLUENCE), 0.0f, 1.0f);
         params.normalMode = std::clamp(

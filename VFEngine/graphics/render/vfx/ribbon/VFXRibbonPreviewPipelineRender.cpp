@@ -79,17 +79,19 @@ namespace render::vfx
         updateDescriptorSet();
     }
 
-    void VFXRibbonPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
+    void VFXRibbonPreviewPipeline::setRenderingConfig(float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
                                                         float ribbonWidth,
                                                         const glm::vec3& glowColor,
+                                                        float emissiveIntensity,
                                                         float uvScrollSpeedU, float uvScrollSpeedV)
     {
         pushConstants.alphaClipThreshold = alphaClipThreshold;
-        pushConstants.blendMode = additiveBlend ? 1u : 0u;
+        pushConstants.blendMode = ::vfx::blendModeToGpuValue(blendMode);
         pushConstants.ribbonWidth = ribbonWidth;
         pushConstants.glowColorR = glowColor.r;
         pushConstants.glowColorG = glowColor.g;
         pushConstants.glowColorB = glowColor.b;
+        pushConstants.emissiveIntensity = emissiveIntensity;
         pushConstants.uvScrollSpeedU = uvScrollSpeedU;
         pushConstants.uvScrollSpeedV = uvScrollSpeedV;
     }
@@ -165,7 +167,9 @@ namespace render::vfx
             return;
         }
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        // VK-1472: Multiply blend selects the dedicated variant; the others share the premultiplied pipeline.
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                   (pushConstants.blendMode == 3u && multiplyPipeline) ? multiplyPipeline : graphicsPipeline);
 
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                           0, descriptorSet, nullptr);

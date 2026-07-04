@@ -68,7 +68,12 @@ namespace editor::vfxeditor
         int gradientSelection = -1;
 
         uint32_t lastSelectedNodeId = 0;
-        std::string lastPropertyKey;
+        // VK-1474: the curve and gradient editors track their re-sync key independently so a
+        // node/section that shows BOTH at once (e.g. ribbon width curve + tail gradient) does not
+        // thrash each other's delegate / stop-selection every frame.
+        std::string lastCurveKey;
+        std::string lastGradientKey;
+        char moduleSearch[128] = {}; // Add-Module popup search filter
 
     public:
         void draw(vfx::VFXGraph* graph, uint32_t selectedNodeId);
@@ -79,6 +84,7 @@ namespace editor::vfxeditor
         void drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label);
         bool drawScalarProperty(const char* label, vfx::VFXProperty& prop, float inputWidth, float step = 0.1f);
         void drawCoreProperties(vfx::VFXNode& node);
+        void drawSpawnVarianceProperties(vfx::VFXNode& node);
         void drawForceProperties(vfx::VFXNode& node);
         void drawShapeProperties(vfx::VFXNode& node);
         void drawFlipbookProperties(vfx::VFXNode& node);
@@ -91,6 +97,10 @@ namespace editor::vfxeditor
         void drawLightingProperties(vfx::VFXNode& node);
         void drawCollisionProperties(vfx::VFXNode& node, float inputWidth);
         void drawDistortionProperties(vfx::VFXNode& node);
+        void drawAdvancedProperties(vfx::VFXNode& node);
+        void drawEmitterSections(vfx::VFXNode& node);
+        void drawEmitterSection(vfx::VFXNode& node, const std::string& sectionId);
+        void drawAddModulePopup(vfx::VFXNode& node);
         void notifyChanged();
     };
 }

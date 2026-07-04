@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../billboard/VFXBillboardTypes.hpp"
+#include "vfx/VFXBlendMode.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <vector>
@@ -29,8 +30,16 @@ namespace render::vfx
         float glowColorR = 1.0f;
         float glowColorG = 1.0f;
         float glowColorB = 1.0f;
+        float emissiveIntensity = 1.0f;
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
+        // VK-1476: mesh orientation. 4-byte scalars only (no vec3) to keep the
+        // push-constant layout std430-simple and identical across vertex+fragment.
+        uint32_t meshOrientationMode = 0; // vfx::VFXOrientationMode (0 = VelocityForward)
+        float orientAxisX = 0.0f;
+        float orientAxisY = 1.0f;
+        float orientAxisZ = 0.0f;
+        float meshOrientationSpinRate = 1.0f;
     };
 
     class VFXMeshPreviewPipeline
@@ -46,6 +55,7 @@ namespace render::vfx
         std::shared_ptr<core::Shader> meshShader;
 
         vk::Pipeline graphicsPipeline;
+        vk::Pipeline multiplyPipeline; // VK-1472: Multiply blend variant (shares pipelineLayout)
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -94,9 +104,14 @@ namespace render::vfx
 
         void setTexture(const std::string& texturePath);
         void setMesh(const std::string& meshPath);
-        void setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
+        void setRenderingConfig(float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
                                 const glm::vec3& glowColor = glm::vec3(1.0f),
+                                float emissiveIntensity = 1.0f,
                                 float uvScrollSpeedU = 0.0f, float uvScrollSpeedV = 0.0f);
+
+        // VK-1476: mesh orientation mode + params (kept separate from setRenderingConfig
+        // so ribbon/billboard callers are untouched). `mode` = vfx::VFXOrientationMode.
+        void setOrientationConfig(uint32_t mode, const glm::vec3& axis, float spinRate);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../compute/GPUVFXTypes.hpp"
+#include "vfx/VFXBlendMode.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -32,6 +33,7 @@ namespace render::vfx
         vk::Format colorFormat = vk::Format::eUndefined;
         vk::Format depthFormat = vk::Format::eUndefined;
         vk::Pipeline graphicsPipeline;
+        vk::Pipeline multiplyPipeline; // VK-1472: Multiply blend variant (shares pipelineLayout)
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -72,6 +74,7 @@ namespace render::vfx
             uint32_t renderMode = 0;
             glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
             bool distortionEnabled = false;
+            int32_t sortOrder = 0; // VK-1471: per-emitter draw-order key
         };
 
         struct TextureEntry
@@ -127,8 +130,8 @@ namespace render::vfx
         void updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize);
 
         void setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath);
-        void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend,
-                                       const glm::vec3& glowColor = glm::vec3(1.0f));
+        void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
+                                       const glm::vec3& glowColor = glm::vec3(1.0f), int32_t sortOrder = 0);
         void setEmitterRenderMode(uint32_t emitterIndex, uint32_t renderMode);
         void setEmitterDistortionEnabled(uint32_t emitterIndex, bool enabled);
         void removeEmitter(uint32_t emitterIndex);

@@ -180,8 +180,6 @@ namespace controllers
             if (instIt == instances.end())
                 continue;
 
-            const VFXRuntimeInstance* parentInstance = &instIt->second;
-
             bool isSubEmitter = false;
             for (const auto& sub : activeSubEmitters)
             {
@@ -190,20 +188,16 @@ namespace controllers
             if (isSubEmitter)
                 continue;
 
-            bool enabled = false;
-            std::string vfxPath;
-            const auto& eventConfig = parentInstance->config.events;
+            if (event.eventType >= vfx::VFX_EVENT_TYPE_COUNT)
+                continue;
 
-            switch (event.eventType)
-            {
-            case 0: enabled = eventConfig.onSpawnEnabled; if (enabled) vfxPath = eventConfig.onSpawnVFXPath; break;
-            case 1: enabled = eventConfig.onDeathEnabled; if (enabled) vfxPath = eventConfig.onDeathVFXPath; break;
-            case 2: enabled = eventConfig.onCollisionEnabled; if (enabled) vfxPath = eventConfig.onCollisionVFXPath; break;
-            case 3: enabled = eventConfig.onLifetimeThresholdEnabled; if (enabled) vfxPath = eventConfig.onLifetimeThresholdVFXPath; break;
-            default: break;
-            }
+            const VFXRuntimeInstance& parentInstance = instIt->second;
+            const auto eventType = static_cast<uint32_t>(event.eventType);
+            const vfx::VFXEventTypeConfig typeConfig = parentInstance.config.events.types[eventType];
+            const uint32_t parentSeed = parentInstance.seed;
+            const uint32_t parentEntityId = parentInstance.entityId;
 
-            if (!enabled)
+            if (!typeConfig.enabled)
                 continue;
 
             uint32_t parentSubCount = 0;
@@ -217,16 +211,31 @@ namespace controllers
             // VFXParticleEventNotification when there is no sub-VFX path or the per-parent
             // cap is reached (dev `continue`d in both cases). Publishing past the cap
             // spammed subscribed gameplay/script listeners every frame.
-            if (vfxPath.empty() || parentSubCount >= MAX_SUB_EMITTERS_PER_PARENT)
+            if (typeConfig.vfxPath.empty() || parentSubCount >= MAX_SUB_EMITTERS_PER_PARENT)
                 continue;
 
-            if (!vfxPath.empty() && parentSubCount < MAX_SUB_EMITTERS_PER_PARENT)
+            uint32_t headroom = MAX_SUB_EMITTERS_PER_PARENT - parentSubCount;
+            uint32_t spawnCount = vfx::evaluateEventSpawnCount(
+                typeConfig, headroom,
+                [&]() { return vfx::eventProbabilityRoll(parentSeed, i, eventType); });
+
+            for (uint32_t spawnIndex = 0; spawnIndex < spawnCount; ++spawnIndex)
             {
                 VFXRuntimeParams subParams;
-                subParams.vfxAssetPath = vfxPath;
+                subParams.vfxAssetPath = typeConfig.vfxPath;
                 subParams.worldTransform = glm::translate(glm::mat4(1.0f),
                     glm::vec3(event.position.x, event.position.y, event.position.z));
                 subParams.loop = false;
+                if (typeConfig.inheritVelocityScale > 0.0f)
+                {
+                    subParams.injectedEmitterVelocity =
+                        glm::vec3(event.velocity.x, event.velocity.y, event.velocity.z) *
+                        typeConfig.inheritVelocityScale;
+                }
+                if (typeConfig.inheritColor)
+                    subParams.startColorMultiplier = glm::vec4(event.color, 1.0f);
+                if (typeConfig.inheritSize)
+                    subParams.startSizeMultiplier = event.size;
 
                 VFXInstanceId subId = createInstance(subParams);
                 if (subId != 0)
@@ -252,8 +261,8 @@ namespace controllers
             notification.velocity = glm::vec3(event.velocity.x, event.velocity.y, event.velocity.z);
             notification.emitterIndex = event.emitterIndex;
             notification.parentInstanceId = parentId;
-            notification.entityId = parentInstance->entityId;
-            notification.vfxAssetPath = vfxPath;
+            notification.entityId = parentEntityId;
+            notification.vfxAssetPath = typeConfig.vfxPath;
             events::EventDispatcher::instance().publish(notification);
         }
     }

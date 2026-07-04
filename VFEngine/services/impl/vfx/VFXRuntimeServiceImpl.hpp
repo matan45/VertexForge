@@ -66,6 +66,10 @@ namespace services
             uint32_t culledEmitters = 0;
             uint32_t throttledEmitters = 0;
             float vfxCullDistance = 0.0f;
+            uint32_t eventsThisFrame = 0;
+            uint32_t rawEventsThisFrame = 0;
+            uint32_t eventBudget = 0;
+            bool eventsDropped = false;
         };
         BudgetStats getBudgetStats() const;
     };

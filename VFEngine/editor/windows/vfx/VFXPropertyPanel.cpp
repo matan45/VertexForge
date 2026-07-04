@@ -1,6 +1,9 @@
 #include "VFXPropertyPanel.hpp"
 #include "imgui.h"
+#include <vfx/VFXEmitterSections.hpp>
 #include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <unordered_set>
 
 namespace editor::vfxeditor
@@ -178,10 +181,10 @@ namespace editor::vfxeditor
     {
         const std::string& label = prop.name;
         std::string key = label;
-        if (lastPropertyKey != key)
+        if (lastCurveKey != key)
         {
             curveDelegate.syncFrom(curve, prop.min, prop.max);
-            lastPropertyKey = key;
+            lastCurveKey = key;
         }
 
         ImGui::Text("%s", label.c_str());
@@ -204,11 +207,11 @@ namespace editor::vfxeditor
     void VFXPropertyPanel::drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label)
     {
         std::string key = label;
-        if (lastPropertyKey != key)
+        if (lastGradientKey != key)
         {
             gradientDelegate.syncFrom(gradient);
             gradientSelection = -1;
-            lastPropertyKey = key;
+            lastGradientKey = key;
         }
 
         ImGui::Text("%s", label.c_str());
@@ -268,109 +271,20 @@ namespace editor::vfxeditor
         if (lastSelectedNodeId != selectedNodeId)
         {
             lastSelectedNodeId = selectedNodeId;
-            lastPropertyKey.clear();
+            lastCurveKey.clear();
+            lastGradientKey.clear();
         }
 
         if (node->type == vfx::VFXNodeType::Emitter)
         {
-            static const std::unordered_set<std::string> handledProperties = {
-                "spawnRate", "lifetime", "startSize", "startVelocity",
-                "startColor", "looping", "texture",
-                "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
-                "flipbookRandomStart", "alphaClipThreshold", "additiveBlend", "meshPath",
-                "renderMode", "softParticleDistance", "stretchMultiplier",
-                "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
-                "uvScrollSpeedU", "uvScrollSpeedV",
-                "lightingInfluence", "ambientAmount", "normalMode",
-                "distortionEnabled", "distortionStrength", "distortionTexture"
-            };
-
+            // Core is always shown and cannot be removed; every other section is an
+            // opt-in "module" (see VFXEmitterSections.hpp), revealed via "Add Module".
             if (ImGui::CollapsingHeader("Core", ImGuiTreeNodeFlags_DefaultOpen))
                 drawCoreProperties(*node);
-            if (ImGui::CollapsingHeader("Flipbook"))
-                drawFlipbookProperties(*node);
-            if (ImGui::CollapsingHeader("Rendering"))
-                drawRenderingProperties(*node);
-            if (ImGui::CollapsingHeader("Ribbon"))
-                drawRibbonProperties(*node, 80.0f);
-            if (ImGui::CollapsingHeader("UV Scroll"))
-                drawUVScrollProperties(*node, 80.0f);
-            if (ImGui::CollapsingHeader("Bursts"))
-                drawBurstProperties(*node, 80.0f);
-            if (ImGui::CollapsingHeader("Events"))
-                drawEventsProperties(*node, 80.0f);
-            if (ImGui::CollapsingHeader("Lighting"))
-                drawLightingProperties(*node);
-            if (ImGui::CollapsingHeader("Collision"))
-                drawCollisionProperties(*node, 80.0f);
-            if (ImGui::CollapsingHeader("Distortion"))
-                drawDistortionProperties(*node);
 
-            if (ImGui::CollapsingHeader("Advanced"))
-            {
-                float labelWidth = 160.0f;
-                float inputWidth = 80.0f;
+            drawEmitterSections(*node);
+            drawAddModulePopup(*node);
 
-                for (auto& [propName, prop] : node->properties)
-                {
-                    if (handledProperties.count(propName)) continue;
-                    if (propName.rfind("flipbook", 0) == 0) continue;
-                    if (propName.rfind("event", 0) == 0) continue;
-                    if (propName.rfind("collision", 0) == 0) continue;
-                    if (propName.rfind("burst", 0) == 0) continue;
-
-                    std::string widgetId = "##adv" + propName + std::to_string(node->id);
-
-                    switch (prop.type)
-                    {
-                    case vfx::VFXPropertyType::Float: {
-                        float* val = std::get_if<float>(&prop.value);
-                        if (val) {
-                            ImGui::Text("%s", propName.c_str());
-                            ImGui::SameLine(labelWidth);
-                            ImGui::PushItemWidth(inputWidth);
-                            if (ImGui::DragFloat(widgetId.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
-                                notifyChanged();
-                            ImGui::PopItemWidth();
-                        }
-                        break;
-                    }
-                    case vfx::VFXPropertyType::Int: {
-                        int32_t* val = std::get_if<int32_t>(&prop.value);
-                        if (val) {
-                            ImGui::Text("%s", propName.c_str());
-                            ImGui::SameLine(labelWidth);
-                            ImGui::PushItemWidth(inputWidth);
-                            if (ImGui::DragInt(widgetId.c_str(), val, 1,
-                                    static_cast<int>(prop.min), static_cast<int>(prop.max)))
-                                notifyChanged();
-                            ImGui::PopItemWidth();
-                        }
-                        break;
-                    }
-                    case vfx::VFXPropertyType::Bool: {
-                        bool* val = std::get_if<bool>(&prop.value);
-                        if (val) {
-                            ImGui::Text("%s", propName.c_str());
-                            ImGui::SameLine(labelWidth);
-                            if (ImGui::Checkbox(widgetId.c_str(), val))
-                                notifyChanged();
-                        }
-                        break;
-                    }
-                    case vfx::VFXPropertyType::String: {
-                        std::string* val = std::get_if<std::string>(&prop.value);
-                        if (val) {
-                            ImGui::Text("%s", propName.c_str());
-                            ImGui::SameLine(labelWidth);
-                            ImGui::TextDisabled("%s", val->empty() ? "(none)" : val->c_str());
-                        }
-                        break;
-                    }
-                    default: break;
-                    }
-                }
-            }
             return;
         }
 
@@ -411,6 +325,20 @@ namespace editor::vfxeditor
                 if (gradient)
                 {
                     drawGradientEditor(*gradient, propName);
+                }
+            }
+            else if (prop.type == vfx::VFXPropertyType::Float)
+            {
+                // VK-1473: scalar modifier props (e.g. SizeBySpeed/ColorBySpeed speedMin/speedMax).
+                auto* val = std::get_if<float>(&prop.value);
+                if (val)
+                {
+                    ImGui::PushItemWidth(160.0f);
+                    if (ImGui::DragFloat(propName.c_str(), val, 0.1f, prop.min, prop.max, "%.2f"))
+                    {
+                        notifyChanged();
+                    }
+                    ImGui::PopItemWidth();
                 }
             }
         }

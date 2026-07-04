@@ -6,6 +6,8 @@
 #include <vfx/VFXShapeTypes.hpp>
 #include <vfx/VFXEventTypes.hpp>
 #include <vfx/VFXBurstTypes.hpp>
+#include <vfx/VFXBlendMode.hpp>
+#include <vfx/VFXOrientationMode.hpp>
 #include <vector>
 #include <glm/glm.hpp>
 #include <string>
@@ -24,6 +26,13 @@ namespace services
         glm::vec3 emitDirection{0.0f, 1.0f, 0.0f};
         std::string texturePath;
         bool looping = true;
+        float sizeVariance = 0.0f;
+        float lifetimeVariance = 0.0f;
+        float speedVariance = 0.0f;
+        float rotationVariance = 0.0f;
+        float angularVelocityVariance = 0.0f;
+        float colorValueVariance = 0.0f;
+        float alphaVariance = 0.0f;
 
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;
@@ -34,9 +43,10 @@ namespace services
         int flipbookColumns = 1;
         float flipbookFrameRate = 0.0f;
         bool flipbookRandomStart = false;
+        bool flipbookFrameBlend = false;
 
         float alphaClipThreshold = 0.1f;
-        bool additiveBlend = false;
+        ::vfx::VFXBlendMode blendMode = ::vfx::VFXBlendMode::Alpha; // VK-1472 (replaces additiveBlend bool)
 
         int renderMode = 0;
         float softParticleDistance = 0.0f;
@@ -44,9 +54,20 @@ namespace services
 
         std::string meshPath;
 
+        // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
+        ::vfx::VFXOrientationMode meshOrientationMode = ::vfx::VFXOrientationMode::VelocityForward;
+        glm::vec3 meshOrientationAxis{0.0f, 1.0f, 0.0f};
+        float meshOrientationSpinRate = 1.0f;
+
         int maxTrailPoints = 64;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
+
+        // VK-1474: over-trail width curve + tail gradient (present only when authored).
+        ::vfx::VFXCurve ribbonWidthCurve;
+        ::vfx::VFXGradient ribbonTailGradient;
+        bool hasRibbonWidthCurve = false;
+        bool hasRibbonTailGradient = false;
 
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
@@ -54,6 +75,7 @@ namespace services
         ::vfx::VFXEventConfig events;
 
         // Lighting
+        float emissiveIntensity = 1.0f;
         float lightingInfluence = 0.0f;
         int normalMode = 0;
         float ambientAmount = 0.3f;

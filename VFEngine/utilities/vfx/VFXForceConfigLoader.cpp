@@ -1,4 +1,5 @@
 #include "VFXForceConfigLoader.hpp"
+#include "VFXKillVolume.hpp"
 #include <unordered_set>
 #include <algorithm>
 
@@ -91,6 +92,14 @@ namespace vfx
             return extractTurbulenceConfig(node);
         case VFXNodeType::ForceVortex:
             return extractVortexConfig(node);
+        case VFXNodeType::ForceDrag:
+            return extractDragConfig(node);
+        case VFXNodeType::ForcePointAttractor:
+            return extractPointAttractorConfig(node);
+        case VFXNodeType::ForceCurlNoise:
+            return extractCurlNoiseConfig(node);
+        case VFXNodeType::ForceKillVolume:
+            return extractKillVolumeConfig(node);
         default:
             return GravityForceConfig{};
         }
@@ -101,6 +110,20 @@ namespace vfx
         GravityForceConfig config;
         config.direction = getVec3(node, "direction", ForceDefaults::GRAVITY_DIRECTION);
         config.strength = getFloat(node, "strength", ForceDefaults::GRAVITY_STRENGTH);
+        config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
+        return config;
+    }
+
+    KillVolumeForceConfig VFXForceConfigLoader::extractKillVolumeConfig(const VFXNode& node)
+    {
+        KillVolumeForceConfig config;
+        config.shape = stringToKillVolumeShape(getString(node, "shape", ForceDefaults::KILLVOLUME_SHAPE));
+        config.center = getVec3(node, "center", ForceDefaults::KILLVOLUME_CENTER);
+        config.normal = sanitizeKillVolumeNormal(getVec3(node, "normal", ForceDefaults::KILLVOLUME_NORMAL));
+        config.radius = std::max(0.0f, getFloat(node, "radius", ForceDefaults::KILLVOLUME_RADIUS));
+        config.halfExtents = sanitizeKillVolumeHalfExtents(
+            getVec3(node, "halfExtents", ForceDefaults::KILLVOLUME_HALF_EXTENTS));
+        config.invert = getBool(node, "invert", ForceDefaults::KILLVOLUME_INVERT);
         config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
         return config;
     }
@@ -138,6 +161,38 @@ namespace vfx
         return config;
     }
 
+    DragForceConfig VFXForceConfigLoader::extractDragConfig(const VFXNode& node)
+    {
+        DragForceConfig config;
+        config.linearCoeff = getFloat(node, "linearCoeff", ForceDefaults::DRAG_LINEAR_COEFF);
+        config.quadraticCoeff = getFloat(node, "quadraticCoeff", ForceDefaults::DRAG_QUADRATIC_COEFF);
+        config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
+        return config;
+    }
+
+    PointAttractorForceConfig VFXForceConfigLoader::extractPointAttractorConfig(const VFXNode& node)
+    {
+        PointAttractorForceConfig config;
+        config.position = getVec3(node, "position", ForceDefaults::ATTRACTOR_POSITION);
+        config.strength = getFloat(node, "strength", ForceDefaults::ATTRACTOR_STRENGTH);
+        config.radius = getFloat(node, "radius", ForceDefaults::ATTRACTOR_RADIUS);
+        config.falloff = getFloat(node, "falloff", ForceDefaults::ATTRACTOR_FALLOFF);
+        config.killAtCenter = getBool(node, "killAtCenter", ForceDefaults::ATTRACTOR_KILL_AT_CENTER);
+        config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
+        return config;
+    }
+
+    CurlNoiseForceConfig VFXForceConfigLoader::extractCurlNoiseConfig(const VFXNode& node)
+    {
+        CurlNoiseForceConfig config;
+        config.strength = getFloat(node, "strength", ForceDefaults::CURLNOISE_STRENGTH);
+        config.frequency = getFloat(node, "frequency", ForceDefaults::CURLNOISE_FREQUENCY);
+        config.scrollSpeed = getFloat(node, "scrollSpeed", ForceDefaults::CURLNOISE_SCROLL_SPEED);
+        config.octaves = std::clamp(getInt(node, "octaves", ForceDefaults::CURLNOISE_OCTAVES), 1, 4);
+        config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
+        return config;
+    }
+
     float VFXForceConfigLoader::getFloat(const VFXNode& node, const std::string& propName, float defaultValue)
     {
         auto it = node.properties.find(propName);
@@ -169,6 +224,18 @@ namespace vfx
             return defaultValue;
 
         if (auto* val = std::get_if<bool>(&it->second.value))
+            return *val;
+
+        return defaultValue;
+    }
+
+    std::string VFXForceConfigLoader::getString(const VFXNode& node, const std::string& propName, const std::string& defaultValue)
+    {
+        auto it = node.properties.find(propName);
+        if (it == node.properties.end())
+            return defaultValue;
+
+        if (auto* val = std::get_if<std::string>(&it->second.value))
             return *val;
 
         return defaultValue;

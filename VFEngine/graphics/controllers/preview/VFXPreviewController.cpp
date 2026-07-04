@@ -21,6 +21,63 @@
 
 namespace controllers
 {
+    namespace
+    {
+        render::vfx::VFXEmitterConfig buildEmitterConfig(const VFXPreviewParams& params)
+        {
+            render::vfx::VFXEmitterConfig config;
+            config.spawnRate = params.spawnRate;
+            config.lifetime = params.lifetime;
+            config.startSize = params.startSize;
+            config.startSpeed = params.startSpeed;
+            config.startColor = params.startColor;
+            config.emitDirection = params.emitDirection;
+            config.texturePath = params.texturePath;
+            config.looping = params.looping;
+            config.sizeVariance = params.sizeVariance;
+            config.lifetimeVariance = params.lifetimeVariance;
+            config.speedVariance = params.speedVariance;
+            config.rotationVariance = params.rotationVariance;
+            config.angularVelocityVariance = params.angularVelocityVariance;
+            config.colorValueVariance = params.colorValueVariance;
+            config.alphaVariance = params.alphaVariance;
+            config.modifiers = params.modifiers;
+            config.forces = params.forces;
+            config.shape = params.shape;
+            config.bursts = params.bursts;
+            config.flipbookRows = params.flipbookRows;
+            config.flipbookColumns = params.flipbookColumns;
+            config.flipbookFrameRate = params.flipbookFrameRate;
+            config.flipbookRandomStart = params.flipbookRandomStart;
+            config.flipbookFrameBlend = params.flipbookFrameBlend;
+            config.alphaClipThreshold = params.alphaClipThreshold;
+            config.blendMode = params.blendMode;
+            config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
+            config.softParticleDistance = params.softParticleDistance;
+            config.stretchMultiplier = params.stretchMultiplier;
+            config.meshPath = params.meshPath;
+            config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
+            config.ribbonWidth = params.ribbonWidth;
+            config.ribbonMinDistance = params.ribbonMinDistance;
+            config.ribbonWidthCurve = params.ribbonWidthCurve;
+            config.ribbonTailGradient = params.ribbonTailGradient;
+            config.hasRibbonWidthCurve = params.hasRibbonWidthCurve;
+            config.hasRibbonTailGradient = params.hasRibbonTailGradient;
+            config.uvScrollSpeedU = params.uvScrollSpeedU;
+            config.uvScrollSpeedV = params.uvScrollSpeedV;
+            config.events = params.events;
+            config.emissiveIntensity = params.emissiveIntensity;
+            config.collisionEnabled = params.collisionEnabled;
+            config.collisionBounce = params.collisionBounce;
+            config.collisionFriction = params.collisionFriction;
+            config.collisionLifetimeLoss = params.collisionLifetimeLoss;
+            config.lightingInfluence = params.lightingInfluence;
+            config.normalMode = params.normalMode;
+            config.ambientAmount = params.ambientAmount;
+            return config;
+        }
+    }
+
     VFXPreviewController::VFXPreviewController()
         : swapChain{*core::VulkanContext::getSwapChain()}
         , device{*core::VulkanContext::getDevice()}
@@ -61,30 +118,7 @@ namespace controllers
         ribbonPipeline = std::make_unique<render::vfx::VFXRibbonPreviewPipeline>(device, swapChain, offscreenResources);
         ribbonPipeline->init();
 
-        render::vfx::VFXEmitterConfig config;
-        config.spawnRate = currentParams.spawnRate;
-        config.lifetime = currentParams.lifetime;
-        config.startSize = currentParams.startSize;
-        config.startSpeed = currentParams.startSpeed;
-        config.startColor = currentParams.startColor;
-        config.emitDirection = currentParams.emitDirection;
-        config.texturePath = currentParams.texturePath;
-        config.looping = currentParams.looping;
-        config.modifiers = currentParams.modifiers;
-        config.forces = currentParams.forces;
-        config.shape = currentParams.shape;
-        config.flipbookRows = currentParams.flipbookRows;
-        config.flipbookColumns = currentParams.flipbookColumns;
-        config.flipbookFrameRate = currentParams.flipbookFrameRate;
-        config.flipbookRandomStart = currentParams.flipbookRandomStart;
-        config.alphaClipThreshold = currentParams.alphaClipThreshold;
-        config.additiveBlend = currentParams.additiveBlend;
-        config.renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
-        config.softParticleDistance = currentParams.softParticleDistance;
-        config.stretchMultiplier = currentParams.stretchMultiplier;
-        config.maxTrailPoints = static_cast<uint32_t>(currentParams.maxTrailPoints);
-        config.ribbonWidth = currentParams.ribbonWidth;
-        config.ribbonMinDistance = currentParams.ribbonMinDistance;
+        render::vfx::VFXEmitterConfig config = buildEmitterConfig(currentParams);
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
@@ -95,12 +129,15 @@ namespace controllers
         fbConfig.rows = currentParams.flipbookRows;
         fbConfig.columns = currentParams.flipbookColumns;
         fbConfig.alphaClipThreshold = currentParams.alphaClipThreshold;
-        fbConfig.additiveBlend = currentParams.additiveBlend;
+        fbConfig.blendMode = currentParams.blendMode;
         fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(currentParams.renderMode);
         fbConfig.stretchMultiplier = currentParams.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(currentParams.modifiers);
+        fbConfig.emissiveIntensity = currentParams.emissiveIntensity;
         fbConfig.uvScrollSpeedU = currentParams.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = currentParams.uvScrollSpeedV;
+        fbConfig.frameBlend = currentParams.flipbookFrameBlend;
+        fbConfig.frameRate = currentParams.flipbookFrameRate;
         pipeline->setFlipbookConfig(fbConfig);
 
         if (!currentParams.meshPath.empty())
@@ -111,15 +148,19 @@ namespace controllers
         {
             meshPipeline->setTexture(currentParams.texturePath);
         }
-        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend, fbConfig.glowColor,
+        meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.blendMode, fbConfig.glowColor,
+                                          currentParams.emissiveIntensity,
                                           currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
+        meshPipeline->setOrientationConfig(::vfx::orientationModeToGpuValue(currentParams.meshOrientationMode), // VK-1476
+                                           currentParams.meshOrientationAxis, currentParams.meshOrientationSpinRate);
 
         if (!currentParams.texturePath.empty())
         {
             ribbonPipeline->setTexture(currentParams.texturePath);
         }
-        ribbonPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.additiveBlend,
+        ribbonPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.blendMode,
                                             currentParams.ribbonWidth, fbConfig.glowColor,
+                                            currentParams.emissiveIntensity,
                                             currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
 
         lastExtent = swapChain.getSwapchainExtent();
@@ -197,39 +238,7 @@ namespace controllers
 
         if (particleSystem)
         {
-            render::vfx::VFXEmitterConfig config;
-            config.spawnRate = params.spawnRate;
-            config.lifetime = params.lifetime;
-            config.startSize = params.startSize;
-            config.startSpeed = params.startSpeed;
-            config.startColor = params.startColor;
-            config.emitDirection = params.emitDirection;
-            config.texturePath = params.texturePath;
-            config.looping = params.looping;
-            config.modifiers = params.modifiers;
-            config.forces = params.forces;
-            config.shape = params.shape;
-            config.bursts = params.bursts;
-            config.flipbookRows = params.flipbookRows;
-            config.flipbookColumns = params.flipbookColumns;
-            config.flipbookFrameRate = params.flipbookFrameRate;
-            config.flipbookRandomStart = params.flipbookRandomStart;
-            config.alphaClipThreshold = params.alphaClipThreshold;
-            config.additiveBlend = params.additiveBlend;
-            config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
-            config.softParticleDistance = params.softParticleDistance;
-            config.stretchMultiplier = params.stretchMultiplier;
-            config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
-            config.ribbonWidth = params.ribbonWidth;
-            config.ribbonMinDistance = params.ribbonMinDistance;
-            config.events = params.events;
-            config.collisionEnabled = params.collisionEnabled;
-            config.collisionBounce = params.collisionBounce;
-            config.collisionFriction = params.collisionFriction;
-            config.collisionLifetimeLoss = params.collisionLifetimeLoss;
-            config.lightingInfluence = params.lightingInfluence;
-            config.normalMode = params.normalMode;
-            config.ambientAmount = params.ambientAmount;
+            render::vfx::VFXEmitterConfig config = buildEmitterConfig(params);
             particleSystem->setEmitterConfig(config);
         }
 
@@ -237,12 +246,15 @@ namespace controllers
         fbConfig.rows = params.flipbookRows;
         fbConfig.columns = params.flipbookColumns;
         fbConfig.alphaClipThreshold = params.alphaClipThreshold;
-        fbConfig.additiveBlend = params.additiveBlend;
+        fbConfig.blendMode = params.blendMode;
         fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
         fbConfig.stretchMultiplier = params.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
+        fbConfig.emissiveIntensity = params.emissiveIntensity;
         fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = params.uvScrollSpeedV;
+        fbConfig.frameBlend = params.flipbookFrameBlend;
+        fbConfig.frameRate = params.flipbookFrameRate;
 
         if (pipeline && pipeline->isInitialized())
         {
@@ -254,15 +266,19 @@ namespace controllers
         {
             meshPipeline->setMesh(params.meshPath);
             meshPipeline->setTexture(params.texturePath);
-            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, fbConfig.glowColor,
+            meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.blendMode, fbConfig.glowColor,
+                                              params.emissiveIntensity,
                                               params.uvScrollSpeedU, params.uvScrollSpeedV);
+            meshPipeline->setOrientationConfig(::vfx::orientationModeToGpuValue(params.meshOrientationMode), // VK-1476
+                                                params.meshOrientationAxis, params.meshOrientationSpinRate);
         }
 
         if (ribbonPipeline && ribbonPipeline->isInitialized())
         {
             ribbonPipeline->setTexture(params.texturePath);
-            ribbonPipeline->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
+            ribbonPipeline->setRenderingConfig(params.alphaClipThreshold, params.blendMode,
                                                 params.ribbonWidth, fbConfig.glowColor,
+                                                params.emissiveIntensity,
                                                 params.uvScrollSpeedU, params.uvScrollSpeedV);
         }
     }
@@ -585,39 +601,7 @@ namespace controllers
     void VFXPreviewController::configureSystemFromParams(render::vfx::VFXParticleSystem& system,
                                                          const VFXPreviewParams& params) const
     {
-        render::vfx::VFXEmitterConfig config;
-        config.spawnRate = params.spawnRate;
-        config.lifetime = params.lifetime;
-        config.startSize = params.startSize;
-        config.startSpeed = params.startSpeed;
-        config.startColor = params.startColor;
-        config.emitDirection = params.emitDirection;
-        config.texturePath = params.texturePath;
-        config.looping = params.looping;
-        config.modifiers = params.modifiers;
-        config.forces = params.forces;
-        config.shape = params.shape;
-        config.bursts = params.bursts;
-        config.flipbookRows = params.flipbookRows;
-        config.flipbookColumns = params.flipbookColumns;
-        config.flipbookFrameRate = params.flipbookFrameRate;
-        config.flipbookRandomStart = params.flipbookRandomStart;
-        config.alphaClipThreshold = params.alphaClipThreshold;
-        config.additiveBlend = params.additiveBlend;
-        config.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
-        config.softParticleDistance = params.softParticleDistance;
-        config.stretchMultiplier = params.stretchMultiplier;
-        config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
-        config.ribbonWidth = params.ribbonWidth;
-        config.ribbonMinDistance = params.ribbonMinDistance;
-        config.events = params.events;
-        config.collisionEnabled = params.collisionEnabled;
-        config.collisionBounce = params.collisionBounce;
-        config.collisionFriction = params.collisionFriction;
-        config.collisionLifetimeLoss = params.collisionLifetimeLoss;
-        config.lightingInfluence = params.lightingInfluence;
-        config.normalMode = params.normalMode;
-        config.ambientAmount = params.ambientAmount;
+        render::vfx::VFXEmitterConfig config = buildEmitterConfig(params);
         system.setEmitterConfig(config);
     }
 
@@ -645,12 +629,15 @@ namespace controllers
         fbConfig.rows = params.flipbookRows;
         fbConfig.columns = params.flipbookColumns;
         fbConfig.alphaClipThreshold = params.alphaClipThreshold;
-        fbConfig.additiveBlend = params.additiveBlend;
+        fbConfig.blendMode = params.blendMode;
         fbConfig.renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
         fbConfig.stretchMultiplier = params.stretchMultiplier;
         fbConfig.glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(params.modifiers);
+        fbConfig.emissiveIntensity = params.emissiveIntensity;
         fbConfig.uvScrollSpeedU = params.uvScrollSpeedU;
         fbConfig.uvScrollSpeedV = params.uvScrollSpeedV;
+        fbConfig.frameBlend = params.flipbookFrameBlend;
+        fbConfig.frameRate = params.flipbookFrameRate;
 
         if (renderMode == render::vfx::VFXRenderMode::Ribbon)
         {
@@ -658,8 +645,9 @@ namespace controllers
             bundle.ribbon->init();
             if (!params.texturePath.empty())
                 bundle.ribbon->setTexture(params.texturePath);
-            bundle.ribbon->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend,
+            bundle.ribbon->setRenderingConfig(params.alphaClipThreshold, params.blendMode,
                                                params.ribbonWidth, fbConfig.glowColor,
+                                               params.emissiveIntensity,
                                                params.uvScrollSpeedU, params.uvScrollSpeedV);
             bundle.ribbon->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
         }
@@ -673,8 +661,11 @@ namespace controllers
                 bundle.mesh->setMesh(params.meshPath);
             if (!params.texturePath.empty())
                 bundle.mesh->setTexture(params.texturePath);
-            bundle.mesh->setRenderingConfig(params.alphaClipThreshold, params.additiveBlend, fbConfig.glowColor,
+            bundle.mesh->setRenderingConfig(params.alphaClipThreshold, params.blendMode, fbConfig.glowColor,
+                                            params.emissiveIntensity,
                                             params.uvScrollSpeedU, params.uvScrollSpeedV);
+            bundle.mesh->setOrientationConfig(::vfx::orientationModeToGpuValue(params.meshOrientationMode), // VK-1476
+                                              params.meshOrientationAxis, params.meshOrientationSpinRate);
             bundle.mesh->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
         }
         else

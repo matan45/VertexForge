@@ -1,6 +1,7 @@
 #include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
 #include "VFXAsset.hpp"
+#include "VFXEmitterSections.hpp"
 #include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -290,6 +291,9 @@ namespace vfx
         }
         j["properties"] = propsJson;
 
+        // Emitter UI module visibility (additive; runtime ignores it).
+        j["enabledSections"] = node.enabledSections;
+
         return j;
     }
 
@@ -312,6 +316,17 @@ namespace vfx
             {
                 node.properties[key] = deserializeProperty(propJson, key);
             }
+        }
+
+        // Emitter UI module visibility. Present key (incl. empty array) is authoritative;
+        // absence means a pre-existing asset -> auto-detect which sections are configured.
+        if (j.contains("enabledSections") && j["enabledSections"].is_array())
+        {
+            node.enabledSections = j["enabledSections"].get<std::vector<std::string>>();
+        }
+        else if (node.type == VFXNodeType::Emitter)
+        {
+            autoDetectEnabledSections(node);
         }
 
         return node;

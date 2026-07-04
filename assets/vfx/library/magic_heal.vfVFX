@@ -47,6 +47,20 @@
                 }
             },
             {
+                "id": 5,
+                "type": "ForcePointAttractor",
+                "name": "Point Attractor",
+                "position": [730.0, 100.0],
+                "properties": {
+                    "position": { "type": "Vec3", "value": [0.0, 0.5, 0.0] },
+                    "strength": { "type": "Float", "value": 3.0 },
+                    "radius": { "type": "Float", "value": 3.0 },
+                    "falloff": { "type": "Float", "value": 1.5 },
+                    "killAtCenter": { "type": "Bool", "value": false },
+                    "localSpace": { "type": "Bool", "value": false }
+                }
+            },
+            {
                 "id": 10,
                 "type": "Shape",
                 "name": "Sphere",
@@ -62,14 +76,15 @@
                 "id": 2,
                 "type": "OutSystem",
                 "name": "Output",
-                "position": [730.0, 200.0],
+                "position": [930.0, 200.0],
                 "properties": {}
             }
         ],
         "links": [
             { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
             { "id": 2, "sourceNode": 3, "targetNode": 4, "sourcePin": "Output", "targetPin": "Input" },
-            { "id": 3, "sourceNode": 4, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 3, "sourceNode": 4, "targetNode": 5, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 5, "sourceNode": 5, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" },
             { "id": 4, "sourceNode": 10, "targetNode": 1, "sourcePin": "Output", "targetPin": "Shape" }
         ]
     }

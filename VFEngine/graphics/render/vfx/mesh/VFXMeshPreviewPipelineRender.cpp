@@ -129,17 +129,28 @@ namespace render::vfx
         vfLogInfo("VFXMeshPreviewPipeline: Mesh set: {} ({} indices)", meshPath, meshIndexCount);
     }
 
-    void VFXMeshPreviewPipeline::setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
+    void VFXMeshPreviewPipeline::setRenderingConfig(float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
                                                        const glm::vec3& glowColor,
+                                                       float emissiveIntensity,
                                                        float uvScrollSpeedU, float uvScrollSpeedV)
     {
         pushConstants.alphaClipThreshold = alphaClipThreshold;
-        pushConstants.blendMode = additiveBlend ? 1u : 0u;
+        pushConstants.blendMode = ::vfx::blendModeToGpuValue(blendMode);
         pushConstants.glowColorR = glowColor.r;
         pushConstants.glowColorG = glowColor.g;
         pushConstants.glowColorB = glowColor.b;
+        pushConstants.emissiveIntensity = emissiveIntensity;
         pushConstants.uvScrollSpeedU = uvScrollSpeedU;
         pushConstants.uvScrollSpeedV = uvScrollSpeedV;
+    }
+
+    void VFXMeshPreviewPipeline::setOrientationConfig(uint32_t mode, const glm::vec3& axis, float spinRate)
+    {
+        pushConstants.meshOrientationMode = mode;
+        pushConstants.orientAxisX = axis.x;
+        pushConstants.orientAxisY = axis.y;
+        pushConstants.orientAxisZ = axis.z;
+        pushConstants.meshOrientationSpinRate = spinRate;
     }
 
     void VFXMeshPreviewPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
@@ -174,7 +185,11 @@ namespace render::vfx
             return;
         }
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        // VK-1472: Multiply blend selects the dedicated Multiply pipeline (shares the layout,
+        // so the descriptor set + vertex/index bindings below stay valid); the other modes
+        // share the premultiplied graphicsPipeline.
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+            (pushConstants.blendMode == 3u && multiplyPipeline) ? multiplyPipeline : graphicsPipeline);
 
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                           0, descriptorSet, nullptr);

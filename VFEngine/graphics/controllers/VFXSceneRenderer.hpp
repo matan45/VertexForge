@@ -76,6 +76,9 @@ namespace controllers
         bool autoDestroy = false;
         uint32_t seed = 0; // VK-1451: 0 => random seed chosen once at creation
         bool poolable = false; // VK-1453: opt into dormant-instance reuse (fire-and-forget only)
+        std::optional<glm::vec3> injectedEmitterVelocity;
+        std::optional<glm::vec4> startColorMultiplier;
+        std::optional<float> startSizeMultiplier;
     };
 
     struct VFXRuntimeInstance
@@ -106,6 +109,7 @@ namespace controllers
         bool burstClampWarned = false;
         bool autoDestroy = false;
         uint32_t seed = 0; // VK-1451: stable per-instance RNG seed (set once at creation)
+        std::optional<glm::vec3> injectedEmitterVelocity;
 
         // VK-1453 (Phase 4) — pooling + scalability per-instance state.
         bool poolable = false;                // opt into dormant reuse (fire-and-forget only)
@@ -160,6 +164,7 @@ namespace controllers
 
         std::vector<render::vfx::GPUVFXEvent> lastFrameEvents;
         uint32_t lastFrameEventCount = 0;
+        uint32_t lastFrameRawEventCount = 0;
 
         static constexpr uint32_t MAX_SUB_EMITTERS_PER_PARENT = 32;
 
@@ -319,6 +324,10 @@ namespace controllers
             uint32_t culledEmitters = 0;    // emitters skipped by frustum/distance cull this frame
             uint32_t throttledEmitters = 0; // emitters whose sim was skipped by updateInterval
             float vfxCullDistance = 0.0f;   // active max VFX draw distance (0 => unlimited)
+            uint32_t eventsThisFrame = 0;
+            uint32_t rawEventsThisFrame = 0;
+            uint32_t eventBudget = 0;
+            bool eventsDropped = false;
         };
 
         VFXBudgetStats getBudgetStats() const;

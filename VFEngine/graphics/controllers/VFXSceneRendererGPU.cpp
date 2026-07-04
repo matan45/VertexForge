@@ -12,7 +12,10 @@
 #include "../core/RenderManager.hpp"
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
+#include "vfx/VFXKillVolume.hpp"
+#include "vfx/VFXRuntimeDiagnostics.hpp"
 #include "vfx/VFXShapeTypes.hpp"
+#include "vfx/VFXOrientationMode.hpp"
 #include "print/Log.hpp"
 #include <random>
 #include <type_traits>
@@ -93,6 +96,8 @@ namespace controllers
             gpuRibbonPipeline->updateRibbonBuffers(
                 gpuBufferManager->getRibbonRingBuffer(), gpuBufferManager->getRibbonRingBufferSize(),
                 gpuBufferManager->getRibbonHeadBuffer(), gpuBufferManager->getRibbonHeadBufferSize());
+            gpuRibbonPipeline->updateLutBuffer( // VK-1474: ribbon width curve / tail gradient
+                gpuBufferManager->getLUTBuffer(), gpuBufferManager->getLUTBufferSize());
 
             emitterPool = std::make_unique<render::vfx::VFXEmitterPool>(*gpuBufferManager, 32);
             emitterPool->warmUp();
@@ -161,6 +166,13 @@ namespace controllers
         }
 
         lastFrameEvents = gpuBufferManager->readbackEvents(lastFrameEventCount);
+        lastFrameRawEventCount = gpuBufferManager->getLastRawEventCount();
+        if (lastFrameRawEventCount > render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME)
+        {
+            vfx::VFXRuntimeDiagnostics::instance().report(
+                "VFX events",
+                "event buffer saturated: >256/frame, child spawns dropped");
+        }
         processEvents();
         cleanupFinishedSubEmitters(deltaTime);
 
@@ -250,7 +262,12 @@ namespace controllers
             if (instance.config.renderMode == render::vfx::VFXRenderMode::MeshParticle && gpuMeshPipeline)
                 gpuConfig.drawIndexCount = gpuMeshPipeline->getEmitterMeshIndexCount(instance.gpuEmitterIndex);
 
-            auto lutResult = render::vfx::VFXLUTBaker::bake(instance.config.modifiers);
+            render::vfx::VFXLUTBaker::RibbonLUTInputs ribbonLutInputs;
+            if (instance.config.hasRibbonWidthCurve)
+                ribbonLutInputs.widthCurve = &instance.config.ribbonWidthCurve;
+            if (instance.config.hasRibbonTailGradient)
+                ribbonLutInputs.tailGradient = &instance.config.ribbonTailGradient;
+            auto lutResult = render::vfx::VFXLUTBaker::bake(instance.config.modifiers, ribbonLutInputs);
             if (lutResult.lutFlags != 0)
             {
                 gpuBufferManager->updateEmitterLUT(instance.gpuEmitterIndex, lutResult.data);
@@ -365,6 +382,18 @@ namespace controllers
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::GlowOverLifetime;
                 }
+                else if constexpr (std::is_same_v<T, ::vfx::SizeBySpeedConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SizeBySpeed;
+                    gpuConfig.modifierSpeedRanges.x = mod.speedMin;
+                    gpuConfig.modifierSpeedRanges.y = mod.speedMax;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::ColorBySpeedConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::ColorBySpeed;
+                    gpuConfig.modifierSpeedRanges.z = mod.speedMin;
+                    gpuConfig.modifierSpeedRanges.w = mod.speedMax;
+                }
             }, modifier);
         }
 
@@ -374,6 +403,11 @@ namespace controllers
         gpuConfig.turbulence = glm::vec4(0.0f);
         gpuConfig.vortexAxis = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
         gpuConfig.vortexCenter = glm::vec4(0.0f);
+        gpuConfig.attractorParams = glm::vec4(0.0f);
+        gpuConfig.dragAttractorExtra = glm::vec4(0.0f);
+        gpuConfig.curlNoiseParams = glm::vec4(0.0f);
+        gpuConfig.killVolumeParams0 = glm::vec4(0.0f);
+        gpuConfig.killVolumeParams1 = glm::vec4(0.0f);
 
         for (const auto& force : cpuConfig.forces.forces)
         {
@@ -400,6 +434,45 @@ namespace controllers
                     gpuConfig.modifierFlags |= render::vfx::ForceFlags::Vortex;
                     gpuConfig.vortexAxis = glm::vec4(glm::normalize(f.axis), f.strength);
                     gpuConfig.vortexCenter = glm::vec4(f.center, f.radialPull);
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::DragForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Drag;
+                    gpuConfig.dragAttractorExtra.x = f.linearCoeff;
+                    gpuConfig.dragAttractorExtra.y = f.quadraticCoeff;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::PointAttractorForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Attractor;
+                    if (f.killAtCenter)
+                        gpuConfig.modifierFlags |= render::vfx::ForceFlags::AttractorKill;
+                    gpuConfig.attractorParams = glm::vec4(f.position, f.strength);
+                    gpuConfig.dragAttractorExtra.z = f.radius;
+                    gpuConfig.dragAttractorExtra.w = f.falloff;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::CurlNoiseForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::CurlNoise;
+                    gpuConfig.curlNoiseParams = glm::vec4(f.strength, f.frequency, f.scrollSpeed, static_cast<float>(f.octaves));
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::KillVolumeForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::KillVolume;
+                    gpuConfig.killVolumeParams0 = glm::vec4(f.center, std::max(f.radius, 0.0f));
+
+                    glm::vec3 axisOrExtents(0.0f);
+                    if (f.shape == ::vfx::KillVolumeShape::Plane)
+                        axisOrExtents = ::vfx::sanitizeKillVolumeNormal(f.normal);
+                    else if (f.shape == ::vfx::KillVolumeShape::Box)
+                        axisOrExtents = ::vfx::sanitizeKillVolumeHalfExtents(f.halfExtents);
+
+                    uint32_t packed = static_cast<uint32_t>(f.shape);
+                    if (f.invert)
+                        packed |= 4u;
+                    if (f.space == ::vfx::ForceSpace::Local)
+                        packed |= 8u;
+
+                    gpuConfig.killVolumeParams1 = glm::vec4(axisOrExtents, static_cast<float>(packed));
                 }
             }, force);
         }
@@ -428,6 +501,8 @@ namespace controllers
         gpuConfig.flipbookFrameRate = cpuConfig.flipbookFrameRate;
         if (cpuConfig.flipbookRandomStart)
             gpuConfig.modifierFlags |= render::vfx::FlipbookFlags::RandomStart;
+        if (cpuConfig.flipbookFrameBlend)
+            gpuConfig.modifierFlags |= render::vfx::FlipbookFlags::FrameBlend;
 
         gpuConfig.renderMode = static_cast<uint32_t>(cpuConfig.renderMode);
         gpuConfig.softParticleDistance = cpuConfig.softParticleDistance;
@@ -449,6 +524,22 @@ namespace controllers
         gpuConfig.ambientAmount = cpuConfig.ambientAmount;
         gpuConfig.distortionEnabled = cpuConfig.distortionEnabled ? 1u : 0u;
         gpuConfig.distortionStrength = cpuConfig.distortionStrength;
+        gpuConfig.sizeVariance = cpuConfig.sizeVariance;
+        gpuConfig.lifetimeVariance = cpuConfig.lifetimeVariance;
+        gpuConfig.speedVariance = cpuConfig.speedVariance;
+        gpuConfig.rotationVariance = cpuConfig.rotationVariance;
+        gpuConfig.angularVelocityVariance = cpuConfig.angularVelocityVariance;
+        gpuConfig.colorValueVariance = cpuConfig.colorValueVariance;
+        gpuConfig.alphaVariance = cpuConfig.alphaVariance;
+        gpuConfig.emissiveIntensity = cpuConfig.emissiveIntensity;
+
+        // VK-1476 mesh orientation. Guard a zero/degenerate axis so the shader's
+        // normalize can never produce NaN (axis-lock about a valid default axis).
+        gpuConfig.meshOrientationMode = ::vfx::orientationModeToGpuValue(cpuConfig.meshOrientationMode);
+        glm::vec3 orientAxis = cpuConfig.meshOrientationAxis;
+        orientAxis = (glm::length(orientAxis) < 1e-6f) ? glm::vec3(0.0f, 1.0f, 0.0f)
+                                                       : glm::normalize(orientAxis);
+        gpuConfig.meshOrientationParams = glm::vec4(orientAxis, cpuConfig.meshOrientationSpinRate);
 
         return gpuConfig;
     }
@@ -459,8 +550,9 @@ namespace controllers
         render::vfx::GPUEmitterState gpuState{};
         gpuState.worldTransform = instance.worldTransform;
         gpuState.prevWorldTransform = instance.prevWorldTransform;
-        gpuState.emitterVelocityAndInherit = glm::vec4(
-            instance.emitterVelocity, instance.config.inheritVelocityRatio);
+        gpuState.emitterVelocityAndInherit = instance.injectedEmitterVelocity.has_value()
+            ? glm::vec4(instance.injectedEmitterVelocity.value(), 1.0f)
+            : glm::vec4(instance.emitterVelocity, instance.config.inheritVelocityRatio);
         gpuState.particleOffset = instance.gpuParticleOffset;
         gpuState.maxParticles = instance.gpuParticleCount;
         gpuState.activeCount = 0;

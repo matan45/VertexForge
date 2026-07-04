@@ -11,6 +11,8 @@
 #include "vfx/VFXEventTypes.hpp"
 #include "vfx/VFXBurstTypes.hpp"
 #include "vfx/VFXScalability.hpp"
+#include "vfx/VFXBlendMode.hpp"
+#include "vfx/VFXOrientationMode.hpp"
 
 namespace render::vfx
 {
@@ -41,6 +43,9 @@ namespace render::vfx
 
         uint32_t spawnSeed = 0;
         float glowIntensity = 0.0f;
+        float angularVelocity = 0.0f;
+        float colorValueMult = 1.0f;
+        float alphaMult = 1.0f;
     };
 
     struct VFXInstanceData
@@ -52,6 +57,13 @@ namespace render::vfx
         float rotation;
         float flipbookFrameIndex;
         float glowIntensity;
+        // VK-1476: appended for the mesh preview's orientation modes. The shared 6-attr
+        // getAttributeDescriptions() below is deliberately NOT extended — billboard/scene
+        // preview pipelines ignore these trailing bytes; only the mesh preview pipeline
+        // binds them (as instance attributes at locations 8/9/10).
+        glm::vec3 velocity{0.0f};
+        uint32_t spawnSeed = 0;
+        float age = 0.0f; // seconds since spawn (matches runtime GPUParticle.lifetime)
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -220,6 +232,15 @@ namespace render::vfx
         // Fraction of the emitter's own world velocity passed to new particles (0..1)
         float inheritVelocityRatio = 0.0f;
 
+        // Spawn variance. Fraction fields are 0..1; rotation fields are radians.
+        float sizeVariance = 0.0f;
+        float lifetimeVariance = 0.0f;
+        float speedVariance = 0.0f;
+        float rotationVariance = 0.0f;
+        float angularVelocityVariance = 0.0f;
+        float colorValueVariance = 0.0f;
+        float alphaVariance = 0.0f;
+
         ::vfx::VFXModifierChain modifiers;
         ::vfx::VFXForceChain forces;
         ::vfx::ShapeConfig shape;
@@ -229,24 +250,47 @@ namespace render::vfx
         int flipbookColumns = 1;
         float flipbookFrameRate = 0.0f;
         bool flipbookRandomStart = false;
+        bool flipbookFrameBlend = false; // VK-1469: linear crossfade between current and next cell
 
         float alphaClipThreshold = 0.1f;
-        bool additiveBlend = false;
-        
+        ::vfx::VFXBlendMode blendMode = ::vfx::VFXBlendMode::Alpha; // VK-1472 (replaces legacy additiveBlend bool)
+
+        // VK-1471: per-emitter draw-order key. Emitter draws are stable-sorted by
+        // sortOrder ascending within each render pipeline (lower = drawn behind).
+        // Default 0 leaves draw order unchanged. Host-only — not sent to the GPU config.
+        int sortOrder = 0;
+
         VFXRenderMode renderMode = VFXRenderMode::Billboard;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
         
         std::string meshPath;
-        
+
+        // VK-1476: MESH-render-mode orientation. Only read when renderMode == MeshParticle.
+        // VelocityForward reproduces the legacy nose-first basis exactly (byte-identical default).
+        // Tumble/AxisLock spin at meshOrientationSpinRate (rad/s); AxisLock spins about
+        // meshOrientationAxis; Tumble derives a per-particle random axis + rate jitter from the seed.
+        ::vfx::VFXOrientationMode meshOrientationMode = ::vfx::VFXOrientationMode::VelocityForward;
+        glm::vec3 meshOrientationAxis{0.0f, 1.0f, 0.0f};
+        float meshOrientationSpinRate = 1.0f;
+
         uint32_t maxTrailPoints = 64;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
-        
+
+        // VK-1474: optional over-trail curves (normalized trail position, head=0 -> tail=1).
+        // The bool gates activation: false => flat legacy behavior (channel/flag off, flat width).
+        // When present the curve/gradient MULTIPLY the flat ribbonWidth / particle color.
+        ::vfx::VFXCurve ribbonWidthCurve;
+        ::vfx::VFXGradient ribbonTailGradient;
+        bool hasRibbonWidthCurve = false;
+        bool hasRibbonTailGradient = false;
+
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
         
         glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
+        float emissiveIntensity = 1.0f;
 
         ::vfx::VFXEventConfig events;
 
@@ -280,13 +324,26 @@ namespace render::vfx
         int rows = 1;
         int columns = 1;
         float alphaClipThreshold = 0.1f;
-        bool additiveBlend = false;
+        ::vfx::VFXBlendMode blendMode = ::vfx::VFXBlendMode::Alpha; // VK-1472 (replaces legacy additiveBlend bool)
         VFXRenderMode renderMode = VFXRenderMode::Billboard;
         float stretchMultiplier = 1.0f;
         glm::vec3 glowColor{1.0f};
+        float emissiveIntensity = 1.0f;
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
+        bool frameBlend = false;   // VK-1469: crossfade current->next flipbook cell
+        float frameRate = 0.0f;    // needed to resolve loop (wrap) vs clamp (one-shot) mode
     };
+
+    // Resolves the per-emitter frame-blend push-constant mode for the CPU-sim preview
+    // path: 0 = off (discrete), 1 = loop (wrap last->first), 2 = clamp (one-shot, hold
+    // last). Mirrors the GPU-sim shader's loop rule (loop == frameRate > 0).
+    inline uint32_t frameBlendModeFor(bool enabled, float frameRate)
+    {
+        if (!enabled)
+            return 0u;
+        return frameRate > 0.0f ? 1u : 2u;
+    }
 
     namespace VFXConstants
     {

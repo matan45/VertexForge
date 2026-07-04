@@ -12,90 +12,8 @@ layout(location = 4) out float fragGlowIntensity;
 layout(location = 5) out vec3 fragWorldPos;
 layout(location = 6) out vec3 fragNormal;
 
-struct GPUParticle
-{
-    vec3 position;
-    float lifetime;
-    vec3 velocity;
-    float maxLifetime;
-    vec4 color;
-    float size;
-    float rotation;
-    float initialSize;
-    float initialSpeed;
-    uint spawnSeed;
-    float glowIntensity;
-    float _pad2;
-    float _pad3;
-};
-
-struct GPUEmitterConfig
-{
-    vec4 emitDirection;
-    vec4 startColor;
-    float spawnRate;
-    float lifetime;
-    float startSize;
-    float startSpeed;
-    uint maxParticles;
-    uint seed;
-    float deltaTime;
-    uint modifierFlags;
-
-    vec4 colorStart;
-    vec4 colorEnd;
-    float sizeStartMult;
-    float sizeEndMult;
-    float speedStartMult;
-    float speedEndMult;
-    float angularVelocity;
-    uint lutBaseOffset;
-    uint lutChannelStride;
-    uint lutFlags;
-
-    vec4 gravityDir;
-    vec4 windDir;
-    vec4 windNoise;
-    vec4 turbulence;
-    vec4 vortexAxis;
-    vec4 vortexCenter;
-
-    vec4 shapeDimensions;
-    uint shapeFlags;
-    float flipbookColumns;
-    float flipbookRows;
-    float flipbookFrameRate;
-
-    uint renderMode;
-    float softParticleDistance;
-    float stretchMultiplier;
-    uint drawIndexCount;
-
-    uint maxTrailPoints;
-    float ribbonWidth;
-    float ribbonMinDistance;
-    float uvScrollSpeedU;
-    float uvScrollSpeedV;
-    uint eventFlags;
-    float lifetimeThreshold;
-    uint colliderCount;
-    float collisionBounce;
-    float collisionFriction;
-    float collisionLifetimeLoss;
-    uint terrainCollisionEnabled;
-
-    // Lighting
-    float lightingInfluence;
-    uint normalMode;
-    float ambientAmount;
-    float _lightPad0;
-
-    // Distortion
-    uint distortionEnabled;
-    float distortionStrength;
-    float _distortionPad0;
-    float _distortionPad1;
-};
+#include "vfx_gpu_types.glsl"
+#include "vfx_lut.glsl"
 
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
 
@@ -126,6 +44,12 @@ layout(std430, set = 0, binding = 6) readonly buffer RibbonHeadBuffer {
     uint ribbonHeads[];
 };
 
+// VK-1474: baked LUT (shared with the compute sim buffer). Bound at binding 7 for the ribbon
+// pipeline (binding 4 is the depth sampler here, unlike the compute pipeline where LUT is 4).
+layout(std430, set = 0, binding = 7) readonly buffer LUTBuffer {
+    vec4 lutData[];
+};
+
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
@@ -134,6 +58,20 @@ layout(push_constant) uniform PushConstants {
     float glowColorG;
     float glowColorB;
 } pc;
+
+// Linear-interpolated LUT fetch (duplicate of the compute sim's helper; the buffer binding
+// differs between pipelines so the function can't live in the shared include).
+vec4 sampleLUT(uint baseOffset, uint channelIndex, uint stride, float t)
+{
+    float coord = clamp(t, 0.0, 1.0) * float(stride - 1u);
+    uint lower = uint(floor(coord));
+    uint upper = min(lower + 1u, stride - 1u);
+    float frac = coord - float(lower);
+    uint channelOffset = baseOffset + channelIndex * stride;
+    vec4 a = lutData[channelOffset + lower];
+    vec4 b = lutData[channelOffset + upper];
+    return mix(a, b, frac);
+}
 
 void main() {
     GPUEmitterConfig config = configs[pc.emitterIndex];
@@ -188,10 +126,22 @@ void main() {
     }
     segDir /= segLen;
 
+    // Per-vertex normalized trail position (0 = head, 1 = tail), normalized by LIVE segment
+    // count (not capacity), matching the draw's instanceCount. Computed here so the width curve
+    // and tail gradient can sample by it.
+    uint totalSegments = min(head, maxTP) - 1u;
+    float trailT = (totalSegments > 0u)
+        ? (float(segIdx) + along) / float(totalSegments)
+        : 0.0;
+
     vec3 toCamera = normalize(camera.cameraPos - pos);
     vec3 right = normalize(cross(toCamera, segDir));
 
+    // VK-1474: flat ribbonWidth optionally scaled by an over-trail width curve (LUT ch7).
     float width = mix(pA.size, pB.size, along) * config.ribbonWidth;
+    if ((config.lutFlags & LUT_FLAG_RIBBON_WIDTH) != 0u) {
+        width *= sampleLUT(config.lutBaseOffset, LUT_CH_RIBBON_WIDTH, config.lutChannelStride, trailT).x;
+    }
     pos += right * inPosition.x * width;
 
     // Tube-style lighting normal: blend the camera-facing normal with the
@@ -208,16 +158,15 @@ void main() {
     fragViewDepth = -(camera.view * vec4(pos, 1.0)).z;
 
     // UV: U = trail position (0=head, 1=tail), V = across width (0..1)
-    uint totalSegments = min(head, maxTP) - 1u;
-    float trailT = (totalSegments > 0u)
-        ? (float(segIdx) + along) / float(totalSegments)
-        : 0.0;
     fragTexCoord = vec2(trailT, inTexCoord.x + 0.5);
 
     fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
 
-    // Interpolate color and lifetime
+    // Interpolate color and lifetime; VK-1474 optionally tint by an over-trail gradient (LUT ch8).
     fragColor = mix(pA.color, pB.color, along);
+    if ((config.lutFlags & LUT_FLAG_RIBBON_TAIL_GRADIENT) != 0u) {
+        fragColor *= sampleLUT(config.lutBaseOffset, LUT_CH_RIBBON_TAIL_GRADIENT, config.lutChannelStride, trailT);
+    }
     float lifeA = (pA.maxLifetime > 0.0) ? (pA.lifetime / pA.maxLifetime) : 0.0;
     float lifeB = (pB.maxLifetime > 0.0) ? (pB.lifetime / pB.maxLifetime) : 0.0;
     fragLifetimeRatio = mix(lifeA, lifeB, along);
@@ -250,73 +199,7 @@ layout(binding = 0) uniform CameraUBO {
 
 layout(binding = 1) uniform sampler2D particleTexture;
 
-struct GPUEmitterConfig
-{
-    vec4 emitDirection;
-    vec4 startColor;
-    float spawnRate;
-    float lifetime;
-    float startSize;
-    float startSpeed;
-    uint maxParticles;
-    uint seed;
-    float deltaTime;
-    uint modifierFlags;
-
-    vec4 colorStart;
-    vec4 colorEnd;
-    float sizeStartMult;
-    float sizeEndMult;
-    float speedStartMult;
-    float speedEndMult;
-    float angularVelocity;
-    uint lutBaseOffset;
-    uint lutChannelStride;
-    uint lutFlags;
-
-    vec4 gravityDir;
-    vec4 windDir;
-    vec4 windNoise;
-    vec4 turbulence;
-    vec4 vortexAxis;
-    vec4 vortexCenter;
-
-    vec4 shapeDimensions;
-    uint shapeFlags;
-    float flipbookColumns;
-    float flipbookRows;
-    float flipbookFrameRate;
-
-    uint renderMode;
-    float softParticleDistance;
-    float stretchMultiplier;
-    uint drawIndexCount;
-
-    uint maxTrailPoints;
-    float ribbonWidth;
-    float ribbonMinDistance;
-    float uvScrollSpeedU;
-    float uvScrollSpeedV;
-    uint eventFlags;
-    float lifetimeThreshold;
-    uint colliderCount;
-    float collisionBounce;
-    float collisionFriction;
-    float collisionLifetimeLoss;
-    uint terrainCollisionEnabled;
-
-    // Lighting
-    float lightingInfluence;
-    uint normalMode;
-    float ambientAmount;
-    float _lightPad0;
-
-    // Distortion
-    uint distortionEnabled;
-    float distortionStrength;
-    float _distortionPad0;
-    float _distortionPad1;
-};
+#include "vfx_gpu_types.glsl"
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
     GPUEmitterConfig configs[];
@@ -397,15 +280,23 @@ void main() {
     // Glow: additive emissive color (applied after lighting)
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
+    finalColor.rgb *= config.emissiveIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;
     }
 
     if (pc.blendMode == 1u) {
-        // Additive: pre-multiply by alpha, output zero alpha
+        // Additive: premultiplied rgb, zero alpha -> src.rgb + dst
         outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
-    } else {
+    } else if (pc.blendMode == 2u) {
+        // Premultiplied: straight color + real alpha (fire->smoke gradient)
         outColor = finalColor;
+    } else if (pc.blendMode == 3u) {
+        // Multiply (dst*src): transparent = white so soft/alpha fade to no-op
+        outColor = vec4(mix(vec3(1.0), finalColor.rgb, finalColor.a), finalColor.a);
+    } else {
+        // Alpha: premultiplied-over (identical result to the legacy straight-alpha path)
+        outColor = vec4(finalColor.rgb * finalColor.a, finalColor.a);
     }
 }

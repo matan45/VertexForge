@@ -13,22 +13,8 @@ layout(location = 4) out vec3 fragNormal;
 layout(location = 5) out vec3 fragWorldPos;
 layout(location = 6) out float fragGlowIntensity;
 
-struct GPUParticle
-{
-    vec3 position;
-    float lifetime;
-    vec3 velocity;
-    float maxLifetime;
-    vec4 color;
-    float size;
-    float rotation;
-    float initialSize;
-    float initialSpeed;
-    uint spawnSeed;
-    float glowIntensity;
-    float _pad2;
-    float _pad3;
-};
+#include "vfx_gpu_types.glsl"
+#include "vfx_mesh_orientation.glsl"
 
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
@@ -43,75 +29,6 @@ layout(binding = 0) uniform CameraUBO {
 
 layout(std430, set = 0, binding = 2) readonly buffer ParticleBuffer {
     GPUParticle particles[];
-};
-
-struct GPUEmitterConfig
-{
-    vec4 emitDirection;
-    vec4 startColor;
-    float spawnRate;
-    float lifetime;
-    float startSize;
-    float startSpeed;
-    uint maxParticles;
-    uint seed;
-    float deltaTime;
-    uint modifierFlags;
-
-    vec4 colorStart;
-    vec4 colorEnd;
-    float sizeStartMult;
-    float sizeEndMult;
-    float speedStartMult;
-    float speedEndMult;
-    float angularVelocity;
-    uint lutBaseOffset;
-    uint lutChannelStride;
-    uint lutFlags;
-
-    vec4 gravityDir;
-    vec4 windDir;
-    vec4 windNoise;
-    vec4 turbulence;
-    vec4 vortexAxis;
-    vec4 vortexCenter;
-
-    vec4 shapeDimensions;
-    uint shapeFlags;
-    float flipbookColumns;
-    float flipbookRows;
-    float flipbookFrameRate;
-
-    uint renderMode;
-    float softParticleDistance;
-    float stretchMultiplier;
-    uint drawIndexCount;
-
-    uint maxTrailPoints;
-    float ribbonWidth;
-    float ribbonMinDistance;
-
-    float uvScrollSpeedU;
-    float uvScrollSpeedV;
-    uint eventFlags;
-    float lifetimeThreshold;
-    uint colliderCount;
-    float collisionBounce;
-    float collisionFriction;
-    float collisionLifetimeLoss;
-    uint terrainCollisionEnabled;
-
-    // Lighting
-    float lightingInfluence;
-    uint normalMode;
-    float ambientAmount;
-    float _lightPad0;
-
-    // Distortion
-    uint distortionEnabled;
-    float distortionStrength;
-    float _distortionPad0;
-    float _distortionPad1;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
@@ -147,24 +64,13 @@ void main() {
 
     GPUEmitterConfig config = configs[pc.emitterIndex];
 
-    // Build rotation matrix from velocity direction
-    vec3 forward = vec3(0.0, 1.0, 0.0);
-    float speed = length(p.velocity);
-    if (speed > 0.001) {
-        forward = p.velocity / speed;
-    }
-
-    vec3 up = abs(forward.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 right = normalize(cross(up, forward));
-    up = cross(forward, right);
-
-    // Apply rotation around forward axis (angular velocity roll)
-    float cosR = cos(p.rotation);
-    float sinR = sin(p.rotation);
-    vec3 rotRight = right * cosR + up * sinR;
-    vec3 rotUp = -right * sinR + up * cosR;
-
-    mat3 rotationMatrix = mat3(rotRight, rotUp, forward);
+    // VK-1476: orientation basis from the emitter's mode (default = velocity-forward,
+    // byte-identical to the legacy formula). camBasis columns = world-space camera
+    // right/up/toward-camera (rows of the view 3x3), consumed by CameraFacing.
+    mat3 camBasis = transpose(mat3(camera.view));
+    mat3 rotationMatrix = vfxComputeMeshOrientation(
+        config.meshOrientationMode, p.velocity, p.rotation, p.spawnSeed,
+        p.lifetime, config.meshOrientationParams, camBasis);
 
     // Scale and transform mesh vertex
     vec3 scaledPos = inPosition * p.size;
@@ -209,73 +115,7 @@ layout(binding = 0) uniform CameraUBO {
 
 layout(binding = 1) uniform sampler2D particleTexture;
 
-struct GPUEmitterConfig
-{
-    vec4 emitDirection;
-    vec4 startColor;
-    float spawnRate;
-    float lifetime;
-    float startSize;
-    float startSpeed;
-    uint maxParticles;
-    uint seed;
-    float deltaTime;
-    uint modifierFlags;
-
-    vec4 colorStart;
-    vec4 colorEnd;
-    float sizeStartMult;
-    float sizeEndMult;
-    float speedStartMult;
-    float speedEndMult;
-    float angularVelocity;
-    uint lutBaseOffset;
-    uint lutChannelStride;
-    uint lutFlags;
-
-    vec4 gravityDir;
-    vec4 windDir;
-    vec4 windNoise;
-    vec4 turbulence;
-    vec4 vortexAxis;
-    vec4 vortexCenter;
-
-    vec4 shapeDimensions;
-    uint shapeFlags;
-    float flipbookColumns;
-    float flipbookRows;
-    float flipbookFrameRate;
-
-    uint renderMode;
-    float softParticleDistance;
-    float stretchMultiplier;
-    uint drawIndexCount;
-
-    uint maxTrailPoints;
-    float ribbonWidth;
-    float ribbonMinDistance;
-    float uvScrollSpeedU;
-    float uvScrollSpeedV;
-    uint eventFlags;
-    float lifetimeThreshold;
-    uint colliderCount;
-    float collisionBounce;
-    float collisionFriction;
-    float collisionLifetimeLoss;
-    uint terrainCollisionEnabled;
-
-    // Lighting
-    float lightingInfluence;
-    uint normalMode;
-    float ambientAmount;
-    float _lightPad0;
-
-    // Distortion
-    uint distortionEnabled;
-    float distortionStrength;
-    float _distortionPad0;
-    float _distortionPad1;
-};
+#include "vfx_gpu_types.glsl"
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
     GPUEmitterConfig configs[];
@@ -363,15 +203,23 @@ void main() {
     // Glow: additive emissive color (applied after lighting)
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
+    finalColor.rgb *= config.emissiveIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;
     }
 
     if (pc.blendMode == 1u) {
-        // Additive blend
+        // Additive: premultiplied rgb, zero alpha -> src.rgb + dst
         outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
-    } else {
+    } else if (pc.blendMode == 2u) {
+        // Premultiplied: straight color + real alpha (fire->smoke gradient)
         outColor = finalColor;
+    } else if (pc.blendMode == 3u) {
+        // Multiply (dst*src): transparent = white so soft/alpha fade to no-op
+        outColor = vec4(mix(vec3(1.0), finalColor.rgb, finalColor.a), finalColor.a);
+    } else {
+        // Alpha: premultiplied-over (identical result to the legacy straight-alpha path)
+        outColor = vec4(finalColor.rgb * finalColor.a, finalColor.a);
     }
 }

@@ -3,12 +3,18 @@
 #include "../../dragdrop/AssetDropTarget.hpp"
 #include <nfd/FileDialog.hpp>
 #include <vfx/VFXBurstTypes.hpp>
+#include <vfx/VFXEventTypes.hpp>
+#include <vfx/VFXEmitterSections.hpp>
+#include <vfx/VFXKillVolume.hpp>
 #include <vfx/VFXShapeProperties.hpp>
 #include <vfx/VFXShapeTypes.hpp>
+#include <vfx/VFXOrientationMode.hpp>
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
+#include <unordered_set>
 
 namespace editor::vfxeditor
 {
@@ -144,6 +150,33 @@ namespace editor::vfxeditor
         }
     }
 
+    void VFXPropertyPanel::drawSpawnVarianceProperties(vfx::VFXNode& node)
+    {
+        constexpr float inputWidth = 80.0f;
+
+        struct VarianceEntry { const char* key; const char* label; float step; };
+        static constexpr VarianceEntry entries[] = {
+            {"sizeVariance",            "Size +/-",       0.01f},
+            {"lifetimeVariance",        "Lifetime +/-",   0.01f},
+            {"speedVariance",           "Speed +/-",      0.01f},
+            {"rotationVariance",        "Rotation +/-",   1.0f},
+            {"angularVelocityVariance", "Ang Vel +/-",    1.0f},
+            {"colorValueVariance",      "Color Val +/-",  0.01f},
+            {"alphaVariance",           "Alpha +/-",      0.01f},
+        };
+
+        for (const auto& entry : entries)
+        {
+            auto it = node.properties.find(entry.key);
+            if (it == node.properties.end()) continue;
+
+            ImGui::PushID(entry.key);
+            if (drawScalarProperty(entry.label, it->second, inputWidth, entry.step))
+                notifyChanged();
+            ImGui::PopID();
+        }
+    }
+
     void VFXPropertyPanel::drawForceProperties(vfx::VFXNode& node)
     {
         struct ForceEntry { const char* key; const char* label; float step; };
@@ -214,6 +247,111 @@ namespace editor::vfxeditor
                 {"localSpace", "Local Space", 0.1f},
             };
             drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::VFXNodeType::ForceDrag: {
+            ImGui::Text("Drag");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"linearCoeff",    "Linear",      0.05f},
+                {"quadraticCoeff", "Quadratic",   0.05f},
+                {"localSpace",     "Local Space", 0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::VFXNodeType::ForcePointAttractor: {
+            ImGui::Text("Point Attractor");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"position",     "Position",       0.1f},
+                {"strength",     "Strength",       0.1f},
+                {"radius",       "Radius",         0.1f},
+                {"falloff",      "Falloff",        0.05f},
+                {"killAtCenter", "Kill At Center", 0.1f},
+                {"localSpace",   "Local Space",    0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::VFXNodeType::ForceCurlNoise: {
+            ImGui::Text("Curl Noise");
+            ImGui::Separator();
+            static constexpr ForceEntry entries[] = {
+                {"strength",    "Strength",     0.1f},
+                {"frequency",   "Frequency",    0.1f},
+                {"scrollSpeed", "Scroll Speed", 0.1f},
+                {"octaves",     "Octaves",      0.1f},
+                {"localSpace",  "Local Space",  0.1f},
+            };
+            drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::VFXNodeType::ForceKillVolume: {
+            constexpr float inputWidth = 80.0f;
+            ImGui::Text("Kill Volume");
+            ImGui::Separator();
+
+            vfx::KillVolumeShape activeShape = vfx::KillVolumeShape::Plane;
+            auto shapeIt = node.properties.find("shape");
+            if (shapeIt != node.properties.end())
+            {
+                if (auto* val = std::get_if<std::string>(&shapeIt->second.value))
+                    activeShape = vfx::stringToKillVolumeShape(*val);
+            }
+
+            const char* shapeItems[] = {"Plane", "Sphere", "Box"};
+            int currentShape = static_cast<int>(activeShape);
+            ImGui::Text("Shape");
+            ImGui::SameLine(120.0f);
+            ImGui::SetNextItemWidth(inputWidth * 1.8f);
+            if (ImGui::Combo("##killVolumeShape", &currentShape, shapeItems, 3))
+            {
+                activeShape = static_cast<vfx::KillVolumeShape>(currentShape);
+                node.properties["shape"] = vfx::VFXProperty{
+                    "shape", vfx::VFXPropertyType::String,
+                    std::string(vfx::killVolumeShapeToString(activeShape)), 0.0f, 1.0f
+                };
+                notifyChanged();
+            }
+
+            static constexpr ForceEntry commonEntries[] = {
+                {"center", "Center", 0.1f},
+            };
+            drawEntries(commonEntries, sizeof(commonEntries) / sizeof(commonEntries[0]));
+
+            switch (activeShape)
+            {
+            case vfx::KillVolumeShape::Plane: {
+                static constexpr ForceEntry entries[] = {
+                    {"normal", "Normal", 0.1f},
+                };
+                drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+                break;
+            }
+            case vfx::KillVolumeShape::Sphere: {
+                static constexpr ForceEntry entries[] = {
+                    {"radius", "Radius", 0.1f},
+                };
+                drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+                break;
+            }
+            case vfx::KillVolumeShape::Box: {
+                static constexpr ForceEntry entries[] = {
+                    {"halfExtents", "Half Extents", 0.1f},
+                };
+                drawEntries(entries, sizeof(entries) / sizeof(entries[0]));
+                break;
+            }
+            default:
+                break;
+            }
+
+            static constexpr ForceEntry toggles[] = {
+                {"invert",     "Invert",      0.1f},
+                {"localSpace", "Local Space", 0.1f},
+            };
+            drawEntries(toggles, sizeof(toggles) / sizeof(toggles[0]));
             break;
         }
         default:
@@ -338,6 +476,7 @@ namespace editor::vfxeditor
             {"flipbookRows",        "Rows"},
             {"flipbookFrameRate",   "Frame Rate"},
             {"flipbookRandomStart", "Random Start"},
+            {"flipbookFrameBlend",  "Frame Blending"},
         };
 
         float inputWidth = 80.0f;
@@ -482,6 +621,29 @@ namespace editor::vfxeditor
                 ImGui::PopID();
             }
         }
+
+        // VK-1474: over-trail width curve + tail gradient. Reuse the shared curve/gradient
+        // editors; their re-sync keys are now independent (VFXPropertyPanel.hpp) so both can
+        // be shown together without thrashing. Width curve multiplies the flat Width above;
+        // tail gradient tints the ribbon color. Both are sampled head(0) -> tail(1).
+        if (auto wcIt = node.properties.find("ribbonWidthCurve"); wcIt != node.properties.end())
+        {
+            if (auto* curve = std::get_if<vfx::VFXCurve>(&wcIt->second.value))
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled("Width Over Trail (head -> tail)");
+                drawCurveEditor(*curve, wcIt->second);
+            }
+        }
+        if (auto tgIt = node.properties.find("ribbonTailGradient"); tgIt != node.properties.end())
+        {
+            if (auto* gradient = std::get_if<vfx::VFXGradient>(&tgIt->second.value))
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled("Tint Over Trail (head -> tail)");
+                drawGradientEditor(*gradient, "ribbonTailGradient");
+            }
+        }
     }
 
     void VFXPropertyPanel::drawUVScrollProperties(vfx::VFXNode& node, float inputWidth)
@@ -544,10 +706,113 @@ namespace editor::vfxeditor
         if (currentRenderMode == 3)
             drawMeshPathSelector(node, inputWidth);
 
+        // VK-1476: mesh-particle orientation (only for the Mesh Particle render mode).
+        if (currentRenderMode == 3)
+        {
+            // Ensure the props exist so effects authored before VK-1476 can be edited.
+            if (node.properties.find("meshOrientationMode") == node.properties.end())
+                node.properties["meshOrientationMode"] = vfx::VFXProperty{
+                    "meshOrientationMode", vfx::VFXPropertyType::String,
+                    std::string(vfx::orientationModeToString(vfx::VFXOrientationMode::VelocityForward)), 0.0f, 0.0f};
+            if (node.properties.find("meshOrientationAxis") == node.properties.end())
+                node.properties["meshOrientationAxis"] = vfx::VFXProperty{
+                    "meshOrientationAxis", vfx::VFXPropertyType::Vec3, glm::vec3(0.0f, 1.0f, 0.0f), 0.0f, 0.0f};
+            if (node.properties.find("meshOrientationSpinRate") == node.properties.end())
+                node.properties["meshOrientationSpinRate"] = vfx::VFXProperty{
+                    "meshOrientationSpinRate", vfx::VFXPropertyType::Float, 1.0f, 0.0f, 50.0f};
+
+            vfx::VFXOrientationMode currentOrient = vfx::VFXOrientationMode::VelocityForward;
+            if (auto* s = std::get_if<std::string>(&node.properties["meshOrientationMode"].value))
+                currentOrient = vfx::stringToOrientationMode(*s);
+
+            ImGui::Text("Orientation");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth * 1.5f);
+            const char* orientModes[] = {"Velocity Forward", "Tumble", "Axis Lock", "Camera Facing"};
+            int current = static_cast<int>(currentOrient);
+            if (ImGui::Combo("##panel_meshOrientationMode", &current, orientModes, 4))
+            {
+                vfx::VFXOrientationMode chosen = static_cast<vfx::VFXOrientationMode>(std::clamp(current, 0, 3));
+                node.properties["meshOrientationMode"] = vfx::VFXProperty{
+                    "meshOrientationMode", vfx::VFXPropertyType::String,
+                    std::string(vfx::orientationModeToString(chosen)), 0.0f, 0.0f};
+                currentOrient = chosen;
+                notifyChanged();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Tumble / Axis Lock spin at the Spin Rate below.\n"
+                                  "Tumble uses a per-particle random axis; Axis Lock uses the fixed Axis.");
+
+            // Spin Rate (Tumble + Axis Lock).
+            if (currentOrient == vfx::VFXOrientationMode::Tumble || currentOrient == vfx::VFXOrientationMode::AxisLock)
+            {
+                if (auto* val = std::get_if<float>(&node.properties["meshOrientationSpinRate"].value))
+                {
+                    ImGui::Text("Spin Rate");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                    if (ImGui::DragFloat("##panel_meshOrientationSpinRate", val, 0.05f, 0.0f, 50.0f, "%.2f"))
+                        notifyChanged();
+                }
+            }
+
+            // Axis (Axis Lock only).
+            if (currentOrient == vfx::VFXOrientationMode::AxisLock)
+            {
+                if (auto* v = std::get_if<glm::vec3>(&node.properties["meshOrientationAxis"].value))
+                {
+                    ImGui::Text("Axis");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth * 2.5f);
+                    if (ImGui::DragFloat3("##panel_meshOrientationAxis", &(*v)[0], 0.01f, -1.0f, 1.0f, "%.2f"))
+                        notifyChanged();
+                }
+            }
+        }
+
+        // VK-1472: Blend Mode dropdown (replaces the legacy "Additive" checkbox).
+        // Resolves from the blendMode string prop, else the legacy additiveBlend bool.
+        {
+            vfx::VFXBlendMode currentBlend = vfx::VFXBlendMode::Alpha;
+            auto bmIt = node.properties.find("blendMode");
+            if (bmIt != node.properties.end())
+            {
+                if (auto* s = std::get_if<std::string>(&bmIt->second.value))
+                    currentBlend = vfx::stringToBlendMode(*s);
+            }
+            else
+            {
+                auto abIt = node.properties.find("additiveBlend");
+                if (abIt != node.properties.end())
+                    if (auto* b = std::get_if<bool>(&abIt->second.value))
+                        currentBlend = vfx::blendModeFromLegacy(*b);
+            }
+
+            ImGui::Text("Blend Mode");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth * 1.5f);
+            const char* blendModes[] = {"Alpha", "Additive", "Premultiplied", "Multiply"};
+            int current = static_cast<int>(currentBlend);
+            if (ImGui::Combo("##panel_blendMode", &current, blendModes, 4))
+            {
+                vfx::VFXBlendMode chosen = static_cast<vfx::VFXBlendMode>(std::clamp(current, 0, 3));
+                node.properties["blendMode"] = vfx::VFXProperty{
+                    "blendMode", vfx::VFXPropertyType::String,
+                    std::string(vfx::blendModeToString(chosen)), 0.0f, 0.0f
+                };
+                // Mirror the legacy bool so old runtimes/tools still read additive-vs-not.
+                node.properties["additiveBlend"] = vfx::VFXProperty{
+                    "additiveBlend", vfx::VFXPropertyType::Bool,
+                    (chosen == vfx::VFXBlendMode::Additive), 0.0f, 1.0f
+                };
+                notifyChanged();
+            }
+        }
+
         struct RenderEntry { const char* key; const char* label; };
         static constexpr RenderEntry entries[] = {
             {"alphaClipThreshold",   "Alpha Clip"},
-            {"additiveBlend",        "Additive"},
+            {"sortOrder",            "Sort Order"},
             {"softParticleDistance",  "Soft Distance"},
             {"stretchMultiplier",    "Stretch"},
         };
@@ -590,6 +855,21 @@ namespace editor::vfxeditor
                     }
                 }
             }
+            else if (prop.type == vfx::VFXPropertyType::Int)
+            {
+                auto* val = std::get_if<int32_t>(&prop.value);
+                if (val)
+                {
+                    ImGui::Text("%s", entry.label);
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    if (ImGui::DragInt("##v", val, 1,
+                                       static_cast<int>(prop.min), static_cast<int>(prop.max)))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
 
             if (disableWidget) ImGui::EndDisabled();
             ImGui::PopID();
@@ -610,6 +890,7 @@ namespace editor::vfxeditor
 
         struct LightEntry { const char* key; const char* label; };
         static constexpr LightEntry lightEntries[] = {
+            {"emissiveIntensity", "Emissive"},
             {"lightingInfluence",  "Light Influence"},
             {"ambientAmount",      "Ambient"},
         };
@@ -825,103 +1106,112 @@ namespace editor::vfxeditor
     {
         struct EventEntry
         {
-            const char* enableKey;
-            const char* vfxKey;
+            vfx::VFXEventType type;
             const char* label;
         };
 
         static constexpr EventEntry eventEntries[] = {
-            {"eventOnSpawnEnabled",             "eventOnSpawnVFX",             "On Spawn"},
-            {"eventOnDeathEnabled",             "eventOnDeathVFX",             "On Death"},
-            {"eventOnCollisionEnabled",         "eventOnCollisionVFX",         "On Collision"},
-            {"eventOnLifetimeThresholdEnabled", "eventOnLifetimeThresholdVFX", "On Threshold"},
+            {vfx::VFXEventType::OnSpawn,             "On Spawn"},
+            {vfx::VFXEventType::OnDeath,             "On Death"},
+            {vfx::VFXEventType::OnCollision,         "On Collision"},
+            {vfx::VFXEventType::OnLifetimeThreshold, "On Threshold"},
         };
+
+        vfx::VFXEventConfig config = vfx::loadEventConfigFromNode(node);
+        bool changed = false;
 
         for (const auto& entry : eventEntries)
         {
-            auto enableIt = node.properties.find(entry.enableKey);
-            if (enableIt == node.properties.end()) continue;
+            auto& eventConfig = config.types[vfx::eventTypeIndex(entry.type)];
 
-            auto* enableVal = std::get_if<bool>(&enableIt->second.value);
-            if (!enableVal) continue;
-
-            ImGui::PushID(entry.enableKey);
+            ImGui::PushID(vfx::eventTypeKeyPrefix(entry.type));
             ImGui::Text("%s", entry.label);
             ImGui::SameLine();
-            if (ImGui::Checkbox("##enable", enableVal))
-            {
-                notifyChanged();
-            }
+            changed |= ImGui::Checkbox("##enable", &eventConfig.enabled);
 
-            if (*enableVal)
+            if (eventConfig.enabled)
             {
-                auto vfxIt = node.properties.find(entry.vfxKey);
-                if (vfxIt != node.properties.end())
+                ImGui::SameLine();
+                std::string display = eventConfig.vfxPath.empty() ? "(none)"
+                    : std::filesystem::path(eventConfig.vfxPath).filename().string();
+                char buf[256];
+                std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
+                ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                ImGui::InputText("##vfxPath", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("...##browse"))
                 {
-                    auto* vfxVal = std::get_if<std::string>(&vfxIt->second.value);
-                    if (vfxVal)
+                    nfd::FileDialog dialog;
+                    std::string path = dialog.openFileDialog({
+                        {L"VFX Asset (*.vfVFX)", L"*.vfVFX"}
+                    });
+                    if (!path.empty())
                     {
-                        ImGui::SameLine();
-                        std::string display = vfxVal->empty() ? "(none)"
-                            : std::filesystem::path(*vfxVal).filename().string();
-                        char buf[256];
-                        std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
-                        buf[sizeof(buf) - 1] = '\0';
-                        ImGui::SetNextItemWidth(inputWidth * 1.5f);
-                        ImGui::InputText("##vfxPath", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
-                        ImGui::SameLine();
-                        if (ImGui::Button("...##browse"))
-                        {
-                            nfd::FileDialog dialog;
-                            std::string path = dialog.openFileDialog({
-                                {L"VFX Asset (*.vfVFX)", L"*.vfVFX"}
-                            });
-                            if (!path.empty())
-                            {
-                                *vfxVal = path;
-                                notifyChanged();
-                            }
-                        }
-                        if (!vfxVal->empty())
-                        {
-                            ImGui::SameLine();
-                            if (ImGui::Button("X##clear"))
-                            {
-                                vfxVal->clear();
-                                notifyChanged();
-                            }
-                        }
+                        eventConfig.vfxPath = path;
+                        changed = true;
                     }
                 }
+                if (!eventConfig.vfxPath.empty())
+                {
+                    ImGui::SameLine();
+                    if (ImGui::Button("X##clear"))
+                    {
+                        eventConfig.vfxPath.clear();
+                        changed = true;
+                    }
+                }
+
+                ImGui::Text("Count");
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                int count = eventConfig.spawnCount;
+                if (ImGui::SliderInt("##count", &count,
+                                     vfx::EventDefaults::MIN_SPAWN_COUNT,
+                                     vfx::EventDefaults::MAX_SPAWN_COUNT))
+                {
+                    eventConfig.spawnCount = count;
+                    changed = true;
+                }
+
+                ImGui::Text("Probability");
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                changed |= ImGui::SliderFloat("##probability", &eventConfig.probability, 0.0f, 1.0f, "%.2f");
+
+                ImGui::Text("Vel Inherit");
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                changed |= ImGui::DragFloat("##velInherit", &eventConfig.inheritVelocityScale,
+                                            0.05f, 0.0f,
+                                            vfx::EventDefaults::MAX_INHERIT_VELOCITY_SCALE,
+                                            "%.2f");
+
+                ImGui::Text("Inherit Color");
+                ImGui::SameLine(100.0f);
+                changed |= ImGui::Checkbox("##inheritColor", &eventConfig.inheritColor);
+
+                ImGui::Text("Inherit Size");
+                ImGui::SameLine(100.0f);
+                changed |= ImGui::Checkbox("##inheritSize", &eventConfig.inheritSize);
+
+                ImGui::Spacing();
             }
             ImGui::PopID();
         }
 
-        auto enableIt = node.properties.find("eventOnLifetimeThresholdEnabled");
-        bool threshEnabled = false;
-        if (enableIt != node.properties.end())
+        if (config.types[vfx::eventTypeIndex(vfx::VFXEventType::OnLifetimeThreshold)].enabled)
         {
-            auto* ev = std::get_if<bool>(&enableIt->second.value);
-            if (ev) threshEnabled = *ev;
+            ImGui::Text("Threshold");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth);
+            changed |= ImGui::SliderFloat("##threshold", &config.lifetimeThreshold, 0.0f, 1.0f, "%.2f");
         }
 
-        if (threshEnabled)
+        if (changed)
         {
-            auto threshIt = node.properties.find("eventLifetimeThreshold");
-            if (threshIt != node.properties.end())
-            {
-                auto* val = std::get_if<float>(&threshIt->second.value);
-                if (val)
-                {
-                    ImGui::Text("Threshold");
-                    ImGui::SameLine(100.0f);
-                    ImGui::SetNextItemWidth(inputWidth);
-                    if (ImGui::SliderFloat("##threshold", val, 0.0f, 1.0f, "%.2f"))
-                    {
-                        notifyChanged();
-                    }
-                }
-            }
+            vfx::storeEventConfigToNode(node, config);
+            notifyChanged();
         }
     }
 
@@ -962,6 +1252,186 @@ namespace editor::vfxeditor
                 if (ImGui::SliderFloat("##slider", val, 0.0f, 1.0f, "%.2f"))
                     notifyChanged();
                 ImGui::PopID();
+            }
+        }
+    }
+
+    namespace
+    {
+        bool moduleMatchesFilter(const char* label, const char* filter)
+        {
+            if (!filter || filter[0] == '\0') return true;
+            std::string hay(label);
+            std::string needle(filter);
+            auto lower = [](std::string& s) {
+                std::transform(s.begin(), s.end(), s.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            };
+            lower(hay);
+            lower(needle);
+            return hay.find(needle) != std::string::npos;
+        }
+    }
+
+    // Draws every enabled "module" section in canonical order. Each addable section
+    // uses the CollapsingHeader(&visible) overload so its built-in "x" removes it.
+    void VFXPropertyPanel::drawEmitterSections(vfx::VFXNode& node)
+    {
+        std::string toRemove;
+        for (const auto& s : vfx::kEmitterSections)
+        {
+            if (!vfx::sectionEnabled(node, s.id))
+                continue;
+
+            bool visible = true;
+            if (ImGui::CollapsingHeader(s.label, &visible))
+                drawEmitterSection(node, s.id);
+            if (!visible)
+                toRemove = s.id;
+        }
+
+        if (!toRemove.empty())
+        {
+            auto& v = node.enabledSections;
+            v.erase(std::remove(v.begin(), v.end(), toRemove), v.end());
+            notifyChanged();
+        }
+    }
+
+    void VFXPropertyPanel::drawEmitterSection(vfx::VFXNode& node, const std::string& sectionId)
+    {
+        if (sectionId == "spawnVariance") drawSpawnVarianceProperties(node);
+        else if (sectionId == "flipbook") drawFlipbookProperties(node);
+        else if (sectionId == "rendering") drawRenderingProperties(node);
+        else if (sectionId == "ribbon") drawRibbonProperties(node, 80.0f);
+        else if (sectionId == "uvScroll") drawUVScrollProperties(node, 80.0f);
+        else if (sectionId == "bursts") drawBurstProperties(node, 80.0f);
+        else if (sectionId == "events") drawEventsProperties(node, 80.0f);
+        else if (sectionId == "lighting") drawLightingProperties(node);
+        else if (sectionId == "collision") drawCollisionProperties(node, 80.0f);
+        else if (sectionId == "distortion") drawDistortionProperties(node);
+        else if (sectionId == "advanced") drawAdvancedProperties(node);
+    }
+
+    void VFXPropertyPanel::drawAddModulePopup(vfx::VFXNode& node)
+    {
+        ImGui::Spacing();
+        if (ImGui::Button("+ Add Module", ImVec2(-1.0f, 0.0f)))
+        {
+            moduleSearch[0] = '\0';
+            ImGui::OpenPopup("VFXAddModule");
+        }
+
+        if (ImGui::BeginPopup("VFXAddModule"))
+        {
+            ImGui::SetNextItemWidth(200.0f);
+            ImGui::InputTextWithHint("##vfxModSearch", "Search...", moduleSearch, sizeof(moduleSearch));
+            ImGui::Separator();
+
+            const char* filter = moduleSearch[0] != '\0' ? moduleSearch : nullptr;
+            bool anyShown = false;
+            for (const auto& s : vfx::kEmitterSections)
+            {
+                if (vfx::sectionEnabled(node, s.id))   // already added -> hide from the list
+                    continue;
+                if (!moduleMatchesFilter(s.label, filter))
+                    continue;
+
+                anyShown = true;
+                if (ImGui::Selectable(s.label))
+                {
+                    node.enabledSections.emplace_back(s.id);
+                    notifyChanged();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!anyShown)
+                ImGui::TextDisabled("No modules");
+
+            ImGui::EndPopup();
+        }
+    }
+
+    // Fallback section: any emitter property not owned by a dedicated section above
+    // (e.g. inheritVelocityRatio, proxy-light emission). Moved verbatim out of draw().
+    void VFXPropertyPanel::drawAdvancedProperties(vfx::VFXNode& node)
+    {
+        static const std::unordered_set<std::string> handledProperties = {
+            "spawnRate", "lifetime", "startSize", "startVelocity",
+            "startColor", "looping", "texture",
+            "sizeVariance", "lifetimeVariance", "speedVariance",
+            "rotationVariance", "angularVelocityVariance",
+            "colorValueVariance", "alphaVariance",
+            "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
+            "flipbookRandomStart", "flipbookFrameBlend", "alphaClipThreshold", "additiveBlend", "blendMode", "meshPath",
+            "meshOrientationMode", "meshOrientationAxis", "meshOrientationSpinRate",
+            "sortOrder", "renderMode", "softParticleDistance", "stretchMultiplier",
+            "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
+            "uvScrollSpeedU", "uvScrollSpeedV",
+            "emissiveIntensity", "lightingInfluence", "ambientAmount", "normalMode",
+            "distortionEnabled", "distortionStrength", "distortionTexture"
+        };
+
+        float labelWidth = 160.0f;
+        float inputWidth = 80.0f;
+
+        for (auto& [propName, prop] : node.properties)
+        {
+            if (handledProperties.count(propName)) continue;
+            if (propName.rfind("flipbook", 0) == 0) continue;
+            if (propName.rfind("event", 0) == 0) continue;
+            if (propName.rfind("collision", 0) == 0) continue;
+            if (propName.rfind("burst", 0) == 0) continue;
+
+            std::string widgetId = "##adv" + propName + std::to_string(node.id);
+
+            switch (prop.type)
+            {
+            case vfx::VFXPropertyType::Float: {
+                float* val = std::get_if<float>(&prop.value);
+                if (val) {
+                    ImGui::Text("%s", propName.c_str());
+                    ImGui::SameLine(labelWidth);
+                    ImGui::PushItemWidth(inputWidth);
+                    if (ImGui::DragFloat(widgetId.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
+                        notifyChanged();
+                    ImGui::PopItemWidth();
+                }
+                break;
+            }
+            case vfx::VFXPropertyType::Int: {
+                int32_t* val = std::get_if<int32_t>(&prop.value);
+                if (val) {
+                    ImGui::Text("%s", propName.c_str());
+                    ImGui::SameLine(labelWidth);
+                    ImGui::PushItemWidth(inputWidth);
+                    if (ImGui::DragInt(widgetId.c_str(), val, 1,
+                            static_cast<int>(prop.min), static_cast<int>(prop.max)))
+                        notifyChanged();
+                    ImGui::PopItemWidth();
+                }
+                break;
+            }
+            case vfx::VFXPropertyType::Bool: {
+                bool* val = std::get_if<bool>(&prop.value);
+                if (val) {
+                    ImGui::Text("%s", propName.c_str());
+                    ImGui::SameLine(labelWidth);
+                    if (ImGui::Checkbox(widgetId.c_str(), val))
+                        notifyChanged();
+                }
+                break;
+            }
+            case vfx::VFXPropertyType::String: {
+                std::string* val = std::get_if<std::string>(&prop.value);
+                if (val) {
+                    ImGui::Text("%s", propName.c_str());
+                    ImGui::SameLine(labelWidth);
+                    ImGui::TextDisabled("%s", val->empty() ? "(none)" : val->c_str());
+                }
+                break;
+            }
+            default: break;
             }
         }
     }

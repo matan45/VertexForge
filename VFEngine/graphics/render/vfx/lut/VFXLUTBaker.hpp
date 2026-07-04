@@ -19,7 +19,17 @@ namespace render::vfx
     class VFXLUTBaker
     {
     public:
-        static LUTBakeResult bake(const ::vfx::VFXModifierChain& modifiers);
+        // VK-1474: ribbon width/tail come from emitter properties, not the modifier chain, so
+        // they are passed alongside the chain. Null pointers bake a flat default (channel present,
+        // flag off).
+        struct RibbonLUTInputs
+        {
+            const ::vfx::VFXCurve* widthCurve = nullptr;      // channel 7 (null => width 1.0, flag off)
+            const ::vfx::VFXGradient* tailGradient = nullptr; // channel 8 (null => white, flag off)
+        };
+
+        static LUTBakeResult bake(const ::vfx::VFXModifierChain& modifiers,
+                                  const RibbonLUTInputs& ribbon = {});
 
     private:
         template<typename ModifierType>

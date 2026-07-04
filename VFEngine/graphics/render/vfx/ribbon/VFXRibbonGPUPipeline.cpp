@@ -107,6 +107,7 @@ namespace render::vfx
 
         auto vkDevice = device.getLogicalDevice();
         vkDevice.destroyPipeline(graphicsPipeline);
+        if (multiplyPipeline) { vkDevice.destroyPipeline(multiplyPipeline); multiplyPipeline = nullptr; } // VK-1472
         vkDevice.destroyPipelineLayout(pipelineLayout);
 
         createPipeline();
@@ -120,6 +121,12 @@ namespace render::vfx
         {
             vkDevice.destroyPipeline(graphicsPipeline);
             graphicsPipeline = nullptr;
+        }
+
+        if (multiplyPipeline) // VK-1472
+        {
+            vkDevice.destroyPipeline(multiplyPipeline);
+            multiplyPipeline = nullptr;
         }
 
         if (pipelineLayout)
@@ -207,7 +214,7 @@ namespace render::vfx
 
     void VFXRibbonGPUPipeline::createDescriptorSetLayout()
     {
-        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 8> bindings{};
 
         // Binding 0: Camera UBO
         bindings[0].binding = 0;
@@ -249,6 +256,12 @@ namespace render::vfx
         bindings[6].descriptorCount = 1;
         bindings[6].stageFlags = vk::ShaderStageFlagBits::eVertex;
 
+        // Binding 7: baked LUT SSBO (VK-1474: ribbon width curve ch7 / tail gradient ch8)
+        bindings[7].binding = 7;
+        bindings[7].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[7].descriptorCount = 1;
+        bindings[7].stageFlags = vk::ShaderStageFlagBits::eVertex;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -266,7 +279,7 @@ namespace render::vfx
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[1].descriptorCount = totalSets * 2; // particle texture + depth texture
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = totalSets * 4; // particle + config + ring + head
+        poolSizes[2].descriptorCount = totalSets * 5; // particle + config + ring + head + lut (VK-1474)
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -351,12 +364,21 @@ namespace render::vfx
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,
-            .blendEnable = true
+            .blendEnable = true,
+            .srcColorBlendFactor = vk::BlendFactor::eOne,            // VK-1472: premultiplied shared state
+            .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         graphicsPipeline = result.pipeline;
         pipelineLayout = result.pipelineLayout;
+
+        // VK-1472: Multiply blend variant (dst*src) reuses the shared layout.
+        core::GraphicsPipelineConfig multiplyConfig = config;
+        multiplyConfig.existingPipelineLayout = pipelineLayout;
+        multiplyConfig.srcColorBlendFactor = vk::BlendFactor::eDstColor;
+        multiplyConfig.dstColorBlendFactor = vk::BlendFactor::eZero;
+        multiplyPipeline = core::PipelineUtilities::createGraphicsPipeline(multiplyConfig).pipeline;
     }
 
     void VFXRibbonGPUPipeline::createBuffers()

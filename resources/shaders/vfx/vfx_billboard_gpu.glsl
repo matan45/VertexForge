@@ -10,93 +10,13 @@ layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out float fragViewDepth;
 layout(location = 4) out float fragGlowIntensity;
 layout(location = 5) out vec3 fragWorldPos;
+layout(location = 6) out vec2 fragTexCoordNext;
+layout(location = 7) out float fragBlend;
 
-struct GPUParticle
-{
-    vec3 position;
-    float lifetime;
-    vec3 velocity;
-    float maxLifetime;
-    vec4 color;
-    float size;
-    float rotation;
-    float initialSize;
-    float initialSpeed;
-    uint spawnSeed;
-    float glowIntensity;
-    float _pad2;
-    float _pad3;
-};
-
-struct GPUEmitterConfig
-{
-    vec4 emitDirection;
-    vec4 startColor;
-    float spawnRate;
-    float lifetime;
-    float startSize;
-    float startSpeed;
-    uint maxParticles;
-    uint seed;
-    float deltaTime;
-    uint modifierFlags;
-
-    vec4 colorStart;
-    vec4 colorEnd;
-    float sizeStartMult;
-    float sizeEndMult;
-    float speedStartMult;
-    float speedEndMult;
-    float angularVelocity;
-    uint lutBaseOffset;
-    uint lutChannelStride;
-    uint lutFlags;
-
-    vec4 gravityDir;
-    vec4 windDir;
-    vec4 windNoise;
-    vec4 turbulence;
-    vec4 vortexAxis;
-    vec4 vortexCenter;
-
-    vec4 shapeDimensions;
-    uint shapeFlags;
-    float flipbookColumns;
-    float flipbookRows;
-    float flipbookFrameRate;
-
-    uint renderMode;
-    float softParticleDistance;
-    float stretchMultiplier;
-    uint drawIndexCount;
-
-    uint maxTrailPoints;
-    float ribbonWidth;
-    float ribbonMinDistance;
-    float uvScrollSpeedU;
-    float uvScrollSpeedV;
-    uint eventFlags;
-    float lifetimeThreshold;
-    uint colliderCount;
-    float collisionBounce;
-    float collisionFriction;
-    float collisionLifetimeLoss;
-    uint terrainCollisionEnabled;
-
-    // Lighting
-    float lightingInfluence;
-    uint normalMode;
-    float ambientAmount;
-    float _lightPad0;
-
-    // Distortion
-    uint distortionEnabled;
-    float distortionStrength;
-    float _distortionPad0;
-    float _distortionPad1;
-};
+#include "vfx_gpu_types.glsl"
 
 const uint FLIPBOOK_RANDOM_START = (1u << 14u);
+const uint FLIPBOOK_FRAME_BLEND = (1u << 21u);
 
 const uint RENDER_MODE_BILLBOARD = 0u;
 const uint RENDER_MODE_STRETCHED = 1u;
@@ -138,6 +58,8 @@ void main() {
         fragViewDepth = 0.0;
         fragGlowIntensity = 0.0;
         fragWorldPos = vec3(0.0);
+        fragTexCoordNext = vec2(0.0);
+        fragBlend = 0.0;
         return;
     }
 
@@ -221,6 +143,24 @@ void main() {
 
     fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
 
+    // VK-1469: optional crossfade between the current flipbook cell and the next.
+    // loop (frameRate > 0) wraps last->first; one-shot (frameRate == 0) clamps/holds
+    // the last cell. UV scroll is applied identically to both sampled cells.
+    if ((config.modifierFlags & FLIPBOOK_FRAME_BLEND) != 0u && totalFrames > 1.0) {
+        float cur = floor(frameIndex);
+        bool loop = config.flipbookFrameRate > 0.0;
+        float nxt = loop ? mod(cur + 1.0, totalFrames)
+                         : min(cur + 1.0, totalFrames - 1.0);
+        float ncol = mod(nxt, config.flipbookColumns);
+        float nrow = floor(nxt / config.flipbookColumns);
+        fragTexCoordNext = (vec2(ncol, nrow) + inTexCoord) * tileSize
+                         + vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
+        fragBlend = fract(frameIndex);
+    } else {
+        fragTexCoordNext = fragTexCoord;
+        fragBlend = 0.0;
+    }
+
     fragColor = p.color;
     fragLifetimeRatio = lifetimeRatio;
     fragGlowIntensity = p.glowIntensity;
@@ -236,6 +176,8 @@ layout(location = 2) in float fragLifetimeRatio;
 layout(location = 3) in float fragViewDepth;
 layout(location = 4) in float fragGlowIntensity;
 layout(location = 5) in vec3 fragWorldPos;
+layout(location = 6) in vec2 fragTexCoordNext;
+layout(location = 7) in float fragBlend;
 
 layout(location = 0) out vec4 outColor;
 
@@ -252,73 +194,7 @@ layout(binding = 0) uniform CameraUBO {
 
 layout(binding = 1) uniform sampler2D particleTexture;
 
-struct GPUEmitterConfig
-{
-    vec4 emitDirection;
-    vec4 startColor;
-    float spawnRate;
-    float lifetime;
-    float startSize;
-    float startSpeed;
-    uint maxParticles;
-    uint seed;
-    float deltaTime;
-    uint modifierFlags;
-
-    vec4 colorStart;
-    vec4 colorEnd;
-    float sizeStartMult;
-    float sizeEndMult;
-    float speedStartMult;
-    float speedEndMult;
-    float angularVelocity;
-    uint lutBaseOffset;
-    uint lutChannelStride;
-    uint lutFlags;
-
-    vec4 gravityDir;
-    vec4 windDir;
-    vec4 windNoise;
-    vec4 turbulence;
-    vec4 vortexAxis;
-    vec4 vortexCenter;
-
-    vec4 shapeDimensions;
-    uint shapeFlags;
-    float flipbookColumns;
-    float flipbookRows;
-    float flipbookFrameRate;
-
-    uint renderMode;
-    float softParticleDistance;
-    float stretchMultiplier;
-    uint drawIndexCount;
-
-    uint maxTrailPoints;
-    float ribbonWidth;
-    float ribbonMinDistance;
-    float uvScrollSpeedU;
-    float uvScrollSpeedV;
-    uint eventFlags;
-    float lifetimeThreshold;
-    uint colliderCount;
-    float collisionBounce;
-    float collisionFriction;
-    float collisionLifetimeLoss;
-    uint terrainCollisionEnabled;
-
-    // Lighting
-    float lightingInfluence;
-    uint normalMode;
-    float ambientAmount;
-    float _lightPad0;
-
-    // Distortion
-    uint distortionEnabled;
-    float distortionStrength;
-    float _distortionPad0;
-    float _distortionPad1;
-};
+#include "vfx_gpu_types.glsl"
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
     GPUEmitterConfig configs[];
@@ -373,6 +249,9 @@ layout(push_constant) uniform PushConstants {
 
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
+    if (fragBlend > 0.0) {
+        texColor = mix(texColor, texture(particleTexture, fragTexCoordNext), fragBlend);
+    }
 
     vec4 finalColor = texColor * fragColor;
 
@@ -411,15 +290,23 @@ void main() {
     // Glow: additive emissive color (applied after lighting)
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
+    finalColor.rgb *= config.emissiveIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;
     }
 
     if (pc.blendMode == 1u) {
-        // Additive: pre-multiply by alpha, output zero alpha
+        // Additive: premultiplied rgb, zero alpha -> src.rgb + dst
         outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
-    } else {
+    } else if (pc.blendMode == 2u) {
+        // Premultiplied: straight color + real alpha (fire->smoke gradient)
         outColor = finalColor;
+    } else if (pc.blendMode == 3u) {
+        // Multiply (dst*src): transparent = white so soft/alpha fade to no-op
+        outColor = vec4(mix(vec3(1.0), finalColor.rgb, finalColor.a), finalColor.a);
+    } else {
+        // Alpha: premultiplied-over (identical result to the legacy straight-alpha path)
+        outColor = vec4(finalColor.rgb * finalColor.a, finalColor.a);
     }
 }

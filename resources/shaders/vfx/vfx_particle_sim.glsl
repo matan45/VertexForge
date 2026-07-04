@@ -3,32 +3,26 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-struct GPUParticle
-{
-    vec3 position;
-    float lifetime;
-    vec3 velocity;
-    float maxLifetime;
-    vec4 color;
-    float size;
-    float rotation;
-    float initialSize;
-    float initialSpeed;
-    uint spawnSeed;
-    float glowIntensity;
-    float _pad2;
-    float _pad3;
-};
+#include "vfx_gpu_types.glsl"
+#include "vfx_variance.glsl"
+#include "vfx_lut.glsl"
 
 const uint MODIFIER_COLOR_OVER_LIFETIME = 1u;
 const uint MODIFIER_SIZE_OVER_LIFETIME = 2u;
 const uint MODIFIER_SPEED_OVER_LIFETIME = 4u;
 const uint MODIFIER_ROTATION_OVER_LIFETIME = 8u;
+const uint MODIFIER_SIZE_BY_SPEED = 4194304u;  // 1 << 22 (VK-1473)
+const uint MODIFIER_COLOR_BY_SPEED = 8388608u; // 1 << 23 (VK-1473)
 
 const uint FORCE_GRAVITY = 16u;
 const uint FORCE_WIND = 32u;
 const uint FORCE_TURBULENCE = 64u;
 const uint FORCE_VORTEX = 128u;
+const uint FORCE_DRAG = 65536u;          // 1 << 16
+const uint FORCE_ATTRACTOR = 131072u;    // 1 << 17
+const uint FORCE_ATTRACTOR_KILL = 262144u; // 1 << 18
+const uint FORCE_CURL_NOISE = 524288u;   // 1 << 19
+const uint FORCE_KILL_VOLUME = 1048576u; // 1 << 20
 
 const uint SHAPE_SPHERE = 256u;
 const uint SHAPE_CONE = 512u;
@@ -38,74 +32,6 @@ const uint SHAPE_EMIT_FROM_SURFACE = 4096u;
 const uint SHAPE_RANDOM_DIRECTION = 8192u;
 
 const uint MODIFIER_GLOW_OVER_LIFETIME = 32768u;
-
-struct GPUEmitterConfig
-{
-    vec4 emitDirection;
-    vec4 startColor;
-    float spawnRate;
-    float lifetime;
-    float startSize;
-    float startSpeed;
-    uint maxParticles;
-    uint seed;
-    float deltaTime;
-    uint modifierFlags;
-
-    vec4 colorStart;
-    vec4 colorEnd;
-    float sizeStartMult;
-    float sizeEndMult;
-    float speedStartMult;
-    float speedEndMult;
-    float angularVelocity;
-    uint lutBaseOffset;
-    uint lutChannelStride;
-    uint lutFlags;
-
-    vec4 gravityDir;
-    vec4 windDir;
-    vec4 windNoise;
-    vec4 turbulence;
-    vec4 vortexAxis;
-    vec4 vortexCenter;
-
-    vec4 shapeDimensions;
-    uint shapeFlags;
-    float flipbookColumns;
-    float flipbookRows;
-    float flipbookFrameRate;
-
-    uint renderMode;
-    float softParticleDistance;
-    float stretchMultiplier;
-    uint drawIndexCount;
-
-    uint maxTrailPoints;
-    float ribbonWidth;
-    float ribbonMinDistance;
-    float uvScrollSpeedU;
-    float uvScrollSpeedV;
-    uint eventFlags;
-    float lifetimeThreshold;
-    uint colliderCount;
-    float collisionBounce;
-    float collisionFriction;
-    float collisionLifetimeLoss;
-    uint terrainCollisionEnabled;
-
-    // Lighting
-    float lightingInfluence;
-    uint normalMode;
-    float ambientAmount;
-    float _lightPad0;
-
-    // Distortion
-    uint distortionEnabled;
-    float distortionStrength;
-    float _distortionPad0;
-    float _distortionPad1;
-};
 
 struct GPUEmitterState
 {
@@ -165,6 +91,8 @@ struct GPUVFXEvent
     uint eventType;
     vec3 velocity;
     uint emitterIndex;
+    vec3 color;
+    float size;
 };
 
 layout(std430, set = 0, binding = 7) buffer EventBuffer {
@@ -209,11 +137,7 @@ const uint MAX_VFX_EVENTS = 256u;
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
 const uint RENDER_MODE_RIBBON = 4u;
 
-const uint LUT_FLAG_COLOR = 1u;
-const uint LUT_FLAG_SIZE = 2u;
-const uint LUT_FLAG_SPEED = 4u;
-const uint LUT_FLAG_ROTATION = 8u;
-const uint LUT_FLAG_GLOW = 16u;
+// LUT_FLAG_* / LUT_CH_* / vfxNormalize01 now live in vfx_lut.glsl (shared with the ribbon shader).
 
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
@@ -503,6 +427,27 @@ float simplexNoise3D(vec3 v) {
     return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 
+// Curl noise (VK-1466). Mirror of vfx::evalCurlNoise in VFXCurlNoise.hpp.
+const float CURL_EPSILON = 0.01; // finite-difference step, shared with CPU + divergence test
+
+// fBM scalar potential at a decorrelation offset (mirrors the Turbulence octave loop).
+float curlPotential(vec3 q, vec3 offset, int octaves)
+{
+    if (octaves <= 1)
+        return simplexNoise3D(q + offset);
+
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    float sum = 0.0;
+    for (int i = 0; i < octaves && i < 4; ++i)
+    {
+        sum += simplexNoise3D(q * frequency + offset) * amplitude;
+        amplitude *= 0.5;
+        frequency *= 2.0;
+    }
+    return sum;
+}
+
 void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
 {
     vec3 totalForce = vec3(0.0);
@@ -582,7 +527,53 @@ void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
         }
     }
 
+    if ((config.modifierFlags & FORCE_ATTRACTOR) != 0u)
+    {
+        vec3 toCenter = config.attractorParams.xyz - p.position;
+        float dist = length(toCenter);
+        float radius = config.dragAttractorExtra.z;
+        if (dist > 1e-4 && dist < radius)
+        {
+            float t = clamp(1.0 - dist / radius, 0.0, 1.0);
+            float falloff = pow(t, config.dragAttractorExtra.w);
+            totalForce += (toCenter / dist) * config.attractorParams.w * falloff;
+        }
+    }
+
+    if ((config.modifierFlags & FORCE_CURL_NOISE) != 0u)
+    {
+        vec3 q = p.position * config.curlNoiseParams.y + vec3(time * config.curlNoiseParams.z);
+        int octaves = int(config.curlNoiseParams.w);
+        float inv2h = 1.0 / (2.0 * CURL_EPSILON);
+        vec3 dx = vec3(CURL_EPSILON, 0.0, 0.0);
+        vec3 dy = vec3(0.0, CURL_EPSILON, 0.0);
+        vec3 dz = vec3(0.0, 0.0, CURL_EPSILON);
+        vec3 o1 = vec3(0.0);
+        vec3 o2 = vec3(100.0);
+        vec3 o3 = vec3(200.0);
+
+        float dPsi3_dy = (curlPotential(q + dy, o3, octaves) - curlPotential(q - dy, o3, octaves)) * inv2h;
+        float dPsi2_dz = (curlPotential(q + dz, o2, octaves) - curlPotential(q - dz, o2, octaves)) * inv2h;
+        float dPsi1_dz = (curlPotential(q + dz, o1, octaves) - curlPotential(q - dz, o1, octaves)) * inv2h;
+        float dPsi3_dx = (curlPotential(q + dx, o3, octaves) - curlPotential(q - dx, o3, octaves)) * inv2h;
+        float dPsi2_dx = (curlPotential(q + dx, o2, octaves) - curlPotential(q - dx, o2, octaves)) * inv2h;
+        float dPsi1_dy = (curlPotential(q + dy, o1, octaves) - curlPotential(q - dy, o1, octaves)) * inv2h;
+
+        vec3 curlForce = vec3(dPsi3_dy - dPsi2_dz,   // curl.x
+                              dPsi1_dz - dPsi3_dx,   // curl.y
+                              dPsi2_dx - dPsi1_dy);  // curl.z
+        totalForce += curlForce * config.curlNoiseParams.x;
+    }
+
     p.velocity += totalForce * config.deltaTime;
+
+    // Drag is applied multiplicatively AFTER integration so it can never reverse
+    // velocity, even when (k * dt) > 1. (Explicit v -= k*v*dt would overshoot.)
+    if ((config.modifierFlags & FORCE_DRAG) != 0u)
+    {
+        float k = config.dragAttractorExtra.x + config.dragAttractorExtra.y * length(p.velocity);
+        p.velocity /= (1.0 + max(k, 0.0) * config.deltaTime);
+    }
 }
 
 vec4 sampleLUT(uint baseOffset, uint channelIndex, uint stride, float t)
@@ -610,6 +601,9 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         {
             p.color = mix(config.colorStart, config.colorEnd, lifetimeRatio);
         }
+        vec2 colorMult = unpackHalf2x16(p.packedColorMult);
+        p.color.rgb *= colorMult.x;
+        p.color.a *= colorMult.y;
     }
 
     if ((config.modifierFlags & MODIFIER_SIZE_OVER_LIFETIME) != 0u)
@@ -665,9 +659,44 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
             p.glowIntensity = sampleLUT(config.lutBaseOffset, 4u, config.lutChannelStride, lifetimeRatio).x;
         }
     }
+
+    // VK-1473 SizeBySpeed: multiply size by a curve sampled by normalized speed. Runs AFTER the
+    // over-lifetime blocks and reconstructs a fresh base each frame (p.size / p.initialSize) so an
+    // absent SizeOverLifetime sibling can't compound frame-over-frame.
+    if ((config.modifierFlags & MODIFIER_SIZE_BY_SPEED) != 0u &&
+        (config.lutFlags & LUT_FLAG_SIZE_BY_SPEED) != 0u)
+    {
+        float tSpeed = vfxNormalize01(length(p.velocity), config.modifierSpeedRanges.x, config.modifierSpeedRanges.y);
+        float sizeBySpeed = sampleLUT(config.lutBaseOffset, LUT_CH_SIZE_BY_SPEED, config.lutChannelStride, tSpeed).x;
+        float sizeBase = ((config.modifierFlags & MODIFIER_SIZE_OVER_LIFETIME) != 0u) ? p.size : p.initialSize;
+        p.size = sizeBase * sizeBySpeed;
+    }
+
+    // VK-1473 ColorBySpeed: multiply color by a gradient sampled by normalized speed. Base is the
+    // fresh over-lifetime color if present, else the reconstructed spawn color (matches spawn at
+    // p.color = startColor * unpackHalf2x16(packedColorMult)).
+    if ((config.modifierFlags & MODIFIER_COLOR_BY_SPEED) != 0u &&
+        (config.lutFlags & LUT_FLAG_COLOR_BY_SPEED) != 0u)
+    {
+        float tSpeed = vfxNormalize01(length(p.velocity), config.modifierSpeedRanges.z, config.modifierSpeedRanges.w);
+        vec4 colorBySpeed = sampleLUT(config.lutBaseOffset, LUT_CH_COLOR_BY_SPEED, config.lutChannelStride, tSpeed);
+        vec4 colorBase;
+        if ((config.modifierFlags & MODIFIER_COLOR_OVER_LIFETIME) != 0u)
+        {
+            colorBase = p.color;
+        }
+        else
+        {
+            vec2 cm = unpackHalf2x16(p.packedColorMult);
+            colorBase = config.startColor;
+            colorBase.rgb *= cm.x;
+            colorBase.a *= cm.y;
+        }
+        p.color = colorBase * colorBySpeed;
+    }
 }
 
-void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx)
+void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx, vec3 color, float size)
 {
     uint idx = atomicAdd(eventCount, 1u);
     if (idx < MAX_VFX_EVENTS)
@@ -676,6 +705,8 @@ void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx)
         events[idx].eventType = type;
         events[idx].velocity = vel;
         events[idx].emitterIndex = emitterIdx;
+        events[idx].color = color;
+        events[idx].size = size;
     }
 }
 
@@ -769,7 +800,7 @@ void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint em
 
         if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
         {
-            emitEvent(2u, p.position, p.velocity, emitterIdx);
+            emitEvent(2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
             collisionEventFired = true;
         }
     }
@@ -913,11 +944,54 @@ void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterI
 
             if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
             {
-                emitEvent(2u, p.position, p.velocity, emitterIdx);
+                emitEvent(2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
                 collisionEventFired = true;
             }
         }
     }
+}
+
+vec3 sanitizeKillVolumeNormal(vec3 normal)
+{
+    float lenSq = dot(normal, normal);
+    if (lenSq <= 1e-8)
+        return vec3(0.0, 1.0, 0.0);
+    return normal * inversesqrt(lenSq);
+}
+
+bool shouldKillByVolume(vec3 particlePos, GPUEmitterConfig config, mat4 worldTransform)
+{
+    uint packed = uint(config.killVolumeParams1.w + 0.5);
+    uint shape = packed & 3u;
+    bool invert = (packed & 4u) != 0u;
+    bool localSpace = (packed & 8u) != 0u;
+
+    vec3 pos = particlePos;
+    if (localSpace)
+        pos = (inverse(worldTransform) * vec4(particlePos, 1.0)).xyz;
+
+    vec3 center = config.killVolumeParams0.xyz;
+    bool killed = false;
+
+    if (shape == 0u)
+    {
+        vec3 normal = sanitizeKillVolumeNormal(config.killVolumeParams1.xyz);
+        killed = dot(normal, pos - center) < 0.0;
+    }
+    else if (shape == 1u)
+    {
+        float radius = max(config.killVolumeParams0.w, 0.0);
+        vec3 delta = pos - center;
+        killed = dot(delta, delta) <= radius * radius;
+    }
+    else if (shape == 2u)
+    {
+        vec3 halfExtents = max(config.killVolumeParams1.xyz, vec3(0.0));
+        vec3 delta = abs(pos - center);
+        killed = all(lessThanEqual(delta, halfExtents));
+    }
+
+    return invert ? !killed : killed;
 }
 
 void main()
@@ -956,7 +1030,7 @@ void main()
         {
             if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
             {
-                emitEvent(1u, p.position, p.velocity, pc.emitterIndex);
+                emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
             }
             p.size = 0.0;
             isActive = false;
@@ -967,6 +1041,7 @@ void main()
             applyForces(p, config, time);
 
             p.position += p.velocity * config.deltaTime;
+            p.rotation += p.angularVelocity * config.deltaTime;
 
             bool collisionEventFired = false;
             applyCollisions(p, config, pc.emitterIndex, collisionEventFired);
@@ -983,7 +1058,7 @@ void main()
                 if (lifetimeRatio > FADE_START)
                 {
                     float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
-                    p.color.a = config.startColor.a * (1.0 - fadeProgress);
+                    p.color.a = config.startColor.a * unpackHalf2x16(p.packedColorMult).y * (1.0 - fadeProgress);
                 }
             }
 
@@ -992,8 +1067,38 @@ void main()
                 float prevRatio = (p.lifetime - config.deltaTime) / p.maxLifetime;
                 if (prevRatio < config.lifetimeThreshold && lifetimeRatio >= config.lifetimeThreshold)
                 {
-                    emitEvent(3u, p.position, p.velocity, pc.emitterIndex);
+                    emitEvent(3u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                 }
+            }
+
+            // Kill-at-center: run after modifiers so a SizeOverLifetime modifier can't
+            // resurrect size. isActive gates the activeCount increment below.
+            if (isActive &&
+                (config.modifierFlags & FORCE_ATTRACTOR) != 0u &&
+                (config.modifierFlags & FORCE_ATTRACTOR_KILL) != 0u)
+            {
+                float killRadius = max(0.05, config.dragAttractorExtra.z * 0.05);
+                if (distance(p.position, config.attractorParams.xyz) < killRadius)
+                {
+                    if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
+                    {
+                        emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                    }
+                    p.size = 0.0;
+                    isActive = false;
+                }
+            }
+
+            if (isActive &&
+                (config.modifierFlags & FORCE_KILL_VOLUME) != 0u &&
+                shouldKillByVolume(p.position, config, worldTransform))
+            {
+                if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
+                {
+                    emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                }
+                p.size = 0.0;
+                isActive = false;
             }
         }
     }
@@ -1020,18 +1125,36 @@ void main()
             p.position = spawnOrigin + rotation * localPos;
 
             p.lifetime = 0.0;
-            p.maxLifetime = config.lifetime;
-            p.size = config.startSize;
-            p.color = config.startColor;
-            p.rotation = 0.0;
-
-            p.initialSize = config.startSize;
-            p.initialSpeed = config.startSpeed;
             p.spawnSeed = seed;
             p.glowIntensity = 0.0;
+            uint varianceSeed = p.spawnSeed;
+            float sizeMult = max(0.0, 1.0 + config.sizeVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_SIZE));
+            float lifetimeMult = max(0.01, 1.0 + config.lifetimeVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_LIFETIME));
+            float speedMult = max(0.0, 1.0 + config.speedVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_SPEED));
+            float colorValueMult = 1.0 + config.colorValueVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_COLOR_VALUE);
+            float alphaMult = 1.0 + config.alphaVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ALPHA);
+
+            p.maxLifetime = config.lifetime * lifetimeMult;
+            p.size = config.startSize * sizeMult;
+            p.color = config.startColor;
+            p.color.rgb *= colorValueMult;
+            p.color.a *= alphaMult;
+            p.rotation = config.rotationVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ROTATION);
+            p.angularVelocity = config.angularVelocityVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ANGULAR_VELOCITY);
+            p.packedColorMult = packHalf2x16(vec2(colorValueMult, alphaMult));
+
+            p.initialSize = p.size;
+            p.initialSpeed = config.startSpeed * speedMult;
 
             vec3 dir = generateDirectionFromShape(seed, localPos, config);
-            p.velocity = dir * config.startSpeed;
+            p.velocity = dir * p.initialSpeed;
 
             p.velocity = rotation * p.velocity;
 
@@ -1046,7 +1169,7 @@ void main()
 
             if ((config.eventFlags & EVENT_FLAG_ON_SPAWN) != 0u)
             {
-                emitEvent(0u, p.position, p.velocity, pc.emitterIndex);
+                emitEvent(0u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
             }
         }
     }

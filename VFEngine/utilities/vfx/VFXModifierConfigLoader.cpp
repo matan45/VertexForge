@@ -92,6 +92,10 @@ namespace vfx
             return extractRotationConfig(node);
         case VFXNodeType::GlowOverLifetime:
             return extractGlowConfig(node);
+        case VFXNodeType::SizeBySpeed:
+            return extractSizeBySpeedConfig(node);
+        case VFXNodeType::ColorBySpeed:
+            return extractColorBySpeedConfig(node);
         default:
             return ColorOverLifetimeConfig{};
         }
@@ -134,6 +138,26 @@ namespace vfx
         config.curve = getCurve(node, "curve", VFXCurve::fromStartEnd(1.0f, 0.0f));
         glm::vec4 color = getVec4(node, "glowColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         config.glowColor = glm::vec3(color);
+        return config;
+    }
+
+    SizeBySpeedConfig VFXModifierConfigLoader::extractSizeBySpeedConfig(const VFXNode& node)
+    {
+        SizeBySpeedConfig config;
+        config.curve = getCurve(node, "curve",
+            VFXCurve::fromStartEnd(ModifierDefaults::SIZE_BY_SPEED_START, ModifierDefaults::SIZE_BY_SPEED_END));
+        config.speedMin = getFloat(node, "speedMin", ModifierDefaults::SPEED_RANGE_MIN);
+        config.speedMax = getFloat(node, "speedMax", ModifierDefaults::SPEED_RANGE_MAX);
+        return config;
+    }
+
+    ColorBySpeedConfig VFXModifierConfigLoader::extractColorBySpeedConfig(const VFXNode& node)
+    {
+        ColorBySpeedConfig config;
+        config.gradient = getGradient(node, "gradient",
+            VFXGradient::fromStartEnd(ModifierDefaults::COLOR_BY_SPEED_START, ModifierDefaults::COLOR_BY_SPEED_END));
+        config.speedMin = getFloat(node, "speedMin", ModifierDefaults::SPEED_RANGE_MIN);
+        config.speedMax = getFloat(node, "speedMax", ModifierDefaults::SPEED_RANGE_MAX);
         return config;
     }
 

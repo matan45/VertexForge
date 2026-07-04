@@ -1,5 +1,9 @@
 #include "VFXParticleSystem.hpp"
 #include "threading/JobSystem.hpp"
+#include "vfx/VFXVariance.hpp"
+#include "vfx/VFXCurlNoise.hpp"
+#include "vfx/VFXKillVolume.hpp"
+#include "vfx/VFXSpeedRemap.hpp"
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/noise.hpp>
@@ -148,6 +152,11 @@ namespace render::vfx
                 instance.color = particle.color;
                 instance.lifetimeRatio = particle.lifetime / particle.maxLifetime;
                 instance.rotation = particle.rotation;
+                // VK-1476: carried for the mesh preview's orientation modes so the
+                // preview matches runtime. age = elapsed seconds (matches GPUParticle.lifetime).
+                instance.velocity = particle.velocity;
+                instance.spawnSeed = particle.spawnSeed;
+                instance.age = particle.lifetime;
 
                 if (totalFrames > 1)
                 {
@@ -232,6 +241,25 @@ namespace render::vfx
             seg.glowIntensityB = pB.glowIntensity;
             seg._pad = 0.0f;
 
+            // VK-1474: fold the over-trail width curve + tail gradient into the endpoints
+            // (per-vertex t: head=0 -> tail=1). No-op when absent -> byte-identical legacy geometry.
+            if (config.hasRibbonWidthCurve || config.hasRibbonTailGradient)
+            {
+                const float denom = static_cast<float>(usedPoints - 1);
+                const float tA = static_cast<float>(i) / denom;
+                const float tB = static_cast<float>(i + 1) / denom;
+                if (config.hasRibbonWidthCurve)
+                {
+                    seg.sizeA *= config.ribbonWidthCurve.evaluate(tA);
+                    seg.sizeB *= config.ribbonWidthCurve.evaluate(tB);
+                }
+                if (config.hasRibbonTailGradient)
+                {
+                    seg.colorA *= config.ribbonTailGradient.evaluate(tA);
+                    seg.colorB *= config.ribbonTailGradient.evaluate(tB);
+                }
+            }
+
             cachedSegments.push_back(seg);
         }
 
@@ -258,6 +286,7 @@ namespace render::vfx
         particle->size = config.startSize;
         particle->color = config.startColor;
         particle->rotation = 0.0f;
+        particle->glowIntensity = 0.0f; // mirror GPU spawn (vfx_particle_sim.glsl): clear stale glow on pooled reuse
 
         particle->initialColor = config.startColor;
         particle->initialSize = config.startSize;
@@ -271,6 +300,34 @@ namespace render::vfx
         particle->velocity = direction * config.startSpeed;
 
         particle->spawnSeed = rng();
+
+        const uint32_t spawnSeed = particle->spawnSeed;
+        const float sizeMult = std::max(0.0f, 1.0f + config.sizeVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Size));
+        const float lifetimeMult = std::max(0.01f, 1.0f + config.lifetimeVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Lifetime));
+        const float speedMult = std::max(0.0f, 1.0f + config.speedVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Speed));
+        particle->colorValueMult = 1.0f + config.colorValueVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::ColorValue);
+        particle->alphaMult = 1.0f + config.alphaVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Alpha);
+
+        particle->maxLifetime = config.lifetime * lifetimeMult;
+        particle->size = config.startSize * sizeMult;
+        particle->initialSize = particle->size;
+        particle->initialSpeed = config.startSpeed * speedMult;
+        particle->rotation = config.rotationVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::Rotation);
+        particle->angularVelocity = config.angularVelocityVariance *
+            ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::AngularVelocity);
+        particle->velocity = direction * particle->initialSpeed;
+        particle->color = config.startColor;
+        particle->color.r *= particle->colorValueMult;
+        particle->color.g *= particle->colorValueMult;
+        particle->color.b *= particle->colorValueMult;
+        particle->color.a *= particle->alphaMult;
+        particle->initialColor = particle->color;
 
         if (config.renderMode == VFXRenderMode::Ribbon && config.maxTrailPoints > 0)
         {
@@ -295,29 +352,66 @@ namespace render::vfx
             return;
         }
 
-        float lifetimeRatio = particle.lifetime / particle.maxLifetime;
-
-        if (!config.modifiers.empty())
-        {
-            applyModifiers(particle, lifetimeRatio, deltaTime);
-        }
-        else
-        {
-            // Default behavior when no modifiers: fade out in last 30% of lifetime
-            float fadeStart = 0.7f;
-            if (lifetimeRatio > fadeStart)
-            {
-                float fadeProgress = (lifetimeRatio - fadeStart) / (1.0f - fadeStart);
-                particle.color.a = config.startColor.a * (1.0f - fadeProgress);
-            }
-        }
-
+        // Mirror the GPU sim step order (vfx_particle_sim.glsl main): forces first, then
+        // position/rotation integration, then modifiers (or the default fade). Position must
+        // integrate BETWEEN forces and modifiers because SpeedOverLifetime rewrites velocity -
+        // the GPU advances position with the post-force / pre-modifier velocity.
         if (!config.forces.empty())
         {
             applyForces(particle, deltaTime);
         }
 
         particle.position += particle.velocity * deltaTime;
+        particle.rotation += particle.angularVelocity * deltaTime;
+
+        float lifetimeRatio = particle.lifetime / particle.maxLifetime;
+
+        // GPU gates the modifier pass on `config.modifierFlags != 0u`; the host OR's a bit for any
+        // modifier, any force, and the flipbook RandomStart/FrameBlend flags. Reconstruct that so a
+        // forces-only or flipbook-only emitter takes the same branch (no courtesy fade).
+        // applyModifiers is a no-op when the modifier chain is empty.
+        if (!config.modifiers.empty() || !config.forces.empty() ||
+            config.flipbookRandomStart || config.flipbookFrameBlend)
+        {
+            applyModifiers(particle, lifetimeRatio, deltaTime);
+        }
+        else
+        {
+            // Default behavior when no modifiers/forces/flipbook: fade out in last 30% of lifetime
+            float fadeStart = 0.7f;
+            if (lifetimeRatio > fadeStart)
+            {
+                float fadeProgress = (lifetimeRatio - fadeStart) / (1.0f - fadeStart);
+                particle.color.a = config.startColor.a * particle.alphaMult * (1.0f - fadeProgress);
+            }
+        }
+
+        // Kill-at-center (mirror GPU): kill any particle that reached the center of an
+        // attractor flagged killAtCenter, checked after the position update. Kill volume
+        // is also checked here; CPU preview has no emitter transform, so Local==World.
+        for (const auto& force : config.forces.forces)
+        {
+            if (auto* killVolume = std::get_if<::vfx::KillVolumeForceConfig>(&force))
+            {
+                if (::vfx::killedByVolume(particle.position, *killVolume))
+                {
+                    particle.active = false;
+                    return;
+                }
+            }
+            else if (auto* attractor = std::get_if<::vfx::PointAttractorForceConfig>(&force))
+            {
+                if (attractor->killAtCenter)
+                {
+                    float killRadius = std::max(0.05f, attractor->radius * 0.05f);
+                    if (glm::length(attractor->position - particle.position) < killRadius)
+                    {
+                        particle.active = false;
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     VFXParticle* VFXParticleSystem::findInactiveParticle()
@@ -334,17 +428,63 @@ namespace render::vfx
 
     void VFXParticleSystem::applyModifiers(VFXParticle& particle, float lifetimeRatio, float deltaTime)
     {
+        // Pass 1: over-lifetime modifiers (sample by age, overwrite color/size/etc).
         for (const auto& modifier : config.modifiers.modifiers)
         {
             std::visit([&](const auto& mod) {
-                applyModifier(particle, mod, lifetimeRatio, deltaTime);
+                using T = std::decay_t<decltype(mod)>;
+                if constexpr (!std::is_same_v<T, ::vfx::SizeBySpeedConfig> &&
+                              !std::is_same_v<T, ::vfx::ColorBySpeedConfig>)
+                {
+                    applyModifier(particle, mod, lifetimeRatio, deltaTime);
+                }
             }, modifier);
+        }
+
+        // Pass 2: by-speed modifiers, multiplied on top (order-independent of graph position).
+        applyBySpeedModifiers(particle);
+    }
+
+    void VFXParticleSystem::applyBySpeedModifiers(VFXParticle& particle)
+    {
+        bool hasSizeOverLifetime = false;
+        bool hasColorOverLifetime = false;
+        bool hasBySpeed = false;
+        for (const auto& modifier : config.modifiers.modifiers)
+        {
+            if (std::holds_alternative<::vfx::SizeOverLifetimeConfig>(modifier)) hasSizeOverLifetime = true;
+            else if (std::holds_alternative<::vfx::ColorOverLifetimeConfig>(modifier)) hasColorOverLifetime = true;
+            else if (std::holds_alternative<::vfx::SizeBySpeedConfig>(modifier) ||
+                     std::holds_alternative<::vfx::ColorBySpeedConfig>(modifier)) hasBySpeed = true;
+        }
+        if (!hasBySpeed)
+            return;
+
+        const float speed = glm::length(particle.velocity);
+        for (const auto& modifier : config.modifiers.modifiers)
+        {
+            if (const auto* m = std::get_if<::vfx::SizeBySpeedConfig>(&modifier))
+            {
+                const float t = ::vfx::normalizedSpeed01(speed, m->speedMin, m->speedMax);
+                const float base = hasSizeOverLifetime ? particle.size : particle.initialSize;
+                particle.size = base * m->curve.evaluate(t);
+            }
+            else if (const auto* m = std::get_if<::vfx::ColorBySpeedConfig>(&modifier))
+            {
+                const float t = ::vfx::normalizedSpeed01(speed, m->speedMin, m->speedMax);
+                const glm::vec4 base = hasColorOverLifetime ? particle.color : particle.initialColor;
+                particle.color = base * m->gradient.evaluate(t);
+            }
         }
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::ColorOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
         particle.color = mod.gradient.evaluate(t);
+        particle.color.r *= particle.colorValueMult;
+        particle.color.g *= particle.colorValueMult;
+        particle.color.b *= particle.colorValueMult;
+        particle.color.a *= particle.alphaMult;
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float /*deltaTime*/)
@@ -354,8 +494,17 @@ namespace render::vfx
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
+        // Rescale the CURRENT (force-deflected) velocity to initialSpeed * curve, preserving
+        // direction - mirrors the GPU MODIFIER_SPEED_OVER_LIFETIME path (vfx_particle_sim.glsl):
+        //   dir = p.velocity / currentSpeed; p.velocity = dir * p.initialSpeed * speedMult;
+        // When |velocity| is ~0 the GPU skips (no direction to preserve); we do the same.
         float multiplier = mod.curve.evaluate(t);
-        particle.velocity = particle.initialDirection * particle.initialSpeed * multiplier;
+        float currentSpeed = glm::length(particle.velocity);
+        if (currentSpeed > 0.001f)
+        {
+            glm::vec3 dir = particle.velocity / currentSpeed;
+            particle.velocity = dir * particle.initialSpeed * multiplier;
+        }
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime)
@@ -370,11 +519,22 @@ namespace render::vfx
 
     void VFXParticleSystem::applyForces(VFXParticle& particle, float deltaTime)
     {
+        // Apply all non-drag (position-based) forces first, then drag last. This mirrors
+        // the GPU, where forces accumulate into totalForce, velocity integrates once, and
+        // drag then divides the fully-integrated velocity.
         for (const auto& force : config.forces.forces)
         {
+            if (std::holds_alternative<::vfx::DragForceConfig>(force))
+                continue;
             std::visit([&](const auto& f) {
                 applyForce(particle, f, deltaTime);
             }, force);
+        }
+
+        for (const auto& force : config.forces.forces)
+        {
+            if (auto* drag = std::get_if<::vfx::DragForceConfig>(&force))
+                applyForce(particle, *drag, deltaTime);
         }
     }
 
@@ -456,6 +616,43 @@ namespace render::vfx
                 particle.velocity += radialDir * force.radialPull * deltaTime;
             }
         }
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::DragForceConfig& force, float deltaTime)
+    {
+        // Multiplicative (semi-implicit) form: never reverses velocity, even when k*dt > 1.
+        // Must match vfx_particle_sim.glsl exactly.
+        float k = force.linearCoeff + force.quadraticCoeff * glm::length(particle.velocity);
+        particle.velocity /= (1.0f + std::max(k, 0.0f) * deltaTime);
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::PointAttractorForceConfig& force, float deltaTime)
+    {
+        // Pull toward a world-space point with radius/falloff. Matches vfx_particle_sim.glsl.
+        glm::vec3 toCenter = force.position - particle.position;
+        float dist = glm::length(toCenter);
+        if (dist > 1e-4f && dist < force.radius)
+        {
+            float t = glm::clamp(1.0f - dist / force.radius, 0.0f, 1.0f);
+            float falloff = std::pow(t, force.falloff);
+            particle.velocity += (toCenter / dist) * force.strength * falloff * deltaTime;
+        }
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::CurlNoiseForceConfig& force, float deltaTime)
+    {
+        // Divergence-free curl noise. Single tested kernel shared with the divergence
+        // doctest; the GPU mirror lives in vfx_particle_sim.glsl. Like Turbulence, the
+        // CPU uses glm::simplex + timeAccumulator while the GPU uses its own simplex +
+        // frameNumber*0.016 (same basis, matches to float rounding).
+        particle.velocity += ::vfx::evalCurlNoise(force.strength, force.frequency, force.scrollSpeed,
+                                                  force.octaves, particle.position, timeAccumulator) *
+                             deltaTime;
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& /*particle*/, const ::vfx::KillVolumeForceConfig& /*force*/, float /*deltaTime*/)
+    {
+        // Kill Volume is a post-integration predicate, not an acceleration force.
     }
 
 }

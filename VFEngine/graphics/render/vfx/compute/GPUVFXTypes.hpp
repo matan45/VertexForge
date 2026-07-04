@@ -19,8 +19,8 @@ namespace render::vfx
         float initialSpeed;
         uint32_t spawnSeed;
         float glowIntensity = 0.0f;
-        float _pad2 = 0.0f;
-        float _pad3 = 0.0f;
+        float angularVelocity = 0.0f;
+        uint32_t packedColorMult = 0;
     };
     static_assert(sizeof(GPUParticle) == 80, "GPUParticle must be 80 bytes for GPU alignment");
     static_assert(offsetof(GPUParticle, position) == 0, "GPUParticle::position offset mismatch");
@@ -33,6 +33,9 @@ namespace render::vfx
     static_assert(offsetof(GPUParticle, initialSize) == 56, "GPUParticle::initialSize offset mismatch");
     static_assert(offsetof(GPUParticle, initialSpeed) == 60, "GPUParticle::initialSpeed offset mismatch");
     static_assert(offsetof(GPUParticle, spawnSeed) == 64, "GPUParticle::spawnSeed offset mismatch");
+    static_assert(offsetof(GPUParticle, glowIntensity) == 68, "GPUParticle::glowIntensity offset mismatch");
+    static_assert(offsetof(GPUParticle, angularVelocity) == 72, "GPUParticle::angularVelocity offset mismatch");
+    static_assert(offsetof(GPUParticle, packedColorMult) == 76, "GPUParticle::packedColorMult offset mismatch");
 
     namespace ModifierFlags
     {
@@ -41,6 +44,9 @@ namespace render::vfx
         inline constexpr uint32_t SpeedOverLifetime = 1 << 2;
         inline constexpr uint32_t RotationOverLifetime = 1 << 3;
         inline constexpr uint32_t GlowOverLifetime = 1 << 15;
+        inline constexpr uint32_t SizeBySpeed = 1u << 22;  // VK-1473: sample size curve by normalized speed
+        inline constexpr uint32_t ColorBySpeed = 1u << 23; // VK-1473: sample color gradient by normalized speed
+        // Bits 24-31 free for future modifiers (e.g. VK-1474 C2 reserved 24/25 if ever node-driven).
     }
 
     namespace ForceFlags
@@ -49,6 +55,11 @@ namespace render::vfx
         inline constexpr uint32_t Wind = 1 << 5;
         inline constexpr uint32_t Turbulence = 1 << 6;
         inline constexpr uint32_t Vortex = 1 << 7;
+        inline constexpr uint32_t Drag = 1 << 16;
+        inline constexpr uint32_t Attractor = 1 << 17;
+        inline constexpr uint32_t AttractorKill = 1 << 18; // kill particles that reach the attractor center
+        inline constexpr uint32_t CurlNoise = 1 << 19;     // divergence-free curl noise force
+        inline constexpr uint32_t KillVolume = 1 << 20;    // kill particles by plane/sphere/box predicate
     }
 
     namespace ShapeFlags
@@ -64,6 +75,7 @@ namespace render::vfx
     namespace FlipbookFlags
     {
         inline constexpr uint32_t RandomStart = 1 << 14;
+        inline constexpr uint32_t FrameBlend = 1 << 21; // VK-1469: crossfade current->next cell
     }
 
     namespace RenderModeFlags
@@ -140,10 +152,42 @@ namespace render::vfx
         // Distortion
         uint32_t distortionEnabled = 0;
         float distortionStrength = 0.0f;
-        float _distortionPad0 = 0.0f;
-        float _distortionPad1 = 0.0f;
+        float sizeVariance = 0.0f;
+        float lifetimeVariance = 0.0f;
+
+        // Spawn variance
+        float speedVariance = 0.0f;
+        float rotationVariance = 0.0f;          // radians
+        float angularVelocityVariance = 0.0f;   // radians / second
+        float colorValueVariance = 0.0f;
+        float alphaVariance = 0.0f;
+        float emissiveIntensity = 1.0f;
+        float _variancePad1 = 0.0f;
+        float _variancePad2 = 0.0f;
+
+        // Forces added in VK-1465 (flags ForceFlags::Drag / Attractor / AttractorKill).
+        // Two vec4s, independent lanes so both forces can be active at once.
+        glm::vec4 attractorParams{0.0f};     // xyz = center (world space), w = strength
+        glm::vec4 dragAttractorExtra{0.0f};  // x = drag linear, y = drag quadratic, z = attractor radius, w = attractor falloff
+
+        // Force added in VK-1466 (flag ForceFlags::CurlNoise).
+        glm::vec4 curlNoiseParams{0.0f};     // x = strength, y = frequency, z = scroll speed, w = octaves
+
+        // Force added in VK-1467 (flag ForceFlags::KillVolume).
+        glm::vec4 killVolumeParams0{0.0f};   // xyz = center, w = sphere radius
+        glm::vec4 killVolumeParams1{0.0f};   // xyz = plane normal / box half extents, w = packed shape/invert/space
+
+        // Speed ranges added in VK-1473 (SizeBySpeed / ColorBySpeed modifiers). Each by-speed
+        // modifier remaps length(velocity) into [0,1] via its own [min,max] before sampling.
+        glm::vec4 modifierSpeedRanges{0.0f}; // x = size speedMin, y = size speedMax, z = color speedMin, w = color speedMax
+
+        // Mesh-particle orientation added in VK-1476. Consumed by the shared mesh
+        // orientation function (vfx_mesh_orientation.glsl); only the MeshParticle
+        // render mode reads these. Mode 0 (VelocityForward) is the legacy default.
+        glm::vec4 meshOrientationParams{0.0f}; // xyz = axis-lock axis (world, normalized), w = spin rate (rad/s)
+        uint32_t meshOrientationMode = 0;      // vfx::VFXOrientationMode (0 = VelocityForward)
     };
-    static_assert(sizeof(GPUEmitterConfig) == 352, "GPUEmitterConfig must be 352 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 512, "GPUEmitterConfig must be 512 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -190,6 +234,24 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, ambientAmount) == 328, "GPUEmitterConfig::ambientAmount offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, distortionEnabled) == 336, "GPUEmitterConfig::distortionEnabled offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, distortionStrength) == 340, "GPUEmitterConfig::distortionStrength offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, sizeVariance) == 344, "GPUEmitterConfig::sizeVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, lifetimeVariance) == 348, "GPUEmitterConfig::lifetimeVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, speedVariance) == 352, "GPUEmitterConfig::speedVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, rotationVariance) == 356, "GPUEmitterConfig::rotationVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, angularVelocityVariance) == 360, "GPUEmitterConfig::angularVelocityVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, colorValueVariance) == 364, "GPUEmitterConfig::colorValueVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, alphaVariance) == 368, "GPUEmitterConfig::alphaVariance offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, emissiveIntensity) == 372, "GPUEmitterConfig::emissiveIntensity offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, _variancePad1) == 376, "GPUEmitterConfig::_variancePad1 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, _variancePad2) == 380, "GPUEmitterConfig::_variancePad2 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, attractorParams) == 384, "GPUEmitterConfig::attractorParams offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, dragAttractorExtra) == 400, "GPUEmitterConfig::dragAttractorExtra offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, curlNoiseParams) == 416, "GPUEmitterConfig::curlNoiseParams offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, killVolumeParams0) == 432, "GPUEmitterConfig::killVolumeParams0 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, killVolumeParams1) == 448, "GPUEmitterConfig::killVolumeParams1 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, modifierSpeedRanges) == 464, "GPUEmitterConfig::modifierSpeedRanges offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, meshOrientationParams) == 480, "GPUEmitterConfig::meshOrientationParams offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, meshOrientationMode) == 496, "GPUEmitterConfig::meshOrientationMode offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {
@@ -234,13 +296,38 @@ namespace render::vfx
     static_assert(offsetof(VFXDrawIndirectCommand, vertexOffset) == 12, "VFXDrawIndirectCommand::vertexOffset offset mismatch");
     static_assert(offsetof(VFXDrawIndirectCommand, firstInstance) == 16, "VFXDrawIndirectCommand::firstInstance offset mismatch");
 
+    namespace LUTChannel
+    {
+        // Baked LUT channel indices. LUT_CHANNELS is derived from Count, so adding a
+        // channel here is a single-point, append-safe change: buffer size, upload stride,
+        // and per-emitter offset all recompute off LUT_CHANNELS. Keep existing indices
+        // stable (they are the packed channel order in VFXLUTBaker::bake()).
+        enum : uint32_t
+        {
+            Color = 0,
+            Size = 1,
+            Speed = 2,
+            Rotation = 3,
+            Glow = 4,
+            SizeBySpeed = 5,        // VK-1473 (C1) curve, sampled by normalized speed
+            ColorBySpeed = 6,       // VK-1473 (C1) gradient, sampled by normalized speed
+            RibbonWidth = 7,        // VK-1474 (C2) curve, sampled by normalized trail position
+            RibbonTailGradient = 8, // VK-1474 (C2) gradient, sampled by normalized trail position
+            Count
+        };
+    }
+
     namespace LUTFlags
     {
-        inline constexpr uint32_t Color = 1 << 0;
-        inline constexpr uint32_t Size = 1 << 1;
-        inline constexpr uint32_t Speed = 1 << 2;
-        inline constexpr uint32_t Rotation = 1 << 3;
-        inline constexpr uint32_t Glow = 1 << 4;
+        inline constexpr uint32_t Color = 1u << LUTChannel::Color;
+        inline constexpr uint32_t Size = 1u << LUTChannel::Size;
+        inline constexpr uint32_t Speed = 1u << LUTChannel::Speed;
+        inline constexpr uint32_t Rotation = 1u << LUTChannel::Rotation;
+        inline constexpr uint32_t Glow = 1u << LUTChannel::Glow;
+        inline constexpr uint32_t SizeBySpeed = 1u << LUTChannel::SizeBySpeed;               // VK-1473
+        inline constexpr uint32_t ColorBySpeed = 1u << LUTChannel::ColorBySpeed;             // VK-1473
+        inline constexpr uint32_t RibbonWidth = 1u << LUTChannel::RibbonWidth;               // VK-1474
+        inline constexpr uint32_t RibbonTailGradient = 1u << LUTChannel::RibbonTailGradient; // VK-1474
     }
 
     struct alignas(16) GPUVFXEvent
@@ -249,12 +336,16 @@ namespace render::vfx
         uint32_t eventType;
         glm::vec3 velocity;
         uint32_t emitterIndex;
+        glm::vec3 color;
+        float size;
     };
-    static_assert(sizeof(GPUVFXEvent) == 32, "GPUVFXEvent must be 32 bytes for GPU alignment");
+    static_assert(sizeof(GPUVFXEvent) == 48, "GPUVFXEvent must be 48 bytes for GPU alignment");
     static_assert(offsetof(GPUVFXEvent, position) == 0, "GPUVFXEvent::position offset mismatch");
     static_assert(offsetof(GPUVFXEvent, eventType) == 12, "GPUVFXEvent::eventType offset mismatch");
     static_assert(offsetof(GPUVFXEvent, velocity) == 16, "GPUVFXEvent::velocity offset mismatch");
     static_assert(offsetof(GPUVFXEvent, emitterIndex) == 28, "GPUVFXEvent::emitterIndex offset mismatch");
+    static_assert(offsetof(GPUVFXEvent, color) == 32, "GPUVFXEvent::color offset mismatch");
+    static_assert(offsetof(GPUVFXEvent, size) == 44, "GPUVFXEvent::size offset mismatch");
 
     struct alignas(16) GPUCollider
     {
@@ -272,7 +363,7 @@ namespace render::vfx
         inline constexpr uint32_t WORKGROUP_SIZE = 64;
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;
         inline constexpr uint32_t LUT_RESOLUTION = 64;
-        inline constexpr uint32_t LUT_CHANNELS = 5;
+        inline constexpr uint32_t LUT_CHANNELS = LUTChannel::Count; // VK-1473/1474: was 5, now derived (9)
         inline constexpr uint32_t MAX_TRAIL_POINTS = 256;
         inline constexpr uint32_t MAX_VFX_EVENTS_PER_FRAME = 256;
         inline constexpr uint32_t MAX_SCENE_COLLIDERS = 256;
@@ -370,7 +461,9 @@ namespace render::vfx
         float glowColorR = 1.0f;
         float glowColorG = 1.0f;
         float glowColorB = 1.0f;
+        float emissiveIntensity = 1.0f;
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
+        uint32_t frameBlendMode = 0; // VK-1469: 0 = off, 1 = loop (wrap), 2 = clamp (one-shot)
     };
 }

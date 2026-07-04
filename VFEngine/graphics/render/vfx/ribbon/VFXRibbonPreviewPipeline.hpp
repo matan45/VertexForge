@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../billboard/VFXBillboardTypes.hpp"
+#include "vfx/VFXBlendMode.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <vector>
@@ -25,6 +26,7 @@ namespace render::vfx
         float glowColorR = 1.0f;
         float glowColorG = 1.0f;
         float glowColorB = 1.0f;
+        float emissiveIntensity = 1.0f;
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
     };
@@ -41,6 +43,7 @@ namespace render::vfx
         std::shared_ptr<core::Shader> ribbonShader;
 
         vk::Pipeline graphicsPipeline;
+        vk::Pipeline multiplyPipeline; // VK-1472: Multiply blend variant (shares pipelineLayout)
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -85,9 +88,10 @@ namespace render::vfx
         void setRibbonSegments(const std::vector<VFXRibbonSegmentData>& segments);
 
         void setTexture(const std::string& texturePath);
-        void setRenderingConfig(float alphaClipThreshold, bool additiveBlend,
+        void setRenderingConfig(float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
                                 float ribbonWidth,
                                 const glm::vec3& glowColor = glm::vec3(1.0f),
+                                float emissiveIntensity = 1.0f,
                                 float uvScrollSpeedU = 0.0f, float uvScrollSpeedV = 0.0f);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;

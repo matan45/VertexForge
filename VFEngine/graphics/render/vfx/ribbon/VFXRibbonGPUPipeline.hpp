@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../compute/GPUVFXTypes.hpp"
+#include "vfx/VFXBlendMode.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -32,6 +33,7 @@ namespace render::vfx
         vk::Format colorFormat = vk::Format::eUndefined;
         vk::Format depthFormat = vk::Format::eUndefined;
         vk::Pipeline graphicsPipeline;
+        vk::Pipeline multiplyPipeline; // VK-1472: Multiply blend variant (shares pipelineLayout)
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -56,6 +58,11 @@ namespace render::vfx
         vk::Buffer cachedRibbonHeadBuffer;
         vk::DeviceSize cachedRibbonHeadBufferSize = 0;
 
+        // VK-1474: baked LUT (width curve ch7 / tail gradient ch8), shared with the compute sim
+        // buffer. Bound at descriptor binding 7 (vertex stage) so the ribbon shader can sample it.
+        vk::Buffer cachedLutBuffer;
+        vk::DeviceSize cachedLutBufferSize = 0;
+
         vk::Image defaultTextureImage;
         core::VulkanAllocation defaultTextureAllocation;
         vk::ImageView defaultTextureImageView;
@@ -72,6 +79,7 @@ namespace render::vfx
             float alphaClipThreshold = 0.1f;
             uint32_t blendMode = 0;
             glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
+            int32_t sortOrder = 0; // VK-1471: per-emitter draw-order key
         };
 
         struct TextureEntry
@@ -126,10 +134,11 @@ namespace render::vfx
         void updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize);
         void updateRibbonBuffers(vk::Buffer ringBuffer, vk::DeviceSize ringBufferSize,
                                   vk::Buffer headBuffer, vk::DeviceSize headBufferSize);
+        void updateLutBuffer(vk::Buffer lutBuffer, vk::DeviceSize lutBufferSize); // VK-1474
 
         void setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath);
-        void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend,
-                                       const glm::vec3& glowColor = glm::vec3(1.0f));
+        void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
+                                       const glm::vec3& glowColor = glm::vec3(1.0f), int32_t sortOrder = 0);
         void removeEmitter(uint32_t emitterIndex);
 
         void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }

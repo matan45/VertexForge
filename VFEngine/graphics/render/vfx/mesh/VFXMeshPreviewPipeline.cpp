@@ -102,6 +102,7 @@ namespace render::vfx
     void VFXMeshPreviewPipeline::recreate()
     {
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+        if (multiplyPipeline) { device.getLogicalDevice().destroyPipeline(multiplyPipeline); multiplyPipeline = nullptr; } // VK-1472
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
 
         createPipeline();
@@ -112,6 +113,7 @@ namespace render::vfx
         auto& dev = device.getLogicalDevice();
 
         if (graphicsPipeline) { dev.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
+        if (multiplyPipeline) { dev.destroyPipeline(multiplyPipeline); multiplyPipeline = nullptr; } // VK-1472
         if (pipelineLayout) { dev.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
 
         if (descriptorPool)
@@ -258,7 +260,7 @@ namespace render::vfx
         instanceBinding.stride = sizeof(VFXInstanceData);
         instanceBinding.inputRate = vk::VertexInputRate::eInstance;
 
-        std::array<vk::VertexInputAttributeDescription, 5> instanceAttribs{};
+        std::array<vk::VertexInputAttributeDescription, 8> instanceAttribs{};
         // location 3: worldPosAndSize (vec4)
         instanceAttribs[0].binding = 1;
         instanceAttribs[0].location = 3;
@@ -289,6 +291,25 @@ namespace render::vfx
         instanceAttribs[4].format = vk::Format::eR32Sfloat;
         instanceAttribs[4].offset = offsetof(VFXInstanceData, glowIntensity);
 
+        // VK-1476: orientation inputs (mesh preview only) — mirrors runtime GPUParticle fields.
+        // location 8: velocity (vec3)
+        instanceAttribs[5].binding = 1;
+        instanceAttribs[5].location = 8;
+        instanceAttribs[5].format = vk::Format::eR32G32B32Sfloat;
+        instanceAttribs[5].offset = offsetof(VFXInstanceData, velocity);
+
+        // location 9: spawnSeed (uint)
+        instanceAttribs[6].binding = 1;
+        instanceAttribs[6].location = 9;
+        instanceAttribs[6].format = vk::Format::eR32Uint;
+        instanceAttribs[6].offset = offsetof(VFXInstanceData, spawnSeed);
+
+        // location 10: age (float, seconds since spawn)
+        instanceAttribs[7].binding = 1;
+        instanceAttribs[7].location = 10;
+        instanceAttribs[7].format = vk::Format::eR32Sfloat;
+        instanceAttribs[7].offset = offsetof(VFXInstanceData, age);
+
         std::vector<vk::VertexInputAttributeDescription> allAttribs;
         allAttribs.insert(allAttribs.end(), meshAttribs.begin(), meshAttribs.end());
         allAttribs.insert(allAttribs.end(), instanceAttribs.begin(), instanceAttribs.end());
@@ -308,12 +329,21 @@ namespace render::vfx
             .cullMode = vk::CullModeFlagBits::eBack,
             .depthTestEnable = true,
             .depthWriteEnable = true,
-            .blendEnable = true
+            .blendEnable = true,
+            .srcColorBlendFactor = vk::BlendFactor::eOne,            // VK-1472: premultiplied shared state
+            .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         graphicsPipeline = result.pipeline;
         pipelineLayout = result.pipelineLayout;
+
+        // VK-1472: Multiply blend variant (dst*src) reuses the shared layout.
+        core::GraphicsPipelineConfig multiplyConfig = config;
+        multiplyConfig.existingPipelineLayout = pipelineLayout;
+        multiplyConfig.srcColorBlendFactor = vk::BlendFactor::eDstColor;
+        multiplyConfig.dstColorBlendFactor = vk::BlendFactor::eZero;
+        multiplyPipeline = core::PipelineUtilities::createGraphicsPipeline(multiplyConfig).pipeline;
     }
 
     void VFXMeshPreviewPipeline::createBuffers()

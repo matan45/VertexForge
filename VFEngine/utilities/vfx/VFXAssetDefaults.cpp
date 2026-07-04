@@ -1,4 +1,5 @@
 #include "VFXAsset.hpp"
+#include "VFXEventTypes.hpp"
 #include "../uuid/UUID.hpp"
 
 namespace vfx
@@ -59,6 +60,42 @@ namespace vfx
                 "flipbookRandomStart", VFXPropertyType::Bool,
                 EmitterDefaults::FLIPBOOK_RANDOM_START, 0.0f, 1.0f
             };
+            node.properties["flipbookFrameBlend"] = VFXProperty{
+                "flipbookFrameBlend", VFXPropertyType::Bool,
+                EmitterDefaults::FLIPBOOK_FRAME_BLEND, 0.0f, 1.0f
+            };
+        }
+
+        void addVarianceProperties(VFXNode& node)
+        {
+            node.properties["sizeVariance"] = VFXProperty{
+                "sizeVariance", VFXPropertyType::Float,
+                EmitterDefaults::SIZE_VARIANCE, 0.0f, 1.0f
+            };
+            node.properties["lifetimeVariance"] = VFXProperty{
+                "lifetimeVariance", VFXPropertyType::Float,
+                EmitterDefaults::LIFETIME_VARIANCE, 0.0f, 1.0f
+            };
+            node.properties["speedVariance"] = VFXProperty{
+                "speedVariance", VFXPropertyType::Float,
+                EmitterDefaults::SPEED_VARIANCE, 0.0f, 1.0f
+            };
+            node.properties["rotationVariance"] = VFXProperty{
+                "rotationVariance", VFXPropertyType::Float,
+                EmitterDefaults::ROTATION_VARIANCE_DEGREES, 0.0f, 180.0f
+            };
+            node.properties["angularVelocityVariance"] = VFXProperty{
+                "angularVelocityVariance", VFXPropertyType::Float,
+                EmitterDefaults::ANGULAR_VELOCITY_VARIANCE_DEGREES, 0.0f, 720.0f
+            };
+            node.properties["colorValueVariance"] = VFXProperty{
+                "colorValueVariance", VFXPropertyType::Float,
+                EmitterDefaults::COLOR_VALUE_VARIANCE, 0.0f, 1.0f
+            };
+            node.properties["alphaVariance"] = VFXProperty{
+                "alphaVariance", VFXPropertyType::Float,
+                EmitterDefaults::ALPHA_VARIANCE, 0.0f, 1.0f
+            };
         }
 
         void addRenderingProperties(VFXNode& node)
@@ -70,6 +107,16 @@ namespace vfx
             node.properties["additiveBlend"] = VFXProperty{
                 "additiveBlend", VFXPropertyType::Bool,
                 EmitterDefaults::ADDITIVE_BLEND, 0.0f, 1.0f
+            };
+            // VK-1472: blend mode supersedes the legacy additiveBlend bool. When
+            // present it wins in the loader; the bool is kept above for back-compat.
+            node.properties["blendMode"] = VFXProperty{
+                "blendMode", VFXPropertyType::String,
+                std::string(blendModeToString(EmitterDefaults::BLEND_MODE)), 0.0f, 0.0f
+            };
+            node.properties["sortOrder"] = VFXProperty{
+                "sortOrder", VFXPropertyType::Int,
+                EmitterDefaults::SORT_ORDER, -256.0f, 256.0f
             };
             node.properties["renderMode"] = VFXProperty{
                 "renderMode", VFXPropertyType::Int,
@@ -87,6 +134,19 @@ namespace vfx
                 "meshPath", VFXPropertyType::String,
                 std::string(""), 0.0f, 0.0f
             };
+            // VK-1476: mesh-particle orientation (only used when renderMode == MeshParticle).
+            node.properties["meshOrientationMode"] = VFXProperty{
+                "meshOrientationMode", VFXPropertyType::String,
+                std::string(orientationModeToString(EmitterDefaults::MESH_ORIENTATION_MODE)), 0.0f, 0.0f
+            };
+            node.properties["meshOrientationAxis"] = VFXProperty{
+                "meshOrientationAxis", VFXPropertyType::Vec3,
+                glm::vec3(0.0f, 1.0f, 0.0f), 0.0f, 0.0f
+            };
+            node.properties["meshOrientationSpinRate"] = VFXProperty{
+                "meshOrientationSpinRate", VFXPropertyType::Float,
+                EmitterDefaults::MESH_ORIENTATION_SPIN_RATE, 0.0f, 50.0f
+            };
         }
 
         void addRibbonProperties(VFXNode& node)
@@ -103,6 +163,17 @@ namespace vfx
                 "ribbonMinDistance", VFXPropertyType::Float,
                 EmitterDefaults::RIBBON_MIN_DISTANCE, 0.0f, 5.0f
             };
+            // VK-1474: over-trail width curve + tail gradient. Defaults are no-ops (constant 1.0
+            // width multiplier, opaque-white tint) so a new ribbon renders identically to the flat
+            // legacy path until authored. min/max drive the curve editor's Y-range.
+            node.properties["ribbonWidthCurve"] = VFXProperty{
+                "ribbonWidthCurve", VFXPropertyType::Curve,
+                VFXCurve::constant(1.0f), 0.0f, 4.0f
+            };
+            node.properties["ribbonTailGradient"] = VFXProperty{
+                "ribbonTailGradient", VFXPropertyType::Gradient,
+                VFXGradient::fromStartEnd(glm::vec4(1.0f), glm::vec4(1.0f)), 0.0f, 1.0f
+            };
             node.properties["uvScrollSpeedU"] = VFXProperty{
                 "uvScrollSpeedU", VFXPropertyType::Float,
                 EmitterDefaults::UV_SCROLL_SPEED_U, -10.0f, 10.0f
@@ -115,46 +186,25 @@ namespace vfx
 
         void addEventProperties(VFXNode& node)
         {
-            node.properties["eventOnSpawnEnabled"] = VFXProperty{
-                "eventOnSpawnEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_SPAWN_ENABLED, 0.0f, 1.0f
-            };
-            node.properties["eventOnSpawnVFX"] = VFXProperty{
-                "eventOnSpawnVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            node.properties["eventOnDeathEnabled"] = VFXProperty{
-                "eventOnDeathEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_DEATH_ENABLED, 0.0f, 1.0f
-            };
-            node.properties["eventOnDeathVFX"] = VFXProperty{
-                "eventOnDeathVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            node.properties["eventOnCollisionEnabled"] = VFXProperty{
-                "eventOnCollisionEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_COLLISION_ENABLED, 0.0f, 1.0f
-            };
-            node.properties["eventOnCollisionVFX"] = VFXProperty{
-                "eventOnCollisionVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            node.properties["eventOnLifetimeThresholdEnabled"] = VFXProperty{
-                "eventOnLifetimeThresholdEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_LIFETIME_THRESHOLD_ENABLED, 0.0f, 1.0f
-            };
-            node.properties["eventOnLifetimeThresholdVFX"] = VFXProperty{
-                "eventOnLifetimeThresholdVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            node.properties["eventLifetimeThreshold"] = VFXProperty{
-                "eventLifetimeThreshold", VFXPropertyType::Float,
-                EmitterDefaults::EVENT_LIFETIME_THRESHOLD, 0.0f, 1.0f
-            };
+            VFXEventConfig config;
+            config.types[eventTypeIndex(VFXEventType::OnSpawn)].enabled =
+                EmitterDefaults::EVENT_ON_SPAWN_ENABLED;
+            config.types[eventTypeIndex(VFXEventType::OnDeath)].enabled =
+                EmitterDefaults::EVENT_ON_DEATH_ENABLED;
+            config.types[eventTypeIndex(VFXEventType::OnCollision)].enabled =
+                EmitterDefaults::EVENT_ON_COLLISION_ENABLED;
+            config.types[eventTypeIndex(VFXEventType::OnLifetimeThreshold)].enabled =
+                EmitterDefaults::EVENT_ON_LIFETIME_THRESHOLD_ENABLED;
+            config.lifetimeThreshold = EmitterDefaults::EVENT_LIFETIME_THRESHOLD;
+            storeEventConfigToNode(node, config);
         }
 
         void addLightingAndCollisionProperties(VFXNode& node)
         {
+            node.properties["emissiveIntensity"] = VFXProperty{
+                "emissiveIntensity", VFXPropertyType::Float,
+                EmitterDefaults::EMISSIVE_INTENSITY, 0.0f, 100.0f
+            };
             node.properties["lightingInfluence"] = VFXProperty{
                 "lightingInfluence", VFXPropertyType::Float,
                 EmitterDefaults::LIGHTING_INFLUENCE, 0.0f, 1.0f
@@ -218,6 +268,7 @@ namespace vfx
             emitterNode.position = glm::vec2(100.0f, 200.0f);
 
             addCoreProperties(emitterNode);
+            addVarianceProperties(emitterNode);
             addFlipbookProperties(emitterNode);
             addRenderingProperties(emitterNode);
             addRibbonProperties(emitterNode);

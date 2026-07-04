@@ -32,6 +32,7 @@ layout(push_constant) uniform PushConstants {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float emissiveIntensity;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
 } pc;
@@ -92,6 +93,7 @@ layout(push_constant) uniform PushConstants {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    float emissiveIntensity;
     float uvScrollSpeedU;
     float uvScrollSpeedV;
 } pc;
@@ -103,15 +105,23 @@ void main() {
     // Glow: additive emissive color
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
+    finalColor.rgb *= pc.emissiveIntensity;
 
     if (finalColor.a < pc.alphaClipThreshold) {
         discard;
     }
 
     if (pc.blendMode == 1u) {
-        // Additive: pre-multiply by alpha, output zero alpha
+        // Additive: premultiplied rgb, zero alpha -> src.rgb + dst
         outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
-    } else {
+    } else if (pc.blendMode == 2u) {
+        // Premultiplied: straight color + real alpha (fire->smoke gradient)
         outColor = finalColor;
+    } else if (pc.blendMode == 3u) {
+        // Multiply (dst*src): transparent = white so soft/alpha fade to no-op
+        outColor = vec4(mix(vec3(1.0), finalColor.rgb, finalColor.a), finalColor.a);
+    } else {
+        // Alpha: premultiplied-over (identical result to the legacy straight-alpha path)
+        outColor = vec4(finalColor.rgb * finalColor.a, finalColor.a);
     }
 }

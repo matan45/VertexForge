@@ -8,6 +8,8 @@
 #include <glm/glm.hpp>
 #include "VFXCurveTypes.hpp"
 #include "VFXScalability.hpp"
+#include "VFXBlendMode.hpp"
+#include "VFXOrientationMode.hpp"
 
 namespace vfx
 {
@@ -54,10 +56,16 @@ namespace vfx
         SpeedOverLifetime,
         RotationOverLifetime,
         GlowOverLifetime,
+        SizeBySpeed,   // VK-1473: curve sampled by normalized speed
+        ColorBySpeed,  // VK-1473: gradient sampled by normalized speed
         ForceGravity,
         ForceWind,
         ForceTurbulence,
         ForceVortex,
+        ForceDrag,
+        ForcePointAttractor,
+        ForceCurlNoise,
+        ForceKillVolume,
         Shape
     };
 
@@ -67,7 +75,9 @@ namespace vfx
                type == VFXNodeType::SizeOverLifetime ||
                type == VFXNodeType::SpeedOverLifetime ||
                type == VFXNodeType::RotationOverLifetime ||
-               type == VFXNodeType::GlowOverLifetime;
+               type == VFXNodeType::GlowOverLifetime ||
+               type == VFXNodeType::SizeBySpeed ||
+               type == VFXNodeType::ColorBySpeed;
     }
 
     inline bool isForceNode(VFXNodeType type)
@@ -75,7 +85,11 @@ namespace vfx
         return type == VFXNodeType::ForceGravity ||
                type == VFXNodeType::ForceWind ||
                type == VFXNodeType::ForceTurbulence ||
-               type == VFXNodeType::ForceVortex;
+               type == VFXNodeType::ForceVortex ||
+               type == VFXNodeType::ForceDrag ||
+               type == VFXNodeType::ForcePointAttractor ||
+               type == VFXNodeType::ForceCurlNoise ||
+               type == VFXNodeType::ForceKillVolume;
     }
 
     inline bool isShapeNode(VFXNodeType type)
@@ -115,6 +129,11 @@ namespace vfx
         glm::vec2 position{0.0f, 0.0f};
 
         std::map<std::string, VFXProperty> properties;
+
+        // Emitter UI (editor-only): which addable "module" sections are shown in the
+        // property panel. Empty = Core only. Persisted additively in .vfVFX; runtime
+        // ignores it. Absence of the JSON key on load triggers auto-detect migration.
+        std::vector<std::string> enabledSections;
     };
 
     struct VFXNodeLink
@@ -164,19 +183,35 @@ namespace vfx
         inline constexpr float START_SPEED = 1.0f;
         inline constexpr bool LOOPING = true;
         inline constexpr float INHERIT_VELOCITY_RATIO = 0.0f;
+        inline constexpr float SIZE_VARIANCE = 0.0f;
+        inline constexpr float LIFETIME_VARIANCE = 0.0f;
+        inline constexpr float SPEED_VARIANCE = 0.0f;
+        inline constexpr float ROTATION_VARIANCE_DEGREES = 0.0f;
+        inline constexpr float ANGULAR_VELOCITY_VARIANCE_DEGREES = 0.0f;
+        inline constexpr float COLOR_VALUE_VARIANCE = 0.0f;
+        inline constexpr float ALPHA_VARIANCE = 0.0f;
 
         inline constexpr int FLIPBOOK_ROWS = 1;
         inline constexpr int FLIPBOOK_COLUMNS = 1;
         inline constexpr float FLIPBOOK_FRAME_RATE = 0.0f;
         inline constexpr bool FLIPBOOK_RANDOM_START = false;
+        inline constexpr bool FLIPBOOK_FRAME_BLEND = false;
 
         // Rendering
         inline constexpr float ALPHA_CLIP_THRESHOLD = 0.1f;
-        inline constexpr bool ADDITIVE_BLEND = false;
+        inline constexpr bool ADDITIVE_BLEND = false; // VK-1472: legacy; superseded by BLEND_MODE, kept for back-compat fallback
+        inline constexpr VFXBlendMode BLEND_MODE = VFXBlendMode::Alpha; // VK-1472
+        inline constexpr int SORT_ORDER = 0; // VK-1471: per-emitter draw-order key
 
         inline constexpr int RENDER_MODE = 0;
         inline constexpr float SOFT_PARTICLE_DISTANCE = 0.0f;
         inline constexpr float STRETCH_MULTIPLIER = 1.0f;
+
+        // VK-1476: mesh-particle orientation (only used when RENDER_MODE == MeshParticle).
+        // Default VelocityForward reproduces the legacy nose-first basis. Axis default
+        // (0,1,0) is applied inline at the load/serialize sites.
+        inline constexpr VFXOrientationMode MESH_ORIENTATION_MODE = VFXOrientationMode::VelocityForward;
+        inline constexpr float MESH_ORIENTATION_SPIN_RATE = 1.0f;
 
         inline constexpr int MAX_TRAIL_POINTS = 64;
         inline constexpr float RIBBON_WIDTH = 1.0f;
@@ -186,6 +221,7 @@ namespace vfx
         inline constexpr float UV_SCROLL_SPEED_V = 0.0f;
 
         // Lighting
+        inline constexpr float EMISSIVE_INTENSITY = 1.0f;
         inline constexpr float LIGHTING_INFLUENCE = 0.0f;
         inline constexpr int NORMAL_MODE = 0;              // 0 = sphere, 1 = view-aligned, 2 = mesh
         inline constexpr float AMBIENT_AMOUNT = 0.3f;
@@ -221,6 +257,15 @@ namespace vfx
         inline constexpr float SPEED_END_MULTIPLIER = 0.5f;
 
         inline constexpr float ANGULAR_VELOCITY = 0.0f;
+
+        // VK-1473: by-speed modifiers. Curve/gradient X-axis is normalized speed in [0,1]
+        // (t=0 at speedMin, t=1 at speedMax); default multiplies small-when-slow -> full-when-fast.
+        inline constexpr float SIZE_BY_SPEED_START = 0.5f;
+        inline constexpr float SIZE_BY_SPEED_END = 1.0f;
+        inline const glm::vec4 COLOR_BY_SPEED_START{0.5f, 0.5f, 0.5f, 1.0f};
+        inline const glm::vec4 COLOR_BY_SPEED_END{1.0f, 1.0f, 1.0f, 1.0f};
+        inline constexpr float SPEED_RANGE_MIN = 0.0f;
+        inline constexpr float SPEED_RANGE_MAX = 10.0f;
     }
 
     namespace ForceDefaults
@@ -242,6 +287,27 @@ namespace vfx
         inline const glm::vec3 VORTEX_CENTER{0.0f, 0.0f, 0.0f};
         inline constexpr float VORTEX_STRENGTH = 1.0f;
         inline constexpr float VORTEX_RADIAL_PULL = 0.0f;
+
+        inline constexpr float DRAG_LINEAR_COEFF = 1.0f;
+        inline constexpr float DRAG_QUADRATIC_COEFF = 0.0f;
+
+        inline const glm::vec3 ATTRACTOR_POSITION{0.0f, 0.0f, 0.0f};
+        inline constexpr float ATTRACTOR_STRENGTH = 5.0f;
+        inline constexpr float ATTRACTOR_RADIUS = 10.0f;
+        inline constexpr float ATTRACTOR_FALLOFF = 1.0f;
+        inline constexpr bool ATTRACTOR_KILL_AT_CENTER = false;
+
+        inline constexpr float CURLNOISE_STRENGTH = 1.0f;
+        inline constexpr float CURLNOISE_FREQUENCY = 1.0f;
+        inline constexpr float CURLNOISE_SCROLL_SPEED = 0.0f;
+        inline constexpr int CURLNOISE_OCTAVES = 1;
+
+        inline constexpr const char* KILLVOLUME_SHAPE = "Plane";
+        inline const glm::vec3 KILLVOLUME_CENTER{0.0f, 0.0f, 0.0f};
+        inline const glm::vec3 KILLVOLUME_NORMAL{0.0f, 1.0f, 0.0f};
+        inline constexpr float KILLVOLUME_RADIUS = 1.0f;
+        inline const glm::vec3 KILLVOLUME_HALF_EXTENTS{1.0f, 1.0f, 1.0f};
+        inline constexpr bool KILLVOLUME_INVERT = false;
     }
 
     const char* propertyTypeToString(VFXPropertyType type);

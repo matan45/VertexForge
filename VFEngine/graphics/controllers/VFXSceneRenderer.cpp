@@ -13,6 +13,7 @@
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
+#include "vfx/VFXSortOrder.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <cmath>
@@ -173,6 +174,7 @@ namespace controllers
             instance.autoDestroy = params.autoDestroy;
             instance.poolable = params.poolable;
             instance.assetPath = params.vfxAssetPath;
+            instance.injectedEmitterVelocity = params.injectedEmitterVelocity;
 
             // VK-1451: a stable per-instance RNG seed, chosen ONCE here. An explicit seed
             // (combo determinism) makes the emission schedule reproducible; otherwise pick
@@ -182,6 +184,10 @@ namespace controllers
 
             // Apply the resolved scalability level to the per-instance config/state.
             instance.config = baseConfig;
+            if (params.startColorMultiplier.has_value())
+                instance.config.startColor *= params.startColorMultiplier.value();
+            if (params.startSizeMultiplier.has_value())
+                instance.config.startSize *= params.startSizeMultiplier.value();
             instance.config.spawnRate *= level.spawnRateScale;
             if (level.cullDistance > 0.0f)
             {
@@ -217,10 +223,13 @@ namespace controllers
             fbConfig.rows = storedConfig.flipbookRows;
             fbConfig.columns = storedConfig.flipbookColumns;
             fbConfig.alphaClipThreshold = storedConfig.alphaClipThreshold;
-            fbConfig.additiveBlend = storedConfig.additiveBlend;
+            fbConfig.blendMode = storedConfig.blendMode; // VK-1472
             fbConfig.renderMode = storedConfig.renderMode;
             fbConfig.stretchMultiplier = storedConfig.stretchMultiplier;
             fbConfig.glowColor = glowColor;
+            fbConfig.emissiveIntensity = storedConfig.emissiveIntensity;
+            fbConfig.frameBlend = storedConfig.flipbookFrameBlend;
+            fbConfig.frameRate = storedConfig.flipbookFrameRate;
             cpuPipeline->setFlipbookConfig(fbConfig);
         }
 
@@ -229,8 +238,9 @@ namespace controllers
             gpuRenderPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
             gpuRenderPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                           storedConfig.alphaClipThreshold,
-                                                          storedConfig.additiveBlend,
-                                                          glowColor);
+                                                          storedConfig.blendMode,
+                                                          glowColor,
+                                                          storedConfig.sortOrder);
             gpuRenderPipeline->setEmitterRenderMode(instances[id].gpuEmitterIndex,
                                                       static_cast<uint32_t>(storedConfig.renderMode));
             gpuRenderPipeline->setEmitterDistortionEnabled(instances[id].gpuEmitterIndex,
@@ -244,8 +254,9 @@ namespace controllers
             gpuMeshPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
             gpuMeshPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                         storedConfig.alphaClipThreshold,
-                                                        storedConfig.additiveBlend,
-                                                        glowColor);
+                                                        storedConfig.blendMode,
+                                                        glowColor,
+                                                        storedConfig.sortOrder);
         }
 
         if (gpuRibbonPipeline && instances[id].gpuDriven &&
@@ -254,8 +265,9 @@ namespace controllers
             gpuRibbonPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
             gpuRibbonPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                           storedConfig.alphaClipThreshold,
-                                                          storedConfig.additiveBlend,
-                                                          glowColor);
+                                                          storedConfig.blendMode,
+                                                          glowColor,
+                                                          storedConfig.sortOrder);
         }
 
         if (storedConfig.distortionEnabled)
@@ -422,6 +434,7 @@ namespace controllers
         instance.poolable = params.poolable;
         instance.assetPath = params.vfxAssetPath;
         instance.seed = pickInstanceSeed(params.seed);
+        instance.injectedEmitterVelocity = params.injectedEmitterVelocity;
 
         instance.spawnAccumulator = 0.0f;
         instance.emissionTime = 0.0f;
@@ -438,6 +451,10 @@ namespace controllers
         instance.updatePhase = 0;
 
         instance.config = baseConfig;
+        if (params.startColorMultiplier.has_value())
+            instance.config.startColor *= params.startColorMultiplier.value();
+        if (params.startSizeMultiplier.has_value())
+            instance.config.startSize *= params.startSizeMultiplier.value();
         instance.config.spawnRate *= level.spawnRateScale;
         if (level.cullDistance > 0.0f)
         {
@@ -1110,6 +1127,15 @@ namespace controllers
     {
         collectedInstances.clear();
 
+        // VK-1471: flatten CPU-sim emitters in ascending sortOrder so a higher-sortOrder
+        // emitter's particles land later in the merged instanced draw (drawn on top).
+        // Gathered in the map's current traversal order, so an all-default (0) set is a
+        // stable no-op and reproduces today's order.
+        std::vector<::vfx::VFXDrawOrderEntry> drawOrder;
+        std::vector<const VFXRuntimeInstance*> liveInstances;
+        drawOrder.reserve(instances.size());
+        liveInstances.reserve(instances.size());
+
         for (const auto& [id, instance] : instances)
         {
             if (instance.gpuDriven)
@@ -1121,6 +1147,16 @@ namespace controllers
             {
                 continue;
             }
+
+            drawOrder.push_back({static_cast<uint32_t>(liveInstances.size()), instance.config.sortOrder});
+            liveInstances.push_back(&instance);
+        }
+
+        ::vfx::stableSortDrawOrder(drawOrder);
+
+        for (const auto& drawEntry : drawOrder)
+        {
+            const VFXRuntimeInstance& instance = *liveInstances[drawEntry.index];
 
             auto particleData = instance.particleSystem->getInstanceData();
 
@@ -1166,6 +1202,10 @@ namespace controllers
         stats.culledEmitters = culledEmittersThisFrame;
         stats.throttledEmitters = throttledEmittersThisFrame;
         stats.vfxCullDistance = std::sqrt(maxVFXDistSq);
+        stats.eventsThisFrame = lastFrameEventCount;
+        stats.rawEventsThisFrame = lastFrameRawEventCount;
+        stats.eventBudget = render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME;
+        stats.eventsDropped = lastFrameRawEventCount > render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME;
 
         return stats;
     }

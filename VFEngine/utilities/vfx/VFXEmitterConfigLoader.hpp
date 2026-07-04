@@ -2,6 +2,7 @@
 
 #include "VFXTypes.hpp"
 #include "VFXAsset.hpp"
+#include "VFXEventTypes.hpp"
 #include "VFXModifierConfigLoader.hpp"
 #include "VFXForceConfigLoader.hpp"
 #include "VFXShapeConfigLoader.hpp"
@@ -109,6 +110,20 @@ namespace vfx
         config.texturePath = getString(*emitterNode, "texture", "");
         config.inheritVelocityRatio = std::clamp(
             getFloat(*emitterNode, "inheritVelocityRatio", EmitterDefaults::INHERIT_VELOCITY_RATIO), 0.0f, 1.0f);
+        config.sizeVariance = std::clamp(
+            getFloat(*emitterNode, "sizeVariance", EmitterDefaults::SIZE_VARIANCE), 0.0f, 1.0f);
+        config.lifetimeVariance = std::clamp(
+            getFloat(*emitterNode, "lifetimeVariance", EmitterDefaults::LIFETIME_VARIANCE), 0.0f, 1.0f);
+        config.speedVariance = std::clamp(
+            getFloat(*emitterNode, "speedVariance", EmitterDefaults::SPEED_VARIANCE), 0.0f, 1.0f);
+        config.rotationVariance = glm::radians(std::max(0.0f,
+            getFloat(*emitterNode, "rotationVariance", EmitterDefaults::ROTATION_VARIANCE_DEGREES)));
+        config.angularVelocityVariance = glm::radians(std::max(0.0f,
+            getFloat(*emitterNode, "angularVelocityVariance", EmitterDefaults::ANGULAR_VELOCITY_VARIANCE_DEGREES)));
+        config.colorValueVariance = std::clamp(
+            getFloat(*emitterNode, "colorValueVariance", EmitterDefaults::COLOR_VALUE_VARIANCE), 0.0f, 1.0f);
+        config.alphaVariance = std::clamp(
+            getFloat(*emitterNode, "alphaVariance", EmitterDefaults::ALPHA_VARIANCE), 0.0f, 1.0f);
 
         config.modifiers = VFXModifierConfigLoader::fromGraph(data.graph);
         config.forces = VFXForceConfigLoader::fromGraph(data.graph);
@@ -119,9 +134,18 @@ namespace vfx
         config.flipbookColumns = std::clamp(getInt(*emitterNode, "flipbookColumns", EmitterDefaults::FLIPBOOK_COLUMNS), 1, 16);
         config.flipbookFrameRate = getFloat(*emitterNode, "flipbookFrameRate", EmitterDefaults::FLIPBOOK_FRAME_RATE);
         config.flipbookRandomStart = getBool(*emitterNode, "flipbookRandomStart", EmitterDefaults::FLIPBOOK_RANDOM_START);
+        config.flipbookFrameBlend = getBool(*emitterNode, "flipbookFrameBlend", EmitterDefaults::FLIPBOOK_FRAME_BLEND);
 
         config.alphaClipThreshold = getFloat(*emitterNode, "alphaClipThreshold", EmitterDefaults::ALPHA_CLIP_THRESHOLD);
-        config.additiveBlend = getBool(*emitterNode, "additiveBlend", EmitterDefaults::ADDITIVE_BLEND);
+        // VK-1472: optional blendMode string wins when present; legacy assets fall
+        // back to the additiveBlend bool (false->Alpha, true->Additive).
+        {
+            const std::string blendModeStr = getString(*emitterNode, "blendMode", "");
+            config.blendMode = blendModeStr.empty()
+                ? blendModeFromLegacy(getBool(*emitterNode, "additiveBlend", EmitterDefaults::ADDITIVE_BLEND))
+                : stringToBlendMode(blendModeStr);
+        }
+        config.sortOrder = std::clamp(getInt(*emitterNode, "sortOrder", EmitterDefaults::SORT_ORDER), -256, 256);
 
         config.renderMode = static_cast<render::vfx::VFXRenderMode>(
             std::clamp(getInt(*emitterNode, "renderMode", EmitterDefaults::RENDER_MODE), 0, 4));
@@ -132,6 +156,13 @@ namespace vfx
 
         config.meshPath = getString(*emitterNode, "meshPath", "");
 
+        // VK-1476: mesh-particle orientation. Missing keys (legacy assets) fall back to
+        // VelocityForward + axis (0,1,0), so old effects load byte-identically.
+        config.meshOrientationMode = stringToOrientationMode(getString(*emitterNode, "meshOrientationMode", ""));
+        config.meshOrientationAxis = getVec3(*emitterNode, "meshOrientationAxis", glm::vec3(0.0f, 1.0f, 0.0f));
+        config.meshOrientationSpinRate = std::max(0.0f,
+            getFloat(*emitterNode, "meshOrientationSpinRate", EmitterDefaults::MESH_ORIENTATION_SPIN_RATE));
+
         config.maxTrailPoints = static_cast<uint32_t>(
             std::clamp(getInt(*emitterNode, "maxTrailPoints", EmitterDefaults::MAX_TRAIL_POINTS), 2, 256));
         config.ribbonWidth = std::max(0.01f,
@@ -139,23 +170,35 @@ namespace vfx
         config.ribbonMinDistance = std::max(0.0f,
             getFloat(*emitterNode, "ribbonMinDistance", EmitterDefaults::RIBBON_MIN_DISTANCE));
 
+        // VK-1474: over-trail width curve + tail gradient. Present only when the property was
+        // authored (legacy assets lack it -> flat behavior). Presence drives the LUT flag.
+        if (auto wcIt = emitterNode->properties.find("ribbonWidthCurve"); wcIt != emitterNode->properties.end())
+        {
+            if (auto* curve = std::get_if<VFXCurve>(&wcIt->second.value))
+            {
+                config.ribbonWidthCurve = *curve;
+                config.hasRibbonWidthCurve = true;
+            }
+        }
+        if (auto tgIt = emitterNode->properties.find("ribbonTailGradient"); tgIt != emitterNode->properties.end())
+        {
+            if (auto* gradient = std::get_if<VFXGradient>(&tgIt->second.value))
+            {
+                config.ribbonTailGradient = *gradient;
+                config.hasRibbonTailGradient = true;
+            }
+        }
+
         config.uvScrollSpeedU = getFloat(*emitterNode, "uvScrollSpeedU", EmitterDefaults::UV_SCROLL_SPEED_U);
         config.uvScrollSpeedV = getFloat(*emitterNode, "uvScrollSpeedV", EmitterDefaults::UV_SCROLL_SPEED_V);
 
         // Glow color
         config.glowColor = VFXModifierConfigLoader::getGlowColorFromChain(config.modifiers);
+        config.emissiveIntensity = std::max(0.0f,
+            getFloat(*emitterNode, "emissiveIntensity", EmitterDefaults::EMISSIVE_INTENSITY));
 
         // Events
-        config.events.onSpawnEnabled = getBool(*emitterNode, "eventOnSpawnEnabled", false);
-        config.events.onSpawnVFXPath = getString(*emitterNode, "eventOnSpawnVFX", "");
-        config.events.onDeathEnabled = getBool(*emitterNode, "eventOnDeathEnabled", false);
-        config.events.onDeathVFXPath = getString(*emitterNode, "eventOnDeathVFX", "");
-        config.events.onCollisionEnabled = getBool(*emitterNode, "eventOnCollisionEnabled", false);
-        config.events.onCollisionVFXPath = getString(*emitterNode, "eventOnCollisionVFX", "");
-        config.events.onLifetimeThresholdEnabled = getBool(*emitterNode, "eventOnLifetimeThresholdEnabled", false);
-        config.events.onLifetimeThresholdVFXPath = getString(*emitterNode, "eventOnLifetimeThresholdVFX", "");
-        config.events.lifetimeThreshold = std::clamp(
-            getFloat(*emitterNode, "eventLifetimeThreshold", EventDefaults::LIFETIME_THRESHOLD), 0.0f, 1.0f);
+        config.events = loadEventConfigFromNode(*emitterNode);
 
         // Lighting
         config.lightingInfluence = std::clamp(

@@ -174,10 +174,18 @@ namespace editor::graph
             return IM_COL32(200, 200, 80, 255);   // Yellow
         case vfx::VFXNodeType::GlowOverLifetime:
             return IM_COL32(255, 220, 100, 255);  // Warm white
+        case vfx::VFXNodeType::SizeBySpeed:
+            return IM_COL32(220, 140, 90, 255);   // Warm orange (size, speed-driven)
+        case vfx::VFXNodeType::ColorBySpeed:
+            return IM_COL32(150, 130, 210, 255);  // Violet (color, speed-driven)
         case vfx::VFXNodeType::ForceGravity:
         case vfx::VFXNodeType::ForceWind:
         case vfx::VFXNodeType::ForceTurbulence:
         case vfx::VFXNodeType::ForceVortex:
+        case vfx::VFXNodeType::ForceDrag:
+        case vfx::VFXNodeType::ForcePointAttractor:
+        case vfx::VFXNodeType::ForceCurlNoise:
+        case vfx::VFXNodeType::ForceKillVolume:
             return IM_COL32(80, 200, 200, 255);   // Cyan
         case vfx::VFXNodeType::Shape:
             return IM_COL32(200, 100, 180, 255);  // Magenta
@@ -197,10 +205,16 @@ namespace editor::graph
         case vfx::VFXNodeType::SpeedOverLifetime: return "Speed Over Lifetime";
         case vfx::VFXNodeType::RotationOverLifetime: return "Rotation Over Lifetime";
         case vfx::VFXNodeType::GlowOverLifetime: return "Glow Over Lifetime";
+        case vfx::VFXNodeType::SizeBySpeed: return "Size By Speed";
+        case vfx::VFXNodeType::ColorBySpeed: return "Color By Speed";
         case vfx::VFXNodeType::ForceGravity: return "Gravity";
         case vfx::VFXNodeType::ForceWind: return "Wind";
         case vfx::VFXNodeType::ForceTurbulence: return "Turbulence";
         case vfx::VFXNodeType::ForceVortex: return "Vortex";
+        case vfx::VFXNodeType::ForceDrag: return "Drag";
+        case vfx::VFXNodeType::ForcePointAttractor: return "Point Attractor";
+        case vfx::VFXNodeType::ForceCurlNoise: return "Curl Noise";
+        case vfx::VFXNodeType::ForceKillVolume: return "Kill Volume";
         case vfx::VFXNodeType::Shape: return "Shape";
         default: return "Unknown";
         }

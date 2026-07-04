@@ -1,11 +1,83 @@
 #include "BTGraphEditor.hpp"
 #include <algorithm>
+#include <array>
+#include <cctype>
+#include <string>
 
 namespace ed = ax::NodeEditor;
 using namespace behaviortree;
 
 namespace editor::graph
 {
+    namespace
+    {
+        struct NodePaletteEntry
+        {
+            const char* category;
+            const char* label;
+            BTNodeType type;
+        };
+
+        constexpr std::array<NodePaletteEntry, 22> kNodePaletteEntries = {{
+            // Composites
+            {"Composites", "Sequence", BTNodeType::Sequence},
+            {"Composites", "Selector", BTNodeType::Selector},
+            {"Composites", "Parallel", BTNodeType::Parallel},
+            // Decorators
+            {"Decorators", "Inverter", BTNodeType::Inverter},
+            {"Decorators", "Repeater", BTNodeType::Repeater},
+            {"Decorators", "Succeeder", BTNodeType::Succeeder},
+            {"Decorators", "Repeat Until Fail", BTNodeType::RepeatUntilFail},
+            {"Decorators", "Cooldown", BTNodeType::Cooldown},
+            {"Decorators", "Time Limit", BTNodeType::TimeLimit},
+            {"Decorators", "Blackboard Condition", BTNodeType::BlackboardCondition},
+            // Tasks
+            {"Tasks", "Wait", BTNodeType::Wait},
+            {"Tasks", "Log", BTNodeType::Log},
+            {"Tasks", "Move To", BTNodeType::MoveTo},
+            {"Tasks", "Play Animation", BTNodeType::PlayAnimation},
+            {"Tasks", "Set Blackboard Value", BTNodeType::SetBlackboardValue},
+            {"Tasks", "Check Blackboard Value", BTNodeType::CheckBlackboardValue},
+            {"Tasks", "Script Task", BTNodeType::ScriptTask},
+            {"Tasks", "Environment Query", BTNodeType::EnvironmentQuery},
+            {"Tasks", "Line Of Sight", BTNodeType::LineOfSight},
+            {"Tasks", "Run Subtree", BTNodeType::SubTree},
+            {"Tasks", "Run Dynamic Subtree", BTNodeType::DynamicSubTree},
+            // Services
+            {"Services", "Service", BTNodeType::Service},
+        }};
+
+        bool containsCaseInsensitive(const char* text, const char* filter)
+        {
+            if (!filter || filter[0] == '\0')
+            {
+                return true;
+            }
+
+            if (!text)
+            {
+                return false;
+            }
+
+            auto toLower = [](unsigned char c)
+            {
+                return static_cast<char>(std::tolower(c));
+            };
+
+            std::string haystack(text);
+            std::string needle(filter);
+            std::transform(haystack.begin(), haystack.end(), haystack.begin(), toLower);
+            std::transform(needle.begin(), needle.end(), needle.begin(), toLower);
+            return haystack.find(needle) != std::string::npos;
+        }
+
+        bool matchesPaletteFilter(const NodePaletteEntry& entry, const char* filter)
+        {
+            return containsCaseInsensitive(entry.label, filter) ||
+                   containsCaseInsensitive(entry.category, filter);
+        }
+    }
+
     void BTGraphEditor::handleCreation()
     {
         if (ed::BeginCreate(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), 2.0f))
@@ -136,17 +208,100 @@ namespace editor::graph
 
     void BTGraphEditor::handleContextMenu()
     {
+        static char nodePaletteFilter[128] = {};
+        static bool focusNodePaletteFilter = false;
+
+        auto createPaletteNode = [this](const NodePaletteEntry& entry)
+        {
+            createNode(entry.type, newNodePosition);
+            nodePaletteFilter[0] = '\0';
+            ImGui::CloseCurrentPopup();
+        };
+
         ed::Suspend();
 
         ed::NodeId contextNodeId;
         if (ed::ShowBackgroundContextMenu())
         {
+            nodePaletteFilter[0] = '\0';
+            focusNodePaletteFilter = true;
             ImGui::OpenPopup("BTCreateNodeMenu");
             newNodePosition = ImGui::GetMousePos();
         }
 
         if (ImGui::BeginPopup("BTCreateNodeMenu"))
         {
+            ImGui::TextDisabled("Add Node");
+
+            if (focusNodePaletteFilter)
+            {
+                ImGui::SetKeyboardFocusHere();
+                focusNodePaletteFilter = false;
+            }
+            ImGui::SetNextItemWidth(240.0f);
+            bool searchSubmitted = ImGui::InputTextWithHint(
+                "##BTNodePaletteSearch",
+                "Search nodes...",
+                nodePaletteFilter,
+                sizeof(nodePaletteFilter),
+                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+
+            bool hasFilter = nodePaletteFilter[0] != '\0';
+            if (hasFilter && ImGui::IsKeyPressed(ImGuiKey_Escape))
+            {
+                nodePaletteFilter[0] = '\0';
+                focusNodePaletteFilter = true;
+                hasFilter = false;
+            }
+
+            const NodePaletteEntry* firstMatch = nullptr;
+            if (hasFilter)
+            {
+                for (const auto& entry : kNodePaletteEntries)
+                {
+                    if (matchesPaletteFilter(entry, nodePaletteFilter))
+                    {
+                        firstMatch = &entry;
+                        break;
+                    }
+                }
+            }
+
+            bool createdPaletteNode = false;
+            if (hasFilter && searchSubmitted && firstMatch)
+            {
+                createPaletteNode(*firstMatch);
+                createdPaletteNode = true;
+            }
+
+            ImGui::Separator();
+
+            if (!createdPaletteNode && hasFilter)
+            {
+                bool anyMatch = false;
+                for (const auto& entry : kNodePaletteEntries)
+                {
+                    if (!matchesPaletteFilter(entry, nodePaletteFilter))
+                    {
+                        continue;
+                    }
+                    anyMatch = true;
+                    std::string menuLabel = (entry.category[0] != '\0')
+                        ? std::string(entry.category) + " / " + entry.label
+                        : std::string(entry.label);
+                    if (ImGui::MenuItem(menuLabel.c_str()))
+                    {
+                        createPaletteNode(entry);
+                        break;
+                    }
+                }
+                if (!anyMatch)
+                {
+                    ImGui::TextDisabled("No matching nodes");
+                }
+            }
+            else if (!createdPaletteNode)
+            {
             if (ImGui::BeginMenu("Composites"))
             {
                 if (ImGui::MenuItem("Sequence")) createNode(BTNodeType::Sequence, newNodePosition);
@@ -187,6 +342,7 @@ namespace editor::graph
             {
                 if (ImGui::MenuItem("Service")) createNode(BTNodeType::Service, newNodePosition);
                 ImGui::EndMenu();
+            }
             }
 
             ImGui::EndPopup();
