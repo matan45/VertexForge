@@ -44,6 +44,9 @@ namespace render::vfx
         inline constexpr uint32_t SpeedOverLifetime = 1 << 2;
         inline constexpr uint32_t RotationOverLifetime = 1 << 3;
         inline constexpr uint32_t GlowOverLifetime = 1 << 15;
+        inline constexpr uint32_t SizeBySpeed = 1u << 22;  // VK-1473: sample size curve by normalized speed
+        inline constexpr uint32_t ColorBySpeed = 1u << 23; // VK-1473: sample color gradient by normalized speed
+        // Bits 24-31 free for future modifiers (e.g. VK-1474 C2 reserved 24/25 if ever node-driven).
     }
 
     namespace ForceFlags
@@ -173,8 +176,12 @@ namespace render::vfx
         // Force added in VK-1467 (flag ForceFlags::KillVolume).
         glm::vec4 killVolumeParams0{0.0f};   // xyz = center, w = sphere radius
         glm::vec4 killVolumeParams1{0.0f};   // xyz = plane normal / box half extents, w = packed shape/invert/space
+
+        // Speed ranges added in VK-1473 (SizeBySpeed / ColorBySpeed modifiers). Each by-speed
+        // modifier remaps length(velocity) into [0,1] via its own [min,max] before sampling.
+        glm::vec4 modifierSpeedRanges{0.0f}; // x = size speedMin, y = size speedMax, z = color speedMin, w = color speedMax
     };
-    static_assert(sizeof(GPUEmitterConfig) == 464, "GPUEmitterConfig must be 464 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 480, "GPUEmitterConfig must be 480 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -236,6 +243,7 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, curlNoiseParams) == 416, "GPUEmitterConfig::curlNoiseParams offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, killVolumeParams0) == 432, "GPUEmitterConfig::killVolumeParams0 offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, killVolumeParams1) == 448, "GPUEmitterConfig::killVolumeParams1 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, modifierSpeedRanges) == 464, "GPUEmitterConfig::modifierSpeedRanges offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {
@@ -280,13 +288,38 @@ namespace render::vfx
     static_assert(offsetof(VFXDrawIndirectCommand, vertexOffset) == 12, "VFXDrawIndirectCommand::vertexOffset offset mismatch");
     static_assert(offsetof(VFXDrawIndirectCommand, firstInstance) == 16, "VFXDrawIndirectCommand::firstInstance offset mismatch");
 
+    namespace LUTChannel
+    {
+        // Baked LUT channel indices. LUT_CHANNELS is derived from Count, so adding a
+        // channel here is a single-point, append-safe change: buffer size, upload stride,
+        // and per-emitter offset all recompute off LUT_CHANNELS. Keep existing indices
+        // stable (they are the packed channel order in VFXLUTBaker::bake()).
+        enum : uint32_t
+        {
+            Color = 0,
+            Size = 1,
+            Speed = 2,
+            Rotation = 3,
+            Glow = 4,
+            SizeBySpeed = 5,        // VK-1473 (C1) curve, sampled by normalized speed
+            ColorBySpeed = 6,       // VK-1473 (C1) gradient, sampled by normalized speed
+            RibbonWidth = 7,        // VK-1474 (C2) curve, sampled by normalized trail position
+            RibbonTailGradient = 8, // VK-1474 (C2) gradient, sampled by normalized trail position
+            Count
+        };
+    }
+
     namespace LUTFlags
     {
-        inline constexpr uint32_t Color = 1 << 0;
-        inline constexpr uint32_t Size = 1 << 1;
-        inline constexpr uint32_t Speed = 1 << 2;
-        inline constexpr uint32_t Rotation = 1 << 3;
-        inline constexpr uint32_t Glow = 1 << 4;
+        inline constexpr uint32_t Color = 1u << LUTChannel::Color;
+        inline constexpr uint32_t Size = 1u << LUTChannel::Size;
+        inline constexpr uint32_t Speed = 1u << LUTChannel::Speed;
+        inline constexpr uint32_t Rotation = 1u << LUTChannel::Rotation;
+        inline constexpr uint32_t Glow = 1u << LUTChannel::Glow;
+        inline constexpr uint32_t SizeBySpeed = 1u << LUTChannel::SizeBySpeed;               // VK-1473
+        inline constexpr uint32_t ColorBySpeed = 1u << LUTChannel::ColorBySpeed;             // VK-1473
+        inline constexpr uint32_t RibbonWidth = 1u << LUTChannel::RibbonWidth;               // VK-1474
+        inline constexpr uint32_t RibbonTailGradient = 1u << LUTChannel::RibbonTailGradient; // VK-1474
     }
 
     struct alignas(16) GPUVFXEvent
@@ -318,7 +351,7 @@ namespace render::vfx
         inline constexpr uint32_t WORKGROUP_SIZE = 64;
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;
         inline constexpr uint32_t LUT_RESOLUTION = 64;
-        inline constexpr uint32_t LUT_CHANNELS = 5;
+        inline constexpr uint32_t LUT_CHANNELS = LUTChannel::Count; // VK-1473/1474: was 5, now derived (9)
         inline constexpr uint32_t MAX_TRAIL_POINTS = 256;
         inline constexpr uint32_t MAX_VFX_EVENTS_PER_FRAME = 256;
         inline constexpr uint32_t MAX_SCENE_COLLIDERS = 256;

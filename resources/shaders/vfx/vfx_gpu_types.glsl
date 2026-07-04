@@ -102,4 +102,7 @@ struct GPUEmitterConfig
     // Force added in VK-1467 (mirror of C++ GPUEmitterConfig).
     vec4 killVolumeParams0;   // xyz = center, w = sphere radius
     vec4 killVolumeParams1;   // xyz = plane normal / box half extents, w = packed shape/invert/space
+
+    // Speed ranges added in VK-1473 (SizeBySpeed / ColorBySpeed).
+    vec4 modifierSpeedRanges; // x = size speedMin, y = size speedMax, z = color speedMin, w = color speedMax
 };

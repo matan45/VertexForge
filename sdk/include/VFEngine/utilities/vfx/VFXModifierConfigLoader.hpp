@@ -30,6 +30,8 @@ namespace vfx
         static SpeedOverLifetimeConfig extractSpeedConfig(const VFXNode& node);
         static RotationOverLifetimeConfig extractRotationConfig(const VFXNode& node);
         static GlowOverLifetimeConfig extractGlowConfig(const VFXNode& node);
+        static SizeBySpeedConfig extractSizeBySpeedConfig(const VFXNode& node);
+        static ColorBySpeedConfig extractColorBySpeedConfig(const VFXNode& node);
 
         static float getFloat(const VFXNode& node, const std::string& propName, float defaultValue);
         static glm::vec4 getVec4(const VFXNode& node, const std::string& propName, const glm::vec4& defaultValue);

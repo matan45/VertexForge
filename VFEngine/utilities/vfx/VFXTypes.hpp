@@ -55,6 +55,8 @@ namespace vfx
         SpeedOverLifetime,
         RotationOverLifetime,
         GlowOverLifetime,
+        SizeBySpeed,   // VK-1473: curve sampled by normalized speed
+        ColorBySpeed,  // VK-1473: gradient sampled by normalized speed
         ForceGravity,
         ForceWind,
         ForceTurbulence,
@@ -72,7 +74,9 @@ namespace vfx
                type == VFXNodeType::SizeOverLifetime ||
                type == VFXNodeType::SpeedOverLifetime ||
                type == VFXNodeType::RotationOverLifetime ||
-               type == VFXNodeType::GlowOverLifetime;
+               type == VFXNodeType::GlowOverLifetime ||
+               type == VFXNodeType::SizeBySpeed ||
+               type == VFXNodeType::ColorBySpeed;
     }
 
     inline bool isForceNode(VFXNodeType type)
@@ -246,6 +250,15 @@ namespace vfx
         inline constexpr float SPEED_END_MULTIPLIER = 0.5f;
 
         inline constexpr float ANGULAR_VELOCITY = 0.0f;
+
+        // VK-1473: by-speed modifiers. Curve/gradient X-axis is normalized speed in [0,1]
+        // (t=0 at speedMin, t=1 at speedMax); default multiplies small-when-slow -> full-when-fast.
+        inline constexpr float SIZE_BY_SPEED_START = 0.5f;
+        inline constexpr float SIZE_BY_SPEED_END = 1.0f;
+        inline const glm::vec4 COLOR_BY_SPEED_START{0.5f, 0.5f, 0.5f, 1.0f};
+        inline const glm::vec4 COLOR_BY_SPEED_END{1.0f, 1.0f, 1.0f, 1.0f};
+        inline constexpr float SPEED_RANGE_MIN = 0.0f;
+        inline constexpr float SPEED_RANGE_MAX = 10.0f;
     }
 
     namespace ForceDefaults

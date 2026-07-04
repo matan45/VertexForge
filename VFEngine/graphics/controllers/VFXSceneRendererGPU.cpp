@@ -94,6 +94,8 @@ namespace controllers
             gpuRibbonPipeline->updateRibbonBuffers(
                 gpuBufferManager->getRibbonRingBuffer(), gpuBufferManager->getRibbonRingBufferSize(),
                 gpuBufferManager->getRibbonHeadBuffer(), gpuBufferManager->getRibbonHeadBufferSize());
+            gpuRibbonPipeline->updateLutBuffer( // VK-1474: ribbon width curve / tail gradient
+                gpuBufferManager->getLUTBuffer(), gpuBufferManager->getLUTBufferSize());
 
             emitterPool = std::make_unique<render::vfx::VFXEmitterPool>(*gpuBufferManager, 32);
             emitterPool->warmUp();
@@ -251,7 +253,12 @@ namespace controllers
             if (instance.config.renderMode == render::vfx::VFXRenderMode::MeshParticle && gpuMeshPipeline)
                 gpuConfig.drawIndexCount = gpuMeshPipeline->getEmitterMeshIndexCount(instance.gpuEmitterIndex);
 
-            auto lutResult = render::vfx::VFXLUTBaker::bake(instance.config.modifiers);
+            render::vfx::VFXLUTBaker::RibbonLUTInputs ribbonLutInputs;
+            if (instance.config.hasRibbonWidthCurve)
+                ribbonLutInputs.widthCurve = &instance.config.ribbonWidthCurve;
+            if (instance.config.hasRibbonTailGradient)
+                ribbonLutInputs.tailGradient = &instance.config.ribbonTailGradient;
+            auto lutResult = render::vfx::VFXLUTBaker::bake(instance.config.modifiers, ribbonLutInputs);
             if (lutResult.lutFlags != 0)
             {
                 gpuBufferManager->updateEmitterLUT(instance.gpuEmitterIndex, lutResult.data);
@@ -365,6 +372,18 @@ namespace controllers
                 else if constexpr (std::is_same_v<T, ::vfx::GlowOverLifetimeConfig>)
                 {
                     gpuConfig.modifierFlags |= render::vfx::ModifierFlags::GlowOverLifetime;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::SizeBySpeedConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SizeBySpeed;
+                    gpuConfig.modifierSpeedRanges.x = mod.speedMin;
+                    gpuConfig.modifierSpeedRanges.y = mod.speedMax;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::ColorBySpeedConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::ColorBySpeed;
+                    gpuConfig.modifierSpeedRanges.z = mod.speedMin;
+                    gpuConfig.modifierSpeedRanges.w = mod.speedMax;
                 }
             }, modifier);
         }

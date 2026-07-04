@@ -58,6 +58,11 @@ namespace render::vfx
         vk::Buffer cachedRibbonHeadBuffer;
         vk::DeviceSize cachedRibbonHeadBufferSize = 0;
 
+        // VK-1474: baked LUT (width curve ch7 / tail gradient ch8), shared with the compute sim
+        // buffer. Bound at descriptor binding 7 (vertex stage) so the ribbon shader can sample it.
+        vk::Buffer cachedLutBuffer;
+        vk::DeviceSize cachedLutBufferSize = 0;
+
         vk::Image defaultTextureImage;
         core::VulkanAllocation defaultTextureAllocation;
         vk::ImageView defaultTextureImageView;
@@ -129,6 +134,7 @@ namespace render::vfx
         void updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize);
         void updateRibbonBuffers(vk::Buffer ringBuffer, vk::DeviceSize ringBufferSize,
                                   vk::Buffer headBuffer, vk::DeviceSize headBufferSize);
+        void updateLutBuffer(vk::Buffer lutBuffer, vk::DeviceSize lutBufferSize); // VK-1474
 
         void setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath);
         void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,

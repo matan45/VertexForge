@@ -33,7 +33,8 @@ namespace render::vfx
             out.emplace_back(value);
     }
 
-    LUTBakeResult VFXLUTBaker::bake(const ::vfx::VFXModifierChain& modifiers)
+    LUTBakeResult VFXLUTBaker::bake(const ::vfx::VFXModifierChain& modifiers,
+                                    const RibbonLUTInputs& ribbon)
     {
         LUTBakeResult result;
         result.data.reserve(GPUVFXConstants::LUT_CHANNELS * GPUVFXConstants::LUT_RESOLUTION);
@@ -66,6 +67,42 @@ namespace render::vfx
             [](const auto& mod, auto& out) { bakeCurve(mod.curve, out); }, result))
         {
             fillDefault(result.data, glm::vec4(0.0f));
+        }
+
+        // VK-1473 channel 5: SizeBySpeed curve (multiply on top of over-lifetime size).
+        if (!bakeChannel<::vfx::SizeBySpeedConfig>(modifiers, LUTFlags::SizeBySpeed,
+            [](const auto& mod, auto& out) { bakeCurve(mod.curve, out); }, result))
+        {
+            fillDefault(result.data, glm::vec4(1.0f, 0.0f, 0.0f, 0.0f));
+        }
+
+        // VK-1473 channel 6: ColorBySpeed gradient (multiply on top of over-lifetime color).
+        if (!bakeChannel<::vfx::ColorBySpeedConfig>(modifiers, LUTFlags::ColorBySpeed,
+            [](const auto& mod, auto& out) { bakeGradient(mod.gradient, out); }, result))
+        {
+            fillDefault(result.data, glm::vec4(1.0f));
+        }
+
+        // VK-1474 channel 7: ribbon width curve (emitter property, sampled by trail position).
+        if (ribbon.widthCurve != nullptr)
+        {
+            bakeCurve(*ribbon.widthCurve, result.data);
+            result.lutFlags |= LUTFlags::RibbonWidth;
+        }
+        else
+        {
+            fillDefault(result.data, glm::vec4(1.0f, 0.0f, 0.0f, 0.0f));
+        }
+
+        // VK-1474 channel 8: ribbon tail gradient (emitter property, sampled by trail position).
+        if (ribbon.tailGradient != nullptr)
+        {
+            bakeGradient(*ribbon.tailGradient, result.data);
+            result.lutFlags |= LUTFlags::RibbonTailGradient;
+        }
+        else
+        {
+            fillDefault(result.data, glm::vec4(1.0f));
         }
 
         result.totalEntries = static_cast<uint32_t>(result.data.size());

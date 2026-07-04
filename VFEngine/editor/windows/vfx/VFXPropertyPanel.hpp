@@ -68,7 +68,11 @@ namespace editor::vfxeditor
         int gradientSelection = -1;
 
         uint32_t lastSelectedNodeId = 0;
-        std::string lastPropertyKey;
+        // VK-1474: the curve and gradient editors track their re-sync key independently so a
+        // node/section that shows BOTH at once (e.g. ribbon width curve + tail gradient) does not
+        // thrash each other's delegate / stop-selection every frame.
+        std::string lastCurveKey;
+        std::string lastGradientKey;
         char moduleSearch[128] = {}; // Add-Module popup search filter
 
     public:

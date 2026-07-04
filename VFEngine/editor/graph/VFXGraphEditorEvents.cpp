@@ -23,12 +23,14 @@ namespace editor::graph
             bool useShapeFactory;
         };
 
-        constexpr std::array<NodePaletteEntry, 14> kNodePaletteEntries = {{
+        constexpr std::array<NodePaletteEntry, 16> kNodePaletteEntries = {{
             {"Modifiers", "Color Over Lifetime", vfx::VFXNodeType::ColorOverLifetime, false},
             {"Modifiers", "Size Over Lifetime", vfx::VFXNodeType::SizeOverLifetime, false},
             {"Modifiers", "Speed Over Lifetime", vfx::VFXNodeType::SpeedOverLifetime, false},
             {"Modifiers", "Rotation Over Lifetime", vfx::VFXNodeType::RotationOverLifetime, false},
             {"Modifiers", "Glow Over Lifetime", vfx::VFXNodeType::GlowOverLifetime, false},
+            {"Modifiers", "Size By Speed", vfx::VFXNodeType::SizeBySpeed, false},
+            {"Modifiers", "Color By Speed", vfx::VFXNodeType::ColorBySpeed, false},
             {"Forces", "Gravity", vfx::VFXNodeType::ForceGravity, false},
             {"Forces", "Wind", vfx::VFXNodeType::ForceWind, false},
             {"Forces", "Turbulence", vfx::VFXNodeType::ForceTurbulence, false},
@@ -416,6 +418,18 @@ namespace editor::graph
             node.properties["curve"] = {"curve", vfx::VFXPropertyType::Curve, vfx::VFXCurve::fromStartEnd(1.0f, 0.0f), 0.0f, 10.0f};
             node.properties["glowColor"] = {"glowColor", vfx::VFXPropertyType::Color, glm::vec4(1.0f), 0.0f, 1.0f};
             break;
+        case vfx::VFXNodeType::SizeBySpeed:
+            node.properties["curve"] = {"curve", vfx::VFXPropertyType::Curve,
+                vfx::VFXCurve::fromStartEnd(vfx::ModifierDefaults::SIZE_BY_SPEED_START, vfx::ModifierDefaults::SIZE_BY_SPEED_END), 0.0f, 10.0f};
+            node.properties["speedMin"] = {"speedMin", vfx::VFXPropertyType::Float, vfx::ModifierDefaults::SPEED_RANGE_MIN, 0.0f, 100.0f};
+            node.properties["speedMax"] = {"speedMax", vfx::VFXPropertyType::Float, vfx::ModifierDefaults::SPEED_RANGE_MAX, 0.0f, 100.0f};
+            break;
+        case vfx::VFXNodeType::ColorBySpeed:
+            node.properties["gradient"] = {"gradient", vfx::VFXPropertyType::Gradient,
+                vfx::VFXGradient::fromStartEnd(vfx::ModifierDefaults::COLOR_BY_SPEED_START, vfx::ModifierDefaults::COLOR_BY_SPEED_END), 0.0f, 1.0f};
+            node.properties["speedMin"] = {"speedMin", vfx::VFXPropertyType::Float, vfx::ModifierDefaults::SPEED_RANGE_MIN, 0.0f, 100.0f};
+            node.properties["speedMax"] = {"speedMax", vfx::VFXPropertyType::Float, vfx::ModifierDefaults::SPEED_RANGE_MAX, 0.0f, 100.0f};
+            break;
         default: break;
         }
     }
@@ -782,6 +796,8 @@ namespace editor::graph
                         if (ImGui::MenuItem("Speed Over Lifetime")) addNode(vfx::VFXNodeType::SpeedOverLifetime);
                         if (ImGui::MenuItem("Rotation Over Lifetime")) addNode(vfx::VFXNodeType::RotationOverLifetime);
                         if (ImGui::MenuItem("Glow Over Lifetime")) addNode(vfx::VFXNodeType::GlowOverLifetime);
+                        if (ImGui::MenuItem("Size By Speed")) addNode(vfx::VFXNodeType::SizeBySpeed);
+                        if (ImGui::MenuItem("Color By Speed")) addNode(vfx::VFXNodeType::ColorBySpeed);
                         ImGui::EndMenu();
                     }
 

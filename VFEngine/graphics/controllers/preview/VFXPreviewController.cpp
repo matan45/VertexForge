@@ -59,6 +59,10 @@ namespace controllers
             config.maxTrailPoints = static_cast<uint32_t>(params.maxTrailPoints);
             config.ribbonWidth = params.ribbonWidth;
             config.ribbonMinDistance = params.ribbonMinDistance;
+            config.ribbonWidthCurve = params.ribbonWidthCurve;
+            config.ribbonTailGradient = params.ribbonTailGradient;
+            config.hasRibbonWidthCurve = params.hasRibbonWidthCurve;
+            config.hasRibbonTailGradient = params.hasRibbonTailGradient;
             config.uvScrollSpeedU = params.uvScrollSpeedU;
             config.uvScrollSpeedV = params.uvScrollSpeedV;
             config.events = params.events;

@@ -65,6 +65,9 @@ namespace render::vfx
         void applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float deltaTime);
         void applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime);
         void applyModifier(VFXParticle& particle, const ::vfx::GlowOverLifetimeConfig& mod, float t, float deltaTime);
+        // VK-1473: second pass, after over-lifetime modifiers. Samples by normalized speed and
+        // multiplies on top, reconstructing a fresh base each frame so it can't compound.
+        void applyBySpeedModifiers(VFXParticle& particle);
 
         void applyForces(VFXParticle& particle, float deltaTime);
         void applyForce(VFXParticle& particle, const ::vfx::GravityForceConfig& force, float deltaTime);

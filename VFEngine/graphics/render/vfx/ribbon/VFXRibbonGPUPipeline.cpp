@@ -214,7 +214,7 @@ namespace render::vfx
 
     void VFXRibbonGPUPipeline::createDescriptorSetLayout()
     {
-        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 8> bindings{};
 
         // Binding 0: Camera UBO
         bindings[0].binding = 0;
@@ -256,6 +256,12 @@ namespace render::vfx
         bindings[6].descriptorCount = 1;
         bindings[6].stageFlags = vk::ShaderStageFlagBits::eVertex;
 
+        // Binding 7: baked LUT SSBO (VK-1474: ribbon width curve ch7 / tail gradient ch8)
+        bindings[7].binding = 7;
+        bindings[7].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[7].descriptorCount = 1;
+        bindings[7].stageFlags = vk::ShaderStageFlagBits::eVertex;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -273,7 +279,7 @@ namespace render::vfx
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[1].descriptorCount = totalSets * 2; // particle texture + depth texture
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = totalSets * 4; // particle + config + ring + head
+        poolSizes[2].descriptorCount = totalSets * 5; // particle + config + ring + head + lut (VK-1474)
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());

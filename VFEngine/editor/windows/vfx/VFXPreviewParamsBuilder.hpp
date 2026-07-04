@@ -107,6 +107,11 @@ namespace editor::vfxeditor
         params.maxTrailPoints = getInt(*emitterNode, "maxTrailPoints", vfx::EmitterDefaults::MAX_TRAIL_POINTS);
         params.ribbonWidth = getFloat(*emitterNode, "ribbonWidth", vfx::EmitterDefaults::RIBBON_WIDTH);
         params.ribbonMinDistance = getFloat(*emitterNode, "ribbonMinDistance", vfx::EmitterDefaults::RIBBON_MIN_DISTANCE);
+        // VK-1474: over-trail width curve + tail gradient (present only when authored).
+        if (auto wcIt = emitterNode->properties.find("ribbonWidthCurve"); wcIt != emitterNode->properties.end())
+            if (auto* c = std::get_if<vfx::VFXCurve>(&wcIt->second.value)) { params.ribbonWidthCurve = *c; params.hasRibbonWidthCurve = true; }
+        if (auto tgIt = emitterNode->properties.find("ribbonTailGradient"); tgIt != emitterNode->properties.end())
+            if (auto* g = std::get_if<vfx::VFXGradient>(&tgIt->second.value)) { params.ribbonTailGradient = *g; params.hasRibbonTailGradient = true; }
         params.uvScrollSpeedU = getFloat(*emitterNode, "uvScrollSpeedU", vfx::EmitterDefaults::UV_SCROLL_SPEED_U);
         params.uvScrollSpeedV = getFloat(*emitterNode, "uvScrollSpeedV", vfx::EmitterDefaults::UV_SCROLL_SPEED_V);
 

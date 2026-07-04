@@ -73,6 +73,10 @@ namespace core
         controllerParams.maxTrailPoints = params.maxTrailPoints;
         controllerParams.ribbonWidth = params.ribbonWidth;
         controllerParams.ribbonMinDistance = params.ribbonMinDistance;
+        controllerParams.ribbonWidthCurve = params.ribbonWidthCurve;
+        controllerParams.ribbonTailGradient = params.ribbonTailGradient;
+        controllerParams.hasRibbonWidthCurve = params.hasRibbonWidthCurve;
+        controllerParams.hasRibbonTailGradient = params.hasRibbonTailGradient;
         controllerParams.uvScrollSpeedU = params.uvScrollSpeedU;
         controllerParams.uvScrollSpeedV = params.uvScrollSpeedV;
         controllerParams.events = params.events;

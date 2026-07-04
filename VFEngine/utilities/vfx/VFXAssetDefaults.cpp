@@ -149,6 +149,17 @@ namespace vfx
                 "ribbonMinDistance", VFXPropertyType::Float,
                 EmitterDefaults::RIBBON_MIN_DISTANCE, 0.0f, 5.0f
             };
+            // VK-1474: over-trail width curve + tail gradient. Defaults are no-ops (constant 1.0
+            // width multiplier, opaque-white tint) so a new ribbon renders identically to the flat
+            // legacy path until authored. min/max drive the curve editor's Y-range.
+            node.properties["ribbonWidthCurve"] = VFXProperty{
+                "ribbonWidthCurve", VFXPropertyType::Curve,
+                VFXCurve::constant(1.0f), 0.0f, 4.0f
+            };
+            node.properties["ribbonTailGradient"] = VFXProperty{
+                "ribbonTailGradient", VFXPropertyType::Gradient,
+                VFXGradient::fromStartEnd(glm::vec4(1.0f), glm::vec4(1.0f)), 0.0f, 1.0f
+            };
             node.properties["uvScrollSpeedU"] = VFXProperty{
                 "uvScrollSpeedU", VFXPropertyType::Float,
                 EmitterDefaults::UV_SCROLL_SPEED_U, -10.0f, 10.0f

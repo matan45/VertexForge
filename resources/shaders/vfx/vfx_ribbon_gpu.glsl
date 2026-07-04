@@ -13,6 +13,7 @@ layout(location = 5) out vec3 fragWorldPos;
 layout(location = 6) out vec3 fragNormal;
 
 #include "vfx_gpu_types.glsl"
+#include "vfx_lut.glsl"
 
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
 
@@ -43,6 +44,12 @@ layout(std430, set = 0, binding = 6) readonly buffer RibbonHeadBuffer {
     uint ribbonHeads[];
 };
 
+// VK-1474: baked LUT (shared with the compute sim buffer). Bound at binding 7 for the ribbon
+// pipeline (binding 4 is the depth sampler here, unlike the compute pipeline where LUT is 4).
+layout(std430, set = 0, binding = 7) readonly buffer LUTBuffer {
+    vec4 lutData[];
+};
+
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
@@ -51,6 +58,20 @@ layout(push_constant) uniform PushConstants {
     float glowColorG;
     float glowColorB;
 } pc;
+
+// Linear-interpolated LUT fetch (duplicate of the compute sim's helper; the buffer binding
+// differs between pipelines so the function can't live in the shared include).
+vec4 sampleLUT(uint baseOffset, uint channelIndex, uint stride, float t)
+{
+    float coord = clamp(t, 0.0, 1.0) * float(stride - 1u);
+    uint lower = uint(floor(coord));
+    uint upper = min(lower + 1u, stride - 1u);
+    float frac = coord - float(lower);
+    uint channelOffset = baseOffset + channelIndex * stride;
+    vec4 a = lutData[channelOffset + lower];
+    vec4 b = lutData[channelOffset + upper];
+    return mix(a, b, frac);
+}
 
 void main() {
     GPUEmitterConfig config = configs[pc.emitterIndex];
@@ -105,10 +126,22 @@ void main() {
     }
     segDir /= segLen;
 
+    // Per-vertex normalized trail position (0 = head, 1 = tail), normalized by LIVE segment
+    // count (not capacity), matching the draw's instanceCount. Computed here so the width curve
+    // and tail gradient can sample by it.
+    uint totalSegments = min(head, maxTP) - 1u;
+    float trailT = (totalSegments > 0u)
+        ? (float(segIdx) + along) / float(totalSegments)
+        : 0.0;
+
     vec3 toCamera = normalize(camera.cameraPos - pos);
     vec3 right = normalize(cross(toCamera, segDir));
 
+    // VK-1474: flat ribbonWidth optionally scaled by an over-trail width curve (LUT ch7).
     float width = mix(pA.size, pB.size, along) * config.ribbonWidth;
+    if ((config.lutFlags & LUT_FLAG_RIBBON_WIDTH) != 0u) {
+        width *= sampleLUT(config.lutBaseOffset, LUT_CH_RIBBON_WIDTH, config.lutChannelStride, trailT).x;
+    }
     pos += right * inPosition.x * width;
 
     // Tube-style lighting normal: blend the camera-facing normal with the
@@ -125,16 +158,15 @@ void main() {
     fragViewDepth = -(camera.view * vec4(pos, 1.0)).z;
 
     // UV: U = trail position (0=head, 1=tail), V = across width (0..1)
-    uint totalSegments = min(head, maxTP) - 1u;
-    float trailT = (totalSegments > 0u)
-        ? (float(segIdx) + along) / float(totalSegments)
-        : 0.0;
     fragTexCoord = vec2(trailT, inTexCoord.x + 0.5);
 
     fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
 
-    // Interpolate color and lifetime
+    // Interpolate color and lifetime; VK-1474 optionally tint by an over-trail gradient (LUT ch8).
     fragColor = mix(pA.color, pB.color, along);
+    if ((config.lutFlags & LUT_FLAG_RIBBON_TAIL_GRADIENT) != 0u) {
+        fragColor *= sampleLUT(config.lutBaseOffset, LUT_CH_RIBBON_TAIL_GRADIENT, config.lutChannelStride, trailT);
+    }
     float lifeA = (pA.maxLifetime > 0.0) ? (pA.lifetime / pA.maxLifetime) : 0.0;
     float lifeB = (pB.maxLifetime > 0.0) ? (pB.lifetime / pB.maxLifetime) : 0.0;
     fragLifetimeRatio = mix(lifeA, lifeB, along);

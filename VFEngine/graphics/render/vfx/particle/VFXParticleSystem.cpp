@@ -3,6 +3,7 @@
 #include "vfx/VFXVariance.hpp"
 #include "vfx/VFXCurlNoise.hpp"
 #include "vfx/VFXKillVolume.hpp"
+#include "vfx/VFXSpeedRemap.hpp"
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/noise.hpp>
@@ -235,6 +236,25 @@ namespace render::vfx
             seg.glowIntensityB = pB.glowIntensity;
             seg._pad = 0.0f;
 
+            // VK-1474: fold the over-trail width curve + tail gradient into the endpoints
+            // (per-vertex t: head=0 -> tail=1). No-op when absent -> byte-identical legacy geometry.
+            if (config.hasRibbonWidthCurve || config.hasRibbonTailGradient)
+            {
+                const float denom = static_cast<float>(usedPoints - 1);
+                const float tA = static_cast<float>(i) / denom;
+                const float tB = static_cast<float>(i + 1) / denom;
+                if (config.hasRibbonWidthCurve)
+                {
+                    seg.sizeA *= config.ribbonWidthCurve.evaluate(tA);
+                    seg.sizeB *= config.ribbonWidthCurve.evaluate(tB);
+                }
+                if (config.hasRibbonTailGradient)
+                {
+                    seg.colorA *= config.ribbonTailGradient.evaluate(tA);
+                    seg.colorB *= config.ribbonTailGradient.evaluate(tB);
+                }
+            }
+
             cachedSegments.push_back(seg);
         }
 
@@ -393,11 +413,53 @@ namespace render::vfx
 
     void VFXParticleSystem::applyModifiers(VFXParticle& particle, float lifetimeRatio, float deltaTime)
     {
+        // Pass 1: over-lifetime modifiers (sample by age, overwrite color/size/etc).
         for (const auto& modifier : config.modifiers.modifiers)
         {
             std::visit([&](const auto& mod) {
-                applyModifier(particle, mod, lifetimeRatio, deltaTime);
+                using T = std::decay_t<decltype(mod)>;
+                if constexpr (!std::is_same_v<T, ::vfx::SizeBySpeedConfig> &&
+                              !std::is_same_v<T, ::vfx::ColorBySpeedConfig>)
+                {
+                    applyModifier(particle, mod, lifetimeRatio, deltaTime);
+                }
             }, modifier);
+        }
+
+        // Pass 2: by-speed modifiers, multiplied on top (order-independent of graph position).
+        applyBySpeedModifiers(particle);
+    }
+
+    void VFXParticleSystem::applyBySpeedModifiers(VFXParticle& particle)
+    {
+        bool hasSizeOverLifetime = false;
+        bool hasColorOverLifetime = false;
+        bool hasBySpeed = false;
+        for (const auto& modifier : config.modifiers.modifiers)
+        {
+            if (std::holds_alternative<::vfx::SizeOverLifetimeConfig>(modifier)) hasSizeOverLifetime = true;
+            else if (std::holds_alternative<::vfx::ColorOverLifetimeConfig>(modifier)) hasColorOverLifetime = true;
+            else if (std::holds_alternative<::vfx::SizeBySpeedConfig>(modifier) ||
+                     std::holds_alternative<::vfx::ColorBySpeedConfig>(modifier)) hasBySpeed = true;
+        }
+        if (!hasBySpeed)
+            return;
+
+        const float speed = glm::length(particle.velocity);
+        for (const auto& modifier : config.modifiers.modifiers)
+        {
+            if (const auto* m = std::get_if<::vfx::SizeBySpeedConfig>(&modifier))
+            {
+                const float t = ::vfx::normalizedSpeed01(speed, m->speedMin, m->speedMax);
+                const float base = hasSizeOverLifetime ? particle.size : particle.initialSize;
+                particle.size = base * m->curve.evaluate(t);
+            }
+            else if (const auto* m = std::get_if<::vfx::ColorBySpeedConfig>(&modifier))
+            {
+                const float t = ::vfx::normalizedSpeed01(speed, m->speedMin, m->speedMax);
+                const glm::vec4 base = hasColorOverLifetime ? particle.color : particle.initialColor;
+                particle.color = base * m->gradient.evaluate(t);
+            }
         }
     }
 

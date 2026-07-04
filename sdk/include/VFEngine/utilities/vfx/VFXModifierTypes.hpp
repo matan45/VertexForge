@@ -34,12 +34,31 @@ namespace vfx
         glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
     };
 
+    // VK-1473: sampled by normalized particle speed (length(velocity) remapped over
+    // [speedMin, speedMax]) instead of age, and MULTIPLIED on top of the over-lifetime result.
+    struct SizeBySpeedConfig
+    {
+        VFXCurve curve = VFXCurve::fromStartEnd(0.5f, 1.0f); // smaller when slow, full when fast
+        float speedMin = 0.0f;
+        float speedMax = 10.0f;
+    };
+
+    struct ColorBySpeedConfig
+    {
+        VFXGradient gradient = VFXGradient::fromStartEnd(
+            glm::vec4(0.5f, 0.5f, 0.5f, 1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        float speedMin = 0.0f;
+        float speedMax = 10.0f;
+    };
+
     using VFXModifierConfig = std::variant<
         ColorOverLifetimeConfig,
         SizeOverLifetimeConfig,
         SpeedOverLifetimeConfig,
         RotationOverLifetimeConfig,
-        GlowOverLifetimeConfig
+        GlowOverLifetimeConfig,
+        SizeBySpeedConfig,
+        ColorBySpeedConfig
     >;
 
     struct VFXModifierChain

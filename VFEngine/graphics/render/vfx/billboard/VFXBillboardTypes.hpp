@@ -261,7 +261,15 @@ namespace render::vfx
         uint32_t maxTrailPoints = 64;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
-        
+
+        // VK-1474: optional over-trail curves (normalized trail position, head=0 -> tail=1).
+        // The bool gates activation: false => flat legacy behavior (channel/flag off, flat width).
+        // When present the curve/gradient MULTIPLY the flat ribbonWidth / particle color.
+        ::vfx::VFXCurve ribbonWidthCurve;
+        ::vfx::VFXGradient ribbonTailGradient;
+        bool hasRibbonWidthCurve = false;
+        bool hasRibbonTailGradient = false;
+
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
         

@@ -162,6 +162,25 @@ namespace vfx
         config.ribbonMinDistance = std::max(0.0f,
             getFloat(*emitterNode, "ribbonMinDistance", EmitterDefaults::RIBBON_MIN_DISTANCE));
 
+        // VK-1474: over-trail width curve + tail gradient. Present only when the property was
+        // authored (legacy assets lack it -> flat behavior). Presence drives the LUT flag.
+        if (auto wcIt = emitterNode->properties.find("ribbonWidthCurve"); wcIt != emitterNode->properties.end())
+        {
+            if (auto* curve = std::get_if<VFXCurve>(&wcIt->second.value))
+            {
+                config.ribbonWidthCurve = *curve;
+                config.hasRibbonWidthCurve = true;
+            }
+        }
+        if (auto tgIt = emitterNode->properties.find("ribbonTailGradient"); tgIt != emitterNode->properties.end())
+        {
+            if (auto* gradient = std::get_if<VFXGradient>(&tgIt->second.value))
+            {
+                config.ribbonTailGradient = *gradient;
+                config.hasRibbonTailGradient = true;
+            }
+        }
+
         config.uvScrollSpeedU = getFloat(*emitterNode, "uvScrollSpeedU", EmitterDefaults::UV_SCROLL_SPEED_U);
         config.uvScrollSpeedV = getFloat(*emitterNode, "uvScrollSpeedV", EmitterDefaults::UV_SCROLL_SPEED_V);
 

@@ -76,10 +76,20 @@ namespace render::vfx
         }
     }
 
+    void VFXRibbonGPUPipeline::updateLutBuffer(vk::Buffer lutBuffer, vk::DeviceSize lutBufferSize)
+    {
+        if (lutBuffer != cachedLutBuffer || lutBufferSize != cachedLutBufferSize)
+        {
+            cachedLutBuffer = lutBuffer;
+            cachedLutBufferSize = lutBufferSize;
+            descriptorsNeedUpdate = true;
+        }
+    }
+
     void VFXRibbonGPUPipeline::writeDescriptors() const
     {
         if (!descriptorsNeedUpdate || !cachedParticleBuffer || !cachedConfigBuffer ||
-            !cachedRibbonRingBuffer || !cachedRibbonHeadBuffer)
+            !cachedRibbonRingBuffer || !cachedRibbonHeadBuffer || !cachedLutBuffer)
         {
             return;
         }
@@ -143,7 +153,12 @@ namespace render::vfx
         headInfo.offset = 0;
         headInfo.range = cachedRibbonHeadBufferSize;
 
-        std::array<vk::WriteDescriptorSet, 7> writes{};
+        vk::DescriptorBufferInfo lutInfo{};
+        lutInfo.buffer = cachedLutBuffer;
+        lutInfo.offset = 0;
+        lutInfo.range = cachedLutBufferSize;
+
+        std::array<vk::WriteDescriptorSet, 8> writes{};
 
         writes[0].dstSet = dstSet;
         writes[0].dstBinding = 0;
@@ -186,6 +201,12 @@ namespace render::vfx
         writes[6].descriptorCount = 1;
         writes[6].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[6].pBufferInfo = &headInfo;
+
+        writes[7].dstSet = dstSet;
+        writes[7].dstBinding = 7;
+        writes[7].descriptorCount = 1;
+        writes[7].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[7].pBufferInfo = &lutInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
     }

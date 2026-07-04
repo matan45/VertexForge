@@ -79,7 +79,13 @@ namespace controllers
         int maxTrailPoints = 64;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;
-        
+
+        // VK-1474: over-trail width curve + tail gradient (present only when authored).
+        ::vfx::VFXCurve ribbonWidthCurve;
+        ::vfx::VFXGradient ribbonTailGradient;
+        bool hasRibbonWidthCurve = false;
+        bool hasRibbonTailGradient = false;
+
         float uvScrollSpeedU = 0.0f;
         float uvScrollSpeedV = 0.0f;
 

@@ -619,6 +619,29 @@ namespace editor::vfxeditor
                 ImGui::PopID();
             }
         }
+
+        // VK-1474: over-trail width curve + tail gradient. Reuse the shared curve/gradient
+        // editors; their re-sync keys are now independent (VFXPropertyPanel.hpp) so both can
+        // be shown together without thrashing. Width curve multiplies the flat Width above;
+        // tail gradient tints the ribbon color. Both are sampled head(0) -> tail(1).
+        if (auto wcIt = node.properties.find("ribbonWidthCurve"); wcIt != node.properties.end())
+        {
+            if (auto* curve = std::get_if<vfx::VFXCurve>(&wcIt->second.value))
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled("Width Over Trail (head -> tail)");
+                drawCurveEditor(*curve, wcIt->second);
+            }
+        }
+        if (auto tgIt = node.properties.find("ribbonTailGradient"); tgIt != node.properties.end())
+        {
+            if (auto* gradient = std::get_if<vfx::VFXGradient>(&tgIt->second.value))
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled("Tint Over Trail (head -> tail)");
+                drawGradientEditor(*gradient, "ribbonTailGradient");
+            }
+        }
     }
 
     void VFXPropertyPanel::drawUVScrollProperties(vfx::VFXNode& node, float inputWidth)

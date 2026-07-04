@@ -5,11 +5,14 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #include "vfx_gpu_types.glsl"
 #include "vfx_variance.glsl"
+#include "vfx_lut.glsl"
 
 const uint MODIFIER_COLOR_OVER_LIFETIME = 1u;
 const uint MODIFIER_SIZE_OVER_LIFETIME = 2u;
 const uint MODIFIER_SPEED_OVER_LIFETIME = 4u;
 const uint MODIFIER_ROTATION_OVER_LIFETIME = 8u;
+const uint MODIFIER_SIZE_BY_SPEED = 4194304u;  // 1 << 22 (VK-1473)
+const uint MODIFIER_COLOR_BY_SPEED = 8388608u; // 1 << 23 (VK-1473)
 
 const uint FORCE_GRAVITY = 16u;
 const uint FORCE_WIND = 32u;
@@ -132,11 +135,7 @@ const uint MAX_VFX_EVENTS = 256u;
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
 const uint RENDER_MODE_RIBBON = 4u;
 
-const uint LUT_FLAG_COLOR = 1u;
-const uint LUT_FLAG_SIZE = 2u;
-const uint LUT_FLAG_SPEED = 4u;
-const uint LUT_FLAG_ROTATION = 8u;
-const uint LUT_FLAG_GLOW = 16u;
+// LUT_FLAG_* / LUT_CH_* / vfxNormalize01 now live in vfx_lut.glsl (shared with the ribbon shader).
 
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
@@ -657,6 +656,41 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         {
             p.glowIntensity = sampleLUT(config.lutBaseOffset, 4u, config.lutChannelStride, lifetimeRatio).x;
         }
+    }
+
+    // VK-1473 SizeBySpeed: multiply size by a curve sampled by normalized speed. Runs AFTER the
+    // over-lifetime blocks and reconstructs a fresh base each frame (p.size / p.initialSize) so an
+    // absent SizeOverLifetime sibling can't compound frame-over-frame.
+    if ((config.modifierFlags & MODIFIER_SIZE_BY_SPEED) != 0u &&
+        (config.lutFlags & LUT_FLAG_SIZE_BY_SPEED) != 0u)
+    {
+        float tSpeed = vfxNormalize01(length(p.velocity), config.modifierSpeedRanges.x, config.modifierSpeedRanges.y);
+        float sizeBySpeed = sampleLUT(config.lutBaseOffset, LUT_CH_SIZE_BY_SPEED, config.lutChannelStride, tSpeed).x;
+        float sizeBase = ((config.modifierFlags & MODIFIER_SIZE_OVER_LIFETIME) != 0u) ? p.size : p.initialSize;
+        p.size = sizeBase * sizeBySpeed;
+    }
+
+    // VK-1473 ColorBySpeed: multiply color by a gradient sampled by normalized speed. Base is the
+    // fresh over-lifetime color if present, else the reconstructed spawn color (matches spawn at
+    // p.color = startColor * unpackHalf2x16(packedColorMult)).
+    if ((config.modifierFlags & MODIFIER_COLOR_BY_SPEED) != 0u &&
+        (config.lutFlags & LUT_FLAG_COLOR_BY_SPEED) != 0u)
+    {
+        float tSpeed = vfxNormalize01(length(p.velocity), config.modifierSpeedRanges.z, config.modifierSpeedRanges.w);
+        vec4 colorBySpeed = sampleLUT(config.lutBaseOffset, LUT_CH_COLOR_BY_SPEED, config.lutChannelStride, tSpeed);
+        vec4 colorBase;
+        if ((config.modifierFlags & MODIFIER_COLOR_OVER_LIFETIME) != 0u)
+        {
+            colorBase = p.color;
+        }
+        else
+        {
+            vec2 cm = unpackHalf2x16(p.packedColorMult);
+            colorBase = config.startColor;
+            colorBase.rgb *= cm.x;
+            colorBase.a *= cm.y;
+        }
+        p.color = colorBase * colorBySpeed;
     }
 }
 

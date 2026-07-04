@@ -181,10 +181,10 @@ namespace editor::vfxeditor
     {
         const std::string& label = prop.name;
         std::string key = label;
-        if (lastPropertyKey != key)
+        if (lastCurveKey != key)
         {
             curveDelegate.syncFrom(curve, prop.min, prop.max);
-            lastPropertyKey = key;
+            lastCurveKey = key;
         }
 
         ImGui::Text("%s", label.c_str());
@@ -207,11 +207,11 @@ namespace editor::vfxeditor
     void VFXPropertyPanel::drawGradientEditor(vfx::VFXGradient& gradient, const std::string& label)
     {
         std::string key = label;
-        if (lastPropertyKey != key)
+        if (lastGradientKey != key)
         {
             gradientDelegate.syncFrom(gradient);
             gradientSelection = -1;
-            lastPropertyKey = key;
+            lastGradientKey = key;
         }
 
         ImGui::Text("%s", label.c_str());
@@ -271,7 +271,8 @@ namespace editor::vfxeditor
         if (lastSelectedNodeId != selectedNodeId)
         {
             lastSelectedNodeId = selectedNodeId;
-            lastPropertyKey.clear();
+            lastCurveKey.clear();
+            lastGradientKey.clear();
         }
 
         if (node->type == vfx::VFXNodeType::Emitter)
@@ -324,6 +325,20 @@ namespace editor::vfxeditor
                 if (gradient)
                 {
                     drawGradientEditor(*gradient, propName);
+                }
+            }
+            else if (prop.type == vfx::VFXPropertyType::Float)
+            {
+                // VK-1473: scalar modifier props (e.g. SizeBySpeed/ColorBySpeed speedMin/speedMax).
+                auto* val = std::get_if<float>(&prop.value);
+                if (val)
+                {
+                    ImGui::PushItemWidth(160.0f);
+                    if (ImGui::DragFloat(propName.c_str(), val, 0.1f, prop.min, prop.max, "%.2f"))
+                    {
+                        notifyChanged();
+                    }
+                    ImGui::PopItemWidth();
                 }
             }
         }

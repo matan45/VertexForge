@@ -87,6 +87,8 @@ namespace vfx
         case VFXNodeType::SpeedOverLifetime:  return "SpeedOverLifetime";
         case VFXNodeType::RotationOverLifetime: return "RotationOverLifetime";
         case VFXNodeType::GlowOverLifetime:   return "GlowOverLifetime";
+        case VFXNodeType::SizeBySpeed:        return "SizeBySpeed";
+        case VFXNodeType::ColorBySpeed:       return "ColorBySpeed";
         case VFXNodeType::ForceGravity:       return "ForceGravity";
         case VFXNodeType::ForceWind:          return "ForceWind";
         case VFXNodeType::ForceTurbulence:    return "ForceTurbulence";
@@ -109,6 +111,8 @@ namespace vfx
         if (str == "SpeedOverLifetime")  return VFXNodeType::SpeedOverLifetime;
         if (str == "RotationOverLifetime") return VFXNodeType::RotationOverLifetime;
         if (str == "GlowOverLifetime")   return VFXNodeType::GlowOverLifetime;
+        if (str == "SizeBySpeed")        return VFXNodeType::SizeBySpeed;
+        if (str == "ColorBySpeed")       return VFXNodeType::ColorBySpeed;
         if (str == "ForceGravity")       return VFXNodeType::ForceGravity;
         if (str == "ForceWind")          return VFXNodeType::ForceWind;
         if (str == "ForceTurbulence")    return VFXNodeType::ForceTurbulence;
