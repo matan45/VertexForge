@@ -245,7 +245,12 @@ namespace render::vfx
 
         float alphaClipThreshold = 0.1f;
         bool additiveBlend = false;
-        
+
+        // VK-1471: per-emitter draw-order key. Emitter draws are stable-sorted by
+        // sortOrder ascending within each render pipeline (lower = drawn behind).
+        // Default 0 leaves draw order unchanged. Host-only — not sent to the GPU config.
+        int sortOrder = 0;
+
         VFXRenderMode renderMode = VFXRenderMode::Billboard;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;

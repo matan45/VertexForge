@@ -77,6 +77,7 @@ namespace render::vfx
             float alphaClipThreshold = 0.1f;
             uint32_t blendMode = 0;
             glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
+            int32_t sortOrder = 0; // VK-1471: per-emitter draw-order key
         };
 
         struct TextureEntry
@@ -135,7 +136,7 @@ namespace render::vfx
         void setEmitterMesh(uint32_t emitterIndex, const std::string& meshPath);
         void setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath);
         void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend,
-                                       const glm::vec3& glowColor = glm::vec3(1.0f));
+                                       const glm::vec3& glowColor = glm::vec3(1.0f), int32_t sortOrder = 0);
         void removeEmitter(uint32_t emitterIndex);
 
         void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }

@@ -107,6 +107,10 @@ namespace vfx
                 "additiveBlend", VFXPropertyType::Bool,
                 EmitterDefaults::ADDITIVE_BLEND, 0.0f, 1.0f
             };
+            node.properties["sortOrder"] = VFXProperty{
+                "sortOrder", VFXPropertyType::Int,
+                EmitterDefaults::SORT_ORDER, -256.0f, 256.0f
+            };
             node.properties["renderMode"] = VFXProperty{
                 "renderMode", VFXPropertyType::Int,
                 EmitterDefaults::RENDER_MODE, 0.0f, 4.0f

@@ -685,6 +685,7 @@ namespace editor::vfxeditor
         static constexpr RenderEntry entries[] = {
             {"alphaClipThreshold",   "Alpha Clip"},
             {"additiveBlend",        "Additive"},
+            {"sortOrder",            "Sort Order"},
             {"softParticleDistance",  "Soft Distance"},
             {"stretchMultiplier",    "Stretch"},
         };
@@ -722,6 +723,21 @@ namespace editor::vfxeditor
                     ImGui::Text("%s", entry.label);
                     ImGui::SameLine();
                     if (ImGui::Checkbox("##v", val))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+            else if (prop.type == vfx::VFXPropertyType::Int)
+            {
+                auto* val = std::get_if<int32_t>(&prop.value);
+                if (val)
+                {
+                    ImGui::Text("%s", entry.label);
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    if (ImGui::DragInt("##v", val, 1,
+                                       static_cast<int>(prop.min), static_cast<int>(prop.max)))
                     {
                         notifyChanged();
                     }
@@ -1212,7 +1228,7 @@ namespace editor::vfxeditor
             "colorValueVariance", "alphaVariance",
             "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
             "flipbookRandomStart", "flipbookFrameBlend", "alphaClipThreshold", "additiveBlend", "meshPath",
-            "renderMode", "softParticleDistance", "stretchMultiplier",
+            "sortOrder", "renderMode", "softParticleDistance", "stretchMultiplier",
             "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
             "uvScrollSpeedU", "uvScrollSpeedV",
             "emissiveIntensity", "lightingInfluence", "ambientAmount", "normalMode",

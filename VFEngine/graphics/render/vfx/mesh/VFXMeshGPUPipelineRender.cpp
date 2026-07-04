@@ -6,6 +6,7 @@
 #include "../../../core/DeferredDeletionQueue.hpp"
 #include "print/Log.hpp"
 #include "../compute/GPUVFXTypes.hpp"
+#include "vfx/VFXSortOrder.hpp"
 #include <filesystem>
 
 namespace render::vfx
@@ -280,11 +281,12 @@ namespace render::vfx
 
     void VFXMeshGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
                                                          float alphaClipThreshold, bool additiveBlend,
-                                                         const glm::vec3& glowColor)
+                                                         const glm::vec3& glowColor, int32_t sortOrder)
     {
         emitterConfigs[emitterIndex].alphaClipThreshold = alphaClipThreshold;
         emitterConfigs[emitterIndex].blendMode = additiveBlend ? 1u : 0u;
         emitterConfigs[emitterIndex].glowColor = glowColor;
+        emitterConfigs[emitterIndex].sortOrder = sortOrder;
     }
 
     void VFXMeshGPUPipeline::removeEmitter(uint32_t emitterIndex)
@@ -352,8 +354,27 @@ namespace render::vfx
 
         vk::DescriptorSet lastBoundSet = nullptr;
 
-        for (const auto& [emitterIdx, meshData] : emitterMeshes)
+        // VK-1471: submit mesh-particle emitter draws in ascending sortOrder. Built in
+        // the map's current traversal order, so an all-default (0) set is a stable no-op.
+        std::vector<::vfx::VFXDrawOrderEntry> drawOrder;
+        drawOrder.reserve(emitterMeshes.size());
+        for (const auto& meshEntry : emitterMeshes)
         {
+            const uint32_t emitterIdx = meshEntry.first;
+            auto cfgIt = emitterConfigs.find(emitterIdx);
+            const int32_t so = (cfgIt != emitterConfigs.end()) ? cfgIt->second.sortOrder : 0;
+            drawOrder.push_back({emitterIdx, so});
+        }
+        ::vfx::stableSortDrawOrder(drawOrder);
+
+        for (const auto& drawEntry : drawOrder)
+        {
+            const uint32_t emitterIdx = drawEntry.index;
+            auto meshIt = emitterMeshes.find(emitterIdx);
+            if (meshIt == emitterMeshes.end())
+                continue;
+            const auto& meshData = meshIt->second;
+
             if (emitterIdx >= emitterCount || meshData.indexCount == 0)
                 continue;
 

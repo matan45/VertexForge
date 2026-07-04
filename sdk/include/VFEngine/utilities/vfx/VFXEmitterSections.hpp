@@ -108,6 +108,7 @@ namespace vfx
         if (id == "rendering")
             return getInt(n, "renderMode", D::RENDER_MODE) != D::RENDER_MODE ||
                    getBool(n, "additiveBlend", D::ADDITIVE_BLEND) ||
+                   getInt(n, "sortOrder", D::SORT_ORDER) != D::SORT_ORDER ||
                    getFloat(n, "softParticleDistance", D::SOFT_PARTICLE_DISTANCE) != D::SOFT_PARTICLE_DISTANCE ||
                    getFloat(n, "stretchMultiplier", D::STRETCH_MULTIPLIER) != D::STRETCH_MULTIPLIER ||
                    getFloat(n, "alphaClipThreshold", D::ALPHA_CLIP_THRESHOLD) != D::ALPHA_CLIP_THRESHOLD ||

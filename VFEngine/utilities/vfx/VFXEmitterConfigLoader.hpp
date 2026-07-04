@@ -137,6 +137,7 @@ namespace vfx
 
         config.alphaClipThreshold = getFloat(*emitterNode, "alphaClipThreshold", EmitterDefaults::ALPHA_CLIP_THRESHOLD);
         config.additiveBlend = getBool(*emitterNode, "additiveBlend", EmitterDefaults::ADDITIVE_BLEND);
+        config.sortOrder = std::clamp(getInt(*emitterNode, "sortOrder", EmitterDefaults::SORT_ORDER), -256, 256);
 
         config.renderMode = static_cast<render::vfx::VFXRenderMode>(
             std::clamp(getInt(*emitterNode, "renderMode", EmitterDefaults::RENDER_MODE), 0, 4));

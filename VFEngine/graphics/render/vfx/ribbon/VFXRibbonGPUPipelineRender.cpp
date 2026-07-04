@@ -4,6 +4,7 @@
 #include "../../../core/DeferredDeletionQueue.hpp"
 #include "print/Log.hpp"
 #include "../compute/GPUVFXTypes.hpp"
+#include "vfx/VFXSortOrder.hpp"
 #include <filesystem>
 
 namespace render::vfx
@@ -276,11 +277,12 @@ namespace render::vfx
 
     void VFXRibbonGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
                                                            float alphaClipThreshold, bool additiveBlend,
-                                                           const glm::vec3& glowColor)
+                                                           const glm::vec3& glowColor, int32_t sortOrder)
     {
         emitterConfigs[emitterIndex].alphaClipThreshold = alphaClipThreshold;
         emitterConfigs[emitterIndex].blendMode = additiveBlend ? 1u : 0u;
         emitterConfigs[emitterIndex].glowColor = glowColor;
+        emitterConfigs[emitterIndex].sortOrder = sortOrder;
     }
 
     void VFXRibbonGPUPipeline::removeEmitter(uint32_t emitterIndex)
@@ -343,8 +345,24 @@ namespace render::vfx
 
         vk::DescriptorSet lastBoundSet = nullptr;
 
+        // VK-1471: submit ribbon emitter draws in ascending sortOrder. Built in the map's
+        // current traversal order, so an all-default (0) set is a stable no-op.
+        std::vector<::vfx::VFXDrawOrderEntry> drawOrder;
+        drawOrder.reserve(emitterConfigs.size());
         for (const auto& [emitterIdx, config] : emitterConfigs)
         {
+            drawOrder.push_back({emitterIdx, config.sortOrder});
+        }
+        ::vfx::stableSortDrawOrder(drawOrder);
+
+        for (const auto& drawEntry : drawOrder)
+        {
+            const uint32_t emitterIdx = drawEntry.index;
+            auto configIt = emitterConfigs.find(emitterIdx);
+            if (configIt == emitterConfigs.end())
+                continue;
+            const auto& config = configIt->second;
+
             if (emitterIdx >= emitterCount)
                 continue;
 

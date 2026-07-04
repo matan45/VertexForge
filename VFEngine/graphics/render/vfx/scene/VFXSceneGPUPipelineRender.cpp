@@ -4,6 +4,7 @@
 #include "../../../core/DeferredDeletionQueue.hpp"
 #include "print/Log.hpp"
 #include "../compute/GPUVFXTypes.hpp"
+#include "vfx/VFXSortOrder.hpp"
 #include <filesystem>
 
 namespace render::vfx
@@ -238,11 +239,12 @@ namespace render::vfx
 
     void VFXSceneGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
                                                          float alphaClipThreshold, bool additiveBlend,
-                                                         const glm::vec3& glowColor)
+                                                         const glm::vec3& glowColor, int32_t sortOrder)
     {
         emitterConfigs[emitterIndex].alphaClipThreshold = alphaClipThreshold;
         emitterConfigs[emitterIndex].blendMode = additiveBlend ? 1u : 0u;
         emitterConfigs[emitterIndex].glowColor = glowColor;
+        emitterConfigs[emitterIndex].sortOrder = sortOrder;
     }
 
     void VFXSceneGPUPipeline::setEmitterRenderMode(uint32_t emitterIndex, uint32_t renderMode)
@@ -314,8 +316,22 @@ namespace render::vfx
 
         vk::DescriptorSet lastBoundSet = nullptr;
 
-        for (uint32_t i = 0; i < emitterCount; ++i)
+        // VK-1471: submit emitter draws in ascending sortOrder (lower = drawn behind).
+        // Built in ascending-slot order, so an all-default (0) set is a stable no-op
+        // and reproduces today's order exactly.
+        std::vector<::vfx::VFXDrawOrderEntry> drawOrder;
+        drawOrder.reserve(emitterCount);
+        for (uint32_t slot = 0; slot < emitterCount; ++slot)
         {
+            auto cfgIt = emitterConfigs.find(slot);
+            const int32_t so = (cfgIt != emitterConfigs.end()) ? cfgIt->second.sortOrder : 0;
+            drawOrder.push_back({slot, so});
+        }
+        ::vfx::stableSortDrawOrder(drawOrder);
+
+        for (const auto& drawEntry : drawOrder)
+        {
+            const uint32_t i = drawEntry.index;
             auto configIt = emitterConfigs.find(i);
             // Skip mesh/ribbon (handled by dedicated pipelines) and distortion
             // emitters (rendered in the separate distortion vector pass)

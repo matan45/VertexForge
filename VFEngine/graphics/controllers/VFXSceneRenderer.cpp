@@ -13,6 +13,7 @@
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
+#include "vfx/VFXSortOrder.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <cmath>
@@ -233,7 +234,8 @@ namespace controllers
             gpuRenderPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                           storedConfig.alphaClipThreshold,
                                                           storedConfig.additiveBlend,
-                                                          glowColor);
+                                                          glowColor,
+                                                          storedConfig.sortOrder);
             gpuRenderPipeline->setEmitterRenderMode(instances[id].gpuEmitterIndex,
                                                       static_cast<uint32_t>(storedConfig.renderMode));
             gpuRenderPipeline->setEmitterDistortionEnabled(instances[id].gpuEmitterIndex,
@@ -248,7 +250,8 @@ namespace controllers
             gpuMeshPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                         storedConfig.alphaClipThreshold,
                                                         storedConfig.additiveBlend,
-                                                        glowColor);
+                                                        glowColor,
+                                                        storedConfig.sortOrder);
         }
 
         if (gpuRibbonPipeline && instances[id].gpuDriven &&
@@ -258,7 +261,8 @@ namespace controllers
             gpuRibbonPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                           storedConfig.alphaClipThreshold,
                                                           storedConfig.additiveBlend,
-                                                          glowColor);
+                                                          glowColor,
+                                                          storedConfig.sortOrder);
         }
 
         if (storedConfig.distortionEnabled)
@@ -1113,6 +1117,15 @@ namespace controllers
     {
         collectedInstances.clear();
 
+        // VK-1471: flatten CPU-sim emitters in ascending sortOrder so a higher-sortOrder
+        // emitter's particles land later in the merged instanced draw (drawn on top).
+        // Gathered in the map's current traversal order, so an all-default (0) set is a
+        // stable no-op and reproduces today's order.
+        std::vector<::vfx::VFXDrawOrderEntry> drawOrder;
+        std::vector<const VFXRuntimeInstance*> liveInstances;
+        drawOrder.reserve(instances.size());
+        liveInstances.reserve(instances.size());
+
         for (const auto& [id, instance] : instances)
         {
             if (instance.gpuDriven)
@@ -1124,6 +1137,16 @@ namespace controllers
             {
                 continue;
             }
+
+            drawOrder.push_back({static_cast<uint32_t>(liveInstances.size()), instance.config.sortOrder});
+            liveInstances.push_back(&instance);
+        }
+
+        ::vfx::stableSortDrawOrder(drawOrder);
+
+        for (const auto& drawEntry : drawOrder)
+        {
+            const VFXRuntimeInstance& instance = *liveInstances[drawEntry.index];
 
             auto particleData = instance.particleSystem->getInstanceData();
 

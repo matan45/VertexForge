@@ -194,6 +194,7 @@ namespace vfx
         // Rendering
         inline constexpr float ALPHA_CLIP_THRESHOLD = 0.1f;
         inline constexpr bool ADDITIVE_BLEND = false;
+        inline constexpr int SORT_ORDER = 0; // VK-1471: per-emitter draw-order key
 
         inline constexpr int RENDER_MODE = 0;
         inline constexpr float SOFT_PARTICLE_DISTANCE = 0.0f;
