@@ -91,6 +91,8 @@ struct GPUVFXEvent
     uint eventType;
     vec3 velocity;
     uint emitterIndex;
+    vec3 color;
+    float size;
 };
 
 layout(std430, set = 0, binding = 7) buffer EventBuffer {
@@ -694,7 +696,7 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
     }
 }
 
-void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx)
+void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx, vec3 color, float size)
 {
     uint idx = atomicAdd(eventCount, 1u);
     if (idx < MAX_VFX_EVENTS)
@@ -703,6 +705,8 @@ void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx)
         events[idx].eventType = type;
         events[idx].velocity = vel;
         events[idx].emitterIndex = emitterIdx;
+        events[idx].color = color;
+        events[idx].size = size;
     }
 }
 
@@ -796,7 +800,7 @@ void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint em
 
         if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
         {
-            emitEvent(2u, p.position, p.velocity, emitterIdx);
+            emitEvent(2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
             collisionEventFired = true;
         }
     }
@@ -940,7 +944,7 @@ void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterI
 
             if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
             {
-                emitEvent(2u, p.position, p.velocity, emitterIdx);
+                emitEvent(2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
                 collisionEventFired = true;
             }
         }
@@ -1026,7 +1030,7 @@ void main()
         {
             if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
             {
-                emitEvent(1u, p.position, p.velocity, pc.emitterIndex);
+                emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
             }
             p.size = 0.0;
             isActive = false;
@@ -1063,7 +1067,7 @@ void main()
                 float prevRatio = (p.lifetime - config.deltaTime) / p.maxLifetime;
                 if (prevRatio < config.lifetimeThreshold && lifetimeRatio >= config.lifetimeThreshold)
                 {
-                    emitEvent(3u, p.position, p.velocity, pc.emitterIndex);
+                    emitEvent(3u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                 }
             }
 
@@ -1078,7 +1082,7 @@ void main()
                 {
                     if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
                     {
-                        emitEvent(1u, p.position, p.velocity, pc.emitterIndex);
+                        emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                     }
                     p.size = 0.0;
                     isActive = false;
@@ -1091,7 +1095,7 @@ void main()
             {
                 if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
                 {
-                    emitEvent(1u, p.position, p.velocity, pc.emitterIndex);
+                    emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                 }
                 p.size = 0.0;
                 isActive = false;
@@ -1165,7 +1169,7 @@ void main()
 
             if ((config.eventFlags & EVENT_FLAG_ON_SPAWN) != 0u)
             {
-                emitEvent(0u, p.position, p.velocity, pc.emitterIndex);
+                emitEvent(0u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
             }
         }
     }

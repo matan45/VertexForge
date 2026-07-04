@@ -13,6 +13,7 @@
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
 #include "vfx/VFXKillVolume.hpp"
+#include "vfx/VFXRuntimeDiagnostics.hpp"
 #include "vfx/VFXShapeTypes.hpp"
 #include "print/Log.hpp"
 #include <random>
@@ -164,6 +165,13 @@ namespace controllers
         }
 
         lastFrameEvents = gpuBufferManager->readbackEvents(lastFrameEventCount);
+        lastFrameRawEventCount = gpuBufferManager->getLastRawEventCount();
+        if (lastFrameRawEventCount > render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME)
+        {
+            vfx::VFXRuntimeDiagnostics::instance().report(
+                "VFX events",
+                "event buffer saturated: >256/frame, child spawns dropped");
+        }
         processEvents();
         cleanupFinishedSubEmitters(deltaTime);
 
@@ -533,8 +541,9 @@ namespace controllers
         render::vfx::GPUEmitterState gpuState{};
         gpuState.worldTransform = instance.worldTransform;
         gpuState.prevWorldTransform = instance.prevWorldTransform;
-        gpuState.emitterVelocityAndInherit = glm::vec4(
-            instance.emitterVelocity, instance.config.inheritVelocityRatio);
+        gpuState.emitterVelocityAndInherit = instance.injectedEmitterVelocity.has_value()
+            ? glm::vec4(instance.injectedEmitterVelocity.value(), 1.0f)
+            : glm::vec4(instance.emitterVelocity, instance.config.inheritVelocityRatio);
         gpuState.particleOffset = instance.gpuParticleOffset;
         gpuState.maxParticles = instance.gpuParticleCount;
         gpuState.activeCount = 0;

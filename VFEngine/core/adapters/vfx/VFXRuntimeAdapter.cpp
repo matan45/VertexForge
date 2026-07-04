@@ -326,6 +326,10 @@ namespace core
             stats.culledEmitters = rs.culledEmitters;
             stats.throttledEmitters = rs.throttledEmitters;
             stats.vfxCullDistance = rs.vfxCullDistance;
+            stats.eventsThisFrame = rs.eventsThisFrame;
+            stats.rawEventsThisFrame = rs.rawEventsThisFrame;
+            stats.eventBudget = rs.eventBudget;
+            stats.eventsDropped = rs.eventsDropped;
         }
         return stats;
     }

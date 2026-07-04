@@ -225,11 +225,13 @@ namespace render::vfx
         if (!eventReadbackMapped[readIndex])
         {
             outEventCount = 0;
+            lastRawEventCount = 0;
             return {};
         }
 
         auto* data = static_cast<const uint8_t*>(eventReadbackMapped[readIndex]);
         uint32_t eventCount = *reinterpret_cast<const uint32_t*>(data);
+        lastRawEventCount = eventCount;
         eventCount = std::min(eventCount, GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME);
         outEventCount = eventCount;
 

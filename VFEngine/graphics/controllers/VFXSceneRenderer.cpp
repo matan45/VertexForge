@@ -174,6 +174,7 @@ namespace controllers
             instance.autoDestroy = params.autoDestroy;
             instance.poolable = params.poolable;
             instance.assetPath = params.vfxAssetPath;
+            instance.injectedEmitterVelocity = params.injectedEmitterVelocity;
 
             // VK-1451: a stable per-instance RNG seed, chosen ONCE here. An explicit seed
             // (combo determinism) makes the emission schedule reproducible; otherwise pick
@@ -183,6 +184,10 @@ namespace controllers
 
             // Apply the resolved scalability level to the per-instance config/state.
             instance.config = baseConfig;
+            if (params.startColorMultiplier.has_value())
+                instance.config.startColor *= params.startColorMultiplier.value();
+            if (params.startSizeMultiplier.has_value())
+                instance.config.startSize *= params.startSizeMultiplier.value();
             instance.config.spawnRate *= level.spawnRateScale;
             if (level.cullDistance > 0.0f)
             {
@@ -429,6 +434,7 @@ namespace controllers
         instance.poolable = params.poolable;
         instance.assetPath = params.vfxAssetPath;
         instance.seed = pickInstanceSeed(params.seed);
+        instance.injectedEmitterVelocity = params.injectedEmitterVelocity;
 
         instance.spawnAccumulator = 0.0f;
         instance.emissionTime = 0.0f;
@@ -445,6 +451,10 @@ namespace controllers
         instance.updatePhase = 0;
 
         instance.config = baseConfig;
+        if (params.startColorMultiplier.has_value())
+            instance.config.startColor *= params.startColorMultiplier.value();
+        if (params.startSizeMultiplier.has_value())
+            instance.config.startSize *= params.startSizeMultiplier.value();
         instance.config.spawnRate *= level.spawnRateScale;
         if (level.cullDistance > 0.0f)
         {
@@ -1192,6 +1202,10 @@ namespace controllers
         stats.culledEmitters = culledEmittersThisFrame;
         stats.throttledEmitters = throttledEmittersThisFrame;
         stats.vfxCullDistance = std::sqrt(maxVFXDistSq);
+        stats.eventsThisFrame = lastFrameEventCount;
+        stats.rawEventsThisFrame = lastFrameRawEventCount;
+        stats.eventBudget = render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME;
+        stats.eventsDropped = lastFrameRawEventCount > render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME;
 
         return stats;
     }

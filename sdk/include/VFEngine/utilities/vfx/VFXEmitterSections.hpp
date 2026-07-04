@@ -1,5 +1,6 @@
 #pragma once
 
+#include "VFXEventTypes.hpp"
 #include "VFXTypes.hpp"
 
 #include <array>
@@ -125,14 +126,23 @@ namespace vfx
         if (id == "bursts")
             return getInt(n, "burstCount", 0) > 0;
         if (id == "events")
-            return getBool(n, "eventOnSpawnEnabled", false) ||
-                   getBool(n, "eventOnDeathEnabled", false) ||
-                   getBool(n, "eventOnCollisionEnabled", false) ||
-                   getBool(n, "eventOnLifetimeThresholdEnabled", false) ||
-                   !getString(n, "eventOnSpawnVFX").empty() ||
-                   !getString(n, "eventOnDeathVFX").empty() ||
-                   !getString(n, "eventOnCollisionVFX").empty() ||
-                   !getString(n, "eventOnLifetimeThresholdVFX").empty();
+        {
+            for (uint32_t i = 0; i < VFX_EVENT_TYPE_COUNT; ++i)
+            {
+                const auto type = static_cast<VFXEventType>(i);
+                if (getBool(n, eventPropName(type, "Enabled").c_str(), false) ||
+                    !getString(n, eventPropName(type, "VFX").c_str()).empty() ||
+                    getInt(n, eventPropName(type, "Count").c_str(), EventDefaults::SPAWN_COUNT) != EventDefaults::SPAWN_COUNT ||
+                    getFloat(n, eventPropName(type, "Probability").c_str(), EventDefaults::PROBABILITY) != EventDefaults::PROBABILITY ||
+                    getFloat(n, eventPropName(type, "VelInherit").c_str(), EventDefaults::INHERIT_VELOCITY_SCALE) != EventDefaults::INHERIT_VELOCITY_SCALE ||
+                    getBool(n, eventPropName(type, "InheritColor").c_str(), EventDefaults::INHERIT_COLOR) != EventDefaults::INHERIT_COLOR ||
+                    getBool(n, eventPropName(type, "InheritSize").c_str(), EventDefaults::INHERIT_SIZE) != EventDefaults::INHERIT_SIZE)
+                {
+                    return true;
+                }
+            }
+            return getFloat(n, "eventLifetimeThreshold", EventDefaults::LIFETIME_THRESHOLD) != EventDefaults::LIFETIME_THRESHOLD;
+        }
         if (id == "lighting")
             return getFloat(n, "emissiveIntensity", D::EMISSIVE_INTENSITY) != D::EMISSIVE_INTENSITY ||
                    getFloat(n, "lightingInfluence", D::LIGHTING_INFLUENCE) != D::LIGHTING_INFLUENCE ||

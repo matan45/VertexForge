@@ -68,6 +68,24 @@ namespace windows
 
         ImGui::Spacing();
         ImGui::Separator();
+        if (budget.eventBudget > 0)
+        {
+            ImGui::Text("Events: %u / %u", budget.eventsThisFrame, budget.eventBudget);
+            if (budget.eventsDropped)
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.2f, 1.0f), "(dropped: raw %u)",
+                                   budget.rawEventsThisFrame);
+            }
+            else if (budget.rawEventsThisFrame == budget.eventBudget)
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "(full)");
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
         ImGui::Text("LOD Distribution:");
         ImGui::Text("  LOD 0 (Full):    %u", budget.lodCounts[0]);
         ImGui::Text("  LOD 1 (Half):    %u", budget.lodCounts[1]);
@@ -210,6 +228,10 @@ namespace windows
             budget.culledEmitters = r.culledEmitters;
             budget.throttledEmitters = r.throttledEmitters;
             budget.vfxCullDistance = r.vfxCullDistance;
+            budget.eventsThisFrame = r.eventsThisFrame;
+            budget.rawEventsThisFrame = r.rawEventsThisFrame;
+            budget.eventBudget = r.eventBudget;
+            budget.eventsDropped = r.eventsDropped;
         }
         catch (const std::exception&) { /* no runtime provider */ }
 

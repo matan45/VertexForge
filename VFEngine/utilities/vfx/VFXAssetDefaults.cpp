@@ -1,4 +1,5 @@
 #include "VFXAsset.hpp"
+#include "VFXEventTypes.hpp"
 #include "../uuid/UUID.hpp"
 
 namespace vfx
@@ -172,42 +173,17 @@ namespace vfx
 
         void addEventProperties(VFXNode& node)
         {
-            node.properties["eventOnSpawnEnabled"] = VFXProperty{
-                "eventOnSpawnEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_SPAWN_ENABLED, 0.0f, 1.0f
-            };
-            node.properties["eventOnSpawnVFX"] = VFXProperty{
-                "eventOnSpawnVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            node.properties["eventOnDeathEnabled"] = VFXProperty{
-                "eventOnDeathEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_DEATH_ENABLED, 0.0f, 1.0f
-            };
-            node.properties["eventOnDeathVFX"] = VFXProperty{
-                "eventOnDeathVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            node.properties["eventOnCollisionEnabled"] = VFXProperty{
-                "eventOnCollisionEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_COLLISION_ENABLED, 0.0f, 1.0f
-            };
-            node.properties["eventOnCollisionVFX"] = VFXProperty{
-                "eventOnCollisionVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            node.properties["eventOnLifetimeThresholdEnabled"] = VFXProperty{
-                "eventOnLifetimeThresholdEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_LIFETIME_THRESHOLD_ENABLED, 0.0f, 1.0f
-            };
-            node.properties["eventOnLifetimeThresholdVFX"] = VFXProperty{
-                "eventOnLifetimeThresholdVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            node.properties["eventLifetimeThreshold"] = VFXProperty{
-                "eventLifetimeThreshold", VFXPropertyType::Float,
-                EmitterDefaults::EVENT_LIFETIME_THRESHOLD, 0.0f, 1.0f
-            };
+            VFXEventConfig config;
+            config.types[eventTypeIndex(VFXEventType::OnSpawn)].enabled =
+                EmitterDefaults::EVENT_ON_SPAWN_ENABLED;
+            config.types[eventTypeIndex(VFXEventType::OnDeath)].enabled =
+                EmitterDefaults::EVENT_ON_DEATH_ENABLED;
+            config.types[eventTypeIndex(VFXEventType::OnCollision)].enabled =
+                EmitterDefaults::EVENT_ON_COLLISION_ENABLED;
+            config.types[eventTypeIndex(VFXEventType::OnLifetimeThreshold)].enabled =
+                EmitterDefaults::EVENT_ON_LIFETIME_THRESHOLD_ENABLED;
+            config.lifetimeThreshold = EmitterDefaults::EVENT_LIFETIME_THRESHOLD;
+            storeEventConfigToNode(node, config);
         }
 
         void addLightingAndCollisionProperties(VFXNode& node)

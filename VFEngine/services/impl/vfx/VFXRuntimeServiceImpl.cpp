@@ -103,6 +103,10 @@ namespace services
                 result.culledEmitters = bs.culledEmitters;
                 result.throttledEmitters = bs.throttledEmitters;
                 result.vfxCullDistance = bs.vfxCullDistance;
+                result.eventsThisFrame = bs.eventsThisFrame;
+                result.rawEventsThisFrame = bs.rawEventsThisFrame;
+                result.eventBudget = bs.eventBudget;
+                result.eventsDropped = bs.eventsDropped;
                 return result;
             });
 
@@ -377,6 +381,10 @@ namespace services
             stats.culledEmitters = ps.culledEmitters;
             stats.throttledEmitters = ps.throttledEmitters;
             stats.vfxCullDistance = ps.vfxCullDistance;
+            stats.eventsThisFrame = ps.eventsThisFrame;
+            stats.rawEventsThisFrame = ps.rawEventsThisFrame;
+            stats.eventBudget = ps.eventBudget;
+            stats.eventsDropped = ps.eventsDropped;
         }
         return stats;
     }

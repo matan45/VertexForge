@@ -65,6 +65,7 @@ namespace render::vfx
         uint32_t currentFrameIndex = 0;
         bool initialized = false;
         bool particleBufferCleared = false;
+        uint32_t lastRawEventCount = 0;
 
         uint32_t allocatedParticleCount = 0;
         uint32_t activeEmitterCount = 0;
@@ -128,6 +129,7 @@ namespace render::vfx
         void clearEventBuffer(vk::CommandBuffer cmd);
         void copyEventBufferToReadback(vk::CommandBuffer cmd);
         std::vector<GPUVFXEvent> readbackEvents(uint32_t& outEventCount);
+        uint32_t getLastRawEventCount() const { return lastRawEventCount; }
 
         void updateEmitterConfig(uint32_t emitterIndex, const GPUEmitterConfig& config);
         void updateEmitterState(uint32_t emitterIndex, const GPUEmitterState& state);

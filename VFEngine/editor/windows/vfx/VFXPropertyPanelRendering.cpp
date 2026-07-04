@@ -3,6 +3,7 @@
 #include "../../dragdrop/AssetDropTarget.hpp"
 #include <nfd/FileDialog.hpp>
 #include <vfx/VFXBurstTypes.hpp>
+#include <vfx/VFXEventTypes.hpp>
 #include <vfx/VFXEmitterSections.hpp>
 #include <vfx/VFXKillVolume.hpp>
 #include <vfx/VFXShapeProperties.hpp>
@@ -1040,103 +1041,112 @@ namespace editor::vfxeditor
     {
         struct EventEntry
         {
-            const char* enableKey;
-            const char* vfxKey;
+            vfx::VFXEventType type;
             const char* label;
         };
 
         static constexpr EventEntry eventEntries[] = {
-            {"eventOnSpawnEnabled",             "eventOnSpawnVFX",             "On Spawn"},
-            {"eventOnDeathEnabled",             "eventOnDeathVFX",             "On Death"},
-            {"eventOnCollisionEnabled",         "eventOnCollisionVFX",         "On Collision"},
-            {"eventOnLifetimeThresholdEnabled", "eventOnLifetimeThresholdVFX", "On Threshold"},
+            {vfx::VFXEventType::OnSpawn,             "On Spawn"},
+            {vfx::VFXEventType::OnDeath,             "On Death"},
+            {vfx::VFXEventType::OnCollision,         "On Collision"},
+            {vfx::VFXEventType::OnLifetimeThreshold, "On Threshold"},
         };
+
+        vfx::VFXEventConfig config = vfx::loadEventConfigFromNode(node);
+        bool changed = false;
 
         for (const auto& entry : eventEntries)
         {
-            auto enableIt = node.properties.find(entry.enableKey);
-            if (enableIt == node.properties.end()) continue;
+            auto& eventConfig = config.types[vfx::eventTypeIndex(entry.type)];
 
-            auto* enableVal = std::get_if<bool>(&enableIt->second.value);
-            if (!enableVal) continue;
-
-            ImGui::PushID(entry.enableKey);
+            ImGui::PushID(vfx::eventTypeKeyPrefix(entry.type));
             ImGui::Text("%s", entry.label);
             ImGui::SameLine();
-            if (ImGui::Checkbox("##enable", enableVal))
-            {
-                notifyChanged();
-            }
+            changed |= ImGui::Checkbox("##enable", &eventConfig.enabled);
 
-            if (*enableVal)
+            if (eventConfig.enabled)
             {
-                auto vfxIt = node.properties.find(entry.vfxKey);
-                if (vfxIt != node.properties.end())
+                ImGui::SameLine();
+                std::string display = eventConfig.vfxPath.empty() ? "(none)"
+                    : std::filesystem::path(eventConfig.vfxPath).filename().string();
+                char buf[256];
+                std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
+                ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                ImGui::InputText("##vfxPath", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("...##browse"))
                 {
-                    auto* vfxVal = std::get_if<std::string>(&vfxIt->second.value);
-                    if (vfxVal)
+                    nfd::FileDialog dialog;
+                    std::string path = dialog.openFileDialog({
+                        {L"VFX Asset (*.vfVFX)", L"*.vfVFX"}
+                    });
+                    if (!path.empty())
                     {
-                        ImGui::SameLine();
-                        std::string display = vfxVal->empty() ? "(none)"
-                            : std::filesystem::path(*vfxVal).filename().string();
-                        char buf[256];
-                        std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
-                        buf[sizeof(buf) - 1] = '\0';
-                        ImGui::SetNextItemWidth(inputWidth * 1.5f);
-                        ImGui::InputText("##vfxPath", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
-                        ImGui::SameLine();
-                        if (ImGui::Button("...##browse"))
-                        {
-                            nfd::FileDialog dialog;
-                            std::string path = dialog.openFileDialog({
-                                {L"VFX Asset (*.vfVFX)", L"*.vfVFX"}
-                            });
-                            if (!path.empty())
-                            {
-                                *vfxVal = path;
-                                notifyChanged();
-                            }
-                        }
-                        if (!vfxVal->empty())
-                        {
-                            ImGui::SameLine();
-                            if (ImGui::Button("X##clear"))
-                            {
-                                vfxVal->clear();
-                                notifyChanged();
-                            }
-                        }
+                        eventConfig.vfxPath = path;
+                        changed = true;
                     }
                 }
+                if (!eventConfig.vfxPath.empty())
+                {
+                    ImGui::SameLine();
+                    if (ImGui::Button("X##clear"))
+                    {
+                        eventConfig.vfxPath.clear();
+                        changed = true;
+                    }
+                }
+
+                ImGui::Text("Count");
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                int count = eventConfig.spawnCount;
+                if (ImGui::SliderInt("##count", &count,
+                                     vfx::EventDefaults::MIN_SPAWN_COUNT,
+                                     vfx::EventDefaults::MAX_SPAWN_COUNT))
+                {
+                    eventConfig.spawnCount = count;
+                    changed = true;
+                }
+
+                ImGui::Text("Probability");
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                changed |= ImGui::SliderFloat("##probability", &eventConfig.probability, 0.0f, 1.0f, "%.2f");
+
+                ImGui::Text("Vel Inherit");
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                changed |= ImGui::DragFloat("##velInherit", &eventConfig.inheritVelocityScale,
+                                            0.05f, 0.0f,
+                                            vfx::EventDefaults::MAX_INHERIT_VELOCITY_SCALE,
+                                            "%.2f");
+
+                ImGui::Text("Inherit Color");
+                ImGui::SameLine(100.0f);
+                changed |= ImGui::Checkbox("##inheritColor", &eventConfig.inheritColor);
+
+                ImGui::Text("Inherit Size");
+                ImGui::SameLine(100.0f);
+                changed |= ImGui::Checkbox("##inheritSize", &eventConfig.inheritSize);
+
+                ImGui::Spacing();
             }
             ImGui::PopID();
         }
 
-        auto enableIt = node.properties.find("eventOnLifetimeThresholdEnabled");
-        bool threshEnabled = false;
-        if (enableIt != node.properties.end())
+        if (config.types[vfx::eventTypeIndex(vfx::VFXEventType::OnLifetimeThreshold)].enabled)
         {
-            auto* ev = std::get_if<bool>(&enableIt->second.value);
-            if (ev) threshEnabled = *ev;
+            ImGui::Text("Threshold");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth);
+            changed |= ImGui::SliderFloat("##threshold", &config.lifetimeThreshold, 0.0f, 1.0f, "%.2f");
         }
 
-        if (threshEnabled)
+        if (changed)
         {
-            auto threshIt = node.properties.find("eventLifetimeThreshold");
-            if (threshIt != node.properties.end())
-            {
-                auto* val = std::get_if<float>(&threshIt->second.value);
-                if (val)
-                {
-                    ImGui::Text("Threshold");
-                    ImGui::SameLine(100.0f);
-                    ImGui::SetNextItemWidth(inputWidth);
-                    if (ImGui::SliderFloat("##threshold", val, 0.0f, 1.0f, "%.2f"))
-                    {
-                        notifyChanged();
-                    }
-                }
-            }
+            vfx::storeEventConfigToNode(node, config);
+            notifyChanged();
         }
     }
 

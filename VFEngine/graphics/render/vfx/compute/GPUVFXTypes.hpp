@@ -328,12 +328,16 @@ namespace render::vfx
         uint32_t eventType;
         glm::vec3 velocity;
         uint32_t emitterIndex;
+        glm::vec3 color;
+        float size;
     };
-    static_assert(sizeof(GPUVFXEvent) == 32, "GPUVFXEvent must be 32 bytes for GPU alignment");
+    static_assert(sizeof(GPUVFXEvent) == 48, "GPUVFXEvent must be 48 bytes for GPU alignment");
     static_assert(offsetof(GPUVFXEvent, position) == 0, "GPUVFXEvent::position offset mismatch");
     static_assert(offsetof(GPUVFXEvent, eventType) == 12, "GPUVFXEvent::eventType offset mismatch");
     static_assert(offsetof(GPUVFXEvent, velocity) == 16, "GPUVFXEvent::velocity offset mismatch");
     static_assert(offsetof(GPUVFXEvent, emitterIndex) == 28, "GPUVFXEvent::emitterIndex offset mismatch");
+    static_assert(offsetof(GPUVFXEvent, color) == 32, "GPUVFXEvent::color offset mismatch");
+    static_assert(offsetof(GPUVFXEvent, size) == 44, "GPUVFXEvent::size offset mismatch");
 
     struct alignas(16) GPUCollider
     {

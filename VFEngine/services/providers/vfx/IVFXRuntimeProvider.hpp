@@ -106,6 +106,10 @@ namespace services
             uint32_t culledEmitters = 0;    // emitters skipped by frustum/distance cull this frame
             uint32_t throttledEmitters = 0; // emitters whose sim was skipped by updateInterval
             float vfxCullDistance = 0.0f;   // active max VFX draw distance (0 => unlimited)
+            uint32_t eventsThisFrame = 0;
+            uint32_t rawEventsThisFrame = 0;
+            uint32_t eventBudget = 0;
+            bool eventsDropped = false;
         };
         virtual BudgetStats getBudgetStats() const = 0;
 
