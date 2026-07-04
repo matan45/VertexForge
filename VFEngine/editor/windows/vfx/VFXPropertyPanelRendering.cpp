@@ -8,6 +8,7 @@
 #include <vfx/VFXKillVolume.hpp>
 #include <vfx/VFXShapeProperties.hpp>
 #include <vfx/VFXShapeTypes.hpp>
+#include <vfx/VFXOrientationMode.hpp>
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -705,6 +706,70 @@ namespace editor::vfxeditor
         if (currentRenderMode == 3)
             drawMeshPathSelector(node, inputWidth);
 
+        // VK-1476: mesh-particle orientation (only for the Mesh Particle render mode).
+        if (currentRenderMode == 3)
+        {
+            // Ensure the props exist so effects authored before VK-1476 can be edited.
+            if (node.properties.find("meshOrientationMode") == node.properties.end())
+                node.properties["meshOrientationMode"] = vfx::VFXProperty{
+                    "meshOrientationMode", vfx::VFXPropertyType::String,
+                    std::string(vfx::orientationModeToString(vfx::VFXOrientationMode::VelocityForward)), 0.0f, 0.0f};
+            if (node.properties.find("meshOrientationAxis") == node.properties.end())
+                node.properties["meshOrientationAxis"] = vfx::VFXProperty{
+                    "meshOrientationAxis", vfx::VFXPropertyType::Vec3, glm::vec3(0.0f, 1.0f, 0.0f), 0.0f, 0.0f};
+            if (node.properties.find("meshOrientationSpinRate") == node.properties.end())
+                node.properties["meshOrientationSpinRate"] = vfx::VFXProperty{
+                    "meshOrientationSpinRate", vfx::VFXPropertyType::Float, 1.0f, 0.0f, 50.0f};
+
+            vfx::VFXOrientationMode currentOrient = vfx::VFXOrientationMode::VelocityForward;
+            if (auto* s = std::get_if<std::string>(&node.properties["meshOrientationMode"].value))
+                currentOrient = vfx::stringToOrientationMode(*s);
+
+            ImGui::Text("Orientation");
+            ImGui::SameLine(100.0f);
+            ImGui::SetNextItemWidth(inputWidth * 1.5f);
+            const char* orientModes[] = {"Velocity Forward", "Tumble", "Axis Lock", "Camera Facing"};
+            int current = static_cast<int>(currentOrient);
+            if (ImGui::Combo("##panel_meshOrientationMode", &current, orientModes, 4))
+            {
+                vfx::VFXOrientationMode chosen = static_cast<vfx::VFXOrientationMode>(std::clamp(current, 0, 3));
+                node.properties["meshOrientationMode"] = vfx::VFXProperty{
+                    "meshOrientationMode", vfx::VFXPropertyType::String,
+                    std::string(vfx::orientationModeToString(chosen)), 0.0f, 0.0f};
+                currentOrient = chosen;
+                notifyChanged();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Tumble / Axis Lock spin at the Spin Rate below.\n"
+                                  "Tumble uses a per-particle random axis; Axis Lock uses the fixed Axis.");
+
+            // Spin Rate (Tumble + Axis Lock).
+            if (currentOrient == vfx::VFXOrientationMode::Tumble || currentOrient == vfx::VFXOrientationMode::AxisLock)
+            {
+                if (auto* val = std::get_if<float>(&node.properties["meshOrientationSpinRate"].value))
+                {
+                    ImGui::Text("Spin Rate");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                    if (ImGui::DragFloat("##panel_meshOrientationSpinRate", val, 0.05f, 0.0f, 50.0f, "%.2f"))
+                        notifyChanged();
+                }
+            }
+
+            // Axis (Axis Lock only).
+            if (currentOrient == vfx::VFXOrientationMode::AxisLock)
+            {
+                if (auto* v = std::get_if<glm::vec3>(&node.properties["meshOrientationAxis"].value))
+                {
+                    ImGui::Text("Axis");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth * 2.5f);
+                    if (ImGui::DragFloat3("##panel_meshOrientationAxis", &(*v)[0], 0.01f, -1.0f, 1.0f, "%.2f"))
+                        notifyChanged();
+                }
+            }
+        }
+
         // VK-1472: Blend Mode dropdown (replaces the legacy "Additive" checkbox).
         // Resolves from the blendMode string prop, else the legacy additiveBlend bool.
         {
@@ -1299,6 +1364,7 @@ namespace editor::vfxeditor
             "colorValueVariance", "alphaVariance",
             "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
             "flipbookRandomStart", "flipbookFrameBlend", "alphaClipThreshold", "additiveBlend", "blendMode", "meshPath",
+            "meshOrientationMode", "meshOrientationAxis", "meshOrientationSpinRate",
             "sortOrder", "renderMode", "softParticleDistance", "stretchMultiplier",
             "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
             "uvScrollSpeedU", "uvScrollSpeedV",

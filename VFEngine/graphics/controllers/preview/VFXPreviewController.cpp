@@ -151,6 +151,8 @@ namespace controllers
         meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.blendMode, fbConfig.glowColor,
                                           currentParams.emissiveIntensity,
                                           currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
+        meshPipeline->setOrientationConfig(::vfx::orientationModeToGpuValue(currentParams.meshOrientationMode), // VK-1476
+                                           currentParams.meshOrientationAxis, currentParams.meshOrientationSpinRate);
 
         if (!currentParams.texturePath.empty())
         {
@@ -267,6 +269,8 @@ namespace controllers
             meshPipeline->setRenderingConfig(params.alphaClipThreshold, params.blendMode, fbConfig.glowColor,
                                               params.emissiveIntensity,
                                               params.uvScrollSpeedU, params.uvScrollSpeedV);
+            meshPipeline->setOrientationConfig(::vfx::orientationModeToGpuValue(params.meshOrientationMode), // VK-1476
+                                                params.meshOrientationAxis, params.meshOrientationSpinRate);
         }
 
         if (ribbonPipeline && ribbonPipeline->isInitialized())
@@ -660,6 +664,8 @@ namespace controllers
             bundle.mesh->setRenderingConfig(params.alphaClipThreshold, params.blendMode, fbConfig.glowColor,
                                             params.emissiveIntensity,
                                             params.uvScrollSpeedU, params.uvScrollSpeedV);
+            bundle.mesh->setOrientationConfig(::vfx::orientationModeToGpuValue(params.meshOrientationMode), // VK-1476
+                                              params.meshOrientationAxis, params.meshOrientationSpinRate);
             bundle.mesh->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
         }
         else

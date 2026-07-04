@@ -14,6 +14,7 @@ layout(location = 5) out vec3 fragWorldPos;
 layout(location = 6) out float fragGlowIntensity;
 
 #include "vfx_gpu_types.glsl"
+#include "vfx_mesh_orientation.glsl"
 
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
@@ -63,24 +64,13 @@ void main() {
 
     GPUEmitterConfig config = configs[pc.emitterIndex];
 
-    // Build rotation matrix from velocity direction
-    vec3 forward = vec3(0.0, 1.0, 0.0);
-    float speed = length(p.velocity);
-    if (speed > 0.001) {
-        forward = p.velocity / speed;
-    }
-
-    vec3 up = abs(forward.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 right = normalize(cross(up, forward));
-    up = cross(forward, right);
-
-    // Apply rotation around forward axis (angular velocity roll)
-    float cosR = cos(p.rotation);
-    float sinR = sin(p.rotation);
-    vec3 rotRight = right * cosR + up * sinR;
-    vec3 rotUp = -right * sinR + up * cosR;
-
-    mat3 rotationMatrix = mat3(rotRight, rotUp, forward);
+    // VK-1476: orientation basis from the emitter's mode (default = velocity-forward,
+    // byte-identical to the legacy formula). camBasis columns = world-space camera
+    // right/up/toward-camera (rows of the view 3x3), consumed by CameraFacing.
+    mat3 camBasis = transpose(mat3(camera.view));
+    mat3 rotationMatrix = vfxComputeMeshOrientation(
+        config.meshOrientationMode, p.velocity, p.rotation, p.spawnSeed,
+        p.lifetime, config.meshOrientationParams, camBasis);
 
     // Scale and transform mesh vertex
     vec3 scaledPos = inPosition * p.size;

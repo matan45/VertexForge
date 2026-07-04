@@ -144,6 +144,15 @@ namespace render::vfx
         pushConstants.uvScrollSpeedV = uvScrollSpeedV;
     }
 
+    void VFXMeshPreviewPipeline::setOrientationConfig(uint32_t mode, const glm::vec3& axis, float spinRate)
+    {
+        pushConstants.meshOrientationMode = mode;
+        pushConstants.orientAxisX = axis.x;
+        pushConstants.orientAxisY = axis.y;
+        pushConstants.orientAxisZ = axis.z;
+        pushConstants.meshOrientationSpinRate = spinRate;
+    }
+
     void VFXMeshPreviewPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                                        uint32_t imageIndex) const
     {

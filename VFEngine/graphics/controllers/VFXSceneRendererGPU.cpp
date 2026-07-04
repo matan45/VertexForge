@@ -15,6 +15,7 @@
 #include "vfx/VFXKillVolume.hpp"
 #include "vfx/VFXRuntimeDiagnostics.hpp"
 #include "vfx/VFXShapeTypes.hpp"
+#include "vfx/VFXOrientationMode.hpp"
 #include "print/Log.hpp"
 #include <random>
 #include <type_traits>
@@ -531,6 +532,14 @@ namespace controllers
         gpuConfig.colorValueVariance = cpuConfig.colorValueVariance;
         gpuConfig.alphaVariance = cpuConfig.alphaVariance;
         gpuConfig.emissiveIntensity = cpuConfig.emissiveIntensity;
+
+        // VK-1476 mesh orientation. Guard a zero/degenerate axis so the shader's
+        // normalize can never produce NaN (axis-lock about a valid default axis).
+        gpuConfig.meshOrientationMode = ::vfx::orientationModeToGpuValue(cpuConfig.meshOrientationMode);
+        glm::vec3 orientAxis = cpuConfig.meshOrientationAxis;
+        orientAxis = (glm::length(orientAxis) < 1e-6f) ? glm::vec3(0.0f, 1.0f, 0.0f)
+                                                       : glm::normalize(orientAxis);
+        gpuConfig.meshOrientationParams = glm::vec4(orientAxis, cpuConfig.meshOrientationSpinRate);
 
         return gpuConfig;
     }

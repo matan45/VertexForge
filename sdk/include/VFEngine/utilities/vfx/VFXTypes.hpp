@@ -9,6 +9,7 @@
 #include "VFXCurveTypes.hpp"
 #include "VFXScalability.hpp"
 #include "VFXBlendMode.hpp"
+#include "VFXOrientationMode.hpp"
 
 namespace vfx
 {
@@ -205,6 +206,12 @@ namespace vfx
         inline constexpr int RENDER_MODE = 0;
         inline constexpr float SOFT_PARTICLE_DISTANCE = 0.0f;
         inline constexpr float STRETCH_MULTIPLIER = 1.0f;
+
+        // VK-1476: mesh-particle orientation (only used when RENDER_MODE == MeshParticle).
+        // Default VelocityForward reproduces the legacy nose-first basis. Axis default
+        // (0,1,0) is applied inline at the load/serialize sites.
+        inline constexpr VFXOrientationMode MESH_ORIENTATION_MODE = VFXOrientationMode::VelocityForward;
+        inline constexpr float MESH_ORIENTATION_SPIN_RATE = 1.0f;
 
         inline constexpr int MAX_TRAIL_POINTS = 64;
         inline constexpr float RIBBON_WIDTH = 1.0f;

@@ -70,6 +70,9 @@ namespace core
         controllerParams.softParticleDistance = params.softParticleDistance;
         controllerParams.stretchMultiplier = params.stretchMultiplier;
         controllerParams.meshPath = params.meshPath;
+        controllerParams.meshOrientationMode = params.meshOrientationMode; // VK-1476
+        controllerParams.meshOrientationAxis = params.meshOrientationAxis;
+        controllerParams.meshOrientationSpinRate = params.meshOrientationSpinRate;
         controllerParams.maxTrailPoints = params.maxTrailPoints;
         controllerParams.ribbonWidth = params.ribbonWidth;
         controllerParams.ribbonMinDistance = params.ribbonMinDistance;

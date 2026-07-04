@@ -134,6 +134,19 @@ namespace vfx
                 "meshPath", VFXPropertyType::String,
                 std::string(""), 0.0f, 0.0f
             };
+            // VK-1476: mesh-particle orientation (only used when renderMode == MeshParticle).
+            node.properties["meshOrientationMode"] = VFXProperty{
+                "meshOrientationMode", VFXPropertyType::String,
+                std::string(orientationModeToString(EmitterDefaults::MESH_ORIENTATION_MODE)), 0.0f, 0.0f
+            };
+            node.properties["meshOrientationAxis"] = VFXProperty{
+                "meshOrientationAxis", VFXPropertyType::Vec3,
+                glm::vec3(0.0f, 1.0f, 0.0f), 0.0f, 0.0f
+            };
+            node.properties["meshOrientationSpinRate"] = VFXProperty{
+                "meshOrientationSpinRate", VFXPropertyType::Float,
+                EmitterDefaults::MESH_ORIENTATION_SPIN_RATE, 0.0f, 50.0f
+            };
         }
 
         void addRibbonProperties(VFXNode& node)

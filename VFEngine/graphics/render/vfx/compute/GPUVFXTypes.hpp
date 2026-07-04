@@ -180,8 +180,14 @@ namespace render::vfx
         // Speed ranges added in VK-1473 (SizeBySpeed / ColorBySpeed modifiers). Each by-speed
         // modifier remaps length(velocity) into [0,1] via its own [min,max] before sampling.
         glm::vec4 modifierSpeedRanges{0.0f}; // x = size speedMin, y = size speedMax, z = color speedMin, w = color speedMax
+
+        // Mesh-particle orientation added in VK-1476. Consumed by the shared mesh
+        // orientation function (vfx_mesh_orientation.glsl); only the MeshParticle
+        // render mode reads these. Mode 0 (VelocityForward) is the legacy default.
+        glm::vec4 meshOrientationParams{0.0f}; // xyz = axis-lock axis (world, normalized), w = spin rate (rad/s)
+        uint32_t meshOrientationMode = 0;      // vfx::VFXOrientationMode (0 = VelocityForward)
     };
-    static_assert(sizeof(GPUEmitterConfig) == 480, "GPUEmitterConfig must be 480 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 512, "GPUEmitterConfig must be 512 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -244,6 +250,8 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, killVolumeParams0) == 432, "GPUEmitterConfig::killVolumeParams0 offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, killVolumeParams1) == 448, "GPUEmitterConfig::killVolumeParams1 offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, modifierSpeedRanges) == 464, "GPUEmitterConfig::modifierSpeedRanges offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, meshOrientationParams) == 480, "GPUEmitterConfig::meshOrientationParams offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, meshOrientationMode) == 496, "GPUEmitterConfig::meshOrientationMode offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {

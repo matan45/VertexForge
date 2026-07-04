@@ -12,6 +12,7 @@
 #include "vfx/VFXBurstTypes.hpp"
 #include "vfx/VFXScalability.hpp"
 #include "vfx/VFXBlendMode.hpp"
+#include "vfx/VFXOrientationMode.hpp"
 
 namespace render::vfx
 {
@@ -56,6 +57,13 @@ namespace render::vfx
         float rotation;
         float flipbookFrameIndex;
         float glowIntensity;
+        // VK-1476: appended for the mesh preview's orientation modes. The shared 6-attr
+        // getAttributeDescriptions() below is deliberately NOT extended — billboard/scene
+        // preview pipelines ignore these trailing bytes; only the mesh preview pipeline
+        // binds them (as instance attributes at locations 8/9/10).
+        glm::vec3 velocity{0.0f};
+        uint32_t spawnSeed = 0;
+        float age = 0.0f; // seconds since spawn (matches runtime GPUParticle.lifetime)
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -257,7 +265,15 @@ namespace render::vfx
         float stretchMultiplier = 1.0f;
         
         std::string meshPath;
-        
+
+        // VK-1476: MESH-render-mode orientation. Only read when renderMode == MeshParticle.
+        // VelocityForward reproduces the legacy nose-first basis exactly (byte-identical default).
+        // Tumble/AxisLock spin at meshOrientationSpinRate (rad/s); AxisLock spins about
+        // meshOrientationAxis; Tumble derives a per-particle random axis + rate jitter from the seed.
+        ::vfx::VFXOrientationMode meshOrientationMode = ::vfx::VFXOrientationMode::VelocityForward;
+        glm::vec3 meshOrientationAxis{0.0f, 1.0f, 0.0f};
+        float meshOrientationSpinRate = 1.0f;
+
         uint32_t maxTrailPoints = 64;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;

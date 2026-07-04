@@ -7,6 +7,7 @@
 #include <vfx/VFXEventTypes.hpp>
 #include <vfx/VFXBurstTypes.hpp>
 #include <vfx/VFXBlendMode.hpp>
+#include <vfx/VFXOrientationMode.hpp>
 #include <vfx/VFXComboTimeline.hpp>
 #include <vfx/VFXSequenceTypes.hpp>
 #include <glm/glm.hpp>
@@ -73,9 +74,14 @@ namespace controllers
         int renderMode = 0;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;
-        
+
         std::string meshPath;
-        
+
+        // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
+        ::vfx::VFXOrientationMode meshOrientationMode = ::vfx::VFXOrientationMode::VelocityForward;
+        glm::vec3 meshOrientationAxis{0.0f, 1.0f, 0.0f};
+        float meshOrientationSpinRate = 1.0f;
+
         int maxTrailPoints = 64;
         float ribbonWidth = 1.0f;
         float ribbonMinDistance = 0.1f;

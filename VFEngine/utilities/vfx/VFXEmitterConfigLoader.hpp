@@ -156,6 +156,13 @@ namespace vfx
 
         config.meshPath = getString(*emitterNode, "meshPath", "");
 
+        // VK-1476: mesh-particle orientation. Missing keys (legacy assets) fall back to
+        // VelocityForward + axis (0,1,0), so old effects load byte-identically.
+        config.meshOrientationMode = stringToOrientationMode(getString(*emitterNode, "meshOrientationMode", ""));
+        config.meshOrientationAxis = getVec3(*emitterNode, "meshOrientationAxis", glm::vec3(0.0f, 1.0f, 0.0f));
+        config.meshOrientationSpinRate = std::max(0.0f,
+            getFloat(*emitterNode, "meshOrientationSpinRate", EmitterDefaults::MESH_ORIENTATION_SPIN_RATE));
+
         config.maxTrailPoints = static_cast<uint32_t>(
             std::clamp(getInt(*emitterNode, "maxTrailPoints", EmitterDefaults::MAX_TRAIL_POINTS), 2, 256));
         config.ribbonWidth = std::max(0.01f,

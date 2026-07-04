@@ -104,6 +104,10 @@ namespace editor::vfxeditor
         params.softParticleDistance = getFloat(*emitterNode, "softParticleDistance", vfx::EmitterDefaults::SOFT_PARTICLE_DISTANCE);
         params.stretchMultiplier = getFloat(*emitterNode, "stretchMultiplier", vfx::EmitterDefaults::STRETCH_MULTIPLIER);
         params.meshPath = getString(*emitterNode, "meshPath", "");
+        // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
+        params.meshOrientationMode = vfx::stringToOrientationMode(getString(*emitterNode, "meshOrientationMode", ""));
+        params.meshOrientationAxis = getVec3(*emitterNode, "meshOrientationAxis", glm::vec3(0.0f, 1.0f, 0.0f));
+        params.meshOrientationSpinRate = getFloat(*emitterNode, "meshOrientationSpinRate", vfx::EmitterDefaults::MESH_ORIENTATION_SPIN_RATE);
         params.maxTrailPoints = getInt(*emitterNode, "maxTrailPoints", vfx::EmitterDefaults::MAX_TRAIL_POINTS);
         params.ribbonWidth = getFloat(*emitterNode, "ribbonWidth", vfx::EmitterDefaults::RIBBON_WIDTH);
         params.ribbonMinDistance = getFloat(*emitterNode, "ribbonMinDistance", vfx::EmitterDefaults::RIBBON_MIN_DISTANCE);

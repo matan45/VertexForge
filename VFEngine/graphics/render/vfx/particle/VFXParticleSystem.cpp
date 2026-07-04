@@ -152,6 +152,11 @@ namespace render::vfx
                 instance.color = particle.color;
                 instance.lifetimeRatio = particle.lifetime / particle.maxLifetime;
                 instance.rotation = particle.rotation;
+                // VK-1476: carried for the mesh preview's orientation modes so the
+                // preview matches runtime. age = elapsed seconds (matches GPUParticle.lifetime).
+                instance.velocity = particle.velocity;
+                instance.spawnSeed = particle.spawnSeed;
+                instance.age = particle.lifetime;
 
                 if (totalFrames > 1)
                 {

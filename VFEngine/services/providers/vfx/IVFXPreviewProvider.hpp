@@ -7,6 +7,7 @@
 #include <vfx/VFXEventTypes.hpp>
 #include <vfx/VFXBurstTypes.hpp>
 #include <vfx/VFXBlendMode.hpp>
+#include <vfx/VFXOrientationMode.hpp>
 #include <vector>
 #include <glm/glm.hpp>
 #include <string>
@@ -52,6 +53,11 @@ namespace services
         float stretchMultiplier = 1.0f;
 
         std::string meshPath;
+
+        // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
+        ::vfx::VFXOrientationMode meshOrientationMode = ::vfx::VFXOrientationMode::VelocityForward;
+        glm::vec3 meshOrientationAxis{0.0f, 1.0f, 0.0f};
+        float meshOrientationSpinRate = 1.0f;
 
         int maxTrailPoints = 64;
         float ribbonWidth = 1.0f;

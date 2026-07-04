@@ -105,4 +105,8 @@ struct GPUEmitterConfig
 
     // Speed ranges added in VK-1473 (SizeBySpeed / ColorBySpeed).
     vec4 modifierSpeedRanges; // x = size speedMin, y = size speedMax, z = color speedMin, w = color speedMax
+
+    // Mesh-particle orientation added in VK-1476 (mirror of C++ GPUEmitterConfig).
+    vec4 meshOrientationParams; // xyz = axis-lock axis (world, normalized), w = spin rate (rad/s)
+    uint meshOrientationMode;   // vfx::VFXOrientationMode (0 = VelocityForward)
 };

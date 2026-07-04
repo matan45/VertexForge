@@ -260,7 +260,7 @@ namespace render::vfx
         instanceBinding.stride = sizeof(VFXInstanceData);
         instanceBinding.inputRate = vk::VertexInputRate::eInstance;
 
-        std::array<vk::VertexInputAttributeDescription, 5> instanceAttribs{};
+        std::array<vk::VertexInputAttributeDescription, 8> instanceAttribs{};
         // location 3: worldPosAndSize (vec4)
         instanceAttribs[0].binding = 1;
         instanceAttribs[0].location = 3;
@@ -290,6 +290,25 @@ namespace render::vfx
         instanceAttribs[4].location = 7;
         instanceAttribs[4].format = vk::Format::eR32Sfloat;
         instanceAttribs[4].offset = offsetof(VFXInstanceData, glowIntensity);
+
+        // VK-1476: orientation inputs (mesh preview only) — mirrors runtime GPUParticle fields.
+        // location 8: velocity (vec3)
+        instanceAttribs[5].binding = 1;
+        instanceAttribs[5].location = 8;
+        instanceAttribs[5].format = vk::Format::eR32G32B32Sfloat;
+        instanceAttribs[5].offset = offsetof(VFXInstanceData, velocity);
+
+        // location 9: spawnSeed (uint)
+        instanceAttribs[6].binding = 1;
+        instanceAttribs[6].location = 9;
+        instanceAttribs[6].format = vk::Format::eR32Uint;
+        instanceAttribs[6].offset = offsetof(VFXInstanceData, spawnSeed);
+
+        // location 10: age (float, seconds since spawn)
+        instanceAttribs[7].binding = 1;
+        instanceAttribs[7].location = 10;
+        instanceAttribs[7].format = vk::Format::eR32Sfloat;
+        instanceAttribs[7].offset = offsetof(VFXInstanceData, age);
 
         std::vector<vk::VertexInputAttributeDescription> allAttribs;
         allAttribs.insert(allAttribs.end(), meshAttribs.begin(), meshAttribs.end());
