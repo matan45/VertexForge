@@ -1,0 +1,87 @@
+{
+    "version": "1.0",
+    "uuid": "920000000000000106",
+    "name": "Ice Sword Wave",
+    "steps": [
+        {
+            "vfxRef": "assets/vfx/library/ice_sword_tip_flash.vfVFX",
+            "label": "tip_flash",
+            "startTime": 0.0,
+            "cueName": "",
+            "localPosition": [0.0, 0.0, 0.0],
+            "localEulerDeg": [0.0, 0.0, 0.0],
+            "localScale": [1.0, 1.0, 1.0],
+            "loop": false,
+            "duration": 0.05,
+            "stopMode": 1,
+            "socketName": "",
+            "overrides": []
+        },
+        {
+            "vfxRef": "assets/vfx/library/ice_sword_wave_core.vfVFX",
+            "label": "wave_core",
+            "startTime": 0.04,
+            "cueName": "",
+            "localPosition": [0.0, 0.0, 0.0],
+            "localEulerDeg": [0.0, 0.0, 0.0],
+            "localScale": [1.0, 1.0, 1.0],
+            "loop": false,
+            "duration": 0.2,
+            "stopMode": 1,
+            "socketName": "",
+            "overrides": []
+        },
+        {
+            "vfxRef": "assets/vfx/library/ice_small_fragments.vfVFX",
+            "label": "small_fragments",
+            "startTime": 0.08,
+            "cueName": "",
+            "localPosition": [0.0, 0.0, -0.1],
+            "localEulerDeg": [0.0, 0.0, 0.0],
+            "localScale": [1.0, 1.0, 1.0],
+            "loop": false,
+            "duration": 0.0,
+            "stopMode": 0,
+            "socketName": "",
+            "overrides": []
+        },
+        {
+            "vfxRef": "assets/vfx/library/ice_large_shards.vfVFX",
+            "label": "large_shards",
+            "startTime": 0.11,
+            "cueName": "",
+            "localPosition": [0.0, 0.08, 0.18],
+            "localEulerDeg": [0.0, 0.0, 0.0],
+            "localScale": [1.0, 1.0, 1.0],
+            "loop": false,
+            "duration": 0.0,
+            "stopMode": 0,
+            "socketName": "",
+            "overrides": []
+        },
+        {
+            "vfxRef": "assets/vfx/library/ice_ground_frost_mist.vfVFX",
+            "label": "ground_frost_mist",
+            "startTime": 0.2,
+            "cueName": "",
+            "localPosition": [0.0, -0.08, 0.25],
+            "localEulerDeg": [0.0, 0.0, 0.0],
+            "localScale": [1.0, 1.0, 1.0],
+            "loop": false,
+            "duration": 0.3,
+            "stopMode": 1,
+            "socketName": "",
+            "overrides": []
+        }
+    ],
+    "seed": 0,
+    "playbackRate": 1.0,
+    "fixedStep": 0.0,
+    "prewarm": 0.0,
+    "eventMarkers": [],
+    "bounds": {
+        "mode": 0,
+        "center": [0.0, 0.25, 1.4],
+        "extents": [2.6, 1.3, 3.2]
+    }
+}
