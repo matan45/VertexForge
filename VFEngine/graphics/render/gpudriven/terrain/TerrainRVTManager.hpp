@@ -55,6 +55,12 @@ namespace render::gpudriven
         };
         using BakeFn = std::function<void(vk::CommandBuffer, const std::vector<ScheduledBake>&)>;
 
+        // Optional residency gate: given a page's world-XZ rect (minX, minZ, sizeX, sizeZ), return
+        // whether loaded terrain covers it. Uncovered pages are left non-resident (the shader falls
+        // back to the live composite) so the page budget isn't spent baking fully-black tiles. An
+        // empty predicate disables gating (all requested pages are eligible).
+        using CoveragePredicate = std::function<bool(const glm::vec4&)>;
+
         // Per-frame CPU cost of the residency path (VK-1480 instrumentation), split so
         // the feedback memcpy can be told apart from the set-bit decode and the residency
         // planning. Render-thread only; the lead publishes it into the profiler.
@@ -78,7 +84,7 @@ namespace render::gpudriven
         // Frame lifecycle (mirrors VSM's feedback-driven loop):
         void markFeedbackReady() { if (feedback) feedback->markReady(); }
         void beginFrameReadback();                 // decode last frame's feedback into requestedPages
-        void updateResidency(uint32_t frame);      // plan + evict + allocate + schedule bakes
+        void updateResidency(uint32_t frame, const CoveragePredicate& covered = {}); // plan + evict + allocate + schedule bakes
         void recordBakes(vk::CommandBuffer cmd, const BakeFn& bake);
         void uploadPageTable(vk::CommandBuffer cmd) { if (pageTable) pageTable->uploadToGPU(cmd); }
         void clearFeedback(vk::CommandBuffer cmd) { if (feedback) feedback->clear(cmd); }

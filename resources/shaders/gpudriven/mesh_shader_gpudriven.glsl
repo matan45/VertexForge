@@ -463,11 +463,23 @@ bool isSampleableTexture(uint index) {
     return isValidTexture(index);
 }
 
+#ifdef SVT_ENABLED
+// SVT sampling diagnostics, set per sampleMaterialTex() call and captured at the albedo site for
+// the viewMode-30 debug readout (VK-1480). Present only in the SVT_ENABLED variant.
+float g_svtSampleTagged = 0.0;  // 1.0 if the last sampled index was SVT-tagged
+float g_svtSampleValid = 0.0;   // 1.0 if the last page lookup resolved to the atlas, 0.0 if it fell back
+float g_svtAlbedoTagged = 0.0;  // g_svtSampleTagged captured at the albedo sample
+float g_svtAlbedoValid = 0.0;   // g_svtSampleValid captured at the albedo sample
+float g_svtAlbedoAlpha = 1.0;   // the albedo .a fed into the color*alpha output premultiply
+#endif
+
 // Sample a material texture. SVT-tagged indices resolve through the page table into the bindless
 // atlas (with a whole-image fallback while a page streams in) and emit a feedback request; all
 // other indices are a plain bindless sample. Off = plain bindless sample.
 vec4 sampleMaterialTex(uint index, vec2 uv, vec2 dx, vec2 dy) {
 #ifdef SVT_ENABLED
+    g_svtSampleTagged = 0.0;
+    g_svtSampleValid = 0.0;
     if ((index & SVT_TAG_BIT) != 0u) {
         VTImageInfo img = svtImageInfo[index & 0x7FFFFFFFu];
         uint atlasIndex = img.pad0;
@@ -481,6 +493,8 @@ vec4 sampleMaterialTex(uint index, vec2 uv, vec2 dx, vec2 dy) {
         if (vtFeedbackFragment(gl_FragCoord.xy))
             vtWriteFeedback(img, wuv, mip);
         VTSample s = vtLookup(img, wuv, mip);
+        g_svtSampleTagged = 1.0;
+        g_svtSampleValid = s.valid ? 1.0 : 0.0;
         if (s.valid)
             return textureLod(bindlessTextures[nonuniformEXT(atlasIndex)], s.uv, 0.0);
         return textureGrad(bindlessTextures[nonuniformEXT(fallbackIndex)], uv, dx, dy);
@@ -549,6 +563,18 @@ void main() {
         vec4 albedoSample = sampleMaterialTex(albedoIdx, texCoords, texDx, texDy);
         albedo = albedoSample.rgb;
         alpha = albedoSample.a;
+#ifdef SVT_ENABLED
+        g_svtAlbedoTagged = g_svtSampleTagged;
+        g_svtAlbedoValid = g_svtSampleValid;
+        g_svtAlbedoAlpha = albedoSample.a;
+        // VK-1480: an SVT albedo tile can carry alpha ~= 0 (BC7 alpha in uncovered/streaming texels),
+        // which the color*alpha output premultiply would collapse to black. Opaque materials do not
+        // use albedo alpha, so force full opacity for them; alpha-mask/translucent/additive keep it.
+        if ((albedoIdx & SVT_TAG_BIT) != 0u &&
+            (drawData.flags & (FLAG_ALPHA_MASK | FLAG_TRANSLUCENT | FLAG_ADDITIVE_BLEND)) == 0u) {
+            alpha = 1.0;
+        }
+#endif
     }
 
     if ((drawData.flags & FLAG_ALPHA_MASK) != 0u) {
@@ -894,6 +920,18 @@ void main() {
         float depth01 = gl_FragCoord.z;
         color = vec3(0.15, 0.4, 0.05); // Base green per fragment
     }
+
+#ifdef SVT_ENABLED
+    // SVT residency debug (VK-1480): R = albedo lookup resolved to the atlas, G = albedo alpha (the
+    // color*alpha input), B = took the whole-image fallback. Read the dark surface: R=1,G~0 => a
+    // resident tile with alpha~0 (the premultiply collapse); R=0,B=1 => a dark fallback path.
+    // alpha is forced to 1 so the readout survives the output premultiply even when the bug is alpha~0.
+    if (viewModeValue == 30u) {
+        float tookFallback = g_svtAlbedoTagged * (1.0 - g_svtAlbedoValid);
+        color = vec3(g_svtAlbedoValid, g_svtAlbedoAlpha, tookFallback);
+        alpha = 1.0;
+    }
+#endif
 
 #ifdef WBOIT_ENABLED
     // Weighted Blended OIT (McGuire & Bavoil 2013)

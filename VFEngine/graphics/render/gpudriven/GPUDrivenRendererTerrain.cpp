@@ -1,6 +1,7 @@
 #include "GPUDrivenRenderer.hpp"
 #include "terrain/TerrainRVTManager.hpp"
 #include "terrain/TerrainRVTBaker.hpp"
+#include "terrain/TerrainRVTCoverage.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
 #include "../material/MaterialTextureCache.hpp"
@@ -160,7 +161,31 @@ namespace render::gpudriven
             return;
         terrainRVT->markFeedbackReady();   // the prior frame's copy has completed (fence-gated caller)
         terrainRVT->beginFrameReadback();  // decode requested pages
-        terrainRVT->updateResidency(rvtFrameCounter++);
+
+        // Coverage gate: only make a page resident if its border-expanded world rect overlaps a
+        // loaded terrain tile, mirroring bakeTerrainRVT's per-tile overlap so gate and bake agree.
+        // Uncovered pages stay non-resident and render via the composite fallback, so the per-frame
+        // page budget and physical tiles are spent on pages that actually carry detail.
+        const std::vector<TerrainTileGPUData>& tiles = terrain.tileData;
+        const float borderFrac =
+            static_cast<float>(vt::VT_BORDER) / static_cast<float>(vt::VT_PAGE_INTERIOR);
+        auto covered = [&tiles, borderFrac](const glm::vec4& rect) -> bool
+        {
+            const glm::vec2 pageMin(rect.x, rect.y);
+            const glm::vec2 pageSize(rect.z, rect.w);
+            const glm::vec2 margin = pageSize * borderFrac;
+            const TerrainCoverageRect q{
+                pageMin.x - margin.x, pageMin.y - margin.y,
+                pageMin.x + pageSize.x + margin.x, pageMin.y + pageSize.y + margin.y};
+            for (const auto& t : tiles)
+            {
+                const TerrainCoverageRect tr{t.aabbMin.x, t.aabbMin.z, t.aabbMax.x, t.aabbMax.z};
+                if (terrainRectsOverlap(q, tr))
+                    return true;
+            }
+            return false;
+        };
+        terrainRVT->updateResidency(rvtFrameCounter++, covered);
     }
 
     void GPUDrivenRenderer::bakeTerrainRVT(vk::CommandBuffer cmd)

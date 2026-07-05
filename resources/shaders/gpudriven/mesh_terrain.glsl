@@ -477,21 +477,53 @@ void main() {
 
 #ifdef RVT_ENABLED
     // Sample the baked terrain RVT atlas (2 texels) instead of the live 8-layer composite.
-    // Fine->coarse fallback keeps the surface textured while a page streams in; the coarsest
-    // mip is pinned so the lookup always resolves (AC6). Steep/cave fragments keep the RVT
-    // result (XZ-projection); the cave adjust below still darkens it.
+    // A lookup "resolves" only when the page-table entry is valid AND the ORM atlas alpha
+    // (the per-texel "baked with real content" bit, written 1.0 by terrain_rvt_bake.glsl) is
+    // set. Any fragment that is not truly resident-with-content — streaming in, on an
+    // uncovered page, or on a mapped-but-not-baked tile (clear leaves alpha 0) — falls back
+    // to the live composite so the surface is never worse than the non-RVT path, never black.
+    vec3 mat_albedo;
+    float mat_metallic;
+    float mat_roughness;
+    float mat_ao;
+    vec3 mat_emission;
     vec2 rvtUV = clamp((fragWorldPos.xz - rvt.worldMin) * rvt.invWorldExtent, vec2(0.0), vec2(0.999999));
     uint rvtMip = uint(max(vtDesiredMip(rvtUV, rvt.virtualResTexels), 0.0));
     if (vtFeedbackFragment(gl_FragCoord.xy))
         vtWriteFeedback(rvt.img, rvtUV, rvtMip);
     VTSample rvtS = vtLookup(rvt.img, rvtUV, rvtMip);
-    vec4 rvtA = texture(rvtAlbedoAtlas, rvtS.uv);
-    vec4 rvtO = texture(rvtOrmAtlas, rvtS.uv);
-    vec3 mat_albedo = rvtA.rgb;
-    float mat_metallic = rvtO.b;
-    float mat_roughness = rvtO.g;
-    float mat_ao = rvtO.r;
-    vec3 mat_emission = rvtA.rgb * rvtA.a;
+    vec4 rvtO = rvtS.valid ? texture(rvtOrmAtlas, rvtS.uv) : vec4(0.0);
+    bool rvtResolved = rvtS.valid && rvtO.a >= 0.5;
+    if (rvtResolved) {
+        vec4 rvtA = texture(rvtAlbedoAtlas, rvtS.uv);
+        mat_albedo = rvtA.rgb;
+        mat_metallic = rvtO.b;
+        mat_roughness = rvtO.g;
+        mat_ao = rvtO.r;
+        mat_emission = rvtA.rgb * rvtA.a;
+    } else {
+        // Live 8-layer composite fallback (cold path — only unresolved fragments pay it, so the
+        // RVT fast path keeps its win). The generated composite declares its own mat_* locals;
+        // rename them to temporaries so they don't clash with the outer decls, then copy out.
+        #define mat_albedo   _rvtcAlbedo
+        #define mat_normalTS _rvtcNormalTS
+        #define mat_metallic _rvtcMetallic
+        #define mat_roughness _rvtcRoughness
+        #define mat_ao       _rvtcAO
+        #define mat_emission _rvtcEmission
+        #include "../material/terrain_material_generated.glsl"
+        #undef mat_albedo
+        #undef mat_normalTS
+        #undef mat_metallic
+        #undef mat_roughness
+        #undef mat_ao
+        #undef mat_emission
+        mat_albedo = _rvtcAlbedo;
+        mat_metallic = _rvtcMetallic;
+        mat_roughness = _rvtcRoughness;
+        mat_ao = _rvtcAO;
+        mat_emission = _rvtcEmission;
+    }
 #else
 #include "../material/terrain_material_generated.glsl"
 #ifndef MAT_EMISSION_DEFINED

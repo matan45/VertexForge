@@ -57,7 +57,10 @@ namespace render::gpudriven
         VTPoolDesc poolDesc;
         poolDesc.poolDim = poolDim;
         poolDesc.planeFormats = {vk::Format::eR8G8B8A8Srgb, vk::Format::eR8G8B8A8Unorm};
-        poolDesc.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
+        // eTransferDst so init can seed the atlas to zero (ORM alpha 0 = "uncovered"); the
+        // shader treats an uncovered/unbaked texel as a composite fallback, never black.
+        poolDesc.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled
+                       | vk::ImageUsageFlagBits::eTransferDst;
         poolDesc.enableAnisotropy = false;
 
         pool = std::make_unique<VTPhysicalPool>(device);
@@ -177,7 +180,7 @@ namespace render::gpudriven
             static_cast<uint64_t>(std::chrono::duration<double, std::micro>(decodeEnd - decodeStart).count());
     }
 
-    void TerrainRVTManager::updateResidency(uint32_t frame)
+    void TerrainRVTManager::updateResidency(uint32_t frame, const CoveragePredicate& covered)
     {
         scheduledBakes.clear();
         cpuStats.residencyUs = 0;
@@ -204,6 +207,11 @@ namespace render::gpudriven
         }
         for (const auto& a : plan.toAllocate)
         {
+            // Skip pages with no loaded-terrain coverage: baking them yields a fully "uncovered"
+            // (alpha 0) tile the shader ignores anyway, so leave them non-resident and spend the
+            // budget on pages that carry real detail. (The pinned coarse page above is exempt.)
+            if (covered && !covered(pageWorldRect(a)))
+                continue;
             const uint32_t tile = pool->allocateTile();
             if (tile == VT_INVALID_TILE)
                 break;

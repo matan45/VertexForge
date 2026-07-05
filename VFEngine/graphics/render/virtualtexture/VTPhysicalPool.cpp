@@ -6,6 +6,29 @@
 
 namespace render::vt
 {
+    namespace
+    {
+        // vkCmdClearColorImage is not valid on block-compressed images (BC7 SVT pools). VT pools
+        // only ever use BC7 among compressed formats, but cover the BC range for safety.
+        bool isBlockCompressed(vk::Format fmt)
+        {
+            switch (fmt)
+            {
+                case vk::Format::eBc1RgbUnormBlock:  case vk::Format::eBc1RgbSrgbBlock:
+                case vk::Format::eBc1RgbaUnormBlock: case vk::Format::eBc1RgbaSrgbBlock:
+                case vk::Format::eBc2UnormBlock:     case vk::Format::eBc2SrgbBlock:
+                case vk::Format::eBc3UnormBlock:     case vk::Format::eBc3SrgbBlock:
+                case vk::Format::eBc4UnormBlock:     case vk::Format::eBc4SnormBlock:
+                case vk::Format::eBc5UnormBlock:     case vk::Format::eBc5SnormBlock:
+                case vk::Format::eBc6HUfloatBlock:   case vk::Format::eBc6HSfloatBlock:
+                case vk::Format::eBc7UnormBlock:     case vk::Format::eBc7SrgbBlock:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
+
     VTPhysicalPool::VTPhysicalPool(core::Device& device)
         : device(device)
     {
@@ -33,30 +56,72 @@ namespace render::vt
 
         allocator.init(vtMaxTiles(poolDim));
 
-        // Bring every plane to shader-read-optimal for a defined initial layout.
+        // Bring every plane to shader-read-optimal for a defined initial layout. For uncompressed
+        // planes whose usage permits a transfer write, first clear the whole atlas to zero so any
+        // never-baked tile reads alpha 0 — the RVT "uncovered" marker the shader falls back on —
+        // instead of undefined memory. BC7 (SVT) planes cannot be cleared, so they transition
+        // straight to shader-read as before (SVT seeds neutral tiles separately).
         {
             const auto& logicalDevice = device.getLogicalDevice();
             auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
+            const bool usageAllowsClear =
+                static_cast<bool>(desc.usage & vk::ImageUsageFlagBits::eTransferDst);
+
+            vk::ImageSubresourceRange range{};
+            range.aspectMask = vk::ImageAspectFlagBits::eColor;
+            range.baseMipLevel = 0;
+            range.levelCount = 1;
+            range.baseArrayLayer = 0;
+            range.layerCount = 1;
+
             for (auto& plane : planes)
             {
+                const bool seed = usageAllowsClear && !isBlockCompressed(plane.format);
+
                 vk::ImageMemoryBarrier barrier{};
                 barrier.srcAccessMask = {};
-                barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
                 barrier.oldLayout = vk::ImageLayout::eUndefined;
-                barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
                 barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                 barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                 barrier.image = plane.image;
-                barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-                barrier.subresourceRange.baseMipLevel = 0;
-                barrier.subresourceRange.levelCount = 1;
-                barrier.subresourceRange.baseArrayLayer = 0;
-                barrier.subresourceRange.layerCount = 1;
+                barrier.subresourceRange = range;
 
-                cmd->pipelineBarrier(
-                    vk::PipelineStageFlagBits::eTopOfPipe,
-                    vk::PipelineStageFlagBits::eFragmentShader,
-                    {}, 0, nullptr, 0, nullptr, 1, &barrier);
+                if (seed)
+                {
+                    barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+                    barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+                    cmd->pipelineBarrier(
+                        vk::PipelineStageFlagBits::eTopOfPipe,
+                        vk::PipelineStageFlagBits::eTransfer,
+                        {}, 0, nullptr, 0, nullptr, 1, &barrier);
+
+                    const vk::ClearColorValue clearColor(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f});
+                    cmd->clearColorImage(plane.image, vk::ImageLayout::eTransferDstOptimal,
+                                         clearColor, range);
+
+                    vk::ImageMemoryBarrier toRead{};
+                    toRead.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+                    toRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+                    toRead.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+                    toRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                    toRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    toRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    toRead.image = plane.image;
+                    toRead.subresourceRange = range;
+                    cmd->pipelineBarrier(
+                        vk::PipelineStageFlagBits::eTransfer,
+                        vk::PipelineStageFlagBits::eFragmentShader,
+                        {}, 0, nullptr, 0, nullptr, 1, &toRead);
+                }
+                else
+                {
+                    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+                    barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                    cmd->pipelineBarrier(
+                        vk::PipelineStageFlagBits::eTopOfPipe,
+                        vk::PipelineStageFlagBits::eFragmentShader,
+                        {}, 0, nullptr, 0, nullptr, 1, &barrier);
+                }
             }
             core::Utilities::endSingleTimeCommands(device, cmd, nullptr);
         }

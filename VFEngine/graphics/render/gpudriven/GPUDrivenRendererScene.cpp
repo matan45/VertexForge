@@ -1017,14 +1017,19 @@ namespace render::gpudriven
                 if (idx != INVALID_TEXTURE_INDEX)
                 {
                     registered = true;
-                    if (svtAccepted)
+                    // Only route through SVT when we can give the shader an addressable whole-image
+                    // fallback slot (< 4096) as pad1. Otherwise an unresolved page would sample the
+                    // white default-texture sentinel; leave the texture untagged so it takes the plain
+                    // bindless path instead (VK-1480).
+                    if (svtAccepted && idx < 4096u)
                     {
                         svtTaggedIndices[texPath] = tagged;
-                        if (idx < 4096u)
-                            svtManager->setFallbackIndex(tagged & 0x7FFFFFFFu, idx);
-                        else
-                            vfLogWarning("GPUDrivenRenderer: SVT fallback slot {} >= 4096 for '{}'; keeping "
-                                         "default-texture sentinel (coarse pin covers it)", idx, texPath);
+                        svtManager->setFallbackIndex(tagged & 0x7FFFFFFFu, idx);
+                    }
+                    else if (svtAccepted)
+                    {
+                        vfLogWarning("GPUDrivenRenderer: SVT fallback slot {} >= 4096 for '{}'; keeping it "
+                                     "plain bindless (no SVT paging) to avoid a sentinel fallback", idx, texPath);
                     }
                     return;
                 }

@@ -123,5 +123,8 @@ void main()
 
     float emissionStrength = clamp(ls_Emission, 0.0, 1.0);
     outAlbedoEmission = vec4(mat_albedo, emissionStrength);
-    outORM = vec4(mat_ao, mat_roughness, mat_metallic, 0.0);
+    // ORM alpha = per-texel "baked with real content" bit (VK-1209). Every rasterized texel
+    // is covered by loaded terrain, so it writes 1.0; the per-page clear / pool seed leave
+    // uncovered texels at 0.0. mesh_terrain.glsl reads this to decide RVT vs composite fallback.
+    outORM = vec4(mat_ao, mat_roughness, mat_metallic, 1.0);
 }
