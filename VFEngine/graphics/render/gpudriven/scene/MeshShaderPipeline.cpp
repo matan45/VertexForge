@@ -414,19 +414,18 @@ namespace render::gpudriven
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
-        // VK-1209: SVT page table (3) / feedback (4) / image info (5), fragment stage. Present only
-        // when SVT is active so set 1 stays byte-identical (3 bindings) with SVT off.
-        if (svtSampleEnabled)
+        // VK-1209: SVT page table (3) / feedback (4) / image info (5), fragment stage. Always declared
+        // so the layout matches the shader whether SVT_ENABLED is compiled in or not (a runtime toggle
+        // recompiles the shader but does not rebuild this layout). When SVT is off the shader doesn't
+        // reference them and they stay unwritten — safe because descriptorBindingPartiallyBound is on.
+        for (uint32_t b = 3; b <= 5; ++b)
         {
-            for (uint32_t b = 3; b <= 5; ++b)
-            {
-                vk::DescriptorSetLayoutBinding sb{};
-                sb.binding = b;
-                sb.descriptorType = vk::DescriptorType::eStorageBuffer;
-                sb.descriptorCount = 1;
-                sb.stageFlags = vk::ShaderStageFlagBits::eFragment;
-                bindings.push_back(sb);
-            }
+            vk::DescriptorSetLayoutBinding sb{};
+            sb.binding = b;
+            sb.descriptorType = vk::DescriptorType::eStorageBuffer;
+            sb.descriptorCount = 1;
+            sb.stageFlags = vk::ShaderStageFlagBits::eFragment;
+            bindings.push_back(sb);
         }
 
         perDrawDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(

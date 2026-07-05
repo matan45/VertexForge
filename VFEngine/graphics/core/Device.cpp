@@ -381,6 +381,11 @@ namespace core
         {
             deviceFeatures.fillModeNonSolid = VK_TRUE;
         }
+        // VK-1209: virtual texturing writes page-request feedback (atomicOr) from the fragment stage.
+        if (supportedFeatures.fragmentStoresAndAtomics)
+        {
+            deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
+        }
 
         // required for gl_BaseInstance in shaders
         vk::PhysicalDeviceVulkan11Features vulkan11Features{};

@@ -135,9 +135,13 @@ namespace render::vt
         return s * s;
     }
 
-    // Largest atlas edge (multiple of VT_PAGE_SIZE) whose `planes` images of
-    // `bytesPerTexel` fit within budgetMB. planeCount/bytesPerTexel model an MRT
-    // pool (RVT = 2 planes x 4 B). Always at least one page.
+    // Hardware-safe upper bound on the atlas edge (maxImageDimension2D is 16384 on essentially all
+    // desktop GPUs). A large SVT budget would otherwise compute an edge that exceeds it.
+    inline constexpr uint32_t VT_MAX_POOL_DIM = 16384;
+
+    // Largest atlas edge (multiple of VT_PAGE_SIZE, <= VT_MAX_POOL_DIM) whose `planes` images of
+    // `bytesPerTexel` fit within budgetMB. planeCount/bytesPerTexel model an MRT pool
+    // (RVT = 2 planes x 4 B; SVT = 1 plane BC7 ~1 B). Always at least one page.
     inline uint32_t vtPoolDimForBudget(uint32_t budgetMB, uint32_t planes, uint32_t bytesPerTexel)
     {
         if (planes == 0u) planes = 1u;
@@ -147,6 +151,7 @@ namespace render::vt
         uint32_t dim = static_cast<uint32_t>(std::floor(std::sqrt(static_cast<double>(maxTexels))));
         dim = (dim / VT_PAGE_SIZE) * VT_PAGE_SIZE;
         if (dim < VT_PAGE_SIZE) dim = VT_PAGE_SIZE;
+        if (dim > VT_MAX_POOL_DIM) dim = VT_MAX_POOL_DIM;
         return dim;
     }
 
