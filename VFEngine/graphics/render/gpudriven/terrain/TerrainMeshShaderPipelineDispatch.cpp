@@ -257,9 +257,11 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
+        // Set 5 = RVT sample set when RVT active (VK-1209), else the empty placeholder.
         std::vector<vk::DescriptorSet> currentSets = {
             iblDescriptorSet, weightMapDescriptorSet, bindlessDescriptorSet,
-            terrainMeshletDescriptorSet, terrainVertexDescriptorSet, emptyDescriptorSet5,
+            terrainMeshletDescriptorSet, terrainVertexDescriptorSet,
+            (rvtSampleEnabled ? rvtSampleDescriptorSet : emptyDescriptorSet5),
             lightDataDescriptorSet, clusterGridDescriptorSet, cullingOutputDescriptorSet,
             shadowDataDescriptorSet, shadowTextureDescriptorSet, terrainDataDescriptorSet
         };

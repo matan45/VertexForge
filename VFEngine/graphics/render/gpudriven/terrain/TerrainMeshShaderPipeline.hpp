@@ -88,6 +88,17 @@ namespace render::gpudriven
         vk::DescriptorPool emptyDescriptorPool;
         vk::DescriptorSet emptyDescriptorSet5;
 
+        // VK-1209 terrain RVT sample resources (set 5, replacing the empty placeholder when
+        // RVT is active). Layout/set/params-UBO always exist (cheap); the pipeline only uses
+        // them + compiles the RVT_ENABLED shader path when rvtSampleEnabled is set, so terrain
+        // stays byte-identical with RVT off.
+        bool rvtSampleEnabled = false;
+        vk::DescriptorSetLayout rvtSampleLayout;
+        vk::DescriptorPool rvtSamplePool;
+        vk::DescriptorSet rvtSampleDescriptorSet;
+        vk::Buffer rvtParamsBuffer;
+        core::VulkanAllocation rvtParamsAllocation;
+
         // Caustic descriptor set (Set 12) - owned by WaterCausticsResources
         vk::DescriptorSetLayout cachedCausticLayout;
         vk::DescriptorSet causticDescriptorSet;
@@ -242,6 +253,15 @@ namespace render::gpudriven
         // and writes the sampler + params UBO into set 11 bindings 3/4.
         void setWorldMaskEnabled(bool enabled) { worldMaskEnabled = enabled; }
         bool isWorldMaskEnabled() const { return worldMaskEnabled; }
+
+        // VK-1209: enable the RVT sample path (set 5 + RVT_ENABLED macro). Takes effect on the
+        // next (re)create. updateRVTSampleResources writes the page table / atlases / feedback /
+        // params UBO into the set-5 descriptor (params = 64-byte RVTParams blob built by the caller).
+        void setRVTSampleEnabled(bool enabled) { rvtSampleEnabled = enabled; }
+        bool isRVTSampleEnabled() const { return rvtSampleEnabled; }
+        void updateRVTSampleResources(vk::Buffer pageTableBuffer, vk::ImageView albedoView,
+                                      vk::ImageView ormView, vk::Sampler sampler,
+                                      vk::Buffer feedbackBuffer, const void* params, vk::DeviceSize paramsSize);
         void updateWorldMaskResources(vk::ImageView maskView, vk::Sampler maskSampler,
                                       vk::Buffer paramsBuffer, vk::DeviceSize paramsSize);
 
@@ -258,6 +278,9 @@ namespace render::gpudriven
 
         vk::DescriptorSetLayout getTerrainDataLayout() const { return terrainDataLayout; }
         vk::DescriptorSet getTerrainDataDescriptorSet() const { return terrainDataDescriptorSet; }
+        // VK-1209: exposed for the RVT baker (set 0 = weightmap+layers).
+        vk::DescriptorSetLayout getWeightMapLayout() const { return weightMapLayout; }
+        vk::DescriptorSet getWeightMapDescriptorSet() const { return weightMapDescriptorSet; }
         vk::DescriptorSet getTerrainMeshletDescriptorSet() const { return terrainMeshletDescriptorSet; }
         vk::DescriptorSet getTerrainVertexDescriptorSet() const { return terrainVertexDescriptorSet; }
         vk::DescriptorSetLayout getCachedMeshletLayout() const { return cachedMeshletLayout; }
@@ -330,6 +353,7 @@ namespace render::gpudriven
         uint32_t hiZMipLevels = 0;
 
         void createEmptyDescriptorSet();
+        void createRVTSampleDescriptor();
         void createWeightMapDescriptor();
         void createTerrainLayerBuffer();
         void createTileDataBuffer();

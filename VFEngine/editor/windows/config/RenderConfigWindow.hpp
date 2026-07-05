@@ -24,6 +24,7 @@ namespace windows
         void drawShadowDebugSection();
         void drawShadowStatistics();
         void drawTerrainSection();
+        void drawVirtualTextureSection();
         void drawVFXLODSection();
         void drawAnimationLODSection();
         void loadFromScene();

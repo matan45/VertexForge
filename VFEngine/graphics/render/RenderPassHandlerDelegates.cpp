@@ -67,6 +67,10 @@ namespace render
                 shadowSystem->markFeedbackReady();
                 shadowSystem->readBackFeedback();
             }
+
+            // VK-1209: terrain RVT feedback readback + residency planning (same fence-gated point).
+            if (gpuDrivenRenderer->isTerrainRVTActive())
+                gpuDrivenRenderer->updateTerrainRVTResidency();
         }
     }
 

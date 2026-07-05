@@ -274,6 +274,27 @@ layout(std430, set = 1, binding = 1) readonly buffer TerrainLayerBuffer {
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
+#ifdef RVT_ENABLED
+// VK-1209 terrain Runtime Virtual Texture (set 5, the previously-empty placeholder set).
+// Replaces the per-fragment 8-layer composite (up to 24 bindless samples) with a lookup
+// into the baked page atlas + an inline feedback request. Compiled only when RVT is active.
+#include "../common/vt_types.glsl"
+layout(std430, set = 5, binding = 0) readonly buffer RVTPageTable { uint rvtPageTable[]; };
+layout(set = 5, binding = 1) uniform sampler2D rvtAlbedoAtlas;
+layout(set = 5, binding = 2) uniform sampler2D rvtOrmAtlas;
+layout(std430, set = 5, binding = 3) buffer RVTFeedback { uint rvtFeedback[]; };
+layout(set = 5, binding = 4) uniform RVTParams {
+    VTImageInfo img;
+    vec2 worldMin;        // terrain XZ origin
+    vec2 invWorldExtent;  // 1 / (worldMax - worldMin)
+    float virtualResTexels;
+    float pad0; float pad1; float pad2;
+} rvt;
+#define VT_PAGE_TABLE rvtPageTable
+#define VT_FEEDBACK rvtFeedback
+#include "../common/vt_sampling.glsl"
+#endif
+
 layout(push_constant) uniform PushConstants {
     uint tileCount;
     uint viewMode;
@@ -454,9 +475,27 @@ void main() {
     vec2 uvYZ = fragWorldPos.yz * textureScale; // X-facing (east/west walls)
     vec2 triplanarWorldUV = uvXZ * blendWeights.y + uvXY * blendWeights.z + uvYZ * blendWeights.x;
 
+#ifdef RVT_ENABLED
+    // Sample the baked terrain RVT atlas (2 texels) instead of the live 8-layer composite.
+    // Fine->coarse fallback keeps the surface textured while a page streams in; the coarsest
+    // mip is pinned so the lookup always resolves (AC6). Steep/cave fragments keep the RVT
+    // result (XZ-projection); the cave adjust below still darkens it.
+    vec2 rvtUV = clamp((fragWorldPos.xz - rvt.worldMin) * rvt.invWorldExtent, vec2(0.0), vec2(0.999999));
+    uint rvtMip = uint(max(vtDesiredMip(rvtUV, rvt.virtualResTexels), 0.0));
+    vtWriteFeedback(rvt.img, rvtUV, rvtMip);
+    VTSample rvtS = vtLookup(rvt.img, rvtUV, rvtMip);
+    vec4 rvtA = texture(rvtAlbedoAtlas, rvtS.uv);
+    vec4 rvtO = texture(rvtOrmAtlas, rvtS.uv);
+    vec3 mat_albedo = rvtA.rgb;
+    float mat_metallic = rvtO.b;
+    float mat_roughness = rvtO.g;
+    float mat_ao = rvtO.r;
+    vec3 mat_emission = rvtA.rgb * rvtA.a;
+#else
 #include "../material/terrain_material_generated.glsl"
 #ifndef MAT_EMISSION_DEFINED
     vec3 mat_emission = vec3(0.0);
+#endif
 #endif
     vec3 albedo = mat_albedo;
     float metallic = mat_metallic;

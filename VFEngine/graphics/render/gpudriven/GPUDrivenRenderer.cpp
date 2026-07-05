@@ -18,6 +18,8 @@
 #include "../raytracing/RTShadowUpsamplePipeline.hpp"
 #include "../raytracing/RTLayeredShadowUpsamplePipeline.hpp"
 #include "../mesh/MeshStreamManager.hpp"
+#include "terrain/TerrainRVTManager.hpp" // VK-1209: complete types for ~GPUDrivenRenderer unique_ptr members
+#include "terrain/TerrainRVTBaker.hpp"
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"

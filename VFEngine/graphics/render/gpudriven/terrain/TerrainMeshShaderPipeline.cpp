@@ -174,6 +174,7 @@ namespace render::gpudriven
         cachedShadowTextureLayout = shadowTextureLayout;
 
         createEmptyDescriptorSet();
+        createRVTSampleDescriptor();
         createWeightMapDescriptor();
         createTerrainLayerBuffer();
         createTileDataBuffer();
@@ -248,6 +249,9 @@ namespace render::gpudriven
         if (weightMapLayout) { vkDevice.destroyDescriptorSetLayout(weightMapLayout); weightMapLayout = nullptr; }
         if (emptyDescriptorPool) { vkDevice.destroyDescriptorPool(emptyDescriptorPool); emptyDescriptorPool = nullptr; }
         if (emptyLayout) { vkDevice.destroyDescriptorSetLayout(emptyLayout); emptyLayout = nullptr; }
+        if (rvtSamplePool) { vkDevice.destroyDescriptorPool(rvtSamplePool); rvtSamplePool = nullptr; }
+        if (rvtSampleLayout) { vkDevice.destroyDescriptorSetLayout(rvtSampleLayout); rvtSampleLayout = nullptr; }
+        if (rvtParamsBuffer) { core::BufferUtilities::destroyBuffer(vkDevice, rvtParamsBuffer, rvtParamsAllocation, device.getMemoryManager()); }
         if (terrainDataPool) { vkDevice.destroyDescriptorPool(terrainDataPool); terrainDataPool = nullptr; }
         if (terrainDataLayout) { vkDevice.destroyDescriptorSetLayout(terrainDataLayout); terrainDataLayout = nullptr; }
     }
@@ -402,6 +406,79 @@ namespace render::gpudriven
                                                        writes.data(), 0, nullptr);
     }
 
+    void TerrainMeshShaderPipeline::createRVTSampleDescriptor()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // set 5: b0 page table (SSBO), b1 albedo atlas, b2 ORM atlas, b3 feedback (SSBO), b4 params (UBO).
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
+        for (uint32_t i = 0; i < 5; ++i)
+        {
+            bindings[i].binding = i;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        }
+        bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[4].descriptorType = vk::DescriptorType::eUniformBuffer;
+
+        rvtSampleLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(),
+                                                                              static_cast<uint32_t>(bindings.size()));
+
+        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+        poolSizes[0] = {vk::DescriptorType::eStorageBuffer, 2};
+        poolSizes[1] = {vk::DescriptorType::eCombinedImageSampler, 2};
+        poolSizes[2] = {vk::DescriptorType::eUniformBuffer, 1};
+        rvtSamplePool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, poolSizes.data(),
+                                                                           static_cast<uint32_t>(poolSizes.size()));
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = rvtSamplePool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &rvtSampleLayout;
+        rvtSampleDescriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+
+        // 64-byte RVTParams UBO (VTImageInfo + worldMin + invWorldExtent + virtualResTexels + pad).
+        core::BufferInfoRequest req(vkDevice, device.getPhysicalDevice(), 64,
+                                    vk::BufferUsageFlagBits::eUniformBuffer,
+                                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        core::BufferUtilities::createBuffer(req, rvtParamsBuffer, rvtParamsAllocation, device.getMemoryManager());
+    }
+
+    void TerrainMeshShaderPipeline::updateRVTSampleResources(vk::Buffer pageTableBuffer, vk::ImageView albedoView,
+                                                             vk::ImageView ormView, vk::Sampler sampler,
+                                                             vk::Buffer feedbackBuffer, const void* params,
+                                                             vk::DeviceSize paramsSize)
+    {
+        if (!rvtSampleDescriptorSet || !pageTableBuffer || !albedoView || !ormView || !sampler || !feedbackBuffer)
+            return;
+
+        if (params && rvtParamsAllocation.mappedPtr)
+            std::memcpy(rvtParamsAllocation.mappedPtr, params, paramsSize > 64 ? 64 : static_cast<size_t>(paramsSize));
+
+        vk::DescriptorBufferInfo ptInfo{pageTableBuffer, 0, VK_WHOLE_SIZE};
+        vk::DescriptorImageInfo albedoInfo{sampler, albedoView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        vk::DescriptorImageInfo ormInfo{sampler, ormView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        vk::DescriptorBufferInfo fbInfo{feedbackBuffer, 0, VK_WHOLE_SIZE};
+        vk::DescriptorBufferInfo paramInfo{rvtParamsBuffer, 0, 64};
+
+        std::array<vk::WriteDescriptorSet, 5> writes{};
+        writes[0].dstSet = rvtSampleDescriptorSet; writes[0].dstBinding = 0; writes[0].descriptorCount = 1;
+        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer; writes[0].pBufferInfo = &ptInfo;
+        writes[1].dstSet = rvtSampleDescriptorSet; writes[1].dstBinding = 1; writes[1].descriptorCount = 1;
+        writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler; writes[1].pImageInfo = &albedoInfo;
+        writes[2].dstSet = rvtSampleDescriptorSet; writes[2].dstBinding = 2; writes[2].descriptorCount = 1;
+        writes[2].descriptorType = vk::DescriptorType::eCombinedImageSampler; writes[2].pImageInfo = &ormInfo;
+        writes[3].dstSet = rvtSampleDescriptorSet; writes[3].dstBinding = 3; writes[3].descriptorCount = 1;
+        writes[3].descriptorType = vk::DescriptorType::eStorageBuffer; writes[3].pBufferInfo = &fbInfo;
+        writes[4].dstSet = rvtSampleDescriptorSet; writes[4].dstBinding = 4; writes[4].descriptorCount = 1;
+        writes[4].descriptorType = vk::DescriptorType::eUniformBuffer; writes[4].pBufferInfo = &paramInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    }
+
     bool TerrainMeshShaderPipeline::loadTerrainShaders()
     {
         terrainShader = std::make_unique<core::Shader>(device);
@@ -421,6 +498,10 @@ namespace render::gpudriven
         if (worldMaskEnabled)
         {
             terrainShader->addMacroDefinition("WORLD_MASK_ENABLED");
+        }
+        if (rvtSampleEnabled)
+        {
+            terrainShader->addMacroDefinition("RVT_ENABLED");
         }
         if (rtSpotShadowEnabled && rtSpotShadowMaskLayout)
         {
@@ -475,9 +556,12 @@ namespace render::gpudriven
 
         vk::Device vkDevice = device.getLogicalDevice();
 
+        // Set 5 is the empty placeholder unless RVT is active, in which case it carries the
+        // RVT page table / atlases / feedback / params (VK-1209). OFF -> byte-identical layout.
         std::vector<vk::DescriptorSetLayout> setLayouts = {
             iblLayout, weightMapLayout, bindlessTextureLayout, meshletDataLayout,
-            vertexDataLayout, emptyLayout, lightDataLayout, clusterGridLayout,
+            vertexDataLayout, (rvtSampleEnabled ? rvtSampleLayout : emptyLayout),
+            lightDataLayout, clusterGridLayout,
             cullingOutputLayout, shadowDataLayout, shadowTextureLayout, terrainDataLayout
         };
 

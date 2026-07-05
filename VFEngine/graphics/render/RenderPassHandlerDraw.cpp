@@ -525,6 +525,11 @@ namespace render
             gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
         }
 
+        // VK-1209: bake requested terrain RVT pages into the atlas (dynamic rendering, outside the
+        // scene pass) before the terrain draw samples it.
+        if (gpuDrivenRenderer->isTerrainRVTActive())
+            gpuDrivenRenderer->bakeTerrainRVT(commandBuffer);
+
         bool useParallel = parallelSceneRecording && sceneThreadPoolManager &&
                            sceneThreadPoolManager->getThreadCount() > 1;
 
@@ -537,6 +542,11 @@ namespace render
         else
             recordInlineScenePassGraphManaged(commandBuffer, imageIndex, iblDescriptorSet,
                                               debugRendererPtr, hasCustomShaderMeshes, wboitActive);
+
+        // VK-1209: terrain wrote its page requests during the scene pass; copy them to staging for
+        // next frame's readback (outside the pass).
+        if (gpuDrivenRenderer->isTerrainRVTActive())
+            gpuDrivenRenderer->copyTerrainRVTFeedback(commandBuffer);
 
         if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
         {

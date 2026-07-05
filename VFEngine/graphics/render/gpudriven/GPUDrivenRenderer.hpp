@@ -47,6 +47,7 @@ namespace types
 {
     struct RTShadowSettings;
     struct RTShadowStats;
+    struct VirtualTextureSettings;
 }
 
 namespace material
@@ -132,6 +133,9 @@ namespace render::custom
 
 namespace render::gpudriven
 {
+    class TerrainRVTManager; // VK-1209
+    class TerrainRVTBaker;   // VK-1209
+
     class GPUDrivenRenderer
     {
     private:
@@ -254,6 +258,30 @@ namespace render::gpudriven
         void recreateScenePipelinesForWorldMask();
 
         detail::TerrainState terrain;
+
+        // VK-1209 — cached virtual-texturing settings (applied via applyVirtualTextureSettings;
+        // consumed by the terrain RVT manager once terrain subsystems initialize). Plain fields
+        // avoid pulling the heavy types/RenderSettings.hpp into this header.
+        struct VTCache
+        {
+            bool rvtEnabled = false;
+            bool svtEnabled = false;
+            uint32_t rvtPoolBudgetMB = 128;
+            uint32_t svtPoolBudgetMB = 512;
+            float rvtTexelsPerMeter = 8.0f;
+            uint32_t pagesPerFrame = 32;
+            uint32_t evictionAgeFrames = 60;
+        } vtCache;
+
+        // VK-1209 terrain RVT (created lazily in updateTerrain once bounds are known and
+        // vtCache.rvtEnabled). Null = inactive; all frame hooks below no-op.
+        std::unique_ptr<TerrainRVTManager> terrainRVT;
+        std::unique_ptr<TerrainRVTBaker> terrainRVTBaker;
+        glm::vec2 rvtWorldMin{0.0f};
+        glm::vec2 rvtWorldMax{0.0f};
+        uint32_t rvtFrameCounter = 0;
+        bool rvtInvalidateAll = false; // set on terrain material change; re-bakes all fine pages
+
         detail::WaterState water;
         detail::VegetationState vegetation;
         detail::BillboardState billboard;
@@ -558,6 +586,20 @@ namespace render::gpudriven
         void setTerrainLODBias(float bias) { terrain.lodBias = bias; }
         void setTerrainErrorThreshold(float threshold) { terrain.errorThreshold = threshold; }
         void setTerrainTextureScale(float scale) { terrain.textureScale = scale; }
+
+        // VK-1209 — apply virtual-texturing settings (RVT/SVT enable, pool budgets,
+        // page-per-frame + eviction age). Pool byte budgets are restart-scoped; the live
+        // knobs (pagesPerFrame, evictionAge, enable toggles) forward to the managers.
+        void applyVirtualTextureSettings(const types::VirtualTextureSettings& settings);
+        bool isTerrainRVTEnabled() const { return vtCache.rvtEnabled; }
+
+        // VK-1209 terrain RVT frame hooks (all no-op unless RVT is active). Frame order:
+        // updateTerrainRVTResidency (frame start, CPU) -> bakeTerrainRVT (before scene pass) ->
+        // [terrain draws, samples atlas + writes feedback] -> copyTerrainRVTFeedback (after pass).
+        void updateTerrainRVTResidency();
+        void bakeTerrainRVT(vk::CommandBuffer cmd);
+        void copyTerrainRVTFeedback(vk::CommandBuffer cmd);
+        bool isTerrainRVTActive() const;
         void updateWater(const services::OceanVisualSettings& visualSettings,
                          float baseWaterHeight,
                          const glm::vec3& cameraPosition,

@@ -100,6 +100,8 @@ namespace controllers
         gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);
         gpuDriven->setTerrainTextureScale(settings.terrain.textureScale);
 
+        gpuDriven->applyVirtualTextureSettings(settings.virtualTexture); // VK-1209 (default OFF)
+
         return shadowReady;
     }
 

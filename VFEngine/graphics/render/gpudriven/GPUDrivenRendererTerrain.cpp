@@ -1,4 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
+#include "terrain/TerrainRVTManager.hpp"
+#include "terrain/TerrainRVTBaker.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
 #include "../material/MaterialTextureCache.hpp"
@@ -8,6 +10,7 @@
 #include "asset/AssetRef.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/SwapChain.hpp"
+#include "types/RenderSettings.hpp"
 #include "print/Log.hpp"
 #include <chrono>
 #include <limits>
@@ -40,6 +43,10 @@ namespace render::gpudriven
         }
 
         terrain.pipeline = std::make_unique<TerrainMeshShaderPipeline>(device, swapChain);
+        // VK-1209: compile the terrain pipeline RVT-ready (set 5 + RVT_ENABLED) when config enabled it
+        // before terrain init. Runtime toggling requires a pipeline recreate (restart-scoped, per config).
+        if (vtCache.rvtEnabled)
+            terrain.pipeline->setRVTSampleEnabled(true);
         terrain.pipeline->init(
             iblDescriptorSetLayout,
             bindlessTextures->getDescriptorSetLayout(),
@@ -58,6 +65,122 @@ namespace render::gpudriven
             terrain.pipeline->getCachedMeshletLayout(),
             terrain.pipeline->getCachedVertexLayout()
         );
+
+        // VK-1209: the RVT bake pipeline (self-contained; binds the terrain pipeline's own sets).
+        if (vtCache.rvtEnabled)
+        {
+            terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
+            terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
+                                  bindlessTextures->getDescriptorSetLayout(),
+                                  terrain.pipeline->getTerrainDataLayout(),
+                                  {vk::Format::eR8G8B8A8Srgb, vk::Format::eR8G8B8A8Unorm});
+        }
+    }
+
+    void GPUDrivenRenderer::applyVirtualTextureSettings(const types::VirtualTextureSettings& settings)
+    {
+        const bool rvtToggled = vtCache.rvtEnabled != settings.rvtEnabled;
+        const bool svtToggled = vtCache.svtEnabled != settings.svtEnabled;
+
+        vtCache.rvtEnabled = settings.rvtEnabled;
+        vtCache.svtEnabled = settings.svtEnabled;
+        vtCache.rvtPoolBudgetMB = settings.rvtPoolBudgetMB;
+        vtCache.svtPoolBudgetMB = settings.svtPoolBudgetMB;
+        vtCache.rvtTexelsPerMeter = settings.rvtTexelsPerMeter;
+        vtCache.pagesPerFrame = settings.pagesPerFrame;
+        vtCache.evictionAgeFrames = settings.evictionAgeFrames;
+
+        // The RVT/SVT managers read vtCache when terrain/material subsystems (re)initialize.
+        // Pool byte budgets require a manager rebuild (Vulkan images don't resize) so they are
+        // restart-scoped; the live knobs take effect on the next frame's residency pass.
+        if (rvtToggled || svtToggled)
+            vfLogInfo("VK-1209 virtual texturing: RVT={} SVT={} (rvtPool={}MB svtPool={}MB, {} pages/frame)",
+                      vtCache.rvtEnabled, vtCache.svtEnabled,
+                      vtCache.rvtPoolBudgetMB, vtCache.svtPoolBudgetMB, vtCache.pagesPerFrame);
+    }
+
+    bool GPUDrivenRenderer::isTerrainRVTActive() const
+    {
+        return terrainRVT != nullptr && terrainRVT->isInitialized();
+    }
+
+    void GPUDrivenRenderer::updateTerrainRVTResidency()
+    {
+        if (!terrainRVT)
+            return;
+        terrainRVT->markFeedbackReady();   // the prior frame's copy has completed (fence-gated caller)
+        terrainRVT->beginFrameReadback();  // decode requested pages
+        terrainRVT->updateResidency(rvtFrameCounter++);
+    }
+
+    void GPUDrivenRenderer::bakeTerrainRVT(vk::CommandBuffer cmd)
+    {
+        if (!terrainRVT || !terrainRVTBaker || !terrainRVTBaker->isReady())
+            return;
+
+        terrainRVT->clearFeedback(cmd); // fresh feedback for this frame's terrain draw
+        terrainRVT->uploadPageTable(cmd);
+
+        const float texScale = terrain.textureScale > 0.0f ? terrain.textureScale : 0.1f;
+        const std::vector<TerrainTileGPUData>& tiles = terrain.tileData;
+        TerrainRVTBaker* baker = terrainRVTBaker.get();
+        const vt::VTPhysicalPool* pool = terrainRVT->getPool();
+
+        // recordBakes transitions the pool ShaderRead<->ColorAttachment around this callback.
+        terrainRVT->recordBakes(cmd,
+            [&](vk::CommandBuffer c, const std::vector<TerrainRVTManager::ScheduledBake>& bakes)
+            {
+                baker->begin(c, *pool,
+                             terrain.pipeline->getWeightMapDescriptorSet(),
+                             bindlessTextures->getDescriptorSet(),
+                             terrain.pipeline->getTerrainDataDescriptorSet());
+
+                const float borderFrac = static_cast<float>(vt::VT_BORDER) / static_cast<float>(vt::VT_PAGE_INTERIOR);
+
+                for (const auto& b : bakes)
+                {
+                    baker->beginPage(c, *pool, b.tile);
+
+                    // Expand the core page rect by the border margin so the full 128-texel tile
+                    // (incl. its 4-texel border) samples correct neighbour content.
+                    const glm::vec2 pageMin(b.worldRect.x, b.worldRect.y);
+                    const glm::vec2 pageSize(b.worldRect.z, b.worldRect.w);
+                    const glm::vec2 margin = pageSize * borderFrac;
+                    const glm::vec2 expMin = pageMin - margin;
+                    const glm::vec2 expSize = pageSize + margin * 2.0f;
+                    const glm::vec2 expMax = expMin + expSize;
+
+                    for (uint32_t ti = 0; ti < tiles.size(); ++ti)
+                    {
+                        const TerrainTileGPUData& t = tiles[ti];
+                        const glm::vec2 tMin(t.aabbMin.x, t.aabbMin.z);
+                        const glm::vec2 tMax(t.aabbMax.x, t.aabbMax.z);
+                        const glm::vec2 qMin = glm::max(expMin, tMin);
+                        const glm::vec2 qMax = glm::min(expMax, tMax);
+                        if (qMin.x >= qMax.x || qMin.y >= qMax.y)
+                            continue; // no overlap
+
+                        TerrainRVTBaker::TilePush pc;
+                        pc.pageWorldMin = expMin;
+                        pc.pageWorldSize = expSize;
+                        pc.quadWorldMin = qMin;
+                        pc.quadWorldSize = qMax - qMin;
+                        pc.tileWorldMin = tMin;
+                        pc.tileWorldSize = glm::max(tMax.x - tMin.x, 1.0f);
+                        pc.fragTileIndex = ti;
+                        pc.textureScale = texScale;
+                        baker->drawTile(c, pc);
+                    }
+                }
+                baker->end(c);
+            });
+    }
+
+    void GPUDrivenRenderer::copyTerrainRVTFeedback(vk::CommandBuffer cmd)
+    {
+        if (!terrainRVT)
+            return;
+        terrainRVT->copyFeedbackToStaging(cmd);
     }
 
     void GPUDrivenRenderer::setTerrainFrustumCullingEnabled(bool enabled)
@@ -148,6 +271,7 @@ namespace render::gpudriven
 
         terrain.currentMaterialPath = materialPath;
         terrain.layerDataDirty = false;
+        rvtInvalidateAll = true; // VK-1209: terrain material changed -> re-bake resident RVT pages
         vfLogInfo("GPUDrivenRenderer: Registered {} terrain layer textures from '{}'",
                    materialData->activeLayerCount, materialPath);
     }
@@ -241,6 +365,54 @@ namespace render::gpudriven
 
         auto uploadEnd = std::chrono::high_resolution_clock::now();
         terrain.uploadTileDataUs = std::chrono::duration<float, std::micro>(uploadEnd - uploadStart).count();
+
+        // VK-1209: bring up the terrain RVT once bounds are known, then keep its sample resources
+        // bound. Only active when config enabled RVT and the pipeline compiled RVT_ENABLED.
+        if (vtCache.rvtEnabled && terrain.pipeline->isRVTSampleEnabled())
+        {
+            rvtWorldMin = terrainGridWorldMin;
+            rvtWorldMax = terrainGridWorldMax;
+            const bool boundsValid = (rvtWorldMax.x > rvtWorldMin.x) && (rvtWorldMax.y > rvtWorldMin.y);
+            if (boundsValid && !terrainRVT)
+            {
+                terrainRVT = std::make_unique<TerrainRVTManager>(device);
+                TerrainRVTManager::Config cfg;
+                cfg.poolBudgetMB = vtCache.rvtPoolBudgetMB;
+                cfg.texelsPerMeter = vtCache.rvtTexelsPerMeter;
+                cfg.pagesPerFrame = vtCache.pagesPerFrame;
+                cfg.evictionAgeFrames = vtCache.evictionAgeFrames;
+                terrainRVT->init(cfg, rvtWorldMin, rvtWorldMax);
+
+                if (const auto* pool = terrainRVT->getPool())
+                {
+                    struct alignas(16) RVTParamsCPU
+                    {
+                        vt::GPUVTImageInfo img;
+                        float worldMinX, worldMinZ;
+                        float invExtentX, invExtentZ;
+                        float virtualResTexels;
+                        float pad0, pad1, pad2;
+                    } params{};
+                    static_assert(sizeof(RVTParamsCPU) == 64, "RVTParams must match set-5 UBO (64 bytes)");
+                    params.img = terrainRVT->getImageInfo();
+                    params.worldMinX = rvtWorldMin.x;
+                    params.worldMinZ = rvtWorldMin.y;
+                    const glm::vec2 extent = glm::max(rvtWorldMax - rvtWorldMin, glm::vec2(1.0f));
+                    params.invExtentX = 1.0f / extent.x;
+                    params.invExtentZ = 1.0f / extent.y;
+                    params.virtualResTexels = terrainRVT->virtualResTexelsX();
+                    terrain.pipeline->updateRVTSampleResources(
+                        terrainRVT->getPageTableBuffer(), pool->planeView(0), pool->planeView(1),
+                        pool->getSampler(), terrainRVT->getFeedbackBuffer(), &params, sizeof(params));
+                }
+            }
+            // Material change -> re-bake all resident fine pages.
+            if (terrainRVT && rvtInvalidateAll)
+            {
+                terrainRVT->invalidateWorldRect(rvtWorldMin, rvtWorldMax);
+                rvtInvalidateAll = false;
+            }
+        }
 
         terrain.updateUs = std::chrono::duration<float, std::micro>(uploadEnd - frameStart).count();
     }
