@@ -243,6 +243,21 @@ layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
+#ifdef SVT_ENABLED
+// VK-1209 material Streamed Virtual Textures. UE5-style: the physical BC7 atlas lives in the
+// bindless heap (sampled as bindlessTextures[atlasIndex]); only the page table / feedback /
+// per-image info ride the mesh pipeline's OWN set 1 (bindings 3/4/5) — no new descriptor set,
+// so the crowded shared set space is untouched. Compiled only when SVT is active.
+#include "../common/vt_types.glsl"
+layout(std430, set = 1, binding = 3) readonly buffer SVTPageTable { uint svtPageTable[]; };
+layout(std430, set = 1, binding = 4) buffer SVTFeedback { uint svtFeedback[]; };
+layout(std430, set = 1, binding = 5) readonly buffer SVTImageInfoBuffer { VTImageInfo svtImageInfo[]; };
+#define VT_PAGE_TABLE svtPageTable
+#define VT_FEEDBACK svtFeedback
+#include "../common/vt_sampling.glsl"
+const uint SVT_TAG_BIT = 0x80000000u;
+#endif
+
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;
     uint viewMode;
@@ -439,6 +454,35 @@ bool isValidTexture(uint index) {
     return index != INVALID_TEXTURE_INDEX && index != 0xFFu && index < 4096u;
 }
 
+// A material texture index is sampleable if it's a normal bindless index OR (SVT on) an
+// SVT-tagged index. When SVT is off this is exactly isValidTexture (byte-identical).
+bool isSampleableTexture(uint index) {
+#ifdef SVT_ENABLED
+    if ((index & SVT_TAG_BIT) != 0u) return true;
+#endif
+    return isValidTexture(index);
+}
+
+// Sample a material texture. SVT-tagged indices resolve through the page table into the bindless
+// atlas (with a whole-image fallback while a page streams in) and emit a feedback request; all
+// other indices are a plain bindless sample. Off = plain bindless sample.
+vec4 sampleMaterialTex(uint index, vec2 uv, vec2 dx, vec2 dy) {
+#ifdef SVT_ENABLED
+    if ((index & SVT_TAG_BIT) != 0u) {
+        VTImageInfo img = svtImageInfo[index & 0x7FFFFFFFu];
+        uint atlasIndex = img.pad0;
+        uint fallbackIndex = img.pad1;
+        uint mip = uint(max(vtDesiredMip(uv, float(img.pagesX0 * VT_PAGE_INTERIOR)), 0.0));
+        vtWriteFeedback(img, uv, mip);
+        VTSample s = vtLookup(img, uv, mip);
+        if (s.valid)
+            return textureLod(bindlessTextures[nonuniformEXT(atlasIndex)], s.uv, 0.0);
+        return textureGrad(bindlessTextures[nonuniformEXT(fallbackIndex)], uv, dx, dy);
+    }
+#endif
+    return textureGrad(bindlessTextures[nonuniformEXT(index)], uv, dx, dy);
+}
+
 vec3 unpackORM(vec4 ormSample) {
     return vec3(ormSample.r, ormSample.g, ormSample.b);
 }
@@ -495,8 +539,8 @@ void main() {
     vec3 albedo = matAlbedo.rgb;
     float alpha = matAlbedo.a;
 
-    if (isValidTexture(albedoIdx)) {
-        vec4 albedoSample = textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], texCoords, texDx, texDy);
+    if (isSampleableTexture(albedoIdx)) {
+        vec4 albedoSample = sampleMaterialTex(albedoIdx, texCoords, texDx, texDy);
         albedo = albedoSample.rgb;
         alpha = albedoSample.a;
     }
@@ -528,24 +572,24 @@ void main() {
     float ao = matParams.z;
     float emission = matParams.w;
 
-    if (isValidTexture(ormIdx)) {
-        vec3 ormValues = unpackORM(textureGrad(bindlessTextures[nonuniformEXT(ormIdx)], texCoords, texDx, texDy));
+    if (isSampleableTexture(ormIdx)) {
+        vec3 ormValues = unpackORM(sampleMaterialTex(ormIdx, texCoords, texDx, texDy));
         ao = ormValues.x;
         roughness = ormValues.y;
         metallic = ormValues.z;
     } else {
-        if (isValidTexture(metallicIdx)) {
-            metallic = textureGrad(bindlessTextures[nonuniformEXT(metallicIdx)], texCoords, texDx, texDy).r;
+        if (isSampleableTexture(metallicIdx)) {
+            metallic = sampleMaterialTex(metallicIdx, texCoords, texDx, texDy).r;
         }
-        if (isValidTexture(roughnessIdx)) {
-            roughness = textureGrad(bindlessTextures[nonuniformEXT(roughnessIdx)], texCoords, texDx, texDy).r;
+        if (isSampleableTexture(roughnessIdx)) {
+            roughness = sampleMaterialTex(roughnessIdx, texCoords, texDx, texDy).r;
         }
-        if (isValidTexture(aoIdx)) {
-            ao = textureGrad(bindlessTextures[nonuniformEXT(aoIdx)], texCoords, texDx, texDy).r;
+        if (isSampleableTexture(aoIdx)) {
+            ao = sampleMaterialTex(aoIdx, texCoords, texDx, texDy).r;
         }
     }
 
-    if (isValidTexture(normalIdx)) {
+    if (isSampleableTexture(normalIdx)) {
         vec3 pos_dx = dFdx(fragWorldPos);
         vec3 pos_dy = dFdy(fragWorldPos);
         vec2 uv_dx = dFdx(fragTexCoord);
@@ -557,7 +601,7 @@ void main() {
         B = cross(N, T);
         mat3 TBN = mat3(T, B, N);
 
-        vec3 tangentNormal = textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], texCoords, texDx, texDy).rgb * 2.0 - 1.0;
+        vec3 tangentNormal = sampleMaterialTex(normalIdx, texCoords, texDx, texDy).rgb * 2.0 - 1.0;
         N = normalize(TBN * tangentNormal);
     }
 
@@ -640,8 +684,8 @@ void main() {
     }
 
     vec3 emissive = vec3(0.0);
-    if (isValidTexture(emissionIdx)) {
-        emissive = textureGrad(bindlessTextures[nonuniformEXT(emissionIdx)], texCoords, texDx, texDy).rgb * emissionMultiplier;
+    if (isSampleableTexture(emissionIdx)) {
+        emissive = sampleMaterialTex(emissionIdx, texCoords, texDx, texDy).rgb * emissionMultiplier;
     } else {
         emissive = albedo * emissionMultiplier;
     }

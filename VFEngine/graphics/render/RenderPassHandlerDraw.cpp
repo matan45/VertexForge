@@ -530,6 +530,10 @@ namespace render
         if (gpuDrivenRenderer->isTerrainRVTActive())
             gpuDrivenRenderer->bakeTerrainRVT(commandBuffer);
 
+        // VK-1209: stream + upload requested material SVT pages, and clear feedback, before meshes sample.
+        if (gpuDrivenRenderer->isSVTActive())
+            gpuDrivenRenderer->updateAndUploadSVT(commandBuffer);
+
         bool useParallel = parallelSceneRecording && sceneThreadPoolManager &&
                            sceneThreadPoolManager->getThreadCount() > 1;
 
@@ -547,6 +551,10 @@ namespace render
         // next frame's readback (outside the pass).
         if (gpuDrivenRenderer->isTerrainRVTActive())
             gpuDrivenRenderer->copyTerrainRVTFeedback(commandBuffer);
+
+        // VK-1209: meshes wrote their SVT page requests during the scene pass; copy to staging.
+        if (gpuDrivenRenderer->isSVTActive())
+            gpuDrivenRenderer->copySVTFeedback(commandBuffer);
 
         if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
         {

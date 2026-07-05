@@ -73,6 +73,10 @@ namespace render::gpudriven
         void clearFeedback(vk::CommandBuffer cmd) { if (feedback) feedback->clear(cmd); }
         void copyFeedbackToStaging(vk::CommandBuffer cmd) { if (feedback) feedback->copyToStaging(cmd); }
 
+        // The BC7 atlas is registered once in the bindless heap (UE5-style); its bindless index is
+        // baked into every image's info (pad0) so the shader samples bindlessTextures[atlasIndex].
+        void setAtlasBindlessIndex(uint32_t idx) { atlasBindlessIndex = idx; imageInfoDirty = true; }
+
         // Shader binding.
         [[nodiscard]] vk::Buffer getPageTableBuffer() const { return pageTable ? pageTable->getBuffer() : nullptr; }
         [[nodiscard]] vk::Buffer getFeedbackBuffer() const { return feedback ? feedback->getBuffer() : nullptr; }
@@ -111,6 +115,7 @@ namespace render::gpudriven
         std::vector<vt::GPUVTImageInfo> imageInfoCpu;
         bool imageInfoDirty = false;
         uint32_t imageInfoCapacity = 0;
+        uint32_t atlasBindlessIndex = 0; // BC7 atlas slot in the bindless heap
 
         // Per-frame upload staging (pagesPerFrame BC7 tiles).
         vk::Buffer uploadStaging;

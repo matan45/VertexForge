@@ -213,6 +213,28 @@ namespace render::gpudriven
         device.getLogicalDevice().updateDescriptorSets(objectWrite, {});
     }
 
+    void MeshShaderPipeline::updateSVTResources(vk::Buffer pageTableBuffer, vk::Buffer feedbackBuffer,
+                                                vk::Buffer imageInfoBuffer)
+    {
+        if (!svtSampleEnabled || !perDrawDataDescriptorSet ||
+            !pageTableBuffer || !feedbackBuffer || !imageInfoBuffer)
+            return;
+
+        vk::DescriptorBufferInfo pt{pageTableBuffer, 0, VK_WHOLE_SIZE};
+        vk::DescriptorBufferInfo fb{feedbackBuffer, 0, VK_WHOLE_SIZE};
+        vk::DescriptorBufferInfo ii{imageInfoBuffer, 0, VK_WHOLE_SIZE};
+
+        std::array<vk::WriteDescriptorSet, 3> writes{};
+        writes[0].dstSet = perDrawDataDescriptorSet; writes[0].dstBinding = 3; writes[0].descriptorCount = 1;
+        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer; writes[0].pBufferInfo = &pt;
+        writes[1].dstSet = perDrawDataDescriptorSet; writes[1].dstBinding = 4; writes[1].descriptorCount = 1;
+        writes[1].descriptorType = vk::DescriptorType::eStorageBuffer; writes[1].pBufferInfo = &fb;
+        writes[2].dstSet = perDrawDataDescriptorSet; writes[2].dstBinding = 5; writes[2].descriptorCount = 1;
+        writes[2].descriptorType = vk::DescriptorType::eStorageBuffer; writes[2].pBufferInfo = &ii;
+
+        device.getLogicalDevice().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    }
+
     void MeshShaderPipeline::updateMeshletDescriptors(MeshletBuffer& meshletBuffer)
     {
         std::array<vk::DescriptorBufferInfo, 3> bufferInfos{};
@@ -369,7 +391,7 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+        std::vector<vk::DescriptorSetLayoutBinding> bindings(3);
 
         // Binding 0: PerDrawData SSBO
         bindings[0].binding = 0;
@@ -392,12 +414,27 @@ namespace render::gpudriven
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
+        // VK-1209: SVT page table (3) / feedback (4) / image info (5), fragment stage. Present only
+        // when SVT is active so set 1 stays byte-identical (3 bindings) with SVT off.
+        if (svtSampleEnabled)
+        {
+            for (uint32_t b = 3; b <= 5; ++b)
+            {
+                vk::DescriptorSetLayoutBinding sb{};
+                sb.binding = b;
+                sb.descriptorType = vk::DescriptorType::eStorageBuffer;
+                sb.descriptorCount = 1;
+                sb.stageFlags = vk::ShaderStageFlagBits::eFragment;
+                bindings.push_back(sb);
+            }
+        }
+
         perDrawDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
             vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 3;
+        poolSize.descriptorCount = static_cast<uint32_t>(bindings.size());
 
         perDrawDataPool = core::PipelineUtilities::createUpdateAfterBindPool(
             vkDevice, 1, &poolSize, 1);
@@ -549,6 +586,10 @@ namespace render::gpudriven
         if (info.motionVectorsEnabled && !isWBOITMode)
         {
             meshShader->addMacroDefinition("MOTION_VECTORS_ENABLED");
+        }
+        if (svtSampleEnabled)
+        {
+            meshShader->addMacroDefinition("SVT_ENABLED"); // VK-1209 material SVT (set-1 bindings 3/4/5)
         }
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");

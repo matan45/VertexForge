@@ -140,6 +140,8 @@ namespace render::gpudriven
         info.mipCount = images[imageId].desc.mipCount;
         info.pageTableBase = images[imageId].desc.pageTableBase;
         info.poolDim = pool->getPoolDim();
+        info.pad0 = atlasBindlessIndex;      // BC7 atlas bindless slot (repatched in uploadImageInfo)
+        info.pad1 = fallbackBindlessIndex;   // whole-image bindless slot (fallback while streaming)
         imageInfoCpu.push_back(info);
         imageInfoDirty = true;
 
@@ -268,6 +270,11 @@ namespace render::gpudriven
         (void)cmd;
         if (!imageInfoDirty || imageInfoCpu.empty())
             return;
+        // Keep the atlas bindless slot current in every image's info (it may be assigned after some
+        // textures were already registered).
+        for (auto& info : imageInfoCpu)
+            info.pad0 = atlasBindlessIndex;
+
         // Host-visible SSBO: a direct memcpy suffices (read by the fragment shader next frame).
         const size_t count = std::min<size_t>(imageInfoCpu.size(), imageInfoCapacity);
         std::memcpy(imageInfoAllocation.mappedPtr, imageInfoCpu.data(), count * sizeof(GPUVTImageInfo));

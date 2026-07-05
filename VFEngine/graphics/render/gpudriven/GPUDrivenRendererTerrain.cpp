@@ -90,13 +90,62 @@ namespace render::gpudriven
         vtCache.pagesPerFrame = settings.pagesPerFrame;
         vtCache.evictionAgeFrames = settings.evictionAgeFrames;
 
-        // The RVT/SVT managers read vtCache when terrain/material subsystems (re)initialize.
-        // Pool byte budgets require a manager rebuild (Vulkan images don't resize) so they are
-        // restart-scoped; the live knobs take effect on the next frame's residency pass.
+        // Runtime RVT toggle: rebuild the terrain pipeline so set 5 + RVT_ENABLED match the new
+        // state, and create/tear down the RVT subsystems. The manager itself comes up on the next
+        // updateTerrain (once world bounds are known) — which runs before the terrain draw — so the
+        // set-5 descriptor is written before it is sampled. Pool byte budgets remain restart-scoped.
+        if (rvtToggled && initialized && terrain.pipeline)
+        {
+            terrain.pipeline->setRVTSampleEnabled(vtCache.rvtEnabled);
+            recreateTerrainPipelineForRVT();
+
+            if (vtCache.rvtEnabled)
+            {
+                if (!terrainRVTBaker)
+                {
+                    terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
+                    terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
+                                          bindlessTextures->getDescriptorSetLayout(),
+                                          terrain.pipeline->getTerrainDataLayout(),
+                                          {vk::Format::eR8G8B8A8Srgb, vk::Format::eR8G8B8A8Unorm});
+                }
+            }
+            else
+            {
+                terrainRVT.reset();
+                terrainRVTBaker.reset();
+            }
+        }
+
+        // Runtime SVT toggle: rebuild the scene mesh pipelines (set-1 SVT bindings + SVT_ENABLED)
+        // and create/tear down the SVT manager. Registration opt-in happens on the next material load.
+        if (svtToggled && initialized)
+            applySVTToggle();
+
         if (rvtToggled || svtToggled)
             vfLogInfo("VK-1209 virtual texturing: RVT={} SVT={} (rvtPool={}MB svtPool={}MB, {} pages/frame)",
                       vtCache.rvtEnabled, vtCache.svtEnabled,
                       vtCache.rvtPoolBudgetMB, vtCache.svtPoolBudgetMB, vtCache.pagesPerFrame);
+    }
+
+    void GPUDrivenRenderer::recreateTerrainPipelineForRVT()
+    {
+        if (!terrain.pipeline || !bindlessTextures || !meshShaderPipeline || !lightBufferManager ||
+            !clusterGridManager || !lightCullingPipeline || !shadowSystem)
+            return;
+
+        // Same layouts + formats initTerrainSubsystems passed to init(); recreate() waits idle.
+        terrain.pipeline->recreate(
+            cachedIBLLayout,
+            bindlessTextures->getDescriptorSetLayout(),
+            meshShaderPipeline->getMeshletDataLayout(),
+            meshShaderPipeline->getVertexDataLayout(),
+            lightBufferManager->getDescriptorSetLayout(),
+            clusterGridManager->getDescriptorSetLayout(),
+            lightCullingPipeline->getDescriptorSetLayout(),
+            shadowSystem->getShadowDataLayout(),
+            shadowSystem->getShadowTextureLayout(),
+            cachedColorFormats, cachedDepthFormat);
     }
 
     bool GPUDrivenRenderer::isTerrainRVTActive() const

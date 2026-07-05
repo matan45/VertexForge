@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "../virtualtexture/svt/SVTManager.hpp"
 #include "../occlusion/HiZBuffer.hpp"
 #include "../occlusion/DepthPrepass.hpp"
 #include "../mesh/MeshTypes.hpp"
@@ -454,8 +455,99 @@ namespace render::gpudriven
                 return INVALID_TEXTURE_INDEX;
             }
 
+            // VK-1209: SVT-backed textures resolve to their bit-31-tagged index so the mesh shader
+            // pages them through the SVT page table instead of sampling the bindless slot directly.
+            if (svtManager)
+            {
+                auto sit = svtTaggedIndices.find(texPath);
+                if (sit != svtTaggedIndices.end())
+                    return sit->second;
+            }
+
             return bindlessTextures->getTextureIndex(texPath);
         };
+    }
+
+    void GPUDrivenRenderer::ensureSVTManager()
+    {
+        if (!vtCache.svtEnabled || !bindlessTextures)
+            return;
+
+        if (!svtManager)
+        {
+            svtManager = std::make_unique<SVTManager>(device);
+            SVTManager::Config cfg;
+            cfg.poolBudgetMB = vtCache.svtPoolBudgetMB;
+            cfg.pagesPerFrame = vtCache.pagesPerFrame;
+            cfg.evictionAgeFrames = vtCache.evictionAgeFrames;
+            cfg.srgb = true;
+            svtManager->init(cfg);
+
+            // UE5-style: the BC7 atlas lives in the bindless heap; its slot is baked into image info.
+            if (const vt::VTPhysicalPool* pool = svtManager->getPool())
+            {
+                const uint32_t atlasIdx = bindlessTextures->registerTexture(
+                    "__svt_atlas__", pool->planeView(0), pool->getSampler());
+                svtManager->setAtlasBindlessIndex(atlasIdx);
+            }
+        }
+
+        // Point the mesh pipelines' set-1 SVT bindings at the manager's buffers.
+        auto wire = [&](MeshShaderPipeline* p)
+        {
+            if (p && p->isSVTSampleEnabled())
+                p->updateSVTResources(svtManager->getPageTableBuffer(), svtManager->getFeedbackBuffer(),
+                                      svtManager->getImageInfoBuffer());
+        };
+        wire(meshShaderPipeline.get());
+        wire(transparentMeshShaderPipeline.get());
+        wire(wboitMeshShaderPipeline.get());
+    }
+
+    bool GPUDrivenRenderer::isSVTActive() const
+    {
+        return svtManager != nullptr && svtManager->isInitialized();
+    }
+
+    void GPUDrivenRenderer::beginSVTFrame()
+    {
+        if (!svtManager) return;
+        svtManager->markFeedbackReady();
+        svtManager->beginFrameReadback();
+    }
+
+    void GPUDrivenRenderer::updateAndUploadSVT(vk::CommandBuffer cmd)
+    {
+        if (!svtManager) return;
+        svtManager->clearFeedback(cmd); // fresh feedback for this frame's mesh draws
+        svtManager->updateAndUpload(cmd, svtFrameCounter++);
+    }
+
+    void GPUDrivenRenderer::copySVTFeedback(vk::CommandBuffer cmd)
+    {
+        if (!svtManager) return;
+        svtManager->copyFeedbackToStaging(cmd);
+    }
+
+    void GPUDrivenRenderer::applySVTToggle()
+    {
+        if (!initialized || !meshShaderPipeline)
+            return;
+
+        const bool enable = vtCache.svtEnabled;
+        meshShaderPipeline->setSVTSampleEnabled(enable);
+        if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->setSVTSampleEnabled(enable);
+        if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->setSVTSampleEnabled(enable);
+
+        recreateScenePipelinesForSVT(); // rebuild with set-1 SVT bindings + SVT_ENABLED matching the flag
+
+        if (enable)
+            ensureSVTManager();
+        else
+        {
+            svtManager.reset();
+            svtTaggedIndices.clear();
+        }
     }
 
     BoneOffsetResolver GPUDrivenRenderer::updateAnimationBones()
@@ -875,6 +967,19 @@ namespace render::gpudriven
 
         bool registered = false;
 
+        // VK-1209: opt a large BC7 .vfImage into SVT. registerTexture gates on format/size and
+        // returns a bit-31-tagged index (else VT_INVALID_TILE); the resolver then returns that
+        // tagged index. `fallback` (the whole-image bindless slot) is sampled while a page streams.
+        auto trySVTRegister = [&](const std::string& texPath, uint32_t fallback)
+        {
+            if (svtManager && texPath.size() >= 8 && texPath.ends_with(".vfImage") && fallback < 4096u)
+            {
+                uint32_t tagged = svtManager->registerTexture(texPath, fallback);
+                if (tagged != INVALID_TEXTURE_INDEX)
+                    svtTaggedIndices[texPath] = tagged;
+            }
+        };
+
         auto tryRegister = [&](const std::string& texPath, vk::Format format = vk::Format::eR8G8B8A8Unorm)
         {
             if (texPath.empty()) return;
@@ -886,6 +991,7 @@ namespace render::gpudriven
                 if (idx != INVALID_TEXTURE_INDEX)
                 {
                     registered = true;
+                    trySVTRegister(texPath, idx);
                     return;
                 }
                 // Fall through to legacy path on failure
@@ -901,8 +1007,9 @@ namespace render::gpudriven
 
             if (view && sampler)
             {
-                bindlessTextures->registerTexture(texPath, view, sampler);
+                uint32_t idx = bindlessTextures->registerTexture(texPath, view, sampler);
                 registered = true;
+                trySVTRegister(texPath, idx);
             }
         };
 

@@ -20,6 +20,7 @@
 #include "../mesh/MeshStreamManager.hpp"
 #include "terrain/TerrainRVTManager.hpp" // VK-1209: complete types for ~GPUDrivenRenderer unique_ptr members
 #include "terrain/TerrainRVTBaker.hpp"
+#include "../virtualtexture/svt/SVTManager.hpp"
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
@@ -167,10 +168,12 @@ namespace render::gpudriven
             };
 
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+            if (vtCache.svtEnabled) meshShaderPipeline->setSVTSampleEnabled(true); // VK-1209
             meshShaderPipeline->init(pipelineInfo);
 
             pipelineInfo.transparentMode = true;
             transparentMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+            if (vtCache.svtEnabled) transparentMeshShaderPipeline->setSVTSampleEnabled(true); // VK-1209
             transparentMeshShaderPipeline->init(pipelineInfo);
 
             shadowSystem->initShadowPass(
@@ -189,6 +192,9 @@ namespace render::gpudriven
             {
                 meshStreamManager->setMeshletBuffer(meshletBuffer.get());
             }
+
+            if (vtCache.svtEnabled)
+                ensureSVTManager(); // VK-1209: create the material SVT + register its atlas in bindless
 
             initTerrainSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat);
             initWaterSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat, sceneDepthView);

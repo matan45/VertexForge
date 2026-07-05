@@ -88,6 +88,11 @@ namespace render::gpudriven
         vk::DescriptorPool perDrawDataPool;
         vk::DescriptorSet perDrawDataDescriptorSet;
 
+        // VK-1209: material SVT sampling. When enabled, set 1 (perDrawData) gains 3 SSBO bindings
+        // (3=page table, 4=feedback, 5=image info) and the SVT_ENABLED macro is compiled in — the
+        // BC7 atlas is sampled via the bindless heap, so no new descriptor set is added anywhere.
+        bool svtSampleEnabled = false;
+
         vk::DescriptorSetLayout meshletDataLayout;
         vk::DescriptorPool meshletDataPool;
         vk::DescriptorSet meshletDataDescriptorSet;
@@ -156,6 +161,12 @@ namespace render::gpudriven
         void recreate(const MeshPipelineInitInfo& info);
 
         void updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer);
+
+        // VK-1209: enable the SVT sample path (set-1 bindings 3/4/5 + SVT_ENABLED). Takes effect on
+        // the next (re)create. updateSVTResources writes the page table / feedback / image-info SSBOs.
+        void setSVTSampleEnabled(bool enabled) { svtSampleEnabled = enabled; }
+        bool isSVTSampleEnabled() const { return svtSampleEnabled; }
+        void updateSVTResources(vk::Buffer pageTableBuffer, vk::Buffer feedbackBuffer, vk::Buffer imageInfoBuffer);
         void updateInstanceTransformDescriptor(vk::Buffer instanceTransformBuffer);
         void updateObjectBufferDescriptor(vk::Buffer objectBuffer);
         void updateMeshletDescriptors(MeshletBuffer& meshletBuffer);
