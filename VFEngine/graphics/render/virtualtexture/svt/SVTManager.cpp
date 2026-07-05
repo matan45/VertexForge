@@ -71,6 +71,7 @@ namespace render::gpudriven
         const vk::Device vkDevice = device.getLogicalDevice();
         auto& mem = device.getMemoryManager();
         core::BufferUtilities::destroyBuffer(vkDevice, uploadStaging, uploadStagingAllocation, mem);
+        core::BufferUtilities::destroyBuffer(vkDevice, imageInfoStaging, imageInfoStagingAllocation, mem);
         core::BufferUtilities::destroyBuffer(vkDevice, imageInfoBuffer, imageInfoAllocation, mem);
         feedback.reset();
         pageTable.reset();
@@ -86,10 +87,15 @@ namespace render::gpudriven
     {
         imageInfoCapacity = 1024; // grows lazily if exceeded
         const vk::DeviceSize size = sizeof(GPUVTImageInfo) * imageInfoCapacity;
-        core::BufferInfoRequest req(device.getLogicalDevice(), device.getPhysicalDevice(), size,
-                                    vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-                                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-        core::BufferUtilities::createBuffer(req, imageInfoBuffer, imageInfoAllocation, device.getMemoryManager());
+        core::BufferInfoRequest devReq(device.getLogicalDevice(), device.getPhysicalDevice(), size,
+                                       vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                                       vk::MemoryPropertyFlagBits::eDeviceLocal);
+        core::BufferUtilities::createBuffer(devReq, imageInfoBuffer, imageInfoAllocation, device.getMemoryManager());
+
+        core::BufferInfoRequest stgReq(device.getLogicalDevice(), device.getPhysicalDevice(), size,
+                                       vk::BufferUsageFlagBits::eTransferSrc,
+                                       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        core::BufferUtilities::createBuffer(stgReq, imageInfoStaging, imageInfoStagingAllocation, device.getMemoryManager());
     }
 
     uint32_t SVTManager::registerTexture(const std::string& path, uint32_t fallbackBindlessIndex)
@@ -267,7 +273,6 @@ namespace render::gpudriven
 
     void SVTManager::uploadImageInfo(vk::CommandBuffer cmd)
     {
-        (void)cmd;
         if (!imageInfoDirty || imageInfoCpu.empty())
             return;
         // Keep the atlas bindless slot current in every image's info (it may be assigned after some
@@ -275,9 +280,25 @@ namespace render::gpudriven
         for (auto& info : imageInfoCpu)
             info.pad0 = atlasBindlessIndex;
 
-        // Host-visible SSBO: a direct memcpy suffices (read by the fragment shader next frame).
         const size_t count = std::min<size_t>(imageInfoCpu.size(), imageInfoCapacity);
-        std::memcpy(imageInfoAllocation.mappedPtr, imageInfoCpu.data(), count * sizeof(GPUVTImageInfo));
+        const vk::DeviceSize bytes = static_cast<vk::DeviceSize>(count) * sizeof(GPUVTImageInfo);
+        std::memcpy(imageInfoStagingAllocation.mappedPtr, imageInfoCpu.data(), bytes);
+
+        vk::BufferCopy copy{};
+        copy.size = bytes;
+        cmd.copyBuffer(imageInfoStaging, imageInfoBuffer, 1, &copy);
+
+        vk::BufferMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = imageInfoBuffer;
+        barrier.offset = 0;
+        barrier.size = bytes;
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
+                            {}, 0, nullptr, 1, &barrier, 0, nullptr);
+
         imageInfoDirty = false;
     }
 }

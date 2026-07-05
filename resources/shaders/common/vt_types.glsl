@@ -31,11 +31,11 @@ struct VTImageInfo
 };
 
 // pages spanning one axis at mip m = ceil(pages0 / 2^m), never below 1.
-// MUST match render::vt::vtPagesAtMip.
+// MUST match render::vt::vtPagesAtMip. Division by the power-of-two denom is a shift.
 uint vtPagesAtMip(uint pages0, uint mip)
 {
     uint denom = 1u << mip;
-    uint p = (pages0 + denom - 1u) / denom;
+    uint p = (pages0 + denom - 1u) >> mip;
     return max(p, 1u);
 }
 

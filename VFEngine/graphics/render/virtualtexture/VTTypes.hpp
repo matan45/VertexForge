@@ -60,7 +60,7 @@ namespace render::vt
     inline uint32_t vtPagesAtMip(uint32_t pages0, uint32_t mip)
     {
         const uint32_t denom = 1u << mip;
-        const uint32_t p = (pages0 + denom - 1u) / denom; // ceil
+        const uint32_t p = (pages0 + denom - 1u) >> mip; // ceil; division by 2^mip == shift
         return p < 1u ? 1u : p;
     }
 

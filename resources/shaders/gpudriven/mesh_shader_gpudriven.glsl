@@ -473,7 +473,8 @@ vec4 sampleMaterialTex(uint index, vec2 uv, vec2 dx, vec2 dy) {
         uint atlasIndex = img.pad0;
         uint fallbackIndex = img.pad1;
         uint mip = uint(max(vtDesiredMip(uv, float(img.pagesX0 * VT_PAGE_INTERIOR)), 0.0));
-        vtWriteFeedback(img, uv, mip);
+        if (vtFeedbackFragment(gl_FragCoord.xy))
+            vtWriteFeedback(img, uv, mip);
         VTSample s = vtLookup(img, uv, mip);
         if (s.valid)
             return textureLod(bindlessTextures[nonuniformEXT(atlasIndex)], s.uv, 0.0);

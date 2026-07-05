@@ -248,6 +248,45 @@ namespace serialization
             if (terrain.contains("textureScale") && terrain["textureScale"].is_number())
                 settings.textureScale = terrain["textureScale"].get<float>();
         }
+
+        // VK-1209 virtual texturing settings.
+        json serializeVirtualTextureSettings(const types::VirtualTextureSettings& s)
+        {
+            return {
+                {"rvtEnabled", s.rvtEnabled},
+                {"svtEnabled", s.svtEnabled},
+                {"rvtPoolBudgetMB", s.rvtPoolBudgetMB},
+                {"svtPoolBudgetMB", s.svtPoolBudgetMB},
+                {"rvtTexelsPerMeter", s.rvtTexelsPerMeter},
+                {"pagesPerFrame", s.pagesPerFrame},
+                {"evictionAgeFrames", s.evictionAgeFrames}
+            };
+        }
+
+        void deserializeVirtualTextureSettings(const json& j, types::VirtualTextureSettings& settings)
+        {
+            if (!j.contains("virtualTexture") || !j["virtualTexture"].is_object())
+            {
+                settings = types::VirtualTextureSettings{};
+                return;
+            }
+            const auto& vt = j["virtualTexture"];
+            if (vt.contains("rvtEnabled") && vt["rvtEnabled"].is_boolean())
+                settings.rvtEnabled = vt["rvtEnabled"].get<bool>();
+            if (vt.contains("svtEnabled") && vt["svtEnabled"].is_boolean())
+                settings.svtEnabled = vt["svtEnabled"].get<bool>();
+            if (vt.contains("rvtPoolBudgetMB") && vt["rvtPoolBudgetMB"].is_number())
+                settings.rvtPoolBudgetMB = vt["rvtPoolBudgetMB"].get<uint32_t>();
+            if (vt.contains("svtPoolBudgetMB") && vt["svtPoolBudgetMB"].is_number())
+                settings.svtPoolBudgetMB = vt["svtPoolBudgetMB"].get<uint32_t>();
+            if (vt.contains("rvtTexelsPerMeter") && vt["rvtTexelsPerMeter"].is_number())
+                settings.rvtTexelsPerMeter = vt["rvtTexelsPerMeter"].get<float>();
+            if (vt.contains("pagesPerFrame") && vt["pagesPerFrame"].is_number())
+                settings.pagesPerFrame = vt["pagesPerFrame"].get<uint32_t>();
+            if (vt.contains("evictionAgeFrames") && vt["evictionAgeFrames"].is_number())
+                settings.evictionAgeFrames = vt["evictionAgeFrames"].get<uint32_t>();
+        }
+
         json serializeDistanceCullingSettings(const types::DistanceCullingSettings& s)
         {
             return {
@@ -452,6 +491,7 @@ namespace serialization
         j["distanceCulling"] = serializeDistanceCullingSettings(settings.distanceCulling);
         j["transparency"] = { {"wboitEnabled", settings.transparency.wboitEnabled} };
         j["terrain"] = serializeTerrainRenderSettings(settings.terrain);
+        j["virtualTexture"] = serializeVirtualTextureSettings(settings.virtualTexture);
         j["postProcess"] = serializePostProcessSettings(settings.postProcess);
         j["gi"] = serializeGISettings(settings.gi);
         j["vfxLOD"] = serializeVfxLODSettings(settings.vfxLOD);
@@ -480,6 +520,7 @@ namespace serialization
         deserializeDistanceCullingSettings(j, settings.distanceCulling);
         deserializeTransparencySettings(j, settings.transparency);
         deserializeTerrainRenderSettings(j, settings.terrain);
+        deserializeVirtualTextureSettings(j, settings.virtualTexture);
 
         deserializeGISettings(j, settings.gi);
 

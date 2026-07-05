@@ -35,6 +35,9 @@ VTSample vtLookup(VTImageInfo img, vec2 uv, uint desiredMip)
 
     uv = clamp(uv, vec2(0.0), vec2(0.999999));
     uint mip = min(desiredMip, img.mipCount - 1u);
+    // Compute the starting mip's block offset once, then advance it incrementally per level
+    // (O(mip) total instead of recomputing vtMipSubOffset every iteration = O(mip^2)).
+    uint mipOffset = vtMipSubOffset(img.pagesX0, img.pagesY0, mip);
 
     for (; mip < img.mipCount; ++mip)
     {
@@ -44,26 +47,24 @@ VTSample vtLookup(VTImageInfo img, vec2 uv, uint desiredMip)
         uint pageX = min(uint(uv.x * float(pagesX)), pagesX - 1u);
         uint pageY = min(uint(uv.y * float(pagesY)), pagesY - 1u);
 
-        uint entryIdx = img.pageTableBase
-                      + vtMipSubOffset(img.pagesX0, img.pagesY0, mip)
-                      + pageY * pagesX + pageX;
-        uint entry = VT_PAGE_TABLE[entryIdx];
-        if (!vtIsPageValid(entry))
-            continue;
+        uint entry = VT_PAGE_TABLE[img.pageTableBase + mipOffset + pageY * pagesX + pageX];
+        if (vtIsPageValid(entry))
+        {
+            uint tileX = vtEntryTileX(entry);
+            uint tileY = vtEntryTileY(entry);
 
-        uint tileX = vtEntryTileX(entry);
-        uint tileY = vtEntryTileY(entry);
+            float fx = uv.x * float(pagesX) - float(pageX);
+            float fy = uv.y * float(pagesY) - float(pageY);
 
-        float fx = uv.x * float(pagesX) - float(pageX);
-        float fy = uv.y * float(pagesY) - float(pageY);
+            float texelX = float(tileX * VT_PAGE_SIZE + VT_BORDER) + fx * float(VT_PAGE_INTERIOR);
+            float texelY = float(tileY * VT_PAGE_SIZE + VT_BORDER) + fy * float(VT_PAGE_INTERIOR);
 
-        float texelX = float(tileX * VT_PAGE_SIZE + VT_BORDER) + fx * float(VT_PAGE_INTERIOR);
-        float texelY = float(tileY * VT_PAGE_SIZE + VT_BORDER) + fy * float(VT_PAGE_INTERIOR);
-
-        s.uv = vec2(texelX, texelY) / float(img.poolDim);
-        s.residentMip = mip;
-        s.valid = true;
-        return s;
+            s.uv = vec2(texelX, texelY) / float(img.poolDim);
+            s.residentMip = mip;
+            s.valid = true;
+            return s;
+        }
+        mipOffset += pagesX * pagesY; // next coarser level's block offset
     }
     return s;
 }
@@ -78,6 +79,14 @@ float vtDesiredMip(vec2 uv, float virtualResTexels)
     vec2 dy = dFdy(uv) * virtualResTexels;
     float m = max(length(dx), length(dy));
     return (m <= 1.0) ? 0.0 : log2(m);
+}
+
+// Feedback need only be emitted by a fraction of fragments: a visible page covers many pixels, so
+// a few requests suffice, and full-rate atomicOr from every fragment causes heavy contention (all
+// fragments of one page hit the same entry). ~1/64 of fragments (every 8th in x and y).
+bool vtFeedbackFragment(vec2 fragCoord)
+{
+    return (uint(fragCoord.x) & 7u) == 0u && (uint(fragCoord.y) & 7u) == 0u;
 }
 
 #ifdef VT_FEEDBACK

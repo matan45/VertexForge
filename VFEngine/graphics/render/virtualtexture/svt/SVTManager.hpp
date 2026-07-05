@@ -109,9 +109,12 @@ namespace render::gpudriven
         std::vector<SVTImage> images;
         std::unordered_map<std::string, uint32_t> pathToImage;
 
-        // GPUVTImageInfo[] SSBO (one per registered image) + CPU mirror.
+        // GPUVTImageInfo[] SSBO (one per registered image) + CPU mirror. Device-local (read per
+        // material fragment) with a host-visible staging buffer for the upload copy.
         vk::Buffer imageInfoBuffer;
         core::VulkanAllocation imageInfoAllocation;
+        vk::Buffer imageInfoStaging;
+        core::VulkanAllocation imageInfoStagingAllocation;
         std::vector<vt::GPUVTImageInfo> imageInfoCpu;
         bool imageInfoDirty = false;
         uint32_t imageInfoCapacity = 0;

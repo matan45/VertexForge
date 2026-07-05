@@ -970,9 +970,14 @@ namespace render::gpudriven
         // VK-1209: opt a large BC7 .vfImage into SVT. registerTexture gates on format/size and
         // returns a bit-31-tagged index (else VT_INVALID_TILE); the resolver then returns that
         // tagged index. `fallback` (the whole-image bindless slot) is sampled while a page streams.
-        auto trySVTRegister = [&](const std::string& texPath, uint32_t fallback)
+        auto trySVTRegister = [&](const std::string& texPath, uint32_t fallback, vk::Format format)
         {
-            if (svtManager && texPath.size() >= 8 && texPath.ends_with(".vfImage") && fallback < 4096u)
+            // Only sRGB (albedo/emission) textures are paged: the SVT atlas is a single BC7-sRGB
+            // image, so linear data (normal/ORM/etc.) would be wrongly sRGB-decoded when sampled
+            // — that darkens lighting and corrupts normals. Those stay plain bindless. (A proper
+            // multi-format SVT with a Unorm atlas is the follow-up.)
+            if (svtManager && format == vk::Format::eR8G8B8A8Srgb &&
+                texPath.size() >= 8 && texPath.ends_with(".vfImage") && fallback < 4096u)
             {
                 uint32_t tagged = svtManager->registerTexture(texPath, fallback);
                 if (tagged != INVALID_TEXTURE_INDEX)
@@ -991,7 +996,7 @@ namespace render::gpudriven
                 if (idx != INVALID_TEXTURE_INDEX)
                 {
                     registered = true;
-                    trySVTRegister(texPath, idx);
+                    trySVTRegister(texPath, idx, format);
                     return;
                 }
                 // Fall through to legacy path on failure
@@ -1009,7 +1014,7 @@ namespace render::gpudriven
             {
                 uint32_t idx = bindlessTextures->registerTexture(texPath, view, sampler);
                 registered = true;
-                trySVTRegister(texPath, idx);
+                trySVTRegister(texPath, idx, format);
             }
         };
 

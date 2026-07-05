@@ -482,7 +482,8 @@ void main() {
     // result (XZ-projection); the cave adjust below still darkens it.
     vec2 rvtUV = clamp((fragWorldPos.xz - rvt.worldMin) * rvt.invWorldExtent, vec2(0.0), vec2(0.999999));
     uint rvtMip = uint(max(vtDesiredMip(rvtUV, rvt.virtualResTexels), 0.0));
-    vtWriteFeedback(rvt.img, rvtUV, rvtMip);
+    if (vtFeedbackFragment(gl_FragCoord.xy))
+        vtWriteFeedback(rvt.img, rvtUV, rvtMip);
     VTSample rvtS = vtLookup(rvt.img, rvtUV, rvtMip);
     vec4 rvtA = texture(rvtAlbedoAtlas, rvtS.uv);
     vec4 rvtO = texture(rvtOrmAtlas, rvtS.uv);
