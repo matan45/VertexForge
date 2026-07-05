@@ -471,6 +471,7 @@ float g_svtSampleValid = 0.0;   // 1.0 if the last page lookup resolved to the a
 float g_svtAlbedoTagged = 0.0;  // g_svtSampleTagged captured at the albedo sample
 float g_svtAlbedoValid = 0.0;   // g_svtSampleValid captured at the albedo sample
 float g_svtAlbedoAlpha = 1.0;   // the albedo .a fed into the color*alpha output premultiply
+float g_svtAlbedoLuma = 1.0;    // brightness of the SVT albedo sample (max channel) for viewMode 30
 #endif
 
 // Sample a material texture. SVT-tagged indices resolve through the page table into the bindless
@@ -567,6 +568,7 @@ void main() {
         g_svtAlbedoTagged = g_svtSampleTagged;
         g_svtAlbedoValid = g_svtSampleValid;
         g_svtAlbedoAlpha = albedoSample.a;
+        g_svtAlbedoLuma = max(max(albedoSample.r, albedoSample.g), albedoSample.b);
         // VK-1480: an SVT albedo tile can carry alpha ~= 0 (BC7 alpha in uncovered/streaming texels),
         // which the color*alpha output premultiply would collapse to black. Opaque materials do not
         // use albedo alpha, so force full opacity for them; alpha-mask/translucent/additive keep it.
@@ -921,17 +923,16 @@ void main() {
         color = vec3(0.15, 0.4, 0.05); // Base green per fragment
     }
 
-#ifdef SVT_ENABLED
-    // SVT residency debug (VK-1480): R = albedo lookup resolved to the atlas, G = albedo alpha (the
-    // color*alpha input), B = took the whole-image fallback. Read the dark surface: R=1,G~0 => a
-    // resident tile with alpha~0 (the premultiply collapse); R=0,B=1 => a dark fallback path.
-    // alpha is forced to 1 so the readout survives the output premultiply even when the bug is alpha~0.
+    // Ambient-input probe (VK-1482), works with SVT on OR off so the two can be compared:
+    // R = matIblDiffuse (per-material IBL diffuse scale), G = irradiance brightness (IBL cubemap
+    // sample), B = ao. `ambient` (diffuse part) is proportional to R*G*B*albedo, and albedo is
+    // known bright, so whichever of R/G/B drops when SVT is enabled is the culprit input.
+    // alpha forced to 1 so the readout survives the output premultiply.
     if (viewModeValue == 30u) {
-        float tookFallback = g_svtAlbedoTagged * (1.0 - g_svtAlbedoValid);
-        color = vec3(g_svtAlbedoValid, g_svtAlbedoAlpha, tookFallback);
+        float irr = max(max(irradiance.r, irradiance.g), irradiance.b);
+        color = vec3(matIblDiffuse, irr, ao);
         alpha = 1.0;
     }
-#endif
 
 #ifdef WBOIT_ENABLED
     // Weighted Blended OIT (McGuire & Bavoil 2013)

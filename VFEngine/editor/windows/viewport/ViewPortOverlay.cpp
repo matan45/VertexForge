@@ -224,12 +224,13 @@ namespace windows
             // Unified dropdown entries:
             // 0-11: View modes (Color, Meshlet, LOD, ...)
             // 12-16: Debug modes (Wireframe, Overdraw, Shadow Cascades, Shadow Pool Heatmap)
-            static const int viewModeMap[] = {0,1,2,3,4,5,6,7,8,9,14,15};
+            static const int viewModeMap[] = {0,1,2,3,4,5,6,7,8,9,14,15,30};
             static const int reverseMap[] = {0,1,2,3,4,5,6,7,8,9,0,0,0,0,10,11};
 
             // Determine unified selected index
             int unifiedIdx = 0;
-            if (wireframe) unifiedIdx = 12;
+            if (wireframe) unifiedIdx = 13;
+            else if (currentViewMode == 30) unifiedIdx = 12; // SVT Debug (VK-1480)
             else unifiedIdx = (currentViewMode < 16) ? reverseMap[currentViewMode] : 0;
 
             const char* allLabels[] = {
@@ -245,11 +246,12 @@ namespace windows
                 "Weight Map",         // 9
                 "Shadow Level",       // 10
                 "Shadow UV",          // 11
-                "Wireframe",          // 12
+                "SVT Debug",          // 12  (R=resident, G=albedo alpha, B=took fallback)
+                "Wireframe",          // 13
             };
-            static constexpr int VIEW_MODE_COUNT = 12;
-            static constexpr int DEBUG_START = 12;
-            static constexpr int TOTAL_COUNT = 13;
+            static constexpr int VIEW_MODE_COUNT = 13;
+            static constexpr int DEBUG_START = 13;
+            static constexpr int TOTAL_COUNT = 14;
 
             ImGui::SetNextItemWidth(dropdownWidth);
             if (ImGui::BeginCombo("##ViewMode", allLabels[unifiedIdx]))
@@ -291,7 +293,7 @@ namespace windows
                         dispatcher.execute(viewCmd);
 
                         // Apply selected debug mode
-                        if (i == 12) { wireCmd.show = true; dispatcher.execute(wireCmd); }
+                        if (i == 13) { wireCmd.show = true; dispatcher.execute(wireCmd); }
                     }
                 }
 
