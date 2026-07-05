@@ -472,10 +472,15 @@ vec4 sampleMaterialTex(uint index, vec2 uv, vec2 dx, vec2 dy) {
         VTImageInfo img = svtImageInfo[index & 0x7FFFFFFFu];
         uint atlasIndex = img.pad0;
         uint fallbackIndex = img.pad1;
+        // VK-1480: wrap the UV into [0,1) for the page lookup + feedback so tiled (UV>1) materials
+        // request/sample the correct pages. Keep the ORIGINAL uv/derivatives for the desired-mip
+        // estimate and the whole-image fallback — fract() at a wrap seam produces derivative spikes
+        // that would otherwise pick the wrong mip.
+        vec2 wuv = fract(uv);
         uint mip = uint(max(vtDesiredMip(uv, float(img.pagesX0 * VT_PAGE_INTERIOR)), 0.0));
         if (vtFeedbackFragment(gl_FragCoord.xy))
-            vtWriteFeedback(img, uv, mip);
-        VTSample s = vtLookup(img, uv, mip);
+            vtWriteFeedback(img, wuv, mip);
+        VTSample s = vtLookup(img, wuv, mip);
         if (s.valid)
             return textureLod(bindlessTextures[nonuniformEXT(atlasIndex)], s.uv, 0.0);
         return textureGrad(bindlessTextures[nonuniformEXT(fallbackIndex)], uv, dx, dy);

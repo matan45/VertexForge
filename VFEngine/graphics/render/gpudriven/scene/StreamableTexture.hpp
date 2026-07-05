@@ -23,5 +23,10 @@ namespace render::gpudriven
         std::string path;
         uint64_t lastAccessFrame = 0;
         float distanceToCamera = 0.0f;
+        // VK-1480: a TailOnly image holds only the coarse tail mips (base <= 128px) as a permanent,
+        // tiny fallback for an SVT-paged texture. Its mips are all resident at creation and it is
+        // excluded from the streaming/eviction machinery. promoteToFull() converts it back to a full
+        // streamed image in place (same bindless slot) when SVT is disabled.
+        bool tailOnly = false;
     };
 }

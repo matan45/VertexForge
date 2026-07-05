@@ -259,7 +259,8 @@ namespace serialization
                 {"svtPoolBudgetMB", s.svtPoolBudgetMB},
                 {"rvtTexelsPerMeter", s.rvtTexelsPerMeter},
                 {"pagesPerFrame", s.pagesPerFrame},
-                {"evictionAgeFrames", s.evictionAgeFrames}
+                {"evictionAgeFrames", s.evictionAgeFrames},
+                {"svtPageLinearMaps", s.svtPageLinearMaps}
             };
         }
 
@@ -285,6 +286,8 @@ namespace serialization
                 settings.pagesPerFrame = vt["pagesPerFrame"].get<uint32_t>();
             if (vt.contains("evictionAgeFrames") && vt["evictionAgeFrames"].is_number())
                 settings.evictionAgeFrames = vt["evictionAgeFrames"].get<uint32_t>();
+            if (vt.contains("svtPageLinearMaps") && vt["svtPageLinearMaps"].is_boolean())
+                settings.svtPageLinearMaps = vt["svtPageLinearMaps"].get<bool>();
         }
 
         json serializeDistanceCullingSettings(const types::DistanceCullingSettings& s)

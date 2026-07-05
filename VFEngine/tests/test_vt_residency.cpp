@@ -105,6 +105,45 @@ TEST_CASE("VT residency: young pages don't evict (blur instead of thrash)")
     CHECK(plan.toAllocate.empty());
 }
 
+TEST_CASE("VT residency: pinned pages survive maximal pressure (VK-1480 coarse-tail pins)")
+{
+    VTResidencyCore core;
+    // A cluster of pinned coarse-tail pages (as SVT pins them) plus one evictable page.
+    for (uint32_t i = 0; i < 8; ++i)
+        core.commitAllocation(K(0, 5, i, 0), /*tile*/ i, /*frame*/ 1, /*pinned*/ true);
+    core.commitAllocation(K(0, 0, 9, 9), /*tile*/ 8, /*frame*/ 1, /*pinned*/ false); // aged, evictable
+
+    // Flood with new requests and zero free tiles: only the single unpinned page may be evicted.
+    std::vector<VTPageKey> req;
+    for (uint32_t i = 0; i < 20; ++i)
+        req.push_back(K(1, 0, i, 0));
+
+    const auto plan = core.planFrame(req, /*frame*/ 1000, /*freeTiles*/ 0, /*cap*/ 32, /*age*/ 10);
+
+    // No pinned page appears in the eviction list.
+    for (const auto& e : plan.toEvict)
+        CHECK((e.mip != 5 || e.imageId != 0)); // the pinned cluster is img0 mip5
+    CHECK(plan.toEvict.size() == 1); // only the one unpinned aged page can go
+    CHECK(plan.toEvict[0].packed() == K(0, 0, 9, 9).packed());
+    // Exactly one tile freed -> at most one new allocation this frame.
+    CHECK(plan.toAllocate.size() == 1);
+}
+
+TEST_CASE("VT residency: a pinned page re-requested via feedback is not double-allocated")
+{
+    VTResidencyCore core;
+    core.commitAllocation(K(3, 4, 0, 0), /*tile*/ 2, /*frame*/ 1, /*pinned*/ true);
+
+    // Feedback re-requests the (already resident, pinned) coarse page alongside a genuine miss.
+    const std::vector<VTPageKey> req = {K(3, 4, 0, 0), K(3, 0, 1, 1)};
+    const auto plan = core.planFrame(req, /*frame*/ 50, /*freeTiles*/ 100, /*cap*/ 8, /*age*/ 10);
+
+    REQUIRE(plan.toAllocate.size() == 1);                            // only the real miss
+    CHECK(plan.toAllocate[0].packed() == K(3, 0, 1, 1).packed());
+    CHECK(core.tileFor(K(3, 4, 0, 0)) == 2);                         // pin keeps its tile
+    CHECK(plan.toEvict.empty());
+}
+
 TEST_CASE("VT residency: commit + evict round trip")
 {
     VTResidencyCore core;

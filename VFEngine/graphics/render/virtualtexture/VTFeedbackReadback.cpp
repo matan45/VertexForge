@@ -1,4 +1,5 @@
 #include "VTFeedbackReadback.hpp"
+#include "VTFeedbackWords.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "print/Log.hpp"
@@ -8,6 +9,49 @@
 
 namespace render::vt
 {
+    namespace
+    {
+        // Choose staging memory for the feedback readback. The render thread memcpys
+        // the whole staging buffer every frame, so prefer HOST_CACHED (cached reads)
+        // over the plain HOST_VISIBLE|HOST_COHERENT the driver would otherwise hand
+        // out — on NVIDIA that lands in uncached write-combined memory, making the
+        // read stall. Never accept non-coherent memory: we don't invalidate the
+        // mapped range before reading. MemoryUtilities::findMemoryType is unfit for
+        // the probe — on a miss it logs an error and returns type 0 (device-local).
+        vk::MemoryPropertyFlags pickStagingMemoryProperties(const vk::Device& logicalDevice,
+                                                            const vk::PhysicalDevice& physicalDevice,
+                                                            vk::DeviceSize size)
+        {
+            const vk::MemoryPropertyFlags coherent =
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            const vk::MemoryPropertyFlags cached = coherent | vk::MemoryPropertyFlagBits::eHostCached;
+
+            // Probe an identical staging buffer to learn which memory types it permits.
+            vk::BufferCreateInfo probeInfo{};
+            probeInfo.size = size;
+            probeInfo.usage = vk::BufferUsageFlagBits::eTransferDst;
+            probeInfo.sharingMode = vk::SharingMode::eExclusive;
+            vk::Buffer probe = logicalDevice.createBuffer(probeInfo);
+            const uint32_t typeBits = logicalDevice.getBufferMemoryRequirements(probe).memoryTypeBits;
+            logicalDevice.destroyBuffer(probe);
+
+            const auto memProps = physicalDevice.getMemoryProperties();
+            for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i)
+            {
+                if ((typeBits & (1u << i)) == 0u)
+                    continue;
+                if ((memProps.memoryTypes[i].propertyFlags & cached) == cached)
+                {
+                    vfLogInfo("VTFeedbackReadback: staging memory HOST_VISIBLE|HOST_COHERENT|HOST_CACHED (type {})", i);
+                    return cached;
+                }
+            }
+
+            vfLogInfo("VTFeedbackReadback: staging memory HOST_VISIBLE|HOST_COHERENT (no HOST_CACHED type available)");
+            return coherent;
+        }
+    }
+
     VTFeedbackReadback::VTFeedbackReadback(core::Device& device)
         : device(device)
     {
@@ -24,11 +68,12 @@ namespace render::vt
             return;
 
         totalEntries = entries == 0 ? 1u : entries;
+        wordCount = vtFeedbackWordCount(totalEntries);
         createBuffers();
         state = VTFeedbackState::Idle;
         initialized = true;
-        vfLogInfo("VTFeedbackReadback: {} entries ({} KB)", totalEntries,
-                  (sizeof(uint32_t) * totalEntries) / 1024);
+        vfLogInfo("VTFeedbackReadback: {} entries, bit-packed to {} words ({} KB)", totalEntries,
+                  wordCount, (sizeof(uint32_t) * wordCount) / 1024);
     }
 
     void VTFeedbackReadback::cleanup()
@@ -51,7 +96,7 @@ namespace render::vt
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
         auto& memManager = device.getMemoryManager();
-        const vk::DeviceSize size = sizeof(uint32_t) * totalEntries;
+        const vk::DeviceSize size = sizeof(uint32_t) * wordCount;
 
         {
             core::BufferInfoRequest request(
@@ -63,10 +108,12 @@ namespace render::vt
             core::BufferUtilities::createBuffer(request, feedbackBuffer, feedbackAllocation, memManager);
         }
         {
+            const vk::MemoryPropertyFlags stagingProps =
+                pickStagingMemoryProperties(logicalDevice, physicalDevice, size);
             core::BufferInfoRequest request(
                 logicalDevice, physicalDevice, size,
                 vk::BufferUsageFlagBits::eTransferDst,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+                stagingProps);
             core::BufferUtilities::createBuffer(request, stagingBuffer, stagingAllocation, memManager);
         }
     }
@@ -76,7 +123,7 @@ namespace render::vt
         if (!initialized)
             return;
 
-        cmd.fillBuffer(feedbackBuffer, 0, sizeof(uint32_t) * totalEntries, 0);
+        cmd.fillBuffer(feedbackBuffer, 0, sizeof(uint32_t) * wordCount, 0);
 
         vk::BufferMemoryBarrier barrier{};
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -85,7 +132,7 @@ namespace render::vt
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.buffer = feedbackBuffer;
         barrier.offset = 0;
-        barrier.size = sizeof(uint32_t) * totalEntries;
+        barrier.size = sizeof(uint32_t) * wordCount;
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,
@@ -105,7 +152,7 @@ namespace render::vt
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.buffer = feedbackBuffer;
         barrier.offset = 0;
-        barrier.size = sizeof(uint32_t) * totalEntries;
+        barrier.size = sizeof(uint32_t) * wordCount;
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eFragmentShader,
@@ -113,7 +160,7 @@ namespace render::vt
             {}, 0, nullptr, 1, &barrier, 0, nullptr);
 
         vk::BufferCopy copyRegion{};
-        copyRegion.size = sizeof(uint32_t) * totalEntries;
+        copyRegion.size = sizeof(uint32_t) * wordCount;
         cmd.copyBuffer(feedbackBuffer, stagingBuffer, copyRegion);
 
         state = VTFeedbackState::Pending;
@@ -131,8 +178,8 @@ namespace render::vt
         if (state != VTFeedbackState::Ready || !initialized)
             return results;
 
-        results.resize(totalEntries);
-        std::memcpy(results.data(), stagingAllocation.mappedPtr, sizeof(uint32_t) * totalEntries);
+        results.resize(wordCount);
+        std::memcpy(results.data(), stagingAllocation.mappedPtr, sizeof(uint32_t) * wordCount);
         state = VTFeedbackState::Idle;
         return results;
     }

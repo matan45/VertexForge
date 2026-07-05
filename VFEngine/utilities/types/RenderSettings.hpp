@@ -226,10 +226,17 @@ namespace types
         bool rvtEnabled = false;          // terrain runtime virtual texture
         bool svtEnabled = false;          // streamed material virtual textures
         uint32_t rvtPoolBudgetMB = 128;   // terrain RVT atlas budget (restart to apply)
-        uint32_t svtPoolBudgetMB = 512;   // material SVT atlas budget (restart to apply)
+        // VK-1480: a hardware-safe BC7 atlas caps at 256 MiB per pool (VT_MAX_POOL_DIM); with two
+        // pools (sRGB + Unorm) the 256 default splits 128/128 and the tail-only fallback path means
+        // SVT now saves VRAM instead of adding it. Restart-scoped (Vulkan images don't resize).
+        uint32_t svtPoolBudgetMB = 256;   // material SVT atlas budget, total across pools (restart)
         float rvtTexelsPerMeter = 8.0f;   // terrain RVT mip-0 texel density
         uint32_t pagesPerFrame = 32;      // per-frame page bake/stream budget (live)
         uint32_t evictionAgeFrames = 60;  // frames unused before a page may evict (live)
+        // VK-1480: also page linear (Unorm) material maps — normal/ORM/height — through a second
+        // BC7-Unorm atlas. Off = only sRGB (albedo/emission) is paged and linear maps stay plain
+        // bindless (today's behavior); a named GPU sign-off item for normal-map quality. Restart.
+        bool svtPageLinearMaps = true;
     };
 
     struct VFXLODSettings

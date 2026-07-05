@@ -31,7 +31,8 @@ namespace render::vt
         createBuffers();
 
         initialized = true;
-        dirty = true;
+        dirtyChunks.reset(totalEntries);
+        dirtyChunks.markAll(); // first upload pushes the whole (zeroed) table, as before
     }
 
     void VTPageTable::cleanup()
@@ -99,7 +100,7 @@ namespace render::vt
         const uint32_t offset = usedEntries;
         usedEntries += count;
         std::fill(cpuTable.begin() + offset, cpuTable.begin() + offset + count, 0u);
-        dirty = true;
+        dirtyChunks.markRange(offset, count);
         return offset;
     }
 
@@ -108,7 +109,7 @@ namespace render::vt
         if (entryIndex >= totalEntries)
             return;
         cpuTable[entryIndex] = vtPackPageEntry(tileX, tileY);
-        dirty = true;
+        dirtyChunks.markEntry(entryIndex);
     }
 
     void VTPageTable::unmapEntry(uint32_t entryIndex)
@@ -116,7 +117,7 @@ namespace render::vt
         if (entryIndex >= totalEntries)
             return;
         cpuTable[entryIndex] = 0u;
-        dirty = true;
+        dirtyChunks.markEntry(entryIndex);
     }
 
     void VTPageTable::clearRange(uint32_t entryIndex, uint32_t count)
@@ -124,31 +125,46 @@ namespace render::vt
         if (entryIndex + count > totalEntries)
             return;
         std::fill(cpuTable.begin() + entryIndex, cpuTable.begin() + entryIndex + count, 0u);
-        dirty = true;
+        dirtyChunks.markRange(entryIndex, count);
     }
 
     void VTPageTable::uploadToGPU(vk::CommandBuffer cmd)
     {
-        if (!initialized || !dirty)
+        if (!initialized || !dirtyChunks.any())
             return;
-
-        vk::DeviceSize dataSize = sizeof(uint32_t) * usedEntries;
-        if (dataSize == 0)
-            dataSize = sizeof(uint32_t);
 
         // Rotate the staging ring so an in-flight upload's source is not overwritten
         // (the defect VSMPageTable never fixed).
         currentStagingFrame = (currentStagingFrame + 1u) % core::MAX_FRAMES_IN_FLIGHT;
         auto& sf = stagingFrames[currentStagingFrame];
 
-        std::memcpy(sf.mapped, cpuTable.data(), dataSize);
+        // Upload only the dirty chunks: pack their entries sequentially into the
+        // staging frame (sized totalEntries*4, so disjoint ranges always fit) and
+        // scatter each back to its original slot with one copyBuffer region.
+        dirtyChunks.takeRanges(dirtyRanges);
+        if (dirtyRanges.empty())
+            return;
 
-        vk::BufferCopy copyRegion{};
-        copyRegion.srcOffset = 0;
-        copyRegion.dstOffset = 0;
-        copyRegion.size = dataSize;
-        cmd.copyBuffer(sf.buffer, tableBuffer, 1, &copyRegion);
+        std::vector<vk::BufferCopy> regions;
+        regions.reserve(dirtyRanges.size());
+        auto* dst = static_cast<uint8_t*>(sf.mapped);
+        vk::DeviceSize packedOffset = 0;
+        for (const auto& r : dirtyRanges)
+        {
+            const vk::DeviceSize bytes = sizeof(uint32_t) * r.entryCount;
+            std::memcpy(dst + packedOffset, cpuTable.data() + r.firstEntry, static_cast<size_t>(bytes));
 
+            vk::BufferCopy copyRegion{};
+            copyRegion.srcOffset = packedOffset;
+            copyRegion.dstOffset = sizeof(uint32_t) * r.firstEntry;
+            copyRegion.size = bytes;
+            regions.push_back(copyRegion);
+
+            packedOffset += bytes;
+        }
+        cmd.copyBuffer(sf.buffer, tableBuffer, static_cast<uint32_t>(regions.size()), regions.data());
+
+        // Whole-buffer barrier: simpler than one per region and correct for the reads.
         vk::BufferMemoryBarrier barrier{};
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -156,20 +172,18 @@ namespace render::vt
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.buffer = tableBuffer;
         barrier.offset = 0;
-        barrier.size = dataSize;
+        barrier.size = sizeof(uint32_t) * totalEntries;
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,
             vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader,
             {}, 0, nullptr, 1, &barrier, 0, nullptr);
-
-        dirty = false;
     }
 
     void VTPageTable::reset()
     {
         usedEntries = 0;
         std::fill(cpuTable.begin(), cpuTable.end(), 0u);
-        dirty = true;
+        dirtyChunks.markAll();
     }
 }

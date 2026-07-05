@@ -55,6 +55,16 @@ namespace render::gpudriven
         };
         using BakeFn = std::function<void(vk::CommandBuffer, const std::vector<ScheduledBake>&)>;
 
+        // Per-frame CPU cost of the residency path (VK-1480 instrumentation), split so
+        // the feedback memcpy can be told apart from the set-bit decode and the residency
+        // planning. Render-thread only; the lead publishes it into the profiler.
+        struct FrameCpuStats
+        {
+            uint64_t readbackUs = 0;   // feedback->readback() (device->host memcpy)
+            uint64_t decodeUs = 0;     // set-bit walk + decode + request sort
+            uint64_t residencyUs = 0;  // planFrame + evict/allocate + map/unmap
+        };
+
         explicit TerrainRVTManager(core::Device& device);
         ~TerrainRVTManager();
 
@@ -87,6 +97,7 @@ namespace render::gpudriven
         [[nodiscard]] uint32_t residentPageCount() const { return residency.residentCount(); }
         [[nodiscard]] uint32_t bakesThisFrame() const { return static_cast<uint32_t>(scheduledBakes.size()); }
         [[nodiscard]] float poolUtilization() const { return pool ? pool->utilization() : 0.0f; }
+        [[nodiscard]] const FrameCpuStats& lastCpuStats() const { return cpuStats; }
 
     private:
         void ensureCoarseResident(uint32_t frame);
@@ -111,6 +122,8 @@ namespace render::gpudriven
 
         std::vector<vt::VTPageKey> requestedPages;
         std::vector<ScheduledBake> scheduledBakes;
+
+        FrameCpuStats cpuStats;
 
         bool initialized = false;
     };

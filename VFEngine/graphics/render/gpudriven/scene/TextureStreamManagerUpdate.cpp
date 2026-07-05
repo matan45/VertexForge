@@ -120,6 +120,118 @@ namespace render::gpudriven
         return true;
     }
 
+    bool TextureStreamManager::createTailOnlyImage(
+        StreamableTexture& tex,
+        uint32_t /*startMip*/,
+        const std::vector<resource::MipLevelData>& retainedMips)
+    {
+        // VK-1480: a small image holding ONLY the retained tail mips (source mip startMip -> image mip
+        // 0). Base dims are the tail base (retainedMips[0]); all its levels are uploaded at creation so
+        // it's a permanently-valid fallback with no streaming.
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        const uint32_t baseW = retainedMips.front().width;
+        const uint32_t baseH = retainedMips.front().height;
+        const uint32_t levels = static_cast<uint32_t>(retainedMips.size());
+
+        core::ImageInfoRequest imageInfo(
+            vkDevice, device.getPhysicalDevice(),
+            baseW, baseH, 1, levels,
+            tex.format, vk::ImageTiling::eOptimal,
+            vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+        core::ImageUtilities::createImage(imageInfo, tex.image, tex.allocation, device.getMemoryManager());
+
+        size_t retainedBytes = 0;
+        for (const auto& mip : retainedMips)
+            retainedBytes += mip.dataSize;
+        tex.gpuMemoryUsage = retainedBytes;
+        currentVRAMUsage += tex.gpuMemoryUsage;
+
+        core::ImageViewInfoRequest viewInfo(
+            vkDevice, tex.image, tex.format,
+            vk::ImageAspectFlagBits::eColor,
+            vk::ImageViewType::e2D, 1, levels
+        );
+        core::ImageUtilities::createImageView(viewInfo, tex.view);
+
+        vk::CommandBufferAllocateInfo cmdAllocInfo{};
+        cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
+        cmdAllocInfo.commandPool = commandPool;
+        cmdAllocInfo.commandBufferCount = 1;
+        auto cmdBuffers = vkDevice.allocateCommandBuffers(cmdAllocInfo);
+        vk::CommandBuffer cmd = cmdBuffers[0];
+
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+        cmd.begin(beginInfo);
+
+        vk::ImageMemoryBarrier barrier{};
+        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = tex.image;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = levels;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = {};
+        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+                            vk::PipelineStageFlagBits::eTransfer,
+                            {}, nullptr, nullptr, barrier);
+
+        if (retainedBytes > stagingBufferSize)
+            createStagingBuffer(retainedBytes * 2);
+
+        size_t stagingOffset = 0;
+        for (uint32_t i = 0; i < levels; ++i)
+        {
+            const auto& mip = retainedMips[i];
+            memcpy(static_cast<char*>(stagingMapped) + stagingOffset, mip.data.data(), mip.dataSize);
+
+            vk::BufferImageCopy copyRegion{};
+            copyRegion.bufferOffset = static_cast<vk::DeviceSize>(stagingOffset);
+            copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            copyRegion.imageSubresource.mipLevel = i; // source mip startMip+i -> image mip i
+            copyRegion.imageSubresource.baseArrayLayer = 0;
+            copyRegion.imageSubresource.layerCount = 1;
+            copyRegion.imageExtent = vk::Extent3D{mip.width, mip.height, 1};
+
+            cmd.copyBufferToImage(stagingBuffer, tex.image,
+                                  vk::ImageLayout::eTransferDstOptimal, copyRegion);
+
+            stagingOffset += mip.dataSize;
+        }
+
+        barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                            vk::PipelineStageFlagBits::eFragmentShader,
+                            {}, nullptr, nullptr, barrier);
+
+        cmd.end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+        device.submitGraphics(submitInfo);
+        device.waitGraphicsIdle();
+
+        vkDevice.freeCommandBuffers(commandPool, cmd);
+
+        tex.currentSampler = createMipClampedSampler(0, levels - 1);
+
+        return true;
+    }
+
     void TextureStreamManager::update(const glm::vec3& cameraPos, uint64_t frameIndex)
     {
         currentFrame = frameIndex;
@@ -139,13 +251,31 @@ namespace render::gpudriven
 
         uint32_t fullyLoaded = 0;
         uint32_t partiallyLoaded = 0;
+        uint32_t tailOnlyCount = 0;
+        size_t tailOnlyBytesSaved = 0;
         for (const auto& [path, tex] : textures)
         {
+            if (tex.tailOnly)
+            {
+                ++tailOnlyCount;
+                // Bytes the full pyramid would have cost minus the tiny tail actually held.
+                auto hIt = streamHandles.find(path);
+                if (hIt != streamHandles.end())
+                {
+                    const auto& hdr = hIt->second->getHeader();
+                    const size_t full = estimateFullImageVRAM(hdr.width, hdr.height, hdr.mipLevels, tex.format);
+                    if (full > tex.gpuMemoryUsage)
+                        tailOnlyBytesSaved += full - tex.gpuMemoryUsage;
+                }
+                continue;
+            }
             if (tex.lowestLoadedMip == 0) fullyLoaded++;
             else partiallyLoaded++;
         }
         stats.fullyLoaded = fullyLoaded;
         stats.partiallyLoaded = partiallyLoaded;
+        stats.tailOnlyCount = tailOnlyCount;
+        stats.tailOnlyBytesSaved = tailOnlyBytesSaved;
     }
 
     void TextureStreamManager::processCompletedReads()
@@ -328,6 +458,7 @@ namespace render::gpudriven
 
         for (const auto& [path, tex] : textures)
         {
+            if (tex.tailOnly) continue; // VK-1480: tail-only fallbacks are fully resident, never stream
             uint32_t desiredMip = calculateDesiredMip(tex.distanceToCamera, tex.totalMipLevels);
             if (desiredMip < tex.lowestLoadedMip)
             {
@@ -389,6 +520,7 @@ namespace render::gpudriven
         std::vector<EvictionCandidate> candidates;
         for (const auto& [path, tex] : textures)
         {
+            if (tex.tailOnly) continue; // VK-1480: never evict tail-only fallbacks
             if (tex.lowestLoadedMip < tex.totalMipLevels - config.tailMipCount)
             {
                 float ageFactor = static_cast<float>(currentFrame - tex.lastAccessFrame + 1);

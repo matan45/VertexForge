@@ -275,10 +275,11 @@ namespace render::gpudriven
             bool rvtEnabled = false;
             bool svtEnabled = false;
             uint32_t rvtPoolBudgetMB = 128;
-            uint32_t svtPoolBudgetMB = 512;
+            uint32_t svtPoolBudgetMB = 256; // VK-1480: 256 total, split across sRGB + Unorm pools
             float rvtTexelsPerMeter = 8.0f;
             uint32_t pagesPerFrame = 32;
             uint32_t evictionAgeFrames = 60;
+            bool svtPageLinearMaps = true;  // VK-1480: page linear (Unorm) maps too (2nd atlas)
         } vtCache;
 
         // VK-1209 terrain RVT (created lazily in updateTerrain once bounds are known and

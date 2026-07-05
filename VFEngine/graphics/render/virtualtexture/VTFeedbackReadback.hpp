@@ -12,12 +12,20 @@ namespace core
 
 // ============================================================================
 // Virtual Texturing (VK-1209) — GPU->CPU page-request feedback. A device-local
-// bitmask buffer (one uint per page-table entry) that consuming FRAGMENT shaders
-// atomicOr into at their sample point (UV + mip are known there), copied to a
-// host-visible staging buffer and read back a frame later. Copy-adapts VSM's
-// {Idle,Pending,Ready} readback state machine (VSMFeedbackPipeline) but drops the
-// compute generator — VSM reconstructs requests from depth in a compute pass; a
+// bitmask buffer (one BIT per page-table entry, 32 entries per uint) that consuming
+// FRAGMENT shaders atomicOr into at their sample point (UV + mip are known there),
+// copied to a host-visible staging buffer and read back a frame later. Copy-adapts
+// VSM's {Idle,Pending,Ready} readback state machine (VSMFeedbackPipeline) but drops
+// the compute generator — VSM reconstructs requests from depth in a compute pass; a
 // texture VT gets exact requests inline for free.
+//
+// (VK-1480) The bitmap is bit-packed at 32 entries per uint — the buffers are sized
+// vtFeedbackWordCount(totalEntries) words, and readback() returns those words. A
+// page request is idempotent, so a shared bit loses nothing while shrinking the
+// every-frame fill/copy/readback/scan ~32x. The staging buffer prefers HOST_CACHED
+// memory so the render-thread memcpy reads at cached (not uncached write-combined)
+// speed. The GLSL write site lives in vt_sampling.glsl::vtWriteFeedback and the CPU
+// mirror of the packing lives in VTFeedbackWords.hpp — keep them in lockstep.
 //
 // The state machine is fence-gated by the caller (clear + copy are recorded into
 // the frame's command buffer; readback happens after that frame's fence signals),
@@ -51,11 +59,15 @@ namespace render::vt
         void copyToStaging(vk::CommandBuffer cmd);
         // Called once the frame that recorded copyToStaging has completed (fence signalled).
         void markReady();
-        // Reads the staged bitmask (Ready -> Idle). Empty unless Ready.
+        // Reads the staged bitmask WORDS (Ready -> Idle); size == getWordCount(), one
+        // bit per page-table entry, 32 entries per uint. Empty unless Ready. Decode
+        // set bits with vt::vtForEachSetEntry (VTFeedbackWords.hpp).
         [[nodiscard]] std::vector<uint32_t> readback();
 
         [[nodiscard]] vk::Buffer getBuffer() const { return feedbackBuffer; }
         [[nodiscard]] uint32_t getTotalEntries() const { return totalEntries; }
+        // Number of packed uint words backing the bitmap (== vtFeedbackWordCount(totalEntries)).
+        [[nodiscard]] uint32_t getWordCount() const { return wordCount; }
         [[nodiscard]] VTFeedbackState getState() const { return state; }
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
@@ -71,6 +83,7 @@ namespace render::vt
         core::VulkanAllocation stagingAllocation;
 
         uint32_t totalEntries = 0;
+        uint32_t wordCount = 0;
         VTFeedbackState state = VTFeedbackState::Idle;
         bool initialized = false;
     };

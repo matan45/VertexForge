@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VTTypes.hpp"
+#include "VTDirtyChunks.hpp"
 #include "../../core/RenderManager.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
@@ -75,9 +76,15 @@ namespace render::vt
 
         std::vector<uint32_t> cpuTable;
         uint32_t totalEntries = 0;
-        uint32_t usedEntries = 0; // bump pointer / high-water mark for upload size
+        uint32_t usedEntries = 0; // bump pointer for allocateBlock (no longer sizes uploads)
+
+        // Per-chunk dirty tracking (VK-1480): uploadToGPU copies only the coalesced
+        // dirty ranges instead of the whole used range, bounding a churn frame to a
+        // few 16 KB chunks rather than the full ~5.6 MB RVT pyramid. dirtyRanges is a
+        // reused scratch buffer for takeRanges (avoids a per-upload allocation).
+        VTDirtyChunks dirtyChunks;
+        std::vector<VTDirtyChunks::Range> dirtyRanges;
 
         bool initialized = false;
-        bool dirty = true;
     };
 }

@@ -104,7 +104,9 @@ void vtWriteFeedback(VTImageInfo img, vec2 uv, uint mip)
     uint entryIdx = img.pageTableBase
                   + vtMipSubOffset(img.pagesX0, img.pagesY0, mip)
                   + pageY * pagesX + pageX;
-    atomicOr(VT_FEEDBACK[entryIdx], 1u);
+    // Bit-packed feedback: one bit per entry, 32 entries per uint word (VK-1480).
+    // Mirrors render::vt::VTFeedbackWords.hpp — CPU decode must use the same packing.
+    atomicOr(VT_FEEDBACK[entryIdx >> 5u], 1u << (entryIdx & 31u));
 }
 #endif // VT_FEEDBACK
 

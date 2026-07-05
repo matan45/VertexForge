@@ -388,6 +388,14 @@ namespace render
             graphProfiler->cleanup(device.getLogicalDevice());
             graphProfilerInitialized = false;
         }
+        // VK-1480: aux VT timestamp pool shares the profiler's lifetime. Guard on the
+        // init flag (mirrors graphProfiler above) so a run where the profiler was never
+        // enabled never touches the pool's (null) query handles.
+        if (vtTimestampPoolInitialized)
+        {
+            vtTimestampPool.cleanup(device.getLogicalDevice());
+            vtTimestampPoolInitialized = false;
+        }
         if (postProcessPipeline) postProcessPipeline->cleanup();
         meshPipeline->cleanUp();
         if (sharedCameraUBO) sharedCameraUBO->cleanup();

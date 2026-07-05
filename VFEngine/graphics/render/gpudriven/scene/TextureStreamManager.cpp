@@ -4,6 +4,7 @@
 #include "../../../core/BufferUtilities.hpp"
 #include "../../../core/ImageUtilities.hpp"
 #include "../../../core/DeferredDeletionQueue.hpp"
+#include "../../virtualtexture/svt/SVTTailMip.hpp" // VK-1480: svtTailStartMip
 #include "print/Log.hpp"
 #include <algorithm>
 #include <cmath>
@@ -123,7 +124,8 @@ namespace render::gpudriven
         stagingMapped = stagingAllocation.mappedPtr;
     }
 
-    uint32_t TextureStreamManager::registerTexture(const std::string& path, vk::Format format)
+    uint32_t TextureStreamManager::registerTexture(const std::string& path, vk::Format format,
+                                                   TextureResidency residency)
     {
         auto it = textures.find(path);
         if (it != textures.end())
@@ -139,29 +141,55 @@ namespace render::gpudriven
         const auto& header = handle->getHeader();
         format = resolveVulkanFormat(header.compression, format);
 
-        uint32_t tailStart = (header.mipLevels > config.tailMipCount)
-                                 ? header.mipLevels - config.tailMipCount
-                                 : 0;
-
-        std::vector<resource::MipLevelData> tailMips;
-        if (!handle->readMipRange(tailStart, header.mipLevels - 1, tailMips))
-        {
-            vfLogWarning("TextureStreamManager: Failed to read tail mips for '{}'", path);
-            return INVALID_TEXTURE_INDEX;
-        }
-
         StreamableTexture tex;
         tex.path = path;
         tex.format = format;
-        tex.width = header.width;
-        tex.height = header.height;
-        tex.totalMipLevels = header.mipLevels;
-        tex.lowestLoadedMip = tailStart;
 
-        if (!createStreamableImage(tex, header, tailMips))
+        if (residency == TextureResidency::TailOnly)
         {
-            vfLogWarning("TextureStreamManager: Failed to create streamable image for '{}'", path);
-            return INVALID_TEXTURE_INDEX;
+            // VK-1480: keep only the coarse tail (base <= 128px) as a tiny permanent SVT fallback.
+            const uint32_t startMip = svtTailStartMip(header.width, header.height, header.mipLevels);
+            std::vector<resource::MipLevelData> retained;
+            if (!handle->readMipRange(startMip, header.mipLevels - 1, retained) || retained.empty())
+            {
+                vfLogWarning("TextureStreamManager: Failed to read tail-only mips for '{}'", path);
+                return INVALID_TEXTURE_INDEX;
+            }
+            tex.tailOnly = true;
+            tex.width = retained.front().width;   // tail base dims (source mip startMip)
+            tex.height = retained.front().height;
+            tex.totalMipLevels = static_cast<uint32_t>(retained.size()); // levels in the created image
+            tex.lowestLoadedMip = 0;              // fully resident (all retained mips uploaded)
+
+            if (!createTailOnlyImage(tex, startMip, retained))
+            {
+                vfLogWarning("TextureStreamManager: Failed to create tail-only image for '{}'", path);
+                return INVALID_TEXTURE_INDEX;
+            }
+        }
+        else
+        {
+            uint32_t tailStart = (header.mipLevels > config.tailMipCount)
+                                     ? header.mipLevels - config.tailMipCount
+                                     : 0;
+
+            std::vector<resource::MipLevelData> tailMips;
+            if (!handle->readMipRange(tailStart, header.mipLevels - 1, tailMips))
+            {
+                vfLogWarning("TextureStreamManager: Failed to read tail mips for '{}'", path);
+                return INVALID_TEXTURE_INDEX;
+            }
+
+            tex.width = header.width;
+            tex.height = header.height;
+            tex.totalMipLevels = header.mipLevels;
+            tex.lowestLoadedMip = tailStart;
+
+            if (!createStreamableImage(tex, header, tailMips))
+            {
+                vfLogWarning("TextureStreamManager: Failed to create streamable image for '{}'", path);
+                return INVALID_TEXTURE_INDEX;
+            }
         }
 
         tex.bindlessIndex = bindlessTextures.registerTexture(path, tex.view, tex.currentSampler);
@@ -239,6 +267,82 @@ namespace render::gpudriven
         streamHandles.erase(path);
 
         vfLogDebug("TextureStreamManager: Unregistered texture '{}'", path);
+        return true;
+    }
+
+    bool TextureStreamManager::promoteToFull(const std::string& path)
+    {
+        auto it = textures.find(path);
+        if (it == textures.end())
+            return false;
+        if (!it->second.tailOnly)
+            return true; // already a full streamed image
+
+        auto handleIt = streamHandles.find(path);
+        if (handleIt == streamHandles.end())
+            return false;
+
+        const auto& header = handleIt->second->getHeader();
+        uint32_t tailStart = (header.mipLevels > config.tailMipCount)
+                                 ? header.mipLevels - config.tailMipCount
+                                 : 0;
+        std::vector<resource::MipLevelData> tailMips;
+        if (!handleIt->second->readMipRange(tailStart, header.mipLevels - 1, tailMips))
+        {
+            vfLogWarning("TextureStreamManager: promoteToFull failed to read tail mips for '{}'", path);
+            return false;
+        }
+
+        StreamableTexture& oldTex = it->second;
+
+        // Build a full-mip streamed image that reuses the SAME bindless slot (no new registration).
+        StreamableTexture full;
+        full.path = path;
+        full.format = oldTex.format;
+        full.width = header.width;
+        full.height = header.height;
+        full.totalMipLevels = header.mipLevels;
+        full.lowestLoadedMip = tailStart;
+        full.bindlessIndex = oldTex.bindlessIndex;
+        full.distanceToCamera = oldTex.distanceToCamera;
+        full.lastAccessFrame = oldTex.lastAccessFrame;
+        full.tailOnly = false;
+
+        if (!createStreamableImage(full, header, tailMips)) // adds full.gpuMemoryUsage to currentVRAMUsage
+        {
+            vfLogWarning("TextureStreamManager: promoteToFull failed to create image for '{}'", path);
+            return false;
+        }
+
+        // In-place descriptor swap on the same bindless slot; retire the old tail-only image deferred.
+        bindlessTextures.updateDescriptor(full.bindlessIndex, full.view, full.currentSampler);
+
+        currentVRAMUsage = (oldTex.gpuMemoryUsage <= currentVRAMUsage)
+                               ? currentVRAMUsage - oldTex.gpuMemoryUsage
+                               : 0;
+
+        if (deletionQueue)
+        {
+            if (oldTex.currentSampler) deletionQueue->queueSampler(oldTex.currentSampler);
+            if (oldTex.image)
+            {
+                std::vector<vk::ImageView> views;
+                if (oldTex.view) views.push_back(oldTex.view);
+                deletionQueue->queueImage(oldTex.image, oldTex.allocation, device.getMemoryManager(), views);
+            }
+        }
+        else
+        {
+            vk::Device vkDevice = device.getLogicalDevice();
+            vkDevice.waitIdle();
+            if (oldTex.currentSampler) vkDevice.destroySampler(oldTex.currentSampler);
+            if (oldTex.view) vkDevice.destroyImageView(oldTex.view);
+            if (oldTex.image) vkDevice.destroyImage(oldTex.image);
+            if (oldTex.allocation) device.getMemoryManager().free(oldTex.allocation);
+        }
+
+        it->second = std::move(full);
+        vfLogDebug("TextureStreamManager: promoted tail-only '{}' to full", path);
         return true;
     }
 

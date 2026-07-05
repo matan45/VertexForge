@@ -33,6 +33,7 @@ namespace render {
         UI,           // UI image/rect quads (UIRenderPipeline)
         UIText,       // UI text + world text (UITextPipeline, TextPipeline)
         Custom,       // custom / plugin pipelines
+        VirtualTexture, // VK-1480: terrain RVT bake tiles (TerrainRVTBaker)
         Count
     };
 
@@ -50,6 +51,7 @@ namespace render {
             case DrawCategory::UI:          return "UI (images)";
             case DrawCategory::UIText:      return "UI text";
             case DrawCategory::Custom:      return "Custom / plugin";
+            case DrawCategory::VirtualTexture: return "Virtual Texture";
             default:                        return "?";
         }
     }

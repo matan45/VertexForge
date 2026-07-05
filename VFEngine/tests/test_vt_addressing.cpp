@@ -146,6 +146,49 @@ TEST_CASE("VT addressing: invalid inputs and empty table")
     CHECK(s2.valid == false);
 }
 
+TEST_CASE("VT coarse-tail pin count (VK-1480)")
+{
+    // Full mip chain: the coarsest level is always a single page.
+    CHECK(vtCoarsePinPageCount(4, 4, vtComputeMipCount(4, 4)) == 1);
+    CHECK(vtCoarsePinPageCount(5, 3, vtComputeMipCount(5, 3)) == 1);
+    CHECK(vtCoarsePinPageCount(256, 256, vtComputeMipCount(256, 256)) == 1);
+
+    // Truncated source chain (SVT clamps mipCount to stored levels): the coarsest STORED level spans
+    // multiple pages, so a safe pin must cover them all.
+    CHECK(vtCoarsePinPageCount(4, 4, 2) == 2u * 2u); // mip1 of a 4x4-page image = 2x2 pages
+    CHECK(vtCoarsePinPageCount(8, 4, 1) == 8u * 4u); // only mip0 stored: the whole grid
+
+    // Degenerate: zero mips pins nothing.
+    CHECK(vtCoarsePinPageCount(4, 4, 0) == 0u);
+
+    // The full-chain pin set is always within the registration cap; a wide truncated one can exceed it.
+    CHECK(vtCoarsePinPageCount(64, 64, vtComputeMipCount(64, 64)) <= VT_MAX_PIN_PAGES);
+    CHECK(vtCoarsePinPageCount(8, 4, 1) > VT_MAX_PIN_PAGES); // 32 > 16 -> registration refuses
+}
+
+TEST_CASE("VT split pool budget (VK-1480)")
+{
+    // Even split; the halves always sum to the total.
+    auto a = vtSplitPoolBudget(256);
+    CHECK(a.firstMB == 128);
+    CHECK(a.secondMB == 128);
+    CHECK(a.firstMB + a.secondMB == 256);
+
+    // Odd total: remainder goes to the first pool.
+    auto b = vtSplitPoolBudget(255);
+    CHECK(b.firstMB == 128);
+    CHECK(b.secondMB == 127);
+    CHECK(b.firstMB + b.secondMB == 255);
+
+    auto c = vtSplitPoolBudget(1);
+    CHECK(c.firstMB == 1);
+    CHECK(c.secondMB == 0);
+
+    auto z = vtSplitPoolBudget(0);
+    CHECK(z.firstMB == 0);
+    CHECK(z.secondMB == 0);
+}
+
 TEST_CASE("VT addressing: desiredMipFromDerivatives")
 {
     // No movement -> mip 0.

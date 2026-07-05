@@ -155,6 +155,52 @@ namespace render::vt
         return dim;
     }
 
+    // True when vtPoolDimForBudget(...) had to clamp the edge to VT_MAX_POOL_DIM —
+    // i.e. the requested budget exceeds what the largest hardware-safe atlas holds,
+    // so part of the budget silently buys nothing. Callers should warn loudly.
+    inline bool vtPoolBudgetClamped(uint32_t budgetMB, uint32_t planes, uint32_t bytesPerTexel)
+    {
+        if (planes == 0u) planes = 1u;
+        if (bytesPerTexel == 0u) bytesPerTexel = 1u;
+        const uint64_t budgetBytes = static_cast<uint64_t>(budgetMB) << 20;
+        const uint64_t maxTexels = budgetBytes / (static_cast<uint64_t>(planes) * bytesPerTexel);
+        uint32_t dim = static_cast<uint32_t>(std::floor(std::sqrt(static_cast<double>(maxTexels))));
+        dim = (dim / VT_PAGE_SIZE) * VT_PAGE_SIZE;
+        return dim > VT_MAX_POOL_DIM;
+    }
+
+    // Split one budget across two pools (VK-1480: SVT sRGB + Unorm atlases —
+    // firstMB feeds the sRGB pool, secondMB the Unorm pool). 50/50, remainder to
+    // the first so the halves always sum to totalMB.
+    struct VTPoolBudgetSplit
+    {
+        uint32_t firstMB = 0;
+        uint32_t secondMB = 0;
+    };
+
+    inline VTPoolBudgetSplit vtSplitPoolBudget(uint32_t totalMB)
+    {
+        const uint32_t half = totalMB / 2u;
+        return {totalMB - half, half};
+    }
+
+    // --- Coarse-tail pinning (VK-1480) ---------------------------------------
+    // Pages spanning the COARSEST mip level. With a full mip chain this is exactly
+    // one page, but source .vfImage chains may be truncated (SVT clamps mipCount to
+    // the stored levels), leaving a coarsest VT mip that spans multiple pages — a
+    // safe always-resident pin must cover them all, or vtLookup's fine->coarse walk
+    // can still miss and fall through to the whole-image fallback.
+    inline uint32_t vtCoarsePinPageCount(uint32_t pagesX0, uint32_t pagesY0, uint32_t mipCount)
+    {
+        if (mipCount == 0u)
+            return 0u;
+        return vtPagesAtMip(pagesX0, mipCount - 1u) * vtPagesAtMip(pagesY0, mipCount - 1u);
+    }
+
+    // Refuse to pin (and therefore refuse SVT registration) images whose coarsest
+    // level needs more tiles than this — they would monopolize the atlas.
+    inline constexpr uint32_t VT_MAX_PIN_PAGES = 16;
+
     // --- Virtual image descriptor (CPU-side) --------------------------------
     struct VTImageDesc
     {

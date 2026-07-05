@@ -89,6 +89,7 @@ namespace render::gpudriven
         vtCache.rvtTexelsPerMeter = settings.rvtTexelsPerMeter;
         vtCache.pagesPerFrame = settings.pagesPerFrame;
         vtCache.evictionAgeFrames = settings.evictionAgeFrames;
+        vtCache.svtPageLinearMaps = settings.svtPageLinearMaps; // VK-1480: 2nd (Unorm) SVT pool (restart)
 
         // Runtime RVT toggle: rebuild the terrain pipeline so set 5 + RVT_ENABLED match the new
         // state, and create/tear down the RVT subsystems. The manager itself comes up on the next

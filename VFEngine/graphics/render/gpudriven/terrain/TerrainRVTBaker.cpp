@@ -2,6 +2,7 @@
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
 #include "print/Log.hpp"
+#include "stats/FrameDrawStats.hpp"
 
 #include <array>
 
@@ -201,6 +202,7 @@ namespace render::gpudriven
                           vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                           0, sizeof(TilePush), &push);
         cmd.draw(6, 1, 0, 0);
+        render::FrameDrawStats::count(render::DrawCategory::VirtualTexture);
     }
 
     void TerrainRVTBaker::end(vk::CommandBuffer cmd) const

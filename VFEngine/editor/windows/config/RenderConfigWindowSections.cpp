@@ -353,6 +353,10 @@ namespace windows
                     vt.svtPoolBudgetMB = static_cast<uint32_t>(svtMB < 64 ? 64 : svtMB);
                     markDirty();
                 }
+                // VK-1480: page linear (Unorm) maps through a second BC7-Unorm atlas. Off = only
+                // sRGB albedo/emission is paged; normal/ORM/height stay plain bindless (restart).
+                if (ImGui::Checkbox("Page Linear Maps (normal/ORM via Unorm atlas)", &vt.svtPageLinearMaps))
+                    markDirty();
                 if (ImGui::DragFloat("RVT Texels / Meter", &vt.rvtTexelsPerMeter, 0.5f, 1.0f, 64.0f, "%.1f"))
                     markDirty();
 

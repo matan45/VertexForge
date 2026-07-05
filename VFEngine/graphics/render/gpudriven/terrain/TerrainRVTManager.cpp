@@ -1,8 +1,10 @@
 #include "TerrainRVTManager.hpp"
+#include "../../virtualtexture/VTFeedbackWords.hpp"
 #include "../../../core/Device.hpp"
 #include "print/Log.hpp"
 
 #include <algorithm>
+#include <chrono>
 
 namespace render::gpudriven
 {
@@ -143,33 +145,46 @@ namespace render::gpudriven
     void TerrainRVTManager::beginFrameReadback()
     {
         requestedPages.clear();
+        cpuStats.readbackUs = 0;
+        cpuStats.decodeUs = 0;
         if (!feedback)
             return;
 
-        const std::vector<uint32_t> bits = feedback->readback();
-        if (!bits.empty())
+        const auto readStart = std::chrono::high_resolution_clock::now();
+        const std::vector<uint32_t> words = feedback->readback(); // bit-packed: one bit per entry
+        const auto readEnd = std::chrono::high_resolution_clock::now();
+        cpuStats.readbackUs =
+            static_cast<uint64_t>(std::chrono::duration<double, std::micro>(readEnd - readStart).count());
+
+        const auto decodeStart = std::chrono::high_resolution_clock::now();
+        if (!words.empty())
         {
-            for (uint32_t i = 0; i < bits.size(); ++i)
-            {
-                if (bits[i] == 0u)
-                    continue;
-                uint32_t mip = 0, x = 0, y = 0;
-                if (vtDecodeEntry(image.pagesX0, image.pagesY0, image.mipCount,
-                                  i - image.pageTableBase, mip, x, y))
-                    requestedPages.push_back(VTPageKey{imageId, mip, x, y});
-            }
+            vtForEachSetEntry(words.data(), static_cast<uint32_t>(words.size()), feedback->getTotalEntries(),
+                              [&](uint32_t entry)
+                              {
+                                  uint32_t mip = 0, x = 0, y = 0;
+                                  if (vtDecodeEntry(image.pagesX0, image.pagesY0, image.mipCount,
+                                                    entry - image.pageTableBase, mip, x, y))
+                                      requestedPages.push_back(VTPageKey{imageId, mip, x, y});
+                              });
         }
 
         // Finer mips first: under the per-frame budget the highest-detail pages win.
         std::sort(requestedPages.begin(), requestedPages.end(),
                   [](const VTPageKey& a, const VTPageKey& b) { return a.mip < b.mip; });
+        const auto decodeEnd = std::chrono::high_resolution_clock::now();
+        cpuStats.decodeUs =
+            static_cast<uint64_t>(std::chrono::duration<double, std::micro>(decodeEnd - decodeStart).count());
     }
 
     void TerrainRVTManager::updateResidency(uint32_t frame)
     {
         scheduledBakes.clear();
+        cpuStats.residencyUs = 0;
         if (!initialized)
             return;
+
+        const auto resStart = std::chrono::high_resolution_clock::now();
 
         ensureCoarseResident(frame);
 
@@ -196,6 +211,10 @@ namespace render::gpudriven
             residency.commitAllocation(a, tile, frame, /*pinned*/ false);
             schedule(a, tile);
         }
+
+        const auto resEnd = std::chrono::high_resolution_clock::now();
+        cpuStats.residencyUs =
+            static_cast<uint64_t>(std::chrono::duration<double, std::micro>(resEnd - resStart).count());
     }
 
     void TerrainRVTManager::recordBakes(vk::CommandBuffer cmd, const BakeFn& bake)
