@@ -18,6 +18,8 @@ namespace core
 
 namespace render::vfx
 {
+    class VFXBindlessTextures;
+
     class VFXDistortionPipeline
     {
     private:
@@ -45,13 +47,20 @@ namespace render::vfx
         core::VulkanAllocation cameraUBOAllocation;
         void* cameraUBOMapped = nullptr;
 
+        // VK-1481 Phase 2 (draw-call merge): per-emitter render-data SSBO (host-visible + mapped),
+        // holding the per-emitter distortionStrength/textureIndex a merged multi-draw can't push,
+        // indexed by emitter slot. Written each frame in recordCommandsInline; read at set 0 binding 8.
+        vk::Buffer renderDataBuffer;
+        core::VulkanAllocation renderDataBufferAllocation;
+        void* renderDataMapped = nullptr;
+
         // Cached particle buffer info
         vk::Buffer cachedParticleBuffer;
         vk::DeviceSize cachedParticleBufferSize = 0;
         vk::Buffer cachedConfigBuffer;
         vk::DeviceSize cachedConfigBufferSize = 0;
 
-        // Default texture (white 1x1)
+        // Default texture (neutral-normal 1x1) — still the binding-4 scene-depth fallback.
         vk::Image defaultTextureImage;
         core::VulkanAllocation defaultTextureAllocation;
         vk::ImageView defaultTextureImageView;
@@ -60,35 +69,23 @@ namespace render::vfx
         vk::ImageView sceneDepthImageView;
         vk::Sampler depthSampler;
 
-        // Per-emitter distortion texture
-        static constexpr uint32_t MAX_TEXTURE_SLOTS = 64;
-
+        // Per-emitter distortion texture and rendering config
         struct DistortionEmitterConfig
         {
-            std::string texturePath;
+            std::string distortionTexturePath;
             float distortionStrength = 0.1f;
-        };
-
-        struct TextureEntry
-        {
-            std::unique_ptr<core::Texture> texture;
-            vk::DescriptorSet descriptorSet;
-            uint32_t refCount = 0;
+            uint32_t textureIndex = 0; // VK-1481: bindless slot (0 = unset; neutral-normal used at record time)
         };
 
         std::unordered_map<uint32_t, DistortionEmitterConfig> emitterConfigs;
-        std::unordered_map<std::string, TextureEntry> textureEntries;
-        vk::DescriptorSet defaultDescriptorSet;
+        vk::DescriptorSet defaultDescriptorSet; // VK-1481: the single set-0 (camera/particle/config/depth)
 
+        // VK-1481: shared VFX bindless texture table (owned by VFXSceneRenderer); bound at set 1
+        // (distortion has no lighting sets, so the local set 0 is the only one before it).
+        VFXBindlessTextures* bindless = nullptr;
+
+        // Deferred cleanup queue (kept for wiring symmetry; texture lifetime now lives in the bindless table)
         core::DeferredDeletionQueue* deletionQueue = nullptr;
-
-        struct PendingDescriptorSet
-        {
-            vk::DescriptorSet set;
-            uint32_t frameRetired;
-        };
-        mutable uint32_t frameCounter = 0;
-        mutable std::vector<PendingDescriptorSet> pendingDescriptorSets;
 
     public:
         explicit VFXDistortionPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -116,6 +113,10 @@ namespace render::vfx
 
         void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }
 
+        // VK-1481: inject the shared bindless texture table. Must be set BEFORE init() (createPipeline
+        // appends its descriptor set layout at set 1).
+        void setBindlessTextures(VFXBindlessTextures* b) { bindless = b; }
+
         void recordCommandsInline(
             vk::CommandBuffer cmd,
             vk::Buffer drawCommandBuffer,
@@ -133,7 +134,6 @@ namespace render::vfx
         void createSampler();
         void createDepthSampler();
         void writeDescriptors() const;
-        void writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const;
-        vk::DescriptorSet allocateDescriptorSetFromPool();
+        void writeDescriptorSet(vk::DescriptorSet dstSet) const;
     };
 }

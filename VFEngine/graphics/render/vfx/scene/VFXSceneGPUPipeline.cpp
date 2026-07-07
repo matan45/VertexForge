@@ -141,7 +141,9 @@ namespace render::vfx
         }
 
         cameraUBOMapped = nullptr;
+        renderDataMapped = nullptr;
         core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, renderDataBuffer, renderDataBufferAllocation, device.getMemoryManager());
         core::BufferUtilities::destroyBuffer(vkDevice, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
         core::BufferUtilities::destroyBuffer(vkDevice, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
 
@@ -170,7 +172,6 @@ namespace render::vfx
         }
         if (defaultTextureAllocation) { device.getMemoryManager().free(defaultTextureAllocation); defaultTextureAllocation = {}; }
 
-        textureEntries.clear();
         emitterConfigs.clear();
 
         if (gpuShader)

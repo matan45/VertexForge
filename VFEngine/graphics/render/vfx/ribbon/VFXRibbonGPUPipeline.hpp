@@ -19,6 +19,8 @@ namespace core
 
 namespace render::vfx
 {
+    class VFXBindlessTextures;
+
     class VFXRibbonGPUPipeline
     {
     private:
@@ -46,6 +48,13 @@ namespace render::vfx
         core::VulkanAllocation cameraUBOAllocation;
         void* cameraUBOMapped = nullptr;
 
+        // VK-1481 Phase 2 (draw-call merge): per-emitter render-data SSBO (host-visible + mapped),
+        // holding the data a merged multi-draw can't push (textureIndex/alphaClip/blendMode/glow),
+        // indexed by emitter slot. Written each frame in recordCommandsInline; read at set 0 binding 8.
+        vk::Buffer renderDataBuffer;
+        core::VulkanAllocation renderDataBufferAllocation;
+        void* renderDataMapped = nullptr;
+
         vk::Buffer cachedParticleBuffer;
         vk::DeviceSize cachedParticleBufferSize = 0;
 
@@ -71,37 +80,24 @@ namespace render::vfx
         vk::ImageView sceneDepthImageView;
         vk::Sampler depthSampler;
 
-        static constexpr uint32_t MAX_TEXTURE_SLOTS = 64;
-
         struct EmitterRenderConfig
         {
             std::string texturePath;
             float alphaClipThreshold = 0.1f;
             uint32_t blendMode = 0;
             glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
-            int32_t sortOrder = 0; // VK-1471: per-emitter draw-order key
-        };
-
-        struct TextureEntry
-        {
-            std::unique_ptr<core::Texture> texture;
-            vk::DescriptorSet descriptorSet;
-            uint32_t refCount = 0;
+            int32_t sortOrder = 0;     // VK-1471: per-emitter draw-order key
+            uint32_t textureIndex = 0; // VK-1481: bindless slot for this emitter (0 = white default)
         };
 
         std::unordered_map<uint32_t, EmitterRenderConfig> emitterConfigs;
-        std::unordered_map<std::string, TextureEntry> textureEntries;
-        vk::DescriptorSet defaultDescriptorSet;
+        vk::DescriptorSet defaultDescriptorSet; // VK-1481: the single set-0 (camera/particle/config/depth/ring/head/lut)
 
+        // VK-1481: shared VFX bindless texture table (owned by the VFX renderer); bound at set 4.
+        VFXBindlessTextures* bindless = nullptr;
+
+        // Deferred cleanup queue (kept for wiring symmetry; texture lifetime now lives in the bindless table)
         core::DeferredDeletionQueue* deletionQueue = nullptr;
-
-        struct PendingDescriptorSet
-        {
-            vk::DescriptorSet set;
-            uint32_t frameRetired;
-        };
-        mutable uint32_t frameCounter = 0;
-        mutable std::vector<PendingDescriptorSet> pendingDescriptorSets;
 
         // Lighting descriptor sets (shared from main renderer)
         vk::DescriptorSetLayout lightBufferLayout;
@@ -143,6 +139,10 @@ namespace render::vfx
 
         void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }
 
+        // VK-1481: inject the shared bindless texture table. Must be set BEFORE init() (createPipeline
+        // appends its descriptor set layout at set 4).
+        void setBindlessTextures(VFXBindlessTextures* b) { bindless = b; }
+
         void setLightingLayouts(vk::DescriptorSetLayout lightBuffer,
                                 vk::DescriptorSetLayout clusterGrid,
                                 vk::DescriptorSetLayout clusterLightGrid);
@@ -166,7 +166,6 @@ namespace render::vfx
         void createSampler();
         void createDepthSampler();
         void writeDescriptors() const;
-        void writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const;
-        vk::DescriptorSet allocateDescriptorSetFromPool();
+        void writeDescriptorSet(vk::DescriptorSet dstSet) const;
     };
 }

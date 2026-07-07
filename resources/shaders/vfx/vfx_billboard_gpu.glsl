@@ -12,6 +12,7 @@ layout(location = 4) out float fragGlowIntensity;
 layout(location = 5) out vec3 fragWorldPos;
 layout(location = 6) out vec2 fragTexCoordNext;
 layout(location = 7) out float fragBlend;
+layout(location = 8) flat out uint fragEmitterSlot; // VK-1481 Phase 2: emitter slot for the FS (merged draw)
 
 #include "vfx_gpu_types.glsl"
 
@@ -42,10 +43,13 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
 };
 
 layout(push_constant) uniform PushConstants {
-    uint emitterIndex;
+    uint runBaseSlot; // VK-1481 Phase 2: emitterSlot = runBaseSlot + gl_DrawID
 } pc;
 
 void main() {
+    uint emitterSlot = pc.runBaseSlot + uint(gl_DrawID);
+    fragEmitterSlot = emitterSlot;
+
     uint particleIdx = gl_InstanceIndex;
 
     GPUParticle p = particles[particleIdx];
@@ -63,7 +67,7 @@ void main() {
         return;
     }
 
-    GPUEmitterConfig config = configs[pc.emitterIndex];
+    GPUEmitterConfig config = configs[emitterSlot];
 
     float cosR = cos(p.rotation);
     float sinR = sin(p.rotation);
@@ -169,6 +173,7 @@ void main() {
 
 #type FRAGMENT
 #version 460 core
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColor;
@@ -178,6 +183,7 @@ layout(location = 4) in float fragGlowIntensity;
 layout(location = 5) in vec3 fragWorldPos;
 layout(location = 6) in vec2 fragTexCoordNext;
 layout(location = 7) in float fragBlend;
+layout(location = 8) flat in uint fragEmitterSlot; // VK-1481 Phase 2: emitter slot (merged draw)
 
 layout(location = 0) out vec4 outColor;
 
@@ -192,12 +198,18 @@ layout(binding = 0) uniform CameraUBO {
     float _pad2;
 } camera;
 
-layout(binding = 1) uniform sampler2D particleTexture;
+// VK-1481: shared VFX bindless texture table (bound once per pass). Per-emitter slot in renderData[].textureIndex.
+layout(set = 4, binding = 0) uniform sampler2D bindlessTextures[];
 
 #include "vfx_gpu_types.glsl"
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
     GPUEmitterConfig configs[];
+};
+
+// VK-1481 Phase 2: per-emitter render data (textureIndex / alphaClip / blendMode / glow) for the merged draw.
+layout(std430, set = 0, binding = 8) readonly buffer EmitterRenderDataBuffer {
+    VFXEmitterRenderData renderData[];
 };
 
 layout(binding = 4) uniform sampler2D sceneDepthTexture;
@@ -238,25 +250,20 @@ layout(std430, set = 3, binding = 1) readonly buffer ClusterLightIndexListBuffer
 // VFX lighting evaluation (must come after buffer declarations above)
 #include "vfx_lighting.glsl"
 
-layout(push_constant) uniform PushConstants {
-    uint emitterIndex;
-    float alphaClipThreshold;
-    uint blendMode;
-    float glowColorR;
-    float glowColorG;
-    float glowColorB;
-} pc;
-
 void main() {
-    vec4 texColor = texture(particleTexture, fragTexCoord);
+    // VK-1481 Phase 2: per-emitter render data comes from the SSBO (indexed by the flat emitter
+    // slot) instead of a push constant, so the draw can be merged into one multi-draw.
+    VFXEmitterRenderData rd = renderData[fragEmitterSlot];
+
+    vec4 texColor = texture(bindlessTextures[nonuniformEXT(rd.textureIndex)], fragTexCoord);
     if (fragBlend > 0.0) {
-        texColor = mix(texColor, texture(particleTexture, fragTexCoordNext), fragBlend);
+        texColor = mix(texColor, texture(bindlessTextures[nonuniformEXT(rd.textureIndex)], fragTexCoordNext), fragBlend);
     }
 
     vec4 finalColor = texColor * fragColor;
 
     // Soft particles: fade near scene geometry
-    GPUEmitterConfig config = configs[pc.emitterIndex];
+    GPUEmitterConfig config = configs[fragEmitterSlot];
     if (config.softParticleDistance > 0.0) {
         vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(sceneDepthTexture, 0));
         float rawDepth = texture(sceneDepthTexture, screenUV).r;
@@ -271,7 +278,7 @@ void main() {
     }
 
     // Scene lighting evaluation
-    if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
+    if (config.lightingInfluence > 0.0 && rd.blendMode != 1u) {
         vec3 normal;
         if (config.normalMode == VFX_NORMAL_VIEW_ALIGNED) {
             normal = -normalize(vec3(camera.view[0][2], camera.view[1][2], camera.view[2][2]));
@@ -288,21 +295,21 @@ void main() {
     }
 
     // Glow: additive emissive color (applied after lighting)
-    vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
+    vec3 glowColor = vec3(rd.glowColorR, rd.glowColorG, rd.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
     finalColor.rgb *= config.emissiveIntensity;
 
-    if (finalColor.a < pc.alphaClipThreshold) {
+    if (finalColor.a < rd.alphaClipThreshold) {
         discard;
     }
 
-    if (pc.blendMode == 1u) {
+    if (rd.blendMode == 1u) {
         // Additive: premultiplied rgb, zero alpha -> src.rgb + dst
         outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
-    } else if (pc.blendMode == 2u) {
+    } else if (rd.blendMode == 2u) {
         // Premultiplied: straight color + real alpha (fire->smoke gradient)
         outColor = finalColor;
-    } else if (pc.blendMode == 3u) {
+    } else if (rd.blendMode == 3u) {
         // Multiply (dst*src): transparent = white so soft/alpha fade to no-op
         outColor = vec4(mix(vec3(1.0), finalColor.rgb, finalColor.a), finalColor.a);
     } else {

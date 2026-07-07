@@ -7,6 +7,7 @@ layout(location = 1) in vec2 inTexCoord;
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragViewDepth;
+layout(location = 3) flat out uint fragEmitterSlot; // VK-1481 Phase 2: emitter slot for the FS (merged draw)
 
 #include "vfx_gpu_types.glsl"
 
@@ -34,11 +35,13 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
 };
 
 layout(push_constant) uniform PushConstants {
-    uint emitterIndex;
-    float distortionStrength;
+    uint runBaseSlot; // VK-1481 Phase 2: emitterSlot = runBaseSlot + gl_DrawID
 } pc;
 
 void main() {
+    uint emitterSlot = pc.runBaseSlot + uint(gl_DrawID);
+    fragEmitterSlot = emitterSlot;
+
     uint particleIdx = gl_InstanceIndex;
     GPUParticle p = particles[particleIdx];
 
@@ -50,7 +53,7 @@ void main() {
         return;
     }
 
-    GPUEmitterConfig config = configs[pc.emitterIndex];
+    GPUEmitterConfig config = configs[emitterSlot];
 
     float cosR = cos(p.rotation);
     float sinR = sin(p.rotation);
@@ -122,10 +125,12 @@ void main() {
 
 #type FRAGMENT
 #version 460 core
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColor;
 layout(location = 2) in float fragViewDepth;
+layout(location = 3) flat in uint fragEmitterSlot; // VK-1481 Phase 2: emitter slot (merged draw)
 
 layout(location = 0) out vec2 outDistortion;
 
@@ -140,7 +145,8 @@ layout(binding = 0) uniform CameraUBO {
     float _pad2;
 } camera;
 
-layout(binding = 1) uniform sampler2D distortionTexture;
+// VK-1481: shared VFX bindless texture table (no lighting sets on distortion, so set = 1).
+layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 
 #include "vfx_gpu_types.glsl"
 
@@ -148,24 +154,28 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
     GPUEmitterConfig configs[];
 };
 
+// VK-1481 Phase 2: per-emitter distortion render data (textureIndex / distortionStrength) for the merged draw.
+layout(std430, set = 0, binding = 8) readonly buffer DistortionRenderDataBuffer {
+    VFXDistortionRenderData renderData[];
+};
+
 layout(binding = 4) uniform sampler2D sceneDepthTexture;
 
-layout(push_constant) uniform PushConstants {
-    uint emitterIndex;
-    float distortionStrength;
-} pc;
-
 void main() {
-    vec4 texColor = texture(distortionTexture, fragTexCoord);
+    // VK-1481 Phase 2: per-emitter render data comes from the SSBO (indexed by the flat emitter
+    // slot) instead of a push constant, so the draw can be merged into one multi-draw.
+    VFXDistortionRenderData rd = renderData[fragEmitterSlot];
+
+    vec4 texColor = texture(bindlessTextures[nonuniformEXT(rd.textureIndex)], fragTexCoord);
 
     // Interpret RG channels as distortion direction (normal map style)
     vec2 distortionDir = texColor.rg * 2.0 - 1.0;
     float mask = texColor.a * fragColor.a;
 
-    float strength = pc.distortionStrength * mask;
+    float strength = rd.distortionStrength * mask;
 
     // Depth-aware fade (soft particles)
-    GPUEmitterConfig config = configs[pc.emitterIndex];
+    GPUEmitterConfig config = configs[fragEmitterSlot];
     if (config.softParticleDistance > 0.0) {
         vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(sceneDepthTexture, 0));
         float rawDepth = texture(sceneDepthTexture, screenUV).r;

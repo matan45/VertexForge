@@ -381,6 +381,17 @@ namespace core
         {
             deviceFeatures.fillModeNonSolid = VK_TRUE;
         }
+        // VK-1481 Phase 2: multi-draw indirect for the merged VFX pass (drawCount > 1), and
+        // firstInstance in indirect draws (the VFX compute writes a non-zero firstInstance =
+        // particleOffset per emitter — this makes that spec-valid and enables the merge).
+        if (supportedFeatures.multiDrawIndirect)
+        {
+            deviceFeatures.multiDrawIndirect = VK_TRUE;
+        }
+        if (supportedFeatures.drawIndirectFirstInstance)
+        {
+            deviceFeatures.drawIndirectFirstInstance = VK_TRUE;
+        }
 
         // required for gl_BaseInstance in shaders
         vk::PhysicalDeviceVulkan11Features vulkan11Features{};
