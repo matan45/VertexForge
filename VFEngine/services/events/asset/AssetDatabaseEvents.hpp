@@ -30,6 +30,16 @@ namespace events::assetdb {
         std::string_view getName() const override { return "RebuildDatabase"; }
     };
 
+    struct RegenerateMetadataResult {
+        uint32_t assetsScanned = 0;
+        uint32_t metaFilesCreated = 0;
+        std::vector<std::string> failures;
+    };
+
+    struct RegenerateMissingMetadataCommand : ICommand<RegenerateMetadataResult> {
+        std::string_view getName() const override { return "RegenerateMissingMetadata"; }
+    };
+
     // ============================================
     // QUERIES
     // ============================================

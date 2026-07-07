@@ -104,6 +104,12 @@ namespace services
                 return rebuildDatabase();
             });
 
+        dispatcher.registerCommandHandler<events::assetdb::RegenerateMissingMetadataCommand>(
+            [this](const events::assetdb::RegenerateMissingMetadataCommand&)
+            {
+                return regenerateMissingMetadata();
+            });
+
         // Queries
         dispatcher.registerQueryHandler<events::assetdb::GetAssetPathQuery>(
             [](const events::assetdb::GetAssetPathQuery& q)
@@ -467,6 +473,44 @@ namespace services
         events::EventDispatcher::instance().publish(notification);
 
         return true;
+    }
+
+    ::events::assetdb::RegenerateMetadataResult AssetDatabaseServiceImpl::regenerateMissingMetadata()
+    {
+        ::events::assetdb::RegenerateMetadataResult result;
+        const std::string projRoot = getProjectRoot();
+        if (projRoot.empty())
+        {
+            result.failures.push_back("No project is loaded");
+            vfLogError("RegenerateMissingMetadata: no project root available");
+            return result;
+        }
+
+        const auto migrationResult = asset::AssetDatabaseMigrator::migrateProject(projRoot);
+        result.assetsScanned = migrationResult.assetsScanned;
+        result.metaFilesCreated = migrationResult.metaFilesCreated;
+        result.failures = migrationResult.errors;
+
+        for (const auto& failure : result.failures)
+        {
+            vfLogError("RegenerateMissingMetadata: {}", failure);
+        }
+
+        auto& db = asset::AssetDatabase::instance();
+        asset::DependencyScanner::scanAll(projRoot);
+        if (!db.saveIndex(projRoot))
+        {
+            result.failures.push_back("Failed to save asset database index");
+            vfLogError("RegenerateMissingMetadata: failed to save asset database index");
+        }
+
+        events::assetdb::AssetDatabaseRebuiltNotification notification;
+        notification.assetCount = static_cast<uint32_t>(db.getAssetCount());
+        events::EventDispatcher::instance().publish(notification);
+
+        vfLogInfo("RegenerateMissingMetadata: scanned {}, regenerated {}, failures {}",
+                  result.assetsScanned, result.metaFilesCreated, result.failures.size());
+        return result;
     }
 
     std::string AssetDatabaseServiceImpl::getProjectRoot() const
