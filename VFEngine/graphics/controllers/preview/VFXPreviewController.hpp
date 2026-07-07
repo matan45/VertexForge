@@ -10,9 +10,11 @@
 #include <vfx/VFXOrientationMode.hpp>
 #include <vfx/VFXComboTimeline.hpp>
 #include <vfx/VFXSequenceTypes.hpp>
+#include <vfx/VFXBundleSignature.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -155,16 +157,18 @@ namespace controllers
         // VK-1451 — composited sequence preview. When sequenceMode is on, render()
         // composites every live step bundle into the one offscreen image instead of the
         // single currentParams emitter above. Each bundle owns its own seeded CPU particle
-        // system and its own pipeline (one texture/descriptor set per step).
+        // system and its own pipeline (one texture/descriptor set per step). Mesh steps share
+        // the controller's persistent previewMeshCache (VK-1483) so the 64 MB staging ring +
+        // mesh load happen once per preview lifetime, not per seek.
         struct StepBundle
         {
             int stepIndex = -1;
             int mode = 0; // render::vfx::VFXRenderMode (0=Billboard,3=MeshParticle,4=Ribbon)
             glm::mat4 localTransform{1.0f};
+            vfx::VFXBundleSignature signature; // VK-1483 — reuse key when parked across seek/loop
             std::unique_ptr<render::vfx::VFXParticleSystem> system;
             std::unique_ptr<render::vfx::VFXBillboardPipeline> billboard;
             std::unique_ptr<render::vfx::VFXMeshPreviewPipeline> mesh;
-            std::unique_ptr<render::mesh::MeshGPUCache> meshCache;
             std::unique_ptr<render::vfx::VFXRibbonPreviewPipeline> ribbon;
         };
 
@@ -177,6 +181,10 @@ namespace controllers
         vfx::VFXComboTimeline timeline;
         std::vector<VFXSequencePreviewStep> sequenceSteps;
         std::vector<StepBundle> bundles;
+        // VK-1483 — dormant step bundles kept alive across seek/loop so their pipelines + shared
+        // mesh cache are reused (not rebuilt) when the same step re-spawns. Persistent: emptied
+        // only by clearBundles() (setSequence / cleanUp), never by a seek.
+        std::unordered_map<int, StepBundle> parkedBundles;
         glm::mat4 lastView{1.0f};
         glm::mat4 lastProjection{1.0f};
         glm::vec3 lastCameraPos{0.0f};
@@ -218,9 +226,13 @@ namespace controllers
 
         // Sequence-preview internals.
         void configureSystemFromParams(render::vfx::VFXParticleSystem& system, const VFXPreviewParams& params) const;
+        void buildStepSystem(StepBundle& bundle, int stepIndex, const VFXSequencePreviewStep& step) const; // VK-1483
         void createBundle(int stepIndex);
+        bool tryReuseBundle(int stepIndex, const VFXSequencePreviewStep& step); // VK-1483 — reuse a parked bundle
+        void parkBundles();                                // VK-1483 — move live bundles to parkedBundles (no GPU teardown)
+        static vfx::VFXBundleSignature signatureFor(const VFXPreviewParams& params); // VK-1483
         void stepSequence(float dt);                       // advance timeline + sim all bundles by dt
-        void clearBundles();
+        void clearBundles();                               // full teardown of live + parked bundles
         void* renderSequence(uint32_t imageIndex, vk::CommandBuffer commandBuffer);
         void recordBundle(const StepBundle& bundle, vk::CommandBuffer commandBuffer) const;
     };
