@@ -27,6 +27,10 @@ namespace services
         ::events::assetdb::RegenerateMetadataResult regenerateMissingMetadata();
         std::string getProjectRoot() const;
 
+        // Shared post-rebuild tail: rescan dependencies, persist the index, and broadcast the
+        // rebuilt notification. Returns whether saveIndex succeeded.
+        bool finalizeDatabaseRebuild(const std::string& projRoot);
+
         std::vector<::events::SubscriptionToken> subscriptions;
     };
 }

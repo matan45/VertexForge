@@ -1,6 +1,7 @@
 #include "VFXSceneGPUPipeline.hpp"
 #include "../quad/VFXQuadData.hpp"
 #include "../../../core/Device.hpp"
+#include "../../../core/GraphicsConstants.hpp"
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
@@ -58,9 +59,11 @@ namespace render::vfx
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-        // VK-1481 Phase 2, Binding 8: per-emitter render-data SSBO (merged draw reads by emitterSlot)
+        // VK-1481 Phase 2, Binding 8: per-emitter render-data SSBO (merged draw reads by emitterSlot).
+        // DYNAMIC storage buffer: the buffer holds MAX_FRAMES_IN_FLIGHT copies and recordCommandsInline
+        // binds the current frame's copy via a per-frame dynamic offset (avoids CPU/GPU write-after-read).
         bindings[4].binding = 8;
-        bindings[4].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[4].descriptorType = vk::DescriptorType::eStorageBufferDynamic;
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
@@ -69,18 +72,25 @@ namespace render::vfx
         layoutInfo.pBindings = bindings.data();
 
         descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
+
+        // VK-1481: empty 0-binding layout used to pad missing lighting sets so bindless is always set 4.
+        vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
+        emptySetLayout = device.getLogicalDevice().createDescriptorSetLayout(emptyLayoutInfo);
     }
 
     void VFXSceneGPUPipeline::createDescriptorPool()
     {
         // VK-1481: a single set-0 (no per-texture cloning). Depth is the only combined-image-sampler.
-        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+        // Render-data is a DYNAMIC storage buffer (per-frame double-buffering via dynamic offset).
+        std::array<vk::DescriptorPoolSize, 4> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[0].descriptorCount = 1;                      // camera UBO
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[1].descriptorCount = 1;                      // scene depth
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = 3;                      // particle + config + render-data SSBO
+        poolSizes[2].descriptorCount = 2;                      // particle + config
+        poolSizes[3].type = vk::DescriptorType::eStorageBufferDynamic;
+        poolSizes[3].descriptorCount = 1;                      // render-data SSBO (per-frame)
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -126,18 +136,17 @@ namespace render::vfx
         auto vertexBinding = VFXQuadVertex::getBindingDescription();
         auto vertexAttribs = VFXQuadVertex::getAttributeDescriptions();
 
+        // VK-1481: sets 1-3 are the lighting sets; the shared bindless texture set is at set 4. When
+        // lighting layouts are absent (e.g. VFX GPU init ran before they were cached — GPU-driven off),
+        // pad sets 1-3 with an empty layout so bindless ALWAYS lands at set 4, matching the shaders.
+        // (Replaces the previous compiled-out assert, which silently mis-built the layout in
+        // Development/Release where asserts are off.)
         std::vector<vk::DescriptorSetLayout> layouts = {descriptorSetLayout};
-        if (lightBufferLayout && clusterGridLayout && clusterLightGridLayout)
-        {
-            layouts.push_back(lightBufferLayout);
-            layouts.push_back(clusterGridLayout);
-            layouts.push_back(clusterLightGridLayout);
-        }
+        layouts.push_back(lightBufferLayout ? lightBufferLayout : emptySetLayout);
+        layouts.push_back(clusterGridLayout ? clusterGridLayout : emptySetLayout);
+        layouts.push_back(clusterLightGridLayout ? clusterLightGridLayout : emptySetLayout);
 
-        // VK-1481: shared bindless texture set at set index 4. The lit shaders statically reference
-        // lighting sets 1-3, so those layouts are always present here (invariant asserted below).
         assert(bindless && "VFXSceneGPUPipeline: bindless table must be set before init()");
-        assert(layouts.size() == 4 && "VFX billboard expects sets 0-3 before the bindless set 4");
         layouts.push_back(bindless->getDescriptorSetLayout());
 
         core::GraphicsPipelineConfig config{
@@ -185,11 +194,14 @@ namespace render::vfx
         cameraUBOMapped = cameraUBOAllocation.mappedPtr;
 
         // VK-1481 Phase 2: per-emitter render-data SSBO (host-visible, mapped, one slot per emitter).
+        // Sized MAX_FRAMES_IN_FLIGHT copies: recordCommandsInline writes/binds the current frame's copy
+        // via a dynamic offset, so the GPU never reads a copy the CPU is overwriting (write-after-read).
         core::BufferInfoRequest renderDataRequest(vkDevice, device.getPhysicalDevice());
         renderDataRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
         renderDataRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                        vk::MemoryPropertyFlagBits::eHostCoherent;
-        renderDataRequest.size = sizeof(VFXEmitterRenderData) * GPUVFXConstants::MAX_EMITTERS;
+        renderDataRequest.size = sizeof(VFXEmitterRenderData) * GPUVFXConstants::MAX_EMITTERS *
+                                 core::MAX_FRAMES_IN_FLIGHT;
         core::BufferUtilities::createBuffer(renderDataRequest, renderDataBuffer, renderDataBufferAllocation, device.getMemoryManager());
         renderDataMapped = renderDataBufferAllocation.mappedPtr;
 

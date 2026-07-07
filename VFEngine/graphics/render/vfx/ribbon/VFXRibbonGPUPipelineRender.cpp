@@ -6,6 +6,7 @@
 #include "print/Log.hpp"
 #include "../compute/GPUVFXTypes.hpp"
 #include "vfx/VFXSortOrder.hpp"
+#include "vfx/VFXDrawRunMerge.hpp"
 #include <filesystem>
 
 namespace render::vfx
@@ -141,6 +142,8 @@ namespace render::vfx
         lutInfo.offset = 0;
         lutInfo.range = cachedLutBufferSize;
 
+        // Dynamic storage buffer: range is ONE frame's window; recordCommandsInline supplies the
+        // per-frame base as a dynamic offset at bind time (buffer holds MAX_FRAMES_IN_FLIGHT copies).
         vk::DescriptorBufferInfo renderDataInfo{};
         renderDataInfo.buffer = renderDataBuffer;
         renderDataInfo.offset = 0;
@@ -193,11 +196,11 @@ namespace render::vfx
         writes[6].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[6].pBufferInfo = &lutInfo;
 
-        // VK-1481 Phase 2: per-emitter render-data SSBO
+        // VK-1481 Phase 2: per-emitter render-data SSBO (dynamic: per-frame offset bound at draw time)
         writes[7].dstSet = dstSet;
         writes[7].dstBinding = 8;
         writes[7].descriptorCount = 1;
-        writes[7].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[7].descriptorType = vk::DescriptorType::eStorageBufferDynamic;
         writes[7].pBufferInfo = &renderDataInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
@@ -263,7 +266,8 @@ namespace render::vfx
     void VFXRibbonGPUPipeline::recordCommandsInline(
         vk::CommandBuffer cmd,
         vk::Buffer drawCommandBuffer,
-        uint32_t emitterCount) const
+        uint32_t emitterCount,
+        uint32_t frameIndex) const
     {
         if (!initialized || emitterCount == 0 || !cachedParticleBuffer ||
             !cachedRibbonRingBuffer || !cachedRibbonHeadBuffer || emitterConfigs.empty())
@@ -286,9 +290,13 @@ namespace render::vfx
                                    1, lightingSets, {});
         }
 
-        // VK-1481: set 0 (camera/particle/config/depth/ring/head/lut) is constant across the pass — bind once.
+        // VK-1481: set 0 (camera/particle/config/depth/ring/head/lut) is constant across the pass — bind
+        // once. The render-data SSBO (binding 8) is dynamic: bind this frame's copy via a per-frame offset.
+        const uint32_t renderDataDynamicOffset =
+            frameIndex * GPUVFXConstants::MAX_EMITTERS *
+            static_cast<uint32_t>(sizeof(VFXEmitterRenderData));
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                               0, defaultDescriptorSet, {});
+                               0, defaultDescriptorSet, renderDataDynamicOffset);
 
         // VK-1481: shared bindless texture set (set 4) — bind once; emitters pick a slot via push constant.
         if (bindless)
@@ -302,24 +310,26 @@ namespace render::vfx
         cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
         cmd.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
 
-        // VK-1471: submit ribbon emitter draws in ascending sortOrder. Built in the map's
-        // current traversal order, so an all-default (0) set is a stable no-op.
-        std::vector<::vfx::VFXDrawOrderEntry> drawOrder;
-        drawOrder.reserve(emitterConfigs.size());
+        // VK-1471: submit ribbon emitter draws in ascending sortOrder. Built in the map's current
+        // traversal order, so an all-default (0) set is a stable no-op. Scratch vectors are reused
+        // across frames (reserve-once, cleared here) to avoid per-frame heap churn on the hot path.
+        scratchDrawOrder.clear();
+        scratchDrawOrder.reserve(emitterConfigs.size());
         for (const auto& [emitterIdx, config] : emitterConfigs)
         {
-            drawOrder.push_back({emitterIdx, config.sortOrder});
+            scratchDrawOrder.push_back({emitterIdx, config.sortOrder});
         }
-        ::vfx::stableSortDrawOrder(drawOrder);
+        ::vfx::stableSortDrawOrder(scratchDrawOrder);
 
         // VK-1481 Phase 2: collect ribbon-drawable slots (in sorted order), write their per-emitter
-        // render-data, then merge into runs of CONSECUTIVE slots that share the graphics pipeline.
-        auto* rd = static_cast<VFXEmitterRenderData*>(renderDataMapped);
-        struct DrawSlot { uint32_t slot; bool multiply; };
-        std::vector<DrawSlot> drawable;
-        drawable.reserve(drawOrder.size());
+        // render-data into THIS frame's copy, then merge into runs of CONSECUTIVE slots sharing the
+        // pipeline. `rd` points at the current frame's window (matches the dynamic offset above).
+        auto* rd = static_cast<VFXEmitterRenderData*>(renderDataMapped) +
+                   static_cast<size_t>(frameIndex) * GPUVFXConstants::MAX_EMITTERS;
+        scratchSlots.clear();
+        scratchKeys.clear();
 
-        for (const auto& drawEntry : drawOrder)
+        for (const auto& drawEntry : scratchDrawOrder)
         {
             const uint32_t emitterIdx = drawEntry.index;
             auto configIt = emitterConfigs.find(emitterIdx);
@@ -342,44 +352,31 @@ namespace render::vfx
                 e._pad1 = 0.0f;
             }
 
-            // VK-1472: Multiply emitters bind the dedicated Multiply blend pipeline (shares the layout).
-            drawable.push_back({emitterIdx, config.blendMode == 3u && multiplyPipeline});
+            scratchSlots.push_back(emitterIdx);
+            // VK-1472: Multiply variant breaks a run so the pipeline switch only happens between runs.
+            scratchKeys.push_back((config.blendMode == 3u && multiplyPipeline) ? 1u : 0u);
         }
 
-        // Emit one multiDrawIndirect per run. A run extends while the next drawable slot is the
-        // previous slot + 1 and uses the same pipeline (Multiply vs. normal). gl_DrawID within the
-        // multi-draw recovers emitterSlot = runBaseSlot + gl_DrawID in the shader.
-        size_t idx = 0;
-        while (idx < drawable.size())
-        {
-            const uint32_t baseSlot = drawable[idx].slot;
-            const bool multiply = drawable[idx].multiply;
-            size_t j = idx + 1;
-            while (j < drawable.size() &&
-                   drawable[j].slot == drawable[j - 1].slot + 1 &&
-                   drawable[j].multiply == multiply)
+        // Emit one multiDrawIndirect per run of CONSECUTIVE slots that share the blend pipeline.
+        // gl_DrawID within the multi-draw recovers emitterSlot = runBaseSlot + gl_DrawID in the shader.
+        ::vfx::forEachDrawRun(scratchSlots, scratchKeys,
+            [&](uint32_t baseSlot, uint32_t runLen, uint32_t key)
             {
-                ++j;
-            }
-            const uint32_t runLen = static_cast<uint32_t>(j - idx);
+                vk::Pipeline wantPipeline = (key != 0u) ? multiplyPipeline : graphicsPipeline;
+                if (wantPipeline != lastBoundPipeline)
+                {
+                    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, wantPipeline);
+                    lastBoundPipeline = wantPipeline;
+                }
 
-            vk::Pipeline wantPipeline = multiply ? multiplyPipeline : graphicsPipeline;
-            if (wantPipeline != lastBoundPipeline)
-            {
-                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, wantPipeline);
-                lastBoundPipeline = wantPipeline;
-            }
+                GPUVFXMergedPushConstants pushConstants{};
+                pushConstants.runBaseSlot = baseSlot;
+                cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                                  0, sizeof(GPUVFXMergedPushConstants), &pushConstants);
 
-            GPUVFXMergedPushConstants pushConstants{};
-            pushConstants.runBaseSlot = baseSlot;
-            cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
-                              0, sizeof(GPUVFXMergedPushConstants), &pushConstants);
-
-            const vk::DeviceSize offset = static_cast<vk::DeviceSize>(baseSlot) * sizeof(VFXDrawIndirectCommand);
-            cmd.drawIndexedIndirect(drawCommandBuffer, offset, runLen, sizeof(VFXDrawIndirectCommand));
-            render::FrameDrawStats::count(render::DrawCategory::VFX);
-
-            idx = j;
-        }
+                const vk::DeviceSize offset = static_cast<vk::DeviceSize>(baseSlot) * sizeof(VFXDrawIndirectCommand);
+                cmd.drawIndexedIndirect(drawCommandBuffer, offset, runLen, sizeof(VFXDrawIndirectCommand));
+                render::FrameDrawStats::count(render::DrawCategory::VFX);
+            });
     }
 }

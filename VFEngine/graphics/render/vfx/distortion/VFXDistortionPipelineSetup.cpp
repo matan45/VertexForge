@@ -1,6 +1,7 @@
 #include "VFXDistortionPipeline.hpp"
 #include "../quad/VFXQuadData.hpp"
 #include "../../../core/Device.hpp"
+#include "../../../core/GraphicsConstants.hpp"
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
@@ -56,9 +57,10 @@ namespace render::vfx
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-        // VK-1481 Phase 2, Binding 8: per-emitter distortion render-data SSBO (merged draw reads by emitterSlot)
+        // VK-1481 Phase 2, Binding 8: per-emitter distortion render-data SSBO (merged draw reads by
+        // emitterSlot). DYNAMIC: MAX_FRAMES_IN_FLIGHT copies bound per-frame via a dynamic offset.
         bindings[4].binding = 8;
-        bindings[4].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[4].descriptorType = vk::DescriptorType::eStorageBufferDynamic;
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
@@ -72,13 +74,16 @@ namespace render::vfx
     void VFXDistortionPipeline::createDescriptorPool()
     {
         // VK-1481: a single set-0 (no per-texture cloning). Depth is the only combined-image-sampler.
-        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+        // Render-data is a DYNAMIC storage buffer (per-frame double-buffering via dynamic offset).
+        std::array<vk::DescriptorPoolSize, 4> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[0].descriptorCount = 1;                      // camera UBO
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[1].descriptorCount = 1;                      // scene depth
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = 3;                      // particle + config + render-data SSBO
+        poolSizes[2].descriptorCount = 2;                      // particle + config
+        poolSizes[3].type = vk::DescriptorType::eStorageBufferDynamic;
+        poolSizes[3].descriptorCount = 1;                      // render-data SSBO (per-frame)
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -151,12 +156,14 @@ namespace render::vfx
         core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
         cameraUBOMapped = cameraUBOAllocation.mappedPtr;
 
-        // VK-1481 Phase 2: per-emitter render-data SSBO (host-visible, mapped, one slot per emitter).
+        // VK-1481 Phase 2: per-emitter render-data SSBO — MAX_FRAMES_IN_FLIGHT copies (per-frame bound
+        // via a dynamic offset) so the GPU never reads a copy the CPU is overwriting.
         core::BufferInfoRequest renderDataRequest(vkDevice, device.getPhysicalDevice());
         renderDataRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
         renderDataRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                        vk::MemoryPropertyFlagBits::eHostCoherent;
-        renderDataRequest.size = sizeof(VFXDistortionRenderData) * GPUVFXConstants::MAX_EMITTERS;
+        renderDataRequest.size = sizeof(VFXDistortionRenderData) * GPUVFXConstants::MAX_EMITTERS *
+                                 core::MAX_FRAMES_IN_FLIGHT;
         core::BufferUtilities::createBuffer(renderDataRequest, renderDataBuffer, renderDataBufferAllocation, device.getMemoryManager());
         renderDataMapped = renderDataBufferAllocation.mappedPtr;
 

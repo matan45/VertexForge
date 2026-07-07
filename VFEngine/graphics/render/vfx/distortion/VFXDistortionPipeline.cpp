@@ -5,6 +5,7 @@
 #include "../../../core/DeferredDeletionQueue.hpp"
 #include "../bindless/VFXBindlessTextures.hpp"
 #include "print/Log.hpp"
+#include "vfx/VFXDrawRunMerge.hpp"
 #include <filesystem>
 
 namespace render::vfx
@@ -160,6 +161,8 @@ namespace render::vfx
             : vk::ImageLayout::eShaderReadOnlyOptimal;
         depthInfo.sampler = depthSampler ? depthSampler : textureSampler;
 
+        // Dynamic storage buffer: range is ONE frame's window; recordCommandsInline supplies the
+        // per-frame base as a dynamic offset at bind time (buffer holds MAX_FRAMES_IN_FLIGHT copies).
         vk::DescriptorBufferInfo renderDataInfo{};
         renderDataInfo.buffer = renderDataBuffer;
         renderDataInfo.offset = 0;
@@ -192,11 +195,11 @@ namespace render::vfx
         writes[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[3].pImageInfo = &depthInfo;
 
-        // VK-1481 Phase 2: per-emitter distortion render-data SSBO
+        // VK-1481 Phase 2: per-emitter distortion render-data SSBO (dynamic: per-frame offset at draw time)
         writes[4].dstSet = dstSet;
         writes[4].dstBinding = 8;
         writes[4].descriptorCount = 1;
-        writes[4].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[4].descriptorType = vk::DescriptorType::eStorageBufferDynamic;
         writes[4].pBufferInfo = &renderDataInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
@@ -262,7 +265,8 @@ namespace render::vfx
         vk::CommandBuffer cmd,
         vk::Buffer drawCommandBuffer,
         uint32_t emitterCount,
-        const std::vector<bool>& distortionEnabledFlags) const
+        const std::vector<bool>& distortionEnabledFlags,
+        uint32_t frameIndex) const
     {
         if (!initialized || emitterCount == 0 || !cachedParticleBuffer) return;
 
@@ -270,9 +274,13 @@ namespace render::vfx
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // VK-1481: set 0 (camera/particle/config/depth) is constant across the pass — bind once.
+        // VK-1481: set 0 (camera/particle/config/depth) is constant across the pass — bind once. The
+        // render-data SSBO (binding 8) is dynamic: bind this frame's copy via a per-frame offset.
+        const uint32_t renderDataDynamicOffset =
+            frameIndex * GPUVFXConstants::MAX_EMITTERS *
+            static_cast<uint32_t>(sizeof(VFXDistortionRenderData));
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                               0, defaultDescriptorSet, {});
+                               0, defaultDescriptorSet, renderDataDynamicOffset);
 
         // VK-1481: shared bindless texture set (set 1) — bind once; emitters pick a slot via push constant.
         if (bindless)
@@ -287,11 +295,13 @@ namespace render::vfx
         cmd.bindIndexBuffer(quadIndexBuffer, 0, vk::IndexType::eUint16);
 
         // VK-1481 Phase 2: collect distortion-enabled slots (ascending), write their per-emitter
-        // render-data, then merge into runs of CONSECUTIVE slots. Distortion has a single graphics
-        // pipeline (no sortOrder, no Multiply variant), so a run is just a maximal consecutive span.
-        auto* rd = static_cast<VFXDistortionRenderData*>(renderDataMapped);
-        std::vector<uint32_t> drawable;
-        drawable.reserve(emitterCount);
+        // render-data into THIS frame's copy, then merge into runs of CONSECUTIVE slots. Distortion has a
+        // single graphics pipeline (no sortOrder, no Multiply variant), so a run is a maximal consecutive
+        // span. `rd` points at the current frame's window (matches the dynamic offset above). scratchSlots
+        // is reused across frames (reserve-once, cleared here) to avoid per-frame heap churn.
+        auto* rd = static_cast<VFXDistortionRenderData*>(renderDataMapped) +
+                   static_cast<size_t>(frameIndex) * GPUVFXConstants::MAX_EMITTERS;
+        scratchSlots.clear();
 
         for (uint32_t i = 0; i < emitterCount; ++i)
         {
@@ -315,32 +325,22 @@ namespace render::vfx
             if (rd)
                 rd[i] = VFXDistortionRenderData{texIndex, strength, 0.0f, 0.0f};
 
-            drawable.push_back(i);
+            scratchSlots.push_back(i);
         }
 
-        // Emit one multiDrawIndirect per run of CONSECUTIVE slots. gl_DrawID within the multi-draw
-        // recovers emitterSlot = runBaseSlot + gl_DrawID in the shader. Single pipeline — no switch.
-        size_t idx = 0;
-        while (idx < drawable.size())
-        {
-            const uint32_t baseSlot = drawable[idx];
-            size_t j = idx + 1;
-            while (j < drawable.size() && drawable[j] == drawable[j - 1] + 1)
+        // Emit one multiDrawIndirect per run of CONSECUTIVE slots (key-less: single pipeline, no switch).
+        // gl_DrawID within the multi-draw recovers emitterSlot = runBaseSlot + gl_DrawID in the shader.
+        ::vfx::forEachDrawRun(scratchSlots,
+            [&](uint32_t baseSlot, uint32_t runLen)
             {
-                ++j;
-            }
-            const uint32_t runLen = static_cast<uint32_t>(j - idx);
+                GPUVFXMergedPushConstants pushConstants{};
+                pushConstants.runBaseSlot = baseSlot;
+                cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                                  0, sizeof(GPUVFXMergedPushConstants), &pushConstants);
 
-            GPUVFXMergedPushConstants pushConstants{};
-            pushConstants.runBaseSlot = baseSlot;
-            cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
-                              0, sizeof(GPUVFXMergedPushConstants), &pushConstants);
-
-            const vk::DeviceSize offset = static_cast<vk::DeviceSize>(baseSlot) * sizeof(VFXDrawIndirectCommand);
-            cmd.drawIndexedIndirect(drawCommandBuffer, offset, runLen, sizeof(VFXDrawIndirectCommand));
-            render::FrameDrawStats::count(render::DrawCategory::VFX);
-
-            idx = j;
-        }
+                const vk::DeviceSize offset = static_cast<vk::DeviceSize>(baseSlot) * sizeof(VFXDrawIndirectCommand);
+                cmd.drawIndexedIndirect(drawCommandBuffer, offset, runLen, sizeof(VFXDrawIndirectCommand));
+                render::FrameDrawStats::count(render::DrawCategory::VFX);
+            });
     }
 }

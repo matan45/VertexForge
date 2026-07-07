@@ -1108,7 +1108,8 @@ namespace controllers
             cmd,
             gpuBufferManager->getDrawCommandBuffer(),
             maxEmitters,
-            distortionFlags);
+            distortionFlags,
+            gpuBufferManager->getCurrentFrameIndex());
     }
 
     void VFXSceneRenderer::recordCPUDrawCommands(vk::CommandBuffer cmd)

@@ -140,6 +140,12 @@ namespace render::vfx
             descriptorSetLayout = nullptr;
         }
 
+        if (emptySetLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(emptySetLayout);
+            emptySetLayout = nullptr;
+        }
+
         cameraUBOMapped = nullptr;
         renderDataMapped = nullptr;
         core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOAllocation, device.getMemoryManager());

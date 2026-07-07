@@ -100,16 +100,17 @@ namespace vfx
             }
         }
 
-        // Keys whose teardown window has elapsed (pending && frame - retiredFrame >= N), each
-        // with the slot to unregister. The caller unregisters the GPU slot then calls forget().
-        [[nodiscard]] std::vector<std::pair<std::string, uint32_t>> collectReady(uint32_t frame) const
+        // Keys whose teardown window has elapsed (pending && frame - retiredFrame >= N). The caller
+        // unregisters the GPU slot by key then calls forget() (the slot index is looked up inside the
+        // wrapper by key, so it is not returned here).
+        [[nodiscard]] std::vector<std::string> collectReady(uint32_t frame) const
         {
-            std::vector<std::pair<std::string, uint32_t>> ready;
+            std::vector<std::string> ready;
             for (const auto& [key, e] : entries_)
             {
                 if (e.pending && (frame - e.retiredFrame) >= framesBeforeDelete_)
                 {
-                    ready.emplace_back(key, e.index);
+                    ready.push_back(key);
                 }
             }
             return ready;
@@ -119,6 +120,12 @@ namespace vfx
         void forget(const std::string& key)
         {
             entries_.erase(key);
+        }
+
+        // Drop every entry (the owning device wrapper is being torn down / re-initialised fresh).
+        void clear()
+        {
+            entries_.clear();
         }
 
         // --- introspection (primarily for unit tests) ---

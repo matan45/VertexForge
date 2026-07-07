@@ -51,14 +51,15 @@ namespace render::vfx
 
     void VFXBindlessTextures::cleanup()
     {
-        if (!initialized_)
-        {
-            return;
-        }
+        // No initialized_ guard: init() sets initialized_ only as its final step, so a throw partway
+        // through init() (e.g. an image allocation fails) must still free whatever was already created.
+        // Every step below is null-guarded / idempotent, so cleanup() is safe on a partially- or
+        // never-initialised instance and safe to call twice.
 
         // Loaded textures: core::Texture destructors free their own GPU resources. The caller
         // (VFXSceneRenderer::cleanUp / cleanupGPUMode) has already idled the device.
         textures_.clear();
+        table_.clear(); // drop refcount bookkeeping so a re-init doesn't hand back stale slot indices
 
         destroySolidImage(whiteImage_, whiteAlloc_, whiteView_);
         destroySolidImage(neutralImage_, neutralAlloc_, neutralView_);
@@ -164,9 +165,8 @@ namespace render::vfx
         std::lock_guard lock(mutex_);
         currentFrame_ = frameNumber;
 
-        for (const auto& [key, idx] : table_.collectReady(frameNumber))
+        for (const auto& key : table_.collectReady(frameNumber))
         {
-            (void)idx;
             // Re-point the slot to the default + return it to the free-list. Deferred 3 frames, so
             // the emitter that used it stopped being recorded >= MAX_FRAMES_IN_FLIGHT frames ago —
             // no in-flight submission still samples this slot.

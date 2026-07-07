@@ -452,6 +452,23 @@ namespace services
         }
     }
 
+    bool AssetDatabaseServiceImpl::finalizeDatabaseRebuild(const std::string& projRoot)
+    {
+        auto& db = asset::AssetDatabase::instance();
+
+        // Re-scan all dependencies
+        asset::DependencyScanner::scanAll(projRoot);
+
+        // Save the index
+        const bool saved = db.saveIndex(projRoot);
+
+        events::assetdb::AssetDatabaseRebuiltNotification notification;
+        notification.assetCount = static_cast<uint32_t>(db.getAssetCount());
+        events::EventDispatcher::instance().publish(notification);
+
+        return saved;
+    }
+
     bool AssetDatabaseServiceImpl::rebuildDatabase()
     {
         std::string projRoot = getProjectRoot();
@@ -462,16 +479,7 @@ namespace services
         // Rebuild from .vfmeta files
         if (!db.rebuildFromMetaFiles(projRoot)) return false;
 
-        // Re-scan all dependencies
-        asset::DependencyScanner::scanAll(projRoot);
-
-        // Save the index
-        db.saveIndex(projRoot);
-
-        events::assetdb::AssetDatabaseRebuiltNotification notification;
-        notification.assetCount = static_cast<uint32_t>(db.getAssetCount());
-        events::EventDispatcher::instance().publish(notification);
-
+        finalizeDatabaseRebuild(projRoot);
         return true;
     }
 
@@ -496,17 +504,19 @@ namespace services
             vfLogError("RegenerateMissingMetadata: {}", failure);
         }
 
-        auto& db = asset::AssetDatabase::instance();
-        asset::DependencyScanner::scanAll(projRoot);
-        if (!db.saveIndex(projRoot))
+        // Nothing was regenerated: the database state is unchanged, so skip the full-project
+        // dependency rescan + index save + rebuilt notification (all of which run on the UI thread).
+        if (result.metaFilesCreated == 0)
+        {
+            vfLogInfo("RegenerateMissingMetadata: scanned {}, nothing to regenerate", result.assetsScanned);
+            return result;
+        }
+
+        if (!finalizeDatabaseRebuild(projRoot))
         {
             result.failures.push_back("Failed to save asset database index");
             vfLogError("RegenerateMissingMetadata: failed to save asset database index");
         }
-
-        events::assetdb::AssetDatabaseRebuiltNotification notification;
-        notification.assetCount = static_cast<uint32_t>(db.getAssetCount());
-        events::EventDispatcher::instance().publish(notification);
 
         vfLogInfo("RegenerateMissingMetadata: scanned {}, regenerated {}, failures {}",
                   result.assetsScanned, result.metaFilesCreated, result.failures.size());

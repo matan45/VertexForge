@@ -44,6 +44,9 @@ namespace render::vfx
         vk::Pipeline multiplyPipeline; // VK-1472: Multiply blend variant (shares pipelineLayout)
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
+        // VK-1481: empty (0-binding) layout used to pad sets 1-3 when the lighting layouts are absent,
+        // so the shared bindless texture set always lands at set 4 regardless of lighting init order.
+        vk::DescriptorSetLayout emptySetLayout;
         vk::DescriptorPool descriptorPool;
 
         vk::Buffer cameraUBO;
@@ -90,9 +93,6 @@ namespace render::vfx
         // VK-1481: shared VFX bindless texture table (owned by the VFX renderer); bound at set 4.
         VFXBindlessTextures* bindless = nullptr;
 
-        // Deferred cleanup queue (kept for wiring symmetry; texture lifetime now lives in the bindless table)
-        core::DeferredDeletionQueue* deletionQueue = nullptr;
-
         // Lighting descriptor sets (shared from main renderer)
         vk::DescriptorSetLayout lightBufferLayout;
         vk::DescriptorSetLayout clusterGridLayout;
@@ -129,8 +129,6 @@ namespace render::vfx
         void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
                                        const glm::vec3& glowColor = glm::vec3(1.0f), int32_t sortOrder = 0);
         void removeEmitter(uint32_t emitterIndex);
-
-        void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }
 
         // VK-1481: inject the shared bindless texture table. Must be set BEFORE init() (createPipeline
         // appends its descriptor set layout at set 4).

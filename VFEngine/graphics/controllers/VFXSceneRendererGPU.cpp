@@ -60,7 +60,6 @@ namespace controllers
                 vfLogError("Failed to initialize GPU VFX render pipeline");
                 return false;
             }
-            gpuRenderPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
             gpuMeshPipeline = std::make_unique<render::vfx::VFXMeshGPUPipeline>(device, swapChain, *gpuMeshCache);
@@ -73,7 +72,6 @@ namespace controllers
                 vfLogError("Failed to initialize GPU VFX mesh pipeline");
                 return false;
             }
-            gpuMeshPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuRibbonPipeline = std::make_unique<render::vfx::VFXRibbonGPUPipeline>(device, swapChain);
             if (hasLightingLayouts)
@@ -85,7 +83,6 @@ namespace controllers
                 vfLogError("Failed to initialize GPU VFX ribbon pipeline");
                 return false;
             }
-            gpuRibbonPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuComputePipeline->updateDescriptors(gpuBufferManager->getBufferSet());
 
@@ -308,7 +305,6 @@ namespace controllers
         gpuDistortionPipeline = std::make_unique<render::vfx::VFXDistortionPipeline>(device, swapChain);
         gpuDistortionPipeline->setBindlessTextures(bindlessTextures.get());
         gpuDistortionPipeline->init(colorFormat, depthFormat);
-        gpuDistortionPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
         gpuDistortionPipeline->updateParticleBuffer(
             gpuBufferManager->getParticleBuffer(), gpuBufferManager->getParticleBufferSize());

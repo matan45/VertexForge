@@ -420,15 +420,6 @@ namespace render::vfx
     static_assert(sizeof(GPUVFXBillboardPushConstants) == 28, "GPUVFXBillboardPushConstants must be 28 bytes");
     static_assert(offsetof(GPUVFXBillboardPushConstants, textureIndex) == 24, "GPUVFXBillboardPushConstants::textureIndex offset mismatch");
 
-    struct GPUVFXDistortionPushConstants
-    {
-        uint32_t emitterIndex;
-        float distortionStrength = 0.1f;
-        uint32_t textureIndex = 0; // VK-1481: bindless slot for this emitter's distortion texture (0 = white; neutral-normal used when unset)
-    };
-    static_assert(sizeof(GPUVFXDistortionPushConstants) == 12, "GPUVFXDistortionPushConstants must be 12 bytes");
-    static_assert(offsetof(GPUVFXDistortionPushConstants, textureIndex) == 8, "GPUVFXDistortionPushConstants::textureIndex offset mismatch");
-
     // VK-1481 Phase 2 (draw-call merge): a merged vkCmdDrawIndexedIndirect(drawCount>1) can't carry a
     // per-emitter push constant, so the per-emitter render-only data (that used to ride the push
     // constant) moves into this SSBO, indexed by emitterSlot = runBaseSlot + gl_DrawID. std430 layout;

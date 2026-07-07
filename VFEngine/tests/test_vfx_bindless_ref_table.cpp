@@ -86,8 +86,8 @@ TEST_SUITE("VFXBindlessRefTable")
 
         auto ready = table.collectReady(103u); // 103 - 100 = 3 >= 3
         REQUIRE(ready.size() == 1u);
-        CHECK(ready[0].first == "s:tex");
-        CHECK(ready[0].second == 7u);
+        CHECK(ready[0] == "s:tex");
+        CHECK(table.indexOf("s:tex").value() == 7u); // slot still resolvable by key until forget()
 
         table.forget("s:tex");
         CHECK_FALSE(table.indexOf("s:tex").has_value());
@@ -174,6 +174,24 @@ TEST_SUITE("VFXBindlessRefTable")
 
         auto ready = table.collectReady(1u); // gap 3 (wrapped): 1 - (2^32-2) == 3 mod 2^32
         REQUIRE(ready.size() == 1u);
-        CHECK(ready[0].second == 7u);
+        CHECK(ready[0] == "s:tex");
+        CHECK(table.indexOf("s:tex").value() == 7u);
+    }
+
+    TEST_CASE("clear() drops all entries so the table can be reused")
+    {
+        vfx::VFXBindlessRefTable table(kFramesBeforeDelete);
+        REQUIRE(table.acquire("s:a").needsRegister);
+        table.setIndex("s:a", 3u);
+        REQUIRE(table.acquire("l:b").needsRegister);
+        table.setIndex("l:b", 4u);
+        REQUIRE(table.liveCount() == 2u);
+
+        table.clear();
+        CHECK(table.liveCount() == 0u);
+        CHECK_FALSE(table.indexOf("s:a").has_value());
+
+        // A post-clear acquire of a previously-known key is treated as fresh again.
+        CHECK(table.acquire("s:a").needsRegister);
     }
 }

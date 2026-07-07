@@ -151,6 +151,12 @@ namespace render::vfx
             descriptorSetLayout = nullptr;
         }
 
+        if (emptySetLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(emptySetLayout);
+            emptySetLayout = nullptr;
+        }
+
         cameraUBOMapped = nullptr;
         core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
 
@@ -245,6 +251,10 @@ namespace render::vfx
         layoutInfo.pBindings = bindings.data();
 
         descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
+
+        // VK-1481: empty 0-binding layout used to pad missing lighting sets so bindless is always set 4.
+        vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
+        emptySetLayout = device.getLogicalDevice().createDescriptorSetLayout(emptyLayoutInfo);
     }
 
     void VFXMeshGPUPipeline::createDescriptorPool()
@@ -302,18 +312,15 @@ namespace render::vfx
         auto vertexBinding = render::mesh::MeshVertexInput::getBindingDescription();
         auto vertexAttribs = render::mesh::MeshVertexInput::getAttributeDescriptions();
 
+        // VK-1481: sets 1-3 are the lighting sets; the shared bindless texture set is at set 4. When
+        // lighting layouts are absent (VFX GPU init ran before they were cached — GPU-driven off), pad
+        // sets 1-3 with an empty layout so bindless ALWAYS lands at set 4, matching the shaders.
         std::vector<vk::DescriptorSetLayout> layouts = {descriptorSetLayout};
-        if (lightBufferLayout && clusterGridLayout && clusterLightGridLayout)
-        {
-            layouts.push_back(lightBufferLayout);
-            layouts.push_back(clusterGridLayout);
-            layouts.push_back(clusterLightGridLayout);
-        }
+        layouts.push_back(lightBufferLayout ? lightBufferLayout : emptySetLayout);
+        layouts.push_back(clusterGridLayout ? clusterGridLayout : emptySetLayout);
+        layouts.push_back(clusterLightGridLayout ? clusterLightGridLayout : emptySetLayout);
 
-        // VK-1481: shared bindless texture set at set index 4. The lit shaders statically reference
-        // lighting sets 1-3, so those layouts are always present here (invariant asserted below).
         assert(bindless && "VFXMeshGPUPipeline: bindless table must be set before init()");
-        assert(layouts.size() == 4 && "VFX mesh particle expects sets 0-3 before the bindless set 4");
         layouts.push_back(bindless->getDescriptorSetLayout());
 
         core::GraphicsPipelineConfig config{

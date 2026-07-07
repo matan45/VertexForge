@@ -3,9 +3,11 @@
 #include "../compute/GPUVFXTypes.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace core
 {
@@ -80,12 +82,14 @@ namespace render::vfx
         std::unordered_map<uint32_t, DistortionEmitterConfig> emitterConfigs;
         vk::DescriptorSet defaultDescriptorSet; // VK-1481: the single set-0 (camera/particle/config/depth)
 
+        // VK-1481 Phase 2: per-frame reused scratch for the merged draw (reserve-once, cleared each
+        // frame) — avoids per-frame heap allocation on the render hot path. recordCommandsInline is the
+        // sole (render-thread) writer, hence mutable on the const record path.
+        mutable std::vector<uint32_t> scratchSlots;
+
         // VK-1481: shared VFX bindless texture table (owned by VFXSceneRenderer); bound at set 1
         // (distortion has no lighting sets, so the local set 0 is the only one before it).
         VFXBindlessTextures* bindless = nullptr;
-
-        // Deferred cleanup queue (kept for wiring symmetry; texture lifetime now lives in the bindless table)
-        core::DeferredDeletionQueue* deletionQueue = nullptr;
 
     public:
         explicit VFXDistortionPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -111,8 +115,6 @@ namespace render::vfx
         void setEmitterDistortionConfig(uint32_t emitterIndex, float strength);
         void removeEmitter(uint32_t emitterIndex);
 
-        void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }
-
         // VK-1481: inject the shared bindless texture table. Must be set BEFORE init() (createPipeline
         // appends its descriptor set layout at set 1).
         void setBindlessTextures(VFXBindlessTextures* b) { bindless = b; }
@@ -121,7 +123,8 @@ namespace render::vfx
             vk::CommandBuffer cmd,
             vk::Buffer drawCommandBuffer,
             uint32_t emitterCount,
-            const std::vector<bool>& distortionEnabledFlags) const;
+            const std::vector<bool>& distortionEnabledFlags,
+            uint32_t frameIndex) const;
 
     private:
         void loadShader();

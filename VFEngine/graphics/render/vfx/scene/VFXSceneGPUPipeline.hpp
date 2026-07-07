@@ -2,11 +2,14 @@
 
 #include "../compute/GPUVFXTypes.hpp"
 #include "vfx/VFXBlendMode.hpp"
+#include "vfx/VFXSortOrder.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace core
 {
@@ -38,6 +41,9 @@ namespace render::vfx
         vk::Pipeline multiplyPipeline; // VK-1472: Multiply blend variant (shares pipelineLayout)
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
+        // VK-1481: empty (0-binding) layout used to pad sets 1-3 when the lighting layouts are absent,
+        // so the shared bindless texture set always lands at set 4 regardless of lighting init order.
+        vk::DescriptorSetLayout emptySetLayout;
         vk::DescriptorPool descriptorPool;
 
         // Buffers
@@ -88,11 +94,15 @@ namespace render::vfx
         std::unordered_map<uint32_t, EmitterRenderConfig> emitterConfigs;
         vk::DescriptorSet defaultDescriptorSet; // VK-1481: the single set-0 (camera/particle/config/depth)
 
+        // VK-1481 Phase 2: per-frame reused scratch for the merged draw (reserve-once, cleared each
+        // frame) — avoids per-frame heap allocations on the render hot path. recordCommandsInline is
+        // the sole (render-thread) writer, hence mutable on the const record path.
+        mutable std::vector<::vfx::VFXDrawOrderEntry> scratchDrawOrder;
+        mutable std::vector<uint32_t> scratchSlots;
+        mutable std::vector<uint32_t> scratchKeys;
+
         // VK-1481: shared VFX bindless texture table (owned by VFXSceneRenderer); bound at set 4.
         VFXBindlessTextures* bindless = nullptr;
-
-        // Deferred cleanup queue (kept for wiring symmetry; texture lifetime now lives in the bindless table)
-        core::DeferredDeletionQueue* deletionQueue = nullptr;
 
         // Lighting descriptor sets (shared from main renderer)
         vk::DescriptorSetLayout lightBufferLayout;
@@ -131,8 +141,6 @@ namespace render::vfx
         void setEmitterDistortionEnabled(uint32_t emitterIndex, bool enabled);
         void removeEmitter(uint32_t emitterIndex);
 
-        void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }
-
         // VK-1481: inject the shared bindless texture table. Must be set BEFORE init() (createPipeline
         // appends its descriptor set layout at set 4).
         void setBindlessTextures(VFXBindlessTextures* b) { bindless = b; }
@@ -147,7 +155,8 @@ namespace render::vfx
         void recordCommandsInline(
             vk::CommandBuffer cmd,
             vk::Buffer drawCommandBuffer,
-            uint32_t emitterCount) const;
+            uint32_t emitterCount,
+            uint32_t frameIndex) const;
 
     private:
         void loadShader();
