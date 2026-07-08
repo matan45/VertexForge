@@ -415,13 +415,46 @@ namespace render::vfx
         float glowColorR = 1.0f;
         float glowColorG = 1.0f;
         float glowColorB = 1.0f;
+        uint32_t textureIndex = 0; // VK-1481: bindless slot for this emitter's texture (0 = white default)
     };
+    static_assert(sizeof(GPUVFXBillboardPushConstants) == 28, "GPUVFXBillboardPushConstants must be 28 bytes");
+    static_assert(offsetof(GPUVFXBillboardPushConstants, textureIndex) == 24, "GPUVFXBillboardPushConstants::textureIndex offset mismatch");
 
-    struct GPUVFXDistortionPushConstants
+    // VK-1481 Phase 2 (draw-call merge): a merged vkCmdDrawIndexedIndirect(drawCount>1) can't carry a
+    // per-emitter push constant, so the per-emitter render-only data (that used to ride the push
+    // constant) moves into this SSBO, indexed by emitterSlot = runBaseSlot + gl_DrawID. std430 layout;
+    // all members are 4-byte scalars so the array stride is exactly 32 bytes.
+    struct VFXEmitterRenderData
     {
-        uint32_t emitterIndex;
-        float distortionStrength = 0.1f;
+        uint32_t textureIndex = 0;        // VK-1481 bindless slot (0 = white default)
+        float alphaClipThreshold = 0.1f;
+        uint32_t blendMode = 0;           // 0 Additive / 1 Alpha / 2 Premultiplied / 3 Multiply
+        float glowColorR = 1.0f;
+        float glowColorG = 1.0f;
+        float glowColorB = 1.0f;
+        float _pad0 = 0.0f;
+        float _pad1 = 0.0f;
     };
+    static_assert(sizeof(VFXEmitterRenderData) == 32, "VFXEmitterRenderData must be 32 bytes (std430 array stride)");
+
+    // VK-1481 Phase 2: per-emitter render data for the merged DISTORTION pass (distortion needs a
+    // distortionStrength the lit VFXEmitterRenderData does not carry). std430; 16-byte array stride.
+    struct VFXDistortionRenderData
+    {
+        uint32_t textureIndex = 0;       // bindless slot (neutral-normal when unset)
+        float distortionStrength = 0.1f;
+        float _pad0 = 0.0f;
+        float _pad1 = 0.0f;
+    };
+    static_assert(sizeof(VFXDistortionRenderData) == 16, "VFXDistortionRenderData must be 16 bytes (std430 array stride)");
+
+    // Push constant for the merged draw: gl_DrawID identifies the sub-draw within the run; the shader
+    // computes emitterSlot = runBaseSlot + gl_DrawID to index configs[] and the render-data SSBO.
+    struct GPUVFXMergedPushConstants
+    {
+        uint32_t runBaseSlot = 0;
+    };
+    static_assert(sizeof(GPUVFXMergedPushConstants) == 4, "GPUVFXMergedPushConstants must be 4 bytes");
 
     struct GPUTerrainHeightfield
     {

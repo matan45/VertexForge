@@ -1,14 +1,18 @@
 #include "VFXSceneGPUPipeline.hpp"
 #include "../quad/VFXQuadData.hpp"
 #include "../../../core/Device.hpp"
+#include "../../../core/GraphicsConstants.hpp"
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
 #include "../../../core/BufferUtilities.hpp"
 #include "../../../core/ImageUtilities.hpp"
 #include "../../../core/DeferredDeletionQueue.hpp"
+#include "../bindless/VFXBindlessTextures.hpp"
 #include "print/Log.hpp"
 #include "../compute/GPUVFXTypes.hpp"
+
+#include <cassert>
 
 
 namespace render::vfx
@@ -27,6 +31,8 @@ namespace render::vfx
 
     void VFXSceneGPUPipeline::createDescriptorSetLayout()
     {
+        // VK-1481: binding 1 (per-emitter texture) removed — textures now live in the shared
+        // bindless set (set 4). The numeric gap at binding 1 is legal.
         std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
 
         // Binding 0: Camera UBO
@@ -35,26 +41,29 @@ namespace render::vfx
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
-        // Binding 1: Particle texture
-        bindings[1].binding = 1;
-        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
         // Binding 2: Particle SSBO
-        bindings[2].binding = 2;
-        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
-        bindings[2].descriptorCount = 1;
-        bindings[2].stageFlags = vk::ShaderStageFlagBits::eVertex;
+        bindings[1].binding = 2;
+        bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eVertex;
 
         // Binding 3: Emitter config SSBO
-        bindings[3].binding = 3;
-        bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
-        bindings[3].descriptorCount = 1;
-        bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        bindings[2].binding = 3;
+        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
-        bindings[4].binding = 4;
-        bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        // Binding 4: Scene depth (soft particles)
+        bindings[3].binding = 4;
+        bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        // VK-1481 Phase 2, Binding 8: per-emitter render-data SSBO (merged draw reads by emitterSlot).
+        // DYNAMIC storage buffer: the buffer holds MAX_FRAMES_IN_FLIGHT copies and recordCommandsInline
+        // binds the current frame's copy via a per-frame dynamic offset (avoids CPU/GPU write-after-read).
+        bindings[4].binding = 8;
+        bindings[4].descriptorType = vk::DescriptorType::eStorageBufferDynamic;
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
@@ -63,52 +72,42 @@ namespace render::vfx
         layoutInfo.pBindings = bindings.data();
 
         descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
+
+        // VK-1481: empty 0-binding layout used to pad missing lighting sets so bindless is always set 4.
+        vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
+        emptySetLayout = device.getLogicalDevice().createDescriptorSetLayout(emptyLayoutInfo);
     }
 
     void VFXSceneGPUPipeline::createDescriptorPool()
     {
-        uint32_t totalSets = MAX_TEXTURE_SLOTS + 1;
-
-        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+        // VK-1481: a single set-0 (no per-texture cloning). Depth is the only combined-image-sampler.
+        // Render-data is a DYNAMIC storage buffer (per-frame double-buffering via dynamic offset).
+        std::array<vk::DescriptorPoolSize, 4> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[0].descriptorCount = totalSets;
+        poolSizes[0].descriptorCount = 1;                      // camera UBO
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[1].descriptorCount = totalSets * 2;  // particle texture + depth texture per set
+        poolSizes[1].descriptorCount = 1;                      // scene depth
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = totalSets * 2;
+        poolSizes[2].descriptorCount = 2;                      // particle + config
+        poolSizes[3].type = vk::DescriptorType::eStorageBufferDynamic;
+        poolSizes[3].descriptorCount = 1;                      // render-data SSBO (per-frame)
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = totalSets;
+        poolInfo.maxSets = 1;
 
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
 
     void VFXSceneGPUPipeline::allocateDescriptorSet()
     {
-        defaultDescriptorSet = allocateDescriptorSetFromPool();
-    }
-
-    vk::DescriptorSet VFXSceneGPUPipeline::allocateDescriptorSetFromPool()
-    {
-        // Recycle descriptor sets that have aged past the deferred deletion window
-        for (auto it = pendingDescriptorSets.begin(); it != pendingDescriptorSets.end(); ++it)
-        {
-            if (frameCounter - it->frameRetired >= core::DeferredDeletionQueue::FRAMES_BEFORE_DELETE)
-            {
-                auto recycled = it->set;
-                pendingDescriptorSets.erase(it);
-                return recycled;
-            }
-        }
-
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &descriptorSetLayout;
 
-        return device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        defaultDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
     }
 
     void VFXSceneGPUPipeline::setLightingLayouts(
@@ -137,13 +136,18 @@ namespace render::vfx
         auto vertexBinding = VFXQuadVertex::getBindingDescription();
         auto vertexAttribs = VFXQuadVertex::getAttributeDescriptions();
 
+        // VK-1481: sets 1-3 are the lighting sets; the shared bindless texture set is at set 4. When
+        // lighting layouts are absent (e.g. VFX GPU init ran before they were cached — GPU-driven off),
+        // pad sets 1-3 with an empty layout so bindless ALWAYS lands at set 4, matching the shaders.
+        // (Replaces the previous compiled-out assert, which silently mis-built the layout in
+        // Development/Release where asserts are off.)
         std::vector<vk::DescriptorSetLayout> layouts = {descriptorSetLayout};
-        if (lightBufferLayout && clusterGridLayout && clusterLightGridLayout)
-        {
-            layouts.push_back(lightBufferLayout);
-            layouts.push_back(clusterGridLayout);
-            layouts.push_back(clusterLightGridLayout);
-        }
+        layouts.push_back(lightBufferLayout ? lightBufferLayout : emptySetLayout);
+        layouts.push_back(clusterGridLayout ? clusterGridLayout : emptySetLayout);
+        layouts.push_back(clusterLightGridLayout ? clusterLightGridLayout : emptySetLayout);
+
+        assert(bindless && "VFXSceneGPUPipeline: bindless table must be set before init()");
+        layouts.push_back(bindless->getDescriptorSetLayout());
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
@@ -155,8 +159,8 @@ namespace render::vfx
             .vertexAttributes = {vertexAttribs.begin(), vertexAttribs.end()},
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = layouts,
-            .pushConstantSize = sizeof(GPUVFXBillboardPushConstants),
-            .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+            .pushConstantSize = sizeof(GPUVFXMergedPushConstants), // VK-1481 Phase 2: {runBaseSlot}
+            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,
@@ -188,6 +192,18 @@ namespace render::vfx
         uboRequest.size = sizeof(GPUVFXCameraUBO);
         core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
         cameraUBOMapped = cameraUBOAllocation.mappedPtr;
+
+        // VK-1481 Phase 2: per-emitter render-data SSBO (host-visible, mapped, one slot per emitter).
+        // Sized MAX_FRAMES_IN_FLIGHT copies: recordCommandsInline writes/binds the current frame's copy
+        // via a dynamic offset, so the GPU never reads a copy the CPU is overwriting (write-after-read).
+        core::BufferInfoRequest renderDataRequest(vkDevice, device.getPhysicalDevice());
+        renderDataRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        renderDataRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                       vk::MemoryPropertyFlagBits::eHostCoherent;
+        renderDataRequest.size = sizeof(VFXEmitterRenderData) * GPUVFXConstants::MAX_EMITTERS *
+                                 core::MAX_FRAMES_IN_FLIGHT;
+        core::BufferUtilities::createBuffer(renderDataRequest, renderDataBuffer, renderDataBufferAllocation, device.getMemoryManager());
+        renderDataMapped = renderDataBufferAllocation.mappedPtr;
 
         constexpr vk::DeviceSize vertexBufferSize = sizeof(VFXQuadVertex) * QUAD_VERTICES.size();
         core::BufferInfoRequest vertexRequest(vkDevice, device.getPhysicalDevice());

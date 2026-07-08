@@ -1,6 +1,7 @@
 #pragma once
 #include "../../interfaces/asset/IAssetDatabaseService.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "../../events/asset/AssetDatabaseEvents.hpp"
 #include <resource/AssetTypes.hpp>
 #include <vector>
 
@@ -23,7 +24,12 @@ namespace services
                                const std::string& sourcePath);
         void onAssetSaved(const std::string& filePath);
         bool rebuildDatabase();
+        ::events::assetdb::RegenerateMetadataResult regenerateMissingMetadata();
         std::string getProjectRoot() const;
+
+        // Shared post-rebuild tail: rescan dependencies, persist the index, and broadcast the
+        // rebuilt notification. Returns whether saveIndex succeeded.
+        bool finalizeDatabaseRebuild(const std::string& projRoot);
 
         std::vector<::events::SubscriptionToken> subscriptions;
     };

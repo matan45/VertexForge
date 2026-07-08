@@ -11,6 +11,7 @@ namespace asset
     public:
         struct MigrationResult
         {
+            uint32_t assetsScanned = 0;
             uint32_t assetsRegistered = 0;
             uint32_t metaFilesCreated = 0;
             std::vector<std::string> errors;

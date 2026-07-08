@@ -1,13 +1,17 @@
 #include "VFXDistortionPipeline.hpp"
 #include "../quad/VFXQuadData.hpp"
 #include "../../../core/Device.hpp"
+#include "../../../core/GraphicsConstants.hpp"
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
 #include "../../../core/BufferUtilities.hpp"
 #include "../../../core/ImageUtilities.hpp"
 #include "../../../core/DeferredDeletionQueue.hpp"
+#include "../bindless/VFXBindlessTextures.hpp"
 #include "print/Log.hpp"
+
+#include <cassert>
 
 namespace render::vfx
 {
@@ -25,6 +29,8 @@ namespace render::vfx
 
     void VFXDistortionPipeline::createDescriptorSetLayout()
     {
+        // VK-1481: binding 1 (per-emitter distortion texture) removed — textures now live in the
+        // shared bindless set (set 1). The numeric gap at binding 1 is legal.
         std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
 
         // Binding 0: Camera UBO
@@ -33,27 +39,28 @@ namespace render::vfx
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
-        // Binding 1: Distortion texture (normal map / noise)
-        bindings[1].binding = 1;
-        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
         // Binding 2: Particle SSBO
-        bindings[2].binding = 2;
-        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
-        bindings[2].descriptorCount = 1;
-        bindings[2].stageFlags = vk::ShaderStageFlagBits::eVertex;
+        bindings[1].binding = 2;
+        bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eVertex;
 
         // Binding 3: Emitter config SSBO
-        bindings[3].binding = 3;
-        bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
-        bindings[3].descriptorCount = 1;
-        bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        bindings[2].binding = 3;
+        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
         // Binding 4: Scene depth texture
-        bindings[4].binding = 4;
-        bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[3].binding = 4;
+        bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        // VK-1481 Phase 2, Binding 8: per-emitter distortion render-data SSBO (merged draw reads by
+        // emitterSlot). DYNAMIC: MAX_FRAMES_IN_FLIGHT copies bound per-frame via a dynamic offset.
+        bindings[4].binding = 8;
+        bindings[4].descriptorType = vk::DescriptorType::eStorageBufferDynamic;
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
@@ -66,53 +73,47 @@ namespace render::vfx
 
     void VFXDistortionPipeline::createDescriptorPool()
     {
-        uint32_t totalSets = MAX_TEXTURE_SLOTS + 1;
-
-        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+        // VK-1481: a single set-0 (no per-texture cloning). Depth is the only combined-image-sampler.
+        // Render-data is a DYNAMIC storage buffer (per-frame double-buffering via dynamic offset).
+        std::array<vk::DescriptorPoolSize, 4> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[0].descriptorCount = totalSets;
+        poolSizes[0].descriptorCount = 1;                      // camera UBO
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[1].descriptorCount = totalSets * 2;
+        poolSizes[1].descriptorCount = 1;                      // scene depth
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = totalSets * 2;
+        poolSizes[2].descriptorCount = 2;                      // particle + config
+        poolSizes[3].type = vk::DescriptorType::eStorageBufferDynamic;
+        poolSizes[3].descriptorCount = 1;                      // render-data SSBO (per-frame)
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = totalSets;
+        poolInfo.maxSets = 1;
 
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
 
     void VFXDistortionPipeline::allocateDescriptorSet()
     {
-        defaultDescriptorSet = allocateDescriptorSetFromPool();
-    }
-
-    vk::DescriptorSet VFXDistortionPipeline::allocateDescriptorSetFromPool()
-    {
-        for (auto it = pendingDescriptorSets.begin(); it != pendingDescriptorSets.end(); ++it)
-        {
-            if (frameCounter - it->frameRetired >= core::DeferredDeletionQueue::FRAMES_BEFORE_DELETE)
-            {
-                auto recycled = it->set;
-                pendingDescriptorSets.erase(it);
-                return recycled;
-            }
-        }
-
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &descriptorSetLayout;
 
-        return device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        defaultDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
     }
 
     void VFXDistortionPipeline::createPipeline()
     {
         auto vertexBinding = VFXQuadVertex::getBindingDescription();
         auto vertexAttribs = VFXQuadVertex::getAttributeDescriptions();
+
+        // VK-1481: the distortion pipeline has no lighting sets, so the local set 0 is the only set
+        // before the shared bindless texture set, which is therefore appended at set index 1.
+        std::vector<vk::DescriptorSetLayout> layouts = {descriptorSetLayout};
+        assert(bindless && "VFXDistortionPipeline: bindless table must be set before init()");
+        assert(layouts.size() == 1 && "VFX distortion expects only set 0 before the bindless set 1");
+        layouts.push_back(bindless->getDescriptorSetLayout());
 
         // Additive blending for distortion vectors: srcColor=One, dstColor=One
         core::GraphicsPipelineConfig config{
@@ -124,9 +125,9 @@ namespace render::vfx
             .vertexBindings = {vertexBinding},
             .vertexAttributes = {vertexAttribs.begin(), vertexAttribs.end()},
             .topology = vk::PrimitiveTopology::eTriangleList,
-            .descriptorSetLayouts = {descriptorSetLayout},
-            .pushConstantSize = sizeof(GPUVFXDistortionPushConstants),
-            .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+            .descriptorSetLayouts = layouts,
+            .pushConstantSize = sizeof(GPUVFXMergedPushConstants), // VK-1481 Phase 2: {runBaseSlot}
+            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,
@@ -154,6 +155,17 @@ namespace render::vfx
         uboRequest.size = sizeof(GPUVFXCameraUBO);
         core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
         cameraUBOMapped = cameraUBOAllocation.mappedPtr;
+
+        // VK-1481 Phase 2: per-emitter render-data SSBO — MAX_FRAMES_IN_FLIGHT copies (per-frame bound
+        // via a dynamic offset) so the GPU never reads a copy the CPU is overwriting.
+        core::BufferInfoRequest renderDataRequest(vkDevice, device.getPhysicalDevice());
+        renderDataRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        renderDataRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                       vk::MemoryPropertyFlagBits::eHostCoherent;
+        renderDataRequest.size = sizeof(VFXDistortionRenderData) * GPUVFXConstants::MAX_EMITTERS *
+                                 core::MAX_FRAMES_IN_FLIGHT;
+        core::BufferUtilities::createBuffer(renderDataRequest, renderDataBuffer, renderDataBufferAllocation, device.getMemoryManager());
+        renderDataMapped = renderDataBufferAllocation.mappedPtr;
 
         constexpr vk::DeviceSize vertexBufferSize = sizeof(VFXQuadVertex) * QUAD_VERTICES.size();
         core::BufferInfoRequest vertexRequest(vkDevice, device.getPhysicalDevice());

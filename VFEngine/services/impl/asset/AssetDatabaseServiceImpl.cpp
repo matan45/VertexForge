@@ -104,6 +104,12 @@ namespace services
                 return rebuildDatabase();
             });
 
+        dispatcher.registerCommandHandler<events::assetdb::RegenerateMissingMetadataCommand>(
+            [this](const events::assetdb::RegenerateMissingMetadataCommand&)
+            {
+                return regenerateMissingMetadata();
+            });
+
         // Queries
         dispatcher.registerQueryHandler<events::assetdb::GetAssetPathQuery>(
             [](const events::assetdb::GetAssetPathQuery& q)
@@ -446,6 +452,23 @@ namespace services
         }
     }
 
+    bool AssetDatabaseServiceImpl::finalizeDatabaseRebuild(const std::string& projRoot)
+    {
+        auto& db = asset::AssetDatabase::instance();
+
+        // Re-scan all dependencies
+        asset::DependencyScanner::scanAll(projRoot);
+
+        // Save the index
+        const bool saved = db.saveIndex(projRoot);
+
+        events::assetdb::AssetDatabaseRebuiltNotification notification;
+        notification.assetCount = static_cast<uint32_t>(db.getAssetCount());
+        events::EventDispatcher::instance().publish(notification);
+
+        return saved;
+    }
+
     bool AssetDatabaseServiceImpl::rebuildDatabase()
     {
         std::string projRoot = getProjectRoot();
@@ -456,17 +479,48 @@ namespace services
         // Rebuild from .vfmeta files
         if (!db.rebuildFromMetaFiles(projRoot)) return false;
 
-        // Re-scan all dependencies
-        asset::DependencyScanner::scanAll(projRoot);
-
-        // Save the index
-        db.saveIndex(projRoot);
-
-        events::assetdb::AssetDatabaseRebuiltNotification notification;
-        notification.assetCount = static_cast<uint32_t>(db.getAssetCount());
-        events::EventDispatcher::instance().publish(notification);
-
+        finalizeDatabaseRebuild(projRoot);
         return true;
+    }
+
+    ::events::assetdb::RegenerateMetadataResult AssetDatabaseServiceImpl::regenerateMissingMetadata()
+    {
+        ::events::assetdb::RegenerateMetadataResult result;
+        const std::string projRoot = getProjectRoot();
+        if (projRoot.empty())
+        {
+            result.failures.push_back("No project is loaded");
+            vfLogError("RegenerateMissingMetadata: no project root available");
+            return result;
+        }
+
+        const auto migrationResult = asset::AssetDatabaseMigrator::migrateProject(projRoot);
+        result.assetsScanned = migrationResult.assetsScanned;
+        result.metaFilesCreated = migrationResult.metaFilesCreated;
+        result.failures = migrationResult.errors;
+
+        for (const auto& failure : result.failures)
+        {
+            vfLogError("RegenerateMissingMetadata: {}", failure);
+        }
+
+        // Nothing was regenerated: the database state is unchanged, so skip the full-project
+        // dependency rescan + index save + rebuilt notification (all of which run on the UI thread).
+        if (result.metaFilesCreated == 0)
+        {
+            vfLogInfo("RegenerateMissingMetadata: scanned {}, nothing to regenerate", result.assetsScanned);
+            return result;
+        }
+
+        if (!finalizeDatabaseRebuild(projRoot))
+        {
+            result.failures.push_back("Failed to save asset database index");
+            vfLogError("RegenerateMissingMetadata: failed to save asset database index");
+        }
+
+        vfLogInfo("RegenerateMissingMetadata: scanned {}, regenerated {}, failures {}",
+                  result.assetsScanned, result.metaFilesCreated, result.failures.size());
+        return result;
     }
 
     std::string AssetDatabaseServiceImpl::getProjectRoot() const

@@ -72,6 +72,11 @@ namespace windows
         std::string errorMessage;
         std::vector<std::string> errorDetails;
 
+        bool showResultModal = false;
+        std::string resultTitle;
+        std::string resultMessage;
+        std::vector<std::string> resultDetails;
+
     public:
         using RefreshCallback = std::function<void()>;
         using ClipboardCallback = std::function<void()>;
@@ -94,6 +99,8 @@ namespace windows
 
         void showError(const std::string& title, const std::string& message,
                        const std::vector<std::string>& details = {});
+        void showResult(const std::string& title, const std::string& message,
+                        const std::vector<std::string>& details = {});
 
     private:
         void drawCreateFolderModal(const fs::path& currentPath);
@@ -111,6 +118,7 @@ namespace windows
         void drawReferencesModal();
         void drawDependenciesModal();
         void drawErrorModal();
+        void drawResultModal();
 
         // Lists asset paths for the given GUIDs (unresolved GUIDs shown
         // explicitly); returns true when a double-click navigated the

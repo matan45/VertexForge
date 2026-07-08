@@ -91,6 +91,7 @@ void main() {
 
 #type FRAGMENT
 #version 460 core
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColor;
@@ -113,7 +114,8 @@ layout(binding = 0) uniform CameraUBO {
     float _pad2;
 } camera;
 
-layout(binding = 1) uniform sampler2D particleTexture;
+// VK-1481: shared VFX bindless texture table (bound once per pass). Per-emitter slot in pc.textureIndex.
+layout(set = 4, binding = 0) uniform sampler2D bindlessTextures[];
 
 #include "vfx_gpu_types.glsl"
 
@@ -166,10 +168,11 @@ layout(push_constant) uniform PushConstants {
     float glowColorR;
     float glowColorG;
     float glowColorB;
+    uint textureIndex;
 } pc;
 
 void main() {
-    vec4 texColor = texture(particleTexture, fragTexCoord);
+    vec4 texColor = texture(bindlessTextures[nonuniformEXT(pc.textureIndex)], fragTexCoord);
     vec4 finalColor = texColor * fragColor;
 
     GPUEmitterConfig config = configs[pc.emitterIndex];
