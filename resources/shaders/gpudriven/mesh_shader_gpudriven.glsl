@@ -208,9 +208,6 @@ void main() {
 #include "../common/lod_crossfade.glsl"
 #include "../common/wetness.glsl"
 #include "../common/snow_accumulation.glsl"
-#ifdef MOTION_VECTORS_ENABLED
-#include "../common/motion_vectors.glsl"
-#endif
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -225,8 +222,6 @@ layout(location = 8) in flat vec4 fragInstanceIBL;
 layout(location = 0) out vec4 outColor;
 #ifdef WBOIT_ENABLED
 layout(location = 1) out float outRevealage;
-#elif defined(MOTION_VECTORS_ENABLED)
-layout(location = 1) out vec2 outMotionVector;
 #endif
 
 layout(set = 0, binding = 0) uniform CameraUBO {
@@ -264,8 +259,6 @@ layout(push_constant) uniform PushConstants {
     float screenWidth;
     float screenHeight;
     uint hiZMipLevels;
-    // mat4 aligns to offset 32 (after the 5 leading scalars) — matches C++ MeshShaderPushConstants.
-    mat4 prevViewProjection;
 } pc;
 
 // Light structs provided by lighting_functions.glsl include
@@ -454,11 +447,23 @@ bool isValidTexture(uint index) {
     return index != INVALID_TEXTURE_INDEX && index != 0xFFu && index < 4096u;
 }
 
+#ifdef SVT_ENABLED
+// VK-1482: INVALID_TEXTURE_INDEX (0xFFFFFFFF) has bit 31 set and would alias SVT_TAG_BIT — an
+// unbound material slot must never route into the SVT path (it OOB-read svtImageInfo[0x7FFFFFFF]
+// and OOB-atomicOr'd the feedback buffer, corrupting ao/normal/emission on every unbound slot).
+// C++ producers only ever emit a bindless slot (bit 31 clear), SVT_TAG_BIT | imageId, or the
+// INVALID_TEXTURE_INDEX / 0xFFu sentinels, so excluding the sentinel exactly isolates real tags.
+// Mirror: render::gpudriven::svtIsTaggedIndex (SVTManager.hpp).
+bool isSVTTagged(uint index) {
+    return index != INVALID_TEXTURE_INDEX && (index & SVT_TAG_BIT) != 0u;
+}
+#endif
+
 // A material texture index is sampleable if it's a normal bindless index OR (SVT on) an
 // SVT-tagged index. When SVT is off this is exactly isValidTexture (byte-identical).
 bool isSampleableTexture(uint index) {
 #ifdef SVT_ENABLED
-    if ((index & SVT_TAG_BIT) != 0u) return true;
+    if (isSVTTagged(index)) return true;
 #endif
     return isValidTexture(index);
 }
@@ -481,7 +486,7 @@ vec4 sampleMaterialTex(uint index, vec2 uv, vec2 dx, vec2 dy) {
 #ifdef SVT_ENABLED
     g_svtSampleTagged = 0.0;
     g_svtSampleValid = 0.0;
-    if ((index & SVT_TAG_BIT) != 0u) {
+    if (isSVTTagged(index)) {
         VTImageInfo img = svtImageInfo[index & 0x7FFFFFFFu];
         uint atlasIndex = img.pad0;
         uint fallbackIndex = img.pad1;
@@ -572,7 +577,7 @@ void main() {
         // VK-1480: an SVT albedo tile can carry alpha ~= 0 (BC7 alpha in uncovered/streaming texels),
         // which the color*alpha output premultiply would collapse to black. Opaque materials do not
         // use albedo alpha, so force full opacity for them; alpha-mask/translucent/additive keep it.
-        if ((albedoIdx & SVT_TAG_BIT) != 0u &&
+        if (isSVTTagged(albedoIdx) &&
             (drawData.flags & (FLAG_ALPHA_MASK | FLAG_TRANSLUCENT | FLAG_ADDITIVE_BLEND)) == 0u) {
             alpha = 1.0;
         }
@@ -947,9 +952,5 @@ void main() {
     } else {
         outColor = vec4(color * alpha, alpha);
     }
-#ifdef MOTION_VECTORS_ENABLED
-    mat4 currentVP = camera.projection * camera.view;
-    outMotionVector = computeStaticMotionVector(fragWorldPos, currentVP, pc.prevViewProjection);
-#endif
 #endif
 }

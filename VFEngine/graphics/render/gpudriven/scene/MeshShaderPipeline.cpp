@@ -582,10 +582,6 @@ namespace render::gpudriven
             meshShader->addMacroDefinition("WORLD_MASK_ENABLED");
             meshShader->addMacroDefinition("WORLD_MASK_SET", info.giProbeDataLayout ? "14" : "11");
         }
-        if (info.motionVectorsEnabled && !isWBOITMode)
-        {
-            meshShader->addMacroDefinition("MOTION_VECTORS_ENABLED");
-        }
         if (svtSampleEnabled)
         {
             meshShader->addMacroDefinition("SVT_ENABLED"); // VK-1209 material SVT (set-1 bindings 3/4/5)
@@ -774,33 +770,6 @@ namespace render::gpudriven
             revealageBlend.colorWriteMask = vk::ColorComponentFlagBits::eR;
 
             config.colorBlendAttachments = {accumBlend, revealageBlend};
-        }
-        else if (info.motionVectorsEnabled)
-        {
-            // Motion vector MRT: color attachment 0 = scene color, attachment 1 = motion vectors (RG only, no blend)
-            config.colorAttachmentFormats.push_back(vk::Format::eR16G16Sfloat);
-
-            vk::PipelineColorBlendAttachmentState colorBlend{};
-            colorBlend.colorWriteMask = vk::ColorComponentFlagBits::eR |
-                                        vk::ColorComponentFlagBits::eG |
-                                        vk::ColorComponentFlagBits::eB |
-                                        vk::ColorComponentFlagBits::eA;
-            if (isTransparentMode)
-            {
-                colorBlend.blendEnable = VK_TRUE;
-                colorBlend.srcColorBlendFactor = vk::BlendFactor::eOne;
-                colorBlend.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-                colorBlend.colorBlendOp = vk::BlendOp::eAdd;
-                colorBlend.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-                colorBlend.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-                colorBlend.alphaBlendOp = vk::BlendOp::eAdd;
-            }
-
-            vk::PipelineColorBlendAttachmentState mvBlend{};
-            mvBlend.blendEnable = VK_FALSE;
-            mvBlend.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG;
-
-            config.colorBlendAttachments = {colorBlend, mvBlend};
         }
 
         try

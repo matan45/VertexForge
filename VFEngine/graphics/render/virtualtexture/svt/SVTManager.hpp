@@ -7,6 +7,7 @@
 #include "../VTResidencyCore.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include "../../../core/GraphicsConstants.hpp"
+#include "../../../core/BindlessConstants.hpp"
 #include "threading/JobSystem.hpp"
 #include "threading/CancellationToken.hpp"
 #include <vulkan/vulkan.hpp>
@@ -46,6 +47,21 @@ namespace render::gpudriven
     // Bit 31 tags a value in PerDrawData.textureIndices as SVT-backed (bindless indices only
     // ever use the low 12 bits — the mesh shader rejects >= 4096 — so bit 31 is free).
     inline constexpr uint32_t SVT_TAG_BIT = 0x80000000u;
+
+    // VK-1482: INVALID_TEXTURE_INDEX (0xFFFFFFFF) also has bit 31 set — an unbound/sentinel slot
+    // must never classify as SVT-tagged. GLSL mirror: isSVTTagged() in
+    // resources/shaders/gpudriven/mesh_shader_gpudriven.glsl (parity by convention, like
+    // vt_types.glsl <-> VTTypes.hpp).
+    inline constexpr bool svtIsTaggedIndex(uint32_t index) noexcept
+    {
+        return index != core::INVALID_TEXTURE_INDEX && (index & SVT_TAG_BIT) != 0u;
+    }
+    static_assert(!svtIsTaggedIndex(core::INVALID_TEXTURE_INDEX),
+                  "VK-1482: the unbound sentinel must not classify as SVT-tagged");
+    static_assert(svtIsTaggedIndex(SVT_TAG_BIT | 0u) && svtIsTaggedIndex(SVT_TAG_BIT | 4095u),
+                  "genuine SVT tags must classify as tagged");
+    static_assert(!svtIsTaggedIndex(0u) && !svtIsTaggedIndex(0xFFu) && !svtIsTaggedIndex(4095u),
+                  "bindless indices and the legacy 0xFF sentinel must not classify as SVT-tagged");
 
     class SVTManager
     {

@@ -149,10 +149,6 @@ namespace render::gpudriven
                 }
             }
 
-            bool mvEnabled = false;
-            if (auto* um = device.getUpscaleManager())
-                mvEnabled = um->isActive();
-
             MeshPipelineInitInfo pipelineInfo{
                 .iblLayout = iblDescriptorSetLayout,
                 .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -163,8 +159,7 @@ namespace render::gpudriven
                 .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .colorAttachmentFormats = colorFormats,
-                .depthAttachmentFormat = depthFormat,
-                .motionVectorsEnabled = mvEnabled
+                .depthAttachmentFormat = depthFormat
             };
 
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
@@ -446,10 +441,6 @@ namespace render::gpudriven
             if (water.causticsResources && water.causticsResources->isInitialized())
                 causticLayout = water.causticsResources->getDescriptorSetLayout();
 
-            bool mvEnabled = false;
-            if (auto* um = device.getUpscaleManager())
-                mvEnabled = um->isActive();
-
             MeshPipelineInitInfo pipelineInfo{
                 .iblLayout = cachedIBLLayout,
                 .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -463,8 +454,7 @@ namespace render::gpudriven
                 .causticLayout = causticLayout,
                 .worldMaskLayout = currentWorldMaskLayout(),
                 .colorAttachmentFormats = cachedColorFormats,
-                .depthAttachmentFormat = cachedDepthFormat,
-                .motionVectorsEnabled = mvEnabled
+                .depthAttachmentFormat = cachedDepthFormat
             };
 
             meshShaderPipeline->recreate(pipelineInfo);
