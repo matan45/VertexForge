@@ -496,11 +496,18 @@ void main() {
     bool rvtResolved = rvtS.valid && rvtO.a >= 0.5;
     if (rvtResolved) {
         vec4 rvtA = texture(rvtAlbedoAtlas, rvtS.uv);
-        mat_albedo = rvtA.rgb;
-        mat_metallic = rvtO.b;
-        mat_roughness = rvtO.g;
-        mat_ao = rvtO.r;
-        mat_emission = rvtA.rgb * rvtA.a;
+        // Coverage renormalization: rvtO.a is the per-texel baked-coverage bit (1.0 baked,
+        // 0.0 cleared), so a bilinear tap straddling covered and cleared texels returns every
+        // channel pre-scaled by the filtered coverage — rendering as a thin dark seam line at
+        // bake-quad seams and page borders at the terrain edge. Dividing by the filtered
+        // coverage reconstructs the covered texels' average instead. Fully covered taps have
+        // a == 1.0 exactly, so the division is an exact no-op on the interior fast path.
+        float rvtCov = rvtO.a;
+        mat_albedo = rvtA.rgb / rvtCov;
+        mat_metallic = rvtO.b / rvtCov;
+        mat_roughness = rvtO.g / rvtCov;
+        mat_ao = rvtO.r / rvtCov;
+        mat_emission = mat_albedo * (rvtA.a / rvtCov);
     } else {
         // Live 8-layer composite fallback (cold path — only unresolved fragments pay it, so the
         // RVT fast path keeps its win). The generated composite declares its own mat_* locals;
