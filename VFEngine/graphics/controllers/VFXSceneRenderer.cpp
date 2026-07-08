@@ -9,6 +9,7 @@
 #include "../render/vfx/mesh/VFXMeshGPUPipeline.hpp"
 #include "../render/vfx/ribbon/VFXRibbonGPUPipeline.hpp"
 #include "../render/vfx/distortion/VFXDistortionPipeline.hpp"
+#include "../render/vfx/bindless/VFXBindlessTextures.hpp"
 #include "../render/vfx/particle/VFXEmitterPool.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
@@ -863,6 +864,11 @@ namespace controllers
 
         processPendingEmitterFrees();
 
+        // VK-1481: advance the shared bindless table's deferred-teardown clock (same frame counter
+        // as pendingEmitterFrees; releases issued this frame retire against this value).
+        if (bindlessTextures)
+            bindlessTextures->tick(frameNumber);
+
         if (gpuDrivenEnabled)
         {
             updateGPU(deltaTime);
@@ -1102,7 +1108,8 @@ namespace controllers
             cmd,
             gpuBufferManager->getDrawCommandBuffer(),
             maxEmitters,
-            distortionFlags);
+            distortionFlags,
+            gpuBufferManager->getCurrentFrameIndex());
     }
 
     void VFXSceneRenderer::recordCPUDrawCommands(vk::CommandBuffer cmd)

@@ -2,12 +2,15 @@
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/asset/AssetDatabaseEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include "Import.hpp"
+#include "print/Log.hpp"
 #include <IconsFontAwesome6.h>
+#include <exception>
 #include <imgui_internal.h>
 #include <windows.h>
 #include <shellapi.h>
@@ -207,8 +210,8 @@ namespace windows
 
         ImGui::SameLine();
 
-        // Reserve space for: Import + Search label + SearchInput(150) + Filter + Bookmark + spacing
-        float reservedRight = 500.0f;
+        // Reserve space for: Import + regenerate metadata + search/filter/bookmark controls.
+        float reservedRight = 550.0f;
         float availableWidth = ImGui::GetContentRegionAvail().x - reservedRight;
         if (availableWidth < 100.0f) availableWidth = 100.0f;
 
@@ -222,6 +225,34 @@ namespace windows
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Import assets");
+
+        ImGui::SameLine();
+
+        if (ImGui::Button(ICON_FA_FILE_MEDICAL "##RegenMeta"))
+        {
+            try
+            {
+                const auto result = events::EventDispatcher::instance().execute(
+                    events::assetdb::RegenerateMissingMetadataCommand{});
+
+                std::string summary = "Scanned " + std::to_string(result.assetsScanned) +
+                    " asset(s); regenerated " + std::to_string(result.metaFilesCreated) +
+                    " .vfmeta file(s).";
+                summary += result.failures.empty()
+                    ? "\nNo failures."
+                    : "\n" + std::to_string(result.failures.size()) + " failure(s):";
+
+                modals->showResult("Regenerate Metadata", summary, result.failures);
+                loadDirectory(currentPath);
+            }
+            catch (const std::exception& e)
+            {
+                vfLogError("Regenerate metadata failed: {}", e.what());
+                modals->showError("Regenerate Metadata", e.what());
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Regenerate missing .vfmeta files");
 
         ImGui::SameLine();
 

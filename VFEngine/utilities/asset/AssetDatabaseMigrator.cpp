@@ -49,6 +49,7 @@ namespace asset
                 // registered extensions. Unknown extensions are still skipped
                 // (graceful — no GUID/.vfmeta until a plugin claims them).
                 if (!extensions::isAssetExtension(ext)) continue;
+                result.assetsScanned++;
 
                 // Check if .vfmeta already exists
                 auto metaPath = AssetMetadataSerializer::getMetaPath(entry.path());
@@ -95,8 +96,8 @@ namespace asset
             vfLogError("Asset database migration failed: {}", e.what());
         }
 
-        vfLogInfo("Migration complete: {} assets registered, {} meta files created",
-                  result.assetsRegistered, result.metaFilesCreated);
+        vfLogInfo("Migration complete: {} assets scanned, {} assets registered, {} meta files created",
+                  result.assetsScanned, result.assetsRegistered, result.metaFilesCreated);
         return result;
     }
 }

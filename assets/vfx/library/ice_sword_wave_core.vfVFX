@@ -1,0 +1,97 @@
+{
+    "version": "1.0",
+    "uuid": "920000000000000102",
+    "name": "Ice Sword Wave Core",
+    "graph": {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "Emitter",
+                "name": "Emitter",
+                "position": [100.0, 200.0],
+                "properties": {
+                    "spawnRate": { "type": "Float", "value": 145.0 },
+                    "lifetime": { "type": "Float", "value": 0.18 },
+                    "startSize": { "type": "Float", "value": 1.0 },
+                    "startSpeed": { "type": "Float", "value": 7.2 },
+                    "startVelocity": { "type": "Vec3", "value": [0.0, 0.04, 1.0] },
+                    "startColor": { "type": "Color", "value": [0.46, 0.92, 1.0, 0.95] },
+                    "looping": { "type": "Bool", "value": false },
+                    "texture": { "type": "String", "value": "" },
+                    "burstCount": { "type": "Int", "value": 1 },
+                    "burst0Time": { "type": "Float", "value": 0.0 },
+                    "burst0Count": { "type": "Int", "value": 26 },
+                    "burst0Cycles": { "type": "Int", "value": 1 },
+                    "burst0Interval": { "type": "Float", "value": 0.5 },
+                    "burst0Probability": { "type": "Float", "value": 1.0 },
+                    "additiveBlend": { "type": "Bool", "value": true },
+                    "blendMode": { "type": "String", "value": "additive" },
+                    "alphaClipThreshold": { "type": "Float", "value": 0.02 },
+                    "renderMode": { "type": "Int", "value": 4 },
+                    "maxTrailPoints": { "type": "Int", "value": 48 },
+                    "ribbonWidth": { "type": "Float", "value": 0.72 },
+                    "ribbonMinDistance": { "type": "Float", "value": 0.035 },
+                    "ribbonWidthCurve": { "type": "Curve", "value": { "keys": [[0.0, 0.25, 0.0, 0.0], [0.22, 1.2, 0.0, 0.0], [0.7, 0.8, 0.0, 0.0], [1.0, 0.08, 0.0, 0.0]] } },
+                    "ribbonTailGradient": { "type": "Gradient", "value": { "stops": [
+                        [0.0, 1.0, 1.0, 1.0, 0.98],
+                        [0.35, 0.42, 0.9, 1.0, 0.82],
+                        [1.0, 0.06, 0.22, 0.55, 0.0]
+                    ] } },
+                    "emissiveIntensity": { "type": "Float", "value": 5.8 },
+                    "speedVariance": { "type": "Float", "value": 0.18 },
+                    "sizeVariance": { "type": "Float", "value": 0.12 },
+                    "colorValueVariance": { "type": "Float", "value": 0.1 },
+                    "coneSpread": { "type": "Float", "value": 0.12 }
+                }
+            },
+            {
+                "id": 3,
+                "type": "ColorOverLifetime",
+                "name": "Color Over Lifetime",
+                "position": [330.0, 100.0],
+                "properties": {
+                    "gradient": { "type": "Gradient", "value": { "stops": [
+                        [0.0, 1.0, 1.0, 1.0, 0.95],
+                        [0.2, 0.45, 0.94, 1.0, 0.88],
+                        [0.75, 0.18, 0.62, 0.95, 0.42],
+                        [1.0, 0.05, 0.2, 0.45, 0.0]
+                    ] } }
+                }
+            },
+            {
+                "id": 4,
+                "type": "SizeOverLifetime",
+                "name": "Size Over Lifetime",
+                "position": [530.0, 100.0],
+                "properties": {
+                    "curve": { "type": "Curve", "value": { "keys": [[0.0, 0.35, 0.0, 0.0], [0.25, 1.35, 0.0, 0.0], [1.0, 0.2, 0.0, 0.0]] } }
+                }
+            },
+            {
+                "id": 10,
+                "type": "Shape",
+                "name": "Box",
+                "position": [100.0, 420.0],
+                "properties": {
+                    "shapeType": { "type": "String", "value": "Box" },
+                    "emitFrom": { "type": "String", "value": "Volume" },
+                    "randomDirection": { "type": "Bool", "value": false },
+                    "halfExtents": { "type": "Vec3", "value": [0.08, 0.02, 0.15] }
+                }
+            },
+            {
+                "id": 2,
+                "type": "OutSystem",
+                "name": "Output",
+                "position": [730.0, 200.0],
+                "properties": {}
+            }
+        ],
+        "links": [
+            { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 2, "sourceNode": 3, "targetNode": 4, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 3, "sourceNode": 4, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 4, "sourceNode": 10, "targetNode": 1, "sourcePin": "Output", "targetPin": "Shape" }
+        ]
+    }
+}

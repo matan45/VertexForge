@@ -110,3 +110,27 @@ struct GPUEmitterConfig
     vec4 meshOrientationParams; // xyz = axis-lock axis (world, normalized), w = spin rate (rad/s)
     uint meshOrientationMode;   // vfx::VFXOrientationMode (0 = VelocityForward)
 };
+
+// VK-1481 Phase 2: per-emitter render-only data read by the merged (multi-draw) VFX pass, indexed by
+// emitterSlot = runBaseSlot + gl_DrawID. Mirror of C++ render::vfx::VFXEmitterRenderData (std430, 32 B).
+struct VFXEmitterRenderData
+{
+    uint textureIndex;
+    float alphaClipThreshold;
+    uint blendMode;
+    float glowColorR;
+    float glowColorG;
+    float glowColorB;
+    float _pad0;
+    float _pad1;
+};
+
+// VK-1481 Phase 2: per-emitter render data for the merged DISTORTION pass (mirror of C++
+// render::vfx::VFXDistortionRenderData, std430, 16 B).
+struct VFXDistortionRenderData
+{
+    uint textureIndex;
+    float distortionStrength;
+    float _pad0;
+    float _pad1;
+};

@@ -74,6 +74,15 @@ namespace windows
         showErrorModal = true;
     }
 
+    void ContentBrowserModals::showResult(const std::string& title, const std::string& message,
+                                          const std::vector<std::string>& details)
+    {
+        resultTitle = title;
+        resultMessage = message;
+        resultDetails = details;
+        showResultModal = true;
+    }
+
     void ContentBrowserModals::processModals(const fs::path& currentPath, const fs::path& selectedFile)
     {
         if (showCreateFolderModal)
@@ -135,6 +144,10 @@ namespace windows
         if (showErrorModal)
             ImGui::OpenPopup("Error##FileOpsError");
         drawErrorModal();
+
+        if (showResultModal)
+            ImGui::OpenPopup("Regenerate Metadata##RegenMetaResult");
+        drawResultModal();
     }
 
     void ContentBrowserModals::drawContextMenu(const Asset* selectedAsset)
@@ -644,6 +657,46 @@ namespace windows
                 errorTitle.clear();
                 errorMessage.clear();
                 errorDetails.clear();
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawResultModal()
+    {
+        if (showResultModal &&
+            ImGui::BeginPopupModal("Regenerate Metadata##RegenMetaResult", nullptr,
+                                   ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextColored(ImVec4(0.45f, 0.8f, 0.55f, 1.0f), "%s", resultTitle.c_str());
+            ImGui::Separator();
+
+            ImGui::TextWrapped("%s", resultMessage.c_str());
+
+            if (!resultDetails.empty())
+            {
+                ImGui::Spacing();
+                ImGui::Text("Failures:");
+                ImGui::BeginChild("ResultDetails", ImVec2(500, 140), true);
+                for (const auto& detail : resultDetails)
+                {
+                    ImGui::BulletText("%s", detail.c_str());
+                }
+                ImGui::EndChild();
+            }
+
+            ImGui::Spacing();
+            float buttonWidth = 120.0f;
+            float windowWidth = ImGui::GetWindowWidth();
+            ImGui::SetCursorPosX((windowWidth - buttonWidth) * 0.5f);
+
+            if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showResultModal = false;
+                resultTitle.clear();
+                resultMessage.clear();
+                resultDetails.clear();
             }
             ImGui::EndPopup();
         }

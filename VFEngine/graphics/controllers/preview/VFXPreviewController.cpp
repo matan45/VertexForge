@@ -536,18 +536,43 @@ namespace controllers
 
     void VFXPreviewController::clearBundles()
     {
-        if (!bundles.empty())
+        // VK-1483 — full teardown of live AND parked bundles. Reserved for the intentional
+        // rebuild boundaries (setSequence / cleanUp); the seek/loop path uses parkBundles()
+        // instead. Mesh steps share the controller's previewMeshCache, so the shared mesh data
+        // is freed separately in cleanUp() — NOT here (never unloadAllMeshes() a reused cache,
+        // which would null its transferManager).
+        if (bundles.empty() && parkedBundles.empty())
+            return;
+
+        device.getLogicalDevice().waitIdle();
+
+        auto teardown = [](StepBundle& bundle)
         {
-            device.getLogicalDevice().waitIdle();
-            for (auto& bundle : bundles)
-            {
-                if (bundle.billboard) bundle.billboard->cleanUp();
-                if (bundle.mesh) bundle.mesh->cleanUp();
-                if (bundle.ribbon) bundle.ribbon->cleanUp();
-                if (bundle.meshCache) bundle.meshCache->unloadAllMeshes();
-            }
-            bundles.clear();
+            if (bundle.billboard) bundle.billboard->cleanUp();
+            if (bundle.mesh) bundle.mesh->cleanUp();
+            if (bundle.ribbon) bundle.ribbon->cleanUp();
+        };
+
+        for (auto& bundle : bundles)
+            teardown(bundle);
+        bundles.clear();
+
+        for (auto& [idx, bundle] : parkedBundles)
+            teardown(bundle);
+        parkedBundles.clear();
+    }
+
+    void VFXPreviewController::parkBundles()
+    {
+        // VK-1483 — move every live bundle into the persistent parked pool. Pure CPU pointer
+        // moves: no waitIdle, no pipeline cleanUp, no mesh unload. The bundle's GPU pipeline and
+        // shared-cache mesh state stay fully intact so a re-spawn of the same step reuses them.
+        for (auto& b : bundles)
+        {
+            const int idx = b.stepIndex;
+            parkedBundles.insert_or_assign(idx, std::move(b));
         }
+        bundles.clear();
     }
 
     void VFXPreviewController::setSequence(const VFXSequencePreviewDesc& desc)
@@ -605,6 +630,29 @@ namespace controllers
         system.setEmitterConfig(config);
     }
 
+    vfx::VFXBundleSignature VFXPreviewController::signatureFor(const VFXPreviewParams& params)
+    {
+        vfx::VFXBundleSignature sig;
+        sig.renderMode = params.renderMode;
+        sig.meshPath = params.meshPath;
+        sig.texturePath = params.texturePath;
+        return sig;
+    }
+
+    void VFXPreviewController::buildStepSystem(StepBundle& bundle, int stepIndex,
+                                               const VFXSequencePreviewStep& step) const
+    {
+        // VK-1483 — single source of truth for a step's CPU particle sim, shared by the fresh-build
+        // and the reuse path. A reused bundle installs a brand-new system through the identical call
+        // sequence as a first-time spawn, so replay is byte-identical (RNG state, spawn set, ages).
+        bundle.system = std::make_unique<render::vfx::VFXParticleSystem>();
+        bundle.system->setSeed(step.seed != 0 ? step.seed
+                                              : vfx::VFXComboTimeline::deriveSeed(timeline.seed(), stepIndex));
+        bundle.system->reset();
+        configureSystemFromParams(*bundle.system, step.params);
+        bundle.system->setPlaying(true);
+    }
+
     void VFXPreviewController::createBundle(int stepIndex)
     {
         if (stepIndex < 0 || stepIndex >= static_cast<int>(sequenceSteps.size()))
@@ -613,17 +661,18 @@ namespace controllers
         const VFXSequencePreviewStep& step = sequenceSteps[static_cast<size_t>(stepIndex)];
         const VFXPreviewParams& params = step.params;
 
+        // VK-1483 — reuse a parked bundle (pipeline + shared mesh cache) instead of rebuilding it.
+        if (tryReuseBundle(stepIndex, step))
+            return;
+
         StepBundle bundle;
         bundle.stepIndex = stepIndex;
         bundle.localTransform = step.localTransform;
         bundle.mode = params.renderMode;
+        bundle.signature = signatureFor(params);
         const auto renderMode = static_cast<render::vfx::VFXRenderMode>(params.renderMode);
 
-        bundle.system = std::make_unique<render::vfx::VFXParticleSystem>();
-        bundle.system->setSeed(step.seed != 0 ? step.seed : vfx::VFXComboTimeline::deriveSeed(timeline.seed(), stepIndex));
-        bundle.system->reset();
-        configureSystemFromParams(*bundle.system, params);
-        bundle.system->setPlaying(true);
+        buildStepSystem(bundle, stepIndex, step);
 
         render::vfx::VFXFlipbookConfig fbConfig;
         fbConfig.rows = params.flipbookRows;
@@ -653,9 +702,11 @@ namespace controllers
         }
         else if (renderMode == render::vfx::VFXRenderMode::MeshParticle)
         {
-            bundle.meshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
+            // VK-1483 — all mesh steps share the controller's persistent previewMeshCache (path-
+            // deduped, one 64 MB staging ring, unloaded only in cleanUp) instead of a per-bundle
+            // cache that got destroyed+recreated every seek.
             bundle.mesh = std::make_unique<render::vfx::VFXMeshPreviewPipeline>(device, swapChain, offscreenResources,
-                                                                                *bundle.meshCache);
+                                                                                *previewMeshCache);
             bundle.mesh->init();
             if (!params.meshPath.empty())
                 bundle.mesh->setMesh(params.meshPath);
@@ -679,6 +730,45 @@ namespace controllers
         }
 
         bundles.push_back(std::move(bundle));
+    }
+
+    bool VFXPreviewController::tryReuseBundle(int stepIndex, const VFXSequencePreviewStep& step)
+    {
+        auto it = parkedBundles.find(stepIndex);
+        if (it == parkedBundles.end())
+            return false;
+
+        // Within a sequence lifetime a step's resource shape is immutable (edits route through
+        // setSequence -> full teardown), so this normally always matches. Guard anyway: a stale
+        // parked bundle is destroyed here and the caller falls through to a fresh build.
+        if (!vfx::canReuseBundle(it->second.signature, signatureFor(step.params)))
+        {
+            device.getLogicalDevice().waitIdle();
+            if (it->second.billboard) it->second.billboard->cleanUp();
+            if (it->second.mesh) it->second.mesh->cleanUp();
+            if (it->second.ribbon) it->second.ribbon->cleanUp();
+            parkedBundles.erase(it);
+            return false;
+        }
+
+        StepBundle bundle = std::move(it->second);
+        parkedBundles.erase(it);
+
+        bundle.stepIndex = stepIndex;
+        bundle.mode = step.params.renderMode;
+        bundle.localTransform = step.localTransform;
+        // signature already matches; pipeline (mesh/texture descriptors) stays intact.
+
+        buildStepSystem(bundle, stepIndex, step);
+
+        // Re-apply the camera so the first frame after a seek is correct; updateCamera() also
+        // re-pushes to every live bundle each subsequent frame.
+        if (bundle.billboard) bundle.billboard->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
+        if (bundle.mesh) bundle.mesh->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
+        if (bundle.ribbon) bundle.ribbon->updateCameraUBO(lastView, lastProjection, lastCameraPos, lastCameraTime);
+
+        bundles.push_back(std::move(bundle));
+        return true;
     }
 
     void VFXPreviewController::stepSequence(float dt)
@@ -711,7 +801,7 @@ namespace controllers
         if (!sequenceMode)
             return;
 
-        clearBundles();
+        parkBundles(); // VK-1483 — keep GPU resources alive; the replay below reuses them
         timeline.rewind();
         sequenceAccumulator = 0.0f;
 

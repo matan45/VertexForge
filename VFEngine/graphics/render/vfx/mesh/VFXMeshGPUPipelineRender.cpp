@@ -4,6 +4,7 @@
 #include "../../../core/Device.hpp"
 #include "../../../core/Texture.hpp"
 #include "../../../core/DeferredDeletionQueue.hpp"
+#include "../bindless/VFXBindlessTextures.hpp"
 #include "print/Log.hpp"
 #include "../compute/GPUVFXTypes.hpp"
 #include "vfx/VFXSortOrder.hpp"
@@ -71,17 +72,12 @@ namespace render::vfx
             return;
         }
 
-        writeDescriptorSet(defaultDescriptorSet, nullptr);
-
-        for (const auto& [path, entry] : textureEntries)
-        {
-            writeDescriptorSet(entry.descriptorSet, entry.texture.get());
-        }
+        writeDescriptorSet(defaultDescriptorSet);
 
         descriptorsNeedUpdate = false;
     }
 
-    void VFXMeshGPUPipeline::writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const
+    void VFXMeshGPUPipeline::writeDescriptorSet(vk::DescriptorSet dstSet) const
     {
         auto vkDevice = device.getLogicalDevice();
 
@@ -89,19 +85,6 @@ namespace render::vfx
         cameraInfo.buffer = cameraUBO;
         cameraInfo.offset = 0;
         cameraInfo.range = sizeof(GPUVFXCameraUBO);
-
-        vk::DescriptorImageInfo textureInfo{};
-        textureInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        if (texture)
-        {
-            textureInfo.imageView = texture->getImageView();
-            textureInfo.sampler = texture->getSampler();
-        }
-        else
-        {
-            textureInfo.imageView = defaultTextureImageView;
-            textureInfo.sampler = textureSampler;
-        }
 
         vk::DescriptorBufferInfo particleInfo{};
         particleInfo.buffer = cachedParticleBuffer;
@@ -120,7 +103,8 @@ namespace render::vfx
             : vk::ImageLayout::eShaderReadOnlyOptimal;
         depthInfo.sampler = depthSampler ? depthSampler : textureSampler;
 
-        std::array<vk::WriteDescriptorSet, 5> writes{};
+        // VK-1481: binding 1 (per-emitter texture) is gone; the texture lives in the bindless set.
+        std::array<vk::WriteDescriptorSet, 4> writes{};
 
         writes[0].dstSet = dstSet;
         writes[0].dstBinding = 0;
@@ -129,28 +113,22 @@ namespace render::vfx
         writes[0].pBufferInfo = &cameraInfo;
 
         writes[1].dstSet = dstSet;
-        writes[1].dstBinding = 1;
+        writes[1].dstBinding = 2;
         writes[1].descriptorCount = 1;
-        writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writes[1].pImageInfo = &textureInfo;
+        writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[1].pBufferInfo = &particleInfo;
 
         writes[2].dstSet = dstSet;
-        writes[2].dstBinding = 2;
+        writes[2].dstBinding = 3;
         writes[2].descriptorCount = 1;
         writes[2].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[2].pBufferInfo = &particleInfo;
+        writes[2].pBufferInfo = &configInfo;
 
         writes[3].dstSet = dstSet;
-        writes[3].dstBinding = 3;
+        writes[3].dstBinding = 4;
         writes[3].descriptorCount = 1;
-        writes[3].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[3].pBufferInfo = &configInfo;
-
-        writes[4].dstSet = dstSet;
-        writes[4].dstBinding = 4;
-        writes[4].descriptorCount = 1;
-        writes[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writes[4].pImageInfo = &depthInfo;
+        writes[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        writes[3].pImageInfo = &depthInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
     }
@@ -199,83 +177,33 @@ namespace render::vfx
     {
         auto& config = emitterConfigs[emitterIndex];
         const std::string oldPath = config.texturePath;
-        config.texturePath = texturePath;
 
         if (oldPath == texturePath)
-            return;
-
-        if (!oldPath.empty())
-        {
-            auto it = textureEntries.find(oldPath);
-            if (it != textureEntries.end() && --it->second.refCount == 0)
-            {
-                if (deletionQueue && it->second.texture)
-                {
-                    it->second.texture->extractResources(*deletionQueue);
-                }
-                if (it->second.descriptorSet)
-                {
-                    pendingDescriptorSets.push_back({it->second.descriptorSet, frameCounter});
-                }
-                textureEntries.erase(it);
-            }
-        }
-
-        if (texturePath.empty())
         {
             return;
         }
 
-        if (textureEntries.count(texturePath))
+        config.texturePath = texturePath;
+
+        // VK-1481: the shared bindless table handles dedup, refcount, cap, and (deferred) teardown.
+        if (!oldPath.empty() && bindless)
         {
-            textureEntries[texturePath].refCount++;
+            bindless->release(oldPath, /*srgb=*/true);
+        }
+
+        if (texturePath.empty() || !bindless)
+        {
+            config.textureIndex = bindless ? bindless->defaultWhiteIndex() : 0u;
             return;
         }
 
-        if (!std::filesystem::exists(texturePath))
+        const uint32_t idx = bindless->acquire(texturePath, /*srgb=*/true);
+        config.textureIndex = idx;
+        if (idx == bindless->defaultWhiteIndex())
         {
-            vfLogWarning("VFX mesh texture not found: {}", texturePath);
-            emitterConfigs[emitterIndex].texturePath.clear();
-            return;
-        }
-
-        if (textureEntries.size() >= MAX_TEXTURE_SLOTS)
-        {
-            vfLogWarning("Max VFX texture slots ({}) reached, emitter {} will use default texture",
-                          MAX_TEXTURE_SLOTS, emitterIndex);
-            emitterConfigs[emitterIndex].texturePath.clear();
-            return;
-        }
-
-        if (!deletionQueue)
-        {
-            device.getLogicalDevice().waitIdle();
-        }
-
-        try
-        {
-            auto& entry = textureEntries[texturePath];
-            entry.texture = std::make_unique<core::Texture>(device);
-            entry.texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
-            entry.descriptorSet = allocateDescriptorSetFromPool();
-            entry.refCount = 1;
-
-            if (cachedParticleBuffer && cachedConfigBuffer)
-            {
-                writeDescriptorSet(entry.descriptorSet, entry.texture.get());
-            }
-            else
-            {
-                descriptorsNeedUpdate = true;
-            }
-
-            vfLogInfo("VFX mesh texture loaded: {}", texturePath);
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Failed to load VFX mesh texture '{}': {}", texturePath, e.what());
-            textureEntries.erase(texturePath);
-            emitterConfigs[emitterIndex].texturePath.clear();
+            // Missing / table-full / load error (already logged): drop the path so a later
+            // release() cannot over-decrement a reference we never took.
+            config.texturePath.clear();
         }
     }
 
@@ -294,22 +222,10 @@ namespace render::vfx
         auto configIt = emitterConfigs.find(emitterIndex);
         if (configIt != emitterConfigs.end())
         {
-            const auto& texPath = configIt->second.texturePath;
-            if (!texPath.empty())
+            // VK-1481: drop the shared bindless reference; teardown is deferred inside the table.
+            if (!configIt->second.texturePath.empty() && bindless)
             {
-                auto texIt = textureEntries.find(texPath);
-                if (texIt != textureEntries.end() && --texIt->second.refCount == 0)
-                {
-                    if (deletionQueue && texIt->second.texture)
-                    {
-                        texIt->second.texture->extractResources(*deletionQueue);
-                    }
-                    if (texIt->second.descriptorSet)
-                    {
-                        pendingDescriptorSets.push_back({texIt->second.descriptorSet, frameCounter});
-                    }
-                    textureEntries.erase(texIt);
-                }
+                bindless->release(configIt->second.texturePath, /*srgb=*/true);
             }
             emitterConfigs.erase(configIt);
         }
@@ -331,8 +247,6 @@ namespace render::vfx
         vk::Buffer drawCommandBuffer,
         uint32_t emitterCount) const
     {
-        ++frameCounter;
-
         if (!initialized || emitterCount == 0 || !cachedParticleBuffer || emitterMeshes.empty())
         {
             return;
@@ -353,7 +267,16 @@ namespace render::vfx
                                    1, lightingSets, {});
         }
 
-        vk::DescriptorSet lastBoundSet = nullptr;
+        // VK-1481: set 0 (camera/particle/config/depth) is constant across the pass — bind once.
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                               0, defaultDescriptorSet, {});
+
+        // VK-1481: shared bindless texture set (set 4) — bind once; emitters pick a slot via push constant.
+        if (bindless)
+        {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                   4, bindless->getDescriptorSet(), {});
+        }
 
         // VK-1471: submit mesh-particle emitter draws in ascending sortOrder. Built in
         // the map's current traversal order, so an all-default (0) set is a stable no-op.
@@ -384,10 +307,10 @@ namespace render::vfx
             cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
             cmd.bindIndexBuffer(meshData.indexBuffer, 0, vk::IndexType::eUint32);
 
-            vk::DescriptorSet setToBind = defaultDescriptorSet;
             float alphaClip = 0.1f;
             uint32_t blendMode = 0;
             glm::vec3 gc(1.0f);
+            uint32_t texIndex = bindless ? bindless->defaultWhiteIndex() : 0u;
 
             auto configIt = emitterConfigs.find(emitterIdx);
             if (configIt != emitterConfigs.end())
@@ -395,22 +318,7 @@ namespace render::vfx
                 alphaClip = configIt->second.alphaClipThreshold;
                 blendMode = configIt->second.blendMode;
                 gc = configIt->second.glowColor;
-
-                if (!configIt->second.texturePath.empty())
-                {
-                    auto texIt = textureEntries.find(configIt->second.texturePath);
-                    if (texIt != textureEntries.end())
-                    {
-                        setToBind = texIt->second.descriptorSet;
-                    }
-                }
-            }
-
-            if (setToBind != lastBoundSet)
-            {
-                cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                       0, setToBind, {});
-                lastBoundSet = setToBind;
+                texIndex = configIt->second.textureIndex; // VK-1481: bindless slot, selected in-shader
             }
 
             // VK-1472: Multiply emitters bind the dedicated Multiply blend pipeline (shares the
@@ -429,6 +337,7 @@ namespace render::vfx
             pushConstants.glowColorR = gc.r;
             pushConstants.glowColorG = gc.g;
             pushConstants.glowColorB = gc.b;
+            pushConstants.textureIndex = texIndex;
             cmd.pushConstants(pipelineLayout,
                               vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                               0, sizeof(GPUVFXBillboardPushConstants), &pushConstants);

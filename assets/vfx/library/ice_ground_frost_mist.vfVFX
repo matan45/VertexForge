@@ -1,0 +1,102 @@
+{
+    "version": "1.0",
+    "uuid": "920000000000000105",
+    "name": "Ice Ground Frost Mist",
+    "graph": {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "Emitter",
+                "name": "Emitter",
+                "position": [100.0, 200.0],
+                "properties": {
+                    "spawnRate": { "type": "Float", "value": 0.0 },
+                    "lifetime": { "type": "Float", "value": 0.34 },
+                    "lifetimeVariance": { "type": "Float", "value": 0.22 },
+                    "startSize": { "type": "Float", "value": 1.55 },
+                    "sizeVariance": { "type": "Float", "value": 0.35 },
+                    "startSpeed": { "type": "Float", "value": 1.15 },
+                    "speedVariance": { "type": "Float", "value": 0.35 },
+                    "startVelocity": { "type": "Vec3", "value": [0.0, 0.02, 1.0] },
+                    "startColor": { "type": "Color", "value": [0.78, 0.94, 1.0, 0.22] },
+                    "looping": { "type": "Bool", "value": false },
+                    "texture": { "type": "String", "value": "" },
+                    "burstCount": { "type": "Int", "value": 1 },
+                    "burst0Time": { "type": "Float", "value": 0.0 },
+                    "burst0Count": { "type": "Int", "value": 24 },
+                    "burst0Cycles": { "type": "Int", "value": 1 },
+                    "burst0Interval": { "type": "Float", "value": 0.5 },
+                    "burst0Probability": { "type": "Float", "value": 1.0 },
+                    "additiveBlend": { "type": "Bool", "value": false },
+                    "blendMode": { "type": "String", "value": "alpha" },
+                    "alphaClipThreshold": { "type": "Float", "value": 0.02 },
+                    "renderMode": { "type": "Int", "value": 2 },
+                    "softParticleDistance": { "type": "Float", "value": 1.6 },
+                    "lightingInfluence": { "type": "Float", "value": 0.55 },
+                    "normalMode": { "type": "Int", "value": 1 },
+                    "ambientAmount": { "type": "Float", "value": 0.62 },
+                    "coneSpread": { "type": "Float", "value": 0.28 }
+                }
+            },
+            {
+                "id": 3,
+                "type": "SizeOverLifetime",
+                "name": "Size Over Lifetime",
+                "position": [330.0, 100.0],
+                "properties": {
+                    "curve": { "type": "Curve", "value": { "keys": [[0.0, 0.35, 0.0, 0.0], [0.35, 1.2, 0.0, 0.0], [1.0, 1.9, 0.0, 0.0]] } }
+                }
+            },
+            {
+                "id": 4,
+                "type": "ColorOverLifetime",
+                "name": "Color Over Lifetime",
+                "position": [530.0, 100.0],
+                "properties": {
+                    "gradient": { "type": "Gradient", "value": { "stops": [
+                        [0.0, 0.78, 0.94, 1.0, 0.0],
+                        [0.22, 0.78, 0.94, 1.0, 0.22],
+                        [0.72, 0.52, 0.78, 0.96, 0.12],
+                        [1.0, 0.34, 0.5, 0.75, 0.0]
+                    ] } }
+                }
+            },
+            {
+                "id": 5,
+                "type": "ForceDrag",
+                "name": "Drag",
+                "position": [730.0, 100.0],
+                "properties": {
+                    "linearCoeff": { "type": "Float", "value": 0.85 },
+                    "quadraticCoeff": { "type": "Float", "value": 0.02 }
+                }
+            },
+            {
+                "id": 10,
+                "type": "Shape",
+                "name": "Box",
+                "position": [100.0, 420.0],
+                "properties": {
+                    "shapeType": { "type": "String", "value": "Box" },
+                    "emitFrom": { "type": "String", "value": "Volume" },
+                    "randomDirection": { "type": "Bool", "value": false },
+                    "halfExtents": { "type": "Vec3", "value": [2.0, 0.04, 0.5] }
+                }
+            },
+            {
+                "id": 2,
+                "type": "OutSystem",
+                "name": "Output",
+                "position": [930.0, 200.0],
+                "properties": {}
+            }
+        ],
+        "links": [
+            { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 2, "sourceNode": 3, "targetNode": 4, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 3, "sourceNode": 4, "targetNode": 5, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 4, "sourceNode": 5, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 5, "sourceNode": 10, "targetNode": 1, "sourcePin": "Output", "targetPin": "Shape" }
+        ]
+    }
+}

@@ -32,6 +32,7 @@ namespace render::vfx
     class VFXRibbonGPUPipeline;
     class VFXEmitterPool;
     class VFXDistortionPipeline;
+    class VFXBindlessTextures;
 }
 
 namespace render::mesh
@@ -131,6 +132,9 @@ namespace controllers
 
         std::unique_ptr<render::vfx::GPUVFXBufferManager> gpuBufferManager;
         std::unique_ptr<render::vfx::GPUVFXComputePipeline> gpuComputePipeline;
+        // VK-1481: shared bindless texture table for all four GPU pipelines. Declared before them so
+        // it is constructed first / destroyed last; each pipeline holds a raw pointer into it.
+        std::unique_ptr<render::vfx::VFXBindlessTextures> bindlessTextures;
         std::unique_ptr<render::vfx::VFXSceneGPUPipeline> gpuRenderPipeline;
         std::unique_ptr<render::vfx::VFXMeshGPUPipeline> gpuMeshPipeline;
         std::unique_ptr<render::vfx::VFXRibbonGPUPipeline> gpuRibbonPipeline;

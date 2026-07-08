@@ -386,6 +386,30 @@ namespace core
         {
             deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
         }
+        // VK-1481 Phase 2: multi-draw indirect for the merged VFX pass (drawCount > 1), and
+        // firstInstance in indirect draws (the VFX compute writes a non-zero firstInstance =
+        // particleOffset per emitter — this makes that spec-valid and enables the merge).
+        // These are hard REQUIREMENTS of the merged VFX draw path (it emits drawCount = runLen > 1 with a
+        // non-zero firstInstance) — there is no fallback. A device lacking them would render VFX
+        // incorrectly, so surface it loudly (near-universal on desktop GPUs).
+        if (supportedFeatures.multiDrawIndirect)
+        {
+            deviceFeatures.multiDrawIndirect = VK_TRUE;
+        }
+        else
+        {
+            vfLogError("Device lacks multiDrawIndirect — the merged VFX draw path (VK-1481 Phase 2) "
+                       "requires it; particle VFX will render incorrectly on this GPU.");
+        }
+        if (supportedFeatures.drawIndirectFirstInstance)
+        {
+            deviceFeatures.drawIndirectFirstInstance = VK_TRUE;
+        }
+        else
+        {
+            vfLogError("Device lacks drawIndirectFirstInstance — the VFX indirect draws use a non-zero "
+                       "firstInstance (per-emitter particleOffset); VFX will render incorrectly on this GPU.");
+        }
 
         // required for gl_BaseInstance in shaders
         vk::PhysicalDeviceVulkan11Features vulkan11Features{};

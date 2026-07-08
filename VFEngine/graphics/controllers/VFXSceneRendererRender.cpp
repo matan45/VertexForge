@@ -137,14 +137,20 @@ namespace controllers
         if (activeGPUEmitters == 0)
             return;
 
+        // VK-1481 Phase 2: the frame-in-flight index selects the render-data SSBO's per-frame copy
+        // (dynamic offset) — mirrors the buffer manager's stateStagingBuffers double-buffering.
+        const uint32_t frameIndex = gpuBufferManager->getCurrentFrameIndex();
+
         gpuRenderPipeline->recordCommandsInline(
             cmd,
             gpuBufferManager->getDrawCommandBuffer(),
-            gpuBufferManager->getMaxEmitters()
+            gpuBufferManager->getMaxEmitters(),
+            frameIndex
         );
 
         if (gpuMeshPipeline && gpuMeshPipeline->isInitialized())
         {
+            // Mesh uses per-emitter push constants (no render-data SSBO) — no frame index needed.
             gpuMeshPipeline->recordCommandsInline(
                 cmd,
                 gpuBufferManager->getDrawCommandBuffer(),
@@ -157,7 +163,8 @@ namespace controllers
             gpuRibbonPipeline->recordCommandsInline(
                 cmd,
                 gpuBufferManager->getDrawCommandBuffer(),
-                gpuBufferManager->getMaxEmitters()
+                gpuBufferManager->getMaxEmitters(),
+                frameIndex
             );
         }
     }

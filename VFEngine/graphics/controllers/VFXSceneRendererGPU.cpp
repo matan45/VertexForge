@@ -5,6 +5,7 @@
 #include "../render/vfx/mesh/VFXMeshGPUPipeline.hpp"
 #include "../render/vfx/ribbon/VFXRibbonGPUPipeline.hpp"
 #include "../render/vfx/distortion/VFXDistortionPipeline.hpp"
+#include "../render/vfx/bindless/VFXBindlessTextures.hpp"
 #include "../render/vfx/particle/VFXEmitterPool.hpp"
 #include "../render/vfx/particle/VFXParticleSystem.hpp"
 #include "../render/vfx/lut/VFXLUTBaker.hpp"
@@ -43,39 +44,45 @@ namespace controllers
                 return false;
             }
 
+            // VK-1481: the shared bindless texture table must exist before any pipeline is created
+            // (createPipeline appends its descriptor set layout).
+            bindlessTextures = std::make_unique<render::vfx::VFXBindlessTextures>(device);
+            bindlessTextures->init();
+            bindlessTextures->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
+
             gpuRenderPipeline = std::make_unique<render::vfx::VFXSceneGPUPipeline>(device, swapChain);
             if (hasLightingLayouts)
                 gpuRenderPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
+            gpuRenderPipeline->setBindlessTextures(bindlessTextures.get());
             gpuRenderPipeline->init(colorFormat, depthFormat);
             if (!gpuRenderPipeline->isInitialized())
             {
                 vfLogError("Failed to initialize GPU VFX render pipeline");
                 return false;
             }
-            gpuRenderPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
             gpuMeshPipeline = std::make_unique<render::vfx::VFXMeshGPUPipeline>(device, swapChain, *gpuMeshCache);
             if (hasLightingLayouts)
                 gpuMeshPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
+            gpuMeshPipeline->setBindlessTextures(bindlessTextures.get());
             gpuMeshPipeline->init(colorFormat, depthFormat);
             if (!gpuMeshPipeline->isInitialized())
             {
                 vfLogError("Failed to initialize GPU VFX mesh pipeline");
                 return false;
             }
-            gpuMeshPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuRibbonPipeline = std::make_unique<render::vfx::VFXRibbonGPUPipeline>(device, swapChain);
             if (hasLightingLayouts)
                 gpuRibbonPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
+            gpuRibbonPipeline->setBindlessTextures(bindlessTextures.get());
             gpuRibbonPipeline->init(colorFormat, depthFormat);
             if (!gpuRibbonPipeline->isInitialized())
             {
                 vfLogError("Failed to initialize GPU VFX ribbon pipeline");
                 return false;
             }
-            gpuRibbonPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuComputePipeline->updateDescriptors(gpuBufferManager->getBufferSet());
 
@@ -124,6 +131,8 @@ namespace controllers
         if (gpuMeshCache) { gpuMeshCache->unloadAllMeshes(); gpuMeshCache.reset(); }
         if (gpuRenderPipeline) { gpuRenderPipeline->cleanup(); gpuRenderPipeline.reset(); }
         if (gpuComputePipeline) { gpuComputePipeline->cleanup(); gpuComputePipeline.reset(); }
+        // VK-1481: tear down the shared bindless table AFTER all pipelines that reference it.
+        if (bindlessTextures) { bindlessTextures->cleanup(); bindlessTextures.reset(); }
         if (gpuBufferManager) { gpuBufferManager->cleanup(); gpuBufferManager.reset(); }
     }
 
@@ -294,8 +303,8 @@ namespace controllers
             return;
 
         gpuDistortionPipeline = std::make_unique<render::vfx::VFXDistortionPipeline>(device, swapChain);
+        gpuDistortionPipeline->setBindlessTextures(bindlessTextures.get());
         gpuDistortionPipeline->init(colorFormat, depthFormat);
-        gpuDistortionPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
         gpuDistortionPipeline->updateParticleBuffer(
             gpuBufferManager->getParticleBuffer(), gpuBufferManager->getParticleBufferSize());
