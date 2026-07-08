@@ -18,6 +18,9 @@
 #include "../raytracing/RTShadowUpsamplePipeline.hpp"
 #include "../raytracing/RTLayeredShadowUpsamplePipeline.hpp"
 #include "../mesh/MeshStreamManager.hpp"
+#include "terrain/TerrainRVTManager.hpp" // VK-1209: complete types for ~GPUDrivenRenderer unique_ptr members
+#include "terrain/TerrainRVTBaker.hpp"
+#include "../virtualtexture/svt/SVTManager.hpp"
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
@@ -146,10 +149,6 @@ namespace render::gpudriven
                 }
             }
 
-            bool mvEnabled = false;
-            if (auto* um = device.getUpscaleManager())
-                mvEnabled = um->isActive();
-
             MeshPipelineInitInfo pipelineInfo{
                 .iblLayout = iblDescriptorSetLayout,
                 .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -160,15 +159,16 @@ namespace render::gpudriven
                 .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .colorAttachmentFormats = colorFormats,
-                .depthAttachmentFormat = depthFormat,
-                .motionVectorsEnabled = mvEnabled
+                .depthAttachmentFormat = depthFormat
             };
 
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+            if (vtCache.svtEnabled) meshShaderPipeline->setSVTSampleEnabled(true); // VK-1209
             meshShaderPipeline->init(pipelineInfo);
 
             pipelineInfo.transparentMode = true;
             transparentMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+            if (vtCache.svtEnabled) transparentMeshShaderPipeline->setSVTSampleEnabled(true); // VK-1209
             transparentMeshShaderPipeline->init(pipelineInfo);
 
             shadowSystem->initShadowPass(
@@ -187,6 +187,9 @@ namespace render::gpudriven
             {
                 meshStreamManager->setMeshletBuffer(meshletBuffer.get());
             }
+
+            if (vtCache.svtEnabled)
+                ensureSVTManager(); // VK-1209: create the material SVT + register its atlas in bindless
 
             initTerrainSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat);
             initWaterSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat, sceneDepthView);
@@ -243,6 +246,10 @@ namespace render::gpudriven
             wboitCausticLayout = water.causticsResources->getDescriptorSetLayout();
 
         wboitMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+        // VK-1209 finding #3: compile SVT_ENABLED + set-1 bindings into WBOIT when SVT is already on,
+        // mirroring the opaque/transparent pipelines — otherwise translucent meshes using an SVT-paged
+        // texture get a bit-31-tagged index the non-SVT shader rejects and render untextured.
+        if (vtCache.svtEnabled) wboitMeshShaderPipeline->setSVTSampleEnabled(true);
         wboitMeshShaderPipeline->init({
             .iblLayout = cachedIBLLayout,
             .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -267,6 +274,11 @@ namespace render::gpudriven
         }
         if (wboitCausticLayout)
             wboitMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
+
+        // VK-1209 finding #3: populate WBOIT's set-1 SVT bindings (3/4/5) if SVT is active — creates the
+        // manager if this ran before the opaque path did, then wires all pipelines including WBOIT.
+        if (vtCache.svtEnabled)
+            ensureSVTManager();
     }
 
     void GPUDrivenRenderer::cleanup()
@@ -438,10 +450,6 @@ namespace render::gpudriven
             if (water.causticsResources && water.causticsResources->isInitialized())
                 causticLayout = water.causticsResources->getDescriptorSetLayout();
 
-            bool mvEnabled = false;
-            if (auto* um = device.getUpscaleManager())
-                mvEnabled = um->isActive();
-
             MeshPipelineInitInfo pipelineInfo{
                 .iblLayout = cachedIBLLayout,
                 .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -455,8 +463,7 @@ namespace render::gpudriven
                 .causticLayout = causticLayout,
                 .worldMaskLayout = currentWorldMaskLayout(),
                 .colorAttachmentFormats = cachedColorFormats,
-                .depthAttachmentFormat = cachedDepthFormat,
-                .motionVectorsEnabled = mvEnabled
+                .depthAttachmentFormat = cachedDepthFormat
             };
 
             meshShaderPipeline->recreate(pipelineInfo);

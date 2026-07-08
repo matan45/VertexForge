@@ -208,9 +208,6 @@ void main() {
 #include "../common/lod_crossfade.glsl"
 #include "../common/wetness.glsl"
 #include "../common/snow_accumulation.glsl"
-#ifdef MOTION_VECTORS_ENABLED
-#include "../common/motion_vectors.glsl"
-#endif
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -225,8 +222,6 @@ layout(location = 8) in flat vec4 fragInstanceIBL;
 layout(location = 0) out vec4 outColor;
 #ifdef WBOIT_ENABLED
 layout(location = 1) out float outRevealage;
-#elif defined(MOTION_VECTORS_ENABLED)
-layout(location = 1) out vec2 outMotionVector;
 #endif
 
 layout(set = 0, binding = 0) uniform CameraUBO {
@@ -243,14 +238,27 @@ layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
+#ifdef SVT_ENABLED
+// VK-1209 material Streamed Virtual Textures. UE5-style: the physical BC7 atlas lives in the
+// bindless heap (sampled as bindlessTextures[atlasIndex]); only the page table / feedback /
+// per-image info ride the mesh pipeline's OWN set 1 (bindings 3/4/5) — no new descriptor set,
+// so the crowded shared set space is untouched. Compiled only when SVT is active.
+#include "../common/vt_types.glsl"
+layout(std430, set = 1, binding = 3) readonly buffer SVTPageTable { uint svtPageTable[]; };
+layout(std430, set = 1, binding = 4) buffer SVTFeedback { uint svtFeedback[]; };
+layout(std430, set = 1, binding = 5) readonly buffer SVTImageInfoBuffer { VTImageInfo svtImageInfo[]; };
+#define VT_PAGE_TABLE svtPageTable
+#define VT_FEEDBACK svtFeedback
+#include "../common/vt_sampling.glsl"
+const uint SVT_TAG_BIT = 0x80000000u;
+#endif
+
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;
     uint viewMode;
     float screenWidth;
     float screenHeight;
     uint hiZMipLevels;
-    // mat4 aligns to offset 32 (after the 5 leading scalars) — matches C++ MeshShaderPushConstants.
-    mat4 prevViewProjection;
 } pc;
 
 // Light structs provided by lighting_functions.glsl include
@@ -439,6 +447,53 @@ bool isValidTexture(uint index) {
     return index != INVALID_TEXTURE_INDEX && index != 0xFFu && index < 4096u;
 }
 
+#ifdef SVT_ENABLED
+// VK-1482: INVALID_TEXTURE_INDEX (0xFFFFFFFF) has bit 31 set and would alias SVT_TAG_BIT — an
+// unbound material slot must never route into the SVT path (it OOB-read svtImageInfo[0x7FFFFFFF]
+// and OOB-atomicOr'd the feedback buffer, corrupting ao/normal/emission on every unbound slot).
+// C++ producers only ever emit a bindless slot (bit 31 clear), SVT_TAG_BIT | imageId, or the
+// INVALID_TEXTURE_INDEX / 0xFFu sentinels, so excluding the sentinel exactly isolates real tags.
+// Mirror: render::gpudriven::svtIsTaggedIndex (SVTManager.hpp).
+bool isSVTTagged(uint index) {
+    return index != INVALID_TEXTURE_INDEX && (index & SVT_TAG_BIT) != 0u;
+}
+#endif
+
+// A material texture index is sampleable if it's a normal bindless index OR (SVT on) an
+// SVT-tagged index. When SVT is off this is exactly isValidTexture (byte-identical).
+bool isSampleableTexture(uint index) {
+#ifdef SVT_ENABLED
+    if (isSVTTagged(index)) return true;
+#endif
+    return isValidTexture(index);
+}
+
+// Sample a material texture. SVT-tagged indices resolve through the page table into the bindless
+// atlas (with a whole-image fallback while a page streams in) and emit a feedback request; all
+// other indices are a plain bindless sample. Off = plain bindless sample.
+vec4 sampleMaterialTex(uint index, vec2 uv, vec2 dx, vec2 dy) {
+#ifdef SVT_ENABLED
+    if (isSVTTagged(index)) {
+        VTImageInfo img = svtImageInfo[index & 0x7FFFFFFFu];
+        uint atlasIndex = img.pad0;
+        uint fallbackIndex = img.pad1;
+        // VK-1480: wrap the UV into [0,1) for the page lookup + feedback so tiled (UV>1) materials
+        // request/sample the correct pages. Keep the ORIGINAL uv/derivatives for the desired-mip
+        // estimate and the whole-image fallback — fract() at a wrap seam produces derivative spikes
+        // that would otherwise pick the wrong mip.
+        vec2 wuv = fract(uv);
+        uint mip = uint(max(vtDesiredMip(uv, float(img.pagesX0 * VT_PAGE_INTERIOR)), 0.0));
+        if (vtFeedbackFragment(gl_FragCoord.xy))
+            vtWriteFeedback(img, wuv, mip);
+        VTSample s = vtLookup(img, wuv, mip);
+        if (s.valid)
+            return textureLod(bindlessTextures[nonuniformEXT(atlasIndex)], s.uv, 0.0);
+        return textureGrad(bindlessTextures[nonuniformEXT(fallbackIndex)], uv, dx, dy);
+    }
+#endif
+    return textureGrad(bindlessTextures[nonuniformEXT(index)], uv, dx, dy);
+}
+
 vec3 unpackORM(vec4 ormSample) {
     return vec3(ormSample.r, ormSample.g, ormSample.b);
 }
@@ -495,10 +550,19 @@ void main() {
     vec3 albedo = matAlbedo.rgb;
     float alpha = matAlbedo.a;
 
-    if (isValidTexture(albedoIdx)) {
-        vec4 albedoSample = textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], texCoords, texDx, texDy);
+    if (isSampleableTexture(albedoIdx)) {
+        vec4 albedoSample = sampleMaterialTex(albedoIdx, texCoords, texDx, texDy);
         albedo = albedoSample.rgb;
         alpha = albedoSample.a;
+#ifdef SVT_ENABLED
+        // VK-1480: an SVT albedo tile can carry alpha ~= 0 (BC7 alpha in uncovered/streaming texels),
+        // which the color*alpha output premultiply would collapse to black. Opaque materials do not
+        // use albedo alpha, so force full opacity for them; alpha-mask/translucent/additive keep it.
+        if (isSVTTagged(albedoIdx) &&
+            (drawData.flags & (FLAG_ALPHA_MASK | FLAG_TRANSLUCENT | FLAG_ADDITIVE_BLEND)) == 0u) {
+            alpha = 1.0;
+        }
+#endif
     }
 
     if ((drawData.flags & FLAG_ALPHA_MASK) != 0u) {
@@ -528,24 +592,24 @@ void main() {
     float ao = matParams.z;
     float emission = matParams.w;
 
-    if (isValidTexture(ormIdx)) {
-        vec3 ormValues = unpackORM(textureGrad(bindlessTextures[nonuniformEXT(ormIdx)], texCoords, texDx, texDy));
+    if (isSampleableTexture(ormIdx)) {
+        vec3 ormValues = unpackORM(sampleMaterialTex(ormIdx, texCoords, texDx, texDy));
         ao = ormValues.x;
         roughness = ormValues.y;
         metallic = ormValues.z;
     } else {
-        if (isValidTexture(metallicIdx)) {
-            metallic = textureGrad(bindlessTextures[nonuniformEXT(metallicIdx)], texCoords, texDx, texDy).r;
+        if (isSampleableTexture(metallicIdx)) {
+            metallic = sampleMaterialTex(metallicIdx, texCoords, texDx, texDy).r;
         }
-        if (isValidTexture(roughnessIdx)) {
-            roughness = textureGrad(bindlessTextures[nonuniformEXT(roughnessIdx)], texCoords, texDx, texDy).r;
+        if (isSampleableTexture(roughnessIdx)) {
+            roughness = sampleMaterialTex(roughnessIdx, texCoords, texDx, texDy).r;
         }
-        if (isValidTexture(aoIdx)) {
-            ao = textureGrad(bindlessTextures[nonuniformEXT(aoIdx)], texCoords, texDx, texDy).r;
+        if (isSampleableTexture(aoIdx)) {
+            ao = sampleMaterialTex(aoIdx, texCoords, texDx, texDy).r;
         }
     }
 
-    if (isValidTexture(normalIdx)) {
+    if (isSampleableTexture(normalIdx)) {
         vec3 pos_dx = dFdx(fragWorldPos);
         vec3 pos_dy = dFdy(fragWorldPos);
         vec2 uv_dx = dFdx(fragTexCoord);
@@ -557,7 +621,7 @@ void main() {
         B = cross(N, T);
         mat3 TBN = mat3(T, B, N);
 
-        vec3 tangentNormal = textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], texCoords, texDx, texDy).rgb * 2.0 - 1.0;
+        vec3 tangentNormal = sampleMaterialTex(normalIdx, texCoords, texDx, texDy).rgb * 2.0 - 1.0;
         N = normalize(TBN * tangentNormal);
     }
 
@@ -640,8 +704,8 @@ void main() {
     }
 
     vec3 emissive = vec3(0.0);
-    if (isValidTexture(emissionIdx)) {
-        emissive = textureGrad(bindlessTextures[nonuniformEXT(emissionIdx)], texCoords, texDx, texDy).rgb * emissionMultiplier;
+    if (isSampleableTexture(emissionIdx)) {
+        emissive = sampleMaterialTex(emissionIdx, texCoords, texDx, texDy).rgb * emissionMultiplier;
     } else {
         emissive = albedo * emissionMultiplier;
     }
@@ -845,6 +909,16 @@ void main() {
         color = vec3(0.15, 0.4, 0.05); // Base green per fragment
     }
 
+    // Ambient-input probe (viewMode 30, VK-1482) — works with SVT on OR off so the two can be compared.
+    // R = matIblDiffuse (per-material IBL diffuse scale), G = irradiance brightness (IBL cubemap sample),
+    // B = ao. The diffuse ambient term is proportional to R*G*B*albedo, so whichever channel drops when a
+    // material darkens is the culprit input. alpha forced to 1 so it survives the output premultiply.
+    if (viewModeValue == 30u) {
+        float irr = max(max(irradiance.r, irradiance.g), irradiance.b);
+        color = vec3(matIblDiffuse, irr, ao);
+        alpha = 1.0;
+    }
+
 #ifdef WBOIT_ENABLED
     // Weighted Blended OIT (McGuire & Bavoil 2013)
     float viewZ = linearizeDepth(gl_FragCoord.z);
@@ -858,9 +932,5 @@ void main() {
     } else {
         outColor = vec4(color * alpha, alpha);
     }
-#ifdef MOTION_VECTORS_ENABLED
-    mat4 currentVP = camera.projection * camera.view;
-    outMotionVector = computeStaticMotionVector(fragWorldPos, currentVP, pc.prevViewProjection);
-#endif
 #endif
 }

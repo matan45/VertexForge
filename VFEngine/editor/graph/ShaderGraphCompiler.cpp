@@ -38,17 +38,24 @@ namespace editor::graph {
         code += "    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
                 "uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);\n";
         code += "    if (w < 0.001) continue;\n";
+        // VK-1209 finding #7: sample with EXPLICIT gradients (textureGrad). These layer samples run
+        // inside per-fragment-divergent control flow (this `continue`, and mesh_terrain's RVT
+        // resolved/fallback branch), where implicit-LOD texture() derivatives are undefined and cause
+        // mip shimmer at RVT seams. The includer must define triplanarWorldUVdx/dy (screen-space
+        // gradients of triplanarWorldUV) in uniform control flow before including this snippet.
         code += "    vec2 layerUV = triplanarWorldUV * terrainLayers[paletteIdx].tilingScale;\n";
+        code += "    vec2 layerUVdx = triplanarWorldUVdx * terrainLayers[paletteIdx].tilingScale;\n";
+        code += "    vec2 layerUVdy = triplanarWorldUVdy * terrainLayers[paletteIdx].tilingScale;\n";
         code += "    uint albedoIdx = terrainLayers[paletteIdx].albedoTextureIndex;\n";
         code += "    vec3 layerAlbedo = (albedoIdx > 0u) ? "
-                "texture(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV).rgb : vec3(0.5);\n";
+                "textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV, layerUVdx, layerUVdy).rgb : vec3(0.5);\n";
         code += "    uint normalIdx = terrainLayers[paletteIdx].normalTextureIndex;\n";
         code += "    vec3 layerNormal = (normalIdx > 0u) ? "
-                "texture(bindlessTextures[nonuniformEXT(normalIdx)], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n";
+                "textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], layerUV, layerUVdx, layerUVdy).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n";
         code += "    uint ormIdx = terrainLayers[paletteIdx].ormTextureIndex;\n";
         code += "    float layerAO, layerRoughness, layerMetallic;\n";
         code += "    if (ormIdx > 0u) {\n";
-        code += "        vec3 ormSample = texture(bindlessTextures[nonuniformEXT(ormIdx)], layerUV).rgb;\n";
+        code += "        vec3 ormSample = textureGrad(bindlessTextures[nonuniformEXT(ormIdx)], layerUV, layerUVdx, layerUVdy).rgb;\n";
         code += "        layerAO = ormSample.r;\n";
         code += "        layerRoughness = ormSample.g;\n";
         code += "        layerMetallic = ormSample.b;\n";

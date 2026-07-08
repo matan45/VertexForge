@@ -47,6 +47,7 @@ namespace types
 {
     struct RTShadowSettings;
     struct RTShadowStats;
+    struct VirtualTextureSettings;
 }
 
 namespace material
@@ -132,6 +133,10 @@ namespace render::custom
 
 namespace render::gpudriven
 {
+    class TerrainRVTManager; // VK-1209
+    class TerrainRVTBaker;   // VK-1209
+    class SVTManager;        // VK-1209 (material SVT)
+
     class GPUDrivenRenderer
     {
     private:
@@ -252,8 +257,50 @@ namespace render::gpudriven
         // MeshPipelineInitInfo construction passes this so recreates keep the mask.
         vk::DescriptorSetLayout currentWorldMaskLayout() const;
         void recreateScenePipelinesForWorldMask();
+        // VK-1209: rebuild the scene mesh pipelines so set-1 SVT bindings + SVT_ENABLED match the
+        // mesh pipelines' svtSampleEnabled flag (runtime SVT toggle). Creates/tears down SVTManager.
+        void applySVTToggle();
+        void recreateScenePipelinesForSVT(); // rebuild scene mesh pipelines with current SVT flag
+        // Create the SVT manager (if absent), register its BC7 atlas in the bindless heap, and point
+        // the mesh pipelines' set-1 SVT bindings at it. Safe to call repeatedly.
+        void ensureSVTManager();
+        // Point every SVT-enabled mesh pipeline's set-1 bindings (3/4/5) at the manager's current
+        // buffers. Also called after the image-info SSBO grows (finding #2) to rebind the new handle.
+        void wireSVTPipelines();
 
         detail::TerrainState terrain;
+
+        // VK-1209 — cached virtual-texturing settings (applied via applyVirtualTextureSettings;
+        // consumed by the terrain RVT manager once terrain subsystems initialize). Plain fields
+        // avoid pulling the heavy types/RenderSettings.hpp into this header.
+        struct VTCache
+        {
+            bool rvtEnabled = false;
+            bool svtEnabled = false;
+            uint32_t rvtPoolBudgetMB = 128;
+            uint32_t svtPoolBudgetMB = 256; // VK-1480: 256 total, split across sRGB + Unorm pools
+            float rvtTexelsPerMeter = 8.0f;
+            uint32_t pagesPerFrame = 32;
+            uint32_t evictionAgeFrames = 60;
+            bool svtPageLinearMaps = true;  // VK-1480: page linear (Unorm) maps too (2nd atlas)
+        } vtCache;
+
+        // VK-1209 terrain RVT (created lazily in updateTerrain once bounds are known and
+        // vtCache.rvtEnabled). Null = inactive; all frame hooks below no-op.
+        std::unique_ptr<TerrainRVTManager> terrainRVT;
+        std::unique_ptr<TerrainRVTBaker> terrainRVTBaker;
+        glm::vec2 rvtWorldMin{0.0f};
+        glm::vec2 rvtWorldMax{0.0f};
+        uint32_t rvtFrameCounter = 0;
+        bool rvtInvalidateAll = false; // set on terrain material change; re-bakes all fine pages
+
+        // VK-1209 material SVT (created lazily when svtEnabled). Null = inactive.
+        std::unique_ptr<SVTManager> svtManager;
+        uint32_t svtFrameCounter = 0;
+        // path -> SVT-tagged index (SVT_TAG_BIT | imageId) for textures opted into SVT; the texture
+        // resolver returns this instead of the plain bindless index so the mesh shader pages them.
+        std::unordered_map<std::string, uint32_t> svtTaggedIndices;
+
         detail::WaterState water;
         detail::VegetationState vegetation;
         detail::BillboardState billboard;
@@ -558,6 +605,28 @@ namespace render::gpudriven
         void setTerrainLODBias(float bias) { terrain.lodBias = bias; }
         void setTerrainErrorThreshold(float threshold) { terrain.errorThreshold = threshold; }
         void setTerrainTextureScale(float scale) { terrain.textureScale = scale; }
+
+        // VK-1209 — apply virtual-texturing settings (RVT/SVT enable, pool budgets,
+        // page-per-frame + eviction age). Pool byte budgets are restart-scoped; the live
+        // knobs (pagesPerFrame, evictionAge, enable toggles) forward to the managers.
+        void applyVirtualTextureSettings(const types::VirtualTextureSettings& settings);
+        bool isTerrainRVTEnabled() const { return vtCache.rvtEnabled; }
+
+        // VK-1209 terrain RVT frame hooks (all no-op unless RVT is active). Frame order:
+        // updateTerrainRVTResidency (frame start, CPU) -> bakeTerrainRVT (before scene pass) ->
+        // [terrain draws, samples atlas + writes feedback] -> copyTerrainRVTFeedback (after pass).
+        void updateTerrainRVTResidency();
+        void bakeTerrainRVT(vk::CommandBuffer cmd);
+        void copyTerrainRVTFeedback(vk::CommandBuffer cmd);
+        bool isTerrainRVTActive() const;
+
+        // VK-1209 material SVT frame hooks (no-op unless SVT active). Order: beginSVTFrame (frame
+        // start) -> updateAndUploadSVT (before scene pass: residency + disk extract + upload) ->
+        // [meshes sample the atlas + write feedback] -> copySVTFeedback (after scene pass).
+        void beginSVTFrame();
+        void updateAndUploadSVT(vk::CommandBuffer cmd);
+        void copySVTFeedback(vk::CommandBuffer cmd);
+        bool isSVTActive() const;
         void updateWater(const services::OceanVisualSettings& visualSettings,
                          float baseWaterHeight,
                          const glm::vec3& cameraPosition,
@@ -683,6 +752,9 @@ namespace render::gpudriven
                                     const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                    const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
+        // VK-1209: rebuild the terrain pipeline so set 5 + RVT_ENABLED match rvtSampleEnabled
+        // (used when the RVT config is toggled at runtime). Gathers the same layouts as init.
+        void recreateTerrainPipelineForRVT();
         void createGrassBuffers(uint32_t maxInstances);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,

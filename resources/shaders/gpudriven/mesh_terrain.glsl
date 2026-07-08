@@ -274,6 +274,27 @@ layout(std430, set = 1, binding = 1) readonly buffer TerrainLayerBuffer {
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
+#ifdef RVT_ENABLED
+// VK-1209 terrain Runtime Virtual Texture (set 5, the previously-empty placeholder set).
+// Replaces the per-fragment 8-layer composite (up to 24 bindless samples) with a lookup
+// into the baked page atlas + an inline feedback request. Compiled only when RVT is active.
+#include "../common/vt_types.glsl"
+layout(std430, set = 5, binding = 0) readonly buffer RVTPageTable { uint rvtPageTable[]; };
+layout(set = 5, binding = 1) uniform sampler2D rvtAlbedoAtlas;
+layout(set = 5, binding = 2) uniform sampler2D rvtOrmAtlas;
+layout(std430, set = 5, binding = 3) buffer RVTFeedback { uint rvtFeedback[]; };
+layout(set = 5, binding = 4) uniform RVTParams {
+    VTImageInfo img;
+    vec2 worldMin;        // terrain XZ origin
+    vec2 invWorldExtent;  // 1 / (worldMax - worldMin)
+    float virtualResTexels;
+    float pad0; float pad1; float pad2;
+} rvt;
+#define VT_PAGE_TABLE rvtPageTable
+#define VT_FEEDBACK rvtFeedback
+#include "../common/vt_sampling.glsl"
+#endif
+
 layout(push_constant) uniform PushConstants {
     uint tileCount;
     uint viewMode;
@@ -453,10 +474,74 @@ void main() {
     vec2 uvXY = fragWorldPos.xy * textureScale; // Z-facing (north/south walls)
     vec2 uvYZ = fragWorldPos.yz * textureScale; // X-facing (east/west walls)
     vec2 triplanarWorldUV = uvXZ * blendWeights.y + uvXY * blendWeights.z + uvYZ * blendWeights.x;
+    // VK-1209 finding #7: screen-space gradients of the (quad-uniform) triplanar UV, computed here in
+    // UNIFORM control flow so the generated composite can sample with textureGrad — its layer samples run
+    // inside the per-fragment-divergent RVT resolved/fallback branch below, where implicit derivatives
+    // are undefined and shimmer at RVT page seams.
+    vec2 triplanarWorldUVdx = dFdx(triplanarWorldUV);
+    vec2 triplanarWorldUVdy = dFdy(triplanarWorldUV);
 
+#ifdef RVT_ENABLED
+    // Sample the baked terrain RVT atlas (2 texels) instead of the live 8-layer composite.
+    // A lookup "resolves" only when the page-table entry is valid AND the ORM atlas alpha
+    // (the per-texel "baked with real content" bit, written 1.0 by terrain_rvt_bake.glsl) is
+    // set. Any fragment that is not truly resident-with-content — streaming in, on an
+    // uncovered page, or on a mapped-but-not-baked tile (clear leaves alpha 0) — falls back
+    // to the live composite so the surface is never worse than the non-RVT path, never black.
+    vec3 mat_albedo;
+    float mat_metallic;
+    float mat_roughness;
+    float mat_ao;
+    vec3 mat_emission;
+    vec2 rvtUV = clamp((fragWorldPos.xz - rvt.worldMin) * rvt.invWorldExtent, vec2(0.0), vec2(0.999999));
+    uint rvtMip = uint(max(vtDesiredMip(rvtUV, rvt.virtualResTexels), 0.0));
+    if (vtFeedbackFragment(gl_FragCoord.xy))
+        vtWriteFeedback(rvt.img, rvtUV, rvtMip);
+    VTSample rvtS = vtLookup(rvt.img, rvtUV, rvtMip);
+    vec4 rvtO = rvtS.valid ? texture(rvtOrmAtlas, rvtS.uv) : vec4(0.0);
+    bool rvtResolved = rvtS.valid && rvtO.a >= 0.5;
+    if (rvtResolved) {
+        vec4 rvtA = texture(rvtAlbedoAtlas, rvtS.uv);
+        // Coverage renormalization: rvtO.a is the per-texel baked-coverage bit (1.0 baked,
+        // 0.0 cleared), so a bilinear tap straddling covered and cleared texels returns every
+        // channel pre-scaled by the filtered coverage — rendering as a thin dark seam line at
+        // bake-quad seams and page borders at the terrain edge. Dividing by the filtered
+        // coverage reconstructs the covered texels' average instead. Fully covered taps have
+        // a == 1.0 exactly, so the division is an exact no-op on the interior fast path.
+        float rvtCov = rvtO.a;
+        mat_albedo = rvtA.rgb / rvtCov;
+        mat_metallic = rvtO.b / rvtCov;
+        mat_roughness = rvtO.g / rvtCov;
+        mat_ao = rvtO.r / rvtCov;
+        mat_emission = mat_albedo * (rvtA.a / rvtCov);
+    } else {
+        // Live 8-layer composite fallback (cold path — only unresolved fragments pay it, so the
+        // RVT fast path keeps its win). The generated composite declares its own mat_* locals;
+        // rename them to temporaries so they don't clash with the outer decls, then copy out.
+        #define mat_albedo   _rvtcAlbedo
+        #define mat_normalTS _rvtcNormalTS
+        #define mat_metallic _rvtcMetallic
+        #define mat_roughness _rvtcRoughness
+        #define mat_ao       _rvtcAO
+        #define mat_emission _rvtcEmission
+        #include "../material/terrain_material_generated.glsl"
+        #undef mat_albedo
+        #undef mat_normalTS
+        #undef mat_metallic
+        #undef mat_roughness
+        #undef mat_ao
+        #undef mat_emission
+        mat_albedo = _rvtcAlbedo;
+        mat_metallic = _rvtcMetallic;
+        mat_roughness = _rvtcRoughness;
+        mat_ao = _rvtcAO;
+        mat_emission = _rvtcEmission;
+    }
+#else
 #include "../material/terrain_material_generated.glsl"
 #ifndef MAT_EMISSION_DEFINED
     vec3 mat_emission = vec3(0.0);
+#endif
 #endif
     vec3 albedo = mat_albedo;
     float metallic = mat_metallic;

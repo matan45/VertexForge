@@ -248,6 +248,51 @@ namespace serialization
             if (terrain.contains("textureScale") && terrain["textureScale"].is_number())
                 settings.textureScale = terrain["textureScale"].get<float>();
         }
+
+        // VK-1209 virtual texturing settings.
+        json serializeVirtualTextureSettings(const types::VirtualTextureSettings& s)
+        {
+            return {
+                {"rvtEnabled", s.rvtEnabled},
+                {"svtEnabled", s.svtEnabled},
+                {"rvtPoolBudgetMB", s.rvtPoolBudgetMB},
+                {"svtPoolBudgetMB", s.svtPoolBudgetMB},
+                {"rvtTexelsPerMeter", s.rvtTexelsPerMeter},
+                {"pagesPerFrame", s.pagesPerFrame},
+                {"evictionAgeFrames", s.evictionAgeFrames},
+                {"svtPageLinearMaps", s.svtPageLinearMaps}
+            };
+        }
+
+        void deserializeVirtualTextureSettings(const json& j, types::VirtualTextureSettings& settings)
+        {
+            if (!j.contains("virtualTexture") || !j["virtualTexture"].is_object())
+            {
+                settings = types::VirtualTextureSettings{};
+                return;
+            }
+            const auto& vt = j["virtualTexture"];
+            if (vt.contains("rvtEnabled") && vt["rvtEnabled"].is_boolean())
+                settings.rvtEnabled = vt["rvtEnabled"].get<bool>();
+            if (vt.contains("svtEnabled") && vt["svtEnabled"].is_boolean())
+                settings.svtEnabled = vt["svtEnabled"].get<bool>();
+            // Finding #5: clamp the numeric fields (read as int64 so a negative JSON value can't wrap to
+            // a huge uint32) — a hand-edited/older scene must not drive a 0 (zero-size staging buffer) or
+            // billions (OOM) into the VT managers. Mirrors the editor UI's floors/ranges.
+            if (vt.contains("rvtPoolBudgetMB") && vt["rvtPoolBudgetMB"].is_number())
+                settings.rvtPoolBudgetMB = static_cast<uint32_t>(std::clamp<int64_t>(vt["rvtPoolBudgetMB"].get<int64_t>(), 1, 65536));
+            if (vt.contains("svtPoolBudgetMB") && vt["svtPoolBudgetMB"].is_number())
+                settings.svtPoolBudgetMB = static_cast<uint32_t>(std::clamp<int64_t>(vt["svtPoolBudgetMB"].get<int64_t>(), 1, 65536));
+            if (vt.contains("rvtTexelsPerMeter") && vt["rvtTexelsPerMeter"].is_number())
+                settings.rvtTexelsPerMeter = std::max(0.01f, vt["rvtTexelsPerMeter"].get<float>());
+            if (vt.contains("pagesPerFrame") && vt["pagesPerFrame"].is_number())
+                settings.pagesPerFrame = static_cast<uint32_t>(std::clamp<int64_t>(vt["pagesPerFrame"].get<int64_t>(), 1, 256));
+            if (vt.contains("evictionAgeFrames") && vt["evictionAgeFrames"].is_number())
+                settings.evictionAgeFrames = static_cast<uint32_t>(std::clamp<int64_t>(vt["evictionAgeFrames"].get<int64_t>(), 1, 600));
+            if (vt.contains("svtPageLinearMaps") && vt["svtPageLinearMaps"].is_boolean())
+                settings.svtPageLinearMaps = vt["svtPageLinearMaps"].get<bool>();
+        }
+
         json serializeDistanceCullingSettings(const types::DistanceCullingSettings& s)
         {
             return {
@@ -452,6 +497,7 @@ namespace serialization
         j["distanceCulling"] = serializeDistanceCullingSettings(settings.distanceCulling);
         j["transparency"] = { {"wboitEnabled", settings.transparency.wboitEnabled} };
         j["terrain"] = serializeTerrainRenderSettings(settings.terrain);
+        j["virtualTexture"] = serializeVirtualTextureSettings(settings.virtualTexture);
         j["postProcess"] = serializePostProcessSettings(settings.postProcess);
         j["gi"] = serializeGISettings(settings.gi);
         j["vfxLOD"] = serializeVfxLODSettings(settings.vfxLOD);
@@ -480,6 +526,7 @@ namespace serialization
         deserializeDistanceCullingSettings(j, settings.distanceCulling);
         deserializeTransparencySettings(j, settings.transparency);
         deserializeTerrainRenderSettings(j, settings.terrain);
+        deserializeVirtualTextureSettings(j, settings.virtualTexture);
 
         deserializeGISettings(j, settings.gi);
 

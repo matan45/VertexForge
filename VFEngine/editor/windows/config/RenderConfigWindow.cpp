@@ -476,6 +476,7 @@ namespace windows
         drawDisplaySection();
         drawCullingSection();
         drawTerrainSection();
+        drawVirtualTextureSection();
         drawShadowSection();
         drawVFXLODSection();
         drawAnimationLODSection();

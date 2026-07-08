@@ -25,6 +25,16 @@ namespace render::gpudriven
 {
     class BindlessTextureManager;
 
+    // VK-1480: how much of a texture's mip pyramid the streamer keeps resident.
+    //   Full     — today's behavior: full-mip image, tail mips resident, higher mips stream on demand.
+    //   TailOnly — only the coarse tail (base <= 128px) as a tiny permanent fallback for an SVT-paged
+    //              texture; excluded from streaming/eviction; the VRAM win that lets SVT save memory.
+    enum class TextureResidency
+    {
+        Full,
+        TailOnly
+    };
+
     struct TextureStreamConfig
     {
         size_t vramBudgetBytes = 1024 * 1024 * 1024;       // 1 GB
@@ -47,6 +57,8 @@ namespace render::gpudriven
         size_t vramUsedBytes = 0;
         size_t vramBudgetBytes = 0;
         uint32_t evictionsThisFrame = 0;
+        uint32_t tailOnlyCount = 0;        // VK-1480: textures kept as tiny SVT fallbacks
+        size_t tailOnlyBytesSaved = 0;     // VK-1480: full-pyramid bytes NOT held for tail-only textures
     };
 
     struct TextureMipReadResult
@@ -120,8 +132,16 @@ namespace render::gpudriven
         void setDeletionQueue(core::DeferredDeletionQueue* queue) { deletionQueue = queue; }
 
         // Register a texture for streaming. Returns the bindless index immediately.
-        // Only tail mips are loaded; higher mips stream in on demand.
-        uint32_t registerTexture(const std::string& path, vk::Format format);
+        // Full: only tail mips are loaded, higher mips stream in on demand (default — zero behavior
+        // change for existing callers). TailOnly (VK-1480): only the coarse tail is created, as a tiny
+        // permanent fallback for an SVT-paged texture; it is excluded from streaming/eviction.
+        uint32_t registerTexture(const std::string& path, vk::Format format,
+                                 TextureResidency residency = TextureResidency::Full);
+
+        // VK-1480: convert a TailOnly texture back into a full streamed image on the SAME bindless
+        // slot (in-place descriptor swap; old image retired via the deletion queue). Called when SVT
+        // is disabled so textures don't stay permanently blurry. No-op / true if already Full.
+        bool promoteToFull(const std::string& path);
 
         // Fully release a streamed texture: unregister its bindless slot, destroy the
         // image (deferred), close the stream handle and drop pending reads/uploads.
@@ -153,6 +173,12 @@ namespace render::gpudriven
         // Create the Vulkan image with full mip chain, upload tail mips
         bool createStreamableImage(StreamableTexture& tex, const resource::TextureStreamHeader& header,
                                     const std::vector<resource::MipLevelData>& tailMips);
+
+        // VK-1480: create a tiny tail-only image (base = source mip startMip, retainedMips levels all
+        // uploaded). Fills tex.image/view/currentSampler + gpuMemoryUsage; the caller sets width/height/
+        // totalMipLevels/tailOnly.
+        bool createTailOnlyImage(StreamableTexture& tex, uint32_t startMip,
+                                 const std::vector<resource::MipLevelData>& retainedMips);
 
         // Create a sampler with the specified minLod
         vk::Sampler createMipClampedSampler(uint32_t minLod, uint32_t maxLod);

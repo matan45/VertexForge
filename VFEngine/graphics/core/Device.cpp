@@ -381,6 +381,11 @@ namespace core
         {
             deviceFeatures.fillModeNonSolid = VK_TRUE;
         }
+        // VK-1209: virtual texturing writes page-request feedback (atomicOr) from the fragment stage.
+        if (supportedFeatures.fragmentStoresAndAtomics)
+        {
+            deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
+        }
         // VK-1481 Phase 2: multi-draw indirect for the merged VFX pass (drawCount > 1), and
         // firstInstance in indirect draws (the VFX compute writes a non-zero firstInstance =
         // particleOffset per emitter — this makes that spec-valid and enables the merge).

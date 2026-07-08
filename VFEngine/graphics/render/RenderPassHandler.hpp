@@ -13,6 +13,7 @@
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include "common/SharedCameraUBO.hpp"
 #include "graph/RenderGraphTypes.hpp"
+#include "raytracing/GPUTimestampQueryPool.hpp"
 #include "gpudriven/billboard/BillboardGPUTypes.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -283,6 +284,28 @@ namespace render
         // unsupported = timestamp queries unavailable, never retry
         bool graphProfilerInitialized = false;
         bool graphProfilerUnsupported = false;
+
+        // VK-1480: aux GPU timestamps for the raw VT commands (RVT bake / SVT update /
+        // feedback copy) recorded inside the GPU-driven mesh pass. They run between
+        // RenderGraph passes, so RenderGraphProfiler can't see them. Same query-pool
+        // discipline as graphProfiler: per-frame-in-flight slots, a dense written range
+        // read back a frame later, gated on the profiler being enabled (GpuPassStats).
+        // Lazily init'd in syncGraphProfiler, cleaned up beside graphProfiler.
+        static constexpr uint32_t kVTTimestampScopes = 3;
+        // Mutable: resetFrame/writeTimestamp are non-const, but the VT scopes are
+        // recorded from the const draw path (like the other mutable frame-scratch state).
+        mutable raytracing::GPUTimestampQueryPool vtTimestampPool;
+        bool vtTimestampPoolInitialized = false;
+        // Set per frame by beginVTTimestamps (profiler enabled + pool valid); read by
+        // the scope brackets. Mutable: the scopes are written from const draw methods.
+        mutable bool vtTimestampsActiveThisFrame = false;
+        // Next free query index this frame (2 per scope, packed densely so readback
+        // never touches an unwritten query when a VT path is inactive that frame).
+        mutable uint32_t vtQueryCursor = 0;
+        // Per frame-in-flight slot: queries written (dense, 2×scopes) and the scope
+        // names in write order, so readback reads exactly the range and labels rows.
+        mutable std::array<uint32_t, core::MAX_FRAMES_IN_FLIGHT> vtSlotQueryCount{};
+        mutable std::array<std::vector<const char*>, core::MAX_FRAMES_IN_FLIGHT> vtSlotScopeNames{};
         graph::ResourceHandle sceneColorHandle;
         graph::ResourceHandle depthHandle;
         // Scoped MSAA: multisampled scene targets. Pre-resolve passes (ClearColor,
@@ -581,6 +604,17 @@ namespace render
         // lazy-inits the GPU pass profiler, reads back last frame's timestamps
         // and publishes the snapshot for the editor.
         void syncGraphProfiler(uint32_t imageIndex);
+
+        // VK-1480: aux VT timestamp scopes (see vtTimestampPool). beginVTTimestamps
+        // resets the pool + this frame's bookkeeping (call once, outside a render pass,
+        // before the first VT command); a vtScopeBegin/vtScopeEnd pair brackets one raw
+        // VT command scope (begin returns a handle to pass to end, UINT32_MAX when
+        // inactive); endVTTimestamps records the slot's dense written range. All no-ops
+        // unless the profiler is enabled and the pool is valid.
+        void beginVTTimestamps(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        uint32_t vtScopeBegin(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex, const char* name) const;
+        void vtScopeEnd(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex, uint32_t startQueryIndex) const;
+        void endVTTimestamps(uint32_t imageIndex) const;
         void drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void drawUIOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);

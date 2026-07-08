@@ -216,6 +216,29 @@ namespace types
         float textureScale = 0.1f;
     };
 
+    // VK-1209 — virtual texturing. Two clients over one page-table substrate:
+    // terrain Runtime Virtual Texture (RVT, bakes the splat composite into a page
+    // atlas) and streamed material textures (SVT, disk-paged BC7). Both default OFF.
+    // Pool byte budgets are restart-scoped (Vulkan images don't resize); the
+    // per-frame page budget and eviction age apply live.
+    struct VirtualTextureSettings
+    {
+        bool rvtEnabled = false;          // terrain runtime virtual texture
+        bool svtEnabled = false;          // streamed material virtual textures
+        uint32_t rvtPoolBudgetMB = 128;   // terrain RVT atlas budget (restart to apply)
+        // VK-1480: a hardware-safe BC7 atlas caps at 256 MiB per pool (VT_MAX_POOL_DIM); with two
+        // pools (sRGB + Unorm) the 256 default splits 128/128 and the tail-only fallback path means
+        // SVT now saves VRAM instead of adding it. Restart-scoped (Vulkan images don't resize).
+        uint32_t svtPoolBudgetMB = 256;   // material SVT atlas budget, total across pools (restart)
+        float rvtTexelsPerMeter = 8.0f;   // terrain RVT mip-0 texel density
+        uint32_t pagesPerFrame = 32;      // per-frame page bake/stream budget (live)
+        uint32_t evictionAgeFrames = 60;  // frames unused before a page may evict (live)
+        // VK-1480: also page linear (Unorm) material maps — normal/ORM/height — through a second
+        // BC7-Unorm atlas. Off = only sRGB (albedo/emission) is paged and linear maps stay plain
+        // bindless (today's behavior); a named GPU sign-off item for normal-map quality. Restart.
+        bool svtPageLinearMaps = true;
+    };
+
     struct VFXLODSettings
     {
         float lod0Distance = 50.0f;
@@ -264,6 +287,7 @@ namespace types
         DistanceCullingSettings distanceCulling;
         TransparencySettings transparency;
         TerrainSettings terrain;
+        VirtualTextureSettings virtualTexture;
         postprocess::PostProcessSettings postProcess;
         VFXLODSettings vfxLOD;
         AnimationLODSettings animationLOD;
@@ -298,6 +322,9 @@ namespace types
                 s.vfxQualityTier = vfx::VFXQualityTier::Low;
                 s.terrain.lodBias = 0.5f;
                 s.terrain.errorThreshold = 5.0f;
+                s.virtualTexture.rvtPoolBudgetMB = 64;
+                s.virtualTexture.svtPoolBudgetMB = 256;
+                s.virtualTexture.rvtTexelsPerMeter = 4.0f;
                 s.gi = render::gi::GISettings::fromQuality(render::gi::GIQuality::Off);
                 s.vfxLOD.lod0Distance = 25.0f;
                 s.vfxLOD.lod1Distance = 50.0f;
@@ -320,6 +347,8 @@ namespace types
                 s.vfxQualityTier = vfx::VFXQualityTier::Medium;
                 s.terrain.lodBias = 0.8f;
                 s.terrain.errorThreshold = 3.0f;
+                s.virtualTexture.rvtPoolBudgetMB = 96;
+                s.virtualTexture.rvtTexelsPerMeter = 6.0f;
                 s.gi = render::gi::GISettings::fromQuality(render::gi::GIQuality::Off);
                 s.vfxLOD.lod0Distance = 40.0f;
                 s.vfxLOD.lod1Distance = 75.0f;
@@ -346,6 +375,10 @@ namespace types
                 s.vfxQualityTier = vfx::VFXQualityTier::Ultra;
                 s.terrain.lodBias = 1.5f;
                 s.terrain.errorThreshold = 1.0f;
+                s.virtualTexture.rvtPoolBudgetMB = 256;
+                s.virtualTexture.svtPoolBudgetMB = 1024;
+                s.virtualTexture.rvtTexelsPerMeter = 16.0f;
+                s.virtualTexture.pagesPerFrame = 48;
                 s.gi = render::gi::GISettings::fromQuality(render::gi::GIQuality::High);
                 s.vfxLOD.lod0Distance = 75.0f;
                 s.vfxLOD.lod1Distance = 150.0f;

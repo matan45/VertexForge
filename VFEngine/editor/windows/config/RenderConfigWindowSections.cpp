@@ -319,6 +319,68 @@ namespace windows
         }
     }
 
+    void RenderConfigWindow::drawVirtualTextureSection()
+    {
+        // VK-1209 — virtual texturing. Fields ride the whole RenderSettings struct; the
+        // "Apply" button pushes them through the standard chain (applyVirtualTextureSettings).
+        // Pool byte budgets are restart-scoped (Vulkan images don't resize live).
+        if (ImGui::CollapsingHeader("Virtual Texturing"))
+        {
+            ImGui::Indent(10.0f);
+
+            auto& vt = settings.virtualTexture;
+
+            if (ImGui::Checkbox("Terrain RVT (bake splat composite to page atlas)", &vt.rvtEnabled))
+                markDirty();
+            if (ImGui::Checkbox("Material SVT (stream BC7 texture pages)", &vt.svtEnabled))
+                markDirty();
+
+            if (vt.rvtEnabled || vt.svtEnabled)
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled("Pool sizes apply after restart. Page budget / eviction apply live.");
+                ImGui::Spacing();
+
+                int rvtMB = static_cast<int>(vt.rvtPoolBudgetMB);
+                if (ImGui::DragInt("RVT Pool (MB)", &rvtMB, 16, 32, 1024))
+                {
+                    vt.rvtPoolBudgetMB = static_cast<uint32_t>(rvtMB < 32 ? 32 : rvtMB);
+                    markDirty();
+                }
+                int svtMB = static_cast<int>(vt.svtPoolBudgetMB);
+                if (ImGui::DragInt("SVT Pool (MB)", &svtMB, 32, 64, 4096))
+                {
+                    vt.svtPoolBudgetMB = static_cast<uint32_t>(svtMB < 64 ? 64 : svtMB);
+                    markDirty();
+                }
+                // VK-1480: page linear (Unorm) maps through a second BC7-Unorm atlas. Off = only
+                // sRGB albedo/emission is paged; normal/ORM/height stay plain bindless (restart).
+                if (ImGui::Checkbox("Page Linear Maps (normal/ORM via Unorm atlas)", &vt.svtPageLinearMaps))
+                    markDirty();
+                if (ImGui::DragFloat("RVT Texels / Meter", &vt.rvtTexelsPerMeter, 0.5f, 1.0f, 64.0f, "%.1f"))
+                    markDirty();
+
+                int perFrame = static_cast<int>(vt.pagesPerFrame);
+                if (ImGui::DragInt("Pages / Frame", &perFrame, 1, 1, 256))
+                {
+                    vt.pagesPerFrame = static_cast<uint32_t>(perFrame < 1 ? 1 : perFrame);
+                    markDirty();
+                }
+                int evictAge = static_cast<int>(vt.evictionAgeFrames);
+                if (ImGui::DragInt("Eviction Age (frames)", &evictAge, 1, 1, 600))
+                {
+                    vt.evictionAgeFrames = static_cast<uint32_t>(evictAge < 1 ? 1 : evictAge);
+                    markDirty();
+                }
+
+                ImGui::Spacing();
+                ImGui::TextDisabled("Press Apply to activate. RVT collapses per-fragment terrain\nsplat blending (up to 24 samples) into 2 atlas reads.");
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
     void RenderConfigWindow::drawVFXLODSection()
     {
         if (ImGui::CollapsingHeader("VFX LOD"))

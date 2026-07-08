@@ -686,7 +686,8 @@ namespace render::mesh
 
         std::vector<vk::RenderingAttachmentInfo> colorAttachments = { colorAttach };
 
-        // MRT motion vectors disabled for now — using fullscreen compute motion vector pass instead
+        // MRT motion vectors removed (dead 0f416c17 experiment) — motion vectors come from the
+        // fullscreen compute MotionVectorPass instead
 
         vk::RenderingInfo renderingInfo{};
         renderingInfo.renderArea.offset = vk::Offset2D{0, 0};

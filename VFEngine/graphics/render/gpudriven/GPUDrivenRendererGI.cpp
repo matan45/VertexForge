@@ -919,6 +919,89 @@ namespace render::gpudriven
         vfLogInfo("GPUDrivenRenderer: world mask bound — scene + terrain pipelines recreated with WORLD_MASK_ENABLED");
     }
 
+    void GPUDrivenRenderer::recreateScenePipelinesForSVT()
+    {
+        // VK-1209: rebuild only the scene MESH pipelines (not terrain) from current state so the
+        // set-1 SVT bindings + SVT_ENABLED match each pipeline's svtSampleEnabled flag. Mirrors
+        // recreateScenePipelinesForWorldMask but pluginTextureManager-guarded and terrain-free.
+        if (!meshShaderPipeline)
+            return;
+
+        vk::DescriptorSetLayout giLayout = (giCascadeManager && giCascadeManager->getProbeStorage())
+            ? giCascadeManager->getProbeStorage()->getSamplingLayout() : vk::DescriptorSetLayout{};
+        vk::DescriptorSetLayout causticLayout = (water.causticsResources && water.causticsResources->isInitialized())
+            ? water.causticsResources->getDescriptorSetLayout() : vk::DescriptorSetLayout{};
+
+        vk::DescriptorSetLayout rtMaskLayout{};
+        vk::DescriptorSet rtMaskDescSet{};
+        if (rtShadowPipeline && rtShadowPipeline->isInitialized())
+        {
+            const bool useDenoised = rtShadowDenoiser && rtShadowDenoiser->isInitialized();
+            rtMaskLayout = useDenoised ? rtShadowDenoiser->getDenoisedMaskSamplerLayout()
+                                       : rtShadowPipeline->getShadowMaskSamplerLayout();
+            rtMaskDescSet = useDenoised ? rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
+                                        : rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
+        }
+
+        vk::DescriptorSetLayout worldMaskLayout = pluginTextureManager
+            ? pluginTextureManager->getEntityMaskLayout() : vk::DescriptorSetLayout{};
+
+        MeshPipelineInitInfo pipelineInfo{
+            .iblLayout = cachedIBLLayout,
+            .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+            .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+            .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+            .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+            .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+            .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+            .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+            .giProbeDataLayout = giLayout,
+            .causticLayout = causticLayout,
+            .rtShadowMaskLayout = rtMaskLayout,
+            .worldMaskLayout = worldMaskLayout,
+            .rtSpotShadowMaskLayout = getActiveRTSpotShadowMaskLayout(),
+            .rtPointShadowMaskLayout = getActiveRTPointShadowMaskLayout(),
+            .colorAttachmentFormats = cachedColorFormats,
+            .depthAttachmentFormat = cachedDepthFormat
+        };
+
+        vk::DescriptorSet spotMaskDescSet = getActiveRTSpotShadowMaskDescriptorSet();
+        vk::DescriptorSet pointMaskDescSet = getActiveRTPointShadowMaskDescriptorSet();
+
+        auto restoreDescriptors = [&](MeshShaderPipeline& pipeline)
+        {
+            if (rtMaskDescSet) pipeline.updateRTShadowMaskDescriptor(rtMaskDescSet);
+            if (spotMaskDescSet) pipeline.updateRTSpotShadowMaskDescriptor(spotMaskDescSet);
+            if (pointMaskDescSet) pipeline.updateRTPointShadowMaskDescriptor(pointMaskDescSet);
+            if (giLayout && giCascadeManager)
+                pipeline.updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
+            if (causticLayout)
+                pipeline.updateCausticDescriptor(water.causticsResources->getDescriptorSet());
+            if (worldMaskLayout && pluginTextureManager)
+                pipeline.updateWorldMaskDescriptor(pluginTextureManager->getEntityMaskDescriptorSet());
+        };
+
+        meshShaderPipeline->recreate(pipelineInfo);
+        restoreDescriptors(*meshShaderPipeline);
+
+        if (transparentMeshShaderPipeline)
+        {
+            pipelineInfo.transparentMode = true;
+            transparentMeshShaderPipeline->recreate(pipelineInfo);
+            restoreDescriptors(*transparentMeshShaderPipeline);
+            pipelineInfo.transparentMode = false;
+        }
+
+        if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
+        {
+            pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+            pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
+            pipelineInfo.wboitMode = true;
+            wboitMeshShaderPipeline->recreate(pipelineInfo);
+            restoreDescriptors(*wboitMeshShaderPipeline);
+        }
+    }
+
     void GPUDrivenRenderer::dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex)
     {
         if (!isRTShadowReady()) return;

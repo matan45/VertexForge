@@ -141,6 +141,16 @@ namespace render
 
         if (!wanted) return;
 
+        // VK-1480: bring up the aux VT timestamp pool alongside the graph profiler.
+        // Reaching here means timestamps are supported (graphProfiler init succeeded), so
+        // mark initialized unconditionally — a failed init just leaves the pool invalid and
+        // every VT scope/readback below no-ops. Avoids re-init attempts across frames.
+        if (!vtTimestampPoolInitialized)
+        {
+            vtTimestampPool.init(device, kVTTimestampScopes * 2);
+            vtTimestampPoolInitialized = true;
+        }
+
         graphProfiler->readbackAndUpdate(device.getLogicalDevice(), imageIndex);
 
         auto stats = graphProfiler->getStats();
@@ -155,7 +165,75 @@ namespace render
         {
             out.passTimings.push_back({pass.name, pass.ms, pass.emaMs});
         }
+
+        // VK-1480: append the aux VT scope timings for the completed frame slot so they
+        // appear as rows in the same Task Graph Profiler window (raw ms; no EMA — the
+        // window plots its own history). readResults is non-blocking, so a slot whose
+        // frame is still in flight simply contributes no rows this frame.
+        if (vtTimestampPoolInitialized && vtTimestampPool.isValid())
+        {
+            uint32_t prevFI = (imageIndex + core::MAX_FRAMES_IN_FLIGHT - 1) % core::MAX_FRAMES_IN_FLIGHT;
+            uint32_t writtenQueries = vtSlotQueryCount[prevFI];
+            const auto& names = vtSlotScopeNames[prevFI];
+            if (writtenQueries > 0 && !names.empty())
+            {
+                std::vector<uint64_t> ts;
+                if (vtTimestampPool.readResults(device.getLogicalDevice(), prevFI, ts, writtenQueries))
+                {
+                    for (size_t i = 0; i < names.size() && (i * 2 + 1) < ts.size(); ++i)
+                    {
+                        float ms = vtTimestampPool.toMilliseconds(ts[i * 2], ts[i * 2 + 1]);
+                        out.passTimings.push_back({names[i], ms, ms});
+                    }
+                }
+            }
+        }
+
         sink.publish(std::move(out));
+    }
+
+    void RenderPassHandler::beginVTTimestamps(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        vtTimestampsActiveThisFrame = false;
+        vtQueryCursor = 0;
+        if (!vtTimestampPoolInitialized || !vtTimestampPool.isValid()) return;
+        if (!GpuPassStats::instance().isEnabledRequested()) return;
+
+        // Reset this slot's queries before any writeTimestamp. Must be outside a render
+        // pass — the VT commands run between graph passes, so we are here.
+        vtTimestampPool.resetFrame(commandBuffer, imageIndex);
+        uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+        vtSlotScopeNames[fi].clear();
+        vtSlotQueryCount[fi] = 0;
+        vtTimestampsActiveThisFrame = true;
+    }
+
+    uint32_t RenderPassHandler::vtScopeBegin(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                             const char* name) const
+    {
+        if (!vtTimestampsActiveThisFrame) return UINT32_MAX;
+        if (vtQueryCursor + 2 > kVTTimestampScopes * 2) return UINT32_MAX; // pool full — drop extra scope
+        uint32_t startIndex = vtQueryCursor;
+        vtTimestampPool.writeTimestamp(commandBuffer, imageIndex, startIndex,
+                                       vk::PipelineStageFlagBits::eTopOfPipe);
+        vtSlotScopeNames[imageIndex % core::MAX_FRAMES_IN_FLIGHT].push_back(name);
+        vtQueryCursor += 2;
+        return startIndex;
+    }
+
+    void RenderPassHandler::vtScopeEnd(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                       uint32_t startQueryIndex) const
+    {
+        if (startQueryIndex == UINT32_MAX) return;
+        vtTimestampPool.writeTimestamp(commandBuffer, imageIndex, startQueryIndex + 1,
+                                       vk::PipelineStageFlagBits::eBottomOfPipe);
+    }
+
+    void RenderPassHandler::endVTTimestamps(uint32_t imageIndex) const
+    {
+        if (!vtTimestampsActiveThisFrame) return;
+        vtSlotQueryCount[imageIndex % core::MAX_FRAMES_IN_FLIGHT] = vtQueryCursor;
+        vtTimestampsActiveThisFrame = false;
     }
 
     void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
@@ -525,6 +603,29 @@ namespace render
             gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
         }
 
+        // VK-1480: the raw VT commands below (RVT bake, SVT update, feedback copies) run
+        // outside the RenderGraph passes, so bracket them with the aux timestamp pool —
+        // the scopes surface as rows in the Task Graph Profiler. All no-ops when the
+        // profiler is off. Reset here (outside any render pass) before the first scope.
+        beginVTTimestamps(commandBuffer, imageIndex);
+
+        // VK-1209: bake requested terrain RVT pages into the atlas (dynamic rendering, outside the
+        // scene pass) before the terrain draw samples it.
+        if (gpuDrivenRenderer->isTerrainRVTActive())
+        {
+            uint32_t vtBakeScope = vtScopeBegin(commandBuffer, imageIndex, "VT/RVT Bake");
+            gpuDrivenRenderer->bakeTerrainRVT(commandBuffer);
+            vtScopeEnd(commandBuffer, imageIndex, vtBakeScope);
+        }
+
+        // VK-1209: stream + upload requested material SVT pages, and clear feedback, before meshes sample.
+        if (gpuDrivenRenderer->isSVTActive())
+        {
+            uint32_t vtSvtScope = vtScopeBegin(commandBuffer, imageIndex, "VT/SVT Update");
+            gpuDrivenRenderer->updateAndUploadSVT(commandBuffer);
+            vtScopeEnd(commandBuffer, imageIndex, vtSvtScope);
+        }
+
         bool useParallel = parallelSceneRecording && sceneThreadPoolManager &&
                            sceneThreadPoolManager->getThreadCount() > 1;
 
@@ -537,6 +638,25 @@ namespace render
         else
             recordInlineScenePassGraphManaged(commandBuffer, imageIndex, iblDescriptorSet,
                                               debugRendererPtr, hasCustomShaderMeshes, wboitActive);
+
+        // VK-1480: one aux scope spanning both feedback copies (skipped when neither VT
+        // path is active this frame).
+        const bool vtFeedbackActive = gpuDrivenRenderer->isTerrainRVTActive() || gpuDrivenRenderer->isSVTActive();
+        uint32_t vtFeedbackScope = vtFeedbackActive
+            ? vtScopeBegin(commandBuffer, imageIndex, "VT/Feedback Copy")
+            : UINT32_MAX;
+
+        // VK-1209: terrain wrote its page requests during the scene pass; copy them to staging for
+        // next frame's readback (outside the pass).
+        if (gpuDrivenRenderer->isTerrainRVTActive())
+            gpuDrivenRenderer->copyTerrainRVTFeedback(commandBuffer);
+
+        // VK-1209: meshes wrote their SVT page requests during the scene pass; copy to staging.
+        if (gpuDrivenRenderer->isSVTActive())
+            gpuDrivenRenderer->copySVTFeedback(commandBuffer);
+
+        vtScopeEnd(commandBuffer, imageIndex, vtFeedbackScope);
+        endVTTimestamps(imageIndex);
 
         if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
         {
