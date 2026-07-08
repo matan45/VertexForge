@@ -474,6 +474,12 @@ void main() {
     vec2 uvXY = fragWorldPos.xy * textureScale; // Z-facing (north/south walls)
     vec2 uvYZ = fragWorldPos.yz * textureScale; // X-facing (east/west walls)
     vec2 triplanarWorldUV = uvXZ * blendWeights.y + uvXY * blendWeights.z + uvYZ * blendWeights.x;
+    // VK-1209 finding #7: screen-space gradients of the (quad-uniform) triplanar UV, computed here in
+    // UNIFORM control flow so the generated composite can sample with textureGrad — its layer samples run
+    // inside the per-fragment-divergent RVT resolved/fallback branch below, where implicit derivatives
+    // are undefined and shimmer at RVT page seams.
+    vec2 triplanarWorldUVdx = dFdx(triplanarWorldUV);
+    vec2 triplanarWorldUVdy = dFdy(triplanarWorldUV);
 
 #ifdef RVT_ENABLED
     // Sample the baked terrain RVT atlas (2 texels) instead of the live 8-layer composite.

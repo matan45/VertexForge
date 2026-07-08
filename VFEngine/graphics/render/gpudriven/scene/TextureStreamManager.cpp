@@ -129,7 +129,15 @@ namespace render::gpudriven
     {
         auto it = textures.find(path);
         if (it != textures.end())
+        {
+            // Finding #12: honor a higher residency request on a cache hit. A texture first registered
+            // TailOnly (as an SVT tail) that a later caller needs Full — e.g. vegetation/billboards that
+            // sample the bindless slot directly, with no SVT resolver — must be promoted, or it stays
+            // permanently at the 128px tail. promoteToFull rebuilds on the SAME bindless slot.
+            if (residency == TextureResidency::Full && it->second.tailOnly)
+                promoteToFull(path);
             return it->second.bindlessIndex;
+        }
 
         auto handle = resource::TextureStreamResource::openStream(path);
         if (!handle)

@@ -346,6 +346,13 @@ namespace render::gpudriven
         {
             materials.textureCache->unloadTexture(texturePath);
         }
+        // VK-1209 finding #9: release the SVT registration too, or its page-table block + resident tiles
+        // leak until the shared table exhausts, and the resolver keeps handing the shader a dead tag.
+        if (svtManager)
+        {
+            svtManager->unregisterTexture(texturePath);
+            svtTaggedIndices.erase(texturePath);
+        }
 
         // Invalidate any materials that used this texture so they re-register on next use
         std::vector<std::string> materialsToInvalidate;
@@ -493,11 +500,23 @@ namespace render::gpudriven
                 const char* atlasKey = (p == 0) ? "__svt_atlas_srgb__" : "__svt_atlas_unorm__";
                 const uint32_t atlasIdx = bindlessTextures->registerTexture(
                     atlasKey, pool->planeView(0), pool->getSampler());
+                // VK-1482 finding #1: registerTexture dedups by path and returns the pre-existing slot
+                // WITHOUT re-writing the descriptor. On an SVT disable->re-enable the old atlas view was
+                // destroyed, so force the slot onto the freshly-created pool's view/sampler (safe here —
+                // the SVT toggle runs at the pipeline-recreate/idle point).
+                bindlessTextures->updateTexture(atlasIdx, pool->planeView(0), pool->getSampler());
                 svtManager->setAtlasBindlessIndex(p, atlasIdx);
             }
         }
 
-        // Point the mesh pipelines' set-1 SVT bindings at the manager's buffers.
+        wireSVTPipelines();
+    }
+
+    void GPUDrivenRenderer::wireSVTPipelines()
+    {
+        if (!svtManager)
+            return;
+        // Point the mesh pipelines' set-1 SVT bindings at the manager's current buffers.
         auto wire = [&](MeshShaderPipeline* p)
         {
             if (p && p->isSVTSampleEnabled())
@@ -526,6 +545,10 @@ namespace render::gpudriven
         if (!svtManager) return;
         svtManager->clearFeedback(cmd); // fresh feedback for this frame's mesh draws
         svtManager->updateAndUpload(cmd, svtFrameCounter++);
+        // If the image-info SSBO grew this frame (finding #2), rebind binding 5 to the new buffer before
+        // the scene pass records the mesh draws. The set is UPDATE_AFTER_BIND, so this is safe here.
+        if (svtManager->consumeImageInfoBufferResized())
+            wireSVTPipelines();
     }
 
     void GPUDrivenRenderer::copySVTFeedback(vk::CommandBuffer cmd)
@@ -561,6 +584,14 @@ namespace render::gpudriven
             }
             svtManager.reset();
             svtTaggedIndices.clear();
+
+            // Finding #4: resident streamed objects baked SVT-tagged (bit-31) texture indices at
+            // stream-in. The mesh shaders were just recompiled WITHOUT SVT_ENABLED, which rejects those
+            // tags (index >= 4096) and renders them untextured — re-resolve every resident object so it
+            // picks up the now-plain bindless indices. (Enable needs no requeue: plain indices are still
+            // valid under the SVT shader; the non-streaming path re-resolves every frame via updateObjects.)
+            if (objectStreamManager)
+                objectStreamManager->requeueActiveObjects();
         }
     }
 

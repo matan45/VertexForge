@@ -15,15 +15,20 @@ for (int ch = 0; ch < 8; ch++) {
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
     if (w < 0.001) continue;
+    // VK-1209 finding #7: explicit-gradient samples (textureGrad) — the includer defines
+    // triplanarWorldUVdx/dy in uniform control flow; implicit texture() here would take derivatives in
+    // divergent flow (this continue / mesh_terrain's RVT branch) and shimmer at RVT seams.
     vec2 layerUV = triplanarWorldUV * terrainLayers[paletteIdx].tilingScale;
+    vec2 layerUVdx = triplanarWorldUVdx * terrainLayers[paletteIdx].tilingScale;
+    vec2 layerUVdy = triplanarWorldUVdy * terrainLayers[paletteIdx].tilingScale;
     uint albedoIdx = terrainLayers[paletteIdx].albedoTextureIndex;
-    vec3 layerAlbedo = (albedoIdx > 0u) ? texture(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV).rgb : vec3(0.5);
+    vec3 layerAlbedo = (albedoIdx > 0u) ? textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV, layerUVdx, layerUVdy).rgb : vec3(0.5);
     uint normalIdx = terrainLayers[paletteIdx].normalTextureIndex;
-    vec3 layerNormal = (normalIdx > 0u) ? texture(bindlessTextures[nonuniformEXT(normalIdx)], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
+    vec3 layerNormal = (normalIdx > 0u) ? textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], layerUV, layerUVdx, layerUVdy).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
     uint ormIdx = terrainLayers[paletteIdx].ormTextureIndex;
     float layerAO, layerRoughness, layerMetallic;
     if (ormIdx > 0u) {
-        vec3 ormSample = texture(bindlessTextures[nonuniformEXT(ormIdx)], layerUV).rgb;
+        vec3 ormSample = textureGrad(bindlessTextures[nonuniformEXT(ormIdx)], layerUV, layerUVdx, layerUVdy).rgb;
         layerAO = ormSample.r;
         layerRoughness = ormSample.g;
         layerMetallic = ormSample.b;

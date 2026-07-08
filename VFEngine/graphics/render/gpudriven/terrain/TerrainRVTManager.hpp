@@ -93,6 +93,10 @@ namespace render::gpudriven
         // Terrain edits (splat brush, palette change): evict overlapping fine pages so they re-bake.
         void invalidateWorldRect(const glm::vec2& mn, const glm::vec2& mx);
 
+        // VK-1209 live settings: update the per-frame page budget + eviction age on a running manager
+        // (no restart). Both floored at 1.
+        void setResidencyBudget(uint32_t pagesPerFrame, uint32_t evictionAgeFrames);
+
         // Shader-binding accessors.
         [[nodiscard]] vk::Buffer getPageTableBuffer() const { return pageTable ? pageTable->getBuffer() : nullptr; }
         [[nodiscard]] vk::Buffer getFeedbackBuffer() const { return feedback ? feedback->getBuffer() : nullptr; }
@@ -130,6 +134,11 @@ namespace render::gpudriven
         std::vector<ScheduledBake> scheduledBakes;
 
         FrameCpuStats cpuStats;
+
+        // Finding #8: a material change must re-bake the PINNED coarse page too, but it's never evicted
+        // nor re-requested. invalidateWorldRect sets this; updateResidency re-schedules the coarse page
+        // in place (keeping it resident) so recordBakes refreshes it next frame.
+        bool coarseRebakePending = false;
 
         bool initialized = false;
     };

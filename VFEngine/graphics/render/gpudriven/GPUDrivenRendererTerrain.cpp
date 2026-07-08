@@ -92,6 +92,14 @@ namespace render::gpudriven
         vtCache.evictionAgeFrames = settings.evictionAgeFrames;
         vtCache.svtPageLinearMaps = settings.svtPageLinearMaps; // VK-1480: 2nd (Unorm) SVT pool (restart)
 
+        // Finding #10: page budget + eviction age apply live to already-running managers (the UI/docs
+        // promise "apply live"). SVT clamps pagesPerFrame to its init-time staging-ring size internally;
+        // terrain RVT applies both fully.
+        if (svtManager)
+            svtManager->setResidencyBudget(vtCache.pagesPerFrame, vtCache.evictionAgeFrames);
+        if (terrainRVT)
+            terrainRVT->setResidencyBudget(vtCache.pagesPerFrame, vtCache.evictionAgeFrames);
+
         // Runtime RVT toggle: rebuild the terrain pipeline so set 5 + RVT_ENABLED match the new
         // state, and create/tear down the RVT subsystems. The manager itself comes up on the next
         // updateTerrain (once world bounds are known) — which runs before the terrain draw — so the
@@ -169,7 +177,13 @@ namespace render::gpudriven
         const std::vector<TerrainTileGPUData>& tiles = terrain.tileData;
         const float borderFrac =
             static_cast<float>(vt::VT_BORDER) / static_cast<float>(vt::VT_PAGE_INTERIOR);
-        auto covered = [&tiles, borderFrac](const glm::vec4& rect) -> bool
+        // Reuse the shared, unit-tested coverage helper (TerrainRVTCoverage.hpp) instead of open-coding
+        // the overlap loop; build the tile rects once per frame, not once per page.
+        std::vector<TerrainCoverageRect> coverageRects;
+        coverageRects.reserve(tiles.size());
+        for (const auto& t : tiles)
+            coverageRects.push_back({t.aabbMin.x, t.aabbMin.z, t.aabbMax.x, t.aabbMax.z});
+        auto covered = [&coverageRects, borderFrac](const glm::vec4& rect) -> bool
         {
             const glm::vec2 pageMin(rect.x, rect.y);
             const glm::vec2 pageSize(rect.z, rect.w);
@@ -177,13 +191,7 @@ namespace render::gpudriven
             const TerrainCoverageRect q{
                 pageMin.x - margin.x, pageMin.y - margin.y,
                 pageMin.x + pageSize.x + margin.x, pageMin.y + pageSize.y + margin.y};
-            for (const auto& t : tiles)
-            {
-                const TerrainCoverageRect tr{t.aabbMin.x, t.aabbMin.z, t.aabbMax.x, t.aabbMax.z};
-                if (terrainRectsOverlap(q, tr))
-                    return true;
-            }
-            return false;
+            return terrainRectCovered(q, coverageRects, /*requireFull*/ false);
         };
         terrainRVT->updateResidency(rvtFrameCounter++, covered);
     }

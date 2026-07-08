@@ -264,6 +264,9 @@ namespace render::gpudriven
         // Create the SVT manager (if absent), register its BC7 atlas in the bindless heap, and point
         // the mesh pipelines' set-1 SVT bindings at it. Safe to call repeatedly.
         void ensureSVTManager();
+        // Point every SVT-enabled mesh pipeline's set-1 bindings (3/4/5) at the manager's current
+        // buffers. Also called after the image-info SSBO grows (finding #2) to rebind the new handle.
+        void wireSVTPipelines();
 
         detail::TerrainState terrain;
 

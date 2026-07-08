@@ -117,6 +117,10 @@ void main()
     uint fragTileIndex = vTileIndex;
     vec2 fragTexCoord = clamp(vTileUV, 0.0, 1.0);
     vec2 triplanarWorldUV = vWorldXZ * pc.textureScale;
+    // VK-1209 finding #7: the composite samples with textureGrad and needs these (here the bake runs in
+    // uniform control flow, so the gradients are well-defined either way — kept for a single contract).
+    vec2 triplanarWorldUVdx = dFdx(triplanarWorldUV);
+    vec2 triplanarWorldUVdy = dFdy(triplanarWorldUV);
 
     // The composite declares mat_albedo/normalTS/metallic/roughness/ao/emission + ls_Emission.
 #include "../material/terrain_material_generated.glsl"

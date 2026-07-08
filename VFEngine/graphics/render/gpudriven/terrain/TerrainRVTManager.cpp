@@ -154,7 +154,7 @@ namespace render::gpudriven
             return;
 
         const auto readStart = std::chrono::high_resolution_clock::now();
-        const std::vector<uint32_t> words = feedback->readback(); // bit-packed: one bit per entry
+        const std::vector<uint32_t>& words = feedback->readback(); // reused buffer (finding #14)
         const auto readEnd = std::chrono::high_resolution_clock::now();
         cpuStats.readbackUs =
             static_cast<uint64_t>(std::chrono::duration<double, std::micro>(readEnd - readStart).count());
@@ -190,6 +190,18 @@ namespace render::gpudriven
         const auto resStart = std::chrono::high_resolution_clock::now();
 
         ensureCoarseResident(frame);
+
+        // Finding #8: a pending material change also re-bakes the pinned coarse page in place (it's never
+        // evicted/re-requested, so it would otherwise keep stale content at distance). Scheduled here —
+        // after this frame's scheduledBakes.clear() above — so recordBakes picks it up.
+        if (coarseRebakePending)
+        {
+            const VTPageKey coarse{imageId, image.mipCount - 1u, 0u, 0u};
+            const uint32_t tile = residency.tileFor(coarse);
+            if (tile != VT_INVALID_TILE)
+                schedule(coarse, tile);
+            coarseRebakePending = false;
+        }
 
         const VTResidencyPlan plan = residency.planFrame(
             requestedPages, frame, pool->freeTileCount(),
@@ -286,6 +298,17 @@ namespace render::gpudriven
                     }
                 }
         }
+
+        // The pinned coarsest mip is skipped by the loop above but must also refresh after a material
+        // change (finding #8) — flag it for an in-place re-bake in the next updateResidency.
+        coarseRebakePending = true;
+    }
+
+    void TerrainRVTManager::setResidencyBudget(uint32_t pagesPerFrame, uint32_t evictionAgeFrames)
+    {
+        // The terrain RVT has no upload staging ring, so both apply live (unlike SVT's pagesPerFrame).
+        config.pagesPerFrame = std::max(1u, pagesPerFrame);
+        config.evictionAgeFrames = std::max(1u, evictionAgeFrames);
     }
 
     GPUVTImageInfo TerrainRVTManager::getImageInfo() const

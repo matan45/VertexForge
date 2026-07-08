@@ -51,6 +51,13 @@ namespace render::gpudriven
                     const ObjectResolvers& resolvers,
                     entt::registry& registry);
 
+        // Force every resident (Active) object back to Queued so the next update() re-runs the texture
+        // resolver and re-uploads its GPU slot(s). Used on an SVT enable/disable (finding #4): resident
+        // objects still hold the texture indices resolved at stream-in, and the recompiled mesh shader no
+        // longer accepts the old (SVT-tagged vs plain) values — re-resolving reconciles them without a
+        // full scene reload. Reuses the eviction path, so it also handles multi-submesh objects.
+        void requeueActiveObjects();
+
         const ObjectStreamingStats& getStats() const { return stats; }
         const ObjectStreamConfig& getConfig() const { return config; }
         void setConfig(const ObjectStreamConfig& cfg) { config = cfg; }

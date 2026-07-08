@@ -174,7 +174,11 @@ namespace render::gpudriven
         cachedShadowTextureLayout = shadowTextureLayout;
 
         createEmptyDescriptorSet();
-        createRVTSampleDescriptor();
+        // Finding #15: only allocate the set-5 RVT descriptor + params UBO when RVT is actually enabled.
+        // A runtime enable (setRVTSampleEnabled) creates it lazily; the layout path falls back to
+        // emptyLayout while disabled, so nothing references it before it exists.
+        if (rvtSampleEnabled)
+            createRVTSampleDescriptor();
         createWeightMapDescriptor();
         createTerrainLayerBuffer();
         createTileDataBuffer();

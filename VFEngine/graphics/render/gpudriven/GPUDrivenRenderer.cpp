@@ -246,6 +246,10 @@ namespace render::gpudriven
             wboitCausticLayout = water.causticsResources->getDescriptorSetLayout();
 
         wboitMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+        // VK-1209 finding #3: compile SVT_ENABLED + set-1 bindings into WBOIT when SVT is already on,
+        // mirroring the opaque/transparent pipelines — otherwise translucent meshes using an SVT-paged
+        // texture get a bit-31-tagged index the non-SVT shader rejects and render untextured.
+        if (vtCache.svtEnabled) wboitMeshShaderPipeline->setSVTSampleEnabled(true);
         wboitMeshShaderPipeline->init({
             .iblLayout = cachedIBLLayout,
             .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -270,6 +274,11 @@ namespace render::gpudriven
         }
         if (wboitCausticLayout)
             wboitMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
+
+        // VK-1209 finding #3: populate WBOIT's set-1 SVT bindings (3/4/5) if SVT is active — creates the
+        // manager if this ran before the opaque path did, then wires all pipelines including WBOIT.
+        if (vtCache.svtEnabled)
+            ensureSVTManager();
     }
 
     void GPUDrivenRenderer::cleanup()

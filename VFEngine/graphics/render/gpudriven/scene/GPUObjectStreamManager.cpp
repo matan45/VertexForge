@@ -115,6 +115,30 @@ namespace render::gpudriven
                   sectorId, freedCount);
     }
 
+    void GPUObjectStreamManager::requeueActiveObjects()
+    {
+        // Mirror processEvictions per-entry: free the resident slot and drop back to Queued so the next
+        // update() re-runs the resolver + re-uploads. Objects re-stream over the following frames at the
+        // configured upload budget (a brief re-stream on a rare SVT toggle, not a scene reload).
+        uint32_t requeued = 0;
+        for (auto& [uuid, entry] : entries)
+        {
+            if (entry.state != ObjectStreamState::Active)
+                continue;
+            if (entry.gpuSlot != FreeListAllocator::ALLOCATION_FAILED)
+            {
+                buffer.freeObjectSlot(entry.gpuSlot);
+                buffer.unmapEntitySlot(uuid);
+                entry.gpuSlot = FreeListAllocator::ALLOCATION_FAILED;
+            }
+            entry.state = ObjectStreamState::Queued;
+            ++requeued;
+        }
+        if (requeued > 0)
+            buffer.rebuildActiveIndexList();
+        vfLogDebug("GPUObjectStreamManager: requeued {} resident objects for texture re-resolve", requeued);
+    }
+
     void GPUObjectStreamManager::update(
         const glm::vec3& cameraPosition,
         const ObjectResolvers& resolvers,

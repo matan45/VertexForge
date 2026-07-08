@@ -2,6 +2,7 @@
 #include <render/virtualtexture/VTResidencyCore.hpp>
 
 #include <vector>
+#include <utility>
 
 // ============================================================================
 // VTResidencyCore streaming policy (VK-1209): request diff, per-frame budget,
@@ -157,4 +158,41 @@ TEST_CASE("VT residency: commit + evict round trip")
     CHECK(core.commitEviction(K(1, 2, 3, 4)) == 7);
     CHECK(core.residentCount() == 0);
     CHECK(core.commitEviction(K(1, 2, 3, 4)) == VT_INVALID_TILE);
+}
+
+TEST_CASE("VT residency: evictImage removes only the target image's pages (VK-1209 reclaim)")
+{
+    VTResidencyCore core;
+    core.commitAllocation(K(0, 0, 0, 0), /*tile*/ 10, /*frame*/ 1, /*pinned*/ false);
+    core.commitAllocation(K(0, 1, 0, 0), /*tile*/ 11, /*frame*/ 1, /*pinned*/ true);  // image 0, pinned
+    core.commitAllocation(K(1, 0, 0, 0), /*tile*/ 20, /*frame*/ 1, /*pinned*/ false); // image 1
+    core.commitAllocation(K(1, 0, 1, 0), /*tile*/ 21, /*frame*/ 1, /*pinned*/ false); // image 1
+    CHECK(core.residentCount() == 4);
+
+    // Reclaim (unregisterTexture) evicts EVERY page of the retired image, pinned or not, and hands each
+    // (key, tile) back so the shell can free the physical tile + unmap the page-table entry.
+    std::vector<std::pair<VTPageKey, uint32_t>> evicted;
+    const uint32_t n = core.evictImage(0, [&](const VTPageKey& key, uint32_t tile)
+                                       { evicted.emplace_back(key, tile); });
+
+    CHECK(n == 2);
+    REQUIRE(evicted.size() == 2);
+    CHECK(core.residentCount() == 2);                 // image 1 untouched
+    CHECK_FALSE(core.isResident(K(0, 0, 0, 0)));
+    CHECK_FALSE(core.isResident(K(0, 1, 0, 0)));      // the pinned page is reclaimed too
+    CHECK(core.isResident(K(1, 0, 0, 0)));
+    CHECK(core.tileFor(K(1, 0, 1, 0)) == 21);
+
+    bool saw10 = false, saw11 = false;
+    for (const auto& [key, tile] : evicted)
+    {
+        CHECK(key.imageId == 0);
+        saw10 = saw10 || tile == 10;
+        saw11 = saw11 || tile == 11;
+    }
+    CHECK(saw10);
+    CHECK(saw11);
+
+    // Reclaiming an image with no resident pages is a no-op.
+    CHECK(core.evictImage(0, [](const VTPageKey&, uint32_t) {}) == 0);
 }

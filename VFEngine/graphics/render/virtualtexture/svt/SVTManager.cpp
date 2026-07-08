@@ -44,6 +44,13 @@ namespace render::gpudriven
         if (initialized)
             return;
         config = cfg;
+        // Floor the streaming budget so a bad scene value can't size a zero-length staging ring (a
+        // negative JSON value also wraps huge — clamped at the deserialize/UI layer, floored here too).
+        if (config.pagesPerFrame == 0u)
+            config.pagesPerFrame = 1u;
+        if (config.evictionAgeFrames == 0u)
+            config.evictionAgeFrames = 1u;
+        initialPagesPerFrame = config.pagesPerFrame; // the staging ring is sized from this
 
         // Two pools (sRGB + Unorm) share one page table + feedback. When linear maps aren't paged the
         // sRGB pool takes the whole budget and the Unorm pool is not created.
@@ -122,6 +129,7 @@ namespace render::gpudriven
         {
             std::lock_guard<std::mutex> lock(completedQueue->mutex);
             completedQueue->tiles.clear();
+            completedQueue->failed.clear();
         }
         pendingPins.clear();
         pinnedKeys.clear();
@@ -131,11 +139,18 @@ namespace render::gpudriven
         core::BufferUtilities::destroyBuffer(vkDevice, uploadStaging, uploadStagingAllocation, mem);
         core::BufferUtilities::destroyBuffer(vkDevice, imageInfoStaging, imageInfoStagingAllocation, mem);
         core::BufferUtilities::destroyBuffer(vkDevice, imageInfoBuffer, imageInfoAllocation, mem);
+        // Any image-info buffers still pending deferred destruction (finding #2): cleanup only runs when
+        // the manager is torn down (device idle around the SVT toggle), so freeing them now is safe.
+        for (auto& p : pendingImageInfoDestroys)
+            core::BufferUtilities::destroyBuffer(vkDevice, p.buffer, p.allocation, mem);
+        pendingImageInfoDestroys.clear();
+        imageInfoBufferResized = false;
         feedback.reset();
         pageTable.reset();
         pools.clear();
         images.clear();
         pathToImage.clear();
+        freeImageIds.clear();
         imageRanges.clear();
         imageInfoCpu.clear();
         requestedPages.clear();
@@ -172,8 +187,10 @@ namespace render::gpudriven
         if (poolId >= pools.size())
             return VT_INVALID_TILE;
 
-        if (auto it = pathToImage.find(path); it != pathToImage.end())
-            return SVT_TAG_BIT | it->second;
+        // Dedup within the SAME pool only: the same .vfImage can legitimately back both an sRGB slot
+        // and a linear slot, and each needs its own imageId so it samples the correct-format atlas.
+        if (auto it = pathToImage.find(path); it != pathToImage.end() && it->second[poolId] != VT_INVALID_TILE)
+            return SVT_TAG_BIT | it->second[poolId];
 
         auto uniqueHandle = resource::TextureStreamResource::openStream(path);
         if (!uniqueHandle)
@@ -209,18 +226,39 @@ namespace render::gpudriven
         }
         desc.pageTableBase = base;
 
-        const uint32_t imageId = static_cast<uint32_t>(images.size());
-
         SVTImage img;
         img.desc = desc;
         img.poolId = poolId;
         img.fallbackIndex = 0; // default-texture slot until setFallbackIndex
         img.path = path;
         img.handle = std::move(handle);
-        images.push_back(std::move(img));
-        pathToImage[path] = imageId;
-        // Bump allocation => bases are monotonically increasing, so push_back keeps imageRanges sorted.
-        imageRanges.push_back({base, base + desc.blockEntryCount(), imageId});
+
+        // Reuse a tombstoned slot (per-texture reclaim) before growing `images` — imageId is also the
+        // SSBO slot and the shader tag, so it must stay stable for every other live image.
+        uint32_t imageId;
+        if (!freeImageIds.empty())
+        {
+            imageId = freeImageIds.back();
+            freeImageIds.pop_back();
+            images[imageId] = std::move(img);
+        }
+        else
+        {
+            imageId = static_cast<uint32_t>(images.size());
+            images.push_back(std::move(img));
+        }
+
+        // Record this path's imageId in its pool slot (the other pool keeps its own registration).
+        auto& slots = pathToImage.try_emplace(
+            path, std::array<uint32_t, 2>{VT_INVALID_TILE, VT_INVALID_TILE}).first->second;
+        slots[poolId] = imageId;
+
+        // Reclaim makes reused bases non-monotonic, so insert the range at its sorted-by-base position —
+        // beginFrameReadback's owning-image binary search requires imageRanges stay sorted + disjoint.
+        const ImageRange range{base, base + desc.blockEntryCount(), imageId};
+        auto rpos = std::upper_bound(imageRanges.begin(), imageRanges.end(), base,
+                                     [](uint32_t b, const ImageRange& r) { return b < r.base; });
+        imageRanges.insert(rpos, range);
 
         // Queue the whole coarsest-mip page set as pins (handles truncated-chain multi-page coarse mips).
         const uint32_t coarseMip = desc.mipCount - 1u;
@@ -242,10 +280,121 @@ namespace render::gpudriven
         info.poolDim = pools[poolId].pool->getPoolDim();
         info.pad0 = pools[poolId].atlasBindlessIndex; // owning pool's atlas slot (repatched in uploadImageInfo)
         info.pad1 = 0;                                 // fallback = default-texture slot until setFallbackIndex
-        imageInfoCpu.push_back(info);
+        // imageInfoCpu stays index-parallel with `images`: assign into a reused slot, append a fresh one.
+        if (imageId < imageInfoCpu.size())
+            imageInfoCpu[imageId] = info;
+        else
+            imageInfoCpu.push_back(info);
         imageInfoDirty = true;
 
         return SVT_TAG_BIT | imageId;
+    }
+
+    void SVTManager::unregisterImageInternal(uint32_t imageId)
+    {
+        if (imageId >= images.size())
+            return;
+        SVTImage& img = images[imageId];
+        const uint32_t poolId = img.poolId;
+
+        // Evict this image's resident tiles: free the physical tile + unmap its page-table entry.
+        if (poolId < pools.size())
+        {
+            Pool& P = pools[poolId];
+            const VTImageDesc d = img.desc;
+            P.residency.evictImage(imageId, [&](const VTPageKey& key, uint32_t tile)
+            {
+                if (tile != VT_INVALID_TILE)
+                    P.pool->freeTile(tile);
+                pageTable->unmapEntry(d.pageTableBase
+                                      + vtPageLinearIndex(d.pagesX0, d.pagesY0, key.mip, key.x, key.y));
+            });
+        }
+
+        // Drop its pins, pending pins and in-flight keys so nothing re-requests or strands them.
+        std::erase_if(pendingPins, [imageId](const VTPageKey& k) { return k.imageId == imageId; });
+        std::erase_if(pinnedKeys, [imageId](uint64_t packed)
+                      { return static_cast<uint32_t>((packed >> 40) & 0xFFFFFFu) == imageId; });
+        std::erase_if(inFlight, [imageId](uint64_t packed)
+                      { return static_cast<uint32_t>((packed >> 40) & 0xFFFFFFu) == imageId; });
+
+        // Return the page-table block and its owning-image range.
+        pageTable->freeBlock(img.desc.pageTableBase, img.desc.blockEntryCount());
+        std::erase_if(imageRanges, [imageId](const ImageRange& r) { return r.imageId == imageId; });
+
+        // Tombstone the slot (never erase — that would renumber every other image's imageId/tag/SSBO
+        // index). The freed slot is reused by a later registerTexture.
+        img = SVTImage{};
+        if (imageId < imageInfoCpu.size())
+            imageInfoCpu[imageId] = GPUVTImageInfo{};
+        freeImageIds.push_back(imageId);
+        imageInfoDirty = true;
+    }
+
+    void SVTManager::unregisterTexture(const std::string& path)
+    {
+        if (!initialized)
+            return;
+        auto it = pathToImage.find(path);
+        if (it == pathToImage.end())
+            return;
+
+        // Bump the epoch first so any in-flight read issued for these (now retiring) registrations is
+        // dropped at drain (svtDrainDecision -> DropEpoch) — a late tile must never land in a reused slot.
+        ++epoch;
+
+        for (uint32_t poolId = 0; poolId < 2u; ++poolId)
+        {
+            const uint32_t imageId = it->second[poolId];
+            if (imageId != VT_INVALID_TILE)
+                unregisterImageInternal(imageId);
+        }
+        pathToImage.erase(it);
+    }
+
+    void SVTManager::setResidencyBudget(uint32_t pagesPerFrame, uint32_t evictionAgeFrames)
+    {
+        // pagesPerFrame can't exceed the init-time value: the upload staging ring was sized from it, so
+        // a larger budget would overrun the ring (svtStagingOffset). evictionAgeFrames applies fully.
+        const uint32_t clamped = std::max(1u, pagesPerFrame);
+        config.pagesPerFrame = std::min(clamped, initialPagesPerFrame == 0u ? clamped : initialPagesPerFrame);
+        config.evictionAgeFrames = std::max(1u, evictionAgeFrames);
+    }
+
+    void SVTManager::growImageInfoBuffer()
+    {
+        if (!needsImageInfoGrow())
+            return;
+
+        // Next power-of-two capacity that holds the current image count.
+        uint32_t newCapacity = imageInfoCapacity == 0u ? 1024u : imageInfoCapacity;
+        while (newCapacity < imageInfoCpu.size())
+            newCapacity <<= 1u;
+
+        const vk::DeviceSize size = sizeof(GPUVTImageInfo) * newCapacity;
+        vk::Buffer newDev, newStg;
+        core::VulkanAllocation newDevAlloc, newStgAlloc;
+        core::BufferInfoRequest devReq(device.getLogicalDevice(), device.getPhysicalDevice(), size,
+                                       vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                                       vk::MemoryPropertyFlagBits::eDeviceLocal);
+        core::BufferUtilities::createBuffer(devReq, newDev, newDevAlloc, device.getMemoryManager());
+        core::BufferInfoRequest stgReq(device.getLogicalDevice(), device.getPhysicalDevice(), size,
+                                       vk::BufferUsageFlagBits::eTransferSrc,
+                                       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        core::BufferUtilities::createBuffer(stgReq, newStg, newStgAlloc, device.getMemoryManager());
+
+        // Defer-destroy the old buffers: the descriptor is UPDATE_AFTER_BIND, so an in-flight frame may
+        // still read the old device buffer until its command buffer retires.
+        pendingImageInfoDestroys.push_back({imageInfoBuffer, imageInfoAllocation, core::MAX_FRAMES_IN_FLIGHT});
+        pendingImageInfoDestroys.push_back({imageInfoStaging, imageInfoStagingAllocation, core::MAX_FRAMES_IN_FLIGHT});
+
+        imageInfoBuffer = newDev;
+        imageInfoAllocation = newDevAlloc;
+        imageInfoStaging = newStg;
+        imageInfoStagingAllocation = newStgAlloc;
+        imageInfoCapacity = newCapacity;
+        imageInfoDirty = true;          // re-upload the full mirror into the new buffer
+        imageInfoBufferResized = true;  // renderer re-wires the pipelines' binding 5 to the new handle
     }
 
     void SVTManager::setFallbackIndex(uint32_t imageId, uint32_t bindlessSlot)
@@ -260,10 +409,12 @@ namespace render::gpudriven
 
     std::vector<std::string> SVTManager::getRegisteredPaths() const
     {
+        // One entry per registered path (a path paged in both pools shares one key); excludes tombstoned
+        // slots, whose pathToImage entry was removed on unregister.
         std::vector<std::string> out;
-        out.reserve(images.size());
-        for (const auto& img : images)
-            out.push_back(img.path);
+        out.reserve(pathToImage.size());
+        for (const auto& [path, slots] : pathToImage)
+            out.push_back(path);
         return out;
     }
 
@@ -282,7 +433,7 @@ namespace render::gpudriven
             return;
 
         const auto tReadback = Clock::now();
-        const std::vector<uint32_t> words = feedback->readback(); // bit-packed: one bit per entry
+        const std::vector<uint32_t>& words = feedback->readback(); // reused buffer (finding #14)
         cpuStats.readbackUs = usSince(tReadback);
         if (words.empty())
             return;
@@ -321,13 +472,44 @@ namespace render::gpudriven
         // Rotate the staging ring so this frame's copies don't overwrite an in-flight source.
         currentStagingFrame = (currentStagingFrame + 1u) % core::MAX_FRAMES_IN_FLIGHT;
 
+        // Free image-info buffers retired by an earlier grow once MAX_FRAMES_IN_FLIGHT frames have passed
+        // (ticked before this frame's grow so a buffer retired now gets the full grace period).
+        if (!pendingImageInfoDestroys.empty())
+        {
+            const vk::Device vkDevice = device.getLogicalDevice();
+            auto& mem = device.getMemoryManager();
+            std::erase_if(pendingImageInfoDestroys, [&](PendingImageInfoDestroy& p)
+            {
+                if (p.framesLeft > 0u)
+                    --p.framesLeft;
+                if (p.framesLeft == 0u)
+                {
+                    core::BufferUtilities::destroyBuffer(vkDevice, p.buffer, p.allocation, mem);
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        // Grow the image-info SSBO before it's read this frame if registration outran its capacity
+        // (finding #2). The new buffer is uploaded below; the renderer re-wires binding 5 on consuming
+        // imageInfoBufferResized. Old buffers linger on the deferred-destroy ring for in-flight frames.
+        if (needsImageInfoGrow())
+            growImageInfoBuffer();
+
         // --- Phase 1: drain async-produced tiles onto the GPU (budget: pagesPerFrame/frame) ---
         const auto tDrain = Clock::now();
         std::vector<CompletedTile> drained;
+        std::vector<uint64_t> drainedFailed;
         {
             std::lock_guard<std::mutex> lock(completedQueue->mutex);
             drained.swap(completedQueue->tiles);
+            drainedFailed.swap(completedQueue->failed);
         }
+        // Failed reads: erase the stranded in-flight keys so pushReq can re-request the page next frame
+        // (finding #6 — otherwise a transient failure leaves the region stuck on the coarse fallback).
+        for (uint64_t k : drainedFailed)
+            inFlight.erase(k);
 
         std::vector<std::vector<vk::BufferImageCopy>> poolCopies(pools.size());
         std::vector<CompletedTile> requeue;
@@ -492,37 +674,67 @@ namespace render::gpudriven
                 [handle, poolId, mip, pages, ep, cq]()
                 {
                     // Worker thread: read the mip once, extract every requested page, push results.
-                    // Never touches `this`, `images`, the pools, or the page table.
-                    try
+                    // Never touches `this`, `images`, the pools, or the page table. Every page that does
+                    // NOT yield a tile is reported failed so the render thread clears it from `inFlight`
+                    // (finding #6) — otherwise a failed read strands the key and the page never re-streams.
+                    std::vector<CompletedTile> local;
+                    std::vector<uint64_t> failed;
+                    local.reserve(pages.size());
+                    if (handle)
                     {
-                        if (!handle || !cq)
-                            return;
-                        resource::MipLevelData mipData;
-                        if (!handle->readMipLevel(mip, mipData))
-                            return;
-                        std::vector<CompletedTile> local;
-                        local.reserve(pages.size());
-                        for (const auto& key : pages)
+                        try
                         {
-                            std::vector<uint8_t> tile;
-                            if (!vtExtractTile(mipData.data.data(), static_cast<uint32_t>(mipData.data.size()),
-                                               mipData.width, mipData.height, VT_FORMAT_BC7, key.x, key.y, tile))
-                                continue;
-                            CompletedTile ct;
-                            ct.key = key;
-                            ct.poolId = poolId;
-                            ct.epoch = ep;
-                            ct.bytes = std::move(tile);
-                            local.push_back(std::move(ct));
+                            resource::MipLevelData mipData;
+                            if (handle->readMipLevel(mip, mipData))
+                            {
+                                for (const auto& key : pages)
+                                {
+                                    std::vector<uint8_t> tile;
+                                    if (vtExtractTile(mipData.data.data(), static_cast<uint32_t>(mipData.data.size()),
+                                                      mipData.width, mipData.height, VT_FORMAT_BC7, key.x, key.y, tile))
+                                    {
+                                        CompletedTile ct;
+                                        ct.key = key;
+                                        ct.poolId = poolId;
+                                        ct.epoch = ep;
+                                        ct.bytes = std::move(tile);
+                                        local.push_back(std::move(ct));
+                                    }
+                                    else
+                                    {
+                                        failed.push_back(key.packed());
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                for (const auto& key : pages)
+                                    failed.push_back(key.packed());
+                            }
                         }
-                        std::lock_guard<std::mutex> lock(cq->mutex);
-                        for (auto& t : local)
-                            cq->tiles.push_back(std::move(t));
+                        catch (const std::exception& e)
+                        {
+                            vfLogError("SVTManager: async tile read failed: {}", e.what());
+                            // Discard any partial results and mark the whole group failed for re-request.
+                            local.clear();
+                            failed.clear();
+                            for (const auto& key : pages)
+                                failed.push_back(key.packed());
+                        }
                     }
-                    catch (const std::exception& e)
+                    else
                     {
-                        vfLogError("SVTManager: async tile read failed: {}", e.what());
+                        for (const auto& key : pages)
+                            failed.push_back(key.packed());
                     }
+
+                    if (!cq)
+                        return;
+                    std::lock_guard<std::mutex> lock(cq->mutex);
+                    for (auto& t : local)
+                        cq->tiles.push_back(std::move(t));
+                    for (uint64_t k : failed)
+                        cq->failed.push_back(k);
                 },
                 cancelToken, threading::JobPriority::NORMAL);
             inFlightJobs.push_back(std::move(h));
@@ -545,6 +757,8 @@ namespace render::gpudriven
             }
         }
 
+        // updateAndUpload grows the buffer before this runs, so count == size in the common path; the
+        // clamp is a safety net that never lets the memcpy overrun the staging buffer.
         const size_t count = std::min<size_t>(imageInfoCpu.size(), imageInfoCapacity);
         const vk::DeviceSize bytes = static_cast<vk::DeviceSize>(count) * sizeof(GPUVTImageInfo);
         std::memcpy(imageInfoStagingAllocation.mappedPtr, imageInfoCpu.data(), bytes);
@@ -564,7 +778,8 @@ namespace render::gpudriven
         cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
                             {}, 0, nullptr, 1, &barrier, 0, nullptr);
 
-        imageInfoDirty = false;
+        // Stay dirty if the mirror still outgrows capacity (a grow next frame completes the upload).
+        imageInfoDirty = (count < imageInfoCpu.size());
     }
 
     size_t SVTManager::poolAtlasBytes(uint32_t poolId) const

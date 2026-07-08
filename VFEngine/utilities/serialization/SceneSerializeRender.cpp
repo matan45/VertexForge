@@ -276,16 +276,19 @@ namespace serialization
                 settings.rvtEnabled = vt["rvtEnabled"].get<bool>();
             if (vt.contains("svtEnabled") && vt["svtEnabled"].is_boolean())
                 settings.svtEnabled = vt["svtEnabled"].get<bool>();
+            // Finding #5: clamp the numeric fields (read as int64 so a negative JSON value can't wrap to
+            // a huge uint32) — a hand-edited/older scene must not drive a 0 (zero-size staging buffer) or
+            // billions (OOM) into the VT managers. Mirrors the editor UI's floors/ranges.
             if (vt.contains("rvtPoolBudgetMB") && vt["rvtPoolBudgetMB"].is_number())
-                settings.rvtPoolBudgetMB = vt["rvtPoolBudgetMB"].get<uint32_t>();
+                settings.rvtPoolBudgetMB = static_cast<uint32_t>(std::clamp<int64_t>(vt["rvtPoolBudgetMB"].get<int64_t>(), 1, 65536));
             if (vt.contains("svtPoolBudgetMB") && vt["svtPoolBudgetMB"].is_number())
-                settings.svtPoolBudgetMB = vt["svtPoolBudgetMB"].get<uint32_t>();
+                settings.svtPoolBudgetMB = static_cast<uint32_t>(std::clamp<int64_t>(vt["svtPoolBudgetMB"].get<int64_t>(), 1, 65536));
             if (vt.contains("rvtTexelsPerMeter") && vt["rvtTexelsPerMeter"].is_number())
-                settings.rvtTexelsPerMeter = vt["rvtTexelsPerMeter"].get<float>();
+                settings.rvtTexelsPerMeter = std::max(0.01f, vt["rvtTexelsPerMeter"].get<float>());
             if (vt.contains("pagesPerFrame") && vt["pagesPerFrame"].is_number())
-                settings.pagesPerFrame = vt["pagesPerFrame"].get<uint32_t>();
+                settings.pagesPerFrame = static_cast<uint32_t>(std::clamp<int64_t>(vt["pagesPerFrame"].get<int64_t>(), 1, 256));
             if (vt.contains("evictionAgeFrames") && vt["evictionAgeFrames"].is_number())
-                settings.evictionAgeFrames = vt["evictionAgeFrames"].get<uint32_t>();
+                settings.evictionAgeFrames = static_cast<uint32_t>(std::clamp<int64_t>(vt["evictionAgeFrames"].get<int64_t>(), 1, 600));
             if (vt.contains("svtPageLinearMaps") && vt["svtPageLinearMaps"].is_boolean())
                 settings.svtPageLinearMaps = vt["svtPageLinearMaps"].get<bool>();
         }

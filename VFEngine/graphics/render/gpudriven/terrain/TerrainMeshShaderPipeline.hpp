@@ -257,7 +257,14 @@ namespace render::gpudriven
         // VK-1209: enable the RVT sample path (set 5 + RVT_ENABLED macro). Takes effect on the
         // next (re)create. updateRVTSampleResources writes the page table / atlases / feedback /
         // params UBO into the set-5 descriptor (params = 64-byte RVTParams blob built by the caller).
-        void setRVTSampleEnabled(bool enabled) { rvtSampleEnabled = enabled; }
+        // Finding #15: the set-5 descriptor is allocated lazily on the first enable after init (runtime
+        // toggle goes through recreate(), not init()), so a build that never enables RVT never allocates it.
+        void setRVTSampleEnabled(bool enabled)
+        {
+            rvtSampleEnabled = enabled;
+            if (enabled && initialized && !rvtSampleDescriptorSet)
+                createRVTSampleDescriptor();
+        }
         bool isRVTSampleEnabled() const { return rvtSampleEnabled; }
         void updateRVTSampleResources(vk::Buffer pageTableBuffer, vk::ImageView albedoView,
                                       vk::ImageView ormView, vk::Sampler sampler,

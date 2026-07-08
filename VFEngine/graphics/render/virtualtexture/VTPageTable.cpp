@@ -42,6 +42,7 @@ namespace render::vt
 
         destroyBuffers();
         cpuTable.clear();
+        freeBlocks.clear();
         totalEntries = 0;
         usedEntries = 0;
         initialized = false;
@@ -90,6 +91,19 @@ namespace render::vt
     uint32_t VTPageTable::allocateBlock(uint32_t pagesX0, uint32_t pagesY0, uint32_t mipCount)
     {
         const uint32_t count = vtBlockEntryCount(pagesX0, pagesY0, mipCount);
+        if (count == 0u)
+            return VT_INVALID_TILE;
+
+        // Reuse a same-size freed block before extending the bump pointer.
+        if (auto it = freeBlocks.find(count); it != freeBlocks.end() && !it->second.empty())
+        {
+            const uint32_t offset = it->second.back();
+            it->second.pop_back();
+            std::fill(cpuTable.begin() + offset, cpuTable.begin() + offset + count, 0u);
+            dirtyChunks.markRange(offset, count);
+            return offset;
+        }
+
         if (usedEntries + count > totalEntries)
         {
             vfLogError("VTPageTable: cannot allocate block of {} entries ({} of {} used)",
@@ -102,6 +116,16 @@ namespace render::vt
         std::fill(cpuTable.begin() + offset, cpuTable.begin() + offset + count, 0u);
         dirtyChunks.markRange(offset, count);
         return offset;
+    }
+
+    void VTPageTable::freeBlock(uint32_t base, uint32_t count)
+    {
+        if (count == 0u || base + count > totalEntries)
+            return;
+        // Zero the entries (marks them dirty so the GPU table clears the retired image's pages) and
+        // return the span to its size bucket for reuse.
+        clearRange(base, count);
+        freeBlocks[count].push_back(base);
     }
 
     void VTPageTable::mapEntry(uint32_t entryIndex, uint32_t tileX, uint32_t tileY)
@@ -183,6 +207,7 @@ namespace render::vt
     void VTPageTable::reset()
     {
         usedEntries = 0;
+        freeBlocks.clear();
         std::fill(cpuTable.begin(), cpuTable.end(), 0u);
         dirtyChunks.markAll();
     }

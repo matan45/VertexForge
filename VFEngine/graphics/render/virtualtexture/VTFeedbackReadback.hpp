@@ -61,8 +61,10 @@ namespace render::vt
         void markReady();
         // Reads the staged bitmask WORDS (Ready -> Idle); size == getWordCount(), one
         // bit per page-table entry, 32 entries per uint. Empty unless Ready. Decode
-        // set bits with vt::vtForEachSetEntry (VTFeedbackWords.hpp).
-        [[nodiscard]] std::vector<uint32_t> readback();
+        // set bits with vt::vtForEachSetEntry (VTFeedbackWords.hpp). Returns a reference to a
+        // reused member buffer (finding #14 — avoids a per-frame ~128-175 KB heap alloc on the
+        // render thread); valid until the next readback() call. Both callers consume it immediately.
+        [[nodiscard]] const std::vector<uint32_t>& readback();
 
         [[nodiscard]] vk::Buffer getBuffer() const { return feedbackBuffer; }
         [[nodiscard]] uint32_t getTotalEntries() const { return totalEntries; }
@@ -86,5 +88,8 @@ namespace render::vt
         uint32_t wordCount = 0;
         VTFeedbackState state = VTFeedbackState::Idle;
         bool initialized = false;
+
+        // Reused across frames so readback() fills in place instead of heap-allocating each call.
+        std::vector<uint32_t> resultsBuffer;
     };
 }

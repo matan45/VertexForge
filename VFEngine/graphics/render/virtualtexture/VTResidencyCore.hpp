@@ -93,6 +93,29 @@ namespace render::vt
             return tile;
         }
 
+        // VK-1209 per-texture reclaim: remove every resident page owned by imageId, invoking
+        // fn(key, tile) for each so the shell frees the physical tile + unmaps its page-table entry.
+        // Iterates only the resident set (cheap), not the image's full pyramid. Returns the count.
+        template <typename Fn>
+        uint32_t evictImage(uint32_t imageId, Fn&& fn)
+        {
+            uint32_t removed = 0;
+            for (auto it = resident.begin(); it != resident.end();)
+            {
+                if (it->second.key.imageId == imageId)
+                {
+                    fn(it->second.key, it->second.tile);
+                    it = resident.erase(it);
+                    ++removed;
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+            return removed;
+        }
+
         // Decide the frame's streaming work. `requested` should be pre-sorted by priority
         // (near / finer mip first): under budget pressure the earliest entries win.
         VTResidencyPlan planFrame(const std::vector<VTPageKey>& requested,

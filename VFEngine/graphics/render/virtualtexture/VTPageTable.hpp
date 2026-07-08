@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.hpp>
 #include <array>
 #include <vector>
+#include <unordered_map>
 #include <cstdint>
 
 namespace core
@@ -38,8 +39,13 @@ namespace render::vt
         void cleanup();
 
         // Reserve a contiguous mip-pyramid block for a virtual image; returns its base
-        // offset in the global table (VT_INVALID_TILE on overflow).
+        // offset in the global table (VT_INVALID_TILE on overflow). Reuses a same-size freed
+        // block (VK-1209 per-texture reclaim) before bumping, so the table doesn't leak on churn.
         [[nodiscard]] uint32_t allocateBlock(uint32_t pagesX0, uint32_t pagesY0, uint32_t mipCount);
+
+        // Return a block (base + its blockEntryCount) to the free list so allocateBlock can reuse
+        // it. base/count must be exactly what allocateBlock returned/reserved for that image.
+        void freeBlock(uint32_t base, uint32_t count);
 
         // entryIndex is a GLOBAL index (block base + vtPageLinearIndex(...)).
         void mapEntry(uint32_t entryIndex, uint32_t tileX, uint32_t tileY);
@@ -77,6 +83,11 @@ namespace render::vt
         std::vector<uint32_t> cpuTable;
         uint32_t totalEntries = 0;
         uint32_t usedEntries = 0; // bump pointer for allocateBlock (no longer sizes uploads)
+
+        // Per-texture reclaim (VK-1209): freed blocks bucketed by entry count for exact-size reuse.
+        // Same-size-only reuse avoids fragmentation/splitting and matches repeated same-dimension
+        // asset churn in streaming scenes; a size with no free block falls back to the bump pointer.
+        std::unordered_map<uint32_t, std::vector<uint32_t>> freeBlocks; // entryCount -> free bases
 
         // Per-chunk dirty tracking (VK-1480): uploadToGPU copies only the coalesced
         // dirty ranges instead of the whole used range, bounding a churn frame to a

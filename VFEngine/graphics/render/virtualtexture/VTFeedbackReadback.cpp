@@ -172,15 +172,17 @@ namespace render::vt
             state = VTFeedbackState::Ready;
     }
 
-    std::vector<uint32_t> VTFeedbackReadback::readback()
+    const std::vector<uint32_t>& VTFeedbackReadback::readback()
     {
-        std::vector<uint32_t> results;
         if (state != VTFeedbackState::Ready || !initialized)
-            return results;
+        {
+            resultsBuffer.clear(); // keeps capacity; returns empty when nothing is ready
+            return resultsBuffer;
+        }
 
-        results.resize(wordCount);
-        std::memcpy(results.data(), stagingAllocation.mappedPtr, sizeof(uint32_t) * wordCount);
+        resultsBuffer.resize(wordCount); // no realloc after the first warm frame (wordCount is fixed)
+        std::memcpy(resultsBuffer.data(), stagingAllocation.mappedPtr, sizeof(uint32_t) * wordCount);
         state = VTFeedbackState::Idle;
-        return results;
+        return resultsBuffer;
     }
 }

@@ -14,6 +14,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <array>
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
@@ -106,9 +107,36 @@ namespace render::gpudriven
         // SVT registration happens before the fallback image exists).
         uint32_t registerTexture(const std::string& path, bool srgb);
 
+        // Release every SVT registration of `path` (both the sRGB and Unorm pool, if it was registered
+        // in both): evict its resident tiles, free its page-table block and physical tiles, and tombstone
+        // its imageId slot for reuse. Call from the renderer's texture-release path so streaming scenes
+        // don't leak page-table entries until the shared table exhausts. No-op if `path` isn't registered.
+        void unregisterTexture(const std::string& path);
+
         // Point image `imageId`'s whole-image fallback (pad1) at a bindless slot. Until set it stays
         // 0 = the default-texture slot (a safe sentinel — the coarse pin makes real content resolve).
         void setFallbackIndex(uint32_t imageId, uint32_t bindlessSlot);
+
+        // VK-1209 live settings: update the per-frame page budget + eviction age on a running manager.
+        // pagesPerFrame is clamped to the init-time value because the upload staging ring was sized from
+        // it; evictionAgeFrames applies fully. Both floored at 1.
+        void setResidencyBudget(uint32_t pagesPerFrame, uint32_t evictionAgeFrames);
+
+        // VK-1209 image-info SSBO growth (finding #2): registering more images than the SSBO holds needs
+        // a larger device buffer + a descriptor rebind on the consumers. The manager can't rebind the
+        // pipelines itself, so the renderer polls needsImageInfoGrow() at a safe point, calls
+        // growImageInfoBuffer(), then re-wires the pipelines when consumeImageInfoBufferResized() is set.
+        [[nodiscard]] bool needsImageInfoGrow() const
+        {
+            return imageInfoCpu.size() > imageInfoCapacity;
+        }
+        void growImageInfoBuffer();
+        bool consumeImageInfoBufferResized()
+        {
+            const bool r = imageInfoBufferResized;
+            imageInfoBufferResized = false;
+            return r;
+        }
 
         // Paths of every SVT-registered image (for promoteToFull on SVT disable).
         [[nodiscard]] std::vector<std::string> getRegisteredPaths() const;
@@ -174,9 +202,15 @@ namespace render::gpudriven
         {
             std::mutex mutex;
             std::vector<CompletedTile> tiles;
+            // Packed keys the worker could not produce a tile for (failed read / extract). The drain
+            // loop erases these from `inFlight` so the page can be re-requested (finding #6: otherwise a
+            // transient read failure strands the key in-flight forever and the region stays blurry).
+            std::vector<uint64_t> failed;
         };
 
-        // Fast owning-image lookup: [base, end) -> imageId, kept sorted by base (bump allocation).
+        // Fast owning-image lookup: [base, end) -> imageId, kept sorted by base. With per-texture
+        // reclaim (finding #9) a reused block's base is no longer monotonic, so registerTexture inserts
+        // in sorted position rather than push_back — the beginFrameReadback binary search relies on it.
         struct ImageRange
         {
             uint32_t base;
@@ -184,9 +218,23 @@ namespace render::gpudriven
             uint32_t imageId;
         };
 
+        // Old image-info buffers awaiting destruction after growth (finding #2): the descriptor is
+        // UPDATE_AFTER_BIND, so an in-flight frame may still read the previous buffer — keep it alive
+        // MAX_FRAMES_IN_FLIGHT more frames before freeing.
+        struct PendingImageInfoDestroy
+        {
+            vk::Buffer buffer;
+            core::VulkanAllocation allocation;
+            uint32_t framesLeft = 0;
+        };
+
         void createImageInfoBuffer();
         void uploadImageInfo(vk::CommandBuffer cmd);
         void submitReadJobs(uint32_t frame); // group planFrame output + submit worker jobs
+
+        // Reclaim one image slot (evict tiles, free the page-table block, tombstone). Does NOT touch
+        // pathToImage — the public unregisterTexture owns that so it can clear both pool entries.
+        void unregisterImageInternal(uint32_t imageId);
 
         core::Device& device;
         Config config;
@@ -196,7 +244,11 @@ namespace render::gpudriven
         std::vector<Pool> pools;
 
         std::vector<SVTImage> images;
-        std::unordered_map<std::string, uint32_t> pathToImage;
+        // path -> imageId per pool ([0]=sRGB, [1]=Unorm), VT_INVALID_TILE = not registered in that pool.
+        // Pool-aware so the same .vfImage used as both an sRGB albedo and a linear normal/ORM map gets a
+        // separate imageId per atlas (finding #11) instead of aliasing to the first-registered pool.
+        std::unordered_map<std::string, std::array<uint32_t, 2>> pathToImage;
+        std::vector<uint32_t> freeImageIds; // tombstoned slots (reclaim), reused before growing `images`
         std::vector<ImageRange> imageRanges;
 
         // GPUVTImageInfo[] SSBO (one per registered image) + CPU mirror. Device-local (read per
@@ -208,12 +260,17 @@ namespace render::gpudriven
         std::vector<vt::GPUVTImageInfo> imageInfoCpu;
         bool imageInfoDirty = false;
         uint32_t imageInfoCapacity = 0;
+        bool imageInfoBufferResized = false; // set on grow; renderer re-wires the pipelines on consume
+        std::vector<PendingImageInfoDestroy> pendingImageInfoDestroys;
 
         // Frame-rotated upload staging ring: pagesPerFrame BC7 tiles per frame-in-flight.
         vk::Buffer uploadStaging;
         core::VulkanAllocation uploadStagingAllocation;
         uint32_t tileByteSize = 0;
         uint32_t currentStagingFrame = 0;
+        // The staging ring is sized from pagesPerFrame at init; a live budget change (setResidencyBudget)
+        // may not raise the effective pagesPerFrame above this without overrunning the ring.
+        uint32_t initialPagesPerFrame = 0;
 
         // Async I/O (Phase 4).
         std::shared_ptr<CompletedQueue> completedQueue;
