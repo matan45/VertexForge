@@ -909,6 +909,16 @@ void main() {
         color = vec3(0.15, 0.4, 0.05); // Base green per fragment
     }
 
+    // Ambient-input probe (viewMode 30, VK-1482) — works with SVT on OR off so the two can be compared.
+    // R = matIblDiffuse (per-material IBL diffuse scale), G = irradiance brightness (IBL cubemap sample),
+    // B = ao. The diffuse ambient term is proportional to R*G*B*albedo, so whichever channel drops when a
+    // material darkens is the culprit input. alpha forced to 1 so it survives the output premultiply.
+    if (viewModeValue == 30u) {
+        float irr = max(max(irradiance.r, irradiance.g), irradiance.b);
+        color = vec3(matIblDiffuse, irr, ao);
+        alpha = 1.0;
+    }
+
 #ifdef WBOIT_ENABLED
     // Weighted Blended OIT (McGuire & Bavoil 2013)
     float viewZ = linearizeDepth(gl_FragCoord.z);
