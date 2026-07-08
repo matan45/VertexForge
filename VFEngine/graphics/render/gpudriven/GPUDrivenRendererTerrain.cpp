@@ -1,5 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
 #include "terrain/TerrainRVTManager.hpp"
+#include "../virtualtexture/svt/SVTManager.hpp" // VK-1209: complete type for svtManager->setResidencyBudget
 #include "terrain/TerrainRVTBaker.hpp"
 #include "terrain/TerrainRVTCoverage.hpp"
 #include "terrain/TerrainTile.hpp"
