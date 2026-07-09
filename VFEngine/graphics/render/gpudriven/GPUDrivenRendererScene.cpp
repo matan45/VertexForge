@@ -33,6 +33,7 @@ namespace render::gpudriven
         thread_local vk::DescriptorSet tlsActiveCullDescriptorSet = nullptr;
         thread_local bool tlsHasTerrainViewProjectionOverride = false;
         thread_local glm::mat4 tlsTerrainViewProjectionOverride{1.0f};
+        thread_local uint32_t tlsRTTCullingMask = 0xFFFFFFFFu;
     }
 
     void GPUDrivenRenderer::updateScene(
@@ -253,6 +254,7 @@ namespace render::gpudriven
         // push-constant build time on this thread only.
         tlsHasTerrainViewProjectionOverride = true;
         tlsTerrainViewProjectionOverride = params.projection * params.view;
+        tlsRTTCullingMask = params.cullingMask;
     }
 
     void GPUDrivenRenderer::endRTTContext()
@@ -264,6 +266,7 @@ namespace render::gpudriven
 
         tlsActiveCullDescriptorSet = nullptr;
         tlsHasTerrainViewProjectionOverride = false;
+        tlsRTTCullingMask = 0xFFFFFFFFu;
     }
 
     vk::DescriptorSet GPUDrivenRenderer::getThreadLocalCullDescriptorSet()
@@ -279,6 +282,11 @@ namespace render::gpudriven
         }
         outVP = tlsTerrainViewProjectionOverride;
         return true;
+    }
+
+    uint32_t GPUDrivenRenderer::getThreadLocalRTTCullingMask()
+    {
+        return tlsRTTCullingMask;
     }
 
     vk::DescriptorSet GPUDrivenRenderer::allocateRTTCullDescriptorSet(vk::DescriptorPool externalPool,

@@ -158,6 +158,10 @@ namespace render::gpudriven
         if (!initialized || !water.renderingEnabled || !water.pipeline || water.tileData.empty())
             return;
 
+        // VK-1415: water honors the per-camera render-layer mask (main view = all layers).
+        if (((1u << (water.renderLayer & 31u)) & getThreadLocalRTTCullingMask()) == 0u)
+            return;
+
         // Set per-band ocean push constant fields
         uint32_t bandMask = 0;
         for (uint32_t i = 0; i < 3; ++i)

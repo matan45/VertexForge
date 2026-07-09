@@ -214,6 +214,12 @@ namespace types
         float lodBias = 1.0f;
         float errorThreshold = 2.0f;
         float textureScale = 0.1f;
+        uint32_t renderLayer = 0; // VK-1415: layer bit tested against a camera's cullingMask (RTT views)
+    };
+
+    struct WaterSettings
+    {
+        uint32_t renderLayer = 0; // VK-1415: layer bit tested against a camera's cullingMask (RTT views)
     };
 
     // VK-1209 — virtual texturing. Two clients over one page-table substrate:
@@ -287,6 +293,7 @@ namespace types
         DistanceCullingSettings distanceCulling;
         TransparencySettings transparency;
         TerrainSettings terrain;
+        WaterSettings water;
         VirtualTextureSettings virtualTexture;
         postprocess::PostProcessSettings postProcess;
         VFXLODSettings vfxLOD;

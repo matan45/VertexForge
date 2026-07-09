@@ -75,6 +75,8 @@ namespace render::gpudriven::detail
         float lodBias = 1.0f;
         float errorThreshold = 2.0f;
         float textureScale = 0.1f;
+        // VK-1415: layer bit tested against the current view's cullingMask (RTT views can exclude terrain).
+        uint32_t renderLayer = 0;
         std::string currentMaterialPath;
         std::vector<TerrainLayerGPUData> layerData;
         bool layerDataDirty = false;
@@ -98,6 +100,8 @@ namespace render::gpudriven::detail
         uint32_t lodTileCounts[render::water::WATER_LOD_COUNT] = {};
         render::water::WaterPushConstants cachedPushConstants{};
         bool renderingEnabled = true;
+        // VK-1415: layer bit tested against the current view's cullingMask (RTT views can exclude water).
+        uint32_t renderLayer = 0;
         // Ocean FFT (multi-band)
         static constexpr uint32_t MAX_OCEAN_BANDS = 3;
         std::array<std::unique_ptr<render::water::OceanFFT>, MAX_OCEAN_BANDS> oceanBands;

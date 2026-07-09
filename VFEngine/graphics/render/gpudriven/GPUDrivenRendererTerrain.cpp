@@ -621,6 +621,10 @@ namespace render::gpudriven
             return;
         }
 
+        // VK-1415: terrain honors the per-camera render-layer mask (main view = all layers).
+        if (((1u << (terrain.renderLayer & 31u)) & getThreadLocalRTTCullingMask()) == 0u)
+            return;
+
         terrain.pipeline->updateSharedDescriptors(
             iblDescriptorSet,
             bindlessTextures->getDescriptorSet(),
