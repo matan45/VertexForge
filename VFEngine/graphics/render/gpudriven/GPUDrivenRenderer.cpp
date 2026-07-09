@@ -220,6 +220,13 @@ namespace render::gpudriven
                             return material::isInstanceFile(path);
                         });
                     }
+
+                    // VK-1486: a terrain layer may source this material for its PBR data. Flag the
+                    // terrain layer buffer for re-resolve; the flatten early-out consumes it via
+                    // exchange(). Over-invalidates (any material change), but the re-flatten is
+                    // editor-time-only and gated, and this avoids racing on terrain-side state from
+                    // the saver thread.
+                    terrain.materialSourceDirty.store(true, std::memory_order_relaxed);
                 });
         }
 

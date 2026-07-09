@@ -5,7 +5,9 @@
 #include "terrain/TerrainRVTCoverage.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
+#include "terrain/TerrainLayerPBRResolver.hpp"
 #include "../material/MaterialTextureCache.hpp"
+#include "../material/MaterialPBRExtractor.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/Types.hpp"
@@ -16,6 +18,7 @@
 #include "print/Log.hpp"
 #include <chrono>
 #include <limits>
+#include <unordered_set>
 
 namespace render::gpudriven
 {
@@ -290,7 +293,10 @@ namespace render::gpudriven
             return;
         }
 
-        if (materialPath == terrain.currentMaterialPath && !terrain.layerDataDirty)
+        // VK-1486: a referenced .vfMat / .vfMatInstance may have changed even when the terrain
+        // material path and layer data are unchanged; consume the flag to force a re-resolve.
+        const bool matSourceDirty = terrain.materialSourceDirty.exchange(false, std::memory_order_relaxed);
+        if (materialPath == terrain.currentMaterialPath && !terrain.layerDataDirty && !matSourceDirty)
         {
             return;
         }
@@ -309,41 +315,84 @@ namespace render::gpudriven
         terrain.layerData.clear();
         terrain.layerData.resize(materialData->activeLayerCount);
 
+        auto tryRegisterLayerTex = [&](const std::string& texPath, vk::Format format = vk::Format::eR8G8B8A8Unorm) -> uint32_t
+        {
+            if (texPath.empty()) return 0;
+            if (!materials.textureCache->loadTexture(texPath, format)) return 0;
+            vk::ImageView view = materials.textureCache->getViewForPath(texPath);
+            vk::Sampler sampler = materials.textureCache->getSamplerForPath(texPath);
+            if (!view || !sampler) return 0;
+            return bindlessTextures->registerTexture(texPath, view, sampler);
+        };
+
+        // VK-1486: warn at most once per source material that carries PBR data terrain cannot represent.
+        static std::unordered_set<std::string> warnedUnrepresentableMaterials;
+
+        std::vector<ResolvedTerrainLayerPBR> resolvedLayers(materialData->activeLayerCount);
+
         for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
         {
             const auto& layer = materialData->layers[i];
             TerrainLayerGPUData& gpuLayer = terrain.layerData[i];
             gpuLayer = {};
 
-            auto tryRegisterLayerTex = [&](const std::string& texPath, vk::Format format = vk::Format::eR8G8B8A8Unorm) -> uint32_t
+            // VK-1486: optionally source terrain-supported PBR fields from a .vfMat / .vfMatInstance.
+            mesh::ExtractedPBRValues pbr;
+            const mesh::ExtractedPBRValues* pbrPtr = nullptr;
+            if (layer.materialRef.isValid())
             {
-                if (texPath.empty()) return 0;
-                if (!materials.textureCache->loadTexture(texPath, format)) return 0;
-                vk::ImageView view = materials.textureCache->getViewForPath(texPath);
-                vk::Sampler sampler = materials.textureCache->getSamplerForPath(texPath);
-                if (!view || !sampler) return 0;
-                return bindlessTextures->registerTexture(texPath, view, sampler);
-            };
+                const std::string matPath = layer.materialRef.resolve();
+                pbr = mesh::MaterialPBRExtractor::extractPBRFromPath(matPath);
+                if (!pbr.materialPath.empty()) // materialPath is set only on successful extraction
+                {
+                    pbrPtr = &pbr;
 
-            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTextureRef.resolve(), vk::Format::eR8G8B8A8Srgb);
-            gpuLayer.normalTextureIndex = tryRegisterLayerTex(layer.normalTextureRef.resolve());
-            gpuLayer.ormTextureIndex = tryRegisterLayerTex(layer.ormTextureRef.resolve());
+                    // Terrain has a single packed-ORM slot and no albedo-tint field; warn once if the
+                    // material relies on PBR data terrain drops.
+                    const bool separateOrmMaps = !pbr.usesORM()
+                        && (!pbr.metallicTexturePath.empty() || !pbr.roughnessTexturePath.empty() || !pbr.aoTexturePath.empty());
+                    const bool droppedAlbedoTint = pbr.albedoTexturePath.empty()
+                        && (pbr.albedo.r != 1.0f || pbr.albedo.g != 1.0f || pbr.albedo.b != 1.0f);
+                    if ((separateOrmMaps || droppedAlbedoTint) && warnedUnrepresentableMaterials.insert(matPath).second)
+                    {
+                        vfLogWarning("GPUDrivenRenderer: terrain material source '{}' uses PBR data terrain cannot "
+                                     "represent ({}{}); falling back to packed ORM / scalars.",
+                                     matPath,
+                                     separateOrmMaps ? "separate metallic/roughness/AO maps" : "",
+                                     droppedAlbedoTint ? (separateOrmMaps ? " + albedo tint" : "albedo tint") : "");
+                    }
+                }
+                else
+                {
+                    vfLogWarning("GPUDrivenRenderer: terrain layer {} material '{}' failed to load; "
+                                 "rendering with defaults", i, matPath);
+                }
+            }
 
-            gpuLayer.tilingScale = layer.tilingScale;
-            gpuLayer.roughness = layer.roughness;
-            gpuLayer.metallic = layer.metallic;
-            gpuLayer.ao = layer.ao;
-            gpuLayer.emissionStrength = layer.emissionStrength;
+            ResolvedTerrainLayerPBR& r = resolvedLayers[i];
+            r = resolveTerrainLayerPBR(layer, pbrPtr);
+
+            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(r.albedoPath, vk::Format::eR8G8B8A8Srgb);
+            gpuLayer.normalTextureIndex = tryRegisterLayerTex(r.normalPath);
+            gpuLayer.ormTextureIndex = tryRegisterLayerTex(r.ormPath);
+
+            gpuLayer.tilingScale = r.tilingScale;
+            gpuLayer.roughness = r.roughness;
+            gpuLayer.metallic = r.metallic;
+            gpuLayer.ao = r.ao;
+            gpuLayer.emissionStrength = r.emissionStrength;
         }
 
         {
+            // VK-1486: track the resolved (material-sourced or manual) texture paths so edits to any
+            // of them hot-reload the terrain.
             std::vector<std::string> texPaths;
-            for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
+            texPaths.reserve(static_cast<size_t>(materialData->activeLayerCount) * 3);
+            for (const auto& r : resolvedLayers)
             {
-                const auto& layer = materialData->layers[i];
-                texPaths.push_back(layer.albedoTextureRef.resolve());
-                texPaths.push_back(layer.normalTextureRef.resolve());
-                texPaths.push_back(layer.ormTextureRef.resolve());
+                texPaths.push_back(r.albedoPath);
+                texPaths.push_back(r.normalPath);
+                texPaths.push_back(r.ormPath);
             }
             registerTextureDependencies(materialPath, texPaths);
         }

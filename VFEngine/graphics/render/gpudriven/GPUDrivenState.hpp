@@ -38,6 +38,7 @@
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <atomic>
 #include <cstdint>
 
 namespace material
@@ -77,6 +78,9 @@ namespace render::gpudriven::detail
         std::string currentMaterialPath;
         std::vector<TerrainLayerGPUData> layerData;
         bool layerDataDirty = false;
+        // VK-1486: set (editor/saver thread) when any material asset changes, so a terrain layer
+        // that sources a .vfMat/.vfMatInstance re-resolves. Consumed (render thread) via exchange().
+        std::atomic<bool> materialSourceDirty{false};
         float updateUs = 0.0f;
         float streamingUs = 0.0f;
         float buildTileDataUs = 0.0f;

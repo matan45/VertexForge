@@ -256,6 +256,49 @@ namespace windows
                     }
                 }
 
+                // VK-1486: terrain layers source all PBR from a referenced .vfMat / .vfMatInstance
+                // (albedo/normal/ORM textures + roughness/metallic/ao/emission). tilingScale stays
+                // terrain-layer-local.
+                {
+                    ImGui::Text("Material Source:");
+                    ImGui::SameLine();
+                    std::string matDisplay = !layer.materialRef.isValid() ? "(None)" :
+                        std::filesystem::path(layer.materialRef.resolve()).filename().string();
+                    ImGui::TextDisabled("%s", matDisplay.c_str());
+
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Browse##material"))
+                    {
+                        nfd::FileDialog fileDialog;
+                        std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                            {L"VF Material", L"*.vfMat;*.vfMatInstance"}
+                        };
+                        std::string selectedPath = fileDialog.openFileDialog(filters);
+                        if (!selectedPath.empty())
+                        {
+                            selectedPath.erase(
+                                std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
+                                selectedPath.end());
+                            layer.materialRef = asset::AssetRef::fromPath(selectedPath);
+                            onChanged();
+                        }
+                    }
+                    if (layer.materialRef.isValid())
+                    {
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("X##material"))
+                        {
+                            layer.materialRef = asset::AssetRef::invalid();
+                            onChanged();
+                        }
+                    }
+                }
+
+                if (!layer.materialRef.isValid())
+                {
+                    ImGui::TextDisabled("No material assigned (layer renders with defaults)");
+                }
+
                 if (i > 0)
                 {
                     const char* blendModes[] = {"Linear", "Overlay"};
@@ -268,136 +311,6 @@ namespace windows
                             : terrain::TerrainLayerBlendMode::Linear;
                         onChanged();
                     }
-                }
-
-                {
-                    ImGui::Text("Albedo:");
-                    ImGui::SameLine();
-                    std::string displayPath = !layer.albedoTextureRef.isValid() ? "(None)" :
-                        std::filesystem::path(layer.albedoTextureRef.resolve()).filename().string();
-                    ImGui::TextDisabled("%s", displayPath.c_str());
-
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Browse##albedo"))
-                    {
-                        nfd::FileDialog fileDialog;
-                        std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                            {L"VF Image", L"*.vfImage"}
-                        };
-                        std::string selectedPath = fileDialog.openFileDialog(filters);
-                        if (!selectedPath.empty())
-                        {
-                            selectedPath.erase(
-                                std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
-                                selectedPath.end());
-                            layer.albedoTextureRef = asset::AssetRef::fromPath(selectedPath);
-                            onChanged();
-                        }
-                    }
-                    if (layer.albedoTextureRef.isValid())
-                    {
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton("X##albedo"))
-                        {
-                            layer.albedoTextureRef = asset::AssetRef::invalid();
-                            onChanged();
-                        }
-                    }
-                }
-
-                {
-                    ImGui::Text("Normal:");
-                    ImGui::SameLine();
-                    std::string displayPath = !layer.normalTextureRef.isValid() ? "(None)" :
-                        std::filesystem::path(layer.normalTextureRef.resolve()).filename().string();
-                    ImGui::TextDisabled("%s", displayPath.c_str());
-
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Browse##normal"))
-                    {
-                        nfd::FileDialog fileDialog;
-                        std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                            {L"VF Image", L"*.vfImage"}
-                        };
-                        std::string selectedPath = fileDialog.openFileDialog(filters);
-                        if (!selectedPath.empty())
-                        {
-                            selectedPath.erase(
-                                std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
-                                selectedPath.end());
-                            layer.normalTextureRef = asset::AssetRef::fromPath(selectedPath);
-                            onChanged();
-                        }
-                    }
-                    if (layer.normalTextureRef.isValid())
-                    {
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton("X##normal"))
-                        {
-                            layer.normalTextureRef = asset::AssetRef::invalid();
-                            onChanged();
-                        }
-                    }
-                }
-
-                {
-                    ImGui::Text("ORM:");
-                    ImGui::SameLine();
-                    std::string displayPath = !layer.ormTextureRef.isValid() ? "(None)" :
-                        std::filesystem::path(layer.ormTextureRef.resolve()).filename().string();
-                    ImGui::TextDisabled("%s", displayPath.c_str());
-
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Browse##orm"))
-                    {
-                        nfd::FileDialog fileDialog;
-                        std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                            {L"VF Image", L"*.vfImage"}
-                        };
-                        std::string selectedPath = fileDialog.openFileDialog(filters);
-                        if (!selectedPath.empty())
-                        {
-                            selectedPath.erase(
-                                std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
-                                selectedPath.end());
-                            layer.ormTextureRef = asset::AssetRef::fromPath(selectedPath);
-                            onChanged();
-                        }
-                    }
-                    if (layer.ormTextureRef.isValid())
-                    {
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton("X##orm"))
-                        {
-                            layer.ormTextureRef = asset::AssetRef::invalid();
-                            onChanged();
-                        }
-                    }
-                }
-
-                if (!layer.ormTextureRef.isValid())
-                {
-                    if (ImGui::DragFloat("Roughness", &layer.roughness, 0.01f, 0.0f, 1.0f))
-                    {
-                        onChanged();
-                    }
-                    if (ImGui::DragFloat("Metallic", &layer.metallic, 0.01f, 0.0f, 1.0f))
-                    {
-                        onChanged();
-                    }
-                    if (ImGui::DragFloat("AO", &layer.ao, 0.01f, 0.0f, 1.0f))
-                    {
-                        onChanged();
-                    }
-                }
-                else
-                {
-                    ImGui::TextDisabled("PBR from ORM texture (R=AO, G=Rough, B=Metal)");
-                }
-
-                if (ImGui::DragFloat("Emission", &layer.emissionStrength, 0.01f, 0.0f, 10.0f))
-                {
-                    onChanged();
                 }
 
                 if (ImGui::DragFloat("Tiling", &layer.tilingScale, 0.01f, 0.01f, 100.0f))

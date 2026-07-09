@@ -127,14 +127,8 @@ namespace terrain
                         {
                             auto& layer = material.layers[i];
                             layer.name = layerJson.value("name", "Layer " + std::to_string(i));
-                            layer.albedoTextureRef = serialization::readAssetRef(layerJson, "albedoTextureRef");
-                            layer.normalTextureRef = serialization::readAssetRef(layerJson, "normalTextureRef");
-                            layer.ormTextureRef = serialization::readAssetRef(layerJson, "ormTextureRef");
+                            layer.materialRef = serialization::readAssetRef(layerJson, "materialRef");
                             layer.tilingScale = layerJson.value("tilingScale", 1.0f);
-                            layer.roughness = layerJson.value("roughness", 0.9f);
-                            layer.metallic = layerJson.value("metallic", 0.0f);
-                            layer.ao = layerJson.value("ao", 1.0f);
-                            layer.emissionStrength = layerJson.value("emissionStrength", 0.0f);
                             layer.blendMode = stringToLayerBlendMode(layerJson.value("blendMode", "Linear"));
                             layer.enabled = layerJson.value("enabled", true);
 
@@ -191,14 +185,8 @@ namespace terrain
             const auto& layer = material.layers[i];
             json layerJson;
             layerJson["name"] = layer.name;
-            serialization::writeAssetRef(layerJson, "albedoTextureRef", layer.albedoTextureRef);
-            serialization::writeAssetRef(layerJson, "normalTextureRef", layer.normalTextureRef);
-            serialization::writeAssetRef(layerJson, "ormTextureRef", layer.ormTextureRef);
+            serialization::writeAssetRef(layerJson, "materialRef", layer.materialRef);
             layerJson["tilingScale"] = layer.tilingScale;
-            layerJson["roughness"] = layer.roughness;
-            layerJson["metallic"] = layer.metallic;
-            layerJson["ao"] = layer.ao;
-            layerJson["emissionStrength"] = layer.emissionStrength;
             layerJson["blendMode"] = blendModeToString(layer.blendMode);
             layerJson["enabled"] = layer.enabled;
             layersJson.push_back(layerJson);
