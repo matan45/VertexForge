@@ -479,12 +479,8 @@ namespace core
                                       slDeviceExtensions.begin(), slDeviceExtensions.end());
 
         // Optionally enable VK_EXT_memory_budget for the real-VRAM-budget readout in
-        // the memory diagnostics window, and VK_KHR_fragment_shading_rate for coarse
-        // terrain shading (VRS 2x2). Neither is required — skip silently if unsupported.
-        // fsrFeatures must outlive createDeviceUnique (chained into createInfo.pNext below).
-        vk::PhysicalDeviceFragmentShadingRateFeaturesKHR fsrFeatures{};
+        // the memory diagnostics window. Not required — skip silently if unsupported.
         {
-            bool fsrExtensionFound = false;
             auto available = physicalDevice.enumerateDeviceExtensionProperties();
             for (const auto& ext : available)
             {
@@ -492,34 +488,13 @@ namespace core
                 {
                     activeDeviceExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
                     memoryBudgetSupported = true;
-                }
-                else if (strcmp(ext.extensionName.data(), VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME) == 0)
-                {
-                    fsrExtensionFound = true;
-                }
-            }
-            if (fsrExtensionFound)
-            {
-                vk::PhysicalDeviceFragmentShadingRateFeaturesKHR fsrQuery{};
-                vk::PhysicalDeviceFeatures2 features2{};
-                features2.pNext = &fsrQuery;
-                physicalDevice.getFeatures2(&features2);
-                if (fsrQuery.pipelineFragmentShadingRate)
-                {
-                    activeDeviceExtensions.push_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
-                    fragmentShadingRateSupported = true;
+                    break;
                 }
             }
         }
 
         vk::DeviceCreateInfo createInfo{};
         createInfo.pNext = &meshShaderFeatures;
-        if (fragmentShadingRateSupported)
-        {
-            fsrFeatures.pipelineFragmentShadingRate = VK_TRUE;
-            fsrFeatures.pNext = &meshShaderFeatures;
-            createInfo.pNext = &fsrFeatures;
-        }
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeatures;

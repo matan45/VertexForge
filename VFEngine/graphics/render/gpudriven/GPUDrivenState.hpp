@@ -79,9 +79,6 @@ namespace render::gpudriven::detail
         uint32_t renderLayer = 0;
         // Terrain as a shadow CASTER (gates the VSM terrain raster); receiving is unaffected.
         bool castShadows = true;
-        // VRS: shade the terrain main draw at 2x2 (quarter fragment invocations).
-        // Inert when the device lacks VK_KHR_fragment_shading_rate.
-        bool vrs2x2 = false;
         std::string currentMaterialPath;
         std::vector<TerrainLayerGPUData> layerData;
         bool layerDataDirty = false;

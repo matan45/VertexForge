@@ -330,18 +330,6 @@ namespace windows
                     ImGui::SetTooltip("Terrain as a shadow CASTER (rasterized into shadow pages).\n"
                                       "Terrain still receives shadows when off.\n"
                                       "Off is a large GPU win on flat maps with negligible terrain self-shadowing.");
-
-                if (ImGui::Checkbox("Coarse Shading (VRS 2x2)", &settings.terrain.vrs2x2))
-                {
-                    markDirty();
-                    events::scene::SetRenderSettingsCommand cmd;
-                    cmd.settings = settings;
-                    dispatcher.execute(cmd);
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Shade terrain at one fragment per 2x2 pixels (quarter fragment cost).\n"
-                                      "Near-free visually on low-frequency ground; units/meshes stay full rate.\n"
-                                      "Requires GPU support for VK_KHR_fragment_shading_rate (ignored otherwise).");
             }
 
             ImGui::Separator();

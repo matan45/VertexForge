@@ -625,11 +625,6 @@ namespace render::gpudriven
             .depthWriteEnable = true
         };
         config.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-        // VRS: the FSR dynamic state may only be declared when the device enabled
-        // VK_KHR_fragment_shading_rate; once declared, every dispatch must set the rate
-        // (dispatch() does, 1x1 when VRS is off).
-        if (device.isFragmentShadingRateSupported())
-            config.dynamicStates.push_back(vk::DynamicState::eFragmentShadingRateKHR);
         config.dynamicSampleCount = true;
 
         try

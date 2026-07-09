@@ -101,7 +101,6 @@ namespace controllers
         gpuDriven->setTerrainTextureScale(settings.terrain.textureScale);
         gpuDriven->setTerrainRenderLayer(settings.terrain.renderLayer);
         gpuDriven->setTerrainCastShadows(settings.terrain.castShadows);
-        gpuDriven->setTerrainVRS2x2(settings.terrain.vrs2x2);
         gpuDriven->setWaterRenderLayer(settings.water.renderLayer);
 
         gpuDriven->applyVirtualTextureSettings(settings.virtualTexture); // VK-1209 (default OFF)

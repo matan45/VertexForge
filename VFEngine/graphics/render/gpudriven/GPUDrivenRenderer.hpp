@@ -610,7 +610,6 @@ namespace render::gpudriven
         // Out-of-line: a change invalidates all cached VSM pages (they were baked
         // with the old caster set).
         void setTerrainCastShadows(bool cast);
-        void setTerrainVRS2x2(bool enabled) { terrain.vrs2x2 = enabled; }
 
         // VK-1209 — apply virtual-texturing settings (RVT/SVT enable, pool budgets,
         // page-per-frame + eviction age). Pool byte budgets are restart-scoped; the live

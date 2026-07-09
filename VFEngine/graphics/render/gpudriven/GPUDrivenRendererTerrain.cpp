@@ -668,7 +668,6 @@ namespace render::gpudriven
         terrain.pipeline->setTerrainMaxDrawDistSq(terrainDistSq);
         terrain.pipeline->setMeshletOcclusionCullingEnabled(culling.meshletOcclusionCullingEnabled);
         terrain.pipeline->setHiZMipLevels(prepassHiZMipLevels);
-        terrain.pipeline->setVRS2x2Enabled(terrain.vrs2x2);
 
         uint32_t viewMode = culling.currentViewMode;
         if (culling.meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;

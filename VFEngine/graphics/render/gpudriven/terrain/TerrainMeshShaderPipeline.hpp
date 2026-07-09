@@ -161,7 +161,6 @@ namespace render::gpudriven
 
         bool initialized = false;
         bool wireframeMode = false;
-        bool vrs2x2Enabled = false;
 
         glm::vec2 brushWorldPos{0.0f};
         float brushWorldY = 0.0f;
@@ -298,10 +297,6 @@ namespace render::gpudriven
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
         void setMeshletOcclusionCullingEnabled(bool enabled) { meshletOcclusionCullingEnabled = enabled; }
-        // VRS: shade terrain at 2x2 (quarter fragment invocations). Applied per dispatch
-        // via the FSR dynamic state; silently inert when the device lacks
-        // VK_KHR_fragment_shading_rate.
-        void setVRS2x2Enabled(bool enabled) { vrs2x2Enabled = enabled; }
         void setHiZMipLevels(uint32_t levels) { hiZMipLevels = levels; }
         void setTerrainMaxDrawDistSq(float distSq) { terrainMaxDrawDistSq = distSq; }
         void setBrushOverlay(const glm::vec3& worldPos, float worldRadius, float falloff, float shape)
