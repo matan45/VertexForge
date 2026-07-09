@@ -286,6 +286,17 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::setTerrainCastShadows(bool cast)
+    {
+        if (terrain.castShadows == cast)
+            return;
+        terrain.castShadows = cast;
+        // Cached VSM pages still hold depth baked with the previous caster set —
+        // mark every page dirty so they re-render without/with terrain.
+        if (shadowSystem)
+            shadowSystem->notifySceneChanged();
+    }
+
     void GPUDrivenRenderer::registerTerrainLayerTextures(const std::string& materialPath)
     {
         if (materialPath.empty())
@@ -657,6 +668,7 @@ namespace render::gpudriven
         terrain.pipeline->setTerrainMaxDrawDistSq(terrainDistSq);
         terrain.pipeline->setMeshletOcclusionCullingEnabled(culling.meshletOcclusionCullingEnabled);
         terrain.pipeline->setHiZMipLevels(prepassHiZMipLevels);
+        terrain.pipeline->setVRS2x2Enabled(terrain.vrs2x2);
 
         uint32_t viewMode = culling.currentViewMode;
         if (culling.meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;

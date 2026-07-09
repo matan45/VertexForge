@@ -519,14 +519,12 @@ void main() {
         // RVT fast path keeps its win). The generated composite declares its own mat_* locals;
         // rename them to temporaries so they don't clash with the outer decls, then copy out.
         #define mat_albedo   _rvtcAlbedo
-        #define mat_normalTS _rvtcNormalTS
         #define mat_metallic _rvtcMetallic
         #define mat_roughness _rvtcRoughness
         #define mat_ao       _rvtcAO
         #define mat_emission _rvtcEmission
         #include "../material/terrain_material_generated.glsl"
         #undef mat_albedo
-        #undef mat_normalTS
         #undef mat_metallic
         #undef mat_roughness
         #undef mat_ao

@@ -350,8 +350,12 @@ namespace render::shadow
             }
         }
 
-        dispatchTerrainShadow(cmd, ctx, page.cropViewProjection,
-                              page.depthBias, page.slopeBias);
+        // Dynamic-layer pages are seeded by the static→dynamic tile copy (executeTileCopies,
+        // queued in addDualLayerPage), and the static tile already contains the terrain depth —
+        // re-rasterizing terrain here every frame a caster moves is pure redundant work.
+        if (page.layer != ShadowLayer::Dynamic)
+            dispatchTerrainShadow(cmd, ctx, page.cropViewProjection,
+                                  page.depthBias, page.slopeBias);
     }
 
     void ShadowPassRecorder::recordStaticPhase(

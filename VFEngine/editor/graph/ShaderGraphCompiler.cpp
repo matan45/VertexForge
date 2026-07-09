@@ -24,7 +24,6 @@ namespace editor::graph {
         code += "// Generated terrain material code\n";
         code += "// Per-tile palette: 8 channels with runtime indirection into palette of " + std::to_string(material.activeLayerCount) + " layer(s)\n";
         code += "vec3 ls_Albedo = vec3(0.0);\n";
-        code += "vec3 ls_Normal = vec3(0.0);\n";
         code += "float ls_Roughness = 0.0;\n";
         code += "float ls_Metallic = 0.0;\n";
         code += "float ls_AO = 0.0;\n";
@@ -49,9 +48,9 @@ namespace editor::graph {
         code += "    uint albedoIdx = terrainLayers[paletteIdx].albedoTextureIndex;\n";
         code += "    vec3 layerAlbedo = (albedoIdx > 0u) ? "
                 "textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV, layerUVdx, layerUVdy).rgb : vec3(0.5);\n";
-        code += "    uint normalIdx = terrainLayers[paletteIdx].normalTextureIndex;\n";
-        code += "    vec3 layerNormal = (normalIdx > 0u) ? "
-                "textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], layerUV, layerUVdx, layerUVdy).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n";
+        // NOTE: no per-layer normal-map fetch — terrain lights with the geometric normal only
+        // (mesh_terrain.glsl uses N = normalize(fragNormal); the RVT bake writes no normal plane),
+        // so a composited tangent-space normal would be dead work: 1 of 3 fetches per layer.
         code += "    uint ormIdx = terrainLayers[paletteIdx].ormTextureIndex;\n";
         code += "    float layerAO, layerRoughness, layerMetallic;\n";
         code += "    if (ormIdx > 0u) {\n";
@@ -66,7 +65,6 @@ namespace editor::graph {
         code += "    }\n";
         code += "    float layerEmission = terrainLayers[paletteIdx].emissionStrength;\n";
         code += "    ls_Albedo += layerAlbedo * w;\n";
-        code += "    ls_Normal += layerNormal * w;\n";
         code += "    ls_Roughness += layerRoughness * w;\n";
         code += "    ls_Metallic += layerMetallic * w;\n";
         code += "    ls_AO += layerAO * w;\n";
@@ -76,7 +74,6 @@ namespace editor::graph {
 
         code += "float ls_InvW = 1.0 / max(ls_TotalW, 0.001);\n";
         code += "ls_Albedo *= ls_InvW;\n";
-        code += "ls_Normal = normalize(ls_Normal);\n";
         code += "ls_Roughness *= ls_InvW;\n";
         code += "ls_Metallic *= ls_InvW;\n";
         code += "ls_AO *= ls_InvW;\n";
@@ -84,7 +81,6 @@ namespace editor::graph {
 
         code += "// Terrain material properties\n";
         code += "vec3 mat_albedo = ls_Albedo;\n";
-        code += "vec3 mat_normalTS = ls_Normal;\n";
         code += "float mat_metallic = ls_Metallic;\n";
         code += "float mat_roughness = ls_Roughness;\n";
         code += "float mat_ao = ls_AO;\n";

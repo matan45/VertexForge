@@ -215,6 +215,12 @@ namespace types
         float errorThreshold = 2.0f;
         float textureScale = 0.1f;
         uint32_t renderLayer = 0; // VK-1415: layer bit tested against a camera's cullingMask (RTT views)
+        // Terrain as a shadow CASTER (VSM page raster). Receiving shadows is unaffected.
+        // Off is a large GPU win on flat maps where terrain self-shadowing is negligible.
+        bool castShadows = true;
+        // VRS: shade the terrain main draw at 2x2 — quarter fragment invocations for the
+        // full material+lighting cost. Needs VK_KHR_fragment_shading_rate (inert otherwise).
+        bool vrs2x2 = false;
     };
 
     struct WaterSettings

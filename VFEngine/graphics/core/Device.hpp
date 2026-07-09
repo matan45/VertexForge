@@ -118,6 +118,11 @@ namespace core
         // device advertises it. Gates the real-VRAM-budget query.
         bool memoryBudgetSupported = false;
 
+        // Optional VK_KHR_fragment_shading_rate (pipelineFragmentShadingRate feature).
+        // Gates the terrain VRS 2x2 path: the terrain pipeline adds the FSR dynamic
+        // state and the draw path calls setFragmentShadingRateKHR only when true.
+        bool fragmentShadingRateSupported = false;
+
         // Private functions for setup and initialization
         void createInstance();
         std::vector<const char*> getRequiredExtensions() const;
@@ -197,6 +202,10 @@ namespace core
         // returns a real driver budget/usage. Optional extension — false on hardware
         // that doesn't advertise it.
         bool isMemoryBudgetSupported() const { return memoryBudgetSupported; }
+
+        // True when VK_KHR_fragment_shading_rate was enabled with the
+        // pipelineFragmentShadingRate feature (optional; gates terrain VRS 2x2).
+        bool isFragmentShadingRateSupported() const { return fragmentShadingRateSupported; }
 
         bool isMeshShaderSupported() const { return meshShaderCapabilities.meshShaderSupported; }
         bool isTaskShaderSupported() const { return meshShaderCapabilities.taskShaderSupported; }

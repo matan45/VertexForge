@@ -257,6 +257,18 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
+        // VRS: the pipeline carries the FSR dynamic state iff the device supports it, and a
+        // declared dynamic state must be set before drawing. 2x2 quarters terrain fragment
+        // invocations; {Keep, Keep} ignores primitive/attachment rates so the pipeline rate wins.
+        if (device.isFragmentShadingRateSupported())
+        {
+            vk::Extent2D fragmentSize = vrs2x2Enabled ? vk::Extent2D{2, 2} : vk::Extent2D{1, 1};
+            vk::FragmentShadingRateCombinerOpKHR combinerOps[2] = {
+                vk::FragmentShadingRateCombinerOpKHR::eKeep,
+                vk::FragmentShadingRateCombinerOpKHR::eKeep};
+            cmd.setFragmentShadingRateKHR(fragmentSize, combinerOps);
+        }
+
         // Set 5 = RVT sample set when RVT active (VK-1209), else the empty placeholder.
         std::vector<vk::DescriptorSet> currentSets = {
             iblDescriptorSet, weightMapDescriptorSet, bindlessDescriptorSet,
