@@ -1,9 +1,11 @@
 #include "RenderConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/animation/AnimationBudgetEvents.hpp"
 #include <imgui.h>
+#include <algorithm>
 
 namespace windows
 {
@@ -313,6 +315,35 @@ namespace windows
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("UV scale for terrain textures.\nLower = larger texture tiles.");
 
+            }
+
+            ImGui::Separator();
+            ImGui::Text("RTT / Minimap Render Layers");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Render-layer index (0-31) for terrain and water. An RTT camera (e.g. the\n"
+                                  "minimap) draws them only if its cullingMask has this bit set; the main\n"
+                                  "viewport always renders all layers. Put terrain/water on a layer your\n"
+                                  "minimap camera excludes to keep them off the minimap.");
+            ImGui::Spacing();
+
+            int terrainLayer = static_cast<int>(settings.terrain.renderLayer);
+            if (ImGui::InputInt("Terrain Render Layer", &terrainLayer))
+            {
+                settings.terrain.renderLayer = static_cast<uint32_t>(std::clamp(terrainLayer, 0, 31));
+                markDirty();
+                events::scene::SetRenderSettingsCommand cmd;
+                cmd.settings = settings;
+                dispatcher.execute(cmd);
+            }
+
+            int waterLayer = static_cast<int>(settings.water.renderLayer);
+            if (ImGui::InputInt("Water Render Layer", &waterLayer))
+            {
+                settings.water.renderLayer = static_cast<uint32_t>(std::clamp(waterLayer, 0, 31));
+                markDirty();
+                events::scene::SetRenderSettingsCommand cmd;
+                cmd.settings = settings;
+                dispatcher.execute(cmd);
             }
 
             ImGui::Unindent(10.0f);
