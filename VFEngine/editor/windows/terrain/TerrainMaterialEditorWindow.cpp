@@ -262,6 +262,15 @@ namespace windows
                 {
                     ImGui::Text("Material Source:");
                     ImGui::SameLine();
+                    ImGui::TextDisabled("(?)");
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Terrain layers source PBR from the linked .vfMat or .vfMatInstance.\n"
+                                          "Supported maps: albedo, packed ORM (Occlusion=R, Roughness=G, "
+                                          "Metallic=B), normal, and emission.\n"
+                                          "Separate AO, roughness, and metallic textures are not supported.");
+                    }
+                    ImGui::SameLine();
                     std::string matDisplay = !layer.materialRef.isValid() ? "(None)" :
                         std::filesystem::path(layer.materialRef.resolve()).filename().string();
                     ImGui::TextDisabled("%s", matDisplay.c_str());

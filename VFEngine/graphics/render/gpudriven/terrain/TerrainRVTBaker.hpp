@@ -15,8 +15,9 @@ namespace core
 // Virtual Texturing (VK-1209) — terrain RVT bake pipeline. A self-contained
 // vertex+fragment graphics pipeline (resources/shaders/gpudriven/terrain_rvt_bake.glsl)
 // that renders one quad per (page, overlapping terrain tile) into a page's atlas tile,
-// running the SAME terrain splat composite the live pass uses and writing 2 RGBA8 MRT
-// planes (albedo+emission / ORM). Independent of the shared TerrainMeshShaderPipeline —
+// running the SAME terrain splat composite the live pass uses and writing either the
+// legacy 2-plane layout or the 4-plane normal/HDR-emission detail layout. Independent
+// of the shared TerrainMeshShaderPipeline —
 // it binds that pipeline's descriptor SETS at compact indices 0/1/2, so nothing about
 // the default terrain path changes. GPUDrivenRenderer drives begin/beginPage/drawTile/end.
 // ============================================================================
@@ -51,7 +52,8 @@ namespace render::gpudriven
         void init(vk::DescriptorSetLayout weightMapLayout,   // set 0 (weightmap b0 + layers b1)
                   vk::DescriptorSetLayout bindlessLayout,    // set 1 (bindless b0)
                   vk::DescriptorSetLayout terrainDataLayout, // set 2 (tiles b0)
-                  const std::vector<vk::Format>& planeFormats);
+                  const std::vector<vk::Format>& planeFormats,
+                  bool detailMaps);
         void cleanup();
         [[nodiscard]] bool isReady() const { return graphicsPipeline != nullptr; }
 

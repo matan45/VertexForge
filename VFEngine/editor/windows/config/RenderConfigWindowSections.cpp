@@ -315,6 +315,17 @@ namespace windows
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("UV scale for terrain textures.\nLower = larger texture tiles.");
 
+                if (ImGui::Checkbox("Detail Normal & Emission Maps", &settings.terrain.detailMaps))
+                {
+                    markDirty();
+                    events::scene::SetRenderSettingsCommand cmd;
+                    cmd.settings = settings;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Samples normal and emission textures from terrain layer materials.\n"
+                                      "When RVT is enabled, toggling this rebuilds its terrain detail planes.");
+
                 ImGui::Separator();
                 ImGui::Text("Shadow Settings");
                 ImGui::Spacing();

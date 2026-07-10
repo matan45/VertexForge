@@ -21,7 +21,8 @@ namespace render::gpudriven
     void TerrainRVTBaker::init(vk::DescriptorSetLayout weightMapLayout,
                                vk::DescriptorSetLayout bindlessLayout,
                                vk::DescriptorSetLayout terrainDataLayout,
-                               const std::vector<vk::Format>& planeFormats)
+                               const std::vector<vk::Format>& planeFormats,
+                               bool detailMaps)
     {
         if (graphicsPipeline)
             return;
@@ -29,6 +30,8 @@ namespace render::gpudriven
         const vk::Device vkDevice = device.getLogicalDevice();
 
         core::Shader shader(device);
+        if (detailMaps)
+            shader.addMacroDefinition("TERRAIN_DETAIL_MAPS");
         shader.readShader("../../resources/shaders/gpudriven/terrain_rvt_bake.glsl");
         const auto& stages = shader.getShaderStages();
         if (stages.size() < 2)

@@ -610,6 +610,9 @@ namespace render::gpudriven
         // Out-of-line: a change invalidates all cached VSM pages (they were baked
         // with the old caster set).
         void setTerrainCastShadows(bool cast);
+        // Changes the terrain shader permutation and, when RVT is enabled, rebuilds its
+        // baker/pool layout as one synchronized transition. Safe to call before init.
+        void setTerrainDetailMaps(bool enabled);
 
         // VK-1209 — apply virtual-texturing settings (RVT/SVT enable, pool budgets,
         // page-per-frame + eviction age). Pool byte budgets are restart-scoped; the live

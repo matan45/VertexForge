@@ -175,6 +175,7 @@ TEST_SUITE("TerrainLayerPBRResolver")
         CHECK(r.albedoPath.empty());
         CHECK(r.normalPath.empty());
         CHECK(r.ormPath.empty());
+        CHECK(r.emissionPath.empty());
         CHECK(r.tilingScale == doctest::Approx(7.0f));
         // struct defaults when no material is assigned
         CHECK(r.roughness == doctest::Approx(0.9f));
@@ -192,6 +193,7 @@ TEST_SUITE("TerrainLayerPBRResolver")
         pbr.albedoTexturePath = "A.vfImage";
         pbr.normalTexturePath = "N.vfImage";
         pbr.ormTexturePath = "ORM.vfImage";
+        pbr.emissionTexturePath = "E.vfImage";
         pbr.roughness = 0.3f;
         pbr.metallic = 0.6f;
         pbr.ao = 0.7f;
@@ -203,6 +205,7 @@ TEST_SUITE("TerrainLayerPBRResolver")
         CHECK(r.albedoPath == "A.vfImage");
         CHECK(r.normalPath == "N.vfImage");
         CHECK(r.ormPath == "ORM.vfImage");
+        CHECK(r.emissionPath == "E.vfImage");
         CHECK(r.roughness == doctest::Approx(0.3f));
         CHECK(r.metallic == doctest::Approx(0.6f));
         CHECK(r.ao == doctest::Approx(0.7f));
@@ -225,6 +228,7 @@ TEST_SUITE("TerrainLayerPBRResolver")
         CHECK(r.albedoPath.empty());
         CHECK(r.normalPath.empty());
         CHECK(r.ormPath.empty());
+        CHECK(r.emissionPath.empty());
         CHECK(r.roughness == doctest::Approx(0.25f));
         CHECK(r.metallic == doctest::Approx(0.1f));
     }

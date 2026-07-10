@@ -79,6 +79,8 @@ namespace render::gpudriven::detail
         uint32_t renderLayer = 0;
         // Terrain as a shadow CASTER (gates the VSM terrain raster); receiving is unaffected.
         bool castShadows = true;
+        // Per-layer normal/emission texture sampling and the matching four-plane RVT layout.
+        bool detailMaps = false;
         std::string currentMaterialPath;
         std::vector<TerrainLayerGPUData> layerData;
         bool layerDataDirty = false;

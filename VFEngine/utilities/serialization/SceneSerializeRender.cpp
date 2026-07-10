@@ -229,7 +229,8 @@ namespace serialization
                 {"errorThreshold", s.errorThreshold},
                 {"textureScale", s.textureScale},
                 {"renderLayer", s.renderLayer},
-                {"castShadows", s.castShadows}
+                {"castShadows", s.castShadows},
+                {"detailMaps", s.detailMaps}
             };
         }
 
@@ -253,6 +254,8 @@ namespace serialization
                 settings.renderLayer = terrain["renderLayer"].get<uint32_t>();
             if (terrain.contains("castShadows") && terrain["castShadows"].is_boolean())
                 settings.castShadows = terrain["castShadows"].get<bool>();
+            if (terrain.contains("detailMaps") && terrain["detailMaps"].is_boolean())
+                settings.detailMaps = terrain["detailMaps"].get<bool>();
         }
 
         json serializeWaterRenderSettings(const types::WaterSettings& s)

@@ -16,6 +16,7 @@ namespace render::gpudriven
             out.albedoPath = pbr->albedoTexturePath;
             out.normalPath = pbr->normalTexturePath;
             out.ormPath = pbr->ormTexturePath;
+            out.emissionPath = pbr->emissionTexturePath;
             out.roughness = pbr->roughness;
             out.metallic = pbr->metallic;
             out.ao = pbr->ao;

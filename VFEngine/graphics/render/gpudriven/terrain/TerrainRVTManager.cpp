@@ -1,4 +1,5 @@
 #include "TerrainRVTManager.hpp"
+#include "TerrainRVTLayout.hpp"
 #include "../../virtualtexture/VTFeedbackWords.hpp"
 #include "../../../core/Device.hpp"
 #include "print/Log.hpp"
@@ -52,11 +53,14 @@ namespace render::gpudriven
         image.pageTableBase = 0;
         imageId = 0;
 
-        // Two-plane RGBA8 MRT atlas: albedo(sRGB)+emission / ORM(Unorm)+flags. 8 B/texel.
-        const uint32_t poolDim = vtPoolDimForBudget(config.poolBudgetMB, /*planes*/ 2, /*bytesPerTexel*/ 4);
+        // Budget the heterogeneous plane set by its aggregate bytes/texel (8 B legacy,
+        // 20 B with RGBA8 normal + RGBA16F emission).
+        const TerrainRVTLayout layout = terrainRVTLayout(config.detailMaps);
+        const uint32_t poolDim = vtPoolDimForBudget(
+            config.poolBudgetMB, /*planes*/ 1, layout.bytesPerTexel);
         VTPoolDesc poolDesc;
         poolDesc.poolDim = poolDim;
-        poolDesc.planeFormats = {vk::Format::eR8G8B8A8Srgb, vk::Format::eR8G8B8A8Unorm};
+        poolDesc.planeFormats = layout.planeFormats;
         // eTransferDst so init can seed the atlas to zero (ORM alpha 0 = "uncovered"); the
         // shader treats an uncovered/unbaked texel as a composite fallback, never black.
         poolDesc.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled

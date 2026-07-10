@@ -165,8 +165,13 @@ namespace render::gpudriven
         float metallic;                // Scalar fallback when no ORM
         float ao;                      // Scalar fallback when no ORM
         float emissionStrength;        // Emission intensity
+        uint32_t emissionTextureIndex; // Bindless index (0 = no emission texture)
     };
-    static_assert(sizeof(TerrainLayerGPUData) == 32);
+    static_assert(sizeof(TerrainLayerGPUData) == 36);
+    static_assert(offsetof(TerrainLayerGPUData, albedoTextureIndex) == 0);
+    static_assert(offsetof(TerrainLayerGPUData, normalTextureIndex) == 4);
+    static_assert(offsetof(TerrainLayerGPUData, ormTextureIndex) == 12);
+    static_assert(offsetof(TerrainLayerGPUData, emissionTextureIndex) == 32);
 
     struct alignas(16) TerrainCullingStats
     {

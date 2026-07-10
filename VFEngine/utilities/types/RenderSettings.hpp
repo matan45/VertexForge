@@ -218,6 +218,9 @@ namespace types
         // Terrain as a shadow CASTER (VSM page raster). Receiving shadows is unaffected.
         // Off is a large GPU win on flat maps where terrain self-shadowing is negligible.
         bool castShadows = true;
+        // Opt-in sampling of terrain-layer normal and emission textures. When RVT is enabled,
+        // changing this also rebuilds the terrain RVT layout to carry the extra detail planes.
+        bool detailMaps = false;
     };
 
     struct WaterSettings
