@@ -56,5 +56,7 @@ TEST_CASE("VK-1488: cloning a UIImageComponent drops the runtime plugin-texture 
     components::resetClonedRuntimeState<components::UIImageComponent>(comp);
 
     CHECK(comp.externalTextureKey.empty());
-    CHECK(comp.renderTextureSource == entt::null);
+    // Extra parens: stop doctest decomposing the ==, which collides with entt's
+    // custom operator==(entity, null_t) and is otherwise ambiguous.
+    CHECK((comp.renderTextureSource == entt::null));
 }
