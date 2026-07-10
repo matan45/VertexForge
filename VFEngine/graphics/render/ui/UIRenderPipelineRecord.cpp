@@ -12,6 +12,7 @@
 #include "print/Log.hpp"
 #include <filesystem>
 #include <algorithm>
+#include <unordered_set>
 
 namespace render::ui
 {
@@ -89,7 +90,17 @@ namespace render::ui
             return;
         }
 
-        if (externalTextureCache.size() >= MAX_EXTERNAL_TEXTURES) return;
+        if (externalTextureCache.size() >= MAX_EXTERNAL_TEXTURES)
+        {
+            // Silent drop here means a synthetic RTT/plugin UIImage renders nothing (the record
+            // path skips unregistered synthetic keys) with no diagnostic — warn once per key.
+            static std::unordered_set<std::string> warnedKeys;
+            if (warnedKeys.insert(key).second)
+                vfLogWarning("UI external texture cache full ({}), dropping '{}'. Raise "
+                             "MAX_EXTERNAL_TEXTURES or unregister unused RTT/plugin textures.",
+                             MAX_EXTERNAL_TEXTURES, key);
+            return;
+        }
 
         ExternalTextureEntry entry;
         entry.bindlessIndices.assign(swapChain.getImageCount(), render::gpudriven::INVALID_TEXTURE_INDEX);

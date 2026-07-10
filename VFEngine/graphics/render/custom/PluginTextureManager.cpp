@@ -153,22 +153,6 @@ namespace render::custom
         return it != uiBindings.end() ? it->second : std::string{};
     }
 
-    std::vector<PluginTextureManager::UITextureBinding> PluginTextureManager::collectUITextureBindings() const
-    {
-        std::lock_guard<std::recursive_mutex> lock(stateMutex);
-        std::vector<UITextureBinding> result;
-        result.reserve(uiBindings.size());
-        for (const auto& [id, key] : uiBindings)
-        {
-            auto texIt = textures.find(id);
-            if (texIt == textures.end()) continue;
-            const TextureEntry& entry = texIt->second;
-            if (!entry.view || !entry.sampler) continue; // skip not-yet-ready textures
-            result.push_back(UITextureBinding{key, entry.view, entry.sampler});
-        }
-        return result;
-    }
-
     void PluginTextureManager::bindWorldMask(plugin::PluginTextureHandle handle,
                                              const glm::vec3& worldMin, const glm::vec3& worldMax,
                                              const plugin::WorldMaskParams& params)

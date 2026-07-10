@@ -63,8 +63,11 @@ namespace render
             // is idle (UpdateAfterBind). A plugin texture's view/sampler are stable for its
             // lifetime, so once a slot matches this is a cheap no-op; first-seen slots fill
             // lazily and a swapchain resize re-populates automatically next frame.
-            for (const auto& binding : pluginTextureManager->collectUITextureBindings())
-                registerExternalTexture(binding.key, imageIndex, binding.view, binding.sampler);
+            pluginTextureManager->forEachUITextureBinding(
+                [&](const std::string& key, vk::ImageView view, vk::Sampler sampler)
+                {
+                    registerExternalTexture(key, imageIndex, view, sampler);
+                });
         }
 
         // Lit plugin custom pipelines: pick up the RT shadow mask layout once the

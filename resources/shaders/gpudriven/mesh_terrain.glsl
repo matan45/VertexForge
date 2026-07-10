@@ -590,6 +590,13 @@ void main() {
     vec3 terrainPosDy = dFdy(fragWorldPos);
     vec3 terrainTangentRaw = terrainPosDx * triplanarWorldUVdy.y
                            - terrainPosDy * triplanarWorldUVdx.y;
+    // terrainTangentRaw == (dPos/dU) * det(UV screen-space Jacobian), so its sign follows sign(det).
+    // Re-align to +U by folding in that sign: otherwise on fragments where the top-down XZ UV winds
+    // negative in screen space the tangent (and its cross(N,tangent) bitangent) flip together and
+    // invert the applied tangent-space normal detail (bumps read as dents as the camera rotates).
+    float terrainUVDet = triplanarWorldUVdx.x * triplanarWorldUVdy.y
+                       - triplanarWorldUVdy.x * triplanarWorldUVdx.y;
+    terrainTangentRaw *= (terrainUVDet < 0.0) ? -1.0 : 1.0;
     vec3 terrainTangentProjected = terrainTangentRaw - N * dot(N, terrainTangentRaw);
     float terrainTangentLengthSq = dot(terrainTangentProjected, terrainTangentProjected);
     if (terrainTangentLengthSq > 1e-12) {

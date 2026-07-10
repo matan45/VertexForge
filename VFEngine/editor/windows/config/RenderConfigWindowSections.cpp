@@ -267,6 +267,16 @@ namespace windows
 
             auto& dispatcher = events::EventDispatcher::instance();
 
+            // Shared dispatch for the controls that push the whole RenderSettings struct (detail
+            // maps, cast shadows, terrain/water render layers) — keeps their edit path in lockstep.
+            auto applyRenderSettings = [&]
+            {
+                markDirty();
+                events::scene::SetRenderSettingsCommand cmd;
+                cmd.settings = settings;
+                dispatcher.execute(cmd);
+            };
+
             if (ImGui::Checkbox("Enable Terrain Rendering", &settings.terrain.enabled))
             {
                 markDirty();
@@ -317,10 +327,7 @@ namespace windows
 
                 if (ImGui::Checkbox("Detail Normal & Emission Maps", &settings.terrain.detailMaps))
                 {
-                    markDirty();
-                    events::scene::SetRenderSettingsCommand cmd;
-                    cmd.settings = settings;
-                    dispatcher.execute(cmd);
+                    applyRenderSettings();
                 }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Samples normal and emission textures from terrain layer materials.\n"
@@ -332,10 +339,7 @@ namespace windows
 
                 if (ImGui::Checkbox("Cast Shadows", &settings.terrain.castShadows))
                 {
-                    markDirty();
-                    events::scene::SetRenderSettingsCommand cmd;
-                    cmd.settings = settings;
-                    dispatcher.execute(cmd);
+                    applyRenderSettings();
                 }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Terrain as a shadow CASTER (rasterized into shadow pages).\n"
@@ -356,20 +360,14 @@ namespace windows
             if (ImGui::InputInt("Terrain Render Layer", &terrainLayer))
             {
                 settings.terrain.renderLayer = static_cast<uint32_t>(std::clamp(terrainLayer, 0, 31));
-                markDirty();
-                events::scene::SetRenderSettingsCommand cmd;
-                cmd.settings = settings;
-                dispatcher.execute(cmd);
+                applyRenderSettings();
             }
 
             int waterLayer = static_cast<int>(settings.water.renderLayer);
             if (ImGui::InputInt("Water Render Layer", &waterLayer))
             {
                 settings.water.renderLayer = static_cast<uint32_t>(std::clamp(waterLayer, 0, 31));
-                markDirty();
-                events::scene::SetRenderSettingsCommand cmd;
-                cmd.settings = settings;
-                dispatcher.execute(cmd);
+                applyRenderSettings();
             }
 
             ImGui::Unindent(10.0f);

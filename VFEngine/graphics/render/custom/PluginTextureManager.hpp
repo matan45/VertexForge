@@ -123,14 +123,6 @@ namespace render::custom
         void destroyTexture2D(plugin::PluginTextureHandle handle);
 
         // VK-1488 — expose a plugin texture as a UI external-texture source.
-        // A snapshot of one live UI-exposed plugin texture: its synthetic key plus the
-        // view/sampler to feed straight to UIRenderPipeline::registerExternalTexture.
-        struct UITextureBinding
-        {
-            std::string key;
-            vk::ImageView view;
-            vk::Sampler sampler;
-        };
 
         // Record a handle->UI-key binding and return the deterministic key
         // ("__plugintex_<id>__"), or "" if the handle is unknown. Idempotent.
@@ -140,9 +132,23 @@ namespace render::custom
         std::string removeUITexture(plugin::PluginTextureHandle handle);
         // The UI key a handle is currently exposed under, or "" if it isn't bound.
         std::string getUITextureKey(plugin::PluginTextureHandle handle) const;
-        // Snapshot (under stateMutex) of every UI-exposed plugin texture that still has a
-        // live view+sampler — safe to feed to registerExternalTexture each frame.
-        std::vector<UITextureBinding> collectUITextureBindings() const;
+        // Invoke fn(const std::string& key, vk::ImageView, vk::Sampler) under stateMutex for every
+        // UI-exposed plugin texture that still has a live view+sampler — safe to feed straight to
+        // registerExternalTexture each frame. Iterating in place avoids the per-frame vector alloc +
+        // key-string copy this incurred in the render draw path (runs every recorded frame).
+        template <typename Fn>
+        void forEachUITextureBinding(Fn&& fn) const
+        {
+            std::lock_guard<std::recursive_mutex> lock(stateMutex);
+            for (const auto& [id, key] : uiBindings)
+            {
+                auto texIt = textures.find(id);
+                if (texIt == textures.end()) continue;
+                const TextureEntry& entry = texIt->second;
+                if (!entry.view || !entry.sampler) continue; // skip not-yet-ready textures
+                fn(key, entry.view, entry.sampler);
+            }
+        }
 
         void bindWorldMask(plugin::PluginTextureHandle handle,
                            const glm::vec3& worldMin, const glm::vec3& worldMax,

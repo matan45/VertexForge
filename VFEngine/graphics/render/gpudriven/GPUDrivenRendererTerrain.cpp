@@ -323,6 +323,16 @@ namespace render::gpudriven
         terrain.pipeline->setDetailMapsEnabled(enabled);
         recreateTerrainPipelineForRVT();
 
+        // Layer normal/emission textures are registered only when detail maps are on (dead-VRAM
+        // gate in registerTerrainLayerTextures). Re-resolve the already-loaded terrain so a runtime
+        // toggle registers (on) or drops (off) those slots instead of leaving them dead / missing
+        // until the next material load.
+        if (bindlessTextures && materials.textureCache && !terrain.currentMaterialPath.empty())
+        {
+            invalidateTerrainLayerData();
+            registerTerrainLayerTextures(terrain.currentMaterialPath);
+        }
+
         if (vtCache.rvtEnabled)
         {
             terrainRVT.reset();
@@ -427,9 +437,15 @@ namespace render::gpudriven
             r = resolveTerrainLayerPBR(layer, pbrPtr);
 
             gpuLayer.albedoTextureIndex = tryRegisterLayerTex(r.albedoPath, vk::Format::eR8G8B8A8Srgb);
-            gpuLayer.normalTextureIndex = tryRegisterLayerTex(r.normalPath);
+            // Normal + emission textures are sampled only by the detail-maps shader permutation
+            // (the non-detail composite drops the normal fetch and uses scalar emission), so skip
+            // uploading them to VRAM / the bindless table when detail maps are off. setTerrainDetailMaps
+            // re-resolves the terrain on toggle so these register/drop to match the live flag.
+            gpuLayer.normalTextureIndex = terrain.detailMaps ? tryRegisterLayerTex(r.normalPath) : 0;
             gpuLayer.ormTextureIndex = tryRegisterLayerTex(r.ormPath);
-            gpuLayer.emissionTextureIndex = tryRegisterLayerTex(r.emissionPath, vk::Format::eR8G8B8A8Srgb);
+            gpuLayer.emissionTextureIndex = terrain.detailMaps
+                ? tryRegisterLayerTex(r.emissionPath, vk::Format::eR8G8B8A8Srgb)
+                : 0;
 
             gpuLayer.tilingScale = r.tilingScale;
             gpuLayer.roughness = r.roughness;
