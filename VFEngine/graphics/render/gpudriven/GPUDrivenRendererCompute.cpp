@@ -175,7 +175,7 @@ namespace render::gpudriven
         shadow::TerrainShadowPassParams terrainShadowParams{};
         shadow::TerrainShadowPassParams* terrainShadowParamsPtr = nullptr;
 
-        if (hasTerrainTiles && terrain.pipeline && terrain.meshBuffer &&
+        if (terrain.castShadows && hasTerrainTiles && terrain.pipeline && terrain.meshBuffer &&
             terrain.meshBuffer->isInitialized() && terrain.pipeline->getCurrentTileCount() > 0)
         {
             vk::DescriptorSet terrainDataSet = terrain.pipeline->getTerrainDataDescriptorSet();

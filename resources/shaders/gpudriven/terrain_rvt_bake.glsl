@@ -1,11 +1,13 @@
 // VK-1209 — terrain Runtime Virtual Texture bake shader. Renders one quad per
 // (page, overlapping terrain tile) with an orthographic mapping of the page's world
 // XZ rect into the page's atlas tile, and writes the SAME terrain splat composite
-// (terrain_material_generated.glsl, included verbatim) into 2 RGBA8 MRT planes:
+// (terrain_material_generated.glsl, included verbatim) into 2 or 4 MRT planes:
 //   plane 0 = albedo.rgb + emissionStrength.a
 //   plane 1 = ao.r + roughness.g + metallic.b
-// The main terrain pass then samples these 2 texels instead of compositing 8 layers
-// (up to 24 bindless samples) per fragment. Bake triplanar uses the XZ projection only
+//   plane 2 = encoded tangent-space normal.rgb (detail maps only)
+//   plane 3 = linear HDR emission.rgb (detail maps only)
+// The main terrain pass then samples these texels instead of compositing 8 layers
+// (up to 32 bindless samples with detail maps) per fragment. Bake uses the XZ projection only
 // (the composite is baked flat, top-down).
 
 #type VERTEX
@@ -57,6 +59,10 @@ layout(location = 2) in flat uint vTileIndex;
 
 layout(location = 0) out vec4 outAlbedoEmission;
 layout(location = 1) out vec4 outORM;
+#ifdef TERRAIN_DETAIL_MAPS
+layout(location = 2) out vec4 outNormal;
+layout(location = 3) out vec4 outEmission;
+#endif
 
 // Compact set layout (bake pipeline is independent of the terrain pipeline's 12-set
 // layout): set 0 = weightmap+layers, set 1 = bindless, set 2 = tiles. The underlying
@@ -122,7 +128,7 @@ void main()
     vec2 triplanarWorldUVdx = dFdx(triplanarWorldUV);
     vec2 triplanarWorldUVdy = dFdy(triplanarWorldUV);
 
-    // The composite declares mat_albedo/normalTS/metallic/roughness/ao/emission + ls_Emission.
+    // The composite declares the material properties and legacy scalar emission accumulator.
 #include "../material/terrain_material_generated.glsl"
 
     float emissionStrength = clamp(ls_Emission, 0.0, 1.0);
@@ -131,4 +137,9 @@ void main()
     // is covered by loaded terrain, so it writes 1.0; the per-page clear / pool seed leave
     // uncovered texels at 0.0. mesh_terrain.glsl reads this to decide RVT vs composite fallback.
     outORM = vec4(mat_ao, mat_roughness, mat_metallic, 1.0);
+#ifdef TERRAIN_DETAIL_MAPS
+    outNormal = vec4(mat_normalTS * 0.5 + 0.5, 1.0);
+    // The detail-map RVT uses a floating-point plane; preserve emission above 1.0.
+    outEmission = vec4(mat_emission, 1.0);
+#endif
 }

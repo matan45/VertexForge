@@ -34,14 +34,8 @@ namespace terrain
     struct TerrainMaterialLayer
     {
         std::string name;
-        asset::AssetRef albedoTextureRef;
-        asset::AssetRef normalTextureRef;
-        asset::AssetRef ormTextureRef;        // Optional: R=AO, G=Roughness, B=Metallic
-        float tilingScale = 1.0f;
-        float roughness = 0.9f;            // Scalar fallback when no ORM
-        float metallic = 0.0f;             // Scalar fallback when no ORM
-        float ao = 1.0f;                   // Scalar fallback when no ORM
-        float emissionStrength = 0.0f;     // Emission intensity (0 = none)
+        asset::AssetRef materialRef;          // PBR source (.vfMat/.vfMatInstance): supplies albedo/normal/ORM textures + roughness/metallic/ao/emission
+        float tilingScale = 1.0f;             // Terrain-layer-local UV tiling (not a material concept)
         TerrainLayerBlendMode blendMode = TerrainLayerBlendMode::Linear;
         bool enabled = true;
     };

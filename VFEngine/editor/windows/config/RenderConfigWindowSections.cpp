@@ -1,9 +1,11 @@
 #include "RenderConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/animation/AnimationBudgetEvents.hpp"
 #include <imgui.h>
+#include <algorithm>
 
 namespace windows
 {
@@ -265,6 +267,16 @@ namespace windows
 
             auto& dispatcher = events::EventDispatcher::instance();
 
+            // Shared dispatch for the controls that push the whole RenderSettings struct (detail
+            // maps, cast shadows, terrain/water render layers) — keeps their edit path in lockstep.
+            auto applyRenderSettings = [&]
+            {
+                markDirty();
+                events::scene::SetRenderSettingsCommand cmd;
+                cmd.settings = settings;
+                dispatcher.execute(cmd);
+            };
+
             if (ImGui::Checkbox("Enable Terrain Rendering", &settings.terrain.enabled))
             {
                 markDirty();
@@ -313,6 +325,49 @@ namespace windows
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("UV scale for terrain textures.\nLower = larger texture tiles.");
 
+                if (ImGui::Checkbox("Detail Normal & Emission Maps", &settings.terrain.detailMaps))
+                {
+                    applyRenderSettings();
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Samples normal and emission textures from terrain layer materials.\n"
+                                      "When RVT is enabled, toggling this rebuilds its terrain detail planes.");
+
+                ImGui::Separator();
+                ImGui::Text("Shadow Settings");
+                ImGui::Spacing();
+
+                if (ImGui::Checkbox("Cast Shadows", &settings.terrain.castShadows))
+                {
+                    applyRenderSettings();
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Terrain as a shadow CASTER (rasterized into shadow pages).\n"
+                                      "Terrain still receives shadows when off.\n"
+                                      "Off is a large GPU win on flat maps with negligible terrain self-shadowing.");
+            }
+
+            ImGui::Separator();
+            ImGui::Text("RTT / Minimap Render Layers");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Render-layer index (0-31) for terrain and water. An RTT camera (e.g. the\n"
+                                  "minimap) draws them only if its cullingMask has this bit set; the main\n"
+                                  "viewport always renders all layers. Put terrain/water on a layer your\n"
+                                  "minimap camera excludes to keep them off the minimap.");
+            ImGui::Spacing();
+
+            int terrainLayer = static_cast<int>(settings.terrain.renderLayer);
+            if (ImGui::InputInt("Terrain Render Layer", &terrainLayer))
+            {
+                settings.terrain.renderLayer = static_cast<uint32_t>(std::clamp(terrainLayer, 0, 31));
+                applyRenderSettings();
+            }
+
+            int waterLayer = static_cast<int>(settings.water.renderLayer);
+            if (ImGui::InputInt("Water Render Layer", &waterLayer))
+            {
+                settings.water.renderLayer = static_cast<uint32_t>(std::clamp(waterLayer, 0, 31));
+                applyRenderSettings();
             }
 
             ImGui::Unindent(10.0f);

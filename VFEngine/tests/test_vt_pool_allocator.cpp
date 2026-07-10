@@ -1,6 +1,7 @@
 #include <doctest.h>
 #include <render/virtualtexture/VTPoolAllocator.hpp>
 #include <render/virtualtexture/VTTypes.hpp>
+#include <render/gpudriven/terrain/TerrainRVTLayout.hpp>
 
 // ============================================================================
 // VTPoolAllocator + pool-sizing math (VK-1209). Pure, CPU-only.
@@ -71,4 +72,26 @@ TEST_CASE("VT pool sizing: budget -> pool dim -> tile count")
     const uint32_t dim = vtPoolDimForBudget(128, 2, 4);
     const uint64_t bytes = static_cast<uint64_t>(dim) * dim * 2ull * 4ull;
     CHECK(bytes == (128ull << 20));
+}
+
+TEST_CASE("Terrain RVT layout: detail maps add normal and HDR emission planes")
+{
+    const auto legacyLayout = render::gpudriven::terrainRVTLayout(false);
+    REQUIRE(legacyLayout.planeFormats.size() == 2);
+    CHECK(legacyLayout.bytesPerTexel == 8);
+    CHECK(legacyLayout.planeFormats[0] == vk::Format::eR8G8B8A8Srgb);
+    CHECK(legacyLayout.planeFormats[1] == vk::Format::eR8G8B8A8Unorm);
+
+    const auto detailLayout = render::gpudriven::terrainRVTLayout(true);
+    REQUIRE(detailLayout.planeFormats.size() == 4);
+    CHECK(detailLayout.bytesPerTexel == 20);
+    CHECK(detailLayout.planeFormats[0] == vk::Format::eR8G8B8A8Srgb);
+    CHECK(detailLayout.planeFormats[1] == vk::Format::eR8G8B8A8Unorm);
+    CHECK(detailLayout.planeFormats[2] == vk::Format::eR8G8B8A8Unorm);
+    CHECK(detailLayout.planeFormats[3] == vk::Format::eR16G16B16A16Sfloat);
+
+    // A fixed 128 MiB budget retains the current atlas edge when detail maps are off and
+    // shrinks to account for the 12 extra bytes/texel when they are on.
+    CHECK(vtPoolDimForBudget(128, 1, legacyLayout.bytesPerTexel) == 4096);
+    CHECK(vtPoolDimForBudget(128, 1, detailLayout.bytesPerTexel) == 2560);
 }

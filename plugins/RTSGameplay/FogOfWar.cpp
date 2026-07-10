@@ -23,6 +23,19 @@ void FogOfWarSystem::initialize(plugin::PluginContext* context, std::shared_ptr<
     }
     else
         ctx->logError("RTSGameplay: fog-of-war texture creation failed");
+
+    // VK-1488: an RGBA8 sibling drives a smooth minimap fog overlay (rgb=0 + white UI tint
+    // => black fog, alpha = darkness). Registered as a generic UI texture source so the
+    // minimap script can bind overlayKey() to a fog-overlay UIImage. Zero-initialized, so
+    // it reads fully transparent until vision data flows.
+    fogOverlayTexture = ctx->createTexture2D(FOG_GRID, FOG_GRID, plugin::TextureFormat::RGBA8);
+    if (fogOverlayTexture.isValid())
+    {
+        fogOverlayRGBA.resize(static_cast<size_t>(FOG_GRID) * FOG_GRID * 4);
+        fogOverlayKey = ctx->registerUITexture(fogOverlayTexture);
+    }
+    else
+        ctx->logError("RTSGameplay: fog overlay texture creation failed");
 }
 
 void FogOfWarSystem::update()
@@ -90,6 +103,13 @@ void FogOfWarSystem::shutdown()
         ctx->destroyTexture2D(fogTexture);
         fogTexture = {};
     }
+    if (fogOverlayTexture.isValid())
+    {
+        ctx->unregisterUITexture(fogOverlayTexture); // also auto-dropped by destroyTexture2D
+        ctx->destroyTexture2D(fogOverlayTexture);
+        fogOverlayTexture = {};
+        fogOverlayKey.clear();
+    }
 }
 
 plugin::WorldMaskParams FogOfWarSystem::makeFogParams(bool enabled) const
@@ -145,6 +165,7 @@ void FogOfWarSystem::updateVisibilityGrid()
             fogActive = false;
         }
         hadVisionSources = false;
+        updateFogOverlay(false); // VK-1488: no vision -> minimap overlay fully transparent
         settings->gridUpdateMs = elapsedMs(start);
         return;
     }
@@ -172,6 +193,7 @@ void FogOfWarSystem::updateVisibilityGrid()
     }
 
     ctx->updateTexture2D(fogTexture, visibilityGrid.data(), visibilityGrid.size());
+    updateFogOverlay(settings->enabled); // VK-1488: refresh the minimap fog overlay (F10-aware)
 
     if (!fogBound)
     {
@@ -214,6 +236,28 @@ int FogOfWarSystem::queryFogState(float worldX, float worldZ) const
     if (cell == std::byte{0xFF}) return 2;
     if (cell != std::byte{0}) return 1;
     return 0;
+}
+
+void FogOfWarSystem::updateFogOverlay(bool active)
+{
+    if (!fogOverlayTexture.isValid() || fogOverlayRGBA.empty()) return;
+
+    // rgb = 0 (a white UI tint renders it black); alpha = darkness derived from the composed
+    // three-state grid: unexplored (0) -> opaque 255, explored (~102) -> ~153 (≈0.6),
+    // currently-visible (255) -> 0 (clear). When inactive (F10 off / no vision) the whole
+    // overlay is transparent so the minimap shows the raw terrain RTT.
+    for (size_t i = 0; i < visibilityGrid.size(); ++i)
+    {
+        const size_t o = i * 4;
+        fogOverlayRGBA[o + 0] = std::byte{0};
+        fogOverlayRGBA[o + 1] = std::byte{0};
+        fogOverlayRGBA[o + 2] = std::byte{0};
+        fogOverlayRGBA[o + 3] = active
+            ? static_cast<std::byte>(255 - static_cast<int>(visibilityGrid[i]))
+            : std::byte{0};
+    }
+
+    ctx->updateTexture2D(fogOverlayTexture, fogOverlayRGBA.data(), fogOverlayRGBA.size());
 }
 
 void FogOfWarSystem::stampVisionCircle(float worldX, float worldZ, float radius, float invCellSize)

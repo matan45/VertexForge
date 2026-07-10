@@ -119,7 +119,7 @@ struct TerrainTileGPUData {
     uvec4 caveMeshletData;      // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = reserved
 };
 
-// Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (32 bytes)
+// Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (36 bytes)
 struct TerrainLayerGPUData {
     uint albedoTextureIndex;    // Bindless index (0 = default white)
     uint normalTextureIndex;    // Bindless index (0 = default)
@@ -129,6 +129,7 @@ struct TerrainLayerGPUData {
     float metallic;             // Scalar fallback when no ORM
     float ao;                   // Scalar fallback when no ORM
     float emissionStrength;     // Emission intensity
+    uint emissionTextureIndex;  // Bindless index (0 = no emission texture)
 };
 
 uvec4 getTerrainLODMeshletData(TerrainTileGPUData tile, uint lodLevel) {

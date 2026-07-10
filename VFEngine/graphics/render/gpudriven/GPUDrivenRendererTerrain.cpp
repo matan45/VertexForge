@@ -2,10 +2,13 @@
 #include "terrain/TerrainRVTManager.hpp"
 #include "../virtualtexture/svt/SVTManager.hpp" // VK-1209: complete type for svtManager->setResidencyBudget
 #include "terrain/TerrainRVTBaker.hpp"
+#include "terrain/TerrainRVTLayout.hpp"
 #include "terrain/TerrainRVTCoverage.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
+#include "terrain/TerrainLayerPBRResolver.hpp"
 #include "../material/MaterialTextureCache.hpp"
+#include "../material/MaterialPBRExtractor.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/Types.hpp"
@@ -16,6 +19,7 @@
 #include "print/Log.hpp"
 #include <chrono>
 #include <limits>
+#include <unordered_set>
 
 namespace render::gpudriven
 {
@@ -45,6 +49,7 @@ namespace render::gpudriven
         }
 
         terrain.pipeline = std::make_unique<TerrainMeshShaderPipeline>(device, swapChain);
+        terrain.pipeline->setDetailMapsEnabled(terrain.detailMaps);
         // VK-1209: compile the terrain pipeline RVT-ready (set 5 + RVT_ENABLED) when config enabled it
         // before terrain init. Runtime toggling requires a pipeline recreate (restart-scoped, per config).
         if (vtCache.rvtEnabled)
@@ -71,11 +76,13 @@ namespace render::gpudriven
         // VK-1209: the RVT bake pipeline (self-contained; binds the terrain pipeline's own sets).
         if (vtCache.rvtEnabled)
         {
+            const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps);
             terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
             terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
                                   bindlessTextures->getDescriptorSetLayout(),
                                   terrain.pipeline->getTerrainDataLayout(),
-                                  {vk::Format::eR8G8B8A8Srgb, vk::Format::eR8G8B8A8Unorm});
+                                  layout.planeFormats,
+                                  terrain.detailMaps);
         }
     }
 
@@ -107,6 +114,8 @@ namespace render::gpudriven
         // set-5 descriptor is written before it is sampled. Pool byte budgets remain restart-scoped.
         if (rvtToggled && initialized && terrain.pipeline)
         {
+            // Prevent a draw from using descriptors that refer to the manager views being replaced.
+            terrain.pipeline->invalidateRVTSampleResources();
             terrain.pipeline->setRVTSampleEnabled(vtCache.rvtEnabled);
             recreateTerrainPipelineForRVT();
 
@@ -114,11 +123,13 @@ namespace render::gpudriven
             {
                 if (!terrainRVTBaker)
                 {
+                    const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps);
                     terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
                     terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
                                           bindlessTextures->getDescriptorSetLayout(),
                                           terrain.pipeline->getTerrainDataLayout(),
-                                          {vk::Format::eR8G8B8A8Srgb, vk::Format::eR8G8B8A8Unorm});
+                                          layout.planeFormats,
+                                          terrain.detailMaps);
                 }
             }
             else
@@ -283,6 +294,62 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::setTerrainCastShadows(bool cast)
+    {
+        if (terrain.castShadows == cast)
+            return;
+        terrain.castShadows = cast;
+        // Cached VSM pages still hold depth baked with the previous caster set —
+        // mark every page dirty so they re-render without/with terrain.
+        if (shadowSystem)
+            shadowSystem->notifySceneChanged();
+    }
+
+    void GPUDrivenRenderer::setTerrainDetailMaps(bool enabled)
+    {
+        if (terrain.detailMaps == enabled)
+            return;
+
+        // Settings can arrive before terrain/pipeline initialization; initTerrainSubsystems consumes
+        // this cached value when it creates both shader permutations.
+        terrain.detailMaps = enabled;
+        if (!initialized || !terrain.pipeline)
+            return;
+
+        // recreate() performs the single device-idle wait for this transition. Mark the old set
+        // unready before that wait so no subsequent recording can sample manager-owned views while
+        // they are being replaced.
+        terrain.pipeline->invalidateRVTSampleResources();
+        terrain.pipeline->setDetailMapsEnabled(enabled);
+        recreateTerrainPipelineForRVT();
+
+        // Layer normal/emission textures are registered only when detail maps are on (dead-VRAM
+        // gate in registerTerrainLayerTextures). Re-resolve the already-loaded terrain so a runtime
+        // toggle registers (on) or drops (off) those slots instead of leaving them dead / missing
+        // until the next material load.
+        if (bindlessTextures && materials.textureCache && !terrain.currentMaterialPath.empty())
+        {
+            invalidateTerrainLayerData();
+            registerTerrainLayerTextures(terrain.currentMaterialPath);
+        }
+
+        if (vtCache.rvtEnabled)
+        {
+            terrainRVT.reset();
+            terrainRVTBaker.reset();
+
+            const TerrainRVTLayout layout = terrainRVTLayout(enabled);
+            terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
+            terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
+                                  bindlessTextures->getDescriptorSetLayout(),
+                                  terrain.pipeline->getTerrainDataLayout(),
+                                  layout.planeFormats,
+                                  enabled);
+            rvtFrameCounter = 0;
+            rvtInvalidateAll = false;
+        }
+    }
+
     void GPUDrivenRenderer::registerTerrainLayerTextures(const std::string& materialPath)
     {
         if (materialPath.empty())
@@ -290,7 +357,10 @@ namespace render::gpudriven
             return;
         }
 
-        if (materialPath == terrain.currentMaterialPath && !terrain.layerDataDirty)
+        // VK-1486: a referenced .vfMat / .vfMatInstance may have changed even when the terrain
+        // material path and layer data are unchanged; consume the flag to force a re-resolve.
+        const bool matSourceDirty = terrain.materialSourceDirty.exchange(false, std::memory_order_relaxed);
+        if (materialPath == terrain.currentMaterialPath && !terrain.layerDataDirty && !matSourceDirty)
         {
             return;
         }
@@ -309,41 +379,92 @@ namespace render::gpudriven
         terrain.layerData.clear();
         terrain.layerData.resize(materialData->activeLayerCount);
 
+        auto tryRegisterLayerTex = [&](const std::string& texPath, vk::Format format = vk::Format::eR8G8B8A8Unorm) -> uint32_t
+        {
+            if (texPath.empty()) return 0;
+            if (!materials.textureCache->loadTexture(texPath, format)) return 0;
+            vk::ImageView view = materials.textureCache->getViewForPath(texPath);
+            vk::Sampler sampler = materials.textureCache->getSamplerForPath(texPath);
+            if (!view || !sampler) return 0;
+            return bindlessTextures->registerTexture(texPath, view, sampler);
+        };
+
+        // VK-1486: warn at most once per source material that carries PBR data terrain cannot represent.
+        static std::unordered_set<std::string> warnedUnrepresentableMaterials;
+
+        std::vector<ResolvedTerrainLayerPBR> resolvedLayers(materialData->activeLayerCount);
+
         for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
         {
             const auto& layer = materialData->layers[i];
             TerrainLayerGPUData& gpuLayer = terrain.layerData[i];
             gpuLayer = {};
 
-            auto tryRegisterLayerTex = [&](const std::string& texPath, vk::Format format = vk::Format::eR8G8B8A8Unorm) -> uint32_t
+            // VK-1486: optionally source terrain-supported PBR fields from a .vfMat / .vfMatInstance.
+            mesh::ExtractedPBRValues pbr;
+            const mesh::ExtractedPBRValues* pbrPtr = nullptr;
+            if (layer.materialRef.isValid())
             {
-                if (texPath.empty()) return 0;
-                if (!materials.textureCache->loadTexture(texPath, format)) return 0;
-                vk::ImageView view = materials.textureCache->getViewForPath(texPath);
-                vk::Sampler sampler = materials.textureCache->getSamplerForPath(texPath);
-                if (!view || !sampler) return 0;
-                return bindlessTextures->registerTexture(texPath, view, sampler);
-            };
+                const std::string matPath = layer.materialRef.resolve();
+                pbr = mesh::MaterialPBRExtractor::extractPBRFromPath(matPath);
+                if (!pbr.materialPath.empty()) // materialPath is set only on successful extraction
+                {
+                    pbrPtr = &pbr;
 
-            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTextureRef.resolve(), vk::Format::eR8G8B8A8Srgb);
-            gpuLayer.normalTextureIndex = tryRegisterLayerTex(layer.normalTextureRef.resolve());
-            gpuLayer.ormTextureIndex = tryRegisterLayerTex(layer.ormTextureRef.resolve());
+                    // Terrain has a single packed-ORM slot and no albedo-tint field; warn once if the
+                    // material relies on PBR data terrain drops.
+                    const bool separateOrmMaps = !pbr.usesORM()
+                        && (!pbr.metallicTexturePath.empty() || !pbr.roughnessTexturePath.empty() || !pbr.aoTexturePath.empty());
+                    const bool droppedAlbedoTint = pbr.albedoTexturePath.empty()
+                        && (pbr.albedo.r != 1.0f || pbr.albedo.g != 1.0f || pbr.albedo.b != 1.0f);
+                    if ((separateOrmMaps || droppedAlbedoTint) && warnedUnrepresentableMaterials.insert(matPath).second)
+                    {
+                        vfLogWarning("GPUDrivenRenderer: terrain material source '{}' uses PBR data terrain cannot "
+                                     "represent ({}{}); falling back to packed ORM / scalars.",
+                                     matPath,
+                                     separateOrmMaps ? "separate metallic/roughness/AO maps" : "",
+                                     droppedAlbedoTint ? (separateOrmMaps ? " + albedo tint" : "albedo tint") : "");
+                    }
+                }
+                else
+                {
+                    vfLogWarning("GPUDrivenRenderer: terrain layer {} material '{}' failed to load; "
+                                 "rendering with defaults", i, matPath);
+                }
+            }
 
-            gpuLayer.tilingScale = layer.tilingScale;
-            gpuLayer.roughness = layer.roughness;
-            gpuLayer.metallic = layer.metallic;
-            gpuLayer.ao = layer.ao;
-            gpuLayer.emissionStrength = layer.emissionStrength;
+            ResolvedTerrainLayerPBR& r = resolvedLayers[i];
+            r = resolveTerrainLayerPBR(layer, pbrPtr);
+
+            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(r.albedoPath, vk::Format::eR8G8B8A8Srgb);
+            // Normal + emission textures are sampled only by the detail-maps shader permutation
+            // (the non-detail composite drops the normal fetch and uses scalar emission), so skip
+            // uploading them to VRAM / the bindless table when detail maps are off. setTerrainDetailMaps
+            // re-resolves the terrain on toggle so these register/drop to match the live flag.
+            gpuLayer.normalTextureIndex = terrain.detailMaps ? tryRegisterLayerTex(r.normalPath) : 0;
+            gpuLayer.ormTextureIndex = tryRegisterLayerTex(r.ormPath);
+            gpuLayer.emissionTextureIndex = terrain.detailMaps
+                ? tryRegisterLayerTex(r.emissionPath, vk::Format::eR8G8B8A8Srgb)
+                : 0;
+
+            gpuLayer.tilingScale = r.tilingScale;
+            gpuLayer.roughness = r.roughness;
+            gpuLayer.metallic = r.metallic;
+            gpuLayer.ao = r.ao;
+            gpuLayer.emissionStrength = r.emissionStrength;
         }
 
         {
+            // VK-1486: track the resolved (material-sourced or manual) texture paths so edits to any
+            // of them hot-reload the terrain.
             std::vector<std::string> texPaths;
-            for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
+            texPaths.reserve(static_cast<size_t>(materialData->activeLayerCount) * 4);
+            for (const auto& r : resolvedLayers)
             {
-                const auto& layer = materialData->layers[i];
-                texPaths.push_back(layer.albedoTextureRef.resolve());
-                texPaths.push_back(layer.normalTextureRef.resolve());
-                texPaths.push_back(layer.ormTextureRef.resolve());
+                texPaths.push_back(r.albedoPath);
+                texPaths.push_back(r.normalPath);
+                texPaths.push_back(r.ormPath);
+                texPaths.push_back(r.emissionPath);
             }
             registerTextureDependencies(materialPath, texPaths);
         }
@@ -388,6 +509,7 @@ namespace render::gpudriven
             defaultLayer.metallic = 0.0f;
             defaultLayer.ao = 1.0f;
             defaultLayer.emissionStrength = 0.0f;
+            defaultLayer.emissionTextureIndex = 0;
             terrain.layerData.push_back(defaultLayer);
 
             if (terrain.pipeline)
@@ -465,6 +587,7 @@ namespace render::gpudriven
                 cfg.texelsPerMeter = vtCache.rvtTexelsPerMeter;
                 cfg.pagesPerFrame = vtCache.pagesPerFrame;
                 cfg.evictionAgeFrames = vtCache.evictionAgeFrames;
+                cfg.detailMaps = terrain.detailMaps;
                 terrainRVT->init(cfg, rvtWorldMin, rvtWorldMax);
 
                 if (const auto* pool = terrainRVT->getPool())
@@ -485,9 +608,14 @@ namespace render::gpudriven
                     params.invExtentX = 1.0f / extent.x;
                     params.invExtentZ = 1.0f / extent.y;
                     params.virtualResTexels = terrainRVT->virtualResTexelsX();
+                    const vk::ImageView normalView = terrain.detailMaps && pool->planeCount() > 2
+                        ? pool->planeView(2) : vk::ImageView{};
+                    const vk::ImageView emissionView = terrain.detailMaps && pool->planeCount() > 3
+                        ? pool->planeView(3) : vk::ImageView{};
                     terrain.pipeline->updateRVTSampleResources(
                         terrainRVT->getPageTableBuffer(), pool->planeView(0), pool->planeView(1),
-                        pool->getSampler(), terrainRVT->getFeedbackBuffer(), &params, sizeof(params));
+                        normalView, emissionView, pool->getSampler(), terrainRVT->getFeedbackBuffer(),
+                        &params, sizeof(params));
                 }
             }
             // Material change -> re-bake all resident fine pages.
@@ -571,6 +699,10 @@ namespace render::gpudriven
         {
             return;
         }
+
+        // VK-1415: terrain honors the per-camera render-layer mask (main view = all layers).
+        if (((1u << (terrain.renderLayer & 31u)) & getThreadLocalRTTCullingMask()) == 0u)
+            return;
 
         terrain.pipeline->updateSharedDescriptors(
             iblDescriptorSet,

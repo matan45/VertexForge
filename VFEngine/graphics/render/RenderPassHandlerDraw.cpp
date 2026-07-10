@@ -53,7 +53,22 @@ namespace render
         // this frame, before any pass records draws (VK-1368).
         FrameDrawStats::beginFrame();
 
-        if (pluginTextureManager) pluginTextureManager->flushUploads(commandBuffer);
+        if (pluginTextureManager)
+        {
+            pluginTextureManager->flushUploads(commandBuffer);
+
+            // VK-1488: repoint every UI-exposed plugin texture into the UI/billboard bindless
+            // table for the swapchain image being recorded. Same safety window as the RTT
+            // repoint — RenderManager already waited imagesInFlight[imageIndex], so this slot
+            // is idle (UpdateAfterBind). A plugin texture's view/sampler are stable for its
+            // lifetime, so once a slot matches this is a cheap no-op; first-seen slots fill
+            // lazily and a swapchain resize re-populates automatically next frame.
+            pluginTextureManager->forEachUITextureBinding(
+                [&](const std::string& key, vk::ImageView view, vk::Sampler sampler)
+                {
+                    registerExternalTexture(key, imageIndex, view, sampler);
+                });
+        }
 
         // Lit plugin custom pipelines: pick up the RT shadow mask layout once the
         // RT shadow pipeline comes online — rebuilds them with RT_SHADOW_ENABLED
@@ -211,14 +226,27 @@ namespace render
     uint32_t RenderPassHandler::vtScopeBegin(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
                                              const char* name) const
     {
+        uint32_t startIndex = vtScopeAlloc(imageIndex, name);
+        vtScopeBeginAt(commandBuffer, imageIndex, startIndex);
+        return startIndex;
+    }
+
+    uint32_t RenderPassHandler::vtScopeAlloc(uint32_t imageIndex, const char* name) const
+    {
         if (!vtTimestampsActiveThisFrame) return UINT32_MAX;
         if (vtQueryCursor + 2 > kVTTimestampScopes * 2) return UINT32_MAX; // pool full — drop extra scope
         uint32_t startIndex = vtQueryCursor;
-        vtTimestampPool.writeTimestamp(commandBuffer, imageIndex, startIndex,
-                                       vk::PipelineStageFlagBits::eTopOfPipe);
         vtSlotScopeNames[imageIndex % core::MAX_FRAMES_IN_FLIGHT].push_back(name);
         vtQueryCursor += 2;
         return startIndex;
+    }
+
+    void RenderPassHandler::vtScopeBeginAt(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                           uint32_t startQueryIndex) const
+    {
+        if (startQueryIndex == UINT32_MAX) return;
+        vtTimestampPool.writeTimestamp(commandBuffer, imageIndex, startQueryIndex,
+                                       vk::PipelineStageFlagBits::eTopOfPipe);
     }
 
     void RenderPassHandler::vtScopeEnd(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
@@ -572,17 +600,29 @@ namespace render
                                                                bool hasVFX) const
     {
         updateGPUDrivenHiZ();
+
+        // Reset the aux timestamp pool before the earliest scope below — the
+        // vkCmdResetQueryPool inside must run outside a render pass, and this point
+        // (before any dynamic-rendering pass begins) is the last one that precedes
+        // the cull/VSM scope. Same-render-pass scopes measure parse-start → drain,
+        // so rows overlapping other GPU work are upper bounds.
+        beginVTTimestamps(commandBuffer, imageIndex);
+
+        uint32_t cullScope = vtScopeBegin(commandBuffer, imageIndex, "GPU Cull + VSM Raster");
         if (asyncComputeActive)
             gpuDrivenRenderer->dispatchGraphicsCompute(commandBuffer, imageIndex);
         else
             gpuDrivenRenderer->dispatchCompute(commandBuffer, imageIndex);
+        vtScopeEnd(commandBuffer, imageIndex, cullScope);
 
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
 
         if (gpuDrivenRenderer->isMeshletOcclusionCullingEnabled())
         {
+            uint32_t prepassScope = vtScopeBegin(commandBuffer, imageIndex, "Depth Prepass + HiZ");
             gpuDrivenRenderer->renderDepthPrepass(commandBuffer, iblDescriptorSet);
             gpuDrivenRenderer->generatePrepassHiZ(commandBuffer);
+            vtScopeEnd(commandBuffer, imageIndex, prepassScope);
         }
 
         // Plugin world mask: one-time pipeline recreate on first bind + descriptor upkeep
@@ -606,8 +646,7 @@ namespace render
         // VK-1480: the raw VT commands below (RVT bake, SVT update, feedback copies) run
         // outside the RenderGraph passes, so bracket them with the aux timestamp pool —
         // the scopes surface as rows in the Task Graph Profiler. All no-ops when the
-        // profiler is off. Reset here (outside any render pass) before the first scope.
-        beginVTTimestamps(commandBuffer, imageIndex);
+        // profiler is off. The pool reset happens at the top of this function.
 
         // VK-1209: bake requested terrain RVT pages into the atlas (dynamic rendering, outside the
         // scene pass) before the terrain draw samples it.
@@ -747,12 +786,19 @@ namespace render
         }, threading::JobPriority::HIGH);
 
         std::future<void> terrainFuture;
+        uint32_t terrainScope = UINT32_MAX;
         if (hasTerrain)
         {
+            // Alloc on the recording thread (cursor/name bookkeeping isn't thread-safe);
+            // the job writes the timestamps into its own secondary. Timestamps are legal
+            // inside render passes/secondaries — only the pool reset is not.
+            terrainScope = vtScopeAlloc(imageIndex, "Terrain Main Draw");
             terrainFuture = threading::JobSystem::instance().submit([&]() {
                 terrainCmd = sceneThreadPoolManager->getSecondary(1, imageIndex);
                 setupSecondary(terrainCmd);
+                vtScopeBeginAt(terrainCmd, imageIndex, terrainScope);
                 gpuDrivenRenderer->renderTerrainDraw(terrainCmd, iblDescriptorSet);
+                vtScopeEnd(terrainCmd, imageIndex, terrainScope);
                 terrainCmd.end();
             }, threading::JobPriority::HIGH);
         }
@@ -892,7 +938,11 @@ namespace render
         gpuDrivenRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet);
 
         if (gpuDrivenRenderer->isTerrainRenderingEnabled())
+        {
+            uint32_t terrainScope = vtScopeBegin(commandBuffer, imageIndex, "Terrain Main Draw");
             gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+            vtScopeEnd(commandBuffer, imageIndex, terrainScope);
+        }
 
         if (gpuDrivenRenderer->isGrassRenderingEnabled())
             gpuDrivenRenderer->renderGrassDraw(commandBuffer);

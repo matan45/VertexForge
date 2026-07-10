@@ -375,6 +375,7 @@ namespace render::gpudriven
         // letting main and RTT record concurrently without stomping on each other.
         static vk::DescriptorSet getThreadLocalCullDescriptorSet();
         static bool tryGetThreadLocalTerrainViewProjection(glm::mat4& outVP);
+        static uint32_t getThreadLocalRTTCullingMask();
 
         void dispatchCompute(vk::CommandBuffer cmd, uint32_t imageIndex = 0);
 
@@ -605,6 +606,13 @@ namespace render::gpudriven
         void setTerrainLODBias(float bias) { terrain.lodBias = bias; }
         void setTerrainErrorThreshold(float threshold) { terrain.errorThreshold = threshold; }
         void setTerrainTextureScale(float scale) { terrain.textureScale = scale; }
+        void setTerrainRenderLayer(uint32_t layer) { terrain.renderLayer = layer; }
+        // Out-of-line: a change invalidates all cached VSM pages (they were baked
+        // with the old caster set).
+        void setTerrainCastShadows(bool cast);
+        // Changes the terrain shader permutation and, when RVT is enabled, rebuilds its
+        // baker/pool layout as one synchronized transition. Safe to call before init.
+        void setTerrainDetailMaps(bool enabled);
 
         // VK-1209 — apply virtual-texturing settings (RVT/SVT enable, pool budgets,
         // page-per-frame + eviction age). Pool byte budgets are restart-scoped; the live
@@ -638,6 +646,7 @@ namespace render::gpudriven
 
         void setWaterRenderingEnabled(bool enabled) { water.renderingEnabled = enabled; }
         bool isWaterRenderingEnabled() const { return water.renderingEnabled; }
+        void setWaterRenderLayer(uint32_t layer) { water.renderLayer = layer; }
 
         void copySceneColorForRefraction(vk::CommandBuffer cmd, vk::Image colorImage, uint32_t width, uint32_t height);
         render::water::WaterRefractionResources* getRefractionResources() { return water.refractionResources.get(); }

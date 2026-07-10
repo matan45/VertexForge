@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <vector>
 
 // Fog of war (VK-1314): per-frame player-team visibility grid streamed to the GPU
@@ -62,6 +63,11 @@ public:
     // report 2 so gameplay rules vanish exactly when the on-screen fog does.
     int queryFogState(float worldX, float worldZ) const;
 
+    // VK-1488: the generic UI-source key for the RGBA minimap fog overlay texture
+    // ("__plugintex_<id>__"), or "" if the overlay texture wasn't created. The demo
+    // minimap binds it to a fog-overlay UIImage via UI::setImageExternalTexture.
+    const std::string& overlayKey() const { return fogOverlayKey; }
+
 private:
     // Two-state fog of war (visible / unseen) over the skirmish map bounds.
     // Bounds match the demo's RTSCameraController / BuildingPlacementController.
@@ -72,6 +78,9 @@ private:
     plugin::WorldMaskParams makeFogParams(bool enabled) const;
     void updateVisibilityGrid();
     void stampVisionCircle(float worldX, float worldZ, float radius, float invCellSize);
+    // VK-1488: refill + upload the RGBA minimap overlay from the composed visibilityGrid.
+    // active=false (F10 off / no vision) writes a fully transparent overlay.
+    void updateFogOverlay(bool active);
 
     static float elapsedMs(std::chrono::steady_clock::time_point start)
     {
@@ -84,6 +93,12 @@ private:
     plugin::PluginTextureHandle fogTexture;
     std::vector<std::byte> visibilityGrid;   // recomputed each frame, then composed for upload
     std::vector<std::byte> exploredGrid;     // persistent "has ever been seen" memory
+
+    // VK-1488: RGBA8 sibling of the R8 mask, driving a smooth minimap fog overlay
+    // (rgb=0, alpha=darkness). Registered as a generic UI texture source at init.
+    plugin::PluginTextureHandle fogOverlayTexture;
+    std::vector<std::byte> fogOverlayRGBA;
+    std::string fogOverlayKey;
     bool fogBound = false;        // mask bound to the renderer
     bool fogActive = false;       // enabled flag currently set in the params UBO
     bool hadVisionSources = false; // explored memory resets when sources reappear (new match)

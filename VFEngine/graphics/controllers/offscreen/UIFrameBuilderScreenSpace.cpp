@@ -165,7 +165,10 @@ namespace controllers::offscreen
             float alphaThreshold = 0.0f)
         {
             const auto& imageComp = registry.get<components::UIImageComponent>(entity);
-            if (!imageComp.textureRef.isValid() && imageComp.colorTint.a < 0.01f)
+            // VK-1488: keep an external-only image (plugin/GPU texture or RTT) alive even
+            // with a transparent authored tint — its texture supplies the visible pixels.
+            if (!imageComp.textureRef.isValid() && imageComp.externalTextureKey.empty()
+                && imageComp.renderTextureSource == entt::null && imageComp.colorTint.a < 0.01f)
                 return;
 
             const auto& rectComp = registry.get<components::UIRectComponent>(entity);
@@ -205,6 +208,12 @@ namespace controllers::offscreen
                     effectiveTexturePath = "__rtt_" + std::to_string(rtt.textureId) + "__";
                 }
             }
+
+            // VK-1488: an explicit external texture key (a plugin/GPU texture registered via
+            // IPluginTextureProvider::registerUITexture) takes precedence over the RTT source
+            // and the file textureRef. The UI record path resolves it against externalTextureCache.
+            if (!imageComp.externalTextureKey.empty())
+                effectiveTexturePath = imageComp.externalTextureKey;
 
             std::string resolvedPath = effectiveTexturePath.empty() ? "__white_1x1__" : effectiveTexturePath;
 

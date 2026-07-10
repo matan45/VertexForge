@@ -227,7 +227,10 @@ namespace serialization
                 {"enabled", s.enabled},
                 {"lodBias", s.lodBias},
                 {"errorThreshold", s.errorThreshold},
-                {"textureScale", s.textureScale}
+                {"textureScale", s.textureScale},
+                {"renderLayer", s.renderLayer},
+                {"castShadows", s.castShadows},
+                {"detailMaps", s.detailMaps}
             };
         }
 
@@ -247,6 +250,31 @@ namespace serialization
                 settings.errorThreshold = terrain["errorThreshold"].get<float>();
             if (terrain.contains("textureScale") && terrain["textureScale"].is_number())
                 settings.textureScale = terrain["textureScale"].get<float>();
+            if (terrain.contains("renderLayer") && terrain["renderLayer"].is_number_unsigned())
+                settings.renderLayer = terrain["renderLayer"].get<uint32_t>();
+            if (terrain.contains("castShadows") && terrain["castShadows"].is_boolean())
+                settings.castShadows = terrain["castShadows"].get<bool>();
+            if (terrain.contains("detailMaps") && terrain["detailMaps"].is_boolean())
+                settings.detailMaps = terrain["detailMaps"].get<bool>();
+        }
+
+        json serializeWaterRenderSettings(const types::WaterSettings& s)
+        {
+            return {
+                {"renderLayer", s.renderLayer}
+            };
+        }
+
+        void deserializeWaterRenderSettings(const json& j, types::WaterSettings& settings)
+        {
+            if (!j.contains("water") || !j["water"].is_object())
+            {
+                settings = types::WaterSettings{};
+                return;
+            }
+            const auto& water = j["water"];
+            if (water.contains("renderLayer") && water["renderLayer"].is_number_unsigned())
+                settings.renderLayer = water["renderLayer"].get<uint32_t>();
         }
 
         // VK-1209 virtual texturing settings.
@@ -497,6 +525,7 @@ namespace serialization
         j["distanceCulling"] = serializeDistanceCullingSettings(settings.distanceCulling);
         j["transparency"] = { {"wboitEnabled", settings.transparency.wboitEnabled} };
         j["terrain"] = serializeTerrainRenderSettings(settings.terrain);
+        j["water"] = serializeWaterRenderSettings(settings.water);
         j["virtualTexture"] = serializeVirtualTextureSettings(settings.virtualTexture);
         j["postProcess"] = serializePostProcessSettings(settings.postProcess);
         j["gi"] = serializeGISettings(settings.gi);
@@ -526,6 +555,7 @@ namespace serialization
         deserializeDistanceCullingSettings(j, settings.distanceCulling);
         deserializeTransparencySettings(j, settings.transparency);
         deserializeTerrainRenderSettings(j, settings.terrain);
+        deserializeWaterRenderSettings(j, settings.water);
         deserializeVirtualTextureSettings(j, settings.virtualTexture);
 
         deserializeGISettings(j, settings.gi);

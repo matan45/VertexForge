@@ -285,13 +285,15 @@ namespace render
         bool graphProfilerInitialized = false;
         bool graphProfilerUnsupported = false;
 
-        // VK-1480: aux GPU timestamps for the raw VT commands (RVT bake / SVT update /
-        // feedback copy) recorded inside the GPU-driven mesh pass. They run between
-        // RenderGraph passes, so RenderGraphProfiler can't see them. Same query-pool
-        // discipline as graphProfiler: per-frame-in-flight slots, a dense written range
-        // read back a frame later, gated on the profiler being enabled (GpuPassStats).
-        // Lazily init'd in syncGraphProfiler, cleaned up beside graphProfiler.
-        static constexpr uint32_t kVTTimestampScopes = 3;
+        // VK-1480: aux GPU timestamps for work recorded inside the GPU-driven mesh pass
+        // that RenderGraphProfiler can't see: the raw VT commands (RVT bake / SVT update /
+        // feedback copy) plus the terrain-cost rows (GPU cull + VSM raster, depth
+        // prepass + HiZ, terrain main draw). Same query-pool discipline as graphProfiler:
+        // per-frame-in-flight slots, a dense written range read back a frame later, gated
+        // on the profiler being enabled (GpuPassStats). Scope names must be string
+        // literals (stored as const char*). Lazily init'd in syncGraphProfiler, cleaned
+        // up beside graphProfiler.
+        static constexpr uint32_t kVTTimestampScopes = 8;
         // Mutable: resetFrame/writeTimestamp are non-const, but the VT scopes are
         // recorded from the const draw path (like the other mutable frame-scratch state).
         mutable raytracing::GPUTimestampQueryPool vtTimestampPool;
@@ -525,6 +527,11 @@ namespace render
                                                           plugin::TextureFormat format);
         void updatePluginTexture2D(plugin::PluginTextureHandle handle, std::vector<std::byte>&& data);
         void destroyPluginTexture2D(plugin::PluginTextureHandle handle);
+        // VK-1488 — expose a plugin texture as a generic UI image source. register returns
+        // the deterministic key ("__plugintex_<id>__") to place on UIImageComponent.externalTextureKey;
+        // the per-frame repoint in draw() keeps its bindless slot pointed at the texture.
+        std::string registerPluginUITexture(plugin::PluginTextureHandle handle);
+        void unregisterPluginUITexture(plugin::PluginTextureHandle handle);
         void bindWorldMask(plugin::PluginTextureHandle handle,
                            const glm::vec3& worldMin, const glm::vec3& worldMax,
                            const plugin::WorldMaskParams& params);
@@ -613,6 +620,14 @@ namespace render
         // unless the profiler is enabled and the pool is valid.
         void beginVTTimestamps(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         uint32_t vtScopeBegin(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex, const char* name) const;
+        // Split begin for scopes recorded on a job thread (parallel scene recording):
+        // vtScopeAlloc reserves the query pair + name on the RECORDING thread (the
+        // cursor/name bookkeeping is not thread-safe), then the job writes the start
+        // timestamp into its own secondary via vtScopeBeginAt. A scope that was
+        // alloc'd MUST be written (begin+end) or readback stays NOT_READY all frame.
+        uint32_t vtScopeAlloc(uint32_t imageIndex, const char* name) const;
+        void vtScopeBeginAt(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                            uint32_t startQueryIndex) const;
         void vtScopeEnd(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex, uint32_t startQueryIndex) const;
         void endVTTimestamps(uint32_t imageIndex) const;
         void drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;

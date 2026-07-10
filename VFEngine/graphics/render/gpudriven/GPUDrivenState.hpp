@@ -38,6 +38,7 @@
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <atomic>
 #include <cstdint>
 
 namespace material
@@ -74,9 +75,18 @@ namespace render::gpudriven::detail
         float lodBias = 1.0f;
         float errorThreshold = 2.0f;
         float textureScale = 0.1f;
+        // VK-1415: layer bit tested against the current view's cullingMask (RTT views can exclude terrain).
+        uint32_t renderLayer = 0;
+        // Terrain as a shadow CASTER (gates the VSM terrain raster); receiving is unaffected.
+        bool castShadows = true;
+        // Per-layer normal/emission texture sampling and the matching four-plane RVT layout.
+        bool detailMaps = false;
         std::string currentMaterialPath;
         std::vector<TerrainLayerGPUData> layerData;
         bool layerDataDirty = false;
+        // VK-1486: set (editor/saver thread) when any material asset changes, so a terrain layer
+        // that sources a .vfMat/.vfMatInstance re-resolves. Consumed (render thread) via exchange().
+        std::atomic<bool> materialSourceDirty{false};
         float updateUs = 0.0f;
         float streamingUs = 0.0f;
         float buildTileDataUs = 0.0f;
@@ -94,6 +104,8 @@ namespace render::gpudriven::detail
         uint32_t lodTileCounts[render::water::WATER_LOD_COUNT] = {};
         render::water::WaterPushConstants cachedPushConstants{};
         bool renderingEnabled = true;
+        // VK-1415: layer bit tested against the current view's cullingMask (RTT views can exclude water).
+        uint32_t renderLayer = 0;
         // Ocean FFT (multi-band)
         static constexpr uint32_t MAX_OCEAN_BANDS = 3;
         std::array<std::unique_ptr<render::water::OceanFFT>, MAX_OCEAN_BANDS> oceanBands;

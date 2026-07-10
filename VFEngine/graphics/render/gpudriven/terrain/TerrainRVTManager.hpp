@@ -19,7 +19,7 @@ namespace core
 
 // ============================================================================
 // Virtual Texturing (VK-1209) — terrain Runtime Virtual Texture manager. Owns the
-// VT substrate for a terrain (page table + 2-plane RGBA8 pool + feedback + residency)
+// VT substrate for a terrain (page table + configurable 2/4-plane pool + feedback + residency)
 // and drives it each frame: decode the previous frame's page requests, plan
 // residency (LRU + per-frame budget over the pure VTResidencyCore), map/unmap
 // page-table entries, and hand a work-list to the baker. The actual GPU bake (an
@@ -42,6 +42,7 @@ namespace render::gpudriven
             float texelsPerMeter = 8.0f;
             uint32_t pagesPerFrame = 32;
             uint32_t evictionAgeFrames = 60;
+            bool detailMaps = false;
         };
 
         // A scheduled page bake: fill physical `tile` for virtual page `page`, whose world

@@ -211,6 +211,17 @@ namespace plugin {
 
         virtual void destroyTexture2D(PluginTextureHandle handle) = 0;
 
+        // === UI texture source (VK-1488) ===
+        // Expose a plugin texture as a generic UI image source. Returns a stable key
+        // string to assign to a UIImage's external texture — set it on the target entity
+        // via the _native_ui_setImageExternalTexture script native (or the UI service).
+        // The engine repoints the texture into the UI bindless table every frame, so the
+        // image updates live. Returns "" if the handle is unknown or graphics is
+        // unavailable. Idempotent; requires the "graphics" capability. Auto-unregistered
+        // on destroyTexture2D and on plugin unload.
+        virtual std::string registerUITexture(PluginTextureHandle handle) = 0;
+        virtual void unregisterUITexture(PluginTextureHandle handle) = 0;
+
         // === World-Space Mask ===
         // Designate one texture as a world-space mask, XZ-projected over
         // [worldMin.xz, worldMax.xz]. The mask's red channel modulates the scene per

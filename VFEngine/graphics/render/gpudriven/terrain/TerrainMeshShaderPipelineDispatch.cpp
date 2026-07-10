@@ -84,13 +84,28 @@ namespace render::gpudriven
 
     bool TerrainMeshShaderPipeline::validateDescriptorsForDispatch() const
     {
+        if (rvtSampleEnabled && !rvtSampleResourcesReady)
+        {
+            static bool warnedRVTNotReady = false;
+            if (!warnedRVTNotReady)
+            {
+                vfLogWarning("TerrainMeshShaderPipeline: Aborting dispatch - RVT sample resources are not ready.");
+                warnedRVTNotReady = true;
+            }
+            return false;
+        }
+
+        const vk::DescriptorSet activeSet5 = rvtSampleEnabled ? rvtSampleDescriptorSet : emptyDescriptorSet5;
+        const char* activeSet5Name = rvtSampleEnabled
+            ? "rvtSampleDescriptorSet (set 5)"
+            : "emptyDescriptorSet5 (set 5)";
         const std::array<std::pair<vk::DescriptorSet, const char*>, 12> descriptors = {{
             {iblDescriptorSet, "iblDescriptorSet (set 0)"},
             {weightMapDescriptorSet, "weightMapDescriptorSet (set 1)"},
             {bindlessDescriptorSet, "bindlessDescriptorSet (set 2)"},
             {terrainMeshletDescriptorSet, "terrainMeshletDescriptorSet (set 3)"},
             {terrainVertexDescriptorSet, "terrainVertexDescriptorSet (set 4)"},
-            {emptyDescriptorSet5, "emptyDescriptorSet5 (set 5)"},
+            {activeSet5, activeSet5Name},
             {lightDataDescriptorSet, "lightDataDescriptorSet (set 6)"},
             {clusterGridDescriptorSet, "clusterGridDescriptorSet (set 7)"},
             {cullingOutputDescriptorSet, "cullingOutputDescriptorSet (set 8)"},

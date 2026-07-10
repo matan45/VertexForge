@@ -78,6 +78,13 @@ namespace components
         entt::entity renderTextureSource = entt::null;
         std::string renderTextureSourceName;
 
+        // VK-1488: runtime-only external UI texture key (e.g. a plugin/GPU texture
+        // exposed via IPluginTextureProvider::registerUITexture -> "__plugintex_<id>__").
+        // When non-empty it is used directly as the image's texture source, taking
+        // precedence over renderTextureSource and textureRef. NOT serialized: the key
+        // embeds a process-lifetime texture id that would dangle on reload.
+        std::string externalTextureKey;
+
         UIImageType imageType = UIImageType::Simple;
         glm::vec4 border{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom in source texture pixels
         uint32_t sourceWidth = 0;

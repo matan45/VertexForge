@@ -91,8 +91,10 @@ namespace render::gpudriven
         // VK-1209 terrain RVT sample resources (set 5, replacing the empty placeholder when
         // RVT is active). Layout/set/params-UBO always exist (cheap); the pipeline only uses
         // them + compiles the RVT_ENABLED shader path when rvtSampleEnabled is set, so terrain
-        // stays byte-identical with RVT off.
+        // keeps the disabled render/sampling path equivalent with RVT off.
         bool rvtSampleEnabled = false;
+        bool detailMapsEnabled = false;
+        bool rvtSampleResourcesReady = false;
         vk::DescriptorSetLayout rvtSampleLayout;
         vk::DescriptorPool rvtSamplePool;
         vk::DescriptorSet rvtSampleDescriptorSet;
@@ -261,13 +263,28 @@ namespace render::gpudriven
         // toggle goes through recreate(), not init()), so a build that never enables RVT never allocates it.
         void setRVTSampleEnabled(bool enabled)
         {
+            if (rvtSampleEnabled == enabled)
+                return;
             rvtSampleEnabled = enabled;
+            rvtSampleResourcesReady = false;
             if (enabled && initialized && !rvtSampleDescriptorSet)
                 createRVTSampleDescriptor();
         }
         bool isRVTSampleEnabled() const { return rvtSampleEnabled; }
+        void setDetailMapsEnabled(bool enabled)
+        {
+            if (detailMapsEnabled == enabled)
+                return;
+            detailMapsEnabled = enabled;
+            if (rvtSampleEnabled)
+                rvtSampleResourcesReady = false;
+        }
+        bool areDetailMapsEnabled() const { return detailMapsEnabled; }
+        bool areRVTSampleResourcesReady() const { return rvtSampleResourcesReady; }
+        void invalidateRVTSampleResources() { rvtSampleResourcesReady = false; }
         void updateRVTSampleResources(vk::Buffer pageTableBuffer, vk::ImageView albedoView,
-                                      vk::ImageView ormView, vk::Sampler sampler,
+                                      vk::ImageView ormView, vk::ImageView normalView,
+                                      vk::ImageView emissionView, vk::Sampler sampler,
                                       vk::Buffer feedbackBuffer, const void* params, vk::DeviceSize paramsSize);
         void updateWorldMaskResources(vk::ImageView maskView, vk::Sampler maskSampler,
                                       vk::Buffer paramsBuffer, vk::DeviceSize paramsSize);

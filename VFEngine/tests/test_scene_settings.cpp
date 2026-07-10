@@ -53,6 +53,7 @@ TEST_SUITE("SceneSettingsSerialization")
 
         auto render = types::RenderSettings::createDefault();
         render.shadows.enabled = false;
+        render.terrain.detailMaps = true;
         sceneGraph.setRenderSettings(render);
         sceneGraph.setInputMappingPath("config/input.vfInputMapping");
 
@@ -78,6 +79,7 @@ TEST_SUITE("SceneSettingsSerialization")
         CHECK(settingsJson["physicsSettings"]["gravityScale"].get<float>() == doctest::Approx(2.5f));
         CHECK(settingsJson["audioSettings"]["listener"]["masterVolume"].get<float>() == doctest::Approx(0.35f));
         CHECK(settingsJson["renderSettings"]["shadows"]["enabled"].get<bool>() == false);
+        CHECK(settingsJson["renderSettings"]["terrain"]["detailMaps"].get<bool>() == true);
         CHECK(settingsJson["inputMapping"].get<std::string>() == "config/input.vfInputMapping");
 
         auto meta = asset::AssetMetadataSerializer::load(metaPath);
@@ -101,6 +103,7 @@ TEST_SUITE("SceneSettingsSerialization")
 
         auto render = types::RenderSettings::createDefault();
         render.distanceCulling.enabled = true;
+        render.terrain.detailMaps = true;
         source.setRenderSettings(render);
 
         fs::path scenePath = testRoot() / "RoundTrip.vfScene";
@@ -113,6 +116,29 @@ TEST_SUITE("SceneSettingsSerialization")
         CHECK(loaded.getPhysicsSettings().gravityScale == doctest::Approx(3.0f));
         CHECK(loaded.getAudioSettings().masterVolume == doctest::Approx(0.2f));
         CHECK(loaded.getRenderSettings().distanceCulling.enabled);
+        CHECK(loaded.getRenderSettings().terrain.detailMaps);
+    }
+
+    TEST_CASE("terrain detail maps false round-trips explicitly")
+    {
+        resetTestRoot();
+
+        scene::SceneGraphSystem source;
+        auto render = types::RenderSettings::createDefault();
+        render.terrain.detailMaps = false;
+        source.setRenderSettings(render);
+
+        const fs::path scenePath = testRoot() / "DetailMapsOff.vfScene";
+        REQUIRE(serialization::SceneSerialization::saveScene(source, scenePath.string()));
+
+        const auto settingsJson = readJson(testRoot() / "DetailMapsOff.vfSettings");
+        REQUIRE(settingsJson["renderSettings"]["terrain"]["detailMaps"].is_boolean());
+        CHECK_FALSE(settingsJson["renderSettings"]["terrain"]["detailMaps"].get<bool>());
+
+        asset::AssetDatabase::instance().clear();
+        scene::SceneGraphSystem loaded;
+        REQUIRE(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
+        CHECK_FALSE(loaded.getRenderSettings().terrain.detailMaps);
     }
 
     TEST_CASE("loadScene falls back to defaults when settings asset ref is missing")
@@ -138,6 +164,7 @@ TEST_SUITE("SceneSettingsSerialization")
         CHECK(serialization::SceneSerialization::loadSceneInto(scenePath.string(), sceneGraph));
         CHECK(sceneGraph.getPhysicsSettings().gravityScale ==
               doctest::Approx(types::PhysicsSettings::createDefault().gravityScale));
+        CHECK_FALSE(sceneGraph.getRenderSettings().terrain.detailMaps);
     }
 
     TEST_CASE("loadScene reads legacy inline settings when settingsRef is missing")
@@ -153,6 +180,14 @@ TEST_SUITE("SceneSettingsSerialization")
         json sceneJson;
         sceneJson["version"] = "1.0";
         sceneJson["physicsSettings"] = json{{"gravityScale", 4.0f}};
+        // Legacy render settings did not carry terrain.detailMaps. Loading must preserve the
+        // default-off behavior while still applying the terrain fields that were present.
+        sceneJson["renderSettings"] = {
+            {"terrain", {
+                {"enabled", false},
+                {"castShadows", false}
+            }}
+        };
         sceneJson["root"] = {
             {"name", "Root"},
             {"isActive", true},
@@ -169,5 +204,7 @@ TEST_SUITE("SceneSettingsSerialization")
         scene::SceneGraphSystem loaded;
         CHECK(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
         CHECK(loaded.getPhysicsSettings().gravityScale == doctest::Approx(4.0f));
+        CHECK_FALSE(loaded.getRenderSettings().terrain.enabled);
+        CHECK_FALSE(loaded.getRenderSettings().terrain.detailMaps);
     }
 }

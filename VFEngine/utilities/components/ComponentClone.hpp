@@ -38,6 +38,7 @@ namespace components
     inline void resetClonedRuntimeState<UIImageComponent>(UIImageComponent& c)
     {
         c.renderTextureSource = entt::null; // keep renderTextureSourceName for later resolution
+        c.externalTextureKey.clear();       // VK-1488: a clone must not inherit the source's live plugin-texture binding
     }
 
     template <>

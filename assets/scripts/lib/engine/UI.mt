@@ -262,6 +262,20 @@ public class UI {
         return _native_ui_getImageTexture(entityId);
     }
 
+    // VK-1488: bind a plugin/GPU texture to this UIImage by the key returned from
+    // PluginContext::registerUITexture ("__plugintex_<id>__"). Unlike setImageTexture this
+    // is NOT an asset path — the UI renderer resolves it against the live external-texture
+    // table each frame, so the image updates as the plugin uploads new pixels. Pass "" to
+    // unbind (or call clearImageExternalTexture).
+    public static function setImageExternalTexture(int entityId, string key): void {
+        _native_ui_setImageExternalTexture(entityId, key);
+    }
+
+    // Unbind any external (plugin/GPU) texture, reverting to the authored textureRef/RTT.
+    public static function clearImageExternalTexture(int entityId): void {
+        _native_ui_clearImageExternalTexture(entityId);
+    }
+
     // ============================================
     // Image / Button Tint Colors
     // ============================================

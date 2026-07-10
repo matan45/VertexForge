@@ -124,6 +124,33 @@ namespace render::custom
         device.getLogicalDevice().waitIdle();
         destroyTextureEntry(it->second);
         textures.erase(it);
+        uiBindings.erase(handle.id); // VK-1488: drop any stale UI binding for this id
+    }
+
+    std::string PluginTextureManager::registerUITexture(plugin::PluginTextureHandle handle)
+    {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+        if (textures.find(handle.id) == textures.end()) return {};
+        std::string key = plugin::pluginTextureUIKey(handle);
+        uiBindings[handle.id] = key;
+        return key;
+    }
+
+    std::string PluginTextureManager::removeUITexture(plugin::PluginTextureHandle handle)
+    {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+        auto it = uiBindings.find(handle.id);
+        if (it == uiBindings.end()) return {};
+        std::string key = std::move(it->second);
+        uiBindings.erase(it);
+        return key;
+    }
+
+    std::string PluginTextureManager::getUITextureKey(plugin::PluginTextureHandle handle) const
+    {
+        std::lock_guard<std::recursive_mutex> lock(stateMutex);
+        auto it = uiBindings.find(handle.id);
+        return it != uiBindings.end() ? it->second : std::string{};
     }
 
     void PluginTextureManager::bindWorldMask(plugin::PluginTextureHandle handle,

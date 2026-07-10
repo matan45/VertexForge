@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <cstddef>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include "../../core/VulkanMemoryManager.hpp"
@@ -83,6 +84,11 @@ namespace render::custom
         std::unordered_map<uint64_t, TextureEntry> textures;
         uint64_t nextId = 1;
 
+        // VK-1488: plugin textures currently exposed as UI external-texture sources.
+        // texture id -> synthetic UI key ("__plugintex_<id>__"). The engine repoints
+        // each of these into the UI bindless table every frame (RenderPassHandler::draw).
+        std::unordered_map<uint64_t, std::string> uiBindings;
+
         // World mask state (single mask).
         uint64_t boundMaskId = 0;
         plugin::WorldMaskParams maskParams;
@@ -115,6 +121,34 @@ namespace render::custom
                                                     plugin::TextureFormat format);
         void updateTexture2D(plugin::PluginTextureHandle handle, std::vector<std::byte>&& data);
         void destroyTexture2D(plugin::PluginTextureHandle handle);
+
+        // VK-1488 — expose a plugin texture as a UI external-texture source.
+
+        // Record a handle->UI-key binding and return the deterministic key
+        // ("__plugintex_<id>__"), or "" if the handle is unknown. Idempotent.
+        std::string registerUITexture(plugin::PluginTextureHandle handle);
+        // Drop a handle's UI binding; returns the key it had registered (or "") so the
+        // caller can unregister that key from the UI/billboard pipelines.
+        std::string removeUITexture(plugin::PluginTextureHandle handle);
+        // The UI key a handle is currently exposed under, or "" if it isn't bound.
+        std::string getUITextureKey(plugin::PluginTextureHandle handle) const;
+        // Invoke fn(const std::string& key, vk::ImageView, vk::Sampler) under stateMutex for every
+        // UI-exposed plugin texture that still has a live view+sampler — safe to feed straight to
+        // registerExternalTexture each frame. Iterating in place avoids the per-frame vector alloc +
+        // key-string copy this incurred in the render draw path (runs every recorded frame).
+        template <typename Fn>
+        void forEachUITextureBinding(Fn&& fn) const
+        {
+            std::lock_guard<std::recursive_mutex> lock(stateMutex);
+            for (const auto& [id, key] : uiBindings)
+            {
+                auto texIt = textures.find(id);
+                if (texIt == textures.end()) continue;
+                const TextureEntry& entry = texIt->second;
+                if (!entry.view || !entry.sampler) continue; // skip not-yet-ready textures
+                fn(key, entry.view, entry.sampler);
+            }
+        }
 
         void bindWorldMask(plugin::PluginTextureHandle handle,
                            const glm::vec3& worldMin, const glm::vec3& worldMax,

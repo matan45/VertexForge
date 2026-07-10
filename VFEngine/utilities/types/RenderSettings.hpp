@@ -214,6 +214,18 @@ namespace types
         float lodBias = 1.0f;
         float errorThreshold = 2.0f;
         float textureScale = 0.1f;
+        uint32_t renderLayer = 0; // VK-1415: layer bit tested against a camera's cullingMask (RTT views)
+        // Terrain as a shadow CASTER (VSM page raster). Receiving shadows is unaffected.
+        // Off is a large GPU win on flat maps where terrain self-shadowing is negligible.
+        bool castShadows = true;
+        // Opt-in sampling of terrain-layer normal and emission textures. When RVT is enabled,
+        // changing this also rebuilds the terrain RVT layout to carry the extra detail planes.
+        bool detailMaps = false;
+    };
+
+    struct WaterSettings
+    {
+        uint32_t renderLayer = 0; // VK-1415: layer bit tested against a camera's cullingMask (RTT views)
     };
 
     // VK-1209 — virtual texturing. Two clients over one page-table substrate:
@@ -287,6 +299,7 @@ namespace types
         DistanceCullingSettings distanceCulling;
         TransparencySettings transparency;
         TerrainSettings terrain;
+        WaterSettings water;
         VirtualTextureSettings virtualTexture;
         postprocess::PostProcessSettings postProcess;
         VFXLODSettings vfxLOD;

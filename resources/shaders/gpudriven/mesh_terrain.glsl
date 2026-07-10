@@ -276,7 +276,7 @@ layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
 #ifdef RVT_ENABLED
 // VK-1209 terrain Runtime Virtual Texture (set 5, the previously-empty placeholder set).
-// Replaces the per-fragment 8-layer composite (up to 24 bindless samples) with a lookup
+// Replaces the per-fragment 8-layer composite (up to 32 bindless samples with detail maps) with a lookup
 // into the baked page atlas + an inline feedback request. Compiled only when RVT is active.
 #include "../common/vt_types.glsl"
 layout(std430, set = 5, binding = 0) readonly buffer RVTPageTable { uint rvtPageTable[]; };
@@ -290,6 +290,10 @@ layout(set = 5, binding = 4) uniform RVTParams {
     float virtualResTexels;
     float pad0; float pad1; float pad2;
 } rvt;
+#ifdef TERRAIN_DETAIL_MAPS
+layout(set = 5, binding = 5) uniform sampler2D rvtNormalAtlas;
+layout(set = 5, binding = 6) uniform sampler2D rvtEmissionAtlas;
+#endif
 #define VT_PAGE_TABLE rvtPageTable
 #define VT_FEEDBACK rvtFeedback
 #include "../common/vt_sampling.glsl"
@@ -473,7 +477,14 @@ void main() {
     vec2 uvXZ = fragWorldPos.xz * textureScale; // Y-facing (horizontal surfaces)
     vec2 uvXY = fragWorldPos.xy * textureScale; // Z-facing (north/south walls)
     vec2 uvYZ = fragWorldPos.yz * textureScale; // X-facing (east/west walls)
-    vec2 triplanarWorldUV = uvXZ * blendWeights.y + uvXY * blendWeights.z + uvYZ * blendWeights.x;
+    vec2 blendedTriplanarWorldUV = uvXZ * blendWeights.y + uvXY * blendWeights.z + uvYZ * blendWeights.x;
+#if defined(RVT_ENABLED) && defined(TERRAIN_DETAIL_MAPS)
+    // Match the bake's top-down projection for cache hits and live fallback. Caves are never
+    // RVT-resolved and retain triplanar projection for their walls and ceilings.
+    vec2 triplanarWorldUV = (fragIsCave == 0u) ? uvXZ : blendedTriplanarWorldUV;
+#else
+    vec2 triplanarWorldUV = blendedTriplanarWorldUV;
+#endif
     // VK-1209 finding #7: screen-space gradients of the (quad-uniform) triplanar UV, computed here in
     // UNIFORM control flow so the generated composite can sample with textureGrad — its layer samples run
     // inside the per-fragment-divergent RVT resolved/fallback branch below, where implicit derivatives
@@ -482,7 +493,7 @@ void main() {
     vec2 triplanarWorldUVdy = dFdy(triplanarWorldUV);
 
 #ifdef RVT_ENABLED
-    // Sample the baked terrain RVT atlas (2 texels) instead of the live 8-layer composite.
+    // Sample the baked terrain RVT atlas (2 or 4 planes) instead of the live 8-layer composite.
     // A lookup "resolves" only when the page-table entry is valid AND the ORM atlas alpha
     // (the per-texel "baked with real content" bit, written 1.0 by terrain_rvt_bake.glsl) is
     // set. Any fragment that is not truly resident-with-content — streaming in, on an
@@ -493,13 +504,21 @@ void main() {
     float mat_roughness;
     float mat_ao;
     vec3 mat_emission;
+#ifdef TERRAIN_DETAIL_MAPS
+    vec3 mat_normalTS;
+#endif
     vec2 rvtUV = clamp((fragWorldPos.xz - rvt.worldMin) * rvt.invWorldExtent, vec2(0.0), vec2(0.999999));
     uint rvtMip = uint(max(vtDesiredMip(rvtUV, rvt.virtualResTexels), 0.0));
-    if (vtFeedbackFragment(gl_FragCoord.xy))
+#ifdef TERRAIN_DETAIL_MAPS
+    bool rvtSurfaceEligible = fragIsCave == 0u;
+#else
+    bool rvtSurfaceEligible = true;
+#endif
+    if (rvtSurfaceEligible && vtFeedbackFragment(gl_FragCoord.xy))
         vtWriteFeedback(rvt.img, rvtUV, rvtMip);
     VTSample rvtS = vtLookup(rvt.img, rvtUV, rvtMip);
-    vec4 rvtO = rvtS.valid ? texture(rvtOrmAtlas, rvtS.uv) : vec4(0.0);
-    bool rvtResolved = rvtS.valid && rvtO.a >= 0.5;
+    vec4 rvtO = (rvtSurfaceEligible && rvtS.valid) ? texture(rvtOrmAtlas, rvtS.uv) : vec4(0.0);
+    bool rvtResolved = rvtSurfaceEligible && rvtS.valid && rvtO.a >= 0.5;
     if (rvtResolved) {
         vec4 rvtA = texture(rvtAlbedoAtlas, rvtS.uv);
         // Coverage renormalization: rvtO.a is the per-texel baked-coverage bit (1.0 baked,
@@ -513,35 +532,84 @@ void main() {
         mat_metallic = rvtO.b / rvtCov;
         mat_roughness = rvtO.g / rvtCov;
         mat_ao = rvtO.r / rvtCov;
+#ifdef TERRAIN_DETAIL_MAPS
+        vec3 rvtNormalEncoded = texture(rvtNormalAtlas, rvtS.uv).rgb / rvtCov;
+        vec3 rvtNormalDecoded = rvtNormalEncoded * 2.0 - 1.0;
+        float rvtNormalLengthSq = dot(rvtNormalDecoded, rvtNormalDecoded);
+        mat_normalTS = (rvtNormalLengthSq > 1e-8)
+            ? rvtNormalDecoded * inversesqrt(rvtNormalLengthSq)
+            : vec3(0.0, 0.0, 1.0);
+        mat_emission = texture(rvtEmissionAtlas, rvtS.uv).rgb / rvtCov;
+#else
         mat_emission = mat_albedo * (rvtA.a / rvtCov);
+#endif
     } else {
         // Live 8-layer composite fallback (cold path — only unresolved fragments pay it, so the
         // RVT fast path keeps its win). The generated composite declares its own mat_* locals;
         // rename them to temporaries so they don't clash with the outer decls, then copy out.
         #define mat_albedo   _rvtcAlbedo
-        #define mat_normalTS _rvtcNormalTS
         #define mat_metallic _rvtcMetallic
         #define mat_roughness _rvtcRoughness
         #define mat_ao       _rvtcAO
         #define mat_emission _rvtcEmission
+#ifdef TERRAIN_DETAIL_MAPS
+        #define mat_normalTS _rvtcNormalTS
+#endif
         #include "../material/terrain_material_generated.glsl"
         #undef mat_albedo
-        #undef mat_normalTS
         #undef mat_metallic
         #undef mat_roughness
         #undef mat_ao
         #undef mat_emission
+#ifdef TERRAIN_DETAIL_MAPS
+        #undef mat_normalTS
+#endif
         mat_albedo = _rvtcAlbedo;
         mat_metallic = _rvtcMetallic;
         mat_roughness = _rvtcRoughness;
         mat_ao = _rvtcAO;
         mat_emission = _rvtcEmission;
+#ifdef TERRAIN_DETAIL_MAPS
+        mat_normalTS = _rvtcNormalTS;
+#endif
     }
 #else
 #include "../material/terrain_material_generated.glsl"
 #ifndef MAT_EMISSION_DEFINED
     vec3 mat_emission = vec3(0.0);
 #endif
+#endif
+#ifdef TERRAIN_DETAIL_MAPS
+#ifndef MAT_NORMALTS_DEFINED
+    vec3 mat_normalTS = vec3(0.0, 0.0, 1.0);
+#endif
+    // Apply the tangent-space detail once after RVT/live selection. Test the orthogonalized
+    // tangent rather than its raw derivative form so degenerate projections retain N exactly.
+    vec3 terrainGeometricNormal = N;
+    vec3 terrainPosDx = dFdx(fragWorldPos);
+    vec3 terrainPosDy = dFdy(fragWorldPos);
+    vec3 terrainTangentRaw = terrainPosDx * triplanarWorldUVdy.y
+                           - terrainPosDy * triplanarWorldUVdx.y;
+    // terrainTangentRaw == (dPos/dU) * det(UV screen-space Jacobian), so its sign follows sign(det).
+    // Re-align to +U by folding in that sign: otherwise on fragments where the top-down XZ UV winds
+    // negative in screen space the tangent (and its cross(N,tangent) bitangent) flip together and
+    // invert the applied tangent-space normal detail (bumps read as dents as the camera rotates).
+    float terrainUVDet = triplanarWorldUVdx.x * triplanarWorldUVdy.y
+                       - triplanarWorldUVdy.x * triplanarWorldUVdx.y;
+    terrainTangentRaw *= (terrainUVDet < 0.0) ? -1.0 : 1.0;
+    vec3 terrainTangentProjected = terrainTangentRaw - N * dot(N, terrainTangentRaw);
+    float terrainTangentLengthSq = dot(terrainTangentProjected, terrainTangentProjected);
+    if (terrainTangentLengthSq > 1e-12) {
+        vec3 terrainTangent = terrainTangentProjected * inversesqrt(terrainTangentLengthSq);
+        vec3 terrainBitangent = cross(N, terrainTangent);
+        vec3 terrainMappedNormal = mat3(terrainTangent, terrainBitangent, N) * mat_normalTS;
+        float terrainMappedLengthSq = dot(terrainMappedNormal, terrainMappedNormal);
+        if (terrainMappedLengthSq > 1e-8)
+            N = terrainMappedNormal * inversesqrt(terrainMappedLengthSq);
+    }
+    #define TERRAIN_SHADOW_NORMAL terrainGeometricNormal
+#else
+    #define TERRAIN_SHADOW_NORMAL N
 #endif
     vec3 albedo = mat_albedo;
     float metallic = mat_metallic;
@@ -633,7 +701,7 @@ void main() {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
 
-            float shadow = sampleTerrainPointShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, N,
+            float shadow = sampleTerrainPointShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, TERRAIN_SHADOW_NORMAL,
                                                           light.position, light.radius);
 
             // Weight shadow contribution to ambient by attenuation
@@ -652,7 +720,7 @@ void main() {
             uint lightIdx = extractLightIndex(packedIdx);
             SpotLight light = spotLights[lightIdx];
 
-            float shadow = sampleTerrainSpotShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, N);
+            float shadow = sampleTerrainSpotShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, TERRAIN_SHADOW_NORMAL);
 
             float spotDist = length(light.position - fragWorldPos);
             float spotAtten = physicalAttenuation(spotDist, light.range);
@@ -669,7 +737,7 @@ void main() {
 
         float shadow = (camera.disableShadows > 0.5)
             ? 1.0
-            : sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
+            : sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, TERRAIN_SHADOW_NORMAL, linearZ, camera.cameraPos);
         // Fog of war hides the casters (entities are discarded in fog), so fade their ground
         // shadows out by the same mask -> no ghost shadows sitting on top of the fog.
         shadow = mix(1.0, shadow, worldMaskVisibility);

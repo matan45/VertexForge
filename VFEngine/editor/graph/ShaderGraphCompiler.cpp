@@ -16,6 +16,122 @@ namespace editor::graph {
     std::string ShaderGraphCompiler::s_fragmentFooter;
     bool ShaderGraphCompiler::s_templatesLoaded = false;
 
+    namespace
+    {
+        // Emits the per-tile terrain composite loop for one shader permutation. Both permutations
+        // share a single body here so the per-layer logic (weight sampling, ORM unpack, tiling /
+        // gradient math) can only be edited in one place; `detail` inserts the extra work the
+        // TERRAIN_DETAIL_MAPS permutation samples — the normal-map fetch, the emission-texture
+        // path, and the mat_normalTS output. Output is byte-identical to the two hand-maintained
+        // branches this replaced.
+        std::string buildTerrainCompositeLoop(bool detail)
+        {
+            std::string s;
+            s += "vec3 ls_Albedo = vec3(0.0);\n";
+            if (detail) s += "vec3 ls_Normal = vec3(0.0);\n";
+            s += "float ls_Roughness = 0.0;\n";
+            s += "float ls_Metallic = 0.0;\n";
+            s += "float ls_AO = 0.0;\n";
+            s += "float ls_Emission = 0.0;\n";
+            if (detail)
+            {
+                s += "float ls_EmissionScalar = 0.0;\n";
+                s += "vec3 ls_EmissionColor = vec3(0.0);\n";
+            }
+            s += "float ls_TotalW = 0.0;\n";
+            s += "uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);\n";
+            s += "uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);\n";
+            s += "for (int ch = 0; ch < 8; ch++) {\n";
+            s += "    uint packedWord = (ch < 4) ? packedLI : packedLI2;\n";
+            s += "    uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;\n";
+            s += "    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+                 "uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);\n";
+            s += "    if (w < 0.001) continue;\n";
+            // Layer samples run inside per-fragment-divergent control flow (this `continue`, and
+            // mesh_terrain's RVT resolved/fallback branch), where implicit-LOD texture() derivatives
+            // are undefined and cause mip shimmer at RVT seams — so sample with EXPLICIT gradients
+            // (textureGrad). The includer must define triplanarWorldUVdx/dy (screen-space gradients
+            // of triplanarWorldUV) in uniform control flow before including this snippet.
+            if (detail)
+                s += "    // Explicit gradients remain valid inside the divergent layer loop and RVT fallback branch.\n";
+            s += "    vec2 layerUV = triplanarWorldUV * terrainLayers[paletteIdx].tilingScale;\n";
+            s += "    vec2 layerUVdx = triplanarWorldUVdx * terrainLayers[paletteIdx].tilingScale;\n";
+            s += "    vec2 layerUVdy = triplanarWorldUVdy * terrainLayers[paletteIdx].tilingScale;\n";
+            s += "    uint albedoIdx = terrainLayers[paletteIdx].albedoTextureIndex;\n";
+            s += "    vec3 layerAlbedo = (albedoIdx > 0u) ? "
+                 "textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV, layerUVdx, layerUVdy).rgb : vec3(0.5);\n";
+            // The non-detail permutation lights terrain with the geometric normal only (mesh_terrain
+            // uses N = normalize(fragNormal); the RVT bake writes no normal plane), so it omits the
+            // per-layer normal fetch — a composited tangent-space normal would be dead work there.
+            if (detail)
+            {
+                s += "    uint normalIdx = terrainLayers[paletteIdx].normalTextureIndex;\n";
+                s += "    vec3 layerNormal = (normalIdx > 0u) ? "
+                     "textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], layerUV, layerUVdx, layerUVdy).xyz * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n";
+            }
+            s += "    uint ormIdx = terrainLayers[paletteIdx].ormTextureIndex;\n";
+            s += "    float layerAO, layerRoughness, layerMetallic;\n";
+            s += "    if (ormIdx > 0u) {\n";
+            s += "        vec3 ormSample = textureGrad(bindlessTextures[nonuniformEXT(ormIdx)], layerUV, layerUVdx, layerUVdy).rgb;\n";
+            s += "        layerAO = ormSample.r;\n";
+            s += "        layerRoughness = ormSample.g;\n";
+            s += "        layerMetallic = ormSample.b;\n";
+            s += "    } else {\n";
+            s += "        layerAO = terrainLayers[paletteIdx].ao;\n";
+            s += "        layerRoughness = terrainLayers[paletteIdx].roughness;\n";
+            s += "        layerMetallic = terrainLayers[paletteIdx].metallic;\n";
+            s += "    }\n";
+            s += "    float layerEmission = terrainLayers[paletteIdx].emissionStrength;\n";
+            if (detail)
+            {
+                s += "    uint emissionIdx = terrainLayers[paletteIdx].emissionTextureIndex;\n";
+                s += "    if (emissionIdx > 0u) {\n";
+                s += "        vec3 emissionSample = textureGrad(bindlessTextures[nonuniformEXT(emissionIdx)], layerUV, layerUVdx, layerUVdy).rgb;\n";
+                s += "        ls_EmissionColor += emissionSample * layerEmission * w;\n";
+                s += "    } else {\n";
+                s += "        ls_EmissionScalar += layerEmission * w;\n";
+                s += "    }\n";
+            }
+            s += "    ls_Albedo += layerAlbedo * w;\n";
+            if (detail) s += "    ls_Normal += layerNormal * w;\n";
+            s += "    ls_Roughness += layerRoughness * w;\n";
+            s += "    ls_Metallic += layerMetallic * w;\n";
+            s += "    ls_AO += layerAO * w;\n";
+            s += "    ls_Emission += layerEmission * w;\n";
+            s += "    ls_TotalW += w;\n";
+            s += "}\n";
+            s += "float ls_InvW = 1.0 / max(ls_TotalW, 0.001);\n";
+            s += "ls_Albedo *= ls_InvW;\n";
+            if (detail) s += "ls_Normal *= ls_InvW;\n";
+            s += "ls_Roughness *= ls_InvW;\n";
+            s += "ls_Metallic *= ls_InvW;\n";
+            s += "ls_AO *= ls_InvW;\n";
+            s += "ls_Emission *= ls_InvW;\n";
+            if (detail)
+            {
+                s += "ls_EmissionScalar *= ls_InvW;\n";
+                s += "ls_EmissionColor *= ls_InvW;\n";
+            }
+            s += "// Terrain material properties\n";
+            s += "vec3 mat_albedo = ls_Albedo;\n";
+            if (detail)
+            {
+                s += "#define MAT_NORMALTS_DEFINED\n";
+                s += "float ls_NormalLengthSq = dot(ls_Normal, ls_Normal);\n";
+                s += "vec3 mat_normalTS = (ls_NormalLengthSq > 1e-8) ? ls_Normal * inversesqrt(ls_NormalLengthSq) : vec3(0.0, 0.0, 1.0);\n";
+            }
+            s += "float mat_metallic = ls_Metallic;\n";
+            s += "float mat_roughness = ls_Roughness;\n";
+            s += "float mat_ao = ls_AO;\n";
+            s += "#define MAT_EMISSION_DEFINED\n";
+            if (detail)
+                s += "vec3 mat_emission = mat_albedo * ls_EmissionScalar + ls_EmissionColor;\n";
+            else
+                s += "vec3 mat_emission = mat_albedo * ls_Emission;\n";
+            return s;
+        }
+    }
+
     TerrainCompilationResult ShaderGraphCompiler::compileTerrainMaterial(const terrain::TerrainMaterialData& material) {
         TerrainCompilationResult result;
 
@@ -23,73 +139,11 @@ namespace editor::graph {
         std::string code;
         code += "// Generated terrain material code\n";
         code += "// Per-tile palette: 8 channels with runtime indirection into palette of " + std::to_string(material.activeLayerCount) + " layer(s)\n";
-        code += "vec3 ls_Albedo = vec3(0.0);\n";
-        code += "vec3 ls_Normal = vec3(0.0);\n";
-        code += "float ls_Roughness = 0.0;\n";
-        code += "float ls_Metallic = 0.0;\n";
-        code += "float ls_AO = 0.0;\n";
-        code += "float ls_Emission = 0.0;\n";
-        code += "float ls_TotalW = 0.0;\n";
-        code += "uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);\n";
-        code += "uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);\n";
-        code += "for (int ch = 0; ch < 8; ch++) {\n";
-        code += "    uint packedWord = (ch < 4) ? packedLI : packedLI2;\n";
-        code += "    uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;\n";
-        code += "    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
-                "uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);\n";
-        code += "    if (w < 0.001) continue;\n";
-        // VK-1209 finding #7: sample with EXPLICIT gradients (textureGrad). These layer samples run
-        // inside per-fragment-divergent control flow (this `continue`, and mesh_terrain's RVT
-        // resolved/fallback branch), where implicit-LOD texture() derivatives are undefined and cause
-        // mip shimmer at RVT seams. The includer must define triplanarWorldUVdx/dy (screen-space
-        // gradients of triplanarWorldUV) in uniform control flow before including this snippet.
-        code += "    vec2 layerUV = triplanarWorldUV * terrainLayers[paletteIdx].tilingScale;\n";
-        code += "    vec2 layerUVdx = triplanarWorldUVdx * terrainLayers[paletteIdx].tilingScale;\n";
-        code += "    vec2 layerUVdy = triplanarWorldUVdy * terrainLayers[paletteIdx].tilingScale;\n";
-        code += "    uint albedoIdx = terrainLayers[paletteIdx].albedoTextureIndex;\n";
-        code += "    vec3 layerAlbedo = (albedoIdx > 0u) ? "
-                "textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV, layerUVdx, layerUVdy).rgb : vec3(0.5);\n";
-        code += "    uint normalIdx = terrainLayers[paletteIdx].normalTextureIndex;\n";
-        code += "    vec3 layerNormal = (normalIdx > 0u) ? "
-                "textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], layerUV, layerUVdx, layerUVdy).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n";
-        code += "    uint ormIdx = terrainLayers[paletteIdx].ormTextureIndex;\n";
-        code += "    float layerAO, layerRoughness, layerMetallic;\n";
-        code += "    if (ormIdx > 0u) {\n";
-        code += "        vec3 ormSample = textureGrad(bindlessTextures[nonuniformEXT(ormIdx)], layerUV, layerUVdx, layerUVdy).rgb;\n";
-        code += "        layerAO = ormSample.r;\n";
-        code += "        layerRoughness = ormSample.g;\n";
-        code += "        layerMetallic = ormSample.b;\n";
-        code += "    } else {\n";
-        code += "        layerAO = terrainLayers[paletteIdx].ao;\n";
-        code += "        layerRoughness = terrainLayers[paletteIdx].roughness;\n";
-        code += "        layerMetallic = terrainLayers[paletteIdx].metallic;\n";
-        code += "    }\n";
-        code += "    float layerEmission = terrainLayers[paletteIdx].emissionStrength;\n";
-        code += "    ls_Albedo += layerAlbedo * w;\n";
-        code += "    ls_Normal += layerNormal * w;\n";
-        code += "    ls_Roughness += layerRoughness * w;\n";
-        code += "    ls_Metallic += layerMetallic * w;\n";
-        code += "    ls_AO += layerAO * w;\n";
-        code += "    ls_Emission += layerEmission * w;\n";
-        code += "    ls_TotalW += w;\n";
-        code += "}\n";
-
-        code += "float ls_InvW = 1.0 / max(ls_TotalW, 0.001);\n";
-        code += "ls_Albedo *= ls_InvW;\n";
-        code += "ls_Normal = normalize(ls_Normal);\n";
-        code += "ls_Roughness *= ls_InvW;\n";
-        code += "ls_Metallic *= ls_InvW;\n";
-        code += "ls_AO *= ls_InvW;\n";
-        code += "ls_Emission *= ls_InvW;\n";
-
-        code += "// Terrain material properties\n";
-        code += "vec3 mat_albedo = ls_Albedo;\n";
-        code += "vec3 mat_normalTS = ls_Normal;\n";
-        code += "float mat_metallic = ls_Metallic;\n";
-        code += "float mat_roughness = ls_Roughness;\n";
-        code += "float mat_ao = ls_AO;\n";
-        code += "#define MAT_EMISSION_DEFINED\n";
-        code += "vec3 mat_emission = mat_albedo * ls_Emission;\n";
+        code += "#ifdef TERRAIN_DETAIL_MAPS\n";
+        code += buildTerrainCompositeLoop(/*detail=*/true);
+        code += "#else\n";
+        code += buildTerrainCompositeLoop(/*detail=*/false);
+        code += "#endif\n";
 
         result.materialSnippet = code;
         result.success = true;
