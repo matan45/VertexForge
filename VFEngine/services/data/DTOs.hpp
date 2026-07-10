@@ -483,6 +483,8 @@ namespace services
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         EntityHandle renderTextureSource;
         std::string renderTextureSourceName;
+        // VK-1488: runtime-only plugin/GPU external texture key ("__plugintex_<id>__").
+        std::string externalTextureKey;
 
         uint8_t imageType = 0; // 0=Simple, 1=Sliced, 2=Tiled
         glm::vec4 border{0.0f, 0.0f, 0.0f, 0.0f}; // left, right, top, bottom (source pixels)

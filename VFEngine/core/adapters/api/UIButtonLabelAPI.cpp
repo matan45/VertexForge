@@ -178,6 +178,53 @@ namespace core::api
                 return value::Value(data->textureRef.resolve());
             }});
 
+        // VK-1488: bind a plugin/GPU texture to a UIImage by its "__plugintex_<id>__" key
+        // (the key returned by PluginContext::registerUITexture). Unlike setImageTexture this
+        // is NOT an asset path — it resolves against the UI bindless external-texture table
+        // each frame, so the image updates live. Pass "" (or clearImageExternalTexture) to unbind.
+        interpreter->registerNativeFunction("_native_ui_setImageExternalTexture",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setImageExternalTexture"));
+                std::string key = extractString(args[1], "_native_ui_setImageExternalTexture");
+
+                events::ui::GetUIImageDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto imageData = data.value();
+                imageData.externalTextureKey = key;
+
+                events::ui::SetUIImageDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.imageData = imageData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_clearImageExternalTexture",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_clearImageExternalTexture"));
+
+                events::ui::GetUIImageDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto imageData = data.value();
+                imageData.externalTextureKey.clear();
+
+                events::ui::SetUIImageDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.imageData = imageData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
         // ---- UILabel property setters/getters (VK-1352) ----
         // Each mirrors _native_ui_setLabelText: query the full UILabelData,
         // mutate one field, write it back via SetUILabelDataCommand. The UI

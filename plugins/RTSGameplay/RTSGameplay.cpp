@@ -157,6 +157,18 @@ private:
                 return result;
             }, this);
 
+        // _rts_fog_overlayKey() -> string: the generic UI external-texture key for the
+        // RGBA minimap fog overlay (VK-1488). Empty until the overlay texture is created
+        // and registered; the minimap script binds it with UI::setImageExternalTexture.
+        ctx->registerScriptFunction("_rts_fog_overlayKey",
+            [](void* userData, MTypeContext* c, const MTypeValue* const* /*args*/, int /*argc*/) -> MTypeValue*
+            {
+                auto* self = static_cast<RTSGameplay*>(userData);
+                const MTypePluginHost* h = self->host;
+                const std::string& key = self->fogOfWar.overlayKey();
+                return h->makeString(c, key.c_str(), key.size());
+            }, this);
+
         // _rts_apply_damage(targetId, amount) -> int: applies `amount` damage to
         // the target's Health (VK-1404). Returns 1 if this killed it, 0 if it
         // survived (incl. a no-op for amount <= 0), -1 if the target is invalid or

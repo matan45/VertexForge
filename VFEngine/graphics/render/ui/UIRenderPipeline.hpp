@@ -73,7 +73,11 @@ namespace render::ui
         std::unordered_map<std::string, TextureEntry> textureCache;
         std::unordered_map<std::string, ExternalTextureEntry> externalTextureCache;
         static constexpr uint32_t MAX_UI_TEXTURES = 64;
-        static constexpr uint32_t MAX_EXTERNAL_TEXTURES = 8;
+        // External UI textures (RTT targets + VK-1488 plugin/GPU textures) share this
+        // pool. It only guards the externalTextureCache map size; the bindless table has
+        // its own (UI_BINDLESS_CAPACITY) budget. Raised 8 -> 16 so plugin textures can
+        // coexist with the existing RTT consumers.
+        static constexpr uint32_t MAX_EXTERNAL_TEXTURES = 16;
         static constexpr uint32_t UI_BINDLESS_CAPACITY = 2048;
 
         std::vector<UIScissorGroup> scissorGroups;

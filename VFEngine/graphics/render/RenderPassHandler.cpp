@@ -261,7 +261,26 @@ namespace render
 
     void RenderPassHandler::destroyPluginTexture2D(plugin::PluginTextureHandle handle)
     {
+        // VK-1488: drop any UI external-texture binding before the image is destroyed so
+        // no stale descriptor lingers in the UI/billboard bindless tables.
+        std::string uiKey = pluginTextureManager->removeUITexture(handle);
+        if (!uiKey.empty())
+            unregisterExternalTexture(uiKey);
         pluginTextureManager->destroyTexture2D(handle);
+    }
+
+    std::string RenderPassHandler::registerPluginUITexture(plugin::PluginTextureHandle handle)
+    {
+        // Record the handle->key binding; the per-frame repoint in draw() fills the current
+        // swapchain image's bindless slot from the texture's (stable) view/sampler.
+        return pluginTextureManager->registerUITexture(handle);
+    }
+
+    void RenderPassHandler::unregisterPluginUITexture(plugin::PluginTextureHandle handle)
+    {
+        std::string uiKey = pluginTextureManager->removeUITexture(handle);
+        if (!uiKey.empty())
+            unregisterExternalTexture(uiKey);
     }
 
     void RenderPassHandler::bindWorldMask(plugin::PluginTextureHandle handle,

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <string>
 #include <vector>
 #include "../../data/PluginTextureTypes.hpp"
 
@@ -16,6 +17,11 @@ namespace services {
                                      std::vector<std::byte>&& data) = 0;
 
         virtual void destroyTexture2D(plugin::PluginTextureHandle handle) = 0;
+
+        // VK-1488: expose/withdraw a plugin texture as a UI external-texture source.
+        // registerUITexture returns the deterministic key ("__plugintex_<id>__"), "" on miss.
+        virtual std::string registerUITexture(plugin::PluginTextureHandle handle) = 0;
+        virtual void unregisterUITexture(plugin::PluginTextureHandle handle) = 0;
 
         virtual void bindWorldMask(plugin::PluginTextureHandle handle,
                                    const glm::vec3& worldMin, const glm::vec3& worldMax,

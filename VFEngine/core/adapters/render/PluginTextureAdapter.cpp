@@ -32,6 +32,20 @@ namespace core
         handler->destroyPluginTexture2D(handle);
     }
 
+    std::string PluginTextureAdapter::registerUITexture(plugin::PluginTextureHandle handle)
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (!handler) return {};
+        return handler->registerPluginUITexture(handle);
+    }
+
+    void PluginTextureAdapter::unregisterUITexture(plugin::PluginTextureHandle handle)
+    {
+        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (!handler) return;
+        handler->unregisterPluginUITexture(handle);
+    }
+
     void PluginTextureAdapter::bindWorldMask(plugin::PluginTextureHandle handle,
                                              const glm::vec3& worldMin, const glm::vec3& worldMax,
                                              const plugin::WorldMaskParams& params)

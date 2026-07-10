@@ -27,6 +27,21 @@ namespace events::plugintexture {
         std::string_view getName() const override { return "DestroyTexture2D"; }
     };
 
+    // VK-1488: expose a plugin texture as a generic UI image source. Returns the
+    // deterministic UI key ("__plugintex_<id>__") to place on
+    // UIImageComponent.externalTextureKey; empty string if the handle is unknown.
+    struct RegisterUITextureCommand : ICommand<std::string> {
+        plugin::PluginTextureHandle handle;
+
+        std::string_view getName() const override { return "RegisterUITexture"; }
+    };
+
+    struct UnregisterUITextureCommand : ICommand<> {
+        plugin::PluginTextureHandle handle;
+
+        std::string_view getName() const override { return "UnregisterUITexture"; }
+    };
+
     struct BindWorldMaskCommand : ICommand<> {
         plugin::PluginTextureHandle handle;
         glm::vec3 worldMin{0.0f};

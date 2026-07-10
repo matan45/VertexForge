@@ -41,6 +41,20 @@ namespace services
             }
         );
 
+        dispatcher.registerCommandHandler<events::plugintexture::RegisterUITextureCommand>(
+            [this](const events::plugintexture::RegisterUITextureCommand& cmd) -> std::string
+            {
+                return provider->registerUITexture(cmd.handle);
+            }
+        );
+
+        dispatcher.registerCommandHandler<events::plugintexture::UnregisterUITextureCommand>(
+            [this](const events::plugintexture::UnregisterUITextureCommand& cmd)
+            {
+                provider->unregisterUITexture(cmd.handle);
+            }
+        );
+
         dispatcher.registerCommandHandler<events::plugintexture::BindWorldMaskCommand>(
             [this](const events::plugintexture::BindWorldMaskCommand& cmd)
             {

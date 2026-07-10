@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <cstddef>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include "../../core/VulkanMemoryManager.hpp"
@@ -83,6 +84,11 @@ namespace render::custom
         std::unordered_map<uint64_t, TextureEntry> textures;
         uint64_t nextId = 1;
 
+        // VK-1488: plugin textures currently exposed as UI external-texture sources.
+        // texture id -> synthetic UI key ("__plugintex_<id>__"). The engine repoints
+        // each of these into the UI bindless table every frame (RenderPassHandler::draw).
+        std::unordered_map<uint64_t, std::string> uiBindings;
+
         // World mask state (single mask).
         uint64_t boundMaskId = 0;
         plugin::WorldMaskParams maskParams;
@@ -115,6 +121,28 @@ namespace render::custom
                                                     plugin::TextureFormat format);
         void updateTexture2D(plugin::PluginTextureHandle handle, std::vector<std::byte>&& data);
         void destroyTexture2D(plugin::PluginTextureHandle handle);
+
+        // VK-1488 — expose a plugin texture as a UI external-texture source.
+        // A snapshot of one live UI-exposed plugin texture: its synthetic key plus the
+        // view/sampler to feed straight to UIRenderPipeline::registerExternalTexture.
+        struct UITextureBinding
+        {
+            std::string key;
+            vk::ImageView view;
+            vk::Sampler sampler;
+        };
+
+        // Record a handle->UI-key binding and return the deterministic key
+        // ("__plugintex_<id>__"), or "" if the handle is unknown. Idempotent.
+        std::string registerUITexture(plugin::PluginTextureHandle handle);
+        // Drop a handle's UI binding; returns the key it had registered (or "") so the
+        // caller can unregister that key from the UI/billboard pipelines.
+        std::string removeUITexture(plugin::PluginTextureHandle handle);
+        // The UI key a handle is currently exposed under, or "" if it isn't bound.
+        std::string getUITextureKey(plugin::PluginTextureHandle handle) const;
+        // Snapshot (under stateMutex) of every UI-exposed plugin texture that still has a
+        // live view+sampler — safe to feed to registerExternalTexture each frame.
+        std::vector<UITextureBinding> collectUITextureBindings() const;
 
         void bindWorldMask(plugin::PluginTextureHandle handle,
                            const glm::vec3& worldMin, const glm::vec3& worldMax,

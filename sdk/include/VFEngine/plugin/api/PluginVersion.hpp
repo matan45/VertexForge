@@ -22,6 +22,9 @@ namespace plugin {
     //      and assets they reference by project-relative path at runtime.
     // v16: findAssetPathsByExtension on PluginContext so plugins can build
     //      read-only indexes over project assets without guessing project roots.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 16;
+    // v17: registerUITexture/unregisterUITexture on PluginContext — expose a plugin
+    //      2D texture as a generic UI image source (bind any plugin/GPU texture to a
+    //      UIImageComponent by key; used for a smooth minimap fog-of-war overlay).
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 17;
 
 }

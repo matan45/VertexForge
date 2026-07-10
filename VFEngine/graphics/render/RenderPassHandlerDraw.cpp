@@ -53,7 +53,19 @@ namespace render
         // this frame, before any pass records draws (VK-1368).
         FrameDrawStats::beginFrame();
 
-        if (pluginTextureManager) pluginTextureManager->flushUploads(commandBuffer);
+        if (pluginTextureManager)
+        {
+            pluginTextureManager->flushUploads(commandBuffer);
+
+            // VK-1488: repoint every UI-exposed plugin texture into the UI/billboard bindless
+            // table for the swapchain image being recorded. Same safety window as the RTT
+            // repoint — RenderManager already waited imagesInFlight[imageIndex], so this slot
+            // is idle (UpdateAfterBind). A plugin texture's view/sampler are stable for its
+            // lifetime, so once a slot matches this is a cheap no-op; first-seen slots fill
+            // lazily and a swapchain resize re-populates automatically next frame.
+            for (const auto& binding : pluginTextureManager->collectUITextureBindings())
+                registerExternalTexture(binding.key, imageIndex, binding.view, binding.sampler);
+        }
 
         // Lit plugin custom pipelines: pick up the RT shadow mask layout once the
         // RT shadow pipeline comes online — rebuilds them with RT_SHADOW_ENABLED

@@ -1,4 +1,5 @@
 #include "UIRenderPipeline.hpp"
+#include "UITextureKeys.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -155,7 +156,7 @@ namespace render::ui
             if (image.texturePath.empty()) continue;
 
             std::string resolvedPath = image.texturePath;
-            bool isRTTSynthetic = resolvedPath.starts_with("__rtt_");
+            bool isSynthetic = isSyntheticUITextureKey(resolvedPath);
 
             uint32_t textureIndex = 0;
             auto extIt = externalTextureCache.find(resolvedPath);
@@ -165,7 +166,7 @@ namespace render::ui
                 textureIndex = extIt->second.bindlessIndices[imageIndex];
                 if (textureIndex == render::gpudriven::INVALID_TEXTURE_INDEX) continue;
             }
-            else if (!isRTTSynthetic)
+            else if (!isSynthetic)
             {
                 // A file texture that fails to load/register (e.g. the bindless table is
                 // saturated) falls back to the white default at index 0, so the element
@@ -176,7 +177,7 @@ namespace render::ui
             }
             else
             {
-                continue; // RTT target not ready this frame
+                continue; // synthetic external texture (RTT / plugin) not registered this frame
             }
 
             glm::ivec4 scissorKey{

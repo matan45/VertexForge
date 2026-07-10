@@ -527,6 +527,11 @@ namespace render
                                                           plugin::TextureFormat format);
         void updatePluginTexture2D(plugin::PluginTextureHandle handle, std::vector<std::byte>&& data);
         void destroyPluginTexture2D(plugin::PluginTextureHandle handle);
+        // VK-1488 — expose a plugin texture as a generic UI image source. register returns
+        // the deterministic key ("__plugintex_<id>__") to place on UIImageComponent.externalTextureKey;
+        // the per-frame repoint in draw() keeps its bindless slot pointed at the texture.
+        std::string registerPluginUITexture(plugin::PluginTextureHandle handle);
+        void unregisterPluginUITexture(plugin::PluginTextureHandle handle);
         void bindWorldMask(plugin::PluginTextureHandle handle,
                            const glm::vec3& worldMin, const glm::vec3& worldMax,
                            const plugin::WorldMaskParams& params);

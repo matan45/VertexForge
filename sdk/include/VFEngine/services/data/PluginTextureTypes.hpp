@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 #include <glm/glm.hpp>
 
 namespace plugin {
@@ -18,6 +19,15 @@ namespace plugin {
 
     inline constexpr uint32_t textureFormatBytesPerPixel(TextureFormat format) {
         return format == TextureFormat::RGBA8 ? 4u : 1u;
+    }
+
+    // VK-1488: deterministic UI external-texture key for a plugin texture handle.
+    // Single source of truth for the "__plugintex_<id>__" convention used to bind
+    // a plugin/GPU texture to UIImageComponent.externalTextureKey. Deterministic
+    // so a caller can recompute it without a round-trip; also returned by
+    // IPluginTextureProvider::registerUITexture / PluginContext::registerUITexture.
+    inline std::string pluginTextureUIKey(const PluginTextureHandle& handle) {
+        return "__plugintex_" + std::to_string(handle.id) + "__";
     }
 
     // World-space XZ-projected mask behavior. All effect fields default to

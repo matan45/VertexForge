@@ -486,6 +486,31 @@ namespace plugin {
             [&](const plugin::PluginTextureHandle& h) { return h.id == handle.id; });
     }
 
+    std::string PluginContextImpl::registerUITexture(plugin::PluginTextureHandle handle)
+    {
+        if (!hasCapability(std::string(capability::graphics))) {
+            vfLogWarning("[Plugin:{}] Cannot register UI texture - graphics capability not available", pluginName);
+            return {};
+        }
+        if (!handle.isValid()) return {};
+
+        events::plugintexture::RegisterUITextureCommand cmd;
+        cmd.handle = handle;
+        // The engine auto-unregisters the UI key when the texture is destroyed
+        // (destroyTexture2D and, on unload, the managedTextures cleanup loop below),
+        // so no extra per-handle tracking is needed here.
+        return events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::unregisterUITexture(plugin::PluginTextureHandle handle)
+    {
+        if (!handle.isValid()) return;
+
+        events::plugintexture::UnregisterUITextureCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
     void PluginContextImpl::bindWorldMask(plugin::PluginTextureHandle handle,
                                           const glm::vec3& worldMin, const glm::vec3& worldMax,
                                           const plugin::WorldMaskParams& params)

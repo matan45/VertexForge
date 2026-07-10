@@ -354,6 +354,7 @@ namespace services {
         else
             data.renderTextureSource = EntityHandle::invalid();
         data.renderTextureSourceName = comp.renderTextureSourceName;
+        data.externalTextureKey = comp.externalTextureKey; // VK-1488
         data.imageType = static_cast<uint8_t>(comp.imageType);
         data.border = comp.border;
         data.sourceWidth = comp.sourceWidth;
@@ -376,6 +377,7 @@ namespace services {
         comp.textureRef = imageData.textureRef;
         comp.colorTint = imageData.colorTint;
         comp.renderTextureSourceName = imageData.renderTextureSourceName;
+        comp.externalTextureKey = imageData.externalTextureKey; // VK-1488
         comp.imageType = static_cast<components::UIImageType>(imageData.imageType);
         comp.border = imageData.border;
         comp.sourceWidth = imageData.sourceWidth;
