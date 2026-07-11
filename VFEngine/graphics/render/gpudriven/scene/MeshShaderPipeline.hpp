@@ -39,6 +39,8 @@ namespace render::gpudriven
         vk::DescriptorSetLayout rtSpotShadowMaskLayout;
         // Optional per-point-light RT shadow mask array (set 16, VK-1176)
         vk::DescriptorSetLayout rtPointShadowMaskLayout;
+        // Editor selection coverage (fixed set 15 when present).
+        vk::DescriptorSetLayout selectionCoverageLayout;
         // Dynamic rendering formats (Vulkan 1.3)
         std::vector<vk::Format> colorAttachmentFormats;
         vk::Format depthAttachmentFormat = vk::Format::eUndefined;
@@ -59,6 +61,7 @@ namespace render::gpudriven
     constexpr uint32_t MESHLET_CULL_FRUSTUM_BIT = 0x100;
     constexpr uint32_t MESHLET_CULL_BACKFACE_BIT = 0x200;
     constexpr uint32_t MESHLET_CULL_OCCLUSION_BIT = 0x800;
+    constexpr uint32_t SELECTION_COVERAGE_WRITE_BIT = 0x1000;
 
     struct MeshletCullingStats
     {

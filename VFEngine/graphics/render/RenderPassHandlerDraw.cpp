@@ -711,7 +711,8 @@ namespace render
         if (wboitActive && gpuDrivenRenderer->hasTransparentObjects())
         {
             wboitPipeline->beginWBOITPass(commandBuffer, imageIndex);
-            gpuDrivenRenderer->renderWBOITDraw(commandBuffer, iblDescriptorSet);
+            gpuDrivenRenderer->renderWBOITDraw(commandBuffer, iblDescriptorSet, 0, 0,
+                                               hasSelectedEntities());
             wboitPipeline->endWBOITPass(commandBuffer);
             wboitPipeline->composite(commandBuffer, imageIndex);
         }
@@ -779,9 +780,12 @@ namespace render
         auto meshFuture = threading::JobSystem::instance().submit([&]() {
             meshCmd = sceneThreadPoolManager->getSecondary(0, imageIndex);
             setupSecondary(meshCmd);
-            gpuDrivenRenderer->renderDraw(meshCmd, iblDescriptorSet);
-            if (!wboitActive) gpuDrivenRenderer->renderTransparentDraw(meshCmd, iblDescriptorSet);
-            gpuDrivenRenderer->renderBlendDraw(meshCmd, iblDescriptorSet);
+            const bool selectionCoverage = hasSelectedEntities();
+            gpuDrivenRenderer->renderDraw(meshCmd, iblDescriptorSet, 0, 0, selectionCoverage);
+            if (!wboitActive)
+                gpuDrivenRenderer->renderTransparentDraw(meshCmd, iblDescriptorSet, 0, 0,
+                                                         selectionCoverage);
+            gpuDrivenRenderer->renderBlendDraw(meshCmd, iblDescriptorSet, 0, 0, selectionCoverage);
             meshCmd.end();
         }, threading::JobPriority::HIGH);
 
@@ -930,12 +934,15 @@ namespace render
         vk::Rect2D scissor{{0, 0}, extent};
         commandBuffer.setScissor(0, scissor);
 
-        gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
+        const bool selectionCoverage = hasSelectedEntities();
+        gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet, 0, 0, selectionCoverage);
 
         if (!wboitActive)
-            gpuDrivenRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet);
+            gpuDrivenRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet, 0, 0,
+                                                     selectionCoverage);
 
-        gpuDrivenRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet);
+        gpuDrivenRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet, 0, 0,
+                                           selectionCoverage);
 
         if (gpuDrivenRenderer->isTerrainRenderingEnabled())
         {

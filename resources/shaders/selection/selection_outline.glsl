@@ -14,7 +14,7 @@
 layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 outColor;
 
-layout(set = 0, binding = 0) uniform sampler2D selectionMask;
+layout(set = 0, binding = 0) uniform usampler2D selectionMask;
 
 layout(push_constant) uniform PushConstants {
     vec2 texelSize;    // 1.0 / mask resolution
@@ -24,21 +24,24 @@ layout(push_constant) uniform PushConstants {
 
 void main()
 {
-    float center = texture(selectionMask, texCoord).r;
-    if (center > 0.5) {
+    ivec2 extent = textureSize(selectionMask, 0);
+    ivec2 centerCoord = clamp(ivec2(texCoord * vec2(extent)), ivec2(0), extent - ivec2(1));
+    bool centerSelected = (texelFetch(selectionMask, centerCoord, 0).r & 1u) == 0u;
+    if (centerSelected) {
         discard;
     }
 
-    float maxNeighbor = 0.0;
+    bool hasSelectedNeighbor = false;
     for (int y = -2; y <= 2; ++y) {
         for (int x = -2; x <= 2; ++x) {
             if (x == 0 && y == 0) continue;
-            vec2 offset = vec2(float(x), float(y)) * pc.texelSize;
-            maxNeighbor = max(maxNeighbor, texture(selectionMask, texCoord + offset).r);
+            ivec2 coord = clamp(centerCoord + ivec2(x, y), ivec2(0), extent - ivec2(1));
+            hasSelectedNeighbor = hasSelectedNeighbor ||
+                ((texelFetch(selectionMask, coord, 0).r & 1u) == 0u);
         }
     }
 
-    if (maxNeighbor < 0.5) {
+    if (!hasSelectedNeighbor) {
         discard;
     }
     outColor = vec4(pc.outlineColor.rgb, 1.0);

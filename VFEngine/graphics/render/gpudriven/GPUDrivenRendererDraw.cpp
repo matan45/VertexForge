@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "SelectionMaskPipeline.hpp"
 #include "stats/FrameDrawStats.hpp" // VK-1443: was reached transitively before the header slim
 #include "../../core/SwapChain.hpp"
 #include "../gi/GIDebugRenderer.hpp"
@@ -73,12 +74,21 @@ namespace render::gpudriven
         }
     }
 
+    static void bindSelectionCoverageDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
+                                                   SelectionMaskPipeline* selection)
+    {
+        if (!selection || !selection->isInitialized()) return;
+        vk::DescriptorSet set = selection->getCurrentBitsDescriptorSet();
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 15, 1, &set, 0, nullptr);
+    }
+
     // Spot (VK-1175) and point (VK-1176) RT masks now ride in the shared set 13 alongside the
     // directional mask, so they no longer need their own bind at sets 15/16 (see
     // bindRTShadowMaskDescriptorSet).
 
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                                       uint32_t screenWidth, uint32_t screenHeight)
+                                       uint32_t screenWidth, uint32_t screenHeight,
+                                       bool selectionCoverage)
     {
         if (!initialized || !enabled || stats.totalObjects == 0 || !meshShaderPipeline)
         {
@@ -107,6 +117,7 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *meshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *meshShaderPipeline, currentImageIndex);
         bindWorldMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
+        bindSelectionCoverageDescriptorSet(cmd, layout, selectionMaskPipeline.get());
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -136,7 +147,8 @@ namespace render::gpudriven
                 pushConstants.viewMode = culling.currentViewMode;
                 if (culling.meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
                 if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
-                if (culling.meshletOcclusionCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_OCCLUSION_BIT;
+            if (culling.meshletOcclusionCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_OCCLUSION_BIT;
+            if (selectionCoverage) pushConstants.viewMode |= SELECTION_COVERAGE_WRITE_BIT;
                 pushConstants.screenWidth = dispatchWidth;
                 pushConstants.screenHeight = dispatchHeight;
                 pushConstants.hiZMipLevels = prepassHiZMipLevels;
@@ -162,7 +174,8 @@ namespace render::gpudriven
     }
 
     void GPUDrivenRenderer::renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                                                   uint32_t screenWidth, uint32_t screenHeight)
+                                                   uint32_t screenWidth, uint32_t screenHeight,
+                                                   bool selectionCoverage)
     {
         if (!initialized || !enabled || stats.totalObjects == 0 || !transparentMeshShaderPipeline)
         {
@@ -196,6 +209,7 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline, currentImageIndex);
         bindWorldMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+        bindSelectionCoverageDescriptorSet(cmd, layout, selectionMaskPipeline.get());
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -223,6 +237,7 @@ namespace render::gpudriven
             pushConstants.viewMode = culling.currentViewMode;
             if (culling.meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
             if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+            if (selectionCoverage) pushConstants.viewMode |= SELECTION_COVERAGE_WRITE_BIT;
             pushConstants.screenWidth = dispatchWidth;
             pushConstants.screenHeight = dispatchHeight;
 
@@ -245,7 +260,8 @@ namespace render::gpudriven
     }
 
     void GPUDrivenRenderer::renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                                              uint32_t screenWidth, uint32_t screenHeight)
+                                              uint32_t screenWidth, uint32_t screenHeight,
+                                              bool selectionCoverage)
     {
         if (!initialized || !enabled || stats.totalObjects == 0 || !wboitMeshShaderPipeline)
         {
@@ -279,6 +295,7 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline, currentImageIndex);
         bindWorldMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
+        bindSelectionCoverageDescriptorSet(cmd, layout, selectionMaskPipeline.get());
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -306,6 +323,7 @@ namespace render::gpudriven
             pushConstants.viewMode = culling.currentViewMode;
             if (culling.meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
             if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+            if (selectionCoverage) pushConstants.viewMode |= SELECTION_COVERAGE_WRITE_BIT;
             pushConstants.screenWidth = dispatchWidth;
             pushConstants.screenHeight = dispatchHeight;
 
@@ -328,7 +346,8 @@ namespace render::gpudriven
     }
 
     void GPUDrivenRenderer::renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                                              uint32_t screenWidth, uint32_t screenHeight)
+                                              uint32_t screenWidth, uint32_t screenHeight,
+                                              bool selectionCoverage)
     {
         if (!initialized || !enabled || stats.totalObjects == 0 || !transparentMeshShaderPipeline)
         {
@@ -362,6 +381,7 @@ namespace render::gpudriven
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
         bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline, currentImageIndex);
         bindWorldMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+        bindSelectionCoverageDescriptorSet(cmd, layout, selectionMaskPipeline.get());
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -389,6 +409,7 @@ namespace render::gpudriven
             pushConstants.viewMode = culling.currentViewMode;
             if (culling.meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
             if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+            if (selectionCoverage) pushConstants.viewMode |= SELECTION_COVERAGE_WRITE_BIT;
             pushConstants.screenWidth = dispatchWidth;
             pushConstants.screenHeight = dispatchHeight;
 

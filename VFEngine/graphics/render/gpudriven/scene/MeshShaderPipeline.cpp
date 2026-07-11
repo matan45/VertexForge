@@ -586,6 +586,10 @@ namespace render::gpudriven
         {
             meshShader->addMacroDefinition("SVT_ENABLED"); // VK-1209 material SVT (set-1 bindings 3/4/5)
         }
+        if (info.selectionCoverageLayout)
+        {
+            meshShader->addMacroDefinition("SELECTION_COVERAGE_ENABLED");
+        }
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");
 
@@ -700,6 +704,14 @@ namespace render::gpudriven
         }
         worldMaskLayoutBound = info.worldMaskLayout != nullptr;
         worldMaskSetIndex = worldMaskLayoutBound ? (worldMaskAtSet11 ? 11u : 14u) : 0u;
+
+        if (info.selectionCoverageLayout)
+        {
+            ensureEmptyPlaceholder();
+            while (setLayouts.size() < 15)
+                setLayouts.push_back(emptyPlaceholderLayout);
+            setLayouts.push_back(info.selectionCoverageLayout); // Set 15
+        }
 
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |

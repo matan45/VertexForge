@@ -63,6 +63,10 @@ namespace render::gpudriven
         mergedBuffer = std::make_unique<MergedMeshBuffer>(device);
         mergedBuffer->init();
 
+        selectionMaskPipeline = std::make_unique<SelectionMaskPipeline>(device, swapChain);
+        selectionMaskPipeline->init({.maxObjectCount = mergedBuffer->getMaxObjectCount()});
+        selectionMaskPipeline->ensureMaskTarget(swapChain.getSwapchainExtent());
+
         objectStreamManager = std::make_unique<GPUObjectStreamManager>(*mergedBuffer);
         objectStreamManager->init();
 
@@ -159,6 +163,7 @@ namespace render::gpudriven
                 .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
                 .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .selectionCoverageLayout = selectionMaskPipeline->getDescriptorSetLayout(),
                 .colorAttachmentFormats = colorFormats,
                 .depthAttachmentFormat = depthFormat
             };
@@ -270,6 +275,7 @@ namespace render::gpudriven
             .giProbeDataLayout = giLayout,
             .causticLayout = wboitCausticLayout,
             .worldMaskLayout = currentWorldMaskLayout(),
+            .selectionCoverageLayout = selectionMaskPipeline->getDescriptorSetLayout(),
             .colorAttachmentFormats = wboitColorFormats,
             .depthAttachmentFormat = wboitDepthFormat,
             .wboitMode = true
@@ -472,6 +478,7 @@ namespace render::gpudriven
                 .giProbeDataLayout = giLayout,
                 .causticLayout = causticLayout,
                 .worldMaskLayout = currentWorldMaskLayout(),
+                .selectionCoverageLayout = selectionMaskPipeline->getDescriptorSetLayout(),
                 .colorAttachmentFormats = cachedColorFormats,
                 .depthAttachmentFormat = cachedDepthFormat
             };

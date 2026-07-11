@@ -238,6 +238,14 @@ layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
+#ifdef SELECTION_COVERAGE_ENABLED
+layout(std430, set = 15, binding = 0) readonly buffer SelectionBits {
+    uint selectionBits[];
+};
+layout(r32ui, set = 15, binding = 1) uniform uimage2D selectionVisibility;
+const uint SELECTION_COVERAGE_WRITE_BIT = 0x1000u;
+#endif
+
 #ifdef SVT_ENABLED
 // VK-1209 material Streamed Virtual Textures. UE5-style: the physical BC7 atlas lives in the
 // bindless heap (sampled as bindlessTextures[atlasIndex]); only the page table / feedback /
@@ -586,6 +594,25 @@ void main() {
         float materialOpacity = float(drawData.blendModeAndOpacity >> 16u) / 65535.0;
         alpha *= materialOpacity;
     }
+
+#ifdef SELECTION_COVERAGE_ENABLED
+    // Record the nearest fragment from the exact scene invocation that survived
+    // alpha masking and LOD dithering. Normal-Z float bits are monotonically
+    // ordered for [0,1], so atomicMin resolves arbitrary draw order. Bit zero is
+    // 0 for selected and 1 for unselected/background; selected wins exact ties.
+    if ((pc.viewMode & SELECTION_COVERAGE_WRITE_BIT) != 0u) {
+        uint objectIndex = drawData.objectIndex;
+        bool selected = (selectionBits[objectIndex >> 5u] &
+                         (1u << (objectIndex & 31u))) != 0u;
+        uint packedDepth = floatBitsToUint(gl_FragCoord.z) & 0xFFFFFFFEu;
+        uint packedVisibility = packedDepth | (selected ? 0u : 1u);
+        ivec2 pixel = ivec2(gl_FragCoord.xy);
+        if (all(greaterThanEqual(pixel, ivec2(0))) &&
+            all(lessThan(pixel, imageSize(selectionVisibility)))) {
+            imageAtomicMin(selectionVisibility, pixel, packedVisibility);
+        }
+    }
+#endif
 
     float metallic = matParams.x;
     float roughness = matParams.y;

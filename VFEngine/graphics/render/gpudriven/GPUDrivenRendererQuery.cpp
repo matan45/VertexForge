@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "SelectionMaskPipeline.hpp"
 #include "../occlusion/HiZBuffer.hpp"
 // VK-1443: full manager types (forward-declared in GPUDrivenRenderer.hpp) constructed /
 // dereferenced in this TU's init + query paths.
@@ -154,6 +155,7 @@ namespace render::gpudriven
                 .giProbeDataLayout = giLayout,
                 .causticLayout = causticLayout,
                 .worldMaskLayout = currentWorldMaskLayout(),
+                .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                 .colorAttachmentFormats = cachedColorFormats,
                 .depthAttachmentFormat = cachedDepthFormat
             };
