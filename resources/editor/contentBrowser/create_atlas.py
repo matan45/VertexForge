@@ -41,6 +41,7 @@ ICON_FILES = {
     19: "VFXSequence",             # physics animation
     20: "material",
     21: "collider",
+    22: "shading"
 }
 
 def find_icon_file(base_name):
