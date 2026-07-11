@@ -2,6 +2,7 @@
 #include "SettingsEntry.hpp"
 #include "config/EditorPreferences.hpp"
 #include "config/EditorTheme.hpp"
+#include "data/EditorKeybindingTypes.hpp"
 #include <imgui.h>
 #include <string>
 #include <vector>
@@ -14,6 +15,7 @@ namespace windows
         enum Category
         {
             Appearance = 0,
+            EditorShortcuts,
             Debug,
             WindowLayout,
             COUNT
@@ -48,6 +50,13 @@ namespace windows
         std::string themeColorFilter;
         bool themePreviewActive = false;      // live preview diverges from savedSettings
 
+        // Editor shortcut UI state. Shortcut edits are applied and persisted
+        // immediately through EditorKeybindingServiceImpl.
+        std::vector<services::EditorActionInfo> shortcutActions;
+        std::string shortcutCaptureAction;
+        std::string shortcutMessage;
+        bool shortcutRefreshPending = false;
+
         void loadSettings();
         void saveSettings();
         void resetToDefaults();
@@ -69,8 +78,17 @@ namespace windows
         void drawSearchResults();
 
         void drawAppearanceSection();
+        void drawEditorShortcutsSection();
         void drawDebugSection();
         void drawWindowLayoutSection();
+
+        void refreshShortcutActions();
+        void captureShortcutBinding();
+        void applyShortcutBinding(const services::InputBinding& binding);
+        void resetShortcut(const std::string& actionName);
+        void resetAllShortcuts();
+        std::string shortcutBindingLabel(const services::InputBinding& binding) const;
+        std::string shortcutActionLabel(const std::string& actionName) const;
 
         void buildSettingsRegistry();
         bool matchesSearch(const SettingsEntry& entry, const std::string& queryLower) const;

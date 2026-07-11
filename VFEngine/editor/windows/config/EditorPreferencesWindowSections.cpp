@@ -1,6 +1,8 @@
 #include "EditorPreferencesWindow.hpp"
 #include "SettingsTooltip.hpp"
 #include "../../handlers/EditorLayoutManager.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/editor/EditorKeybindingEvents.hpp"
 #include "string/StringUtil.hpp"
 #include <imgui.h>
 #include <cstring>
@@ -165,6 +167,240 @@ namespace windows
         if (ImGui::Checkbox("Compact Mode", &settings.appearance.compactMode))
             markDirty();
         drawSettingTooltip("Reduce padding and spacing for more compact UI layout");
+    }
+
+    // ============================================
+    // Editor Shortcuts
+    // ============================================
+
+    void EditorPreferencesWindow::refreshShortcutActions()
+    {
+        shortcutActions = events::EventDispatcher::instance().query(
+            events::editor::GetAllEditorActionsQuery{});
+        std::sort(shortcutActions.begin(), shortcutActions.end(),
+            [](const services::EditorActionInfo& lhs, const services::EditorActionInfo& rhs)
+            {
+                if (lhs.category != rhs.category) return lhs.category < rhs.category;
+                return lhs.displayName < rhs.displayName;
+            });
+    }
+
+    std::string EditorPreferencesWindow::shortcutBindingLabel(
+        const services::InputBinding& binding) const
+    {
+        std::string label;
+        if (binding.requireCtrl) label += "Ctrl+";
+        if (binding.requireShift) label += "Shift+";
+        if (binding.requireAlt) label += "Alt+";
+
+        if (binding.type == services::BindingType::MouseButton)
+        {
+            label += "Mouse " + std::to_string(binding.code + 1);
+            return label;
+        }
+
+        const char* keyName = ImGui::GetKeyName(static_cast<ImGuiKey>(binding.code));
+        if (keyName && keyName[0] != '\0')
+            label += keyName;
+        else
+            label += "Key " + std::to_string(binding.code);
+        return label;
+    }
+
+    std::string EditorPreferencesWindow::shortcutActionLabel(const std::string& actionName) const
+    {
+        const auto it = std::find_if(shortcutActions.begin(), shortcutActions.end(),
+            [&actionName](const services::EditorActionInfo& action)
+            {
+                return action.name == actionName;
+            });
+        return it != shortcutActions.end() ? it->displayName : actionName;
+    }
+
+    void EditorPreferencesWindow::applyShortcutBinding(
+        const services::InputBinding& binding)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::editor::GetKeybindingConflictsQuery conflictQuery;
+        conflictQuery.actionName = shortcutCaptureAction;
+        conflictQuery.binding = binding;
+        const auto conflicts = dispatcher.query(conflictQuery);
+        if (!conflicts.empty())
+        {
+            shortcutMessage = "Already assigned to " +
+                              shortcutActionLabel(conflicts.front().conflictingAction) + ".";
+            return;
+        }
+
+        events::editor::SetEditorActionBindingsCommand setCommand;
+        setCommand.actionName = shortcutCaptureAction;
+        setCommand.bindings = {binding};
+        dispatcher.execute(setCommand);
+
+        const bool saved = dispatcher.execute(events::editor::SaveEditorKeybindingsCommand{});
+        shortcutMessage = saved ? "Shortcut saved." : "Shortcut changed, but saving failed.";
+        shortcutCaptureAction.clear();
+        shortcutRefreshPending = true;
+    }
+
+    void EditorPreferencesWindow::captureShortcutBinding()
+    {
+        if (shortcutCaptureAction.empty()) return;
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        {
+            shortcutCaptureAction.clear();
+            shortcutMessage = "Rebinding cancelled.";
+            return;
+        }
+
+        const ImGuiIO& io = ImGui::GetIO();
+        for (int keyValue = ImGuiKey_NamedKey_BEGIN;
+             keyValue < ImGuiKey_GamepadStart; ++keyValue)
+        {
+            const auto key = static_cast<ImGuiKey>(keyValue);
+            if (key == ImGuiKey_LeftCtrl || key == ImGuiKey_RightCtrl ||
+                key == ImGuiKey_LeftShift || key == ImGuiKey_RightShift ||
+                key == ImGuiKey_LeftAlt || key == ImGuiKey_RightAlt ||
+                key == ImGuiKey_LeftSuper || key == ImGuiKey_RightSuper ||
+                key == ImGuiKey_Escape)
+            {
+                continue;
+            }
+
+            if (!ImGui::IsKeyPressed(key, false)) continue;
+
+            services::InputBinding binding{};
+            binding.type = services::BindingType::Key;
+            binding.code = keyValue;
+            binding.requireCtrl = io.KeyCtrl;
+            binding.requireShift = io.KeyShift;
+            binding.requireAlt = io.KeyAlt;
+            applyShortcutBinding(binding);
+            return;
+        }
+    }
+
+    void EditorPreferencesWindow::resetShortcut(const std::string& actionName)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::editor::ResetEditorActionBindingsCommand resetCommand;
+        resetCommand.actionName = actionName;
+        dispatcher.execute(resetCommand);
+        const bool saved = dispatcher.execute(events::editor::SaveEditorKeybindingsCommand{});
+        shortcutMessage = saved ? "Shortcut reset." : "Shortcut reset, but saving failed.";
+        shortcutCaptureAction.clear();
+        shortcutRefreshPending = true;
+    }
+
+    void EditorPreferencesWindow::resetAllShortcuts()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        dispatcher.execute(events::editor::ResetEditorActionBindingsCommand{});
+        const bool saved = dispatcher.execute(events::editor::SaveEditorKeybindingsCommand{});
+        shortcutMessage = saved ? "All shortcuts reset." : "Shortcuts reset, but saving failed.";
+        shortcutCaptureAction.clear();
+        shortcutRefreshPending = true;
+    }
+
+    void EditorPreferencesWindow::drawEditorShortcutsSection()
+    {
+        if (shortcutRefreshPending)
+        {
+            refreshShortcutActions();
+            shortcutRefreshPending = false;
+        }
+
+        ImGui::TextWrapped("Editor shortcuts are global. Click Rebind, then press a key combination. "
+                           "Changes are saved immediately.");
+        ImGui::Spacing();
+
+        if (ImGui::Button("Reset All Shortcuts"))
+            resetAllShortcuts();
+
+        if (!shortcutCaptureAction.empty())
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+                               "Press shortcut for %s (Esc to cancel)",
+                               shortcutActionLabel(shortcutCaptureAction).c_str());
+        }
+
+        captureShortcutBinding();
+
+        if (!shortcutMessage.empty())
+        {
+            ImGui::Spacing();
+            ImGui::TextWrapped("%s", shortcutMessage.c_str());
+        }
+
+        ImGui::Spacing();
+        if (shortcutActions.empty())
+        {
+            ImGui::TextDisabled("No editor actions are registered.");
+            return;
+        }
+
+        if (ImGui::BeginTable("EditorShortcutTable", 3,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                              ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY,
+                              ImVec2(0.0f, 300.0f)))
+        {
+            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthFixed, 125.0f);
+            ImGui::TableHeadersRow();
+
+            std::string currentCategory;
+            for (const auto& action : shortcutActions)
+            {
+                if (action.category != currentCategory)
+                {
+                    currentCategory = action.category;
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextDisabled("%s", currentCategory.c_str());
+                }
+
+                ImGui::PushID(action.name.c_str());
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(action.displayName.c_str());
+
+                ImGui::TableSetColumnIndex(1);
+                if (action.currentBindings.empty())
+                {
+                    ImGui::TextDisabled("Unassigned");
+                }
+                else
+                {
+                    std::string bindings;
+                    for (const auto& binding : action.currentBindings)
+                    {
+                        if (!bindings.empty()) bindings += ", ";
+                        bindings += shortcutBindingLabel(binding);
+                    }
+                    ImGui::TextUnformatted(bindings.c_str());
+                }
+
+                ImGui::TableSetColumnIndex(2);
+                const bool capturingOther = !shortcutCaptureAction.empty() &&
+                                            shortcutCaptureAction != action.name;
+                ImGui::BeginDisabled(capturingOther);
+                if (ImGui::SmallButton(shortcutCaptureAction == action.name ? "Listening..." : "Rebind"))
+                {
+                    shortcutCaptureAction = action.name;
+                    shortcutMessage.clear();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Reset"))
+                    resetShortcut(action.name);
+                ImGui::EndDisabled();
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
     }
 
     // ============================================
@@ -355,6 +591,10 @@ namespace windows
                 if (ImGui::Checkbox("Compact Mode##s", &settings.appearance.compactMode)) markDirty();
                 drawSettingTooltip("Reduce padding and spacing for more compact UI layout");
             }});
+
+        settingsRegistry.push_back({"Editor Shortcuts", "View and rebind editor keyboard shortcuts",
+            {"shortcut", "hotkey", "keybinding", "undo", "redo"}, EditorShortcuts,
+            [this]() { drawEditorShortcutsSection(); }});
 
         // Debug
         settingsRegistry.push_back({"Show FPS", "Frames per second counter", {"fps", "performance", "stats"}, Debug,

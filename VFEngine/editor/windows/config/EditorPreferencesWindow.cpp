@@ -4,6 +4,7 @@
 #include "config/EditorThemeStorage.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
+#include "events/editor/EditorKeybindingEvents.hpp"
 #include "events/save/ConfigEvents.hpp"
 #include "string/StringUtil.hpp"
 #include <imgui.h>
@@ -17,6 +18,7 @@ namespace windows
 {
     static const char* categoryNames[] = {
         "Appearance",
+        "Editor Shortcuts",
         "Debug",
         "Window Layout"
     };
@@ -51,6 +53,7 @@ namespace windows
         }
 
         settingsPath = dispatcher.query(events::editor::GetEditorSettingsPathQuery{});
+        refreshShortcutActions();
 
         events::save::GetConfigIntQuery tabQuery;
         tabQuery.key = "editorPreferences_lastCategory";
@@ -225,6 +228,7 @@ namespace windows
         switch (selectedCategory)
         {
         case Appearance:    drawAppearanceSection(); break;
+        case EditorShortcuts: drawEditorShortcutsSection(); break;
         case Debug:         drawDebugSection(); break;
         case WindowLayout:  drawWindowLayoutSection(); break;
         default: break;

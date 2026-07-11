@@ -17,6 +17,7 @@ namespace services
         };
 
         std::unordered_map<std::string, EditorActionEntry> actions;
+        std::unordered_map<std::string, std::vector<InputBinding>> persistedBindings;
         mutable std::mutex actionsMutex;
         bool loaded = false;
 

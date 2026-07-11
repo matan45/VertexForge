@@ -6,7 +6,6 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 #include "events/project/FileOperationsEvents.hpp"
-#include "events/editor/UndoRedoEvents.hpp"
 #include "events/editor/EditorKeybindingEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
@@ -58,8 +57,6 @@ namespace windows
         reg("ContentBrowser.Copy", "Copy", ImGuiKey_C, true);
         reg("ContentBrowser.Cut", "Cut", ImGuiKey_X, true);
         reg("ContentBrowser.Paste", "Paste", ImGuiKey_V, true);
-        reg("ContentBrowser.Undo", "Undo", ImGuiKey_Z, true);
-        reg("ContentBrowser.Redo", "Redo", ImGuiKey_Y, true);
         reg("ContentBrowser.SelectAll", "Select All", ImGuiKey_A, true);
         reg("ContentBrowser.Delete", "Delete", ImGuiKey_Delete);
         reg("ContentBrowser.Cancel", "Cancel", ImGuiKey_Escape);
@@ -400,10 +397,6 @@ namespace windows
             performCut();
         if (isPressed("ContentBrowser.Paste"))
             performPaste();
-        if (isPressed("ContentBrowser.Undo"))
-            dispatcher.execute(events::undoredo::UndoCommand{});
-        if (isPressed("ContentBrowser.Redo"))
-            dispatcher.execute(events::undoredo::RedoCommand{});
         if (isPressed("ContentBrowser.SelectAll"))
         {
             for (const auto& asset : assets)
