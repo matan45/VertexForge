@@ -25,7 +25,6 @@ namespace render::gpudriven
 
     struct SelectionMaskInitInfo
     {
-        vk::Format depthFormat = vk::Format::eUndefined; // resolved scene depth format
         vk::DescriptorSetLayout cameraLayout;
         vk::DescriptorSetLayout perDrawLayout;
         vk::DescriptorSetLayout bindlessTextureLayout;
@@ -37,11 +36,14 @@ namespace render::gpudriven
 
     // VK-1490 editor selection outline, pass 1 of 2: renders the SELECTED
     // objects — through the same post-cull combined indirect stream the scene
-    // pass consumes (same LODs, same visibility) — into an R8 mask, depth-tested
-    // LessOrEqual against the resolved scene depth bound READ-ONLY, so only the
-    // visible surface marks the mask (occluded parts stay clear). A per-object
-    // selection bitmask SSBO (set 6, host-visible ring) drives the task-shader
-    // early-out; sets 0-5 mirror the depth prepass layout so the live scene
+    // pass consumes (same LODs, same visibility) — into an R8 mask. Visibility
+    // is tested in the FRAGMENT shader against the SAMPLED resolved scene depth
+    // with a 3x3 neighborhood tolerance (a fixed-function depth test is not
+    // usable here: re-rasterized depth is not invariant with the scene pass and
+    // MSAA-resolved depth is sample 0, which speckles on subpixel geometry).
+    // A per-object selection bitmask SSBO (set 6 binding 0, host-visible ring)
+    // drives the task-shader early-out; set 6 binding 1 samples the scene
+    // depth; sets 0-5 mirror the depth prepass layout so the live scene
     // descriptor sets bind unchanged. Editor-only: never records in play mode
     // because the selection list is forced empty there.
     class SelectionMaskPipeline
@@ -65,6 +67,7 @@ namespace render::gpudriven
         std::array<BitsFrame, core::MAX_FRAMES_IN_FLIGHT> bitsFrames{};
         uint32_t currentBitsFrame = 0;
         uint32_t bitsWordCount = 0;
+        bool lastBitsEmpty = true;
         vk::DescriptorSetLayout selectionBitsLayout;
         vk::DescriptorPool descriptorPool;
 
@@ -74,6 +77,11 @@ namespace render::gpudriven
         vk::ImageView maskImageView;
         vk::Sampler maskSampler;
         vk::Extent2D maskExtent{};
+
+        // Sampled scene-depth input. The depth-only view is engine-owned and
+        // non-owning here; descriptors refresh when it changes on recreation.
+        vk::ImageView sceneDepthView;
+        vk::Sampler depthSampler;
 
         bool initialized = false;
 
@@ -95,12 +103,27 @@ namespace render::gpudriven
         void ensureMaskTarget(vk::Extent2D extent);
 
         // Advances the host-visible ring, clears it and sets one bit per slot.
-        // Returns the frame's set-6 descriptor set to bind for the draw.
-        vk::DescriptorSet updateSelectionBits(const std::vector<uint32_t>& selectedSlots);
+        // MUST be called from updateScene right after the object-slot rebuild —
+        // the slots reshuffle every frame with the camera-culled draw list, so
+        // the bits have to snapshot the same rebuild the GPU consumes this
+        // frame. An empty-after-empty write is skipped.
+        void writeSelectionBits(const std::vector<uint32_t>& selectedSlots);
 
-        // Dynamic rendering scope: clears the mask, binds the resolved scene
-        // depth read-only (LessOrEqual test happens in the pipeline state).
-        void beginMaskPass(vk::CommandBuffer cmd, vk::ImageView sceneDepthView) const;
+        // Set-6 descriptor of the last written ring entry (valid after init;
+        // zero-filled until the first write, which emits nothing).
+        vk::DescriptorSet getCurrentBitsDescriptorSet() const
+        {
+            return bitsFrames[currentBitsFrame].descriptorSet;
+        }
+
+        // Points set-6 binding 1 at the engine-owned depth-only scene view.
+        // Recreation must quiesce GPU work before replacing the view and
+        // rewriting the ring descriptor sets.
+        void updateSceneDepthInput(vk::ImageView depthImageView);
+
+        // Dynamic rendering scope: clears the mask (color only; the visibility
+        // test happens in the fragment shader against the sampled scene depth).
+        void beginMaskPass(vk::CommandBuffer cmd) const;
         void endMaskPass(vk::CommandBuffer cmd) const;
 
         void bindPipeline(vk::CommandBuffer cmd) const;

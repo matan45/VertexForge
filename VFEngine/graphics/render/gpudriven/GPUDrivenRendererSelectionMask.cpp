@@ -8,8 +8,8 @@
 // scene block (GPUDrivenRendererDepthPrepass.cpp): the SAME post-cull combined
 // indirect stream + live descriptor sets, but through SelectionMaskPipeline,
 // whose task shader early-outs every draw whose object slot is not in the
-// selection bitmask and whose depth state tests LessOrEqual read-only against
-// the resolved scene depth (visible-only silhouette).
+// selection bitmask. The fragment shader samples resolved scene depth with a
+// conservative neighborhood test for a stable visible-only silhouette.
 
 namespace render::gpudriven
 {
@@ -25,7 +25,6 @@ namespace render::gpudriven
         {
             selectionMaskPipeline = std::make_unique<SelectionMaskPipeline>(device, swapChain);
             SelectionMaskInitInfo info{
-                .depthFormat = cachedDepthFormat,
                 .cameraLayout = cachedIBLLayout,
                 .perDrawLayout = meshShaderPipeline->getPerDrawDataLayout(),
                 .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -55,14 +54,19 @@ namespace render::gpudriven
             return;
         }
 
+        // Rebinds only when the engine-owned depth view changes on recreation.
+        selectionMaskPipeline->updateSceneDepthInput(sceneDepthView);
+
         const auto& selectedSlots = mergedBuffer->getSelectedObjectSlots();
         const auto extent = selectionMaskPipeline->getMaskExtent();
 
-        auto bitsSet = selectionMaskPipeline->updateSelectionBits(selectedSlots);
+        // The bits were written by updateScene right after the slot rebuild
+        // (same-frame snapshot); here we only bind that ring entry.
+        auto bitsSet = selectionMaskPipeline->getCurrentBitsDescriptorSet();
 
         // Always begin/end: the frame graph transitioned the mask for a write,
         // and an empty selection must still leave a cleared mask behind.
-        selectionMaskPipeline->beginMaskPass(cmd, sceneDepthView);
+        selectionMaskPipeline->beginMaskPass(cmd);
 
         if (!selectedSlots.empty() && stats.totalObjects > 0)
         {

@@ -39,26 +39,33 @@ namespace render::gpudriven
         bitsWordCount = (maxObjectCount + 31u) / 32u;
         if (bitsWordCount == 0) bitsWordCount = 1;
 
-        // Set 6: one readonly storage buffer visible to the task stage.
-        vk::DescriptorSetLayoutBinding binding{};
-        binding.binding = 0;
-        binding.descriptorType = vk::DescriptorType::eStorageBuffer;
-        binding.descriptorCount = 1;
-        binding.stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+        // Set 6: binding 0 = selection bitmask (task stage), binding 1 =
+        // sampled scene depth for the fragment visibility test.
+        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &binding;
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
         selectionBitsLayout = dev.createDescriptorSetLayout(layoutInfo);
 
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = core::MAX_FRAMES_IN_FLIGHT;
+        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
+        poolSizes[0].descriptorCount = core::MAX_FRAMES_IN_FLIGHT;
+        poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[1].descriptorCount = core::MAX_FRAMES_IN_FLIGHT;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = core::MAX_FRAMES_IN_FLIGHT;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
         descriptorPool = dev.createDescriptorPool(poolInfo);
 
         for (auto& frame : bitsFrames)
@@ -137,20 +144,21 @@ namespace render::gpudriven
                                  vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
         std::vector<vk::PipelineColorBlendAttachmentState> blendStates{noBlend};
 
-        // Depth: test-only LessOrEqual against the resolved scene depth — the
-        // selected geometry re-rasterizes with the identical transform chain, so
-        // its visible surface passes and occluded fragments fail.
+        // No depth attachment: the fragment shader samples the resolved scene
+        // depth and discards occluded fragments itself (3x3 neighborhood
+        // tolerance — see frag_selection_mask.glsl for why a fixed-function
+        // depth test speckles here).
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
             .extent = swapChain.getSwapchainExtent(),
             .colorAttachmentFormats = {getMaskFormat()},
-            .depthAttachmentFormat = info.depthFormat,
+            .depthAttachmentFormat = vk::Format::eUndefined,
             .shaderStages = shader->getShaderStages(),
             .existingPipelineLayout = pipelineLayout,
             .cullMode = vk::CullModeFlagBits::eBack,
-            .depthTestEnable = true,
+            .depthTestEnable = false,
             .depthWriteEnable = false,
-            .depthCompareOp = vk::CompareOp::eLessOrEqual,
+            .depthCompareOp = vk::CompareOp::eAlways,
             .blendEnable = false,
             .colorBlendAttachments = blendStates
         };
@@ -198,9 +206,16 @@ namespace render::gpudriven
         }
     }
 
-    vk::DescriptorSet SelectionMaskPipeline::updateSelectionBits(
-        const std::vector<uint32_t>& selectedSlots)
+    void SelectionMaskPipeline::writeSelectionBits(const std::vector<uint32_t>& selectedSlots)
     {
+        // Every ring entry starts zero-filled, so consecutive empty frames need
+        // no work (and no ring advance).
+        if (selectedSlots.empty() && lastBitsEmpty)
+        {
+            return;
+        }
+        lastBitsEmpty = selectedSlots.empty();
+
         currentBitsFrame = (currentBitsFrame + 1) % core::MAX_FRAMES_IN_FLIGHT;
         auto& frame = bitsFrames[currentBitsFrame];
 
@@ -214,17 +229,57 @@ namespace render::gpudriven
                 words[word] |= 1u << (slot & 31u);
             }
         }
-        return frame.descriptorSet;
     }
 
-    void SelectionMaskPipeline::beginMaskPass(vk::CommandBuffer cmd, vk::ImageView sceneDepthView) const
+    void SelectionMaskPipeline::updateSceneDepthInput(vk::ImageView depthImageView)
+    {
+        if (!depthImageView || depthImageView == sceneDepthView)
+        {
+            return;
+        }
+
+        auto& dev = device.getLogicalDevice();
+
+        if (!depthSampler)
+        {
+            vk::SamplerCreateInfo samplerInfo{};
+            samplerInfo.magFilter = vk::Filter::eNearest;
+            samplerInfo.minFilter = vk::Filter::eNearest;
+            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+            depthSampler = dev.createSampler(samplerInfo);
+        }
+
+        // The supplied view exposes only the depth aspect. The frame graph
+        // declares ShaderRead, matching this descriptor and fragment access.
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfo.imageView = depthImageView;
+        imageInfo.sampler = depthSampler;
+
+        for (auto& frame : bitsFrames)
+        {
+            vk::WriteDescriptorSet write{};
+            write.dstSet = frame.descriptorSet;
+            write.dstBinding = 1;
+            write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            write.descriptorCount = 1;
+            write.pImageInfo = &imageInfo;
+            dev.updateDescriptorSets(write, nullptr);
+        }
+
+        sceneDepthView = depthImageView;
+    }
+
+    void SelectionMaskPipeline::beginMaskPass(vk::CommandBuffer cmd) const
     {
         const vk::ClearColorValue clearColor(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f});
 
         core::DynamicRenderingInfo info{};
         info.extent = maskExtent;
         info.colorAttachments = {core::colorClear(maskImageView, clearColor)};
-        info.depthAttachment = core::depthReadOnly(sceneDepthView);
 
         core::beginDynamicRendering(cmd, info);
 
@@ -292,6 +347,12 @@ namespace render::gpudriven
             maskSampler = nullptr;
         }
 
+        sceneDepthView = nullptr;
+        if (depthSampler)
+        {
+            dev.destroySampler(depthSampler);
+            depthSampler = nullptr;
+        }
         if (pipeline)
         {
             dev.destroyPipeline(pipeline);

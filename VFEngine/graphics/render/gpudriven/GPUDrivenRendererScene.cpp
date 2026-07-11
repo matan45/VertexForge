@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "SelectionMaskPipeline.hpp" // VK-1490
 #include "../virtualtexture/svt/SVTManager.hpp"
 #include "../occlusion/HiZBuffer.hpp"
 #include "../occlusion/DepthPrepass.hpp"
@@ -136,6 +137,25 @@ namespace render::gpudriven
                 mergedBuffer->setPersistentMode(false);
             }
             mergedBuffer->updateObjects(opaqueObjects, resolvers);
+        }
+
+        // VK-1490: the selection bitmask must snapshot the SAME slot rebuild the
+        // GPU consumes this frame — slots reshuffle every frame with the
+        // camera-culled draw list, so writing the bits any later (e.g. at
+        // SelectionMask record time) can pair stale bits with new slots and
+        // highlight the wrong submeshes while the camera moves. The streaming
+        // (persistent-slot) path never resolves selection slots, so it writes an
+        // empty mask.
+        if (selectionMaskPipeline && selectionMaskPipeline->isInitialized())
+        {
+            if (useStreaming)
+            {
+                selectionMaskPipeline->writeSelectionBits({});
+            }
+            else
+            {
+                selectionMaskPipeline->writeSelectionBits(mergedBuffer->getSelectedObjectSlots());
+            }
         }
 
         uint32_t objectCount = useStreaming

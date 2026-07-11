@@ -250,7 +250,7 @@ namespace render
                         meshPipeline->getIBLDescriptorSet(idx),
                         offscreenResources.depthImage.depthImageView);
                 });
-            builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            builder.read(depthHandle, graph::ResourceUsage::ShaderRead);
             selectionMaskHandle = builder.write(selectionMaskHandle,
                                                 graph::ResourceUsage::ColorAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);

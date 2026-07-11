@@ -457,7 +457,8 @@ namespace render::gpudriven
         // VK-1490 editor selection outline mask pass. ensureSelectionMaskResources
         // lazily creates the pipeline + R8 mask target (called at frame-graph
         // build so the mask image exists for import); renderSelectionMask records
-        // the depth-tested selected-only draw into it.
+        // the selected-only draw, testing visibility against the SAMPLED resolved
+        // scene depth (fragment-side, neighborhood-tolerant).
         bool ensureSelectionMaskResources();
         void renderSelectionMask(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                  vk::ImageView sceneDepthView);
