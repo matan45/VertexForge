@@ -13,6 +13,7 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -197,6 +198,46 @@ TEST_CASE("degenerate start scale yields no delta instead of NaN") {
     const glm::mat4 newWorld = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
     CHECK_FALSE(grouptransform::worldDelta(startWorld, newWorld).has_value());
+}
+
+TEST_CASE("world transform component starts as identity") {
+    const components::WorldTransformComponent world{};
+    for (int column = 0; column < 4; ++column)
+    {
+        for (int row = 0; row < 4; ++row)
+        {
+            const float expected = column == row ? 1.0f : 0.0f;
+            CHECK(world.worldMatrix[column][row] == doctest::Approx(expected));
+        }
+    }
+}
+
+TEST_CASE("non-finite local transform is rejected") {
+    TestEntities fixture;
+    auto& service = transformService();
+    const auto entity = fixture.createWithTransform(glm::vec3(1.0f, 2.0f, 3.0f));
+
+    auto invalid = transformAt(glm::vec3(5.0f));
+    invalid.position.x = std::numeric_limits<float>::quiet_NaN();
+    service.setTransform(entity, invalid);
+
+    CHECK(approxVec(localPositionOf(entity), glm::vec3(1.0f, 2.0f, 3.0f)));
+}
+
+TEST_CASE("singular parent world transform cannot corrupt child local transform") {
+    TestEntities fixture;
+    auto& service = transformService();
+    const auto parent = fixture.createWithTransform(glm::vec3(0.0f));
+    const auto child = fixture.createWithTransform(glm::vec3(2.0f, 3.0f, 4.0f));
+    fixture.parent(child, parent);
+
+    auto& parentWorld = fixture.registry.get<components::WorldTransformComponent>(
+        services::internal::fromHandle(parent));
+    parentWorld.worldMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(0.0f));
+
+    service.setWorldTransform(child, transformAt(glm::vec3(10.0f, 20.0f, 30.0f)));
+
+    CHECK(approxVec(localPositionOf(child), glm::vec3(2.0f, 3.0f, 4.0f)));
 }
 
 TEST_CASE("local-space undo command applies and reverts through the service") {
