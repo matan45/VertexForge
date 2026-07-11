@@ -397,6 +397,23 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setSelectedEntityDrawList(std::vector<uint32_t>&& entityIds)
+    {
+        // Pushed every editor frame; skip the downstream set rebuild while the
+        // selection stays empty (the common case).
+        if (entityIds.empty() && selectedEntityIds.empty())
+        {
+            return;
+        }
+
+        selectedEntityIds = std::move(entityIds);
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setSelectedEntities(std::unordered_set<uint32_t>(
+                selectedEntityIds.begin(), selectedEntityIds.end()));
+        }
+    }
+
     void RenderPassHandler::setLightGizmoDrawList(std::vector<mesh::LightGizmoRenderData>&& gizmos)
     {
         if (debugRenderer)

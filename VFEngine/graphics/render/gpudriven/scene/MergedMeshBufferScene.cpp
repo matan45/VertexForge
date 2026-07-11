@@ -317,6 +317,7 @@ namespace render::gpudriven
 
                     if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
                         transparentObjectCount++;
+                    recordSelectedSlot(meshRender.entity, currentObjectCount); // VK-1490
                     currentObjectCount++;
                 }
                 continue;
@@ -348,6 +349,7 @@ namespace render::gpudriven
                 if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
                     transparentObjectCount++;
 
+                recordSelectedSlot(meshRender.entity, currentObjectCount); // VK-1490
                 currentObjectCount++;
             }
         }
@@ -360,6 +362,7 @@ namespace render::gpudriven
         currentObjectCount = 0;
         transparentObjectCount = 0;
         currentInstanceCount = 0;
+        selectedObjectSlots.clear(); // VK-1490: slots re-resolve with the rebuilt object list
 
         // Hardware instancing is handled by updateObjectsSequential for all scene sizes.
         // The parallel path is used only for large scenes with many unique (non-instanced) objects.
@@ -419,6 +422,7 @@ namespace render::gpudriven
 
                     if (obj.shaderGroupIndex == SHADER_GROUP_TRANSPARENT)
                         transparentObjectCount++;
+                    recordSelectedSlot(meshRender.entity, currentObjectCount); // VK-1490
                     currentObjectCount++;
                 }
             }
@@ -483,6 +487,17 @@ namespace render::gpudriven
 
         uint32_t nonInstancedStart = currentObjectCount;
         uint32_t totalWork = static_cast<uint32_t>(parallelWorkItems.size());
+
+        // VK-1490: work item i lands at object slot nonInstancedStart + i, so the
+        // selection slots can be recorded up front (no need to touch the parallel
+        // populate loop).
+        if (!selectedEntities.empty())
+        {
+            for (uint32_t i = 0; i < totalWork; ++i)
+            {
+                recordSelectedSlot(parallelWorkItems[i].meshRender->entity, nonInstancedStart + i);
+            }
+        }
 
         if (totalWork > 0)
         {

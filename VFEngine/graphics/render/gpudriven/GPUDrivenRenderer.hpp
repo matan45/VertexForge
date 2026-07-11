@@ -136,6 +136,7 @@ namespace render::gpudriven
     class TerrainRVTManager; // VK-1209
     class TerrainRVTBaker;   // VK-1209
     class SVTManager;        // VK-1209 (material SVT)
+    class SelectionMaskPipeline; // VK-1490 editor selection outline
 
     class GPUDrivenRenderer
     {
@@ -170,6 +171,9 @@ namespace render::gpudriven
         // Depth prepass for meshlet-level Hi-Z occlusion culling
         std::unique_ptr<occlusion::DepthPrepass> depthPrepass;
         std::unique_ptr<occlusion::DepthPrepassPipeline> depthPrepassPipeline;
+
+        // VK-1490 editor selection outline mask (lazily created on first selection)
+        std::unique_ptr<SelectionMaskPipeline> selectionMaskPipeline;
         std::unique_ptr<occlusion::HiZBuffer> prepassHiZ;
         uint32_t prepassHiZMipLevels = 0;
         // VK-1397: tracks whether the prepass is currently producing DLSS-D Ray
@@ -409,6 +413,20 @@ namespace render::gpudriven
         void setEnabled(bool enabled) { this->enabled = enabled; }
         bool isEnabled() const { return enabled; }
 
+        // VK-1490: editor selection outline — entt ids of the selected entities.
+        // MergedMeshBuffer resolves them to GPU object slots while (re)building
+        // the object list in updateScene, so the SelectionMask pass can draw
+        // exactly the selected objects. Edit-mode only by construction: the
+        // play-mode persistent-slot path never records selection slots.
+        void setSelectedEntities(std::unordered_set<uint32_t> entityIds)
+        {
+            if (mergedBuffer) mergedBuffer->setSelectedEntities(std::move(entityIds));
+        }
+        bool hasSelectedObjects() const
+        {
+            return mergedBuffer && !mergedBuffer->getSelectedObjectSlots().empty();
+        }
+
         void setFrustumCullingEnabled(bool enabled) { culling.frustumCullingEnabled = enabled; }
         bool isFrustumCullingEnabled() const { return culling.frustumCullingEnabled; }
 
@@ -435,6 +453,15 @@ namespace render::gpudriven
         void initDepthPrepass();
         void renderDepthPrepass(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void generatePrepassHiZ(vk::CommandBuffer cmd);
+
+        // VK-1490 editor selection outline mask pass. ensureSelectionMaskResources
+        // lazily creates the pipeline + R8 mask target (called at frame-graph
+        // build so the mask image exists for import); renderSelectionMask records
+        // the depth-tested selected-only draw into it.
+        bool ensureSelectionMaskResources();
+        void renderSelectionMask(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+                                 vk::ImageView sceneDepthView);
+        SelectionMaskPipeline* getSelectionMaskPipeline() const { return selectionMaskPipeline.get(); }
         void initAccelerationStructures();
         void ensureAccelerationStructureManager();
         // True if the device's maxBoundDescriptorSets can fit the requested set count.

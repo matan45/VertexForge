@@ -4,6 +4,7 @@
 #include "../../data/DTOs.hpp"
 #include <glm/glm.hpp>
 #include <optional>
+#include <vector>
 
 namespace events::ui {
 
@@ -31,5 +32,20 @@ namespace events::ui {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetUIEntityWorldQuad"; }
+    };
+
+    // VK-1490: region variant of PickUIEntityAtQuery for the editor marquee —
+    // every visible UI element whose edit-mode world quad intersects the
+    // screen-rect region frustum. Corners are absolute screen coords in any
+    // order (normalized inside, matching buildScreenRegionFrustum).
+    struct PickUIEntitiesInRegionQuery : IQuery<std::vector<services::EntityHandle>> {
+        glm::vec2 minPx;
+        glm::vec2 maxPx;
+        glm::vec2 viewportPos;   // viewport content top-left (screen coords)
+        glm::vec2 viewportSize;  // viewport content size in pixels
+        glm::mat4 viewMatrix;
+        glm::mat4 projMatrix;    // editor projection (Vulkan Y-flip applied)
+
+        std::string_view getName() const override { return "PickUIEntitiesInRegion"; }
     };
 }

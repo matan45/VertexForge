@@ -1,5 +1,6 @@
 #include "OffScreenAdapter.hpp"
 #include "../../controllers/OffScreen.hpp"
+#include "../../services/data/EntityConversion.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/lifecycle/AssetLifecycleEvents.hpp"
 #include "resource/AssetTypes.hpp"
@@ -242,6 +243,23 @@ namespace core {
         if (offScreen) {
             offScreen->prepareFramePhysicsColliders();
         }
+    }
+
+    void OffScreenAdapter::prepareFrameSelectionOutline(
+        const std::vector<services::EntityHandle>& selectedEntities) {
+        if (!offScreen) {
+            return;
+        }
+        // Graphics speaks raw entt ids, not service handles. Dead handles need
+        // no filtering here: EntityStateService normalizes on write, and an id
+        // that no longer matches any MeshRenderData simply resolves to no slot.
+        std::vector<uint32_t> entityIds;
+        entityIds.reserve(selectedEntities.size());
+        for (const auto& handle : selectedEntities) {
+            if (!handle.isValid()) continue;
+            entityIds.push_back(static_cast<uint32_t>(services::internal::fromHandle(handle)));
+        }
+        offScreen->setSelectedEntities(std::move(entityIds));
     }
 
     void OffScreenAdapter::setViewMode(uint32_t mode) {

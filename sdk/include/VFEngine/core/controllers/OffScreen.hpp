@@ -112,6 +112,10 @@ namespace controllers
         bool getShowPhysicsDebug() const;
         void prepareFramePhysicsColliders();
 
+        // VK-1490: editor selection (raw entt ids) for the silhouette outline
+        // passes. Empty clears the highlight.
+        void setSelectedEntities(std::vector<uint32_t> entityIds);
+
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;
 

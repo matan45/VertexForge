@@ -12,6 +12,9 @@
 #include "ClearColor.hpp"
 #include "IBL.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
+#include "gpudriven/SelectionMaskPipeline.hpp"
+#include "selection/SelectionOutlineComposite.hpp"
+#include "mesh/StaticMeshPipeline.hpp"
 #include "upscaling/UpscaleManager.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 
@@ -200,6 +203,57 @@ namespace render
                 depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             }
             builder.setSegment(graph::HookSegment::Scene);
+            builder.setSideEffect();
+        }
+
+        // VK-1490: editor selection outline, pass 1 — depth-tested mask of the
+        // selected meshes right after the opaque resolve (reads the resolved
+        // single-sample depth read-only, so only visible surfaces mark the
+        // mask). Composited by the SelectionOutline pass after post-processing.
+        // Editor-only by construction: the selection list is forced empty in
+        // play mode, so neither pass is added there.
+        bool selectionOutlineActive = hasSelectedEntities() &&
+                                      gpuDrivenRendererInitialized &&
+                                      gpuDrivenRenderer->isEnabled() &&
+                                      meshPipelineInitialized &&
+                                      gpuDrivenRenderer->ensureSelectionMaskResources();
+        if (selectionOutlineActive)
+        {
+            if (!selectionOutlineComposite)
+            {
+                selectionOutlineComposite =
+                    std::make_unique<selection::SelectionOutlineComposite>(device, swapChain);
+                selectionOutlineComposite->init();
+            }
+            selectionOutlineActive = selectionOutlineComposite->isInitialized();
+        }
+        if (selectionOutlineActive)
+        {
+            auto* maskPipeline = gpuDrivenRenderer->getSelectionMaskPipeline();
+            selectionOutlineComposite->setMaskInput(maskPipeline->getMaskImageView(),
+                                                    maskPipeline->getMaskSampler());
+
+            graph::ImageResourceDesc maskDesc{};
+            maskDesc.extent = maskPipeline->getMaskExtent();
+            maskDesc.format = gpudriven::SelectionMaskPipeline::getMaskFormat();
+            maskDesc.usage = vk::ImageUsageFlagBits::eColorAttachment |
+                             vk::ImageUsageFlagBits::eSampled;
+            maskDesc.aspectMask = vk::ImageAspectFlagBits::eColor;
+            maskDesc.debugName = "SelectionMask";
+            selectionMaskHandle = frameGraph->importImage(
+                maskPipeline->getMaskImage(), maskPipeline->getMaskImageView(),
+                vk::ImageLayout::eUndefined, maskDesc);
+
+            auto builder = frameGraph->addPass("SelectionMask",
+                [this](vk::CommandBuffer cmd, uint32_t idx) {
+                    gpuDrivenRenderer->renderSelectionMask(cmd,
+                        meshPipeline->getIBLDescriptorSet(idx),
+                        offscreenResources.depthImage.depthImageView);
+                });
+            builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            selectionMaskHandle = builder.write(selectionMaskHandle,
+                                                graph::ResourceUsage::ColorAttachmentWrite);
+            builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
 
@@ -464,6 +518,25 @@ namespace render
                     executeRenderHooks(plugin::RenderPassHookPoint::PostPostProcess, cmd, idx);
                 });
             builder.setSegment(graph::HookSegment::PostProcess);
+            builder.setSideEffect();
+        }
+
+        // VK-1490: editor selection outline, pass 2 — dilate the visible-only
+        // mask into an ~2px #FFA100 silhouette after post-processing (so the
+        // outline is not tonemapped/blurred) and before the UI overlays.
+        if (selectionOutlineActive)
+        {
+            auto builder = frameGraph->addPass("SelectionOutline",
+                [this](vk::CommandBuffer cmd, uint32_t idx) {
+                    auto* maskPipeline = gpuDrivenRenderer->getSelectionMaskPipeline();
+                    selectionOutlineComposite->executeGraphManaged(cmd,
+                        offscreenResources.colorImages[idx].colorImageView,
+                        swapChain.getSwapchainExtent(),
+                        maskPipeline->getMaskExtent());
+                });
+            builder.read(selectionMaskHandle, graph::ResourceUsage::ShaderRead);
+            sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
+            builder.setSegment(graph::HookSegment::UI);
             builder.setSideEffect();
         }
 

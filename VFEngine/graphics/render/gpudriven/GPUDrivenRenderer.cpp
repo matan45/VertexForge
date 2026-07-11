@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "SelectionMaskPipeline.hpp" // VK-1490: complete type for the unique_ptr deleter
 #include "../occlusion/DepthPrepass.hpp"
 #include "../occlusion/DepthPrepassPipeline.hpp"
 #include "../occlusion/HiZBuffer.hpp"
@@ -331,6 +332,7 @@ namespace render::gpudriven
         if (terrain.pipeline) terrain.pipeline->cleanup();
         if (terrain.meshBuffer) terrain.meshBuffer->cleanup();
         if (depthPrepassPipeline) depthPrepassPipeline->cleanup();
+        if (selectionMaskPipeline) selectionMaskPipeline->cleanup(); // VK-1490
         if (prepassHiZ) prepassHiZ->cleanup();
         if (depthPrepass) depthPrepass->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
@@ -370,6 +372,7 @@ namespace render::gpudriven
         water.pipeline.reset();
         water.meshBuffer.reset();
         depthPrepassPipeline.reset();
+        selectionMaskPipeline.reset(); // VK-1490
         prepassHiZ.reset();
         depthPrepass.reset();
         lightOcclusionCulling.reset();

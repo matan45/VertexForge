@@ -53,5 +53,10 @@ namespace windows
                                    glm::vec2 screenPos,
                                    glm::vec2 viewportPos,
                                    glm::vec2 viewportSize);
+
+        // VK-1490: the marquee tests the same per-frame pick caches the click
+        // path uses, so region selection shares the "visually pickable" notion.
+        const std::vector<BillboardScreenHit>& getBillboardHits() const { return cachedBillboardHits; }
+        const std::vector<MeshPickData>& getMeshHits() const { return cachedMeshHits; }
     };
 }

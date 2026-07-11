@@ -18,6 +18,7 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
+#include "selection/SelectionOutlineComposite.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "gi/SSGIPipeline.hpp"
 #include "ssr/SSRPipeline.hpp"
@@ -389,6 +390,7 @@ namespace render
         if (pluginTextureManager) pluginTextureManager->cleanUp();
         if (cameraOcclusionManager) cameraOcclusionManager->cleanup();
         cleanUpPipelines();
+        if (selectionOutlineComposite) selectionOutlineComposite->cleanup(); // VK-1490
         if (volumetricFogComposite) volumetricFogComposite->cleanup();
         if (ssgiPipeline) ssgiPipeline->cleanup();
         if (ssrPipeline) ssrPipeline->cleanup();
