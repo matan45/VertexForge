@@ -59,6 +59,7 @@ namespace
             {".vfprefab", AssetType::Prefab},
             {".vfrig", AssetType::HumanoidRig},
             {".vfretarget", AssetType::RetargetMap},
+            {".vftoonprofile", AssetType::ToonProfile}, // VK-1493
             {".mt", AssetType::Script},
         };
         return m;
@@ -73,7 +74,8 @@ namespace
             ".vffont", ".vfscene", ".vfsettings", ".vfprefab", ".vftheme",
             ".vfterrain", ".vfterrainmat", ".vfwater", ".vfnavmesh",
             ".vfnavindex", ".vfimposter", ".vfinputmapping",
-            ".vfbehaviortree", ".vfphysanim", ".vfrig", ".vfretarget", ".mt"
+            ".vfbehaviortree", ".vfphysanim", ".vfrig", ".vfretarget",
+            ".vftoonprofile", ".mt" // VK-1493
         };
         return s;
     }
