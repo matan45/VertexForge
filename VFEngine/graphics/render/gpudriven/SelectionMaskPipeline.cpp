@@ -3,6 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/Utilities.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 
@@ -110,6 +111,22 @@ namespace render::gpudriven
         viewReq.format = getMaskFormat();
         viewReq.aspectFlags = vk::ImageAspectFlagBits::eColor;
         core::ImageUtilities::createImageView(viewReq, maskImageView);
+
+        // VK-1490: the storage-image descriptor (set 15, binding 1) is statically used
+        // by every mesh pipeline and bound on every scene draw, so the mask must sit in
+        // its declared eGeneral layout at all times — including no-selection and RTT
+        // frames the frame graph never touches. All operations on it are valid in
+        // eGeneral (clearColorImage, imageAtomicMin, usampler2D sampling), so transition
+        // it once here and keep it there (the frame graph's per-pass usages resolve to
+        // eGeneral / bracket the transfer clear and return to eGeneral each frame).
+        {
+            auto cmd = core::Utilities::beginSingleTimeCommands(dev, device.getStagingCommandPool());
+            core::ImageUtilities::transitionImageLayout(
+                cmd.get(), maskImage,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
+                vk::ImageAspectFlagBits::eColor);
+            core::Utilities::endSingleTimeCommands(device, cmd);
+        }
 
         if (!maskSampler)
         {

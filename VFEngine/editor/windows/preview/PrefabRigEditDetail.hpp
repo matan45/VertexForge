@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imgui.h"
+#include "math/TransformUtils.hpp"
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
@@ -21,18 +22,10 @@ namespace windows::prefabdetail
     // matrix inversions; a degenerate (near-zero) scale or a pre-existing NaN would produce
     // inf/NaN that then gets persisted and fed back next frame (a sticky NaN). These let the
     // gizmo skip a bad frame instead of writing garbage.
-    inline bool isFiniteVec(const glm::vec3& v)
-    {
-        return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-    }
-    inline bool isFiniteMat(const glm::mat4& m)
-    {
-        for (int c = 0; c < 4; ++c)
-            for (int r = 0; r < 4; ++r)
-                if (!std::isfinite(m[c][r]))
-                    return false;
-        return true;
-    }
+    // Thin aliases over the shared math:: guards so the finite-check logic has a
+    // single source of truth (a future hardening propagates to all callers).
+    inline bool isFiniteVec(const glm::vec3& v) { return math::isFinite(v); }
+    inline bool isFiniteMat(const glm::mat4& m) { return math::isFinite(m); }
     inline float minAbsComponent(const glm::vec3& v)
     {
         return std::min({std::abs(v.x), std::abs(v.y), std::abs(v.z)});

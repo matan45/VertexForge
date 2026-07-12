@@ -29,7 +29,6 @@ namespace render::mesh
         vk::Pipeline multiplyPipeline;
         std::string vertexShaderHash;
         std::string fragmentShaderHash;
-        std::string materialIRHash;
         std::string shaderMapKey;
         bool valid = false;
 

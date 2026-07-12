@@ -13,28 +13,35 @@ namespace
 {
     constexpr float kMinInvertibleDeterminant = 1e-12f;
 
-    bool isFinite(const glm::vec3& value)
-    {
-        return std::isfinite(value.x) && std::isfinite(value.y) &&
-               std::isfinite(value.z);
-    }
-
-    bool isFinite(const glm::mat4& value)
-    {
-        for (int column = 0; column < 4; ++column)
-        {
-            for (int row = 0; row < 4; ++row)
-            {
-                if (!std::isfinite(value[column][row])) return false;
-            }
-        }
-        return true;
-    }
+    // Shared vec3/mat4 finite guards live in math::; the TransformData overload
+    // below joins the overload set via this using-declaration.
+    using math::isFinite;
 
     bool isFinite(const services::TransformData& value)
     {
         return isFinite(value.position) && isFinite(value.rotation) &&
                isFinite(value.scale);
+    }
+
+    // A finite-but-degenerate matrix (e.g. a legitimately zero-scaled axis)
+    // decomposes to NaN rotation/scale while position stays valid. Read-side
+    // callers (AI targeting, mType getWorldPosition, WorldSector streaming) rely
+    // on always receiving a world position, so keep the valid position and reset
+    // only the non-finite rotation/scale components. nullopt is reserved for a
+    // non-finite position, which signals genuine corruption worth surfacing.
+    std::optional<services::TransformData> sanitizeRead(const services::TransformData& value)
+    {
+        if (!isFinite(value.position))
+        {
+            return std::nullopt;
+        }
+        services::TransformData result = value;
+        for (int i = 0; i < 3; ++i)
+        {
+            if (!std::isfinite(result.rotation[i])) result.rotation[i] = 0.0f;
+            if (!std::isfinite(result.scale[i])) result.scale[i] = 1.0f;
+        }
+        return result;
     }
 }
 
@@ -118,12 +125,7 @@ namespace services
         }
 
         auto& comp = sceneEntity.getComponent<components::TransformComponent>();
-        TransformData result{comp.position, comp.rotation, comp.scale};
-        if (!isFinite(result))
-        {
-            return std::nullopt;
-        }
-        return result;
+        return sanitizeRead(TransformData{comp.position, comp.rotation, comp.scale});
     }
 
     std::optional<TransformData> TransformComponentService::getWorldTransform(EntityHandle entity) const
@@ -149,12 +151,7 @@ namespace services
         }
         auto decomposed = math::decomposeMatrix(worldComp.worldMatrix);
 
-        TransformData result{decomposed.position, decomposed.rotation, decomposed.scale};
-        if (!isFinite(result))
-        {
-            return std::nullopt;
-        }
-        return result;
+        return sanitizeRead(TransformData{decomposed.position, decomposed.rotation, decomposed.scale});
     }
 
     void TransformComponentService::setWorldTransform(EntityHandle entity, const TransformData& worldTransform)

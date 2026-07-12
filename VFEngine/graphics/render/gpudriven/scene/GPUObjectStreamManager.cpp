@@ -439,8 +439,25 @@ namespace render::gpudriven
                     obj.flags |= (renderData.renderLayer & ObjectFlags::LayerMask) << ObjectFlags::LayerShift;
 
                     // VK-1493: pack toon shading model + profile index into flags bits 23-31.
-                    if (subMat)
-                        ObjectFlags::packShadingFlags(obj.flags, subMat->shadingModel, subMat->toonProfileIndex);
+                    // Mirror the edit-mode fallback (MergedMeshBuffer::populateObjectData):
+                    // per-submesh material, else resolve from defaultMaterialPath so default-
+                    // material toon meshes shade the same in edit and play mode.
+                    {
+                        uint8_t shadingModel = 0;
+                        uint8_t toonProfileIndex = 0;
+                        if (subMat)
+                        {
+                            shadingModel = subMat->shadingModel;
+                            toonProfileIndex = subMat->toonProfileIndex;
+                        }
+                        else if (resolvers.shadingResolver && !materialPath.empty())
+                        {
+                            auto shading = resolvers.shadingResolver(materialPath);
+                            shadingModel = shading.first;
+                            toonProfileIndex = shading.second;
+                        }
+                        ObjectFlags::packShadingFlags(obj.flags, shadingModel, toonProfileIndex);
+                    }
 
                     buffer.updateObjectAtSlot(slot, obj);
                     buffer.mapEntityToSlot(uuid, slot);

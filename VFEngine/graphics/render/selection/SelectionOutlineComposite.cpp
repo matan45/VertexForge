@@ -95,7 +95,10 @@ namespace render::selection
         }
 
         vk::DescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        // The mask is held in eGeneral for its whole lifetime (see SelectionMaskPipeline)
+        // so the always-bound set-15 storage-image descriptor stays layout-correct on
+        // every draw; sample it here in eGeneral to match the frame graph's StorageRead.
+        imageInfo.imageLayout = vk::ImageLayout::eGeneral;
         imageInfo.imageView = maskView;
         imageInfo.sampler = maskSampler;
 

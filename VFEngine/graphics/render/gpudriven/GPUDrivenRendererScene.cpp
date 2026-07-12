@@ -117,7 +117,19 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition};
+        // VK-1493: resolve toon shading from the material path (defaultMaterialPath
+        // fallback for the streaming path), reading the same pbrCache as above.
+        ShadingResolver shadingResolver = [this](const std::string& materialPath)
+            -> std::pair<uint8_t, uint8_t> {
+            if (materialPath.empty()) return {0, 0};
+            auto it = materials.pbrCache.find(materialPath);
+            if (it != materials.pbrCache.end())
+                return {it->second.shadingModel, it->second.toonProfileIndex};
+            return {0, 0};
+        };
+
+        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver,
+                                  shadingResolver, time, cameraPosition};
 
         bool useStreaming = objectStreamingEnabled && objectStreamManager
                            && objectStreamManager->getStats().totalRegistered > 0;

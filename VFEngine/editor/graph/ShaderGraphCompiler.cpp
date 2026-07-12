@@ -287,7 +287,11 @@ namespace editor::graph {
         }
         if (opts.toonEnabled) {
             const material::ToonProfile& p = opts.toonProfile;
-            auto f = [](float v) { return std::to_string(v); };
+            // std::format is locale-independent by default (no 'L' option), unlike
+            // std::to_string which honors LC_NUMERIC and would emit '0,35' under a
+            // comma-decimal locale — invalid GLSL. Fixed 6-digit output keeps a
+            // decimal point so the values stay float literals.
+            auto f = [](float v) { return std::format("{:.6f}", v); };
             auto v3 = [&](const glm::vec3& c) {
                 return "vec3(" + f(c.x) + ", " + f(c.y) + ", " + f(c.z) + ")";
             };

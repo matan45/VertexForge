@@ -133,9 +133,12 @@ namespace render
                              vk::ImageUsageFlagBits::eTransferDst;
             maskDesc.aspectMask = vk::ImageAspectFlagBits::eColor;
             maskDesc.debugName = "SelectionVisibility";
+            // The mask is held permanently in eGeneral (SelectionMaskPipeline transitions
+            // it on create and the composite read below returns it to eGeneral each frame),
+            // so it is already in eGeneral at import time.
             selectionMaskHandle = frameGraph->importImage(
                 coverage->getMaskImage(), coverage->getMaskImageView(),
-                vk::ImageLayout::eUndefined, maskDesc);
+                vk::ImageLayout::eGeneral, maskDesc);
         }
 
         // --- Scene core passes ---
@@ -535,7 +538,11 @@ namespace render
                         swapChain.getSwapchainExtent(),
                         maskPipeline->getMaskExtent());
                 });
-            builder.read(selectionMaskHandle, graph::ResourceUsage::ShaderRead);
+            // StorageRead (eGeneral) rather than ShaderRead (eShaderReadOnly): the mask
+            // sampler reads fine in eGeneral, and this leaves the image in eGeneral at
+            // frame end so the always-bound set-15 descriptor stays layout-correct on
+            // the following no-selection / RTT frames.
+            builder.read(selectionMaskHandle, graph::ResourceUsage::StorageRead);
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
             builder.setSegment(graph::HookSegment::UI);
             builder.setSideEffect();

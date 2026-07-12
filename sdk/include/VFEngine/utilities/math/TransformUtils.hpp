@@ -3,9 +3,30 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/euler_angles.hpp>
+#include <cmath>
 
 namespace math
 {
+    // Shared NaN/Inf guards. Transform decomposition and gizmo math can produce
+    // non-finite components on degenerate input; these are the single source of
+    // truth used by the viewport gizmo, prefab rig, and transform service.
+    inline bool isFinite(const glm::vec3& v)
+    {
+        return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+    }
+
+    inline bool isFinite(const glm::mat4& m)
+    {
+        for (int c = 0; c < 4; ++c)
+        {
+            for (int r = 0; r < 4; ++r)
+            {
+                if (!std::isfinite(m[c][r])) return false;
+            }
+        }
+        return true;
+    }
+
     struct DecomposedTransform
     {
         glm::vec3 position{0.0f};

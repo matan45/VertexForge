@@ -12,22 +12,8 @@
 // Pure functions (no ImGui/dispatcher/registry) — unit-testable from Tests.
 namespace grouptransform
 {
-    inline bool isFiniteVec(const glm::vec3& v)
-    {
-        return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-    }
-
-    inline bool isFiniteMat(const glm::mat4& m)
-    {
-        for (int c = 0; c < 4; ++c)
-        {
-            for (int r = 0; r < 4; ++r)
-            {
-                if (!std::isfinite(m[c][r])) return false;
-            }
-        }
-        return true;
-    }
+    // Shared NaN/Inf guards (single source of truth in math::).
+    using math::isFinite;
 
     inline glm::mat4 composeWorld(const services::TransformData& t)
     {
@@ -41,7 +27,7 @@ namespace grouptransform
                                                const glm::mat4& newActiveWorld)
     {
         constexpr float kMinDeterminant = 1e-12f;
-        if (!isFiniteMat(startActiveWorld) || !isFiniteMat(newActiveWorld))
+        if (!isFinite(startActiveWorld) || !isFinite(newActiveWorld))
         {
             return std::nullopt;
         }
@@ -51,7 +37,7 @@ namespace grouptransform
         }
 
         const glm::mat4 delta = newActiveWorld * glm::inverse(startActiveWorld);
-        if (!isFiniteMat(delta)) return std::nullopt;
+        if (!isFinite(delta)) return std::nullopt;
         return delta;
     }
 
@@ -62,11 +48,11 @@ namespace grouptransform
         const glm::mat4& delta, const services::TransformData& startWorld)
     {
         const glm::mat4 newWorld = delta * composeWorld(startWorld);
-        if (!isFiniteMat(newWorld)) return std::nullopt;
+        if (!isFinite(newWorld)) return std::nullopt;
 
         const math::DecomposedTransform d = math::decomposeMatrix(newWorld);
-        if (!isFiniteVec(d.position) || !isFiniteVec(d.rotation) ||
-            !isFiniteVec(d.scale))
+        if (!isFinite(d.position) || !isFinite(d.rotation) ||
+            !isFinite(d.scale))
         {
             return std::nullopt;
         }

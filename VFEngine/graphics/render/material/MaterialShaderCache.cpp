@@ -106,7 +106,6 @@ namespace render::mesh
             material::MaterialRuntimeDataBuilder::fromMaterialData(materialData);
         outData.vertexShaderHash = runtimeData.shaderMap.vertexShaderHash;
         outData.fragmentShaderHash = runtimeData.shaderMap.fragmentShaderHash;
-        outData.materialIRHash = runtimeData.irHash;
         outData.shaderMapKey = runtimeData.shaderMap.shaderMapKey;
 
         if (resource::PathResolver::isExportedMode())

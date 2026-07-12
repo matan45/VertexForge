@@ -32,12 +32,13 @@ void main()
     }
 
     bool hasSelectedNeighbor = false;
-    for (int y = -2; y <= 2; ++y) {
-        for (int x = -2; x <= 2; ++x) {
+    for (int y = -2; y <= 2 && !hasSelectedNeighbor; ++y) {
+        for (int x = -2; x <= 2 && !hasSelectedNeighbor; ++x) {
             if (x == 0 && y == 0) continue;
             ivec2 coord = clamp(centerCoord + ivec2(x, y), ivec2(0), extent - ivec2(1));
-            hasSelectedNeighbor = hasSelectedNeighbor ||
-                ((texelFetch(selectionMask, coord, 0).r & 1u) == 0u);
+            if ((texelFetch(selectionMask, coord, 0).r & 1u) == 0u) {
+                hasSelectedNeighbor = true;
+            }
         }
     }
 

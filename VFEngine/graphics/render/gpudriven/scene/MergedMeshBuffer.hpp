@@ -54,11 +54,17 @@ namespace render::gpudriven
 
     using BoneOffsetResolver = std::function<uint32_t(entt::entity entity)>;
 
+    // VK-1493: resolves {shadingModel, toonProfileIndex} for a material path so the
+    // object-streaming path can pack toon flags from defaultMaterialPath, matching
+    // the edit-mode pbrCache fallback in MergedMeshBuffer::populateObjectData.
+    using ShadingResolver = std::function<std::pair<uint8_t, uint8_t>(const std::string& materialPath)>;
+
     struct ObjectResolvers
     {
         TextureIndexResolver textureResolver;
         ShaderGroupResolver shaderGroupResolver;
         BoneOffsetResolver boneOffsetResolver;
+        ShadingResolver shadingResolver;
         float time = 0.0f;
         glm::vec3 cameraPosition{0.0f};
     };

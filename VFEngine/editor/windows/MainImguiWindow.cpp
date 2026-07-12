@@ -75,6 +75,7 @@ namespace windows
         dispatcher.unsubscribe(openProjectSettingsToken);
         dispatcher.unsubscribe(openBackgroundRemovalToken);
         dispatcher.unsubscribe(openUILayerBuilderToken);
+        dispatcher.unsubscribe(openToonProfileEditorToken);
         dispatcher.unsubscribe(settingsChangedToken);
     }
 
