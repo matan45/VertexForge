@@ -19,8 +19,12 @@ struct ToonProfileGPU {
 // 3-band diffuse. Shadow + normalized attenuation are folded into the band coordinate
 // BEFORE the smoothstep, so a penumbra / distance falloff reads as one clean band edge
 // (not a lit edge times a separate shadow edge = a double terminator). Half-Lambert wraps
-// NdotL into [0,1]. litColor is the fully-lit top band (albedo * lightColor); the shade
-// and mid bands come from the profile tints.
+// NdotL into [0,1]. litColor is the fully-lit base color (albedo * lightColor).
+//
+// shadeColor / midColor are TINT MULTIPLIERS (0..1), not flat replacement colours: the
+// shade -> mid -> white ramp multiplies the lit base colour, so an albedo texture shows
+// through in EVERY band (darkened/tinted toward the profile colours in shadow) instead of
+// the shade/mid bands hiding it behind a flat colour.
 vec3 toonApplyBands(ToonProfileGPU p, float NdotL, float atten01, float shadow, vec3 litColor) {
     float halfLambert = NdotL * 0.5 + 0.5;
     float t = clamp(halfLambert * shadow * atten01, 0.0, 1.0);
@@ -29,9 +33,9 @@ vec3 toonApplyBands(ToonProfileGPU p, float NdotL, float atten01, float shadow, 
     float midFactor = smoothstep(p.diffParams.x - s, p.diffParams.x + s, t); // shade -> mid
     float litFactor = smoothstep(p.diffParams.y - s, p.diffParams.y + s, t); // mid   -> lit
 
-    vec3 band = mix(p.shadeColor.rgb, p.midColor.rgb, midFactor);
-    band = mix(band, litColor, litFactor);
-    return band;
+    vec3 tint = mix(p.shadeColor.rgb, p.midColor.rgb, midFactor);
+    tint = mix(tint, vec3(1.0), litFactor);
+    return litColor * tint;
 }
 
 // Thresholded pow(NdotH, shininess) hard blob -> specColor * intensity, gated by

@@ -75,8 +75,11 @@
         float bs = max(TOON_BAND_SMOOTHNESS, 1e-4);
         float midFactor = smoothstep(TOON_SHADOW_THRESHOLD - bs, TOON_SHADOW_THRESHOLD + bs, t);
         float litFactor = smoothstep(TOON_MID_THRESHOLD - bs, TOON_MID_THRESHOLD + bs, t);
-        vec3 band = mix(TOON_SHADE_COLOR, TOON_MID_COLOR, midFactor);
-        band = mix(band, albedo_linear, litFactor);            // lit band = albedo * white key
+        // shade/mid colours are tint multipliers: ramp (shade -> mid -> 1) times the base
+        // albedo, so a texture shows through in every band (matches toon_shading.glsl).
+        vec3 tint = mix(TOON_SHADE_COLOR, TOON_MID_COLOR, midFactor);
+        tint = mix(tint, vec3(1.0), litFactor);
+        vec3 band = albedo_linear * tint;                      // lit band = albedo * white key
 
         vec3 H = normalize(V + keyDir);
         float ndh = clamp(dot(N, H), 0.0, 1.0);
