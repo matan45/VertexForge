@@ -62,7 +62,41 @@
 
     vec3 emission_linear = mat_emissionColor * mat_emissionStrength;
 
+#ifdef TOON_ENABLED
+    // VK-1493 toon preview under a fixed synthetic key light (this footer has no scene
+    // lights). Same band/spec/rim math as resources/shaders/common/toon_shading.glsl,
+    // inlined because the material shader path does not resolve #include. Profile values
+    // arrive as TOON_* defines from ShaderGraphCompiler.
+    vec3 color;
+    {
+        vec3 keyDir = normalize(vec3(0.4, 0.85, 0.5)); // not const: glslang rejects const = normalize(...)
+        float halfLambert = dot(N, keyDir) * 0.5 + 0.5;
+        float t = clamp(halfLambert, 0.0, 1.0);                 // no shadow/atten in preview
+        float bs = max(TOON_BAND_SMOOTHNESS, 1e-4);
+        float midFactor = smoothstep(TOON_SHADOW_THRESHOLD - bs, TOON_SHADOW_THRESHOLD + bs, t);
+        float litFactor = smoothstep(TOON_MID_THRESHOLD - bs, TOON_MID_THRESHOLD + bs, t);
+        // shade/mid colours are tint multipliers: ramp (shade -> mid -> 1) times the base
+        // albedo, so a texture shows through in every band (matches toon_shading.glsl).
+        vec3 tint = mix(TOON_SHADE_COLOR, TOON_MID_COLOR, midFactor);
+        tint = mix(tint, vec3(1.0), litFactor);
+        vec3 band = albedo_linear * tint;                      // lit band = albedo * white key
+
+        vec3 H = normalize(V + keyDir);
+        float ndh = clamp(dot(N, H), 0.0, 1.0);
+        float spec = pow(ndh, max(TOON_SPEC_SHININESS, 1.0));
+        float ss = max(TOON_SPEC_SMOOTHNESS, 1e-4);
+        float blob = smoothstep(TOON_SPEC_THRESHOLD - ss, TOON_SPEC_THRESHOLD + ss, spec);
+        vec3 toonSpec = blob * TOON_SPEC_INTENSITY * TOON_SPEC_COLOR;
+
+        float rim = pow(1.0 - clamp(NdotV, 0.0, 1.0), max(TOON_RIM_POWER, 1e-3));
+        vec3 toonRim = rim * TOON_RIM_INTENSITY * TOON_RIM_COLOR;
+
+        vec3 toonAmbient = irradiance * albedo_linear * TOON_GI_SCALE;
+        color = band + toonSpec + toonRim + toonAmbient + emission_linear;
+    }
+#else
     vec3 color = ambient + emission_linear;
+#endif
 
     color = color / (color + vec3(1.0));
 

@@ -39,6 +39,7 @@ namespace windows
         menuBar.setTaskGraphWindow(&taskGraphWindow);
         menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
+        menuBar.setToonProfileEditorWindow(&toonProfileEditorWindow);
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
         menuBar.setThemeEditorWindow(&themeEditorWindow);
         menuBar.setUILayerBuilderWindow(&uiLayerBuilderWindow);
@@ -74,6 +75,7 @@ namespace windows
         dispatcher.unsubscribe(openProjectSettingsToken);
         dispatcher.unsubscribe(openBackgroundRemovalToken);
         dispatcher.unsubscribe(openUILayerBuilderToken);
+        dispatcher.unsubscribe(openToonProfileEditorToken);
         dispatcher.unsubscribe(settingsChangedToken);
     }
 
@@ -131,6 +133,12 @@ namespace windows
             [this](const events::application::OpenUILayerBuilderNotification& n)
             {
                 uiLayerBuilderWindow.openFromContentBrowser(n.filePath);
+            });
+
+        openToonProfileEditorToken = dispatcher.subscribe<events::application::OpenToonProfileEditorNotification>(
+            [this](const events::application::OpenToonProfileEditorNotification& n)
+            {
+                toonProfileEditorWindow.openProfile(n.filePath);
             });
 
         settingsChangedToken = dispatcher.subscribe<events::editor::EditorSettingsChangedNotification>(
@@ -225,6 +233,7 @@ namespace windows
             taskGraphWindow.draw();
             inputActionMappingWindow.draw();
             heightmapGeneratorWindow.draw();
+            toonProfileEditorWindow.draw();
             backgroundRemovalWindow.draw();
             themeEditorWindow.draw();
             uiLayerBuilderWindow.draw();

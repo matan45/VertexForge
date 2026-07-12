@@ -153,6 +153,11 @@ namespace render
         struct UITextRenderData;
     }
 
+    namespace selection
+    {
+        class SelectionOutlineComposite; // VK-1490 editor selection outline
+    }
+
     class RenderPassHandler
     {
     private:
@@ -233,6 +238,9 @@ namespace render
         bool parallelSceneRecording = false;
         core::ThreadCommandPoolManager* sceneThreadPoolManager = nullptr;
 
+        // VK-1490: editor selection (entt ids) for the silhouette outline passes
+        std::vector<uint32_t> selectedEntityIds;
+
         // Scene recording stats
         mutable float lastSceneRecordingUs = 0.0f;
         mutable uint32_t lastSceneSecondaryCount = 0;
@@ -310,6 +318,9 @@ namespace render
         mutable std::array<std::vector<const char*>, core::MAX_FRAMES_IN_FLIGHT> vtSlotScopeNames{};
         graph::ResourceHandle sceneColorHandle;
         graph::ResourceHandle depthHandle;
+        // VK-1490: imported per frame only while a selection outline is active
+        graph::ResourceHandle selectionMaskHandle;
+        std::unique_ptr<selection::SelectionOutlineComposite> selectionOutlineComposite;
         // Scoped MSAA: multisampled scene targets. Pre-resolve passes (ClearColor,
         // sky, clouds, opaque meshes) write these; the opaque pass resolves into
         // sceneColorHandle/depthHandle. Equal to the single-sample handles when MSAA
@@ -380,6 +391,12 @@ namespace render
         void setUICanvasOutlineDrawList(std::vector<mesh::UICanvasOutlineRenderData>&& outlines);
         void setUICanvasImageDrawList(std::vector<mesh::UICanvasImageRenderData>&& images);
         void setWireframeMode(bool enabled);
+
+        // VK-1490: editor selection outline — selected entt ids pushed per frame
+        // by the editor (empty clears). Forwarded to the GPU-driven renderer,
+        // which resolves them to GPU object slots for the SelectionMask pass.
+        void setSelectedEntityDrawList(std::vector<uint32_t>&& entityIds);
+        bool hasSelectedEntities() const { return !selectedEntityIds.empty(); }
 
         void setShowNavmeshDebug(bool show);
         bool getShowNavmeshDebug() const;

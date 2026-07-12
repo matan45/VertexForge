@@ -84,6 +84,7 @@ namespace core
         void setShowPhysicsDebug(bool show) override;
         bool getShowPhysicsDebug() const override;
         void prepareFramePhysicsColliders() override;
+        void prepareFrameSelectionOutline(const std::vector<services::EntityHandle>& selectedEntities) override;
 
         void setViewMode(uint32_t mode) override;
         uint32_t getViewMode() const override;

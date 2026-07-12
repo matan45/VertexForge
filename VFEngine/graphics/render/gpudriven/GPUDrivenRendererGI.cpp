@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "SelectionMaskPipeline.hpp"
 #include "../occlusion/DepthPrepass.hpp"
 // VK-1443: full manager types (forward-declared in GPUDrivenRenderer.hpp) needed here
 // because this TU dispatches GI probe + RT shadow work and defines upsampleLayeredRTShadow.
@@ -269,7 +270,8 @@ namespace render::gpudriven
                         .giProbeDataLayout = storage->getSamplingLayout(),
                         .causticLayout = causticLayout,
                         .worldMaskLayout = currentWorldMaskLayout(),
-                        .colorAttachmentFormats = cachedColorFormats,
+                .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
+                .colorAttachmentFormats = cachedColorFormats,
                         .depthAttachmentFormat = cachedDepthFormat
                     };
 
@@ -357,6 +359,7 @@ namespace render::gpudriven
                     .giProbeDataLayout = nullptr,
                     .causticLayout = causticLayout,
                     .worldMaskLayout = currentWorldMaskLayout(),
+                    .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                     .colorAttachmentFormats = cachedColorFormats,
                     .depthAttachmentFormat = cachedDepthFormat
                 };
@@ -859,6 +862,7 @@ namespace render::gpudriven
             .worldMaskLayout = pluginTextureManager->getEntityMaskLayout(),
             .rtSpotShadowMaskLayout = getActiveRTSpotShadowMaskLayout(),
             .rtPointShadowMaskLayout = getActiveRTPointShadowMaskLayout(),
+            .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
             .colorAttachmentFormats = cachedColorFormats,
             .depthAttachmentFormat = cachedDepthFormat
         };
@@ -961,6 +965,7 @@ namespace render::gpudriven
             .worldMaskLayout = worldMaskLayout,
             .rtSpotShadowMaskLayout = getActiveRTSpotShadowMaskLayout(),
             .rtPointShadowMaskLayout = getActiveRTPointShadowMaskLayout(),
+            .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
             .colorAttachmentFormats = cachedColorFormats,
             .depthAttachmentFormat = cachedDepthFormat
         };
@@ -1053,6 +1058,7 @@ namespace render::gpudriven
                     .worldMaskLayout = currentWorldMaskLayout(),
                     .rtSpotShadowMaskLayout = getActiveRTSpotShadowMaskLayout(),
                     .rtPointShadowMaskLayout = getActiveRTPointShadowMaskLayout(),
+                    .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                     .colorAttachmentFormats = cachedColorFormats,
                     .depthAttachmentFormat = cachedDepthFormat
                 };
@@ -1359,6 +1365,7 @@ namespace render::gpudriven
                     .worldMaskLayout = currentWorldMaskLayout(),
                     .rtSpotShadowMaskLayout = spotMaskLayout,
                     .rtPointShadowMaskLayout = pointMaskLayout,
+                    .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                     .colorAttachmentFormats = cachedColorFormats,
                     .depthAttachmentFormat = cachedDepthFormat
                 };
@@ -1607,6 +1614,7 @@ namespace render::gpudriven
                     .worldMaskLayout = currentWorldMaskLayout(),
                     .rtSpotShadowMaskLayout = spotMaskLayout,
                     .rtPointShadowMaskLayout = pointMaskLayout,
+                    .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                     .colorAttachmentFormats = cachedColorFormats,
                     .depthAttachmentFormat = cachedDepthFormat
                 };

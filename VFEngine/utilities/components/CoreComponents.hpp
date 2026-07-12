@@ -15,7 +15,10 @@ namespace components
 {
     struct WorldTransformComponent
     {
-        glm::mat4 worldMatrix;
+        // Identity until SceneGraphSystem computes the real world transform.
+        // Leaving this uninitialized lets same-frame consumers (notably the
+        // multi-selection gizmo) decompose indeterminate values into NaNs.
+        glm::mat4 worldMatrix{1.0f};
     };
 
     struct ParentComponent

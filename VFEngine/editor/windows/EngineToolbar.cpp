@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorModeEvents.hpp"
 #include "events/editor/EditorKeybindingEvents.hpp"
+#include "events/editor/UndoRedoEvents.hpp"
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "print/Log.hpp"
@@ -55,13 +56,15 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Register a single-key (optionally Shift-modified) action and warn on any binding
+        // Register a single-key action and warn on any binding
         // conflict instead of silently overriding another action's shortcut.
-        auto reg = [&](const std::string& name, const std::string& display, int key, bool shift)
+        auto reg = [&](const std::string& name, const std::string& category,
+                       const std::string& display, int key, bool ctrl, bool shift)
         {
             services::InputBinding b;
             b.type = services::BindingType::Key;
             b.code = key;
+            b.requireCtrl = ctrl;
             b.requireShift = shift;
 
             events::editor::GetKeybindingConflictsQuery conflictQuery;
@@ -73,16 +76,18 @@ namespace windows
 
             events::editor::RegisterEditorActionCommand cmd;
             cmd.actionName = name;
-            cmd.category = "Play Controls";
+            cmd.category = category;
             cmd.displayName = display;
             cmd.defaultBindings = {b};
             dispatcher.execute(cmd);
         };
 
-        reg("Editor.Play", "Play", ImGuiKey_F5, false);
-        reg("Editor.PauseResume", "Pause / Resume", ImGuiKey_F6, false);
-        reg("Editor.Stop", "Stop", ImGuiKey_F5, true);
-        reg("Editor.Step", "Step Frame", ImGuiKey_F10, false);
+        reg("Editor.Undo", "Edit", "Undo", ImGuiKey_Z, true, false);
+        reg("Editor.Redo", "Edit", "Redo", ImGuiKey_Y, true, false);
+        reg("Editor.Play", "Play Controls", "Play", ImGuiKey_F5, false, false);
+        reg("Editor.PauseResume", "Play Controls", "Pause / Resume", ImGuiKey_F6, false, false);
+        reg("Editor.Stop", "Play Controls", "Stop", ImGuiKey_F5, false, true);
+        reg("Editor.Step", "Play Controls", "Step Frame", ImGuiKey_F10, false, false);
     }
 
     void EngineToolbar::handleHotkeys()
@@ -98,6 +103,20 @@ namespace windows
 
         auto currentMode = dispatcher.query(events::editor::GetEditorModeQuery{});
         bool isPlayMode = (currentMode == services::EditorMode::Play);
+
+        // Undo/redo are editor-global, not tied to whichever docked window has
+        // focus. Let active text widgets retain their native editing history.
+        if (!ImGui::GetIO().WantTextInput)
+        {
+            if (isPressed("Editor.Undo"))
+            {
+                dispatcher.execute(events::undoredo::UndoCommand{});
+            }
+            else if (isPressed("Editor.Redo"))
+            {
+                dispatcher.execute(events::undoredo::RedoCommand{});
+            }
+        }
 
         // Play: block only on sculpt mode here. The scripts-compiled gate now lives
         // in the SetEditorModeCommand handler (Phase 4a), which auto-builds when

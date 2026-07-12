@@ -208,6 +208,10 @@ void main() {
 #include "../common/lod_crossfade.glsl"
 #include "../common/wetness.glsl"
 #include "../common/snow_accumulation.glsl"
+// VK-1493: toon primitives + the set-1 binding-6 profile table. toon_lighting.glsl MUST
+// follow lighting_functions.glsl (needs its light structs + attenuation helpers).
+#include "../common/toon_shading.glsl"
+#include "../common/toon_lighting.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -237,6 +241,14 @@ layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
 };
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
+
+#ifdef SELECTION_COVERAGE_ENABLED
+layout(std430, set = 15, binding = 0) readonly buffer SelectionBits {
+    uint selectionBits[];
+};
+layout(r32ui, set = 15, binding = 1) uniform uimage2D selectionVisibility;
+const uint SELECTION_COVERAGE_WRITE_BIT = 0x1000u;
+#endif
 
 #ifdef SVT_ENABLED
 // VK-1209 material Streamed Virtual Textures. UE5-style: the physical BC7 atlas lives in the
@@ -587,6 +599,25 @@ void main() {
         alpha *= materialOpacity;
     }
 
+#ifdef SELECTION_COVERAGE_ENABLED
+    // Record the nearest fragment from the exact scene invocation that survived
+    // alpha masking and LOD dithering. Normal-Z float bits are monotonically
+    // ordered for [0,1], so atomicMin resolves arbitrary draw order. Bit zero is
+    // 0 for selected and 1 for unselected/background; selected wins exact ties.
+    if ((pc.viewMode & SELECTION_COVERAGE_WRITE_BIT) != 0u) {
+        uint objectIndex = drawData.objectIndex;
+        bool selected = (selectionBits[objectIndex >> 5u] &
+                         (1u << (objectIndex & 31u))) != 0u;
+        uint packedDepth = floatBitsToUint(gl_FragCoord.z) & 0xFFFFFFFEu;
+        uint packedVisibility = packedDepth | (selected ? 0u : 1u);
+        ivec2 pixel = ivec2(gl_FragCoord.xy);
+        if (all(greaterThanEqual(pixel, ivec2(0))) &&
+            all(lessThan(pixel, imageSize(selectionVisibility)))) {
+            imageAtomicMin(selectionVisibility, pixel, packedVisibility);
+        }
+    }
+#endif
+
     float metallic = matParams.x;
     float roughness = matParams.y;
     float ao = matParams.z;
@@ -646,6 +677,14 @@ void main() {
     float so = specularOcclusion(NdotV, ao, roughness);
     vec3 ambient = kD * diffuse * ao + specular * so;
 
+    // VK-1493: toon setup. When the per-draw shading model is Toon, each light loop below
+    // takes a banded branch; the PBR path stays byte-identical when isToon is false.
+    // toonProfile is fetched only under isToon, so non-toon draws never index the SSBO.
+    bool isToon = getShadingModel(drawData.flags) == SHADING_MODEL_TOON;
+    ToonProfileGPU toonProfile;
+    if (isToon) toonProfile = toonProfiles[getToonProfileIndex(drawData.flags)];
+    vec3 toonSpecAccum = vec3(0.0);
+
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
 
@@ -664,7 +703,14 @@ void main() {
             PointLight light = pointLights[lightIdx];
             float shadow = samplePointShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, N, light.position, light.radius);
             minShadow = min(minShadow, shadow);
-            directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
+            if (isToon) {
+                vec3 spec;
+                vec3 d = toonPointLight(toonProfile, fragWorldPos, N, V, albedo, light, shadow, spec);
+                directLighting = toonCombineDiffuse(directLighting, d);
+                toonSpecAccum = max(toonSpecAccum, spec);
+            } else {
+                directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
+            }
         }
 
         for (uint i = 0u; i < clusterSpotCount; ++i) {
@@ -673,7 +719,14 @@ void main() {
             SpotLight light = spotLights[lightIdx];
             float shadow = sampleSpotShadowHybrid(light.shadowIndex, light.rtMaskSlice, fragWorldPos, N);
             minShadow = min(minShadow, shadow);
-            directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
+            if (isToon) {
+                vec3 spec;
+                vec3 d = toonSpotLight(toonProfile, fragWorldPos, N, V, albedo, light, shadow, spec);
+                directLighting = toonCombineDiffuse(directLighting, d);
+                toonSpecAccum = max(toonSpecAccum, spec);
+            } else {
+                directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
+            }
         }
     }
 
@@ -683,14 +736,21 @@ void main() {
             ? 1.0
             : sampleDirectionalShadowHybrid(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
         minShadow = min(minShadow, shadow);
-        vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
+        if (isToon) {
+            vec3 spec;
+            vec3 d = toonDirectionalLight(toonProfile, N, V, albedo, light, shadow, spec);
+            directLighting = toonCombineDiffuse(directLighting, d);
+            toonSpecAccum = max(toonSpecAccum, spec);
+        } else {
+            vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
 #ifdef CAUSTICS_ENABLED
-        float caustic = sampleCaustics(causticMap, causticParams.waterHeight, causticParams.causticStrength,
-                                       causticParams.depthFalloff, causticParams.patchSize,
-                                       fragWorldPos, light.direction);
-        lightContrib *= (1.0 + caustic);
+            float caustic = sampleCaustics(causticMap, causticParams.waterHeight, causticParams.causticStrength,
+                                           causticParams.depthFalloff, causticParams.patchSize,
+                                           fragWorldPos, light.direction);
+            lightContrib *= (1.0 + caustic);
 #endif
-        directLighting += lightContrib;
+            directLighting += lightContrib;
+        }
     }
 
     float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;
@@ -720,6 +780,17 @@ void main() {
     float giStrength = min(length(giIrradiance), 1.0);
     ambient *= mix(1.0, 0.3, giStrength);
 #endif
+
+    // VK-1493: toon finalize. directLighting already holds the luminance-max banded diffuse
+    // from the loops; add the crisp specular blob(s) + view rim, replace ambient with flat
+    // GI (irradiance * albedo * giScale), and drop probe GI to avoid double-counting. The
+    // PBR path is byte-identical when isToon is false (this block is skipped).
+    if (isToon) {
+        directLighting += toonSpecAccum;
+        directLighting += toonRim(toonProfile, NdotV);
+        ambient = irradiance * albedo * toonProfile.diffParams.w; // giScale
+        giContribution = vec3(0.0);
+    }
 
     vec3 color = ambient + directLighting + giContribution + emissive;
 

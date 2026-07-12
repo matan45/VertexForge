@@ -1,4 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
+#include "scene/ToonProfileGpuTable.hpp" // VK-1493: complete type for getBuffer()/uploadIfDirty()
+#include "SelectionMaskPipeline.hpp" // VK-1490
 #include "../virtualtexture/svt/SVTManager.hpp"
 #include "../occlusion/HiZBuffer.hpp"
 #include "../occlusion/DepthPrepass.hpp"
@@ -115,7 +117,19 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition};
+        // VK-1493: resolve toon shading from the material path (defaultMaterialPath
+        // fallback for the streaming path), reading the same pbrCache as above.
+        ShadingResolver shadingResolver = [this](const std::string& materialPath)
+            -> std::pair<uint8_t, uint8_t> {
+            if (materialPath.empty()) return {0, 0};
+            auto it = materials.pbrCache.find(materialPath);
+            if (it != materials.pbrCache.end())
+                return {it->second.shadingModel, it->second.toonProfileIndex};
+            return {0, 0};
+        };
+
+        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver,
+                                  shadingResolver, time, cameraPosition};
 
         bool useStreaming = objectStreamingEnabled && objectStreamManager
                            && objectStreamManager->getStats().totalRegistered > 0;
@@ -136,6 +150,25 @@ namespace render::gpudriven
                 mergedBuffer->setPersistentMode(false);
             }
             mergedBuffer->updateObjects(opaqueObjects, resolvers);
+        }
+
+        // VK-1490: the selection bitmask must snapshot the SAME slot rebuild the
+        // GPU consumes this frame — slots reshuffle every frame with the
+        // camera-culled draw list, so writing the bits any later (e.g. at
+        // SelectionMask record time) can pair stale bits with new slots and
+        // highlight the wrong submeshes while the camera moves. The streaming
+        // (persistent-slot) path never resolves selection slots, so it writes an
+        // empty mask.
+        if (selectionMaskPipeline && selectionMaskPipeline->isInitialized())
+        {
+            if (useStreaming)
+            {
+                selectionMaskPipeline->writeSelectionBits({});
+            }
+            else
+            {
+                selectionMaskPipeline->writeSelectionBits(mergedBuffer->getSelectedObjectSlots());
+            }
         }
 
         uint32_t objectCount = useStreaming
@@ -534,6 +567,28 @@ namespace render::gpudriven
         wire(meshShaderPipeline.get());
         wire(transparentMeshShaderPipeline.get());
         wire(wboitMeshShaderPipeline.get());
+    }
+
+    void GPUDrivenRenderer::wireToonProfilePipelines()
+    {
+        if (!toonProfileTable)
+            return;
+        // Binding 6 is statically used on every scene draw and is not partially-bound, so
+        // every mesh pipeline must point at the (lifetime-stable) toon table buffer.
+        auto wire = [&](MeshShaderPipeline* p)
+        {
+            if (p)
+                p->updateToonProfileDescriptor(toonProfileTable->getBuffer());
+        };
+        wire(meshShaderPipeline.get());
+        wire(transparentMeshShaderPipeline.get());
+        wire(wboitMeshShaderPipeline.get());
+    }
+
+    void GPUDrivenRenderer::uploadToonProfiles(vk::CommandBuffer cmd)
+    {
+        if (toonProfileTable)
+            toonProfileTable->uploadIfDirty(cmd);
     }
 
     bool GPUDrivenRenderer::isSVTActive() const

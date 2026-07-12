@@ -266,6 +266,13 @@ namespace material
         j["name"] = material.name;
         j["domain"] = materialDomainToString(material.domain);
         j["shadingModel"] = shadingModelToString(material.shadingModel);
+        // Toon profile reference — written only for Toon materials so non-toon
+        // `.vfMat` files stay byte-identical. The `.vfToonProfile` path is picked
+        // up automatically by the dependency scanner (registered extension).
+        if (material.shadingModel == ShadingModel::Toon && !material.toonProfile.empty())
+        {
+            j["toonProfile"] = material.toonProfile;
+        }
         j["blendMode"] = blendModeToString(material.blendMode);
         j["opacity"] = material.opacity;
         j["alphaCutoff"] = material.alphaCutoff;

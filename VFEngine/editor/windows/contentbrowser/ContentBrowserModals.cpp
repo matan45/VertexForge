@@ -93,6 +93,10 @@ namespace windows
             ImGui::OpenPopup("Create New Material");
         drawCreateMaterialModal(currentPath);
 
+        if (showCreateToonProfileModal)
+            ImGui::OpenPopup("Create New Toon Profile");
+        drawCreateToonProfileModal(currentPath);
+
         if (showCreateAnimatorModal)
             ImGui::OpenPopup("Create New Animator");
         drawCreateAnimatorModal(currentPath);
@@ -165,6 +169,11 @@ namespace windows
                 {
                     showCreateMaterialModal = true;
                     newMaterialName.clear();
+                }
+                if (ImGui::MenuItem("Toon Profile")) // VK-1493
+                {
+                    showCreateToonProfileModal = true;
+                    newToonProfileName.clear();
                 }
                 if (ImGui::MenuItem("Animator"))
                 {

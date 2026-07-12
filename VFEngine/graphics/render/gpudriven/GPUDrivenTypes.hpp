@@ -124,6 +124,33 @@ namespace render::gpudriven
         // cullingMask. Must match LAYER_SHIFT/LAYER_MASK in resources/shaders/common/gpu_draw_functions.glsl.
         constexpr uint32_t LayerShift = 18;
         constexpr uint32_t LayerMask  = 0x1Fu;
+
+        // VK-1493: toon shading. Bits 23-24 = shading model (0 = DefaultLit, 1 = Unlit,
+        // 2 = Toon), bits 25-31 = toon profile index (0-127, index 0 = built-in default).
+        // These are the last free flag bits; do not collide with Layer (18-22),
+        // Category (13-16), ShadowStatic (17) or Instanced (15). Must match
+        // SHADING_MODEL_SHIFT/PROFILE_INDEX_SHIFT in gpu_draw_functions.glsl and the
+        // unpack in toon_lighting.glsl. `makePerDrawData` copies flags verbatim, so no
+        // PerDrawData struct change is needed.
+        constexpr uint32_t ShadingModelShift = 23;
+        constexpr uint32_t ShadingModelMask  = 0x3u;   // bits 23-24
+        constexpr uint32_t ProfileIndexShift = 25;
+        constexpr uint32_t ProfileIndexMask  = 0x7Fu;  // bits 25-31 (128 profiles)
+
+        // ShadingModel enum ids as they appear in the packed flags (mirror of
+        // material::ShadingModel ordering — kept as raw ints so this header stays
+        // free of a Utilities dependency).
+        constexpr uint32_t ShadingModelDefaultLit = 0;
+        constexpr uint32_t ShadingModelUnlit      = 1;
+        constexpr uint32_t ShadingModelToon       = 2;
+
+        // OR the shading-model id + profile index into an object's flags. Call AFTER
+        // flags is zero-initialized and the other bits (blend/layer/etc.) are set.
+        inline void packShadingFlags(uint32_t& flags, uint8_t shadingModel, uint8_t profileIndex)
+        {
+            flags |= (static_cast<uint32_t>(shadingModel) & ShadingModelMask) << ShadingModelShift;
+            flags |= (static_cast<uint32_t>(profileIndex) & ProfileIndexMask) << ProfileIndexShift;
+        }
     }
 
     namespace ObjectCategory

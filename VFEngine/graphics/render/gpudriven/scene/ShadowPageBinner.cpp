@@ -285,12 +285,15 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Pool holds the compute set (8 storage + 1 uniform) and the draw set (3 storage).
-        // Update-after-bind so the externally-owned perDrawLayout (created update-after-bind) can be
-        // allocated from it and so per-frame descriptor writes are legal on the bound sets.
+        // Pool holds the compute set (8 storage + 1 uniform) and the draw set, which is
+        // allocated from the shared mesh perDrawLayout. That layout carries 7 storage
+        // bindings: 0 PerDrawData, 1 instance, 2 object, 3-5 SVT (VK-1209), 6 toon table
+        // (VK-1493) — the allocation consumes all of them even though the binner only writes
+        // binding 0. Update-after-bind so the externally-owned perDrawLayout can be allocated
+        // from it and so per-frame descriptor writes are legal on the bound sets.
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 11; // 8 (compute b0,b2..b8) + 3 (draw b0..b2)
+        poolSizes[0].descriptorCount = 15; // 8 (compute b0,b2..b8) + 7 (draw b0..b6)
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;  // compute b1
 

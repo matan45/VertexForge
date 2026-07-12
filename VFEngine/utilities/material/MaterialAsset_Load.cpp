@@ -424,6 +424,7 @@ namespace material
             }
             material.domain = stringToMaterialDomain(j.value("domain", "surface"));
             material.shadingModel = stringToShadingModel(j.value("shadingModel", "defaultLit"));
+            material.toonProfile = j.value("toonProfile", "");
             material.blendMode = stringToBlendMode(j.value("blendMode", "opaque"));
             material.opacity = j.value("opacity", 1.0f);
             material.alphaCutoff = j.value("alphaCutoff", 0.5f);

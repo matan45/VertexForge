@@ -213,6 +213,24 @@ namespace render::gpudriven
         device.getLogicalDevice().updateDescriptorSets(objectWrite, {});
     }
 
+    void MeshShaderPipeline::updateToonProfileDescriptor(vk::Buffer toonProfileBuffer)
+    {
+        if (!perDrawDataDescriptorSet || !toonProfileBuffer)
+            return;
+
+        vk::DescriptorBufferInfo toonInfo{toonProfileBuffer, 0, VK_WHOLE_SIZE};
+
+        vk::WriteDescriptorSet toonWrite{};
+        toonWrite.dstSet = perDrawDataDescriptorSet;
+        toonWrite.dstBinding = 6;
+        toonWrite.dstArrayElement = 0;
+        toonWrite.descriptorCount = 1;
+        toonWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        toonWrite.pBufferInfo = &toonInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(toonWrite, {});
+    }
+
     void MeshShaderPipeline::updateSVTResources(vk::Buffer pageTableBuffer, vk::Buffer feedbackBuffer,
                                                 vk::Buffer imageInfoBuffer)
     {
@@ -428,6 +446,21 @@ namespace render::gpudriven
             bindings.push_back(sb);
         }
 
+        // VK-1493: toon profile table SSBO (binding 6), fragment stage. Unlike SVT
+        // (3-5), the toon branch is compiled unconditionally into the ubershader, so
+        // binding 6 is STATICALLY USED on every draw and there is no ePartiallyBound
+        // flag here — it must always point at a live buffer. The renderer binds the
+        // fixed 128-entry ToonProfileGpuTable buffer once (updateToonProfileDescriptor);
+        // slot 0 holds a valid default from frame 0, so the binding is always valid.
+        {
+            vk::DescriptorSetLayoutBinding tb{};
+            tb.binding = 6;
+            tb.descriptorType = vk::DescriptorType::eStorageBuffer;
+            tb.descriptorCount = 1;
+            tb.stageFlags = vk::ShaderStageFlagBits::eFragment;
+            bindings.push_back(tb);
+        }
+
         perDrawDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
             vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
@@ -586,6 +619,10 @@ namespace render::gpudriven
         {
             meshShader->addMacroDefinition("SVT_ENABLED"); // VK-1209 material SVT (set-1 bindings 3/4/5)
         }
+        if (info.selectionCoverageLayout)
+        {
+            meshShader->addMacroDefinition("SELECTION_COVERAGE_ENABLED");
+        }
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");
 
@@ -700,6 +737,14 @@ namespace render::gpudriven
         }
         worldMaskLayoutBound = info.worldMaskLayout != nullptr;
         worldMaskSetIndex = worldMaskLayoutBound ? (worldMaskAtSet11 ? 11u : 14u) : 0u;
+
+        if (info.selectionCoverageLayout)
+        {
+            ensureEmptyPlaceholder();
+            while (setLayouts.size() < 15)
+                setLayouts.push_back(emptyPlaceholderLayout);
+            setLayouts.push_back(info.selectionCoverageLayout); // Set 15
+        }
 
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |

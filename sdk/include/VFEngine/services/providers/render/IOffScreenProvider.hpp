@@ -10,6 +10,7 @@
 #include "types/CameraTypes.hpp"
 #include "types/RenderSettings.hpp"
 #include "stats/FrameDrawStats.hpp" // render::DrawCategory / FrameDrawStats::kCount
+#include "../../data/EntityHandle.hpp"
 
 namespace services {
 
@@ -263,6 +264,11 @@ namespace services {
         virtual void setShowPhysicsDebug(bool show) = 0;
         virtual bool getShowPhysicsDebug() const = 0;
         virtual void prepareFramePhysicsColliders() = 0;
+
+        // VK-1490: per-frame push of the editor selection for the silhouette
+        // outline passes. An empty list clears the highlight (deselection,
+        // scene replacement, play mode).
+        virtual void prepareFrameSelectionOutline(const std::vector<EntityHandle>& selectedEntities) = 0;
 
         virtual void setViewMode(uint32_t mode) = 0;
         virtual uint32_t getViewMode() const = 0;

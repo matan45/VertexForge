@@ -6,6 +6,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include <unordered_set>
 
 namespace services
 {
@@ -73,20 +74,33 @@ namespace services
 
     void EntityStateService::setSelectedEntity(std::optional<EntityHandle> entity)
     {
-        selectedEntities.clear();
-        if (entity.has_value() && entity->isValid())
+        std::vector<EntityHandle> entities;
+        if (entity.has_value())
         {
-            selectedEntities.push_back(*entity);
+            entities.push_back(*entity);
         }
-
-        events::scene::EntitySelectedNotification notification;
-        notification.entity = entity;
-        events::EventDispatcher::instance().publish(notification);
+        setSelectedEntities(std::move(entities));
     }
 
     void EntityStateService::setSelectedEntities(std::vector<EntityHandle> entities)
     {
-        selectedEntities = std::move(entities);
+        // VK-1490: every selection write (Scene Graph, Viewport, play-mode
+        // reselect) funnels through here, so invalid, deleted and duplicate
+        // handles are pruned once, centrally. Order is preserved (first
+        // occurrence wins) and front() after pruning is the active entity.
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<EntityHandle> normalized;
+        normalized.reserve(entities.size());
+        std::unordered_set<uint64_t> seen;
+        for (const auto& handle : entities)
+        {
+            if (!internal::isValidHandle(handle, registry)) continue;
+            if (seen.insert(handle.id).second)
+            {
+                normalized.push_back(handle);
+            }
+        }
+        selectedEntities = std::move(normalized);
 
         // Single-selection consumers (gizmo, details panel) track the primary entity.
         events::scene::EntitySelectedNotification notification;

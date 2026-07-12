@@ -1,6 +1,7 @@
 #include "SceneHierarchyPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
+#include "events/editor/EditorModeEvents.hpp"
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
@@ -8,6 +9,7 @@
 #include "events/scripting/ScriptingEvents.hpp"
 #include "asset/AssetRef.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
+#include "../../selection/SelectionPolicy.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -248,33 +250,23 @@ namespace windows
     void SceneHierarchyPanel::handleSelectionClick(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // VK-1490: selection input is edit-mode only. The gate sits on the input
+        // handler, not on the commands — Stop still restores the selection
+        // through SelectEntitiesCommand while transitioning back to Edit.
+        if (dispatcher.query(events::editor::IsPlayModeQuery{})) return;
+
         const ImGuiIO& io = ImGui::GetIO();
 
-        if (io.KeyShift && rangeAnchorHandle != services::EntityHandle::INVALID_ID)
+        if (io.KeyShift)
         {
             // Range over last frame's visible order, anchor..clicked inclusive
-            int anchorIndex = -1;
-            int clickedIndex = -1;
-            for (int i = 0; i < static_cast<int>(lastVisibleOrder.size()); ++i)
+            auto range = selection::computeRangeSelection(
+                lastVisibleOrder, services::EntityHandle{rangeAnchorHandle}, handle);
+            if (range.has_value())
             {
-                if (lastVisibleOrder[i].id == rangeAnchorHandle) anchorIndex = i;
-                if (lastVisibleOrder[i].id == handle.id) clickedIndex = i;
-            }
-
-            if (anchorIndex >= 0 && clickedIndex >= 0)
-            {
-                int lo = std::min(anchorIndex, clickedIndex);
-                int hi = std::max(anchorIndex, clickedIndex);
-
                 events::scene::SelectEntitiesCommand cmd;
-                cmd.entities.push_back(handle); // clicked entity becomes primary
-                for (int i = lo; i <= hi; ++i)
-                {
-                    if (lastVisibleOrder[i].id != handle.id)
-                    {
-                        cmd.entities.push_back(lastVisibleOrder[i]);
-                    }
-                }
+                cmd.entities = std::move(*range);
                 dispatcher.execute(cmd);
                 return;
             }
@@ -284,24 +276,8 @@ namespace windows
         if (io.KeyCtrl)
         {
             events::scene::SelectEntitiesCommand cmd;
-            if (isSelected(handle))
-            {
-                for (const auto& selected : selectedHandles)
-                {
-                    if (selected.id != handle.id)
-                    {
-                        cmd.entities.push_back(selected);
-                    }
-                }
-            }
-            else
-            {
-                cmd.entities.push_back(handle); // newly added entity becomes primary
-                for (const auto& selected : selectedHandles)
-                {
-                    cmd.entities.push_back(selected);
-                }
-            }
+            cmd.entities = selection::computeClickSelection(selectedHandles, handle,
+                                                            {.ctrl = true});
             dispatcher.execute(cmd);
             rangeAnchorHandle = handle.id;
             return;
@@ -675,43 +651,18 @@ namespace windows
     std::vector<services::EntityHandle> SceneHierarchyPanel::collectTopLevelSelection() const
     {
         auto& dispatcher = events::EventDispatcher::instance();
-
         auto rootHandle = dispatcher.query(events::scene::GetRootEntityQuery{});
 
-        auto isAncestorSelected = [this, &dispatcher](services::EntityHandle handle)
+        auto parentOf = [&dispatcher](services::EntityHandle handle)
+            -> std::optional<services::EntityHandle>
         {
-            services::EntityHandle current = handle;
-            while (true)
-            {
-                events::scene::GetEntityQuery entityQuery;
-                entityQuery.entity = current;
-                auto dataOpt = dispatcher.query(entityQuery);
-                if (!dataOpt.has_value() || !dataOpt->parent.has_value())
-                {
-                    return false;
-                }
-                current = dataOpt->parent.value();
-                if (isSelected(current))
-                {
-                    return true;
-                }
-            }
+            events::scene::GetEntityQuery entityQuery;
+            entityQuery.entity = handle;
+            auto dataOpt = dispatcher.query(entityQuery);
+            if (!dataOpt.has_value()) return std::nullopt;
+            return dataOpt->parent;
         };
-
-        std::vector<services::EntityHandle> result;
-        result.reserve(selectedHandles.size());
-        for (const auto& handle : selectedHandles)
-        {
-            if (!handle.isValid() || handle.id == rootHandle.id)
-            {
-                continue;
-            }
-            if (!isAncestorSelected(handle))
-            {
-                result.push_back(handle);
-            }
-        }
-        return result;
+        return selection::collectTopLevel(selectedHandles, parentOf, rootHandle);
     }
 
     void SceneHierarchyPanel::duplicateSelection()
@@ -845,6 +796,13 @@ namespace windows
     {
         if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
             renamingHandle != services::EntityHandle::INVALID_ID || ImGui::IsAnyItemActive())
+        {
+            return;
+        }
+
+        // VK-1490: rename/delete/copy/paste/duplicate act on the selection and
+        // are edit-mode only, like the selection clicks above.
+        if (events::EventDispatcher::instance().query(events::editor::IsPlayModeQuery{}))
         {
             return;
         }

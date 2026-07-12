@@ -3,6 +3,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -78,6 +79,19 @@ namespace services
         offScreenProvider->prepareFrameShadowDebug();
         offScreenProvider->prepareFrameUICanvasOutlines();
         offScreenProvider->prepareFrameUIImages();
+
+        // VK-1490: push the current editor selection for the silhouette outline
+        // passes. Polling per frame makes clear-on-deselect/delete/scene-replace
+        // automatic; play mode pushes empty so the runtime frame is untouched.
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            std::vector<EntityHandle> outlineSelection;
+            if (!dispatcher.query(events::editor::IsPlayModeQuery{}))
+            {
+                outlineSelection = dispatcher.query(events::scene::GetSelectedEntitiesQuery{});
+            }
+            offScreenProvider->prepareFrameSelectionOutline(outlineSelection);
+        }
 
         // Mark that preparation is done; GPU render will happen on the render thread
         viewportPrepared = true;

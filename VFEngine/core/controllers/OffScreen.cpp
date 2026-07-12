@@ -235,6 +235,11 @@ namespace controllers {
 		offScreenController->prepareFramePhysicsColliders();
 	}
 
+	void OffScreen::setSelectedEntities(std::vector<uint32_t> entityIds)
+	{
+		offScreenController->setSelectedEntities(std::move(entityIds));
+	}
+
 	void OffScreen::setViewMode(uint32_t mode)
 	{
 		offScreenController->setViewMode(mode);

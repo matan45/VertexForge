@@ -74,8 +74,12 @@ namespace services
                                                       const std::string& displayName,
                                                       const std::vector<InputBinding>& defaultBindings)
     {
-        std::lock_guard<std::mutex> lock(actionsMutex);
+        // Load persisted data before taking actionsMutex. load() also locks the
+        // action map, so calling ensureLoaded() under this lock deadlocks once
+        // the keybindings file exists.
         ensureLoaded();
+
+        std::lock_guard<std::mutex> lock(actionsMutex);
 
         if (actions.contains(name))
             return;
@@ -84,7 +88,10 @@ namespace services
         entry.category = category;
         entry.displayName = displayName;
         entry.defaultBindings = defaultBindings;
-        entry.currentBindings = defaultBindings;
+        const auto saved = persistedBindings.find(name);
+        entry.currentBindings = saved != persistedBindings.end()
+                                    ? saved->second
+                                    : defaultBindings;
         actions[name] = std::move(entry);
     }
 
@@ -202,6 +209,7 @@ namespace services
             std::lock_guard<std::mutex> lock(actionsMutex);
             for (const auto& [name, entry] : actions)
             {
+                persistedBindings[name] = entry.currentBindings;
                 json bindings = json::array();
                 for (const auto& b : entry.currentBindings)
                 {
@@ -237,14 +245,12 @@ namespace services
             std::ifstream file(path);
             json j = json::parse(file);
 
-            std::lock_guard<std::mutex> lock(actionsMutex);
-            for (auto& [name, entry] : actions)
+            std::unordered_map<std::string, std::vector<InputBinding>> loadedBindings;
+            for (auto& [name, arr] : j.items())
             {
-                if (!j.contains(name)) continue;
-                auto& arr = j[name];
                 if (!arr.is_array()) continue;
 
-                entry.currentBindings.clear();
+                std::vector<InputBinding> bindings;
                 for (const auto& bj : arr)
                 {
                     InputBinding b;
@@ -253,8 +259,18 @@ namespace services
                     b.requireShift = bj.value("shift", false);
                     b.requireCtrl = bj.value("ctrl", false);
                     b.requireAlt = bj.value("alt", false);
-                    entry.currentBindings.push_back(b);
+                    bindings.push_back(b);
                 }
+                loadedBindings.emplace(name, std::move(bindings));
+            }
+
+            std::lock_guard<std::mutex> lock(actionsMutex);
+            persistedBindings = std::move(loadedBindings);
+            for (auto& [name, entry] : actions)
+            {
+                const auto saved = persistedBindings.find(name);
+                if (saved != persistedBindings.end())
+                    entry.currentBindings = saved->second;
             }
             return true;
         }

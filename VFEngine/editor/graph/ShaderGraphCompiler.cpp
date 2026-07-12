@@ -150,7 +150,8 @@ namespace editor::graph {
         return result;
     }
 
-    CompilationResult ShaderGraphCompiler::compileGraph(const material::ShaderGraph& graph) {
+    CompilationResult ShaderGraphCompiler::compileGraph(const material::ShaderGraph& graph,
+                                                        const ShaderCompileOptions& opts) {
         CompilationResult result;
 
         if (!loadTemplates()) {
@@ -188,7 +189,7 @@ namespace editor::graph {
         }
 
         result.vertexShader = generateVertexShader();
-        result.fragmentShader = generateFragmentShader(graph);
+        result.fragmentShader = generateFragmentShader(graph, opts);
         result.success = true;
 
         return result;
@@ -270,26 +271,62 @@ namespace editor::graph {
         return false;
     }
 
-    std::string ShaderGraphCompiler::generateFragmentShader(const material::ShaderGraph& graph) {
+    std::string ShaderGraphCompiler::generateFragmentShader(const material::ShaderGraph& graph,
+                                                            const ShaderCompileOptions& opts) {
         std::string code;
 
         bool useParallax = isDisplacementConnected(graph);
 
+        // Build the preprocessor block spliced right after the #version line. USE_PARALLAX
+        // toggles POM; TOON_ENABLED + the baked TOON_* profile constants drive the toon
+        // preview branch in material_fragment_footer.glsl (self-contained — no UBO/descriptor
+        // changes; a profile value edit recompiles, which callers debounce).
+        std::string defines;
         if (useParallax) {
+            defines += "#define USE_PARALLAX 1\n";
+        }
+        if (opts.toonEnabled) {
+            const material::ToonProfile& p = opts.toonProfile;
+            // std::format is locale-independent by default (no 'L' option), unlike
+            // std::to_string which honors LC_NUMERIC and would emit '0,35' under a
+            // comma-decimal locale — invalid GLSL. Fixed 6-digit output keeps a
+            // decimal point so the values stay float literals.
+            auto f = [](float v) { return std::format("{:.6f}", v); };
+            auto v3 = [&](const glm::vec3& c) {
+                return "vec3(" + f(c.x) + ", " + f(c.y) + ", " + f(c.z) + ")";
+            };
+            defines += "#define TOON_ENABLED 1\n";
+            defines += "#define TOON_SHADE_COLOR "      + v3(p.shadeColor)      + "\n";
+            defines += "#define TOON_MID_COLOR "        + v3(p.midColor)        + "\n";
+            defines += "#define TOON_SHADOW_THRESHOLD " + f(p.shadowThreshold)  + "\n";
+            defines += "#define TOON_MID_THRESHOLD "    + f(p.midThreshold)     + "\n";
+            defines += "#define TOON_BAND_SMOOTHNESS "  + f(p.bandSmoothness)   + "\n";
+            defines += "#define TOON_GI_SCALE "         + f(p.giScale)          + "\n";
+            defines += "#define TOON_SPEC_COLOR "       + v3(p.specColor)       + "\n";
+            defines += "#define TOON_SPEC_THRESHOLD "   + f(p.specThreshold)    + "\n";
+            defines += "#define TOON_SPEC_SMOOTHNESS "  + f(p.specSmoothness)   + "\n";
+            defines += "#define TOON_SPEC_INTENSITY "   + f(p.specIntensity)    + "\n";
+            defines += "#define TOON_SPEC_SHININESS "   + f(p.specShininess)    + "\n";
+            defines += "#define TOON_RIM_COLOR "        + v3(p.rimColor)        + "\n";
+            defines += "#define TOON_RIM_POWER "        + f(p.rimPower)         + "\n";
+            defines += "#define TOON_RIM_INTENSITY "    + f(p.rimIntensity)     + "\n";
+        }
+
+        if (!defines.empty()) {
             // Find the end of the #version line (after #type FRAGMENT line)
             size_t versionPos = s_fragmentHeader.find("#version");
             if (versionPos != std::string::npos) {
                 size_t versionEnd = s_fragmentHeader.find('\n', versionPos);
                 if (versionEnd != std::string::npos) {
                     code += s_fragmentHeader.substr(0, versionEnd + 1);
-                    code += "#define USE_PARALLAX 1\n";
+                    code += defines;
                     code += s_fragmentHeader.substr(versionEnd + 1);
                 } else {
                     code += s_fragmentHeader;
-                    code += "#define USE_PARALLAX 1\n";
+                    code += defines;
                 }
             } else {
-                code += "#define USE_PARALLAX 1\n";
+                code += defines;
                 code += s_fragmentHeader;
             }
         } else {

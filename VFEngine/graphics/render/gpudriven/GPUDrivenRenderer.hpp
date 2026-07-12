@@ -136,6 +136,8 @@ namespace render::gpudriven
     class TerrainRVTManager; // VK-1209
     class TerrainRVTBaker;   // VK-1209
     class SVTManager;        // VK-1209 (material SVT)
+    class ToonProfileGpuTable; // VK-1493 (toon profile table)
+    class SelectionMaskPipeline; // VK-1490 editor selection outline
 
     class GPUDrivenRenderer
     {
@@ -170,6 +172,9 @@ namespace render::gpudriven
         // Depth prepass for meshlet-level Hi-Z occlusion culling
         std::unique_ptr<occlusion::DepthPrepass> depthPrepass;
         std::unique_ptr<occlusion::DepthPrepassPipeline> depthPrepassPipeline;
+
+        // Editor selection bit ring + same-pass packed visibility image.
+        std::unique_ptr<SelectionMaskPipeline> selectionMaskPipeline;
         std::unique_ptr<occlusion::HiZBuffer> prepassHiZ;
         uint32_t prepassHiZMipLevels = 0;
         // VK-1397: tracks whether the prepass is currently producing DLSS-D Ray
@@ -268,6 +273,10 @@ namespace render::gpudriven
         // buffers. Also called after the image-info SSBO grows (finding #2) to rebind the new handle.
         void wireSVTPipelines();
 
+        // VK-1493: bind the toon profile table (set-1 binding 6) on every mesh pipeline. Written
+        // once after pipeline (re)creation — the table's buffer handle is lifetime-stable.
+        void wireToonProfilePipelines();
+
         detail::TerrainState terrain;
 
         // VK-1209 — cached virtual-texturing settings (applied via applyVirtualTextureSettings;
@@ -297,6 +306,10 @@ namespace render::gpudriven
         // VK-1209 material SVT (created lazily when svtEnabled). Null = inactive.
         std::unique_ptr<SVTManager> svtManager;
         uint32_t svtFrameCounter = 0;
+
+        // VK-1493 toon profile GPU table (set-1 binding 6). Created with the mesh pipelines,
+        // always present so binding 6 has a live buffer. Null only before init / after teardown.
+        std::unique_ptr<ToonProfileGpuTable> toonProfileTable;
         // path -> SVT-tagged index (SVT_TAG_BIT | imageId) for textures opted into SVT; the texture
         // resolver returns this instead of the plain bindless index so the mesh shader pages them.
         std::unordered_map<std::string, uint32_t> svtTaggedIndices;
@@ -392,13 +405,17 @@ namespace render::gpudriven
         void dispatchAsyncCompute(vk::CommandBuffer asyncCmd);
 
         void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                        uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+                        uint32_t screenWidth = 0, uint32_t screenHeight = 0,
+                        bool selectionCoverage = false);
         void renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                                   uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+                                   uint32_t screenWidth = 0, uint32_t screenHeight = 0,
+                                   bool selectionCoverage = false);
         void renderWBOITDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                             uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+                             uint32_t screenWidth = 0, uint32_t screenHeight = 0,
+                             bool selectionCoverage = false);
         void renderBlendDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
-                             uint32_t screenWidth = 0, uint32_t screenHeight = 0);
+                             uint32_t screenWidth = 0, uint32_t screenHeight = 0,
+                             bool selectionCoverage = false);
 
         void renderGIDebug(vk::CommandBuffer cmd, const glm::mat4& viewProjection);
 
@@ -408,6 +425,20 @@ namespace render::gpudriven
 
         void setEnabled(bool enabled) { this->enabled = enabled; }
         bool isEnabled() const { return enabled; }
+
+        // VK-1490: editor selection outline — entt ids of the selected entities.
+        // MergedMeshBuffer resolves them to GPU object slots while rebuilding
+        // the object list; the regular scene shader records their visibility.
+        // Edit-mode only by construction: the
+        // play-mode persistent-slot path never records selection slots.
+        void setSelectedEntities(std::unordered_set<uint32_t> entityIds)
+        {
+            if (mergedBuffer) mergedBuffer->setSelectedEntities(std::move(entityIds));
+        }
+        bool hasSelectedObjects() const
+        {
+            return mergedBuffer && !mergedBuffer->getSelectedObjectSlots().empty();
+        }
 
         void setFrustumCullingEnabled(bool enabled) { culling.frustumCullingEnabled = enabled; }
         bool isFrustumCullingEnabled() const { return culling.frustumCullingEnabled; }
@@ -435,6 +466,10 @@ namespace render::gpudriven
         void initDepthPrepass();
         void renderDepthPrepass(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void generatePrepassHiZ(vk::CommandBuffer cmd);
+
+        // Ensures the same-pass selection visibility resources exist for import.
+        bool ensureSelectionMaskResources();
+        SelectionMaskPipeline* getSelectionMaskPipeline() const { return selectionMaskPipeline.get(); }
         void initAccelerationStructures();
         void ensureAccelerationStructureManager();
         // True if the device's maxBoundDescriptorSets can fit the requested set count.
@@ -635,6 +670,11 @@ namespace render::gpudriven
         void updateAndUploadSVT(vk::CommandBuffer cmd);
         void copySVTFeedback(vk::CommandBuffer cmd);
         bool isSVTActive() const;
+
+        // VK-1493: record the toon profile table upload (staging copy + barrier) if a
+        // profile changed. Cheap (12 KB); called before the scene pass, next to the SVT
+        // upload. No-op unless a profile row is dirty.
+        void uploadToonProfiles(vk::CommandBuffer cmd);
         void updateWater(const services::OceanVisualSettings& visualSettings,
                          float baseWaterHeight,
                          const glm::vec3& cameraPosition,

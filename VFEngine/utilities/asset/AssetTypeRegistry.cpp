@@ -68,6 +68,7 @@ namespace asset
                 {".vfprefab", resource::AssetType::Prefab},
                 {".vfrig", resource::AssetType::HumanoidRig},
                 {".vfretarget", resource::AssetType::RetargetMap},
+                {".vftoonprofile", resource::AssetType::ToonProfile},
                 {".mt", resource::AssetType::Script},
             };
 
@@ -81,7 +82,8 @@ namespace asset
                 ".vffont", ".vfscene", ".vfsettings", ".vfprefab", ".vftheme",
                 ".vfterrain", ".vfterrainmat", ".vfwater", ".vfnavmesh",
                 ".vfnavindex", ".vfimposter", ".vfinputmapping",
-                ".vfbehaviortree", ".vfphysanim", ".vfrig", ".vfretarget", ".mt"
+                ".vfbehaviortree", ".vfphysanim", ".vfrig", ".vfretarget",
+                ".vftoonprofile", ".mt"
             };
 
             // JSON-based asset files that can reference other assets — the set

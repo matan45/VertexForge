@@ -146,6 +146,11 @@ namespace render::postprocess
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
+        core::ImageUtilities::transitionImageLayout(commandBuffer, blurImage,
+            blurImageLayout, vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+        blurImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
         auto colorAttach = core::colorDontCare(blurImageView);
 
         core::DynamicRenderingInfo dynInfo{};
@@ -170,6 +175,7 @@ namespace render::postprocess
         core::ImageUtilities::transitionImageLayout(commandBuffer, blurImage,
             vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
+        blurImageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
@@ -235,6 +241,7 @@ namespace render::postprocess
         req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::ImageUtilities::createImage(req, blurImage, blurAllocation, device.getMemoryManager());
+        blurImageLayout = vk::ImageLayout::eUndefined;
 
         core::ImageViewInfoRequest viewReq(dev, blurImage);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
@@ -521,6 +528,7 @@ namespace render::postprocess
             dev.destroyImage(blurImage);
             blurImage = nullptr;
         }
+        blurImageLayout = vk::ImageLayout::eUndefined;
 
         if (blurAllocation.isValid())
         {

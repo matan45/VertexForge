@@ -111,6 +111,8 @@ namespace controllers::offscreen
             matInfo.alphaCutoff = pbrValues->alphaCutoff;
             matInfo.iblDiffuse = pbrValues->iblDiffuse;
             matInfo.iblSpecular = pbrValues->iblSpecular;
+            matInfo.shadingModel = pbrValues->shadingModel;
+            matInfo.toonProfileIndex = pbrValues->toonProfileIndex;
         }
     }
 

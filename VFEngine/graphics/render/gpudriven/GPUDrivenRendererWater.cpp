@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "SelectionMaskPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../water/OceanFFTResources.hpp"
@@ -300,6 +301,7 @@ namespace render::gpudriven
                     .giProbeDataLayout = giLayout,
                     .causticLayout = causticLayout,
                     .worldMaskLayout = currentWorldMaskLayout(),
+                    .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                     .colorAttachmentFormats = cachedColorFormats,
                     .depthAttachmentFormat = cachedDepthFormat
                 };
@@ -541,6 +543,7 @@ namespace render::gpudriven
                 .giProbeDataLayout = giLayout,
                 .causticLayout = nullptr,
                 .worldMaskLayout = currentWorldMaskLayout(),
+                .selectionCoverageLayout = selectionMaskPipeline ? selectionMaskPipeline->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                 .colorAttachmentFormats = cachedColorFormats,
                 .depthAttachmentFormat = cachedDepthFormat
             };

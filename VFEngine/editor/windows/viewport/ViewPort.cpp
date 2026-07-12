@@ -129,6 +129,7 @@ namespace windows
             }
 
             handleEntityPicking(isPlayMode, vp, vs);
+            selector.update(picker, *editorCamera, isPlayMode, vp, vs);
             handleSculptBrush();
             handlePaintBrush();
             handleHoleBrush();
@@ -470,10 +471,13 @@ namespace windows
 
         if (picked.has_value())
         {
-            auto& dispatcher = events::EventDispatcher::instance();
-            events::scene::SelectEntityCommand cmd;
-            cmd.entity = *picked;
-            dispatcher.execute(cmd);
+            selector.handleEntityClick(*picked);
+        }
+        else
+        {
+            // Empty space: candidate for a drag-marquee or, released without a
+            // drag, an empty-click clear (resolved in ViewPortSelection::update).
+            selector.beginMarqueeCandidate(mp);
         }
     }
 
@@ -482,21 +486,12 @@ namespace windows
         if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f) return;
 
         auto& dispatcher = events::EventDispatcher::instance();
-        auto selected = dispatcher.query(events::scene::GetSelectedEntityQuery{});
-        if (!selected.has_value()) return;
-
-        events::ui::GetUIEntityWorldQuadQuery quadQuery;
-        quadQuery.entity = *selected;
-        auto quad = dispatcher.query(quadQuery);
-        if (!quad.has_value()) return;
+        // VK-1490: every selected UI entity keeps its quad outline in a
+        // multi-selection (meshes get the silhouette outline instead).
+        auto selectedEntities = dispatcher.query(events::scene::GetSelectedEntitiesQuery{});
+        if (selectedEntities.empty()) return;
 
         glm::mat4 viewProj = editorCamera->getProjectionMatrix() * editorCamera->getViewMatrix();
-
-        glm::vec4 clipCorners[4];
-        for (int i = 0; i < 4; ++i)
-        {
-            clipCorners[i] = viewProj * glm::vec4(quad->corners[i], 1.0f);
-        }
 
         // No Y flip — EditorCamera's projection already flips Y for Vulkan
         auto project = [&](const glm::vec4& clip) {
@@ -505,30 +500,44 @@ namespace windows
                           (ndc.y * 0.5f + 0.5f) * viewportSize.y + viewportPos.y);
         };
 
-        // Corners behind the camera (clip.w <= 0) project to garbage — clip each
-        // edge against the near plane and draw the surviving polygon instead
-        constexpr float nearW = 1e-4f;
-        ImVec2 points[8];
-        int pointCount = 0;
-        for (int i = 0; i < 4; ++i)
+        for (const auto& selected : selectedEntities)
         {
-            const glm::vec4& a = clipCorners[i];
-            const glm::vec4& b = clipCorners[(i + 1) % 4];
-            bool aIn = a.w > nearW;
-            bool bIn = b.w > nearW;
-            if (!aIn && !bIn) continue;
+            events::ui::GetUIEntityWorldQuadQuery quadQuery;
+            quadQuery.entity = selected;
+            auto quad = dispatcher.query(quadQuery);
+            if (!quad.has_value()) continue;
 
-            if (aIn) points[pointCount++] = project(a);
-            if (aIn != bIn)
+            glm::vec4 clipCorners[4];
+            for (int i = 0; i < 4; ++i)
             {
-                float tEdge = (nearW - a.w) / (b.w - a.w);
-                points[pointCount++] = project(a + (b - a) * tEdge);
+                clipCorners[i] = viewProj * glm::vec4(quad->corners[i], 1.0f);
             }
-        }
-        if (pointCount < 2) return; // fully behind the camera
 
-        ImGui::GetWindowDrawList()->AddPolyline(points, pointCount, IM_COL32(255, 161, 0, 255),
-                                                ImDrawFlags_Closed, 2.0f);
+            // Corners behind the camera (clip.w <= 0) project to garbage — clip each
+            // edge against the near plane and draw the surviving polygon instead
+            constexpr float nearW = 1e-4f;
+            ImVec2 points[8];
+            int pointCount = 0;
+            for (int i = 0; i < 4; ++i)
+            {
+                const glm::vec4& a = clipCorners[i];
+                const glm::vec4& b = clipCorners[(i + 1) % 4];
+                bool aIn = a.w > nearW;
+                bool bIn = b.w > nearW;
+                if (!aIn && !bIn) continue;
+
+                if (aIn) points[pointCount++] = project(a);
+                if (aIn != bIn)
+                {
+                    float tEdge = (nearW - a.w) / (b.w - a.w);
+                    points[pointCount++] = project(a + (b - a) * tEdge);
+                }
+            }
+            if (pointCount < 2) continue; // fully behind the camera
+
+            ImGui::GetWindowDrawList()->AddPolyline(points, pointCount, IM_COL32(255, 161, 0, 255),
+                                                    ImDrawFlags_Closed, 2.0f);
+        }
     }
 
     void ViewPort::handleCameraInput()

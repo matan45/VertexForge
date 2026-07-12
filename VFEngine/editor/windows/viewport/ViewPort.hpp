@@ -3,6 +3,7 @@
 #include "ViewPortPicker.hpp"
 #include "ViewPortGizmo.hpp"
 #include "ViewPortOverlay.hpp"
+#include "ViewPortSelection.hpp"
 #include "../../camera/EditorCamera.hpp"
 #include <memory>
 
@@ -24,6 +25,7 @@ namespace windows
         ViewPortPicker picker;
         ViewPortGizmo gizmo;
         ViewPortOverlay overlay;
+        ViewPortSelection selector;  // VK-1490 modifier clicks + drag-marquee
 
         bool cameraLookActive = false;  // RMB-held OS mouse capture for camera look (VK-1428)
 

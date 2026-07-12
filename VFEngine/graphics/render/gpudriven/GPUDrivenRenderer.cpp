@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "SelectionMaskPipeline.hpp" // VK-1490: complete type for the unique_ptr deleter
 #include "../occlusion/DepthPrepass.hpp"
 #include "../occlusion/DepthPrepassPipeline.hpp"
 #include "../occlusion/HiZBuffer.hpp"
@@ -21,6 +22,7 @@
 #include "terrain/TerrainRVTManager.hpp" // VK-1209: complete types for ~GPUDrivenRenderer unique_ptr members
 #include "terrain/TerrainRVTBaker.hpp"
 #include "../virtualtexture/svt/SVTManager.hpp"
+#include "scene/ToonProfileGpuTable.hpp" // VK-1493: complete type for the unique_ptr member/deleter
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
@@ -61,6 +63,10 @@ namespace render::gpudriven
 
         mergedBuffer = std::make_unique<MergedMeshBuffer>(device);
         mergedBuffer->init();
+
+        selectionMaskPipeline = std::make_unique<SelectionMaskPipeline>(device, swapChain);
+        selectionMaskPipeline->init({.maxObjectCount = mergedBuffer->getMaxObjectCount()});
+        selectionMaskPipeline->ensureMaskTarget(swapChain.getSwapchainExtent());
 
         objectStreamManager = std::make_unique<GPUObjectStreamManager>(*mergedBuffer);
         objectStreamManager->init();
@@ -158,9 +164,17 @@ namespace render::gpudriven
                 .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
                 .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .selectionCoverageLayout = selectionMaskPipeline->getDescriptorSetLayout(),
                 .colorAttachmentFormats = colorFormats,
                 .depthAttachmentFormat = depthFormat
             };
+
+            // VK-1493: create the toon profile table before the mesh pipelines so binding 6
+            // can be wired immediately. Always present (even with no toon materials) so the
+            // statically-used binding always points at a live buffer (slot 0 = default).
+            toonProfileTable = std::make_unique<ToonProfileGpuTable>(device);
+            toonProfileTable->init();
+            ToonProfileGpuTable::setActive(toonProfileTable.get());
 
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             if (vtCache.svtEnabled) meshShaderPipeline->setSVTSampleEnabled(true); // VK-1209
@@ -170,6 +184,10 @@ namespace render::gpudriven
             transparentMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             if (vtCache.svtEnabled) transparentMeshShaderPipeline->setSVTSampleEnabled(true); // VK-1209
             transparentMeshShaderPipeline->init(pipelineInfo);
+
+            // Bind the toon profile table (set-1 binding 6) on the opaque + transparent
+            // pipelines now that their descriptor sets exist. WBOIT is wired in initWBOITPipeline.
+            wireToonProfilePipelines();
 
             shadowSystem->initShadowPass(
                 meshShaderPipeline->getPerDrawDataLayout(),
@@ -269,6 +287,7 @@ namespace render::gpudriven
             .giProbeDataLayout = giLayout,
             .causticLayout = wboitCausticLayout,
             .worldMaskLayout = currentWorldMaskLayout(),
+            .selectionCoverageLayout = selectionMaskPipeline->getDescriptorSetLayout(),
             .colorAttachmentFormats = wboitColorFormats,
             .depthAttachmentFormat = wboitDepthFormat,
             .wboitMode = true
@@ -286,6 +305,10 @@ namespace render::gpudriven
         // manager if this ran before the opaque path did, then wires all pipelines including WBOIT.
         if (vtCache.svtEnabled)
             ensureSVTManager();
+
+        // VK-1493: bind the toon profile table on the freshly-created WBOIT pipeline
+        // (re-wires opaque/transparent too, harmless — the buffer handle is stable).
+        wireToonProfilePipelines();
     }
 
     void GPUDrivenRenderer::cleanup()
@@ -306,6 +329,11 @@ namespace render::gpudriven
 
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
+
+        // VK-1493: destroy the toon profile table (device is idle here). Clear the static
+        // accessor first so no late extraction can touch a half-torn-down table.
+        ToonProfileGpuTable::setActive(nullptr);
+        if (toonProfileTable) { toonProfileTable->cleanup(); toonProfileTable.reset(); }
 
         cleanupGI();
         // Safety net: ensure RT shadow resources are cleaned even if GI cleanup path missed them
@@ -331,6 +359,7 @@ namespace render::gpudriven
         if (terrain.pipeline) terrain.pipeline->cleanup();
         if (terrain.meshBuffer) terrain.meshBuffer->cleanup();
         if (depthPrepassPipeline) depthPrepassPipeline->cleanup();
+        if (selectionMaskPipeline) selectionMaskPipeline->cleanup(); // VK-1490
         if (prepassHiZ) prepassHiZ->cleanup();
         if (depthPrepass) depthPrepass->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
@@ -370,6 +399,7 @@ namespace render::gpudriven
         water.pipeline.reset();
         water.meshBuffer.reset();
         depthPrepassPipeline.reset();
+        selectionMaskPipeline.reset(); // VK-1490
         prepassHiZ.reset();
         depthPrepass.reset();
         lightOcclusionCulling.reset();
@@ -469,6 +499,7 @@ namespace render::gpudriven
                 .giProbeDataLayout = giLayout,
                 .causticLayout = causticLayout,
                 .worldMaskLayout = currentWorldMaskLayout(),
+                .selectionCoverageLayout = selectionMaskPipeline->getDescriptorSetLayout(),
                 .colorAttachmentFormats = cachedColorFormats,
                 .depthAttachmentFormat = cachedDepthFormat
             };

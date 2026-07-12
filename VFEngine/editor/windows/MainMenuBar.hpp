@@ -33,6 +33,7 @@ namespace windows
     class InputActionMappingWindow;
     class TaskGraphWindow;
     class HeightmapGeneratorWindow;
+    class ToonProfileEditorWindow;
     class BackgroundRemovalWindow;
     class ThemeEditorWindow;
     class UILayerBuilderWindow;
@@ -77,6 +78,7 @@ namespace windows
         InputActionMappingWindow* inputActionMappingWindow = nullptr;
         TaskGraphWindow* taskGraphWindow = nullptr;
         HeightmapGeneratorWindow* heightmapGeneratorWindow = nullptr;
+        ToonProfileEditorWindow* toonProfileEditorWindow = nullptr;
         BackgroundRemovalWindow* backgroundRemovalWindow = nullptr;
         ThemeEditorWindow* themeEditorWindow = nullptr;
         UILayerBuilderWindow* uiLayerBuilderWindow = nullptr;
@@ -207,6 +209,11 @@ namespace windows
         void setHeightmapGeneratorWindow(HeightmapGeneratorWindow* window)
         {
             heightmapGeneratorWindow = window;
+        }
+
+        void setToonProfileEditorWindow(ToonProfileEditorWindow* window)
+        {
+            toonProfileEditorWindow = window;
         }
 
         void setBackgroundRemovalWindow(BackgroundRemovalWindow* window)

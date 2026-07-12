@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace core
 {
@@ -53,11 +54,17 @@ namespace render::gpudriven
 
     using BoneOffsetResolver = std::function<uint32_t(entt::entity entity)>;
 
+    // VK-1493: resolves {shadingModel, toonProfileIndex} for a material path so the
+    // object-streaming path can pack toon flags from defaultMaterialPath, matching
+    // the edit-mode pbrCache fallback in MergedMeshBuffer::populateObjectData.
+    using ShadingResolver = std::function<std::pair<uint8_t, uint8_t>(const std::string& materialPath)>;
+
     struct ObjectResolvers
     {
         TextureIndexResolver textureResolver;
         ShaderGroupResolver shaderGroupResolver;
         BoneOffsetResolver boneOffsetResolver;
+        ShadingResolver shadingResolver;
         float time = 0.0f;
         glm::vec3 cameraPosition{0.0f};
     };
@@ -146,6 +153,21 @@ namespace render::gpudriven
         std::unordered_map<std::string, mesh::MaterialPBRExtractor::ParameterOverrides> instanceOverrideCache;
         material::CallbackId materialChangeCallbackId{};
 
+        // VK-1490 editor selection outline: entt ids of the selected entities and
+        // the GPU object slots they resolved to in the last updateObjects rebuild
+        // (edit-mode path only — persistent play-mode slots never record here).
+        std::unordered_set<uint32_t> selectedEntities;
+        std::vector<uint32_t> selectedObjectSlots;
+
+        void recordSelectedSlot(entt::entity entity, uint32_t slot)
+        {
+            if (selectedEntities.empty()) return;
+            if (selectedEntities.count(static_cast<uint32_t>(entity)) != 0)
+            {
+                selectedObjectSlots.push_back(slot);
+            }
+        }
+
         // Persistent slot mode (play mode streaming)
         FreeListAllocator objectAllocator;
         std::unordered_map<uint64_t, uint32_t> entityToSlot;    // Entity UUID -> GPU slot
@@ -173,6 +195,16 @@ namespace render::gpudriven
 
         void updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
                            const ObjectResolvers& resolvers = {});
+
+        // VK-1490: editor selection for the outline mask pass. updateObjects
+        // rebuilds selectedObjectSlots from these entt ids each frame; an empty
+        // set costs nothing on the hot path.
+        void setSelectedEntities(std::unordered_set<uint32_t> entityIds)
+        {
+            selectedEntities = std::move(entityIds);
+            if (selectedEntities.empty()) selectedObjectSlots.clear();
+        }
+        const std::vector<uint32_t>& getSelectedObjectSlots() const { return selectedObjectSlots; }
 
         void uploadObjects(vk::CommandBuffer cmd);
         void uploadInstances(vk::CommandBuffer cmd);

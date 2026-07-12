@@ -40,6 +40,7 @@ namespace render::postprocess
         vk::Image blurImage;
         core::VulkanAllocation blurAllocation;
         vk::ImageView blurImageView;
+        vk::ImageLayout blurImageLayout = vk::ImageLayout::eUndefined;
         vk::ImageView depthOnlyImageView;
 
         std::shared_ptr<core::Shader> blurShader;

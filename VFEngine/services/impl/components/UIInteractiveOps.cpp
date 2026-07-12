@@ -4,6 +4,7 @@
 #include "components/Components.hpp"
 #include "ui/UIRectMath.hpp"
 #include "math/Frustum.hpp"
+#include "math/ScreenRegionFrustum.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/ui/UIEvents.hpp"
@@ -592,6 +593,51 @@ namespace services {
             return bestEntity;
         }
 
+        // VK-1490: editor marquee — every visible UI element whose edit-mode
+        // quad AABB intersects the screen-rect region frustum. Same element
+        // filter as pickUIEntityAt; the AABB test is slightly conservative for
+        // diagonal quads, which is fine for a selection marquee.
+        std::vector<EntityHandle> pickUIEntitiesInRegion(
+            const events::ui::PickUIEntitiesInRegionQuery& query) {
+            std::vector<EntityHandle> result;
+            if (query.viewportSize.x <= 0.0f || query.viewportSize.y <= 0.0f) {
+                return result;
+            }
+
+            const glm::vec2 minPx = query.minPx - query.viewportPos;
+            const glm::vec2 maxPx = query.maxPx - query.viewportPos;
+            const math::Frustum region = math::buildScreenRegionFrustum(
+                query.viewMatrix, query.projMatrix, minPx, maxPx,
+                query.viewportSize.x, query.viewportSize.y);
+
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto rectView = registry.view<components::UIRectComponent>();
+            for (auto entity : rectView) {
+                if (!hasVisibleUIContent(registry, entity)) {
+                    continue;
+                }
+                if (!scene::Entity::isEffectivelyActive(registry, entity)) {
+                    continue;
+                }
+
+                auto quad = computeUIWorldQuad(registry, entity);
+                if (!quad.has_value()) {
+                    continue;
+                }
+
+                math::AABB quadAABB(quad->corners[0], quad->corners[0]);
+                for (int i = 1; i < 4; ++i) {
+                    quadAABB.min = glm::min(quadAABB.min, quad->corners[i]);
+                    quadAABB.max = glm::max(quadAABB.max, quad->corners[i]);
+                }
+
+                if (region.intersectsAABB(quadAABB)) {
+                    result.push_back(internal::toHandle(entity));
+                }
+            }
+            return result;
+        }
+
         std::optional<UIQuadCorners> getUIEntityWorldQuad(EntityHandle entity) {
             auto& registry = scene::EntityRegistry::getRegistry();
             if (!internal::isValidHandle(entity, registry)) {
@@ -734,6 +780,11 @@ namespace services {
         dispatcher.registerQueryHandler<events::ui::GetUIEntityWorldQuadQuery>(
             [](const events::ui::GetUIEntityWorldQuadQuery& query) {
                 return getUIEntityWorldQuad(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ui::PickUIEntitiesInRegionQuery>(
+            [](const events::ui::PickUIEntitiesInRegionQuery& query) {
+                return pickUIEntitiesInRegion(query);
             });
     }
 

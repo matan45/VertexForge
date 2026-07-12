@@ -7,6 +7,43 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include <cmath>
+
+namespace
+{
+    constexpr float kMinInvertibleDeterminant = 1e-12f;
+
+    // Shared vec3/mat4 finite guards live in math::; the TransformData overload
+    // below joins the overload set via this using-declaration.
+    using math::isFinite;
+
+    bool isFinite(const services::TransformData& value)
+    {
+        return isFinite(value.position) && isFinite(value.rotation) &&
+               isFinite(value.scale);
+    }
+
+    // A finite-but-degenerate matrix (e.g. a legitimately zero-scaled axis)
+    // decomposes to NaN rotation/scale while position stays valid. Read-side
+    // callers (AI targeting, mType getWorldPosition, WorldSector streaming) rely
+    // on always receiving a world position, so keep the valid position and reset
+    // only the non-finite rotation/scale components. nullopt is reserved for a
+    // non-finite position, which signals genuine corruption worth surfacing.
+    std::optional<services::TransformData> sanitizeRead(const services::TransformData& value)
+    {
+        if (!isFinite(value.position))
+        {
+            return std::nullopt;
+        }
+        services::TransformData result = value;
+        for (int i = 0; i < 3; ++i)
+        {
+            if (!std::isfinite(result.rotation[i])) result.rotation[i] = 0.0f;
+            if (!std::isfinite(result.scale[i])) result.scale[i] = 1.0f;
+        }
+        return result;
+    }
+}
 
 namespace services
 {
@@ -44,6 +81,11 @@ namespace services
 
     void TransformComponentService::setTransform(EntityHandle entity, const TransformData& transform)
     {
+        if (!isFinite(transform))
+        {
+            return;
+        }
+
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry))
         {
@@ -83,7 +125,7 @@ namespace services
         }
 
         auto& comp = sceneEntity.getComponent<components::TransformComponent>();
-        return TransformData{comp.position, comp.rotation, comp.scale};
+        return sanitizeRead(TransformData{comp.position, comp.rotation, comp.scale});
     }
 
     std::optional<TransformData> TransformComponentService::getWorldTransform(EntityHandle entity) const
@@ -103,13 +145,22 @@ namespace services
 
         // Decompose the world matrix to get world position, rotation, scale
         const auto& worldComp = sceneEntity.getComponent<components::WorldTransformComponent>();
+        if (!isFinite(worldComp.worldMatrix))
+        {
+            return std::nullopt;
+        }
         auto decomposed = math::decomposeMatrix(worldComp.worldMatrix);
 
-        return TransformData{decomposed.position, decomposed.rotation, decomposed.scale};
+        return sanitizeRead(TransformData{decomposed.position, decomposed.rotation, decomposed.scale});
     }
 
     void TransformComponentService::setWorldTransform(EntityHandle entity, const TransformData& worldTransform)
     {
+        if (!isFinite(worldTransform))
+        {
+            return;
+        }
+
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry))
         {
@@ -123,6 +174,10 @@ namespace services
             worldTransform.position,
             worldTransform.rotation,
             worldTransform.scale);
+        if (!isFinite(worldMatrix))
+        {
+            return;
+        }
 
         // Compute the local transform from world transform
         TransformData localTransform = worldTransform;
@@ -137,14 +192,32 @@ namespace services
                 {
                     // Get parent's world matrix and invert it
                     const auto& parentWorld = parentEntity.getComponent<components::WorldTransformComponent>().worldMatrix;
+                    const float determinant = glm::determinant(parentWorld);
+                    if (!isFinite(parentWorld) || !std::isfinite(determinant) ||
+                        std::abs(determinant) <= kMinInvertibleDeterminant)
+                    {
+                        return;
+                    }
                     glm::mat4 parentWorldInverse = glm::inverse(parentWorld);
+                    if (!isFinite(parentWorldInverse))
+                    {
+                        return;
+                    }
 
                     // Local = inverse(parentWorld) * worldMatrix
                     glm::mat4 localMatrix = parentWorldInverse * worldMatrix;
+                    if (!isFinite(localMatrix))
+                    {
+                        return;
+                    }
 
                     // Decompose to get local transform
                     auto decomposed = math::decomposeMatrix(localMatrix);
                     localTransform = TransformData{decomposed.position, decomposed.rotation, decomposed.scale};
+                    if (!isFinite(localTransform))
+                    {
+                        return;
+                    }
                 }
             }
         }

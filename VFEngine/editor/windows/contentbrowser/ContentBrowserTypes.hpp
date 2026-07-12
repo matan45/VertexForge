@@ -38,6 +38,7 @@ namespace windows
         Retarget,
         VFXSequence,
         Collider,
+        ToonProfile,
         Other
     };
 
@@ -68,7 +69,8 @@ namespace windows
         Retarget = 18, // shared by .vfrig and .vfretarget (VK-910)
         VFXSequence = 19, // .vfVFXSequence combo asset (VK-1425)
         Material = 20, // .vfTerrainMat atlas glyph
-        Collider = 21 // .vfCollider sidecar glyph
+        Collider = 21, // .vfCollider sidecar glyph
+        ToonProfile = 22 // .vfToonProfile "shading" glyph (VK-1493)
     };
 
     // Canonical per-type display data. Single source of truth for the filter
@@ -82,10 +84,10 @@ namespace windows
         uint32_t badgeColor; // IM_COL32 layout (0xAABBGGRR)
     };
 
-    inline const std::array<AssetTypeInfo, 26>& assetTypeTable()
+    inline const std::array<AssetTypeInfo, 27>& assetTypeTable()
     {
         using enum AssetType;
-        static const std::array<AssetTypeInfo, 26> table = {{
+        static const std::array<AssetTypeInfo, 27> table = {{
             {Texture,          "Texture",           AtlasIcon::File,         0xFFF7C34F},
             {HDR,              "HDR",               AtlasIcon::File,         0xFFF7E04F},
             {Model,            "Model",             AtlasIcon::File,         0xFF4FC3F7},
@@ -111,6 +113,7 @@ namespace windows
             {Retarget,         "Retarget",          AtlasIcon::Retarget,     0xFFD08AF7},
             {VFXSequence,      "VFX Sequence",      AtlasIcon::VFXSequence,  0xFFF74FC8},
             {Collider,         "Collider",          AtlasIcon::Collider,     0xFF7AA7FF},
+            {ToonProfile,      "Toon Profile",      AtlasIcon::ToonProfile,  0xFF9E7FF7},
             {Other,            "Other",             AtlasIcon::File,         0xFF909090}
         }};
         return table;
@@ -176,6 +179,7 @@ namespace windows
         case resource::AssetType::HumanoidRig:      return AssetType::Retarget;
         case resource::AssetType::RetargetMap:      return AssetType::Retarget;
         case resource::AssetType::PluginAsset:      return AssetType::Plugin; // VK-1449
+        case resource::AssetType::ToonProfile:      return AssetType::ToonProfile; // VK-1493
         case resource::AssetType::Skeleton:
         case resource::AssetType::World:
         case resource::AssetType::Theme:

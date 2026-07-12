@@ -29,6 +29,7 @@
 #include "config/InputActionMappingWindow.hpp"
 #include "animation/AnimationDebugWindow.hpp"
 #include "procedural/HeightmapGeneratorWindow.hpp"
+#include "material/ToonProfileEditorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
 #include "animation/RetargetingEditorWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
@@ -221,6 +222,7 @@ namespace windows
     {
         if (!ImGui::BeginMenu("Tools")) return;
         if (ImGui::MenuItem("Generate Heightmap") && heightmapGeneratorWindow) heightmapGeneratorWindow->show();
+        if (ImGui::MenuItem("Toon Profile Editor") && toonProfileEditorWindow) toonProfileEditorWindow->show();
         if (ImGui::MenuItem("Remove Background") && backgroundRemovalWindow) backgroundRemovalWindow->show();
         if (ImGui::MenuItem("Animation Retargeting"))
             controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<RetargetingEditorWindow>(""));

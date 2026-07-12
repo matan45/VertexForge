@@ -12,6 +12,9 @@
 #include "ClearColor.hpp"
 #include "IBL.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
+#include "gpudriven/SelectionMaskPipeline.hpp"
+#include "selection/SelectionOutlineComposite.hpp"
+#include "mesh/StaticMeshPipeline.hpp"
 #include "upscaling/UpscaleManager.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 
@@ -100,6 +103,44 @@ namespace render
         graph::ResourceHandle& colorH = msaa ? sceneColorMSAAHandle : sceneColorHandle;
         graph::ResourceHandle& depthH = msaa ? depthMSAAHandle : depthHandle;
 
+        // Selection visibility is produced by the regular scene fragment shader.
+        bool selectionOutlineActive = hasSelectedEntities() &&
+                                      gpuDrivenRendererInitialized &&
+                                      gpuDrivenRenderer->isEnabled() &&
+                                      meshPipelineInitialized &&
+                                      gpuDrivenRenderer->ensureSelectionMaskResources();
+        if (selectionOutlineActive)
+        {
+            if (!selectionOutlineComposite)
+            {
+                selectionOutlineComposite =
+                    std::make_unique<selection::SelectionOutlineComposite>(device, swapChain);
+                selectionOutlineComposite->init();
+            }
+            selectionOutlineActive = selectionOutlineComposite->isInitialized();
+        }
+        if (selectionOutlineActive)
+        {
+            auto* coverage = gpuDrivenRenderer->getSelectionMaskPipeline();
+            selectionOutlineComposite->setMaskInput(coverage->getMaskImageView(),
+                                                    coverage->getMaskSampler());
+
+            graph::ImageResourceDesc maskDesc{};
+            maskDesc.extent = coverage->getMaskExtent();
+            maskDesc.format = gpudriven::SelectionMaskPipeline::getMaskFormat();
+            maskDesc.usage = vk::ImageUsageFlagBits::eStorage |
+                             vk::ImageUsageFlagBits::eSampled |
+                             vk::ImageUsageFlagBits::eTransferDst;
+            maskDesc.aspectMask = vk::ImageAspectFlagBits::eColor;
+            maskDesc.debugName = "SelectionVisibility";
+            // The mask is held permanently in eGeneral (SelectionMaskPipeline transitions
+            // it on create and the composite read below returns it to eGeneral each frame),
+            // so it is already in eGeneral at import time.
+            selectionMaskHandle = frameGraph->importImage(
+                coverage->getMaskImage(), coverage->getMaskImageView(),
+                vk::ImageLayout::eGeneral, maskDesc);
+        }
+
         // --- Scene core passes ---
 
         // ClearColor
@@ -186,6 +227,18 @@ namespace render
         // SceneMeshes — opaque geometry. Under MSAA this renders into the multisampled
         // handles and resolves into the single-sample handles, which the post-resolve
         // passes below consume.
+        if (selectionOutlineActive)
+        {
+            auto builder = frameGraph->addPass("SelectionCoverageClear",
+                [this](vk::CommandBuffer cmd, uint32_t) {
+                    gpuDrivenRenderer->getSelectionMaskPipeline()->clearVisibility(cmd);
+                });
+            selectionMaskHandle = builder.write(selectionMaskHandle,
+                                                graph::ResourceUsage::TransferDst);
+            builder.setSegment(graph::HookSegment::Scene);
+            builder.setSideEffect();
+        }
+
         {
             auto builder = frameGraph->addPass("SceneMeshes",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
@@ -198,6 +251,11 @@ namespace render
                 // Resolve targets — the dynamic-rendering resolve attachments write these.
                 sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
                 depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
+            }
+            if (selectionOutlineActive)
+            {
+                selectionMaskHandle = builder.write(selectionMaskHandle,
+                                                    graph::ResourceUsage::ShaderWrite);
             }
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
@@ -464,6 +522,29 @@ namespace render
                     executeRenderHooks(plugin::RenderPassHookPoint::PostPostProcess, cmd, idx);
                 });
             builder.setSegment(graph::HookSegment::PostProcess);
+            builder.setSideEffect();
+        }
+
+        // VK-1490: editor selection outline, pass 2 — dilate the visible-only
+        // mask into an ~2px #FFA100 silhouette after post-processing (so the
+        // outline is not tonemapped/blurred) and before the UI overlays.
+        if (selectionOutlineActive)
+        {
+            auto builder = frameGraph->addPass("SelectionOutline",
+                [this](vk::CommandBuffer cmd, uint32_t idx) {
+                    auto* maskPipeline = gpuDrivenRenderer->getSelectionMaskPipeline();
+                    selectionOutlineComposite->executeGraphManaged(cmd,
+                        offscreenResources.colorImages[idx].colorImageView,
+                        swapChain.getSwapchainExtent(),
+                        maskPipeline->getMaskExtent());
+                });
+            // StorageRead (eGeneral) rather than ShaderRead (eShaderReadOnly): the mask
+            // sampler reads fine in eGeneral, and this leaves the image in eGeneral at
+            // frame end so the always-bound set-15 descriptor stays layout-correct on
+            // the following no-selection / RTT frames.
+            builder.read(selectionMaskHandle, graph::ResourceUsage::StorageRead);
+            sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
+            builder.setSegment(graph::HookSegment::UI);
             builder.setSideEffect();
         }
 

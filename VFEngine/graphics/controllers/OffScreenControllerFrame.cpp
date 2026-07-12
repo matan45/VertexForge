@@ -157,6 +157,20 @@ namespace controllers
         framePreparation->preparePhysicsColliders(ctx);
     }
 
+    void OffScreenController::setSelectedEntities(std::vector<uint32_t> entityIds)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        // No highlight while playing: the runtime frame must be unaffected by
+        // editor selection state.
+        if (playModeActive)
+        {
+            entityIds.clear();
+        }
+        renderHandler->setSelectedEntityDrawList(std::move(entityIds));
+    }
+
     void OffScreenController::prepareFrameClusterDebug()
     {
         offscreen::FrameContext ctx;
