@@ -683,6 +683,11 @@ namespace windows
             return;
         }
 
+        // VK-1497 — resolve which steps play at the current preview seed so we can grey the
+        // ones this run skips (probability roll lost, or a variant-group member that isn't the
+        // winner). Same source of truth the runtime and composited preview use.
+        const std::vector<bool> plays = vfx::VFXComboTimeline::resolvePlays(*data, effectivePreviewSeed());
+
         for (int i = 0; i < static_cast<int>(data->steps.size()); ++i)
         {
             auto& step = data->steps[static_cast<size_t>(i)];
@@ -724,8 +729,13 @@ namespace windows
             ImGui::SameLine();
 
             std::string label = step.label.empty() ? ("(step " + std::to_string(i) + ")") : step.label;
+            const bool skipped = i < static_cast<int>(plays.size()) && !plays[static_cast<size_t>(i)];
+            if (skipped) // VK-1497 — grey steps this run resolves out (mirrors the composited preview)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
             if (ImGui::Selectable(label.c_str(), selectedStep == i))
                 selectedStep = i;
+            if (skipped)
+                ImGui::PopStyleColor();
 
             ImGui::PopID();
         }
@@ -780,6 +790,32 @@ namespace windows
         ImGui::TextDisabled("(?)");
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Empty = time-driven (uses Start Time). Otherwise fired by a named cue.");
+
+        // VK-1497 — deterministic per-step variety (resolved from the combo seed at rewind()).
+        if (ImGui::DragFloat("Probability", &step.probability, 0.01f, 0.0f, 1.0f, "%.2f"))
+        {
+            isDirty = true;
+            previewDirty = true; // changes which steps the composited preview fires
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Independent chance this step plays (deterministic per combo seed). "
+                              "Inside a variant group it acts as a selection weight, ignored "
+                              "(uniform) in this version.");
+
+        int variantGroupProxy = step.variantGroup;
+        if (ImGui::InputInt("Variant Group", &variantGroupProxy, 1, 10))
+        {
+            step.variantGroup = variantGroupProxy < 0 ? -1 : variantGroupProxy;
+            isDirty = true;
+            previewDirty = true;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("-1 = none. Steps sharing a group id >= 0 are mutually exclusive: "
+                              "exactly one member plays per combo seed (chosen uniformly).");
 
         ImGui::Separator();
 
@@ -1101,6 +1137,14 @@ namespace windows
         }
     }
 
+    uint32_t VFXSequenceEditorWindow::effectivePreviewSeed() const
+    {
+        // Mirror buildSequenceDesc's normalization exactly: preview seed override, else the
+        // asset seed, and 0 maps to a stable non-zero value (deriveSeed does the same).
+        const uint32_t s = (data && previewSeed == 0) ? data->seed : previewSeed;
+        return s != 0 ? s : 1u;
+    }
+
     services::VFXSequencePreviewDesc VFXSequenceEditorWindow::buildSequenceDesc() const
     {
         services::VFXSequencePreviewDesc desc;
@@ -1113,11 +1157,17 @@ namespace windows
         for (const auto& marker : data->eventMarkers)
             desc.markers.emplace_back(marker.time, marker.cueName);
 
-        const uint32_t comboSeed = desc.seed != 0 ? desc.seed : 1u;
+        const uint32_t comboSeed = effectivePreviewSeed(); // == the step-list mask seed (VK-1497)
+
+        // VK-1497 — resolve variety once so the preview drops steps this run skips, exactly as
+        // the runtime timeline does (same pure function, same seed).
+        const std::vector<bool> plays = vfx::VFXComboTimeline::resolvePlays(*data, comboSeed);
 
         for (size_t i = 0; i < data->steps.size(); ++i)
         {
             const auto& step = data->steps[i];
+            if (i < plays.size() && !plays[i]) // VK-1497 — probability/variant-group skipped
+                continue;
             // VK-1496 — the composited preview is VFX-only. Skip Sound/ScriptCue kinds up front
             // so a step converted away from VFX but retaining a stale vfxRef doesn't render a
             // ghost effect (and typed steps stay silent/visual-free in the editor by construction).

@@ -101,6 +101,10 @@ namespace windows
         // (loads each step's .vfVFX, applies overrides, attaches timing + derived seed).
         services::VFXSequencePreviewDesc buildSequenceDesc() const;
 
+        // VK-1497 — the normalized combo seed the preview resolves variety against, so the
+        // step list, the composited preview, and the runtime all agree on which steps play.
+        uint32_t effectivePreviewSeed() const;
+
         // VK-1453 — aggregate bounds over the steps (union of each child's resolved
         // bounds transformed by its local placement); recalc captures it as Fixed.
         math::AABB computeSequenceBoundsUnion() const;

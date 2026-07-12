@@ -77,6 +77,13 @@ namespace vfx
         // time-driven (empty `cueName`) so the timeline fires it at `startTime`.
         std::string emitCueName;
         VFXCuePayload cuePayload;
+
+        // VK-1497 — deterministic per-step variety, resolved once at VFXComboTimeline
+        // reset()/rewind() from the combo seed so seek/prewarm/replay reproduce the exact
+        // same choices. Applies to every step kind.
+        float probability = 1.0f;   // ungrouped: independent play chance in [0,1] (>=1 always plays)
+        int32_t variantGroup = -1;  // >=0: exactly one member of the group plays (uniform in v1);
+                                    //      probability is reserved as a future selection weight
     };
 
     // A one-shot timeline event marker (VK-1451). When the combo clock crosses

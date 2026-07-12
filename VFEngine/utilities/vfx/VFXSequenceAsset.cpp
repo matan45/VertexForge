@@ -432,6 +432,10 @@ namespace vfx
         if (!payloadEmpty(step.cuePayload))
             j["cuePayload"] = serializePayload(step.cuePayload);
 
+        // VK-1497 — deterministic per-step variety (additive; tolerant reader defaults them).
+        j["probability"] = step.probability;
+        j["variantGroup"] = step.variantGroup;
+
         return j;
     }
 
@@ -529,6 +533,11 @@ namespace vfx
         step.emitCueName = j.value("emitCueName", "");
         if (j.contains("cuePayload"))
             step.cuePayload = deserializePayload(j["cuePayload"]);
+
+        // VK-1497 — per-step variety (tolerant; defaults MUST match struct defaults so a
+        // pre-VK-1497 file loads exactly like a default-constructed step: always play, no group).
+        step.probability = j.value("probability", 1.0f);
+        step.variantGroup = j.value("variantGroup", -1);
 
         return step;
     }

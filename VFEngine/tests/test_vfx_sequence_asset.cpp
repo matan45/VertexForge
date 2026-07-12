@@ -80,6 +80,7 @@ namespace
             step.stopMode = vfx::VFXStepStopMode::PlayToCompletion;
             step.socketName = "hand_R";
             step.overrides.push_back(vfx::VFXParamOverride{"spawnRate", 50.0f});
+            step.probability = 0.75f; // VK-1497 — ungrouped independent play chance
             data.steps.push_back(step);
         }
 
@@ -99,6 +100,8 @@ namespace
             step.stopMode = vfx::VFXStepStopMode::StopAfterDuration;
             step.socketName = ""; // no socket
             step.overrides.push_back(vfx::VFXParamOverride{"startColor", glm::vec4(1.0f, 0.0f, 0.0f, 1.0f)});
+            step.probability = 0.4f; // VK-1497 — reserved as a group weight; must still round-trip
+            step.variantGroup = 3;   // VK-1497 — member of variant group 3
             data.steps.push_back(step);
         }
 
@@ -119,6 +122,7 @@ namespace
             step.overrides.push_back(vfx::VFXParamOverride{"lifetime", 3.0f});
             step.overrides.push_back(vfx::VFXParamOverride{"startSpeed", 12.5f});
             step.overrides.push_back(vfx::VFXParamOverride{"emitDirection", glm::vec3(0.0f, 1.0f, 0.0f)});
+            step.variantGroup = 3; // VK-1497 — same variant group as step 1
             data.steps.push_back(step);
         }
 
@@ -252,6 +256,10 @@ namespace
         CHECK(a.spatialized == b.spatialized);
         CHECK(a.emitCueName == b.emitCueName);
         checkPayloadEqual(a.cuePayload, b.cuePayload);
+
+        // VK-1497 — per-step variety fields.
+        CHECK(a.probability == doctest::Approx(b.probability));
+        CHECK(a.variantGroup == b.variantGroup);
     }
 }
 
@@ -411,6 +419,9 @@ TEST_SUITE("VFXSequenceAsset")
         CHECK(s.spatialized == false);
         CHECK(s.emitCueName.empty());
         CHECK_FALSE(s.audioRef.isValid());
+        // VK-1497 — absent probability/variantGroup keys default to always-play / no-group.
+        CHECK(s.probability == doctest::Approx(1.0f));
+        CHECK(s.variantGroup == -1);
     }
 
     TEST_CASE("a Sound step with no vfxRef survives load via the kind-aware gate (VK-1496)")

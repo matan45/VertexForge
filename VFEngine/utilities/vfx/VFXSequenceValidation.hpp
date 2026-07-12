@@ -160,6 +160,7 @@ namespace vfx::validation
 
         std::unordered_map<std::string, std::vector<int>> exactCueSteps;
         std::unordered_map<std::string, std::vector<int>> normalizedCueSteps;
+        std::unordered_map<int, std::vector<int>> variantGroups; // VK-1497
 
         for (int i = 0; i < static_cast<int>(sequence.steps.size()); ++i)
         {
@@ -225,6 +226,28 @@ namespace vfx::validation
                                 "negative duration means no forced stop will be applied.");
             }
 
+            // VK-1497 — per-step variety diagnostics.
+            if (step.probability < 0.0f || step.probability > 1.0f)
+            {
+                detail::addStep(report, Severity::Warning, i, step,
+                                "probability is outside [0,1]; it is treated as always/never play.");
+            }
+            if (step.variantGroup >= 0)
+            {
+                variantGroups[step.variantGroup].push_back(i);
+                if (step.probability != 1.0f)
+                {
+                    detail::addStep(report, Severity::Info, i, step,
+                                    "probability acts as a selection weight inside a variant group and "
+                                    "is ignored (uniform) in this version.");
+                }
+            }
+            else if (step.probability == 0.0f)
+            {
+                detail::addStep(report, Severity::Info, i, step,
+                                "probability 0 means this step never plays.");
+            }
+
             const std::string trimmedCue = detail::trim(step.cueName);
             if (!step.cueName.empty())
             {
@@ -284,6 +307,18 @@ namespace vfx::validation
             {
                 detail::add(report, Severity::Info, steps.front(),
                             "Cue '" + cue + "' fans out to " + std::to_string(steps.size()) + " steps.");
+            }
+        }
+
+        // VK-1497 — a variant group with a single member always plays; the author probably
+        // intended two or more mutually-exclusive variants.
+        for (const auto& [group, members] : variantGroups)
+        {
+            if (members.size() == 1)
+            {
+                detail::add(report, Severity::Info, members.front(),
+                            "Variant group " + std::to_string(group) +
+                                " has a single member; it always plays.");
             }
         }
 
