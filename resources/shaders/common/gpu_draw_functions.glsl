@@ -30,6 +30,12 @@ const uint CATEGORY_MASK  = 0xFu;
 const uint LAYER_SHIFT = 18u;
 const uint LAYER_MASK  = 0x1Fu;
 
+// VK-1493: toon shading model (bits 23-24) + toon profile index (bits 25-31) are
+// packed by ObjectFlags::packShadingFlags on the CPU and carried through
+// makePerDrawData verbatim (d.flags = obj.flags). The cull pass never inspects them;
+// the fragment shader unpacks them via SHADING_MODEL_SHIFT / PROFILE_INDEX_SHIFT in
+// resources/shaders/common/toon_lighting.glsl.
+
 // Task workgroup size — must match the mesh/task shaders that consume the draws.
 const uint TASK_WORKGROUP_SIZE = 32u;
 

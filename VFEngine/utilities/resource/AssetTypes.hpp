@@ -40,6 +40,10 @@ namespace resource {
 		// COUNT — both persistence paths store AssetType by name, never by the
 		// raw integer, so the renumbered COUNT is backward-compatible.
 		PluginAsset = 25,
+		// Toon shading profile (VK-1493), `.vfToonProfile`. Appended after
+		// PluginAsset so existing enumerator values are unchanged; both
+		// persistence paths store AssetType by name, so the shifted COUNT is safe.
+		ToonProfile = 26,
 		COUNT
 	};
 
@@ -71,6 +75,7 @@ namespace resource {
 		case AssetType::RetargetMap:      return "RetargetMap";
 		case AssetType::VFXSequence:      return "VFXSequence";
 		case AssetType::PluginAsset:      return "PluginAsset";
+		case AssetType::ToonProfile:      return "ToonProfile";
 		default:                          return "Unknown";
 		}
 	}

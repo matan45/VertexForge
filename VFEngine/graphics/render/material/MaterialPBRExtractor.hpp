@@ -24,6 +24,12 @@ namespace render::mesh
         float iblDiffuse = 1.0f;
         float iblSpecular = 0.5f;
 
+        // VK-1493 toon shading. shadingModel mirrors material::ShadingModel (0 = DefaultLit,
+        // 1 = Unlit, 2 = Toon); toonProfileIndex is the resolved 0-127 GPU table slot
+        // (0 = default) — set only when shadingModel == Toon, else 0.
+        uint8_t shadingModel = 0;
+        uint8_t toonProfileIndex = 0;
+
         // Texture paths (empty = use scalar value)
         std::string albedoTexturePath;
         std::string normalTexturePath;

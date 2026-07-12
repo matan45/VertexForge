@@ -33,6 +33,7 @@
 #include "debug/TaskGraphWindow.hpp"
 #include "config/InputActionMappingWindow.hpp"
 #include "procedural/HeightmapGeneratorWindow.hpp"
+#include "material/ToonProfileEditorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
 #include "theme/ThemeEditorWindow.hpp"
 #include "uilayer/UILayerBuilderWindow.hpp"
@@ -94,6 +95,7 @@ namespace windows
         TaskGraphWindow taskGraphWindow;
         InputActionMappingWindow inputActionMappingWindow;
         HeightmapGeneratorWindow heightmapGeneratorWindow;
+        ToonProfileEditorWindow toonProfileEditorWindow;
         BackgroundRemovalWindow backgroundRemovalWindow;
         ThemeEditorWindow themeEditorWindow;
         UILayerBuilderWindow uiLayerBuilderWindow;

@@ -155,6 +155,8 @@ namespace render::mesh
         float alphaCutoff = 0.5f;
         float iblDiffuse = 1.0f;
         float iblSpecular = 0.5f;
+        uint8_t shadingModel = 0;      // VK-1493: material::ShadingModel (2 = Toon)
+        uint8_t toonProfileIndex = 0;  // VK-1493: resolved toon profile GPU slot (0-127)
     };
 
     struct MeshRenderData

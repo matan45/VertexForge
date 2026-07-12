@@ -7,6 +7,7 @@
 #include "export/GameExporter.hpp"
 #include "material/MaterialAsset.hpp"
 #include "material/MaterialInstanceTypes.hpp"
+#include "material/ToonProfileManager.hpp"
 #include <filesystem>
 
 namespace handlers
@@ -199,7 +200,20 @@ namespace handlers
 			if (hasCachedShader && !materialData.needsRecompile) continue;
 
 			std::string relativePath = fs::relative(it->path(), workingDirectory, ec).generic_string();
-			auto compileResult = editor::graph::ShaderGraphCompiler::compileGraph(materialData.graph);
+			// VK-1493: bake the toon branch + resolved profile values into the cooked
+			// classic-path shader (the gpudriven path drives toon via the SSBO table).
+			editor::graph::ShaderCompileOptions compileOpts;
+			if (materialData.shadingModel == material::ShadingModel::Toon)
+			{
+				compileOpts.toonEnabled = true;
+				if (!materialData.toonProfile.empty())
+				{
+					if (auto profile = material::ToonProfileManager::instance().getOrLoad(materialData.toonProfile))
+						materialData.toonProfileValues = *profile;
+				}
+				compileOpts.toonProfile = materialData.toonProfileValues;
+			}
+			auto compileResult = editor::graph::ShaderGraphCompiler::compileGraph(materialData.graph, compileOpts);
 			if (!compileResult.success)
 			{
 				failedMaterials.push_back(relativePath + ": " + compileResult.errorMessage);

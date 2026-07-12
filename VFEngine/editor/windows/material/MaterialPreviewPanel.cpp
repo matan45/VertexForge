@@ -5,6 +5,8 @@
 #include "../preview/PreviewToolbar.hpp"
 #include <events/EventDispatcher.hpp>
 #include <events/render/PreviewEvents.hpp>
+#include <material/ToonProfileManager.hpp>
+#include <nfd/FileDialog.hpp>
 #include <time/Timer.hpp>
 #include "imgui.h"
 #include <algorithm>
@@ -129,7 +131,52 @@ namespace editor::materialeditor
 
         ImGui::Spacing();
 
-        if (materialData) {
+        if (materialData && showSettings) {
+            // VK-1493: shading model + toon profile picker. Toggling to/from Toon or changing
+            // the profile changes the compiled shader, so flag a recompile (user clicks Compile).
+            ImGui::Text("Shading Model");
+            const char* shadingModels[] = { "Default Lit", "Unlit", "Toon" };
+            int shadingModel = static_cast<int>(materialData->shadingModel);
+            if (ImGui::Combo("##ShadingModel", &shadingModel, shadingModels, IM_ARRAYSIZE(shadingModels))) {
+                materialData->shadingModel = static_cast<::material::ShadingModel>(shadingModel);
+                materialData->needsRecompile = true;
+                if (onBlendModeChanged) {
+                    onBlendModeChanged();
+                }
+            }
+
+            if (materialData->shadingModel == ::material::ShadingModel::Toon) {
+                ImGui::Text("Toon Profile");
+                ImGui::TextWrapped("%s", materialData->toonProfile.empty()
+                                             ? "(built-in default)" : materialData->toonProfile.c_str());
+                if (ImGui::Button("Browse##ToonProfile")) {
+                    nfd::FileDialog fd;
+                    std::string picked = fd.openFileDialog(
+                        {{L"Toon Profile (*.vfToonProfile)", L"*.vfToonProfile"}});
+                    if (!picked.empty()) {
+                        materialData->toonProfile = picked;
+                        if (auto p = ::material::ToonProfileManager::instance().getOrLoad(picked)) {
+                            materialData->toonProfileValues = *p;
+                        }
+                        materialData->needsRecompile = true;
+                        if (onBlendModeChanged) {
+                            onBlendModeChanged();
+                        }
+                    }
+                }
+                if (!materialData->toonProfile.empty()) {
+                    ImGui::SameLine();
+                    if (ImGui::Button("Clear##ToonProfile")) {
+                        materialData->toonProfile.clear();
+                        materialData->needsRecompile = true;
+                        if (onBlendModeChanged) {
+                            onBlendModeChanged();
+                        }
+                    }
+                }
+            }
+
+            ImGui::Separator();
             ImGui::Text("Blend Mode");
             const char* blendModes[] = { "Opaque", "Masked", "Translucent", "Additive", "Multiply" };
             int blendMode = static_cast<int>(materialData->blendMode);

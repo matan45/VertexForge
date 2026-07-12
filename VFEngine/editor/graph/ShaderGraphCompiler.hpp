@@ -15,6 +15,15 @@ namespace editor::graph {
         std::string errorMessage;
     };
 
+    // VK-1493: toon compile options. When toonEnabled, the fragment shader gets a
+    // `#define TOON_ENABLED` branch selector plus the profile values baked as TOON_*
+    // `#define`s (self-contained — no descriptor/UBO changes). A profile value edit
+    // therefore recompiles the material preview shader; callers debounce live edits.
+    struct ShaderCompileOptions {
+        bool toonEnabled = false;
+        material::ToonProfile toonProfile{};
+    };
+
     struct TerrainCompilationResult {
         bool success = false;
         std::string materialSnippet; // GLSL body (no header/footer templates)
@@ -53,14 +62,16 @@ namespace editor::graph {
         static bool s_templatesLoaded;
     public:
         
-        static CompilationResult compileGraph(const material::ShaderGraph& graph);
+        static CompilationResult compileGraph(const material::ShaderGraph& graph,
+                                              const ShaderCompileOptions& opts = {});
 
         static TerrainCompilationResult compileTerrainMaterial(const terrain::TerrainMaterialData& material);
 
     private:
         static std::string generateVertexShader();
         
-        static std::string generateFragmentShader(const material::ShaderGraph& graph);
+        static std::string generateFragmentShader(const material::ShaderGraph& graph,
+                                                   const ShaderCompileOptions& opts = {});
         
         static bool loadTemplates();
         

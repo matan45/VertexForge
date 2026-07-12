@@ -39,6 +39,7 @@ namespace windows
         menuBar.setTaskGraphWindow(&taskGraphWindow);
         menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
+        menuBar.setToonProfileEditorWindow(&toonProfileEditorWindow);
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
         menuBar.setThemeEditorWindow(&themeEditorWindow);
         menuBar.setUILayerBuilderWindow(&uiLayerBuilderWindow);
@@ -225,6 +226,7 @@ namespace windows
             taskGraphWindow.draw();
             inputActionMappingWindow.draw();
             heightmapGeneratorWindow.draw();
+            toonProfileEditorWindow.draw();
             backgroundRemovalWindow.draw();
             themeEditorWindow.draw();
             uiLayerBuilderWindow.draw();

@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "scene/ToonProfileGpuTable.hpp" // VK-1493: complete type for getBuffer()/uploadIfDirty()
 #include "SelectionMaskPipeline.hpp" // VK-1490
 #include "../virtualtexture/svt/SVTManager.hpp"
 #include "../occlusion/HiZBuffer.hpp"
@@ -554,6 +555,28 @@ namespace render::gpudriven
         wire(meshShaderPipeline.get());
         wire(transparentMeshShaderPipeline.get());
         wire(wboitMeshShaderPipeline.get());
+    }
+
+    void GPUDrivenRenderer::wireToonProfilePipelines()
+    {
+        if (!toonProfileTable)
+            return;
+        // Binding 6 is statically used on every scene draw and is not partially-bound, so
+        // every mesh pipeline must point at the (lifetime-stable) toon table buffer.
+        auto wire = [&](MeshShaderPipeline* p)
+        {
+            if (p)
+                p->updateToonProfileDescriptor(toonProfileTable->getBuffer());
+        };
+        wire(meshShaderPipeline.get());
+        wire(transparentMeshShaderPipeline.get());
+        wire(wboitMeshShaderPipeline.get());
+    }
+
+    void GPUDrivenRenderer::uploadToonProfiles(vk::CommandBuffer cmd)
+    {
+        if (toonProfileTable)
+            toonProfileTable->uploadIfDirty(cmd);
     }
 
     bool GPUDrivenRenderer::isSVTActive() const

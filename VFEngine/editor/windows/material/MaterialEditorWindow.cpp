@@ -8,6 +8,7 @@
 #include "../../graph/nodes/ShaderNode.hpp"
 #include <material/MaterialManager.hpp>
 #include <material/MaterialInstanceTypes.hpp>
+#include <material/ToonProfileManager.hpp>
 #include <resource/ResourceManager.hpp>
 #include <resource/AssetTypes.hpp>
 #include <asset/AssetRef.hpp>
@@ -114,7 +115,21 @@ namespace windows
     {
         if (!materialData) return;
 
-        auto result = editor::graph::ShaderGraphCompiler::compileGraph(materialData->graph);
+        // VK-1493: when the material is Toon, refresh the resolved profile snapshot so the
+        // baked TOON_* defines match the current profile, and enable the toon preview branch.
+        editor::graph::ShaderCompileOptions opts;
+        if (materialData->shadingModel == material::ShadingModel::Toon)
+        {
+            opts.toonEnabled = true;
+            if (!materialData->toonProfile.empty())
+            {
+                if (auto profile = material::ToonProfileManager::instance().getOrLoad(materialData->toonProfile))
+                    materialData->toonProfileValues = *profile;
+            }
+            opts.toonProfile = materialData->toonProfileValues;
+        }
+
+        auto result = editor::graph::ShaderGraphCompiler::compileGraph(materialData->graph, opts);
 
         if (result.success)
         {

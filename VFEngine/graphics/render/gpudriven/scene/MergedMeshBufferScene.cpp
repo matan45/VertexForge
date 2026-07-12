@@ -254,6 +254,29 @@ namespace render::gpudriven
         // VK-1415: pack the render-layer index (0-31) into flags bits 18-22.
         obj.flags |= (meshRender.renderLayer & ObjectFlags::LayerMask) << ObjectFlags::LayerShift;
 
+        // VK-1493: pack toon shading model + profile index into flags bits 23-31.
+        // Both values are pre-resolved on the main thread (subMat or the pbrCache
+        // fallback), so this stays a pure read — safe in the parallel object phase.
+        {
+            uint8_t shadingModel = 0;
+            uint8_t toonProfileIndex = 0;
+            if (subMat)
+            {
+                shadingModel = subMat->shadingModel;
+                toonProfileIndex = subMat->toonProfileIndex;
+            }
+            else if (!materialPath.empty())
+            {
+                auto it = pbrCache.find(materialPath);
+                if (it != pbrCache.end())
+                {
+                    shadingModel = it->second.shadingModel;
+                    toonProfileIndex = it->second.toonProfileIndex;
+                }
+            }
+            ObjectFlags::packShadingFlags(obj.flags, shadingModel, toonProfileIndex);
+        }
+
         obj.availableLODMask = submeshLoc.getAvailableLODMask();
         obj.shaderGroupIndex = (resolvers.shaderGroupResolver && !materialPath.empty())
                                    ? resolvers.shaderGroupResolver(materialPath) : 0;

@@ -1,4 +1,5 @@
 #pragma once
+#include "ToonProfile.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -68,7 +69,8 @@ namespace material
     enum class ShadingModel : uint8_t
     {
         DefaultLit,
-        Unlit
+        Unlit,
+        Toon
     };
 
     inline std::string shadingModelToString(ShadingModel model)
@@ -77,6 +79,7 @@ namespace material
         {
         case ShadingModel::DefaultLit: return "defaultLit";
         case ShadingModel::Unlit: return "unlit";
+        case ShadingModel::Toon: return "toon";
         default: return "defaultLit";
         }
     }
@@ -84,6 +87,7 @@ namespace material
     inline ShadingModel stringToShadingModel(const std::string& str)
     {
         if (str == "unlit") return ShadingModel::Unlit;
+        if (str == "toon") return ShadingModel::Toon;
         return ShadingModel::DefaultLit;
     }
 
@@ -470,6 +474,14 @@ namespace material
         float opacity = 1.0f;
         float alphaCutoff = 0.5f;
         std::map<std::string, bool> staticParameters;
+
+        // Toon shading (VK-1493). `toonProfile` is a path to a reusable
+        // `.vfToonProfile` asset — serialized only when shadingModel == Toon so
+        // non-toon `.vfMat` files stay byte-identical. `toonProfileValues` is a
+        // runtime-only resolved snapshot (NOT serialized) used by the material
+        // preview UBO path; the authoritative values live in the referenced asset.
+        std::string toonProfile;
+        ToonProfile toonProfileValues;
 
         ShaderGraph graph;
 

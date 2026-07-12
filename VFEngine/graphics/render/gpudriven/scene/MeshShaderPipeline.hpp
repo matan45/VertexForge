@@ -167,6 +167,9 @@ namespace render::gpudriven
         void updateSVTResources(vk::Buffer pageTableBuffer, vk::Buffer feedbackBuffer, vk::Buffer imageInfoBuffer);
         void updateInstanceTransformDescriptor(vk::Buffer instanceTransformBuffer);
         void updateObjectBufferDescriptor(vk::Buffer objectBuffer);
+        // VK-1493: bind the toon profile table SSBO to set-1 binding 6. The buffer
+        // handle is lifetime-stable, so this is written once after (re)creation.
+        void updateToonProfileDescriptor(vk::Buffer toonProfileBuffer);
         void updateMeshletDescriptors(MeshletBuffer& meshletBuffer);
         void updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler);
         void updateVertexDescriptors(MergedMeshBuffer& mergedBuffer);

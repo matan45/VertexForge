@@ -665,6 +665,10 @@ namespace render
             vtScopeEnd(commandBuffer, imageIndex, vtSvtScope);
         }
 
+        // VK-1493: upload any dirtied toon profile rows before the scene meshes sample the
+        // set-1 binding-6 table. No-op unless a profile changed (not gated by SVT).
+        gpuDrivenRenderer->uploadToonProfiles(commandBuffer);
+
         bool useParallel = parallelSceneRecording && sceneThreadPoolManager &&
                            sceneThreadPoolManager->getThreadCount() > 1;
 

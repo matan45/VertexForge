@@ -3,6 +3,7 @@
 #include "material/MaterialParameterSet.hpp"
 #include "resource/ResourceManager.hpp"
 #include "asset/AssetRef.hpp"
+#include "../gpudriven/scene/ToonProfileGpuTable.hpp"
 #include <cmath>
 #include <vector>
 
@@ -342,6 +343,20 @@ namespace render::mesh
         pbr.blendMode = matData.blendMode;
         pbr.opacity = matData.opacity;
         pbr.alphaCutoff = matData.alphaCutoff;
+
+        // VK-1493: shading model + resolved toon profile slot. resolveIndex assigns a
+        // stable 0-127 GPU slot (loading the profile on first touch). This runs on the
+        // main thread during the sequential pbr-cache pre-warm, so the later parallel
+        // flag-packing only reads the already-resolved index. The table is null in
+        // CPU-only contexts (e.g. Tests) — index then stays 0 (default), which is safe.
+        pbr.shadingModel = static_cast<uint8_t>(matData.shadingModel);
+        if (matData.shadingModel == material::ShadingModel::Toon)
+        {
+            if (auto* toonTable = render::gpudriven::ToonProfileGpuTable::active())
+            {
+                pbr.toonProfileIndex = toonTable->resolveIndex(matData.toonProfile);
+            }
+        }
 
         return pbr;
     }

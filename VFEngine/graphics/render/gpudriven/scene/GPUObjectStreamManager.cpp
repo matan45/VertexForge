@@ -438,6 +438,10 @@ namespace render::gpudriven
                     // VK-1415: pack the render-layer index (0-31) into flags bits 18-22.
                     obj.flags |= (renderData.renderLayer & ObjectFlags::LayerMask) << ObjectFlags::LayerShift;
 
+                    // VK-1493: pack toon shading model + profile index into flags bits 23-31.
+                    if (subMat)
+                        ObjectFlags::packShadingFlags(obj.flags, subMat->shadingModel, subMat->toonProfileIndex);
+
                     buffer.updateObjectAtSlot(slot, obj);
                     buffer.mapEntityToSlot(uuid, slot);
                 }
