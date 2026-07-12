@@ -20,6 +20,9 @@ namespace windows
         std::string newMaterialName;
         bool showCreateMaterialModal = false;
 
+        std::string newToonProfileName; // VK-1493
+        bool showCreateToonProfileModal = false;
+
         std::string newAnimatorName;
         bool showCreateAnimatorModal = false;
 
@@ -105,6 +108,7 @@ namespace windows
     private:
         void drawCreateFolderModal(const fs::path& currentPath);
         void drawCreateMaterialModal(const fs::path& currentPath);
+        void drawCreateToonProfileModal(const fs::path& currentPath); // VK-1493
         void drawCreateAnimatorModal(const fs::path& currentPath);
         void drawCreateVFXModal(const fs::path& currentPath);
         void drawCreateVFXSequenceModal(const fs::path& currentPath);

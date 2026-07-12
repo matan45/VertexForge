@@ -8,6 +8,7 @@
 #include "../../graph/nodes/ShaderNode.hpp"
 #include <material/MaterialManager.hpp>
 #include <material/MaterialInstanceTypes.hpp>
+#include <material/MaterialRuntimeData.hpp>
 #include <material/ToonProfileManager.hpp>
 #include <resource/ResourceManager.hpp>
 #include <resource/AssetTypes.hpp>
@@ -136,6 +137,15 @@ namespace windows
             materialData->cachedVertexShader = result.vertexShader;
             materialData->cachedFragmentShader = result.fragmentShader;
             materialData->needsRecompile = false;
+            // Refresh the in-memory IR hash / shader-map key so the render-side shader
+            // cache (MaterialShaderCache::getOrCreatePipeline) doesn't treat this material
+            // as perpetually stale — otherwise an IR-affecting edit such as switching to
+            // Toon recompiles the shader every frame (VK-1493). Mirrors what save writes.
+            {
+                auto runtimeData = material::MaterialRuntimeDataBuilder::fromMaterialData(*materialData);
+                materialData->irHash = runtimeData.irHash;
+                materialData->shaderMapKey = runtimeData.shaderMap.shaderMapKey;
+            }
             showCompileError = false;
             previewPanel->clearShaderError();
             vfLogInfo("Material compiled successfully: {}", materialData->name);

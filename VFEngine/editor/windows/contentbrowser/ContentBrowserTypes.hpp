@@ -69,7 +69,8 @@ namespace windows
         Retarget = 18, // shared by .vfrig and .vfretarget (VK-910)
         VFXSequence = 19, // .vfVFXSequence combo asset (VK-1425)
         Material = 20, // .vfTerrainMat atlas glyph
-        Collider = 21 // .vfCollider sidecar glyph
+        Collider = 21, // .vfCollider sidecar glyph
+        ToonProfile = 22 // .vfToonProfile "shading" glyph (VK-1493)
     };
 
     // Canonical per-type display data. Single source of truth for the filter
@@ -112,7 +113,7 @@ namespace windows
             {Retarget,         "Retarget",          AtlasIcon::Retarget,     0xFFD08AF7},
             {VFXSequence,      "VFX Sequence",      AtlasIcon::VFXSequence,  0xFFF74FC8},
             {Collider,         "Collider",          AtlasIcon::Collider,     0xFF7AA7FF},
-            {ToonProfile,      "Toon Profile",      AtlasIcon::Material,     0xFF9E7FF7},
+            {ToonProfile,      "Toon Profile",      AtlasIcon::ToonProfile,  0xFF9E7FF7},
             {Other,            "Other",             AtlasIcon::File,         0xFF909090}
         }};
         return table;

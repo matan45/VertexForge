@@ -18,6 +18,12 @@ namespace windows
     {
         const std::vector<std::pair<std::wstring, std::wstring>> kToonFilter =
             {{L"Toon Profile (*.vfToonProfile)", L"*.vfToonProfile"}};
+
+        // The preview controller only injects a custom shader when the material path is
+        // non-empty (MaterialPreviewController.cpp:403). The scratch material has no real
+        // path, so give it a stable synthetic key — the shader cache still recompiles on
+        // cachedFragmentShader change (hashed), so live edits update.
+        constexpr const char* kScratchPath = "__toonProfilePreview__";
     }
 
     ToonProfileEditorWindow::ToonProfileEditorWindow()
@@ -119,7 +125,7 @@ namespace windows
             scratchMaterial->cachedVertexShader = result.vertexShader;
             scratchMaterial->cachedFragmentShader = result.fragmentShader;
             scratchMaterial->needsRecompile = false;
-            previewPanel->updateFromGraph(scratchMaterial, "", true);
+            previewPanel->updateFromGraph(scratchMaterial, kScratchPath, true);
         }
     }
 
@@ -158,8 +164,9 @@ namespace windows
         }
 
         ImGui::SetNextWindowSize(ImVec2(780, 480), ImGuiCond_FirstUseEver);
+        maximizer.preBegin();
         std::string title = std::string("Toon Profile Editor") + (dirty ? " *" : "") + "###ToonProfileEditor";
-        if (ImGui::Begin(title.c_str(), &visible))
+        if (ImGui::Begin(title.c_str(), &visible, maximizer.windowFlags()))
         {
             if (ImGui::Button("New")) newProfile();
             ImGui::SameLine();
@@ -170,6 +177,8 @@ namespace windows
             if (ImGui::Button("Save As...")) saveProfile(true);
             ImGui::SameLine();
             ImGui::TextDisabled("%s", currentPath.empty() ? "(unsaved)" : currentPath.c_str());
+            ImGui::SameLine();
+            maximizer.drawButton();
             if (!statusMessage.empty())
                 ImGui::TextWrapped("%s", statusMessage.c_str());
             ImGui::Separator();
@@ -181,7 +190,12 @@ namespace windows
             ImGui::SameLine();
 
             ImGui::BeginChild("ToonPreview", ImVec2(0.0f, 0.0f), true);
-            previewPanel->draw(scratchMaterial, "");
+            previewPanel->draw(scratchMaterial, kScratchPath);
+            if (previewPanel->hasShaderError())
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Shader error:");
+                ImGui::TextWrapped("%s", previewPanel->getShaderError().c_str());
+            }
             ImGui::EndChild();
 
             // Debounced recompile: only rebuild the scratch shader once edits settle.

@@ -69,7 +69,7 @@
     // arrive as TOON_* defines from ShaderGraphCompiler.
     vec3 color;
     {
-        const vec3 keyDir = normalize(vec3(0.4, 0.85, 0.5));
+        vec3 keyDir = normalize(vec3(0.4, 0.85, 0.5)); // not const: glslang rejects const = normalize(...)
         float halfLambert = dot(N, keyDir) * 0.5 + 0.5;
         float t = clamp(halfLambert, 0.0, 1.0);                 // no shadow/atten in preview
         float bs = max(TOON_BAND_SMOOTHNESS, 1e-4);

@@ -1,5 +1,6 @@
 #pragma once
 #include "nfd/FileDialog.hpp"
+#include "../preview/PreviewWindowChrome.hpp"
 #include <material/ToonProfile.hpp>
 #include <memory>
 #include <string>
@@ -36,6 +37,7 @@ namespace windows
         void refreshPreview();      // recompile scratch material + push to the preview panel
 
         bool visible = false;
+        editor::preview::WindowMaximizer maximizer;
         nfd::FileDialog fileDialog;
 
         material::ToonProfile profile;

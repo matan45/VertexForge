@@ -6,6 +6,11 @@
 #include "events/project/ResourceEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
 #include <material/MaterialAsset.hpp>
+#include <material/ToonProfileManager.hpp>
+#include <asset/AssetMetadata.hpp>
+#include <asset/AssetMetadataSerializer.hpp>
+#include <asset/AssetGUID.hpp>
+#include <resource/AssetTypes.hpp>
 #include <animator/AnimatorAsset.hpp>
 #include <vfx/VFXAsset.hpp>
 #include <vfx/VFXSequenceAsset.hpp>
@@ -90,6 +95,63 @@ namespace windows
             {
                 ImGui::CloseCurrentPopup();
                 showCreateMaterialModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawCreateToonProfileModal(const fs::path& currentPath)
+    {
+        if (showCreateToonProfileModal &&
+            ImGui::BeginPopupModal("Create New Toon Profile", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            char buffer[256];
+            std::strncpy(buffer, newToonProfileName.c_str(), sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText("Toon Profile Name", buffer, IM_ARRAYSIZE(buffer)))
+            {
+                newToonProfileName = std::string(buffer);
+            }
+
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                if (!newToonProfileName.empty())
+                {
+                    std::string extension = ".vfToonProfile";
+                    fs::path newPath = currentPath / (newToonProfileName + extension);
+                    int counter = 1;
+                    while (fs::exists(newPath))
+                    {
+                        newPath = currentPath / (newToonProfileName + "_" + std::to_string(counter) + extension);
+                        counter++;
+                    }
+
+                    std::string pathStr = StringUtil::wstringToUtf8(newPath.wstring());
+                    if (material::ToonProfileManager::instance().save(pathStr, material::ToonProfileManager::defaultProfile()))
+                    {
+                        // .vfmeta sidecar so the browser + export recognise the asset.
+                        auto metaPath = asset::AssetMetadataSerializer::getMetaPath(pathStr);
+                        asset::AssetMetadata metadata;
+                        metadata.guid = asset::AssetGUID::generate();
+                        metadata.type = resource::AssetType::ToonProfile;
+                        metadata.importSourcePath = "editor://toonprofile";
+                        metadata.formatVersion = 1;
+                        asset::AssetMetadataSerializer::save(metadata, metaPath);
+
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
+                        if (refreshCallback) refreshCallback();
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+                showCreateToonProfileModal = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showCreateToonProfileModal = false;
             }
             ImGui::EndPopup();
         }
