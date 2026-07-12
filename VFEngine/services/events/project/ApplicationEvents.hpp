@@ -116,4 +116,10 @@ namespace events::application {
         std::string_view getName() const override { return "OpenUILayerBuilder"; }
     };
 
+    // VK-1493: open the (MainImguiWindow-owned) Toon Profile editor for a `.vfToonProfile`.
+    struct OpenToonProfileEditorNotification : INotification {
+        std::string filePath;
+        std::string_view getName() const override { return "OpenToonProfileEditor"; }
+    };
+
 }

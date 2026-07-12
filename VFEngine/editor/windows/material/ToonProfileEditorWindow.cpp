@@ -53,6 +53,26 @@ namespace windows
         dirty = false; // a fresh default is not "unsaved edits"
     }
 
+    void ToonProfileEditorWindow::openProfile(const std::string& path)
+    {
+        visible = true;
+        if (path.empty())
+            return;
+        if (auto loaded = material::ToonProfileManager::instance().getOrLoad(path))
+        {
+            profile = *loaded;
+            currentPath = path;
+            dirty = false;
+            previewDirty = true;
+            lastEditTime = static_cast<float>(engineTime::Timer::getElapsedTime());
+            statusMessage = "Loaded " + path;
+        }
+        else
+        {
+            statusMessage = "Failed to load " + path;
+        }
+    }
+
     void ToonProfileEditorWindow::loadProfile()
     {
         std::string path = fileDialog.openFileDialog(kToonFilter);

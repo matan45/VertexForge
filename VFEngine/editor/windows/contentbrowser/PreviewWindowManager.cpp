@@ -96,6 +96,15 @@ namespace windows
         case AssetType::Material:
             openMaterialEditor(path);
             return true;
+        case AssetType::ToonProfile:
+        {
+            // VK-1493: the Toon Profile editor is a MainImguiWindow member — route via a
+            // notification (same pattern as the UI-prefab -> UI Layer Builder route).
+            events::application::OpenToonProfileEditorNotification note;
+            note.filePath = path;
+            events::EventDispatcher::instance().publish(note);
+            return true;
+        }
         case AssetType::MaterialInstance:
             openMaterialInstanceEditor(path);
             return true;

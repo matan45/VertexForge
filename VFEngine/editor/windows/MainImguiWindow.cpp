@@ -134,6 +134,12 @@ namespace windows
                 uiLayerBuilderWindow.openFromContentBrowser(n.filePath);
             });
 
+        openToonProfileEditorToken = dispatcher.subscribe<events::application::OpenToonProfileEditorNotification>(
+            [this](const events::application::OpenToonProfileEditorNotification& n)
+            {
+                toonProfileEditorWindow.openProfile(n.filePath);
+            });
+
         settingsChangedToken = dispatcher.subscribe<events::editor::EditorSettingsChangedNotification>(
             [](const events::editor::EditorSettingsChangedNotification& n)
             {

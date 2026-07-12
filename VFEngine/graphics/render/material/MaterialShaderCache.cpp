@@ -66,16 +66,22 @@ namespace render::mesh
         {
             const std::string vertexShaderHash = hashShaderSource(materialData.cachedVertexShader);
             const std::string fragmentShaderHash = hashShaderSource(materialData.cachedFragmentShader);
-            const std::string& irHash = materialData.irHash;
 
+            // The compiled pipeline is fully determined by the vertex + fragment SPIR-V.
+            // Blend modes are all pre-created (selected at bind via pipelineForBlendMode) and
+            // opacity/alphaCutoff are runtime uniforms, so material IR changes that don't alter
+            // the shader text don't invalidate the pipeline. The old irHash check compared the
+            // persisted materialData.irHash field, which goes stale on in-memory IR edits (e.g.
+            // switching shadingModel to Toon) and made getOrCreatePipeline recompile every frame
+            // (VK-1493). A shader-affecting change (graph edit, toon defines) already changes the
+            // fragment hash, so dropping the irHash check keeps recompiles correct.
             if (it->second.vertexShaderHash == vertexShaderHash &&
                 it->second.fragmentShaderHash == fragmentShaderHash &&
-                (irHash.empty() || it->second.materialIRHash == irHash) &&
                 it->second.valid)
             {
                 return &it->second;
             }
-            
+
             invalidate(materialPath);
         }
         

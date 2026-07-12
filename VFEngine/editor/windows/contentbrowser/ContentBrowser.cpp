@@ -250,6 +250,7 @@ namespace windows
         std::string extension = entry.path().extension().string();
 
         if (extension == ".vfMat") return Material;
+        if (extension == ".vfToonProfile") return ToonProfile; // VK-1493
         if (extension == ".vfFont") return Font;
         if (extension == ".vfproj") return Project;
         if (extension == ".vfMatInstance") return MaterialInstance;

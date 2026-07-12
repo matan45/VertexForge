@@ -117,6 +117,7 @@ namespace windows
         events::SubscriptionToken openProjectSettingsToken;
         events::SubscriptionToken openBackgroundRemovalToken;
         events::SubscriptionToken openUILayerBuilderToken;
+        events::SubscriptionToken openToonProfileEditorToken;
         events::SubscriptionToken settingsChangedToken;
 
     public:

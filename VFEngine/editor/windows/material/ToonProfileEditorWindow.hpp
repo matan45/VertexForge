@@ -26,6 +26,8 @@ namespace windows
         ToonProfileEditorWindow& operator=(const ToonProfileEditorWindow&) = delete;
 
         void show() { visible = true; }
+        // Open the window on a specific `.vfToonProfile` (content-browser double-click).
+        void openProfile(const std::string& path);
         void draw();
 
     private:
