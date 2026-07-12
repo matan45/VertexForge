@@ -200,7 +200,7 @@ TEST_SUITE("VFXBoundsSerialization")
         CHECK(loaded.cullEligible == false);
     }
 
-    TEST_CASE(".vfVFXSequence round-trips aggregate bounds; stamps 1.4")
+    TEST_CASE(".vfVFXSequence round-trips aggregate bounds + stableLoop; stamps 1.5")
     {
         resetBoundsTestRoot();
 
@@ -210,11 +210,12 @@ TEST_SUITE("VFXBoundsSerialization")
         original.bounds.mode = vfx::VFXBoundsMode::Fixed;
         original.bounds.center = glm::vec3(-1.5f, 0.5f, 7.0f);
         original.bounds.extents = glm::vec3(2.0f, 3.0f, 4.0f);
+        original.stableLoop = true; // VK-1498 — additive flag, round-trips with the asset
         // steps intentionally left empty — bounds are independent of steps here.
 
         const fs::path path = boundsTestRoot() / "BoundsSequence.vfVFXSequence";
         REQUIRE(vfx::VFXSequenceAsset::save(original, path.string()));
-        CHECK(readVersionField(path) == "1.4"); // VK-1496 bumped the sequence format version
+        CHECK(readVersionField(path) == "1.5"); // VK-1498 bumped the sequence format version
 
         auto loadedOpt = vfx::VFXSequenceAsset::load(path.string());
         REQUIRE(loadedOpt.has_value());
@@ -227,6 +228,7 @@ TEST_SUITE("VFXBoundsSerialization")
         CHECK(loaded.bounds.extents.x == doctest::Approx(2.0f));
         CHECK(loaded.bounds.extents.y == doctest::Approx(3.0f));
         CHECK(loaded.bounds.extents.z == doctest::Approx(4.0f));
+        CHECK(loaded.stableLoop == true);
     }
 
     TEST_CASE("a .vfVFXSequence without a bounds key loads as Auto")
