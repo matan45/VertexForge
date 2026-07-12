@@ -122,6 +122,36 @@ namespace
             data.steps.push_back(step);
         }
 
+        // Step 3 (VK-1496): a spatialized Sound step — no vfxRef, carries audioRef + params.
+        {
+            vfx::VFXSequenceStep step;
+            step.kind = vfx::VFXStepKind::Sound;
+            step.audioRef = asset::AssetRef::fromHexString("aaaabbbbccccdddd");
+            step.label = "boom";
+            step.startTime = 0.15f;
+            step.volume = 0.8f;
+            step.pitch = 1.2f;
+            step.spatialized = true;
+            step.localPosition = glm::vec3(2.0f, 0.0f, -1.0f);
+            step.socketName = "muzzle";
+            data.steps.push_back(step);
+        }
+
+        // Step 4 (VK-1496): a ScriptCue step — emits a named cue with a full payload.
+        {
+            vfx::VFXSequenceStep step;
+            step.kind = vfx::VFXStepKind::ScriptCue;
+            step.label = "cue";
+            step.startTime = 0.5f;
+            step.emitCueName = "OnExplosionPeak";
+            step.cuePayload.position = glm::vec3(3.0f, 4.0f, 5.0f);
+            step.cuePayload.color = glm::vec4(0.1f, 0.2f, 0.3f, 0.4f);
+            step.cuePayload.scalar = 9.5f;
+            step.cuePayload.custom.push_back(
+                vfx::VFXParamOverride{"startColor", glm::vec4(0.5f, 0.6f, 0.7f, 0.8f)});
+            data.steps.push_back(step);
+        }
+
         return data;
     }
 
@@ -192,6 +222,7 @@ namespace
 
     void checkStepEqual(const vfx::VFXSequenceStep& a, const vfx::VFXSequenceStep& b)
     {
+        CHECK(a.kind == b.kind); // VK-1496
         CHECK(a.vfxRef.toHexString() == b.vfxRef.toHexString());
         CHECK(a.label == b.label);
         CHECK(a.startTime == doctest::Approx(b.startTime));
@@ -213,6 +244,14 @@ namespace
         REQUIRE(a.overrides.size() == b.overrides.size());
         for (size_t i = 0; i < a.overrides.size(); ++i)
             checkOverrideEqual(a.overrides[i], b.overrides[i]);
+
+        // VK-1496 — typed-step fields.
+        CHECK(a.audioRef.toHexString() == b.audioRef.toHexString());
+        CHECK(a.volume == doctest::Approx(b.volume));
+        CHECK(a.pitch == doctest::Approx(b.pitch));
+        CHECK(a.spatialized == b.spatialized);
+        CHECK(a.emitCueName == b.emitCueName);
+        checkPayloadEqual(a.cuePayload, b.cuePayload);
     }
 }
 
@@ -336,6 +375,79 @@ TEST_SUITE("VFXSequenceAsset")
         CHECK(loaded.fixedStep == doctest::Approx(0.0f));
         CHECK(loaded.prewarm == doctest::Approx(0.0f));
         CHECK(loaded.eventMarkers.empty());
+    }
+
+    TEST_CASE("a pre-1.4 step without a kind key loads as VFX with default typed fields (VK-1496)")
+    {
+        resetSequenceTestRoot();
+
+        // A 1.3 file: a VFX step with no `kind` and none of the VK-1496 typed fields.
+        json j;
+        j["version"] = "1.3";
+        j["uuid"] = "pre14";
+        j["name"] = "Pre14";
+
+        json step;
+        step["vfxRef"] = "00000000aaaa1111";
+        step["label"] = "legacy-vfx";
+        step["startTime"] = 0.25f;
+        j["steps"] = json::array({step});
+
+        const fs::path path = sequenceTestRoot() / "Pre14.vfVFXSequence";
+        {
+            std::ofstream file(path);
+            REQUIRE(file.is_open());
+            file << j.dump(4);
+        }
+
+        auto loadedOpt = vfx::VFXSequenceAsset::load(path.string());
+        REQUIRE(loadedOpt.has_value());
+        REQUIRE(loadedOpt->steps.size() == 1);
+        const auto& s = loadedOpt->steps[0];
+        CHECK(s.kind == vfx::VFXStepKind::VFX);           // absent kind => VFX (back-compat)
+        CHECK(s.vfxRef.toHexString() == "00000000aaaa1111");
+        CHECK(s.volume == doctest::Approx(1.0f));
+        CHECK(s.pitch == doctest::Approx(1.0f));
+        CHECK(s.spatialized == false);
+        CHECK(s.emitCueName.empty());
+        CHECK_FALSE(s.audioRef.isValid());
+    }
+
+    TEST_CASE("a Sound step with no vfxRef survives load via the kind-aware gate (VK-1496)")
+    {
+        resetSequenceTestRoot();
+
+        // A hand-written 1.4 Sound step with no vfxRef. The pre-1.4 gate would drop it as
+        // "malformed"; the kind-aware gate must keep it (only VFX kind requires vfxRef).
+        json j;
+        j["version"] = "1.4";
+        j["uuid"] = "sound-only";
+        j["name"] = "SoundOnly";
+
+        json step;
+        step["kind"] = static_cast<int>(vfx::VFXStepKind::Sound);
+        step["audioRef"] = "aaaabbbbccccdddd";
+        step["label"] = "boom";
+        step["startTime"] = 0.1f;
+        step["volume"] = 0.5f;
+        step["spatialized"] = false;
+        j["steps"] = json::array({step});
+
+        const fs::path path = sequenceTestRoot() / "SoundOnly.vfVFXSequence";
+        {
+            std::ofstream file(path);
+            REQUIRE(file.is_open());
+            file << j.dump(4);
+        }
+
+        auto loadedOpt = vfx::VFXSequenceAsset::load(path.string());
+        REQUIRE(loadedOpt.has_value());
+        REQUIRE(loadedOpt->steps.size() == 1);
+        const auto& s = loadedOpt->steps[0];
+        CHECK(s.kind == vfx::VFXStepKind::Sound);
+        CHECK_FALSE(s.vfxRef.isValid());
+        CHECK(s.audioRef.toHexString() == "aaaabbbbccccdddd");
+        CHECK(s.volume == doctest::Approx(0.5f));
     }
 
     TEST_CASE("malformed step is skipped, good steps survive, no throw")

@@ -6,6 +6,7 @@
 #include "../../events/vfx/VFXEventNotifications.hpp"
 #include "../../events/physics/SocketEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
+#include "../../events/audio/AudioEvents.hpp" // VK-1496 — Sound-step fan-out (dispatched here only)
 #include "../../data/VFXOverrideApplier.hpp"
 #include "asset/AssetDatabase.hpp"
 #include "vfx/VFXSequenceAsset.hpp"
@@ -340,6 +341,14 @@ namespace services
         if (!step.def)
             return;
 
+        // VK-1496 — spawnStep only ever creates VFX children. Sound/ScriptCue (and unknown)
+        // kinds have no persistent child; their side effects are dispatched from
+        // applyComboEvents on the forward path only. This guard also protects replayTo()'s
+        // DIRECT spawnStep calls (seek/prewarm), keeping typed steps silent during scrub and
+        // suppressing the spurious "missing .vfVFX" warning below.
+        if (step.def->kind != vfx::VFXStepKind::VFX)
+            return;
+
         if (payload)
             step.payload = *payload;
         else
@@ -453,6 +462,74 @@ namespace services
         step.childId = childId;
     }
 
+    void VFXSequenceRuntimeServiceImpl::fireSoundStep(ComboInstance& combo, int stepIndex,
+                                                      const glm::mat4& stepParent)
+    {
+        ActiveStep& step = combo.steps[static_cast<size_t>(stepIndex)];
+        step.spawned = true; // one-shot: mark fired so it is never retried
+        if (!step.def)
+            return;
+
+        const std::string path = step.def->audioRef.resolve();
+        if (path.empty())
+        {
+            reportWarning("[VFXSequence] combo " + std::to_string(combo.id) + " sound step '" +
+                          step.def->label + "' has an unresolved/missing .vfAudio asset; skipping");
+            return;
+        }
+
+        // VK-1496 fire-and-forget one-shot: the AudioHandle is intentionally discarded — the
+        // sound is owned by the audio service and outlives the combo; loop / StopAfterDuration
+        // truncation / following a moving combo are out of scope this pass (see VK-1504). The
+        // audio service may be absent (Tests / headless): EventDispatcher::execute throws with
+        // no handler, so the dispatch is guarded exactly like queryCullState() — tightly, so a
+        // missing handler cannot skip sibling steps dispatched in the same tick.
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        try
+        {
+            if (step.def->spatialized)
+            {
+                ::events::audio::PlaySound3DCommand cmd; // audio events live in global ::events::audio
+                cmd.path = path;
+                cmd.position = glm::vec3(composeStepWorldTransform(step, stepParent)[3]);
+                cmd.params.volume = step.def->volume;
+                cmd.params.pitch = step.def->pitch;
+                cmd.params.loop = false;
+                cmd.params.is3D = true;
+                dispatcher.execute(cmd);
+            }
+            else
+            {
+                ::events::audio::PlayStreamingSoundCommand cmd;
+                cmd.path = path;
+                cmd.params.volume = step.def->volume;
+                cmd.params.pitch = step.def->pitch;
+                cmd.params.loop = false;
+                cmd.params.is3D = false;
+                dispatcher.execute(cmd);
+            }
+        }
+        catch (const std::exception&)
+        {
+            // No audio handler registered (headless / Tests). Silently skip — same contract as
+            // queryCullState()'s "no renderer => no cull".
+        }
+    }
+
+    void VFXSequenceRuntimeServiceImpl::fireScriptCueStep(ComboInstance& combo, int stepIndex)
+    {
+        ActiveStep& step = combo.steps[static_cast<size_t>(stepIndex)];
+        step.spawned = true; // one-shot
+        if (!step.def || step.def->emitCueName.empty())
+            return;
+
+        // Publish the authored cue + payload on the same channel VK-1495's ScriptVFXEventBridge
+        // forwards to mType onComboCue. publish() is fire-and-forget pub/sub and does NOT throw
+        // on zero subscribers, so no try/catch is needed. Publish-only: we deliberately do NOT
+        // call timeline.fireCue(), so a ScriptCue step never relays into other combo steps.
+        publishCueFired(combo, step.def->emitCueName, step.def->cuePayload);
+    }
+
     VFXComboInstanceId VFXSequenceRuntimeServiceImpl::createCombo(const std::string& sequenceAssetPath,
                                                                   const glm::mat4& worldTransform,
                                                                   uint32_t entityId, bool autoDestroyOnFinish,
@@ -523,6 +600,14 @@ namespace services
 
     void VFXSequenceRuntimeServiceImpl::destroyCombo(VFXComboInstanceId id)
     {
+        // VK-1496 — if a combo reference/iterator is currently held (inside update() or
+        // triggerCue(), reachable re-entrantly from a ScriptCue's onComboCue), defer the erase
+        // so it never invalidates the live iterator; drainPendingComboTeardowns() applies it.
+        if (comboTeardownGuard > 0)
+        {
+            pendingComboTeardowns.emplace_back(id, false);
+            return;
+        }
         auto it = combos.find(id);
         if (it == combos.end())
             return;
@@ -581,6 +666,13 @@ namespace services
 
     void VFXSequenceRuntimeServiceImpl::resetCombo(VFXComboInstanceId id)
     {
+        // VK-1496 — defer while a combo reference/iterator is held (see comboTeardownGuard),
+        // so a reset requested re-entrantly from onComboCue can't mutate a combo mid-iteration.
+        if (comboTeardownGuard > 0)
+        {
+            pendingComboTeardowns.emplace_back(id, true);
+            return;
+        }
         auto it = combos.find(id);
         if (it == combos.end())
             return;
@@ -596,6 +688,22 @@ namespace services
             step.stopped = false;
             step.childId = 0;
             step.payload.reset();
+        }
+    }
+
+    void VFXSequenceRuntimeServiceImpl::drainPendingComboTeardowns()
+    {
+        // Runs with comboTeardownGuard == 0, so destroyCombo/resetCombo now execute immediately.
+        // Swap first so the vector is stable while we iterate. A combo already erased by the
+        // update() auto-destroy path is a safe no-op (find fails inside destroyCombo/resetCombo).
+        std::vector<std::pair<VFXComboInstanceId, bool>> pending;
+        pending.swap(pendingComboTeardowns);
+        for (const auto& [id, isReset] : pending)
+        {
+            if (isReset)
+                resetCombo(id);
+            else
+                destroyCombo(id);
         }
     }
 
@@ -639,8 +747,13 @@ namespace services
         const glm::mat4 comboParent = resolveComboParent(combo);
         std::vector<vfx::ComboEvent> events;
         combo.timeline.fireCue(cueName, events);
+        // VK-1496 — guard the reference held across the (script-invoking) publish/apply so a
+        // re-entrant Destroy/Reset of this combo is deferred, not applied to `it` mid-call.
+        ++comboTeardownGuard;
         publishCueFired(combo, cueName, payload);
         applyComboEvents(combo, events, comboParent, &payload);
+        if (--comboTeardownGuard == 0)
+            drainPendingComboTeardowns();
     }
 
     bool VFXSequenceRuntimeServiceImpl::isComboPlaying(VFXComboInstanceId id) const
@@ -662,13 +775,35 @@ namespace services
             ActiveStep& step = combo.steps[static_cast<size_t>(ev.stepIndex)];
             if (ev.kind == vfx::ComboEventKind::SpawnStep)
             {
-                const vfx::VFXCuePayload* payload = manualPayload;
-                if (!payload && ev.sourceMarker >= 0 && combo.data &&
-                    ev.sourceMarker < static_cast<int>(combo.data->eventMarkers.size()))
+                // VK-1496 — fan out by step kind. THIS BRANCH is the single home for typed
+                // side effects. It is reached ONLY from forward paths — update() (:837) and
+                // manual triggerCue() (:643); replayTo()/seek call spawnStep() directly and
+                // never reach here, so Sound/ScriptCue stay silent on scrub/seek/prewarm. Do
+                // NOT move the kind dispatch into spawnStep() or a future spawn-caller
+                // refactor could make seek audible (mirror the transport-safety note in
+                // ScriptVFXEventBridge.cpp).
+                const glm::mat4 stepParent = resolveStepParent(combo, step, comboParent);
+                switch (step.def ? step.def->kind : vfx::VFXStepKind::VFX)
                 {
-                    payload = &combo.data->eventMarkers[static_cast<size_t>(ev.sourceMarker)].payload;
+                case vfx::VFXStepKind::Sound:
+                    fireSoundStep(combo, ev.stepIndex, stepParent);
+                    break;
+                case vfx::VFXStepKind::ScriptCue:
+                    fireScriptCueStep(combo, ev.stepIndex);
+                    break;
+                case vfx::VFXStepKind::VFX:
+                default: // unknown future kinds self-no-op via spawnStep's guard
+                {
+                    const vfx::VFXCuePayload* payload = manualPayload;
+                    if (!payload && ev.sourceMarker >= 0 && combo.data &&
+                        ev.sourceMarker < static_cast<int>(combo.data->eventMarkers.size()))
+                    {
+                        payload = &combo.data->eventMarkers[static_cast<size_t>(ev.sourceMarker)].payload;
+                    }
+                    spawnStep(combo, ev.stepIndex, stepParent, payload);
+                    break;
                 }
-                spawnStep(combo, ev.stepIndex, resolveStepParent(combo, step, comboParent), payload);
+                }
             }
             else // StopStep — the timeline already gated StopAfterDuration + duration + threshold.
             {
@@ -801,6 +936,9 @@ namespace services
         const CachedCull tickCull = queryCullState();
         const CachedTier tickTier = queryQualityTier();
 
+        // VK-1496 — hold combo destroy/reset requests raised re-entrantly by a ScriptCue's
+        // onComboCue until the loop releases `it`; applied by drainPendingComboTeardowns() below.
+        ++comboTeardownGuard;
         for (auto it = combos.begin(); it != combos.end();)
         {
             ComboInstance& combo = it->second;
@@ -882,6 +1020,9 @@ namespace services
             }
             ++it;
         }
+
+        if (--comboTeardownGuard == 0)
+            drainPendingComboTeardowns();
     }
 
     void VFXSequenceRuntimeServiceImpl::setComboPaused(VFXComboInstanceId id, bool paused)

@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace services
@@ -94,6 +95,17 @@ namespace services
         VFXComboInstanceId nextComboId = 1;
         ::events::SubscriptionToken assetSavedToken;
 
+        // VK-1496 — re-entrancy guard. A ScriptCue step publishes VFXComboCueFiredNotification
+        // synchronously (ScriptVFXEventBridge -> mType onComboCue on the update thread). If that
+        // script destroys/resets its own combo, doing it immediately would invalidate the
+        // `combos` iterator/reference held by update() and triggerCue(). While the guard depth
+        // is >0, destroyCombo(id)/resetCombo(id) queue the request and drainPendingComboTeardowns()
+        // applies it once the outermost holder releases the reference. Depth-counted (not a bool)
+        // so a nested triggerCue() invoked from inside onComboCue does not prematurely drain.
+        // Single-threaded (update thread) => a plain int, no atomic.
+        int comboTeardownGuard = 0;
+        std::vector<std::pair<VFXComboInstanceId, bool>> pendingComboTeardowns; // (id, isReset)
+
         // VK-1460: AssetSaved is delivered on the publishing (editor) thread; queue the
         // saved paths here and apply them on the update thread (drained at the top of
         // update()) so sequenceCache/childCache are never mutated concurrently with the
@@ -129,6 +141,11 @@ namespace services
         void invalidateSequence(const std::string& path);
         void spawnStep(ComboInstance& combo, int stepIndex, const glm::mat4& stepParent,
                        const vfx::VFXCuePayload* payload = nullptr);
+        // VK-1496 — typed-step fan-out (Sound + ScriptCue). Plain glm/int signatures so the
+        // header pulls in NO audio events header (audio commands are dispatched from the .cpp
+        // only, avoiding the services::events -> ::events namespace-shadowing pitfall).
+        void fireSoundStep(ComboInstance& combo, int stepIndex, const glm::mat4& stepParent);
+        void fireScriptCueStep(ComboInstance& combo, int stepIndex);
         void applyComboEvents(ComboInstance& combo, const std::vector<vfx::ComboEvent>& events,
                               const glm::mat4& comboParent, const vfx::VFXCuePayload* manualPayload = nullptr);
         // Rewind + deterministic fixed-step replay of the schedule to `targetSeconds`,
@@ -140,6 +157,8 @@ namespace services
         void destroyCombo(ComboInstance& combo);
         void publishCueFired(ComboInstance& combo, const std::string& cueName, const vfx::VFXCuePayload& payload);
         void publishNewlyFiredMarkers(ComboInstance& combo, const std::vector<bool>& before);
+        // VK-1496 — apply combo destroy/reset requests deferred while suppressComboTeardown was set.
+        void drainPendingComboTeardowns();
 
         static VFXEmitterOverrides toOverrides(const vfx::VFXSequenceStep& step);
 

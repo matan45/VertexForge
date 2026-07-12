@@ -21,12 +21,38 @@ namespace vfx
         StopAfterDuration = 1
     };
 
-    // One entry in a combo/sequence: a child .vfVFX placed in time (or behind a
-    // named cue), with an optional local transform, socket attachment, and
-    // name-keyed parameter overrides applied when the step is spawned.
+    // VK-1496 — what a sequence step does when its timeline slot fires. Additive tag:
+    // absent in v1.3 files => VFX (the only pre-v1.4 behavior), so old assets load
+    // unchanged. Decal/Light/CameraShake are intentionally NOT implemented this pass
+    // (camera shake stays a cue + mType script); the enum leaves room for them.
+    enum class VFXStepKind : uint8_t
+    {
+        VFX = 0,        // spawn a child .vfVFX (default; pre-v1.4 behavior)
+        Sound = 1,      // fire-and-forget a .vfAudio one-shot via the audio service
+        ScriptCue = 2   // publish a named cue to gameplay scripts (onComboCue)
+    };
+
+    // Optional gameplay payload carried by an event marker or a ScriptCue step.
+    // Declared before VFXSequenceStep because a ScriptCue step embeds one by value.
+    struct VFXCuePayload
+    {
+        std::optional<glm::vec3> position;
+        std::optional<glm::vec4> color;
+        std::optional<float> scalar;
+        std::vector<VFXParamOverride> custom;
+    };
+
+    // One entry in a combo/sequence, placed in time (or behind a named cue) with an
+    // optional local transform and socket attachment. `kind` selects the payload:
+    //   VFX       - spawn `vfxRef` with name-keyed `overrides` applied.
+    //   Sound     - play `audioRef` (2D, or 3D at the step world transform when
+    //               `spatialized`); fire-and-forget, no retained handle.
+    //   ScriptCue - publish `emitCueName` + `cuePayload` to gameplay scripts.
     struct VFXSequenceStep
     {
-        asset::AssetRef vfxRef;             // GUID ref to an existing .vfVFX
+        VFXStepKind kind = VFXStepKind::VFX; // VK-1496 — payload selector (default = VFX)
+
+        asset::AssetRef vfxRef;             // [VFX] GUID ref to an existing .vfVFX
         std::string label;                  // editor display name
         float startTime = 0.0f;             // seconds from combo play()
         std::string cueName;                // "" => time-driven; else fired by named cue
@@ -38,14 +64,19 @@ namespace vfx
         VFXStepStopMode stopMode = VFXStepStopMode::PlayToCompletion;
         std::string socketName;             // optional per-step socket
         std::vector<VFXParamOverride> overrides;
-    };
 
-    struct VFXCuePayload
-    {
-        std::optional<glm::vec3> position;
-        std::optional<glm::vec4> color;
-        std::optional<float> scalar;
-        std::vector<VFXParamOverride> custom;
+        // VK-1496 [Sound] — fire-and-forget audio one-shot.
+        asset::AssetRef audioRef;           // .vfAudio to play
+        float volume = 1.0f;
+        float pitch = 1.0f;
+        bool spatialized = false;           // false => 2D; true => 3D at step world transform
+
+        // VK-1496 [ScriptCue] — cue published at fire time. `emitCueName` is the cue to
+        // PUBLISH and is deliberately separate from `cueName` (which means "fired BY a
+        // cue" and drives the timeline's cue-driven detection): a ScriptCue step is
+        // time-driven (empty `cueName`) so the timeline fires it at `startTime`.
+        std::string emitCueName;
+        VFXCuePayload cuePayload;
     };
 
     // A one-shot timeline event marker (VK-1451). When the combo clock crosses

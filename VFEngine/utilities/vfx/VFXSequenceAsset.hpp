@@ -12,10 +12,12 @@ namespace vfx
     // 1.2 (VK-1452) replaces scalar/vector override lists with typed overrides
     // and adds marker cue payloads.
     // 1.3 (VK-1453) adds the optional aggregate bounds block.
+    // 1.4 (VK-1496) adds a per-step `kind` tag (VFX/Sound/ScriptCue) plus the Sound
+    // (audioRef/volume/pitch/spatialized) and ScriptCue (emitCueName/cuePayload) fields.
     // The loader stays version-agnostic (tolerant j.value defaults), so 1.0
     // assets load unchanged and 1.1 assets load on older readers minus the new
-    // fields.
-    inline constexpr const char* VFX_SEQUENCE_FORMAT_VERSION = "1.3";
+    // fields. A step with no `kind` key loads as VFX (pre-1.4 behavior).
+    inline constexpr const char* VFX_SEQUENCE_FORMAT_VERSION = "1.4";
 
     class VFXSequenceAsset
     {

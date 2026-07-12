@@ -7,7 +7,7 @@
 //      Phase-4 keys loads with the neutral struct defaults (Auto bounds,
 //      scalability disabled, cull off).
 //   3. .vfVFXSequence round-trip: aggregate bounds survive save/load and the
-//      saved file stamps version "1.3".
+//      saved file stamps the current sequence format version.
 //
 // The seam is the public VFXAsset / VFXSequenceAsset save & load over temp files.
 // No graphics layer, no Vulkan device.
@@ -200,7 +200,7 @@ TEST_SUITE("VFXBoundsSerialization")
         CHECK(loaded.cullEligible == false);
     }
 
-    TEST_CASE(".vfVFXSequence round-trips aggregate bounds; stamps 1.3")
+    TEST_CASE(".vfVFXSequence round-trips aggregate bounds; stamps 1.4")
     {
         resetBoundsTestRoot();
 
@@ -214,7 +214,7 @@ TEST_SUITE("VFXBoundsSerialization")
 
         const fs::path path = boundsTestRoot() / "BoundsSequence.vfVFXSequence";
         REQUIRE(vfx::VFXSequenceAsset::save(original, path.string()));
-        CHECK(readVersionField(path) == "1.3");
+        CHECK(readVersionField(path) == "1.4"); // VK-1496 bumped the sequence format version
 
         auto loadedOpt = vfx::VFXSequenceAsset::load(path.string());
         REQUIRE(loadedOpt.has_value());

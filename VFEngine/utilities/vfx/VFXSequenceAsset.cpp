@@ -403,6 +403,7 @@ namespace vfx
     json VFXSequenceAsset::serializeStep(const VFXSequenceStep& step)
     {
         json j;
+        j["kind"] = static_cast<int>(static_cast<uint8_t>(step.kind)); // VK-1496
         serialization::writeAssetRef(j, "vfxRef", step.vfxRef);
         j["label"] = step.label;
         j["startTime"] = step.startTime;
@@ -420,6 +421,17 @@ namespace vfx
             overrides.push_back(serializeParamOverride(overrideValue));
         j["overrides"] = overrides;
 
+        // VK-1496 — Sound fields (written for all kinds; tolerant reader ignores when unused).
+        serialization::writeAssetRef(j, "audioRef", step.audioRef);
+        j["volume"] = step.volume;
+        j["pitch"] = step.pitch;
+        j["spatialized"] = step.spatialized;
+
+        // VK-1496 — ScriptCue fields. cuePayload only when non-empty (matches marker codec).
+        j["emitCueName"] = step.emitCueName;
+        if (!payloadEmpty(step.cuePayload))
+            j["cuePayload"] = serializePayload(step.cuePayload);
+
         return j;
     }
 
@@ -427,8 +439,13 @@ namespace vfx
     {
         VFXSequenceStep step;
 
+        // VK-1496 — read `kind` BEFORE the vfxRef gate. Absent in v1.3 files => VFX, so
+        // the gate stays byte-identical for old assets. Only VFX steps require a vfxRef;
+        // Sound/ScriptCue (and unknown future kinds) legitimately have none.
+        step.kind = static_cast<VFXStepKind>(static_cast<uint8_t>(j.value("kind", 0)));
         step.vfxRef = serialization::readAssetRef(j, "vfxRef");
-        if (!step.vfxRef.isValid())
+        step.audioRef = serialization::readAssetRef(j, "audioRef");
+        if (step.kind == VFXStepKind::VFX && !step.vfxRef.isValid())
         {
             return std::nullopt;
         }
@@ -504,6 +521,14 @@ namespace vfx
                 }
             }
         }
+
+        // VK-1496 — Sound + ScriptCue fields (tolerant; absent keys keep struct defaults).
+        step.volume = j.value("volume", 1.0f);
+        step.pitch = j.value("pitch", 1.0f);
+        step.spatialized = j.value("spatialized", false);
+        step.emitCueName = j.value("emitCueName", "");
+        if (j.contains("cuePayload"))
+            step.cuePayload = deserializePayload(j["cuePayload"]);
 
         return step;
     }

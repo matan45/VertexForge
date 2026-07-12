@@ -165,14 +165,53 @@ namespace vfx::validation
         {
             const VFXSequenceStep& step = sequence.steps[static_cast<size_t>(i)];
 
-            if (!step.vfxRef.isValid())
+            // VK-1496 — kind-aware reference checks. Only VFX steps require a .vfVFX; a
+            // ref-less Sound/ScriptCue step is valid, so the pre-1.4 blanket Error would be a
+            // false positive (and would flip the whole report to hasErrors()).
+            switch (step.kind)
             {
-                detail::addStep(report, Severity::Error, i, step, "missing .vfVFX reference.");
-            }
-            else if (context.checkRefResolvable && step.vfxRef.resolve().empty())
-            {
-                detail::addStep(report, Severity::Warning, i, step,
-                                ".vfVFX reference does not currently resolve.");
+            case VFXStepKind::VFX:
+                if (!step.vfxRef.isValid())
+                {
+                    detail::addStep(report, Severity::Error, i, step, "missing .vfVFX reference.");
+                }
+                else if (context.checkRefResolvable && step.vfxRef.resolve().empty())
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    ".vfVFX reference does not currently resolve.");
+                }
+                break;
+            case VFXStepKind::Sound:
+                if (!step.audioRef.isValid())
+                {
+                    detail::addStep(report, Severity::Error, i, step, "missing .vfAudio reference.");
+                }
+                else if (context.checkRefResolvable && step.audioRef.resolve().empty())
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    ".vfAudio reference does not currently resolve.");
+                }
+                if (step.spatialized && step.localPosition == glm::vec3(0.0f) &&
+                    detail::trim(step.socketName).empty())
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    "spatialized sound has no local offset or socket; it plays at the combo origin.");
+                }
+                if (step.loop)
+                {
+                    detail::addStep(report, Severity::Info, i, step,
+                                    "loop is ignored for Sound steps in this version.");
+                }
+                break;
+            case VFXStepKind::ScriptCue:
+                if (detail::trim(step.emitCueName).empty())
+                {
+                    detail::addStep(report, Severity::Error, i, step, "ScriptCue step has an empty cue name.");
+                }
+                break;
+            default:
+                detail::addStep(report, Severity::Warning, i, step, "unknown step kind is ignored at runtime.");
+                break;
             }
 
             if (step.startTime < 0.0f)
@@ -235,7 +274,8 @@ namespace vfx::validation
                 }
             }
 
-            detail::validateOverrides(report, step.overrides, i, step);
+            if (step.kind == VFXStepKind::VFX) // overrides only apply to VFX children
+                detail::validateOverrides(report, step.overrides, i, step);
         }
 
         for (const auto& [cue, steps] : exactCueSteps)
