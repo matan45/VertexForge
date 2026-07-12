@@ -77,7 +77,7 @@ namespace services
             [this](const events::vfxsequence::CreateVFXComboInstanceCommand& cmd)
             {
                 return createCombo(cmd.sequenceAssetPath, cmd.worldTransform, cmd.entityId, cmd.autoDestroyOnFinish,
-                                   cmd.seed, cmd.prewarm, cmd.playbackRate, cmd.fixedStep);
+                                   cmd.seed, cmd.prewarm, cmd.playbackRate, cmd.fixedStep, cmd.loopSequence);
             });
 
         dispatcher.registerCommandHandler<events::vfxsequence::DestroyVFXComboInstanceCommand>(
@@ -534,7 +534,8 @@ namespace services
                                                                   const glm::mat4& worldTransform,
                                                                   uint32_t entityId, bool autoDestroyOnFinish,
                                                                   uint32_t seed, float prewarm,
-                                                                  float playbackRate, float fixedStep)
+                                                                  float playbackRate, float fixedStep,
+                                                                  bool loopSequence)
     {
         auto data = loadSequence(sequenceAssetPath);
         if (!data || data->steps.empty())
@@ -550,6 +551,10 @@ namespace services
         combo.data = data;
         combo.parentTransform = worldTransform;
         combo.autoDestroyOnFinish = autoDestroyOnFinish;
+        // VK-1498 — whole-sequence loop is a per-placement decision (from the component `loop`);
+        // stableLoop is an intrinsic authoring property of the sequence content, read once here.
+        combo.loopSequence = loopSequence;
+        combo.stableLoop = data->stableLoop;
         if (entityId != 0)
             combo.socketEntity = EntityHandle{static_cast<uint64_t>(entityId)};
 
@@ -909,6 +914,99 @@ namespace services
         }
     }
 
+    void VFXSequenceRuntimeServiceImpl::restartComboForLoop(ComboInstance& combo)
+    {
+        // VK-1498 — completion is defined as `allStepsSpawned && !anyLive`, so there are no live
+        // children to destroy here. Rewind the schedule (stableLoop keeps the exact VK-1497
+        // variety) or re-seed for fresh variety, then clear per-step state. The NEXT forward
+        // update() advance re-spawns the t=0 steps and re-fires Sound/ScriptCue/markers through
+        // applyComboEvents (so cues re-fire once per iteration). Deliberately no child destroy, no
+        // direct respawn, no notification publish — this is a pure in-place mutation, which is safe
+        // under comboTeardownGuard (it never erases/emplaces the `combos` map).
+        if (combo.stableLoop || !combo.data)
+        {
+            combo.timeline.rewind();
+        }
+        else
+        {
+            combo.loopIteration++;
+            const uint32_t nextSeed = vfx::VFXComboTimeline::deriveLoopSeed(combo.seed, combo.loopIteration);
+            combo.timeline.reset(*combo.data, nextSeed);
+        }
+        for (auto& step : combo.steps)
+        {
+            step.spawned = false;
+            step.stopped = false;
+            step.childId = 0;
+            step.frozenByCull = false;
+            step.payload.reset();
+        }
+        combo.accumulator = 0.0f;
+        combo.playing = true;
+    }
+
+    bool VFXSequenceRuntimeServiceImpl::computeComboCull(const ComboInstance& combo,
+                                                        const glm::mat4& comboParent) const
+    {
+        // VK-1498 — whole-combo bounds cull applies only to looping combos with a valid cull state
+        // and authored Fixed (non-degenerate) bounds. A sequence has N child steps rather than one
+        // emitter graph, so Auto/degenerate bounds are not cheaply resolvable here => never cull
+        // (the combo runs exactly as before — safe default). Reuses the once-per-tick cachedCull
+        // snapshot; no extra query.
+        if (!combo.loopSequence || !combo.cachedCull.valid || !combo.data)
+            return false;
+
+        const vfx::VFXBounds& b = combo.data->bounds;
+        const bool fixedUsable = b.mode == vfx::VFXBoundsMode::Fixed &&
+                                 (b.extents.x > 0.0f || b.extents.y > 0.0f || b.extents.z > 0.0f);
+        if (!fixedUsable)
+            return false;
+
+        const math::AABB local(b.center - b.extents, b.center + b.extents);
+        const math::AABB world = local.getTransformed(comboParent);
+        math::Frustum frustum;
+        frustum.extractFromMatrix(combo.cachedCull.viewProj);
+        if (!frustum.intersectsAABB(world))
+            return true; // outside the frustum
+
+        // Mirror spawnStep's distance leg: only checked when inside the frustum.
+        if (combo.cachedCull.distanceCullEnabled && combo.cachedCull.maxDrawDistance > 0.0f)
+        {
+            const float dist = glm::distance(world.getCenter(), combo.cachedCull.cameraPos);
+            return dist > combo.cachedCull.maxDrawDistance;
+        }
+        return false;
+    }
+
+    void VFXSequenceRuntimeServiceImpl::setComboChildrenFrozen(ComboInstance& combo, bool frozen)
+    {
+        // VK-1498 — non-destructive freeze/thaw of the combo's live children for the whole-combo
+        // bounds cull. Stop => renderer active=false (halts BOTH sim and draw); Play => active=true.
+        // Never routes through stopCombo(), which DESTROYS looping children. Gated on !stopped so a
+        // step the timeline already stopped (StopAfterDuration) is never revived, and tracked via
+        // frozenByCull so re-entry Plays back exactly the set that was frozen.
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        for (auto& step : combo.steps)
+        {
+            if (step.childId == 0 || step.stopped)
+                continue;
+            if (frozen)
+            {
+                events::vfxruntime::StopVFXInstanceCommand stopCmd;
+                stopCmd.instanceId = step.childId;
+                dispatcher.execute(stopCmd);
+                step.frozenByCull = true;
+            }
+            else if (step.frozenByCull)
+            {
+                events::vfxruntime::PlayVFXInstanceCommand playCmd;
+                playCmd.instanceId = step.childId;
+                dispatcher.execute(playCmd);
+                step.frozenByCull = false;
+            }
+        }
+    }
+
     void VFXSequenceRuntimeServiceImpl::update(float deltaTime)
     {
         // VK-1460: apply AssetSaved invalidations queued from the editor thread here, on the
@@ -945,6 +1043,23 @@ namespace services
             combo.cachedCull = tickCull;
             combo.cachedTier = tickTier;
             const glm::mat4 comboParent = resolveComboParent(combo);
+
+            // VK-1498 — whole-combo bounds cull. On the cull transition, Stop (freeze+hide) or
+            // Play back the live children; while culled, skip the ENTIRE tick (advance, cascade,
+            // reap, completion) so an off-screen looping combo stops churning. Never destroyed;
+            // resumes on re-entry. Skipping reap is required: a Stopped child reports
+            // IsVFXInstancePlaying==false, which would zero its childId and lose it on resume.
+            const bool nowCulled = computeComboCull(combo, comboParent);
+            if (nowCulled != combo.comboCulled)
+            {
+                setComboChildrenFrozen(combo, nowCulled);
+                combo.comboCulled = nowCulled;
+            }
+            if (combo.comboCulled)
+            {
+                ++it;
+                continue;
+            }
 
             if (combo.playing && !combo.paused && deltaTime > 0.0f)
             {
@@ -1010,7 +1125,16 @@ namespace services
             const bool allSpawned = combo.timeline.allStepsSpawned();
 
             if (combo.playing && allSpawned && !anyLive)
-                combo.playing = false;
+            {
+                // VK-1498 — a looping combo replays its whole schedule instead of idling: the next
+                // forward advance re-spawns t=0 steps and re-fires cues (markers once per iteration).
+                // Non-looping combos stop and (if autoDestroyOnFinish) are erased below. A restarted
+                // combo keeps playing=true / elapsed=0, so the auto-destroy guard never erases it.
+                if (combo.loopSequence)
+                    restartComboForLoop(combo);
+                else
+                    combo.playing = false;
+            }
 
             if (!combo.playing && allSpawned && !anyLive && combo.autoDestroyOnFinish &&
                 combo.timeline.elapsed() > 0.0f)

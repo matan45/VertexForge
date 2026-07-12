@@ -176,6 +176,18 @@ namespace vfx
             return h ? h : 1u;
         }
 
+        // VK-1498 — deterministic per-loop-iteration seed stream for whole-sequence looping.
+        // Salted with a distinct stream constant so a loop-iteration seed can never coincide
+        // with a child seed (deriveSeed(comboSeed, stepIndex)); reusing the same finalizer keeps
+        // it well-avalanched and never-zero. Iteration 0 is intentionally NOT special-cased here
+        // (the runtime keeps the raw combo seed for the first cycle so it matches the editor
+        // preview, and only calls this for iteration >= 1).
+        static uint32_t deriveLoopSeed(uint32_t comboSeed, uint32_t iteration)
+        {
+            static constexpr uint32_t kLoopIterationStream = 0x4C4F4F50u; // 'LOOP'
+            return deriveSeed(comboSeed ^ kLoopIterationStream, static_cast<int>(iteration));
+        }
+
         // VK-1497 — the single source of truth for "which steps play this run". A pure
         // function of (data, seed): ungrouped steps roll their independent `probability`;
         // each variantGroup (>=0) yields exactly ONE uniformly-chosen member that always

@@ -148,8 +148,22 @@ namespace
     struct MockVFXRuntime
     {
         services::VFXInstanceId nextId = 5000;
+        services::VFXInstanceId lastCreatedId = 0;
         std::vector<std::string> createPaths;
         std::set<services::VFXInstanceId> live;
+        // VK-1498 — record Stop/Play/Destroy so the whole-combo cull's freeze/resume is observable.
+        std::vector<services::VFXInstanceId> stops;
+        std::vector<services::VFXInstanceId> plays;
+        std::vector<services::VFXInstanceId> destroys;
+
+        int countId(const std::vector<services::VFXInstanceId>& v, services::VFXInstanceId id) const
+        {
+            int n = 0;
+            for (auto x : v)
+                if (x == id)
+                    ++n;
+            return n;
+        }
 
         void install()
         {
@@ -158,20 +172,25 @@ namespace
                 [this](const vfxruntime::CreateVFXInstanceCommand& c) -> services::VFXInstanceId
                 {
                     const services::VFXInstanceId id = nextId++;
+                    lastCreatedId = id;
                     createPaths.push_back(c.params.vfxAssetPath);
                     live.insert(id);
                     return id;
                 });
             d.registerCommandHandler<vfxruntime::DestroyVFXInstanceCommand>(
-                [this](const vfxruntime::DestroyVFXInstanceCommand& c) { live.erase(c.instanceId); });
+                [this](const vfxruntime::DestroyVFXInstanceCommand& c)
+                {
+                    destroys.push_back(c.instanceId);
+                    live.erase(c.instanceId);
+                });
             d.registerCommandHandler<vfxruntime::SetVFXInstanceTransformCommand>(
                 [](const vfxruntime::SetVFXInstanceTransformCommand&) {});
             d.registerCommandHandler<vfxruntime::ApplyVFXInstanceOverridesCommand>(
                 [](const vfxruntime::ApplyVFXInstanceOverridesCommand&) {});
             d.registerCommandHandler<vfxruntime::PlayVFXInstanceCommand>(
-                [](const vfxruntime::PlayVFXInstanceCommand&) {});
+                [this](const vfxruntime::PlayVFXInstanceCommand& c) { plays.push_back(c.instanceId); });
             d.registerCommandHandler<vfxruntime::StopVFXInstanceCommand>(
-                [](const vfxruntime::StopVFXInstanceCommand&) {});
+                [this](const vfxruntime::StopVFXInstanceCommand& c) { stops.push_back(c.instanceId); });
             d.registerQueryHandler<vfxruntime::IsVFXInstancePlayingQuery>(
                 [this](const vfxruntime::IsVFXInstancePlayingQuery& q) -> bool
                 {
@@ -454,5 +473,66 @@ TEST_SUITE("VFXPreCull")
         REQUIRE(mock.createPaths.size() == 1);
         CHECK(normPath(mock.createPaths.back()) == normPath(childPath));
         CHECK(culledSpawns() == 0);
+    }
+
+    // VK-1498 — whole-combo bounds cull: a LOOPING combo with authored Fixed bounds pauses
+    // (children Stopped, tick frozen) when it leaves the view and resumes on re-entry, never
+    // destroyed. This is distinct from the per-step spawn cull above (which exempts looping steps).
+    TEST_CASE("VK-1498: a looping combo pauses its children when culled and resumes on re-entry")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        // A single looping child (exempt from the per-step spawn cull, so it always spawns) sitting
+        // at the combo origin. cullEligible is irrelevant here — the gate is the SEQUENCE bounds.
+        const std::string childPath = saveChildVFX("child_loop_cull.vfVFX", /*cullEligible=*/false);
+        const auto childRef = makeChildRef(0xC010, childPath);
+        vfx::VFXSequenceData seq;
+        seq.name = "loop_cull";
+        seq.steps.push_back(makeStep(childRef, glm::vec3(0.0f), /*loop=*/true, ""));
+        seq.bounds.mode = vfx::VFXBoundsMode::Fixed; // authored whole-combo bounds => cull can resolve
+        seq.bounds.center = glm::vec3(0.0f);
+        seq.bounds.extents = glm::vec3(1.0f);
+        const std::string seqPath = saveSequence("LoopCull.vfVFXSequence", seq);
+
+        services::VFXSequenceRuntimeServiceImpl svc;
+        svc.registerEventHandlers();
+        auto cleanup = makeScopeExit(unregisterAll);
+
+        // In view: bounds at world (0,0,-10) are inside the forward frustum, no distance gate.
+        installCullState(frustumCullState());
+        const glm::mat4 parent = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -10.0f));
+        const auto combo = svc.createCombo(seqPath, parent, 0, /*autoDestroyOnFinish*/ false,
+                                           0u, -1.0f, -1.0f, -1.0f, /*loopSequence*/ true);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+
+        // Tick 1 (in view): the looping child spawns and is not stopped.
+        svc.update(0.1f);
+        REQUIRE(mock.createPaths.size() == 1);
+        const services::VFXInstanceId childId = mock.lastCreatedId;
+        CHECK(mock.stops.empty());
+
+        // Camera leaves: same frustum, but a 1-unit draw distance culls the 10-unit-away combo.
+        auto outState = frustumCullState();
+        outState.distanceCullEnabled = true;
+        outState.maxDrawDistance = 1.0f;
+        installCullState(outState);
+
+        const size_t createsBeforeCull = mock.createPaths.size();
+        svc.update(0.1f); // enter cull: Stop the live child, then freeze the whole tick
+        CHECK(mock.countId(mock.stops, childId) == 1); // child frozen (stopped), not destroyed
+        CHECK(mock.destroys.empty());
+        svc.update(0.1f); // still culled: fully frozen — no re-spawn churn off-screen
+        CHECK(mock.createPaths.size() == createsBeforeCull);
+        CHECK(mock.countId(mock.stops, childId) == 1); // edge-triggered: not Stopped again every tick
+
+        // Camera returns: resume Plays the same child back; nothing was ever destroyed.
+        installCullState(frustumCullState());
+        svc.update(0.1f);
+        CHECK(mock.countId(mock.plays, childId) >= 1);
+        CHECK(mock.destroys.empty());
+        CHECK(mock.createPaths.size() == 1); // the same child resumed — no new instance created
     }
 }

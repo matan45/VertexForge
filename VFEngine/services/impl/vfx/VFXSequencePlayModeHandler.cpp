@@ -225,6 +225,7 @@ namespace services
         createCmd.worldTransform = worldTransform.worldMatrix;
         createCmd.entityId = static_cast<uint32_t>(entity);
         createCmd.autoDestroyOnFinish = !loop; // looping standalone combos persist until exit-play
+        createCmd.loopSequence = loop;         // VK-1498 — and replay the whole schedule each cycle
         const VFXComboInstanceId comboId = dispatcher.execute(createCmd);
         if (comboId == 0)
             return;

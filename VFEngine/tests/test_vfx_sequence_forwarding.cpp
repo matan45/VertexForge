@@ -1040,4 +1040,68 @@ TEST_SUITE("VFXSequenceForwarding")
         REQUIRE(mock.creates.size() == 1);
         CHECK(mock.creates[0].path == "assets/vfx/pw.vfVFX");
     }
+
+    // -------- VK-1498: whole-sequence loop replays without a Destroy/Create storm --------
+    TEST_CASE("a looping combo replays each cycle (one Create set per cycle, no Destroys) and re-fires cues")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        // Two one-shot steps + a marker. One-shot children are provider-auto-destroyed (simulated
+        // by erasing them from mock.live), so the combo genuinely completes each cycle and loops.
+        vfx::VFXSequenceData data;
+        data.name = "loopcombo";
+        {
+            vfx::VFXSequenceStep s0;
+            s0.vfxRef = makeResolvingRef(0xF0D0, "assets/vfx/l0.vfVFX");
+            s0.startTime = 0.0f;
+            s0.loop = false;
+            data.steps.push_back(s0);
+
+            vfx::VFXSequenceStep s1;
+            s1.vfxRef = makeResolvingRef(0xF0D1, "assets/vfx/l1.vfVFX");
+            s1.startTime = 0.5f;
+            s1.loop = false;
+            data.steps.push_back(s1);
+        }
+        data.eventMarkers.push_back(vfx::VFXSequenceEventMarker{0.3f, "beat"});
+        std::string path = saveSequence("Combo_Loop.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        // loopSequence = true (9th arg); autoDestroyOnFinish=false so the combo is never erased.
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, /*autoDestroyOnFinish*/ false,
+                                     /*seed*/ 0u, /*prewarm*/ -1.0f, /*rate*/ -1.0f, /*fixedStep*/ -1.0f,
+                                     /*loopSequence*/ true);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+
+        auto runOneCycle = [&]()
+        {
+            svc.update(0.1f);                        // step0 @0 spawns
+            REQUIRE(!mock.creates.empty());
+            mock.live.erase(mock.creates.back().id); // step0 child finishes (provider auto-destroy)
+            svc.update(0.5f);                        // elapsed 0.6: step1 spawns, marker@0.3 crosses
+            mock.live.erase(mock.creates.back().id); // step1 child finishes
+            svc.update(0.1f);                        // reap step1 -> complete -> restart (no new create)
+        };
+
+        runOneCycle();
+        CHECK(mock.creates.size() == 2);  // exactly one Create per step, once this cycle
+        CHECK(notifications.size() == 1); // marker fired once this cycle
+        CHECK(svc.isComboPlaying(combo)); // restarted, still playing
+
+        runOneCycle();
+        CHECK(mock.creates.size() == 4);  // +2 for the second cycle (a replay, NOT a per-frame storm)
+        CHECK(notifications.size() == 2); // the marker re-fires exactly once per iteration
+
+        // The crux: looping must never tear down + recreate. One-shot children self-destruct
+        // provider-side; the loop restart destroys nothing, so no DestroyVFXInstance is ever issued.
+        CHECK(mock.destroys.empty());
+    }
 }

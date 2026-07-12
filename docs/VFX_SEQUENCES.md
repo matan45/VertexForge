@@ -3,9 +3,9 @@
 Compose several existing `.vfVFX` effects into one **timed combo** and play it
 standalone, from script, or automatically from an animation event. (VK-1425.)
 
-> **Scope:** combos run in the **editor (Play mode + the sequence editor preview)**.
-> Playing combos in an exported/shipped game is a tracked follow-up. Everything below
-> is for editor play/preview.
+> **Scope:** combos run in **editor Play mode, the sequence editor preview, and the
+> shipped/exported Runtime** (`RuntimeHandler` constructs the same
+> `VFXSequenceRuntimeServiceImpl` + `VFXSequencePlayModeHandler` the editor uses).
 
 ---
 
@@ -61,7 +61,23 @@ double-click it to open the **VFX Sequence Editor**.
 Add a **VFX Sequence** component to an entity:
 
 - **`sequenceRef` + `autoPlay`** → the combo plays when the entity enters Play mode
-  (optionally attached to a `socketName`, looped with `loop`).
+  (optionally attached to a `socketName`).
+- **`loop`** → when set, the whole sequence **replays** each time it finishes: the
+  timeline rewinds and the next tick re-spawns the steps and **re-fires the sounds,
+  script cues, and event markers** (each marker fires exactly once per iteration). This
+  is the "burning building" case — no babysitting script needed. Notes:
+  - By default each loop **re-rolls** any per-step variety (`probability` / `variantGroup`,
+    see §2) for variation; set the sequence's **Stable Loop** flag (asset setting) to
+    replay the *identical* variant every iteration. Either way the loop is fully
+    deterministic from the combo seed.
+  - A sequence whose *steps* are themselves looping emitters (per-step **Loop**) never
+    "finishes", so it is already continuous — whole-sequence replay simply never triggers.
+  - **Off-screen looping combos pause** (children stopped + hidden, the tick frozen) and
+    resume on re-entry — they are never destroyed. This whole-combo culling only kicks in
+    when the sequence has **authored Fixed bounds** (use *Recalc Bounds* in the editor);
+    with Auto/empty bounds the loop runs unculled. (Resume currently restarts a frozen
+    emitter's emission — a small visual pop on ambient effects; a non-resetting resume is
+    a tracked graphics follow-up.)
 - **`triggers[]`** → a map of `eventName → sequence (+ socket)`. When an authored
   animation notify event of that name fires on the entity, the engine spawns +
   attaches the combo automatically. **No script required.**

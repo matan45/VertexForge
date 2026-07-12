@@ -32,6 +32,10 @@ namespace services::events::vfxsequence
         float prewarm = -1.0f;
         float playbackRate = -1.0f;
         float fixedStep = -1.0f;
+        // VK-1498 — whole-sequence looping: replay the entire schedule at completion (rewind +
+        // re-fire cues/sounds each iteration) instead of merely staying alive. Orthogonal to
+        // autoDestroyOnFinish. Trailing/defaulted so existing producers are unaffected.
+        bool loopSequence = false;
         std::string_view getName() const override { return "CreateVFXComboInstance"; }
     };
 

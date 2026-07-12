@@ -33,6 +33,10 @@ namespace services
             VFXInstanceId childId = 0;
             bool spawned = false;
             bool stopped = false;
+            // VK-1498 — this child was Stopped (frozen+hidden) by the whole-combo bounds cull.
+            // Records exactly the set to Play back on re-entry so we never revive a child the
+            // timeline legitimately stopped (StopAfterDuration) or one that already finished.
+            bool frozenByCull = false;
             std::optional<vfx::VFXCuePayload> payload;
         };
 
@@ -64,6 +68,17 @@ namespace services
             glm::mat4 parentTransform{1.0f};
             bool playing = false;
             bool autoDestroyOnFinish = true;
+            // VK-1498 — whole-sequence looping. `loopSequence` (from the component `loop` flag,
+            // threaded via the create command) makes the combo rewind + replay its whole
+            // schedule at completion instead of idling. `stableLoop` (asset-authored) keeps the
+            // VK-1497 variety identical each iteration (rewind); otherwise each loop re-seeds for
+            // fresh variety. `loopIteration` drives the deterministic per-iteration seed stream.
+            // `comboCulled` is the whole-combo bounds-cull freeze state (children Stopped, tick
+            // frozen) — distinct from `paused` so a user pause and a cull can't fight each other.
+            bool loopSequence = false;
+            bool stableLoop = false;
+            uint32_t loopIteration = 0;
+            bool comboCulled = false;
             // Entity used to resolve sockets (combo-level attach and per-step sockets).
             EntityHandle socketEntity;
             bool attached = false;       // whole-combo socket attach
@@ -151,6 +166,16 @@ namespace services
         // Rewind + deterministic fixed-step replay of the schedule to `targetSeconds`,
         // then (re)spawn only the steps live at that time. Used by seek and prewarm.
         void replayTo(ComboInstance& combo, float targetSeconds);
+        // VK-1498 — on completion of a looping combo, rewind (stableLoop) or re-seed+reset
+        // (variety) the schedule and clear per-step state so the next forward update() re-spawns
+        // and re-fires cues. No child destroy (none live at completion), no respawn, no publish.
+        void restartComboForLoop(ComboInstance& combo);
+        // VK-1498 — whole-combo bounds cull: true when a looping combo with authored Fixed bounds
+        // is outside the cached frustum/distance. Auto/degenerate bounds or no cull state => false.
+        bool computeComboCull(const ComboInstance& combo, const glm::mat4& comboParent) const;
+        // VK-1498 — Stop (freeze+hide) or Play back the live, non-stopped children on a cull
+        // transition, tracking exactly the frozen set via ActiveStep::frozenByCull.
+        void setComboChildrenFrozen(ComboInstance& combo, bool frozen);
         glm::mat4 resolveComboParent(ComboInstance& combo);
         glm::mat4 resolveStepParent(ComboInstance& combo, const ActiveStep& step, const glm::mat4& comboParent);
         glm::mat4 composeStepWorldTransform(const ActiveStep& step, const glm::mat4& stepParent) const;
@@ -170,10 +195,13 @@ namespace services
 
         // VK-1451: seed/prewarm/playbackRate/fixedStep are "use asset default" sentinels
         // (seed==0, the floats <0) unless the caller overrides them.
+        // VK-1498: loopSequence makes the whole combo rewind + replay its schedule at
+        // completion (the component `loop` flag). Orthogonal to autoDestroyOnFinish.
         VFXComboInstanceId createCombo(const std::string& sequenceAssetPath, const glm::mat4& worldTransform,
                                        uint32_t entityId, bool autoDestroyOnFinish,
                                        uint32_t seed = 0, float prewarm = -1.0f,
-                                       float playbackRate = -1.0f, float fixedStep = -1.0f);
+                                       float playbackRate = -1.0f, float fixedStep = -1.0f,
+                                       bool loopSequence = false);
         void destroyCombo(VFXComboInstanceId id);
         void playCombo(VFXComboInstanceId id);
         void stopCombo(VFXComboInstanceId id);

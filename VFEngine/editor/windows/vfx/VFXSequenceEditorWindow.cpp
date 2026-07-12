@@ -411,6 +411,18 @@ namespace windows
         ImGui::SetItemTooltip("Union each step's bounds (transformed by its placement) and capture as the sequence's Fixed bounds.");
         ImGui::SameLine();
         ImGui::Checkbox("Show Bounds", &showBounds);
+        if (data)
+        {
+            // VK-1498 — asset-level loop variety flag. Only meaningful when the sequence is
+            // looped at runtime (VFXSequenceComponent::loop); ignored otherwise.
+            ImGui::SameLine();
+            ImGui::TextDisabled("|");
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Stable Loop", &data->stableLoop))
+                isDirty = true;
+            ImGui::SetItemTooltip("When this sequence is looped at runtime, replay the identical variant every "
+                                  "iteration.\nOff (default) = re-roll probability / variant-group variety each loop.");
+        }
 
         ImGui::Separator();
     }

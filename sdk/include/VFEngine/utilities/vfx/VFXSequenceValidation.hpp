@@ -355,6 +355,26 @@ namespace vfx::validation
             }
         }
 
+        // VK-1498 — stableLoop only has an effect when there is VK-1497 variety to keep stable.
+        if (sequence.stableLoop)
+        {
+            bool hasVariety = !variantGroups.empty();
+            for (const auto& step : sequence.steps)
+            {
+                if (step.probability < 1.0f)
+                {
+                    hasVariety = true;
+                    break;
+                }
+            }
+            if (!hasVariety)
+            {
+                detail::add(report, Severity::Info, -1,
+                            "Stable Loop is set but no step has probability < 1 or a variant group; "
+                            "it has no effect.");
+            }
+        }
+
         return report;
     }
 }

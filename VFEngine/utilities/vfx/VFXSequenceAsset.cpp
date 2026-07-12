@@ -624,6 +624,9 @@ namespace vfx
                     data.bounds.extents = jsonToVec3(boundsJson["extents"], glm::vec3(0.0f));
             }
 
+            // VK-1498 — stable-loop flag (tolerant; absent => false = re-roll variety each loop).
+            data.stableLoop = j.value("stableLoop", false);
+
             if (warningCount > 0)
                 vfLogWarning("Loaded VFX sequence '{}' with {} warning(s)", data.name, warningCount);
 
@@ -682,6 +685,9 @@ namespace vfx
             boundsJson["extents"] = vec3ToJson(data.bounds.extents);
             j["bounds"] = std::move(boundsJson);
         }
+
+        // VK-1498 — stable-loop flag.
+        j["stableLoop"] = data.stableLoop;
 
         try
         {

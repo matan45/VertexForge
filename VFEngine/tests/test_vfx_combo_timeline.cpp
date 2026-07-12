@@ -456,4 +456,91 @@ TEST_SUITE("VFXComboTimeline")
         CHECK(sawSkip);      // and is skipped for others
         CHECK(winnerVaried); // the group winner isn't constant across seeds
     }
+
+    // ============================================================
+    // VK-1498 — whole-sequence looping. The loop lives in the runtime service
+    // (restartComboForLoop) but its two primitives are the timeline's rewind() (stableLoop) and
+    // deriveLoopSeed()+reset() (variety). These verify markers re-fire exactly once per iteration
+    // and that the per-iteration seed stream is deterministic yet varied.
+    // ============================================================
+
+    TEST_CASE("VK-1498: deriveLoopSeed is stable, distinct per iteration, never zero, decorrelated")
+    {
+        CHECK(VFXComboTimeline::deriveLoopSeed(1234u, 1) == VFXComboTimeline::deriveLoopSeed(1234u, 1));
+        CHECK(VFXComboTimeline::deriveLoopSeed(1234u, 1) != VFXComboTimeline::deriveLoopSeed(1234u, 2));
+        CHECK(VFXComboTimeline::deriveLoopSeed(1u, 1) != VFXComboTimeline::deriveLoopSeed(2u, 1));
+        for (uint32_t i = 0; i < 64; ++i)
+            CHECK(VFXComboTimeline::deriveLoopSeed(0u, i) != 0u);
+        // A loop-iteration seed must not coincide with a child seed at the same index.
+        CHECK(VFXComboTimeline::deriveLoopSeed(1234u, 3) != VFXComboTimeline::deriveSeed(1234u, 3));
+    }
+
+    TEST_CASE("VK-1498: rewind loop re-fires the marker exactly once per iteration and repeats the schedule")
+    {
+        VFXSequenceData data;
+        data.steps.push_back(timeStep(0.0f));    // 0 — time-driven
+        data.steps.push_back(cueStep("boom"));   // 1 — cue-driven (fired by the marker)
+        data.eventMarkers.push_back(VFXSequenceEventMarker{0.3f, "boom"});
+
+        VFXComboTimeline tl;
+        tl.reset(data, 7u);
+
+        for (int iter = 0; iter < 3; ++iter)
+        {
+            std::vector<ComboEvent> ev;
+            tl.advance(1.0f, ev); // cross both the time step and the marker
+            const std::vector<int> spawns = spawnIndices(ev);
+            CHECK(std::find(spawns.begin(), spawns.end(), 0) != spawns.end()); // time step spawned
+            CHECK(std::find(spawns.begin(), spawns.end(), 1) != spawns.end()); // cue step via marker
+            REQUIRE(tl.firedMarkers().size() == 1);
+            CHECK(tl.firedMarkers()[0]); // marker fired exactly once this iteration
+            CHECK(tl.allStepsSpawned());
+
+            // Loop restart's stableLoop primitive: rewind() clears fired/spawned so the next
+            // iteration re-fires from t=0 (mirrors VFXSequenceRuntimeServiceImpl::restartComboForLoop).
+            tl.rewind();
+            CHECK(tl.elapsed() == doctest::Approx(0.0f));
+            CHECK_FALSE(tl.firedMarkers()[0]);
+            CHECK_FALSE(tl.allStepsSpawned());
+        }
+    }
+
+    TEST_CASE("VK-1498: re-seeding per iteration varies the variant winner; a stable seed keeps it fixed")
+    {
+        VFXSequenceData data;
+        for (int k = 0; k < 3; ++k)
+        {
+            VFXSequenceStep s = timeStep(0.0f);
+            s.variantGroup = 5;
+            data.steps.push_back(s);
+        }
+        const uint32_t base = 20260712u;
+
+        // Variety path (restartComboForLoop's !stableLoop branch): each iteration resolves with
+        // deriveLoopSeed(base, iter). Exactly one member wins each time, and the winner varies.
+        int firstWinner = -1;
+        bool winnerVaried = false;
+        for (uint32_t iter = 1; iter <= 200; ++iter)
+        {
+            const std::vector<bool> plays =
+                VFXComboTimeline::resolvePlays(data, VFXComboTimeline::deriveLoopSeed(base, iter));
+            int winner = -1;
+            int count = 0;
+            for (int i = 0; i < 3; ++i)
+                if (plays[i])
+                {
+                    winner = i;
+                    ++count;
+                }
+            CHECK(count == 1);
+            if (firstWinner < 0)
+                firstWinner = winner;
+            else if (winner != firstWinner)
+                winnerVaried = true;
+        }
+        CHECK(winnerVaried);
+
+        // Stable path (rewind keeps the same seed): identical resolution every iteration.
+        CHECK(VFXComboTimeline::resolvePlays(data, base) == VFXComboTimeline::resolvePlays(data, base));
+    }
 }

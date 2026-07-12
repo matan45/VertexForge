@@ -115,5 +115,10 @@ namespace vfx
         // VK-1453 (Phase 4) — aggregate bounds over the sequence's steps. Additive
         // with a neutral default (Auto) so existing .vfVFXSequence files are unaffected.
         VFXBounds bounds;
+
+        // VK-1498 — when this sequence is looped, keep the VK-1497 variety (probability /
+        // variantGroup rolls) IDENTICAL every iteration instead of re-rolling for variety.
+        // Default false = re-roll each loop (the ticket's default). Additive/back-compat.
+        bool stableLoop = false;
     };
 }
