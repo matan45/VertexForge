@@ -33,7 +33,17 @@ namespace core
                                  notif.entityId);
             }));
 
-        vfLogInfo("[ScriptVFXEventBridge] Subscribed to VFX particle events");
+        // Combo-sequence cues (VK-1495). Published only by forward playback
+        // (update -> publishNewlyFiredMarkers) and manual triggerCue; seek/scrub/
+        // replay/prewarm route through replayTo() and never publish, so no
+        // transport guard is needed here.
+        tokens.push_back(dispatcher.subscribe<::services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [this](const ::services::events::vfxsequence::VFXComboCueFiredNotification& notif)
+            {
+                dispatchComboCue(notif.comboId, notif.cueName, notif.payload);
+            }));
+
+        vfLogInfo("[ScriptVFXEventBridge] Subscribed to VFX particle events and combo cues");
     }
 
     void ScriptVFXEventBridge::unsubscribeAll()
@@ -82,6 +92,53 @@ namespace core
             catch (const std::exception& e)
             {
                 vfLogWarning("[ScriptVFXEventBridge] onVFXParticleEvent callback error: {}", e.what());
+            }
+        }
+    }
+
+    void ScriptVFXEventBridge::dispatchComboCue(
+        uint32_t comboId, const std::string& cueName, const ::vfx::VFXCuePayload& payload)
+    {
+        // The payload fields are std::optional at the source; the has* flags
+        // preserve "unset" vs a real zero so scripts can tell them apart. Guard
+        // every optional before dereferencing (dereferencing an empty one is UB).
+        const bool hasPos = payload.position.has_value();
+        const glm::vec3 pos = hasPos ? *payload.position : glm::vec3(0.0f);
+        const bool hasCol = payload.color.has_value();
+        const glm::vec4 col = hasCol ? *payload.color : glm::vec4(0.0f);
+        const bool hasScl = payload.scalar.has_value();
+        const float scl = payload.scalar.value_or(0.0f);
+
+        // Build the payload object once; it is never mutated, so it is safe to
+        // reuse across every listener instance (mirrors positionObj above).
+        value::Value payloadObj = interpreter->createObject("ComboCuePayload",
+            {value::Value(hasPos), value::Value(pos.x), value::Value(pos.y), value::Value(pos.z),
+             value::Value(hasCol), value::Value(col.r), value::Value(col.g), value::Value(col.b),
+             value::Value(col.a),
+             value::Value(hasScl), value::Value(scl)});
+
+        for (const auto& [instanceId, entityHandle] : instanceToEntity)
+        {
+            auto interfaceIt = instanceToInterfaces.find(instanceId);
+            if (interfaceIt == instanceToInterfaces.end() ||
+                interfaceIt->second.find(kVFXComboCueListener) == interfaceIt->second.end())
+                continue;
+
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt == instanceToObject.end()) continue;
+
+            try
+            {
+                AmbientScriptContext ctx(entityHandle, instanceId);
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+                interpreter->callMethod(instance, "onComboCue",
+                                        {value::Value(static_cast<int>(comboId)),
+                                         value::Value(cueName),
+                                         payloadObj});
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("[ScriptVFXEventBridge] onComboCue callback error: {}", e.what());
             }
         }
     }

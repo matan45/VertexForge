@@ -771,6 +771,54 @@ TEST_SUITE("VFXSequenceForwarding")
         CHECK(mock.creates[0].path == "assets/vfx/early.vfVFX");
     }
 
+    // -------- seek/prewarm cross a cue marker WITHOUT publishing (VK-1495) --------
+    // The cue->script bridge (ScriptVFXEventBridge, Core) relies on this Services-layer
+    // invariant: replayTo() advances the timeline into a throwaway scratch vector and
+    // never calls publishCueFired, so scrub/seek/prewarm deliver no onComboCue. Forward
+    // update() DOES publish the same marker (see the marker-payload cases above, e.g. :375).
+    TEST_CASE("seek/prewarm replay across a cue marker does not publish a cue notification")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        vfx::VFXSequenceData data;
+        data.name = "seekNoPublish";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF024, "assets/vfx/seek_signal.vfVFX");
+        s.cueName = "impact";
+        data.steps.push_back(s);
+        vfx::VFXSequenceEventMarker marker{0.1f, "impact"};
+        marker.payload.scalar = 3.0f;
+        data.eventMarkers.push_back(marker);
+
+        std::string path = saveSequence("Combo_SeekNoPublish.vfVFXSequence", data);
+
+        SUBCASE("seekCombo crosses the 0.1s marker")
+        {
+            VFXSequenceRuntimeServiceImpl svc;
+            auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+            svc.playCombo(combo);
+            svc.seekCombo(combo, 0.5f); // replayTo(0.5) crosses the marker, but must not publish
+            CHECK(notifications.empty());
+        }
+
+        SUBCASE("prewarm crosses the 0.1s marker")
+        {
+            VFXSequenceRuntimeServiceImpl svc;
+            auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false,
+                                         /*seed*/ 0u, /*prewarm*/ 0.5f, /*rate*/ -1.0f, /*fixedStep*/ -1.0f);
+            REQUIRE(combo != 0);
+            svc.playCombo(combo); // applies prewarm via replayTo — no publish
+            CHECK(notifications.empty());
+        }
+    }
+
     // -------- prewarm at create fast-forwards the schedule before the first frame --------
     TEST_CASE("a combo created with prewarm spawns due steps immediately on play")
     {

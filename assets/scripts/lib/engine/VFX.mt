@@ -218,6 +218,8 @@ public class VFX {
     }
 
     // Fire all cue-driven steps in the combo whose cue name matches.
+    // Listen for cues (from these triggers or authored timeline markers) by
+    // implementing IVFXComboCueListener.onComboCue in an @Script class (VK-1495).
     public static function triggerComboCue(int comboId, string cueName): void {
         _native_vfx_triggerComboCue(comboId, cueName);
     }
