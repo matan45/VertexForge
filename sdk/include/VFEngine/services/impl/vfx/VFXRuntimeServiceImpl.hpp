@@ -78,6 +78,9 @@ namespace services
             uint32_t channelRingDroppedRequests = 0;
             uint32_t channelParticleDroppedRequests = 0;
             uint32_t channelRequestBudget = 0;
+            // VK-1503 (M4 slice-c)
+            uint32_t evictedInstances = 0; // instances soft-stopped by the significance cap this frame
+            uint32_t maxLiveInstances = 0; // active significance budget (0 => unlimited)
         };
         BudgetStats getBudgetStats() const;
     };

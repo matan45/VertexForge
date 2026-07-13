@@ -378,6 +378,15 @@ namespace windows
             ImGui::Spacing();
             ImGui::TextDisabled("Scalability profile");
             drawScalabilityControls();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Significance (live-instance cap)");
+            if (vfxData &&
+                ImGui::DragFloat("Significance", &vfxData->significance, 0.05f, 0.0f, 1.0e6f))
+                isDirty = true;
+            ImGui::SetItemTooltip(
+                "Per-asset importance for the runtime significance cap (scored as "
+                "significance / distance^2). Higher = more likely to stay live when a "
+                "scene-wide live-instance budget is set. Default 1.0 is neutral.");
             ImGui::Unindent();
         }
 

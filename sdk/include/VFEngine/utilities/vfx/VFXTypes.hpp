@@ -173,6 +173,11 @@ namespace vfx
         VFXBounds bounds;             // explicit/derived bounds for cull + viz
         VFXScalability scalability;   // per-quality-tier scalability profile (disabled by default)
         bool cullEligible = false;    // opt-in: allow pre-spawn distance+frustum culling
+
+        // VK-1503 (M4 slice-c) — per-asset importance weight for the significance cap.
+        // Scored as significance / max(distanceSq, eps) to keep the top-N live effects
+        // when a scene-wide budget is set. Default 1.0 is neutral (equal weight).
+        float significance = 1.0f;
     };
 
     namespace EmitterDefaults

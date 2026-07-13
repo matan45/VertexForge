@@ -324,6 +324,10 @@ namespace render::vfx
         // VK-1453 (Phase 4) — per-quality-tier scalability profile (CPU-only; disabled
         // by default so the resolved level is neutral and runtime behavior is unchanged).
         ::vfx::VFXScalability scalability;
+
+        // VK-1503 (M4 slice-c) — per-asset importance weight for the significance cap
+        // (default 1.0 = neutral). Copied onto the live instance at createInstance.
+        float significance = 1.0f;
     };
 
     struct VFXFlipbookConfig

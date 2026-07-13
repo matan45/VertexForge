@@ -466,6 +466,9 @@ namespace vfx
 
             vfxData.cullEligible = j.value("cullEligible", false);
 
+            // VK-1503 — per-asset significance weight (tolerant; absent => neutral 1.0).
+            vfxData.significance = j.value("significance", 1.0f);
+
             if (warningCount > 0)
                 vfLogWarning("Loaded VFX '{}' with {} warning(s)", vfxData.name, warningCount);
 
@@ -537,6 +540,9 @@ namespace vfx
         }
 
         j["cullEligible"] = vfxData.cullEligible;
+
+        // VK-1503 — per-asset significance weight for the live-instance cap.
+        j["significance"] = vfxData.significance;
 
         try
         {

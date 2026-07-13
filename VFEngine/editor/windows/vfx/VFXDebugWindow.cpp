@@ -119,6 +119,30 @@ namespace windows
         else
             ImGui::TextDisabled("  Cull distance:        (unlimited)");
 
+        // VK-1503 (M4 slice-c) — significance cap: bound the number of live effect
+        // instances by importance. 0 = unlimited (disabled). Setting a budget dispatches
+        // SetVFXSignificanceBudgetCommand to the runtime.
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Text("Significance Cap:");
+        if (ImGui::InputInt("Max live instances (0=unlimited)", &significanceBudgetInput))
+        {
+            if (significanceBudgetInput < 0)
+                significanceBudgetInput = 0;
+            try
+            {
+                events::EventDispatcher::instance().execute(
+                    services::events::vfxruntime::SetVFXSignificanceBudgetCommand{
+                        static_cast<uint32_t>(significanceBudgetInput)});
+            }
+            catch (const std::exception&) { /* no runtime provider */ }
+        }
+        if (budget.maxLiveInstances > 0)
+            ImGui::Text("  Evicted (soft-stopped): %u / cap %u", budget.evictedInstances,
+                        budget.maxLiveInstances);
+        else
+            ImGui::TextDisabled("  Cap disabled (unlimited)");
+
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Text("Emitter Pool:");
@@ -255,6 +279,8 @@ namespace windows
             budget.channelRingDroppedRequests = r.channelRingDroppedRequests;
             budget.channelParticleDroppedRequests = r.channelParticleDroppedRequests;
             budget.channelRequestBudget = r.channelRequestBudget;
+            budget.evictedInstances = r.evictedInstances;
+            budget.maxLiveInstances = r.maxLiveInstances;
         }
         catch (const std::exception&) { /* no runtime provider */ }
 

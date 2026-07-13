@@ -131,6 +131,9 @@ namespace services
             uint32_t channelRingDroppedRequests = 0;
             uint32_t channelParticleDroppedRequests = 0;
             uint32_t channelRequestBudget = 0;
+            // VK-1503 (M4 slice-c)
+            uint32_t evictedInstances = 0; // instances soft-stopped by the significance cap this frame
+            uint32_t maxLiveInstances = 0; // active significance budget (0 => unlimited)
         };
         virtual BudgetStats getBudgetStats() const = 0;
 
@@ -161,6 +164,11 @@ namespace services
 
         // Global VFX quality tier applied to scalability profiles at instance creation.
         virtual void setQualityTier(vfx::VFXQualityTier tier) { (void)tier; }
+
+        // VK-1503 (M4 slice-c) — scene-wide live-instance budget for the significance
+        // cap. 0 => disabled (default). Non-pure so existing test/plugin providers stay
+        // source-compatible; the runtime adapter overrides it.
+        virtual void setSignificanceBudget(uint32_t budget) { (void)budget; }
 
         // Per-instance debug snapshot for the VFX debug window (capped by the impl).
         struct InstanceDebugInfo

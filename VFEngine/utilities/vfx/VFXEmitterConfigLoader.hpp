@@ -241,6 +241,9 @@ namespace vfx
         // disabled by default so it resolves to a neutral level).
         config.scalability = data.scalability;
 
+        // VK-1503 (M4 slice-c) — carry the per-asset significance weight.
+        config.significance = data.significance;
+
         return config;
     }
 }

@@ -1164,11 +1164,85 @@ namespace controllers
         inst.firstFrame = false;
     }
 
+    void VFXSceneRenderer::applySignificanceCap()
+    {
+        // Disabled (default): clear any stray suppression once, then no-op. Guarantees
+        // byte-identical behavior with pre-VK-1503 when no scene-wide budget is set.
+        if (significanceBudget == 0)
+        {
+            if (significanceCapWasActive)
+            {
+                for (auto& [id, instance] : instances)
+                    instance.significanceEvicted = false;
+                significanceCapWasActive = false;
+            }
+            return;
+        }
+        significanceCapWasActive = true;
+
+        // Gather the live GPU population. distanceSq matches isEmitterDistanceCulled
+        // (emitter pos = worldTransform[3], no sqrt). Structurally-protected effects
+        // (loops / attached / camera-relative / channel listeners / Critical priority)
+        // are never evicted; only fire-and-forget one-shots are, so the existing reap
+        // loop finalises them once their particles drain.
+        significanceScratch.clear();
+        for (auto& [id, instance] : instances)
+        {
+            if (!instance.gpuDriven || !instance.active || instance.dormant)
+                continue;
+
+            const glm::vec3 emitterPos = glm::vec3(instance.worldTransform[3]);
+            const glm::vec3 diff = emitterPos - currentCameraPos;
+            const float distSq = glm::dot(diff, diff);
+
+            const bool evictable =
+                instance.autoDestroy && !instance.loop && !instance.cameraRelative &&
+                !instance.channelListener &&
+                instance.priority != services::VFXEmitterPriority::Critical;
+
+            vfx::VFXSignificanceCandidate cand;
+            cand.id = id;
+            cand.score = vfx::significanceScore(instance.config.significance, distSq);
+            cand.evictable = evictable;
+            cand.currentlyEvicted = instance.significanceEvicted;
+            significanceScratch.push_back(cand);
+        }
+
+        vfx::selectSignificanceEvictions(significanceScratch,
+                                         static_cast<int>(significanceBudget),
+                                         vfx::kSignificanceHysteresis,
+                                         significanceEvictScratch);
+
+        uint32_t evicted = 0;
+        for (size_t i = 0; i < significanceScratch.size(); ++i)
+        {
+            const bool ev = significanceEvictScratch[i] != 0;
+            auto it = instances.find(significanceScratch[i].id);
+            if (it != instances.end())
+                it->second.significanceEvicted = ev;
+            if (ev)
+                ++evicted;
+        }
+        significanceEvictedThisFrame = evicted;
+
+        if (evicted > 0 &&
+            vfx::VFXRuntimeDiagnostics::instance().report(
+                "VFX significance",
+                "live-instance budget saturated; least-significant one-shots soft-stopped"))
+        {
+            vfLogWarning("VFX significance cap saturated: {} instance(s) soft-stopped (budget {})",
+                         evicted, significanceBudget);
+        }
+    }
+
     void VFXSceneRenderer::update(float deltaTime)
     {
         // VK-1453: per-frame cull/throttle counters, reported via getBudgetStats.
         culledEmittersThisFrame = 0;
         throttledEmittersThisFrame = 0;
+        // VK-1503: reset here so it stays 0 when the cap is disabled or on the CPU path;
+        // applySignificanceCap() (inside updateGPU) sets it to the evicted count when active.
+        significanceEvictedThisFrame = 0;
 
         processPendingEmitterFrees();
 
@@ -1560,6 +1634,10 @@ namespace controllers
         stats.channelRingDroppedRequests = channelRingDroppedThisFrame;
         stats.channelParticleDroppedRequests = channelParticleDroppedThisFrame;
         stats.channelRequestBudget = render::vfx::GPUVFXConstants::MAX_SPAWN_REQUESTS;
+
+        // VK-1503 (M4 slice-c) — significance cap.
+        stats.evictedInstances = significanceEvictedThisFrame;
+        stats.maxLiveInstances = significanceBudget;
 
         return stats;
     }

@@ -4,6 +4,7 @@
 #include "../render/vfx/compute/GPUVFXTypes.hpp"
 #include "../../services/data/VFXTypes.hpp"
 #include "vfx/VFXScalability.hpp"
+#include "vfx/VFXSignificance.hpp" // VK-1503: significance-cap scorer / top-N selection
 #include "vfx/VFXHandlePool.hpp"
 #include "vfx/VFXChildSpawn.hpp" // VK-1501: GPU event->child region allocator + slot packing
 #include <glm/glm.hpp>
@@ -121,6 +122,12 @@ namespace controllers
         int updateInterval = 1;               // >1 => simulate only every Nth frame
         int updatePhase = 0;                  // frame offset so throttled emitters spread out
 
+        // VK-1503 (M4 slice-c) — significance-cap soft-stop flag. When true the cap has
+        // suppressed this instance's emission this frame; existing particles still
+        // simulate and fade. Sole writer is applySignificanceCap(); sole reader is the
+        // spawn gate in updateGPU/updateCPU.
+        bool significanceEvicted = false;
+
         // VK-1500: a channel listener owns one large GPU slice and consumes batched
         // world-space spawn requests instead of running the authored emission schedule.
         bool channelListener = false;
@@ -230,6 +237,14 @@ namespace controllers
         uint32_t culledEmittersThisFrame = 0;
         uint32_t throttledEmittersThisFrame = 0;
 
+        // VK-1503 (M4 slice-c) — significance cap. Budget 0 => disabled (byte-identical
+        // with pre-VK-1503 behavior). Scratch buffers are reused every frame (no alloc).
+        uint32_t significanceBudget = 0;           // max live effect instances (0 = unlimited)
+        uint32_t significanceEvictedThisFrame = 0; // soft-stopped this frame (debug stat)
+        bool significanceCapWasActive = false;     // clears stray flags once when disabled
+        std::vector<vfx::VFXSignificanceCandidate> significanceScratch;
+        std::vector<char> significanceEvictScratch;
+
         glm::vec4 frustumPlanes[6]{};
         bool frustumPlanesValid = false;
 
@@ -333,6 +348,11 @@ namespace controllers
         // each instance at creation; existing instances are not retroactively re-scaled.
         void setQualityTier(vfx::VFXQualityTier tier) { currentTier = tier; }
 
+        // VK-1503 (M4 slice-c) — scene-wide live-instance budget for the significance
+        // cap. 0 disables the cap (default; existing scenes are byte-identical).
+        void setSignificanceBudget(uint32_t budget) { significanceBudget = budget; }
+        uint32_t getSignificanceBudget() const { return significanceBudget; }
+
         // Camera + cull-state snapshot so the combo service can pre-cull off-screen
         // fire-and-forget effects before spawning them.
         struct VFXCullState
@@ -382,6 +402,9 @@ namespace controllers
             uint32_t channelRingDroppedRequests = 0;
             uint32_t channelParticleDroppedRequests = 0;
             uint32_t channelRequestBudget = 0;
+            // VK-1503 (M4 slice-c)
+            uint32_t evictedInstances = 0; // instances soft-stopped by the significance cap this frame
+            uint32_t maxLiveInstances = 0; // active significance budget (0 => unlimited)
         };
 
         VFXBudgetStats getBudgetStats() const;
@@ -427,6 +450,10 @@ namespace controllers
         bool isEmitterDistanceCulled(const VFXRuntimeInstance& instance) const;
         void updateInstanceLOD(VFXRuntimeInstance& instance) const;
         VFXInstanceId findLowestPriorityInstance(services::VFXEmitterPriority belowPriority) const;
+
+        // VK-1503 (M4 slice-c) — rank live instances by significance and soft-stop the
+        // least-significant fire-and-forget one-shots over the scene-wide budget.
+        void applySignificanceCap();
 
         // VK-1453 (Phase 4) helpers.
         render::vfx::VFXEmitterConfig loadConfigCached(const std::string& path);

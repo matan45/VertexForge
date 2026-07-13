@@ -272,6 +272,12 @@ namespace controllers
         // (VK-1451). Burst jitter stays frame-random (accepted GPU micro-nondeterminism).
         std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
 
+        // VK-1503 — rank live instances by significance and soft-stop the least-
+        // significant fire-and-forget one-shots when a scene-wide budget is set. Runs
+        // before the spawn walk so a below-budget newcomer is suppressed before it emits
+        // a single particle. No-op (clears stray flags once) when the budget is 0.
+        applySignificanceCap();
+
         for (auto& [id, instance] : instances)
         {
             if (!instance.gpuDriven || !instance.active)
@@ -300,7 +306,10 @@ namespace controllers
             instance.emissionTime += effectiveDt;
 
             uint32_t spawnThisFrame = 0;
-            bool canSpawn = instance.loop || (instance.emissionTime < instance.config.lifetime);
+            // VK-1503 — a significance-evicted instance emits nothing new (soft-stop);
+            // its already-spawned particles keep simulating and fade out naturally.
+            bool canSpawn = !instance.significanceEvicted &&
+                            (instance.loop || (instance.emissionTime < instance.config.lifetime));
 
             if (instance.channelListener)
             {

@@ -125,6 +125,8 @@ namespace services
                 result.channelRingDroppedRequests = bs.channelRingDroppedRequests;
                 result.channelParticleDroppedRequests = bs.channelParticleDroppedRequests;
                 result.channelRequestBudget = bs.channelRequestBudget;
+                result.evictedInstances = bs.evictedInstances;
+                result.maxLiveInstances = bs.maxLiveInstances;
                 return result;
             });
 
@@ -189,6 +191,14 @@ namespace services
             [this](const events::vfxruntime::GetVFXQualityTierQuery&)
             {
                 return currentTier;
+            });
+
+        // VK-1503 (M4 slice-c) — scene-wide live-instance budget for the significance cap.
+        dispatcher.registerCommandHandler<events::vfxruntime::SetVFXSignificanceBudgetCommand>(
+            [this](const events::vfxruntime::SetVFXSignificanceBudgetCommand& cmd)
+            {
+                if (vfxProvider)
+                    vfxProvider->setSignificanceBudget(cmd.budget);
             });
 
         dispatcher.registerQueryHandler<events::vfxruntime::GetVFXInstanceDebugQuery>(
@@ -424,6 +434,8 @@ namespace services
             stats.channelRingDroppedRequests = ps.channelRingDroppedRequests;
             stats.channelParticleDroppedRequests = ps.channelParticleDroppedRequests;
             stats.channelRequestBudget = ps.channelRequestBudget;
+            stats.evictedInstances = ps.evictedInstances;
+            stats.maxLiveInstances = ps.maxLiveInstances;
         }
         return stats;
     }

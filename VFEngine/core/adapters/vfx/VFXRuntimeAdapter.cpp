@@ -371,6 +371,8 @@ namespace core
             stats.channelRingDroppedRequests = rs.channelRingDroppedRequests;
             stats.channelParticleDroppedRequests = rs.channelParticleDroppedRequests;
             stats.channelRequestBudget = rs.channelRequestBudget;
+            stats.evictedInstances = rs.evictedInstances;
+            stats.maxLiveInstances = rs.maxLiveInstances;
         }
         return stats;
     }
@@ -442,6 +444,12 @@ namespace core
     {
         if (renderer)
             renderer->setQualityTier(tier);
+    }
+
+    void VFXRuntimeAdapter::setSignificanceBudget(uint32_t budget)
+    {
+        if (renderer)
+            renderer->setSignificanceBudget(budget);
     }
 
     std::vector<services::IVFXRuntimeProvider::InstanceDebugInfo> VFXRuntimeAdapter::getInstanceDebugInfo() const

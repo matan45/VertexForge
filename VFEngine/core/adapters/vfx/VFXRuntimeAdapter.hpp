@@ -111,6 +111,7 @@ namespace core
         // VK-1453 (Phase 4)
         CullState getCullState() const override;
         void setQualityTier(vfx::VFXQualityTier tier) override;
+        void setSignificanceBudget(uint32_t budget) override;
         std::vector<InstanceDebugInfo> getInstanceDebugInfo() const override;
     };
 }
