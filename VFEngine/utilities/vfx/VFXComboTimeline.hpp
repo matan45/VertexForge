@@ -80,10 +80,13 @@ namespace vfx
             elapsed_ += dt;
 
             // 1) Time-driven steps (empty cueName) whose start time has arrived.
+            //    VK-1524 — StepOutput receivers are never scheduled by the timeline; they are
+            //    spawned by the runtime service when a bound particle event arrives.
             for (size_t i = 0; i < data_->steps.size(); ++i)
             {
                 const VFXSequenceStep& s = data_->steps[i];
-                if (spawned_[i] || !s.cueName.empty() || !plays_[i]) // VK-1497 — skip resolved-out steps
+                if (spawned_[i] || !s.cueName.empty() || s.trigger == VFXStepTrigger::StepOutput ||
+                    !plays_[i]) // VK-1497 — skip resolved-out steps; VK-1524 — skip StepOutput receivers
                     continue;
                 if (elapsed_ >= s.startTime)
                 {
@@ -145,10 +148,12 @@ namespace vfx
         // Mirrors the Phase-1 completion gate: every step (time- and cue-driven) spawned.
         // VK-1497 — a step resolved not to play never spawns, so treat it as satisfied;
         // otherwise a rolled-out step would stall the combo's completion forever.
+        // VK-1524 — a StepOutput receiver may never fire (its source event might not occur), so
+        // it must not block completion; the runtime service tracks its liveness separately.
         bool allStepsSpawned() const
         {
             for (size_t i = 0; i < spawned_.size(); ++i)
-                if (plays_[i] && !spawned_[i])
+                if (plays_[i] && data_->steps[i].trigger != VFXStepTrigger::StepOutput && !spawned_[i])
                     return false;
             return true;
         }
@@ -294,7 +299,8 @@ namespace vfx
             for (size_t i = 0; i < data_->steps.size(); ++i)
             {
                 const VFXSequenceStep& s = data_->steps[i];
-                if (spawned_[i] || s.cueName.empty() || std::string_view(s.cueName) != cueName ||
+                if (spawned_[i] || s.trigger == VFXStepTrigger::StepOutput || s.cueName.empty() ||
+                    std::string_view(s.cueName) != cueName ||
                     !plays_[i]) // VK-1497 — a cue-driven step also honors its resolved play/skip
                     continue;
                 spawned_[i] = true;

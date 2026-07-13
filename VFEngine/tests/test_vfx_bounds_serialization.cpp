@@ -200,7 +200,7 @@ TEST_SUITE("VFXBoundsSerialization")
         CHECK(loaded.cullEligible == false);
     }
 
-    TEST_CASE(".vfVFXSequence round-trips aggregate bounds + stableLoop; stamps 1.5")
+    TEST_CASE(".vfVFXSequence round-trips aggregate bounds + stableLoop; stamps 1.6")
     {
         resetBoundsTestRoot();
 
@@ -215,7 +215,7 @@ TEST_SUITE("VFXBoundsSerialization")
 
         const fs::path path = boundsTestRoot() / "BoundsSequence.vfVFXSequence";
         REQUIRE(vfx::VFXSequenceAsset::save(original, path.string()));
-        CHECK(readVersionField(path) == "1.5"); // VK-1498 bumped the sequence format version
+        CHECK(readVersionField(path) == "1.6"); // VK-1524 bumped the sequence format version
 
         auto loadedOpt = vfx::VFXSequenceAsset::load(path.string());
         REQUIRE(loadedOpt.has_value());

@@ -44,6 +44,7 @@ namespace vfx
         inline constexpr bool INHERIT_SIZE = false;
         inline constexpr float LIFETIME_THRESHOLD = 0.5f;
         inline constexpr bool GPU_FAST_PATH = false; // VK-1501
+        inline constexpr bool NOTIFY = false;        // VK-1524
     }
 
     struct VFXEventTypeConfig
@@ -59,6 +60,10 @@ namespace vfx
         // instance slot). Honored only for OnDeath/OnCollision; falls back to the CPU path when the
         // event uses probability<1, when child regions are exhausted, or for ineligible event types.
         bool gpuFastPath = EventDefaults::GPU_FAST_PATH;
+        // VK-1524: publish a VFXParticleEventNotification for this event WITHOUT requiring a sub-emitter
+        // `vfxPath`, so a VFX-sequence StepOutput source (or a script listener) can react to the death/
+        // collision location. Default false => publish behavior is byte-identical to pre-VK-1524.
+        bool notify = EventDefaults::NOTIFY;
     };
 
     struct VFXEventConfig
@@ -164,6 +169,8 @@ namespace vfx
                                               EventDefaults::INHERIT_SIZE);
             tc.gpuFastPath = getEventBoolProp(node, eventPropName(type, "FastPath"),
                                               EventDefaults::GPU_FAST_PATH);
+            tc.notify = getEventBoolProp(node, eventPropName(type, "Notify"),
+                                         EventDefaults::NOTIFY);
         }
 
         config.lifetimeThreshold = std::clamp(
@@ -216,6 +223,10 @@ namespace vfx
             const std::string fastPathKey = eventPropName(type, "FastPath");
             node.properties[fastPathKey] = VFXProperty{
                 fastPathKey, VFXPropertyType::Bool, tc.gpuFastPath, 0.0f, 1.0f};
+
+            const std::string notifyKey = eventPropName(type, "Notify");
+            node.properties[notifyKey] = VFXProperty{
+                notifyKey, VFXPropertyType::Bool, tc.notify, 0.0f, 1.0f};
         }
 
         node.properties["eventLifetimeThreshold"] = VFXProperty{

@@ -46,6 +46,7 @@ namespace windows
 
         vfx::VFXSequenceData* data = nullptr;
         std::vector<int> starts, ends, snapStarts, snapEnds;
+        mutable std::string labelScratch; // VK-1524 — backing store for GetItemLabel suffixes
 
         void sync(vfx::VFXSequenceData* d)
         {
@@ -102,7 +103,17 @@ namespace windows
             if (!data || index < 0 || index >= static_cast<int>(data->steps.size()))
                 return "";
             const auto& s = data->steps[static_cast<size_t>(index)];
-            return s.label.empty() ? "(step)" : s.label.c_str();
+            labelScratch = s.label.empty() ? "(step)" : s.label;
+            // VK-1524 — a StepOutput clip never plays on the timeline; it waits for a source
+            // step's runtime particle event. Make that explicit and note its source binding.
+            if (s.trigger == vfx::VFXStepTrigger::StepOutput)
+            {
+                labelScratch += "  [waiting for event";
+                if (s.sourceStepIndex >= 0)
+                    labelScratch += " <- step " + std::to_string(s.sourceStepIndex);
+                labelScratch += "]";
+            }
+            return labelScratch.c_str();
         }
 
         void Get(int index, int** start, int** end, int* type, unsigned int* color) override
@@ -118,7 +129,11 @@ namespace windows
                 if (data && index < static_cast<int>(data->steps.size()))
                 {
                     const auto& s = data->steps[static_cast<size_t>(index)];
-                    if (!s.cueName.empty())
+                    if (s.trigger == vfx::VFXStepTrigger::StepOutput)
+                    {
+                        *color = 0xFFE0A020u; // blue-ish = StepOutput receiver (waits for an event)
+                    }
+                    else if (!s.cueName.empty())
                     {
                         *color = 0xFF888888u; // gray = cue-driven (any kind) takes precedence
                     }
@@ -709,6 +724,12 @@ namespace windows
             if (ImGui::SmallButton(ICON_FA_ARROW_UP "##MoveStepUp") && i > 0)
             {
                 std::swap(data->steps[static_cast<size_t>(i)], data->steps[static_cast<size_t>(i - 1)]);
+                // VK-1524 — keep StepOutput bindings pointing at the same source after the swap.
+                for (auto& st : data->steps)
+                {
+                    if (st.sourceStepIndex == i) st.sourceStepIndex = i - 1;
+                    else if (st.sourceStepIndex == i - 1) st.sourceStepIndex = i;
+                }
                 if (selectedStep == i) selectedStep = i - 1;
                 else if (selectedStep == i - 1) selectedStep = i;
                 isDirty = true;
@@ -720,6 +741,12 @@ namespace windows
             if (ImGui::SmallButton(ICON_FA_ARROW_DOWN "##MoveStepDown") && i + 1 < static_cast<int>(data->steps.size()))
             {
                 std::swap(data->steps[static_cast<size_t>(i)], data->steps[static_cast<size_t>(i + 1)]);
+                // VK-1524 — keep StepOutput bindings pointing at the same source after the swap.
+                for (auto& st : data->steps)
+                {
+                    if (st.sourceStepIndex == i) st.sourceStepIndex = i + 1;
+                    else if (st.sourceStepIndex == i + 1) st.sourceStepIndex = i;
+                }
                 if (selectedStep == i) selectedStep = i + 1;
                 else if (selectedStep == i + 1) selectedStep = i;
                 isDirty = true;
@@ -730,6 +757,13 @@ namespace windows
             ImGui::SameLine();
             if (ImGui::SmallButton("X"))
             {
+                // VK-1524 — remap StepOutput bindings before the erase: a receiver of the removed
+                // step loses its source (-1); references to later steps shift down by one.
+                for (auto& st : data->steps)
+                {
+                    if (st.sourceStepIndex == i) st.sourceStepIndex = -1;
+                    else if (st.sourceStepIndex > i) --st.sourceStepIndex;
+                }
                 data->steps.erase(data->steps.begin() + i);
                 if (selectedStep == i) selectedStep = -1;
                 else if (selectedStep > i) --selectedStep;
@@ -790,18 +824,123 @@ namespace windows
         if (ImGui::DragFloat("Start Time", &step.startTime, 0.01f, 0.0f, 1000.0f, "%.2f s"))
             isDirty = true;
 
-        char cueBuf[256];
-        std::strncpy(cueBuf, step.cueName.c_str(), sizeof(cueBuf) - 1);
-        cueBuf[sizeof(cueBuf) - 1] = '\0';
-        if (ImGui::InputText("Cue Name", cueBuf, IM_ARRAYSIZE(cueBuf)))
+        // --- Trigger (VK-1524): Time / Cue / Step Output ---
+        int triggerIdx = static_cast<int>(step.trigger);
+        if (triggerIdx < 0 || triggerIdx > 2)
+            triggerIdx = 0;
+        const char* triggerNames[] = {"Time", "Cue", "Step Output"};
+        if (ImGui::Combo("Trigger", &triggerIdx, triggerNames, IM_ARRAYSIZE(triggerNames)))
         {
-            step.cueName = cueBuf;
+            step.trigger = static_cast<vfx::VFXStepTrigger>(triggerIdx);
+            // Keep cueName consistent with the mode so the timeline (which keys Time/Cue on
+            // cueName) and this combo agree: Cue needs a non-empty name; Time/StepOutput have none.
+            if (step.trigger == vfx::VFXStepTrigger::Cue)
+            {
+                if (step.cueName.empty())
+                    step.cueName = "cue";
+            }
+            else
+            {
+                step.cueName.clear();
+            }
+            // A StepOutput receiver cannot also declare a source output (dual-role validation Error).
+            if (step.trigger == vfx::VFXStepTrigger::StepOutput)
+                step.outputEventName.clear();
             isDirty = true;
+            previewDirty = true;
         }
         ImGui::SameLine();
         ImGui::TextDisabled("(?)");
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Empty = time-driven (uses Start Time). Otherwise fired by a named cue.");
+            ImGui::SetTooltip("Time = fires at Start Time. Cue = fired by a named cue (triggerComboCue). "
+                              "Step Output = spawns at a source step's particle event world location.");
+
+        if (step.trigger == vfx::VFXStepTrigger::Cue)
+        {
+            char cueBuf[256];
+            std::strncpy(cueBuf, step.cueName.c_str(), sizeof(cueBuf) - 1);
+            cueBuf[sizeof(cueBuf) - 1] = '\0';
+            if (ImGui::InputText("Cue Name", cueBuf, IM_ARRAYSIZE(cueBuf)))
+            {
+                step.cueName = cueBuf;
+                isDirty = true;
+            }
+        }
+        else if (step.trigger == vfx::VFXStepTrigger::StepOutput)
+        {
+            // Source dropdown — VFX steps that declare an output event name (never self).
+            std::string currentSrc = "(select a source)";
+            if (step.sourceStepIndex >= 0 && step.sourceStepIndex < static_cast<int>(data->steps.size()))
+            {
+                const auto& s = data->steps[static_cast<size_t>(step.sourceStepIndex)];
+                currentSrc = "Step " + std::to_string(step.sourceStepIndex) +
+                             (s.label.empty() ? "" : (" (" + s.label + ")"));
+            }
+            if (ImGui::BeginCombo("Source Step", currentSrc.c_str()))
+            {
+                for (int s = 0; s < static_cast<int>(data->steps.size()); ++s)
+                {
+                    if (s == selectedStep)
+                        continue; // no self-dependency
+                    const auto& cand = data->steps[static_cast<size_t>(s)];
+                    if (cand.kind != vfx::VFXStepKind::VFX || cand.outputEventName.empty())
+                        continue; // only a VFX step publishing an output can be a source
+                    const std::string entry = "Step " + std::to_string(s) +
+                                              (cand.label.empty() ? "" : (" (" + cand.label + ")")) +
+                                              "  ->  '" + cand.outputEventName + "'";
+                    if (ImGui::Selectable(entry.c_str(), step.sourceStepIndex == s))
+                    {
+                        step.sourceStepIndex = s;
+                        step.sourceEventName = cand.outputEventName; // auto-fill the bound name
+                        isDirty = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            char evBuf[256];
+            std::strncpy(evBuf, step.sourceEventName.c_str(), sizeof(evBuf) - 1);
+            evBuf[sizeof(evBuf) - 1] = '\0';
+            if (ImGui::InputText("Event Name", evBuf, IM_ARRAYSIZE(evBuf)))
+            {
+                step.sourceEventName = evBuf;
+                isDirty = true;
+            }
+
+            const char* consumeNames[] = {"First Event", "Every Event"};
+            int consumeIdx = static_cast<int>(step.eventConsumption);
+            if (consumeIdx < 0 || consumeIdx > 1)
+                consumeIdx = 0;
+            if (ImGui::Combo("Consumption", &consumeIdx, consumeNames, IM_ARRAYSIZE(consumeNames)))
+            {
+                step.eventConsumption = static_cast<vfx::VFXEventConsumption>(consumeIdx);
+                isDirty = true;
+            }
+            if (step.eventConsumption == vfx::VFXEventConsumption::EveryEvent)
+            {
+                int budget = static_cast<int>(step.eventBudget);
+                if (ImGui::InputInt("Event Budget", &budget, 1, 4))
+                {
+                    step.eventBudget = budget < 0 ? 0u : static_cast<uint32_t>(budget);
+                    isDirty = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Max simultaneous live event-children this receiver spawns.");
+            }
+
+            ImGui::TextUnformatted("Inherit from impact:");
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Velocity", &step.inheritVelocity))
+                isDirty = true;
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Color", &step.inheritColor))
+                isDirty = true;
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Size", &step.inheritScalar))
+                isDirty = true;
+        }
 
         // VK-1497 — deterministic per-step variety (resolved from the combo seed at rewind()).
         if (ImGui::DragFloat("Probability", &step.probability, 0.01f, 0.0f, 1.0f, "%.2f"))
@@ -876,7 +1015,10 @@ namespace windows
             if (ImGui::DragFloat3("Local Scale", &step.localScale.x, 0.01f, 0.0001f, 1000.0f))
                 isDirty = true;
 
-            drawSocketField(step);
+            if (step.trigger == vfx::VFXStepTrigger::StepOutput)
+                ImGui::TextDisabled("Socket ignored (StepOutput spawns are world-anchored).");
+            else
+                drawSocketField(step);
 
             ImGui::Separator();
 
@@ -901,6 +1043,41 @@ namespace windows
             ImGui::Separator();
 
             drawOverrideList(step.overrides, "Overrides");
+
+            // VK-1524 — source output declaration. A Time/Cue VFX step can publish a named spatial
+            // output when its particles emit a death/collision event; StepOutput receivers bind to
+            // it. A StepOutput receiver cannot also be a source (dual-role validation Error).
+            if (step.trigger != vfx::VFXStepTrigger::StepOutput)
+            {
+                ImGui::Separator();
+                ImGui::TextUnformatted("Step Output (publish to receivers)");
+                char outBuf[256];
+                std::strncpy(outBuf, step.outputEventName.c_str(), sizeof(outBuf) - 1);
+                outBuf[sizeof(outBuf) - 1] = '\0';
+                if (ImGui::InputText("Output Name", outBuf, IM_ARRAYSIZE(outBuf)))
+                {
+                    step.outputEventName = outBuf;
+                    isDirty = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Empty = not a source. Set a name to publish this step's particle "
+                                      "event location to StepOutput receivers.");
+                if (!step.outputEventName.empty())
+                {
+                    const char* evNames[] = {"On Spawn", "On Death", "On Collision", "On Lifetime Threshold"};
+                    int evIdx = static_cast<int>(step.outputEventType);
+                    if (evIdx < 0 || evIdx > 3)
+                        evIdx = static_cast<int>(vfx::VFXEventType::OnDeath);
+                    if (ImGui::Combo("Output Event", &evIdx, evNames, IM_ARRAYSIZE(evNames)))
+                    {
+                        step.outputEventType = static_cast<vfx::VFXEventType>(evIdx);
+                        isDirty = true;
+                    }
+                    ImGui::TextDisabled("Enable this event (and its Notify flag) on the source .vfVFX.");
+                }
+            }
         }
         else if (step.kind == vfx::VFXStepKind::Sound)
         {
@@ -1179,6 +1356,11 @@ namespace windows
         {
             const auto& step = data->steps[i];
             if (i < plays.size() && !plays[i]) // VK-1497 — probability/variant-group skipped
+                continue;
+            // VK-1524 — StepOutput receivers spawn from runtime particle events, which never fire
+            // in the event-free CPU preview. Skip them so the preview shows a "waiting for event"
+            // clip instead of fabricating a non-deterministic spawn (upholds the no-fabrication rule).
+            if (step.trigger == vfx::VFXStepTrigger::StepOutput)
                 continue;
             // VK-1496 — the composited preview is VFX-only. Skip Sound/ScriptCue kinds up front
             // so a step converted away from VFX but retaining a stale vfxRef doesn't render a

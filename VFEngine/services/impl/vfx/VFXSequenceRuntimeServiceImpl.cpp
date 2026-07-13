@@ -58,6 +58,16 @@ namespace services
             if (vfx::VFXRuntimeDiagnostics::instance().report("VFXSequence", msg))
                 vfLogWarning("{}", msg);
         }
+
+        // VK-1524 — a source step's trailing OnDeath/OnCollision notification arrives a few frames
+        // after its child stops (readbackEvents reads the previous frame's GPU buffer +
+        // MAX_FRAMES_IN_FLIGHT-1 latency, plus the ~1-frame render->update marshalling FIFO). Keep
+        // a just-reaped source routable for this many active frames so its final event still spawns
+        // the bound receiver instead of being dropped.
+        constexpr int kSourceGraceFrames = 8;
+        // VK-1524 — EveryEvent spawn-storm backstop: at most this many receiver spawns per receiver
+        // per drain tick (the per-receiver live `eventBudget` is the primary control).
+        constexpr uint32_t kMaxEventSpawnsPerReceiverPerTick = 8;
     }
 
     VFXSequenceRuntimeServiceImpl::~VFXSequenceRuntimeServiceImpl()
@@ -66,6 +76,11 @@ namespace services
         {
             ::events::EventDispatcher::instance().unsubscribe(assetSavedToken);
             assetSavedToken = {};
+        }
+        if (particleEventToken.isValid())
+        {
+            ::events::EventDispatcher::instance().unsubscribe(particleEventToken);
+            particleEventToken = {};
         }
     }
 
@@ -147,6 +162,15 @@ namespace services
                             ++result.liveChildInstances;
                         }
                     }
+                    // VK-1524 — event-children are live instances too.
+                    for (const auto& ec : combo.eventChildren)
+                    {
+                        if (ec.childId != 0)
+                        {
+                            anyLive = true;
+                            ++result.liveChildInstances;
+                        }
+                    }
                     // "Playing" = still driving output: explicitly playing, a child alive,
                     // or steps still pending their spawn time.
                     if (combo.playing || anyLive || !combo.timeline.allStepsSpawned())
@@ -167,6 +191,21 @@ namespace services
                 // update thread, where spawnStep reads them (see pendingSequenceInvalidations).
                 std::lock_guard<std::mutex> lock(sequenceInvalidationMutex);
                 pendingSequenceInvalidations.push_back(n.filePath);
+            });
+
+        // VK-1524 — particle step-output events. Published on the render thread from GPU readback;
+        // the callback only mirrors the fields into the FIFO under `particleEventMutex` (it must
+        // not touch `combos`). update() drains and routes them on the update thread (1-frame
+        // latency). Editor scrub is structurally event-free (the CPU preview emits none).
+        if (particleEventToken.isValid())
+            dispatcher.unsubscribe(particleEventToken);
+        particleEventToken = dispatcher.subscribe<events::vfxruntime::VFXParticleEventNotification>(
+            [this](const events::vfxruntime::VFXParticleEventNotification& n)
+            {
+                std::lock_guard<std::mutex> lock(particleEventMutex);
+                pendingParticleEvents.push_back(
+                    PendingParticleEvent{n.eventType, n.position, n.velocity, n.color, n.size,
+                                         n.parentInstanceId});
             });
     }
 
@@ -462,6 +501,240 @@ namespace services
         step.childId = childId;
     }
 
+    VFXInstanceId VFXSequenceRuntimeServiceImpl::spawnEventChild(ComboInstance& combo, int receivingStepIndex,
+                                                                 const vfx::VFXEventPayload& payload)
+    {
+        const ActiveStep& recv = combo.steps[static_cast<size_t>(receivingStepIndex)];
+        if (!recv.def)
+            return 0;
+
+        const std::string path = recv.def->vfxRef.resolve();
+        if (path.empty())
+        {
+            reportWarning("[VFXSequence] combo " + std::to_string(combo.id) + " StepOutput step '" +
+                          recv.def->label + "' has an unresolved/missing .vfVFX asset; skipping");
+            return 0;
+        }
+
+        // INV-3 world anchoring: identity parent + the event's world position + the receiver's
+        // authored local offset. NOT the combo/socket parent — the event position is already
+        // world-space, so applying comboParent again would double-transform it.
+        const glm::vec3 anchor = payload.position.value_or(glm::vec3(0.0f));
+        const glm::mat4 stepWorld =
+            glm::translate(glm::mat4(1.0f), anchor) * vfx::VFXComboTimeline::composeStepLocal(*recv.def);
+
+        // Reuse spawnStep's pre-spawn cull/tier gate (combo.cachedCull/Tier are stamped by
+        // drainParticleEvents before this call). Event-children are non-looping/non-socket =>
+        // structurally cullable, so the fire-and-forget frustum/distance leg applies.
+        if (combo.cachedCull.valid || combo.cachedTier.valid)
+        {
+            const ChildVFXInfo& childInfo = loadChildInfo(path);
+            if (childInfo.valid)
+            {
+                if (combo.cachedTier.valid && childInfo.scal.enabled)
+                {
+                    const vfx::VFXScalabilityLevel level =
+                        vfx::resolveScalability(childInfo.scal, combo.cachedTier.tier);
+                    if (!level.rendererEnabled)
+                    {
+                        ++culledSpawns;
+                        return 0;
+                    }
+                }
+                if (childInfo.cullEligible && combo.cachedCull.valid)
+                {
+                    const math::AABB worldBounds = childInfo.bounds.getTransformed(stepWorld);
+                    math::Frustum frustum;
+                    frustum.extractFromMatrix(combo.cachedCull.viewProj);
+                    bool culled = !frustum.intersectsAABB(worldBounds);
+                    if (!culled && combo.cachedCull.distanceCullEnabled && combo.cachedCull.maxDrawDistance > 0.0f)
+                    {
+                        const float dist = glm::distance(worldBounds.getCenter(), combo.cachedCull.cameraPos);
+                        culled = dist > combo.cachedCull.maxDrawDistance;
+                    }
+                    if (culled)
+                    {
+                        ++culledSpawns;
+                        return 0;
+                    }
+                }
+            }
+        }
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        events::vfxruntime::CreateVFXInstanceCommand createCmd;
+        createCmd.params.vfxAssetPath = path;
+        createCmd.params.worldTransform = stepWorld;
+        createCmd.params.loop = false;
+        createCmd.params.autoDestroy = true; // fire-and-forget; self-destructs when done
+        createCmd.params.priority = VFXEmitterPriority::Normal;
+        createCmd.params.cameraRelative = false;
+        // Distinct-but-varied seed: the receiver's step seed perturbed by how many event-children it
+        // has already spawned, so repeated impacts don't look identical. Never 0 (renderer-random).
+        uint32_t seed = combo.timeline.derivedSeed(receivingStepIndex) ^
+                        (static_cast<uint32_t>(combo.eventChildren.size()) * 2654435761u);
+        if (seed == 0)
+            seed = 1u;
+        createCmd.params.seed = seed;
+        // Non-poolable for the same reason as spawnStep: a retained id must never be re-issued.
+        createCmd.params.poolable = false;
+
+        const VFXInstanceId childId = dispatcher.execute(createCmd);
+        if (childId == 0)
+        {
+            reportWarning("[VFXSequence] combo " + std::to_string(combo.id) + " StepOutput step '" +
+                          recv.def->label + "' failed to create instance");
+            return 0;
+        }
+
+        // Authored step overrides + inherit-gated impact payload. Position is the anchor (already in
+        // the transform); velocity maps to emit direction + start speed, color to start color, and
+        // scalar to start size — the fields the services override API exposes.
+        VFXEmitterOverrides overrides = toOverrides(*recv.def);
+        if (recv.def->inheritColor && payload.color)
+            overrides.startColor = *payload.color;
+        if (recv.def->inheritScalar && payload.scalar)
+            overrides.startSize = *payload.scalar;
+        if (recv.def->inheritVelocity && payload.velocity)
+        {
+            const glm::vec3 v = *payload.velocity;
+            const float speed = glm::length(v);
+            if (speed > 1e-4f)
+            {
+                overrides.emitDirection = v / speed;
+                overrides.startSpeed = speed;
+            }
+        }
+        for (const auto& overrideValue : payload.custom)
+            services::applyOverride(overrides, overrideValue);
+        events::vfxruntime::ApplyVFXInstanceOverridesCommand ovCmd;
+        ovCmd.instanceId = childId;
+        ovCmd.overrides = overrides;
+        dispatcher.execute(ovCmd);
+
+        events::vfxruntime::PlayVFXInstanceCommand playCmd;
+        playCmd.instanceId = childId;
+        dispatcher.execute(playCmd);
+
+        return childId;
+    }
+
+    void VFXSequenceRuntimeServiceImpl::drainParticleEvents()
+    {
+        std::vector<PendingParticleEvent> events;
+        {
+            std::lock_guard<std::mutex> lock(particleEventMutex);
+            if (pendingParticleEvents.empty())
+                return;
+            events.swap(pendingParticleEvents);
+        }
+        if (combos.empty())
+            return;
+
+        // Only reached when there are events to route: snapshot the cull/tier state and stamp every
+        // active combo so spawnEventChild reuses the pre-spawn cull/tier gate.
+        const CachedCull cull = queryCullState();
+        const CachedTier tier = queryQualityTier();
+
+        // Transient reverse index: source childId -> (comboId, sourceStepIndex). A source is a live
+        // (or just-retired within grace) step declaring an outputEventName, in an ACTIVE combo (a
+        // stopped/paused/culled combo must not spawn new receivers). No persistent map => no stale-id
+        // leak; combo child ids are monotonic + non-poolable => no reuse can mis-route (INV-4/INV-5).
+        std::unordered_map<VFXInstanceId, std::pair<VFXComboInstanceId, int>> sourceIndex;
+        for (auto& [comboId, combo] : combos)
+        {
+            if (!combo.playing || combo.paused || combo.comboCulled)
+                continue;
+            combo.cachedCull = cull;
+            combo.cachedTier = tier;
+            for (size_t i = 0; i < combo.steps.size(); ++i)
+            {
+                const ActiveStep& step = combo.steps[i];
+                if (step.childId != 0 && step.def && !step.def->outputEventName.empty())
+                    sourceIndex[step.childId] = {comboId, static_cast<int>(i)};
+            }
+            for (const auto& rs : combo.retiredSourceGrace)
+            {
+                if (rs.childId != 0)
+                    sourceIndex[rs.childId] = {comboId, rs.stepIndex};
+            }
+        }
+        if (sourceIndex.empty())
+            return;
+
+        // Per-drain per-receiver spawn counter for the EveryEvent per-tick cap (key = comboId|r).
+        std::unordered_map<uint64_t, uint32_t> spawnsThisTick;
+
+        for (const auto& e : events)
+        {
+            auto srcIt = sourceIndex.find(e.parentInstanceId);
+            if (srcIt == sourceIndex.end())
+                continue; // stale / non-source / inactive combo => drop (structurally correct)
+            const VFXComboInstanceId comboId = srcIt->second.first;
+            const int srcIdx = srcIt->second.second;
+            auto comboIt = combos.find(comboId);
+            if (comboIt == combos.end())
+                continue; // combo destroyed this frame; its receivers went with it
+            ComboInstance& combo = comboIt->second;
+            const vfx::VFXSequenceStep* srcDef = combo.steps[static_cast<size_t>(srcIdx)].def;
+            if (!srcDef)
+                continue;
+            if (e.eventType != static_cast<uint32_t>(srcDef->outputEventType))
+                continue; // wrong particle event type for this source's declared output
+
+            const std::string outName = srcDef->outputEventName;
+
+            // World-space payload (INV-3): position anchors the spawn; the rest is inherit-gated.
+            vfx::VFXEventPayload payload;
+            payload.position = e.position;
+            payload.velocity = e.velocity;
+            payload.color = glm::vec4(e.color, 1.0f);
+            payload.scalar = e.size;
+
+            for (size_t r = 0; r < combo.steps.size(); ++r)
+            {
+                const vfx::VFXSequenceStep* recvDef = combo.steps[r].def;
+                if (!recvDef || recvDef->trigger != vfx::VFXStepTrigger::StepOutput)
+                    continue;
+                if (recvDef->sourceStepIndex != srcIdx || recvDef->sourceEventName != outName)
+                    continue;
+
+                if (recvDef->eventConsumption == vfx::VFXEventConsumption::FirstEvent)
+                {
+                    if (combo.firstEventConsumed[r])
+                        continue;
+                    combo.firstEventConsumed[r] = true;
+                    const VFXInstanceId child = spawnEventChild(combo, static_cast<int>(r), payload);
+                    if (child != 0)
+                        combo.eventChildren.push_back(
+                            ComboInstance::EventChild{child, static_cast<int>(r), false});
+                }
+                else // EveryEvent — bounded by the per-receiver live budget + per-tick cap.
+                {
+                    uint32_t liveForR = 0;
+                    for (const auto& ec : combo.eventChildren)
+                        if (ec.receivingStepIndex == static_cast<int>(r))
+                            ++liveForR;
+                    const uint64_t key = (static_cast<uint64_t>(comboId) << 32) | static_cast<uint32_t>(r);
+                    uint32_t& perTick = spawnsThisTick[key];
+                    if (liveForR >= recvDef->eventBudget || perTick >= kMaxEventSpawnsPerReceiverPerTick)
+                    {
+                        reportWarning("[VFXSequence] combo " + std::to_string(comboId) +
+                                      " StepOutput receiver hit its event budget; dropping an event spawn");
+                        continue;
+                    }
+                    const VFXInstanceId child = spawnEventChild(combo, static_cast<int>(r), payload);
+                    if (child != 0)
+                    {
+                        combo.eventChildren.push_back(
+                            ComboInstance::EventChild{child, static_cast<int>(r), false});
+                        ++perTick;
+                    }
+                }
+            }
+        }
+    }
+
     void VFXSequenceRuntimeServiceImpl::fireSoundStep(ComboInstance& combo, int stepIndex,
                                                       const glm::mat4& stepParent)
     {
@@ -580,6 +853,7 @@ namespace services
         combo.steps.reserve(data->steps.size());
         for (const auto& stepDef : data->steps)
             combo.steps.push_back(ActiveStep{&stepDef, 0, false, false});
+        combo.firstEventConsumed.assign(data->steps.size(), false); // VK-1524 FirstEvent latches
 
         combo.timeline.reset(*data, combo.seed);
 
@@ -601,6 +875,26 @@ namespace services
                 step.payload.reset();
             }
         }
+        // VK-1524 — destroy any live event-children so they never outlive the combo (they are
+        // separate instances, not tracked by step.childId).
+        for (auto& ec : combo.eventChildren)
+        {
+            if (ec.childId != 0)
+            {
+                events::vfxruntime::DestroyVFXInstanceCommand destroyCmd;
+                destroyCmd.instanceId = ec.childId;
+                dispatcher.execute(destroyCmd);
+            }
+        }
+        combo.eventChildren.clear();
+    }
+
+    void VFXSequenceRuntimeServiceImpl::clearEventState(ComboInstance& combo)
+    {
+        // VK-1524 — destroyCombo() already destroys + clears eventChildren; reset the schedule-scoped
+        // StepOutput state so a reset/replay/loop re-arms FirstEvent latches and drops stale grace.
+        std::fill(combo.firstEventConsumed.begin(), combo.firstEventConsumed.end(), false);
+        combo.retiredSourceGrace.clear();
     }
 
     void VFXSequenceRuntimeServiceImpl::destroyCombo(VFXComboInstanceId id)
@@ -683,6 +977,7 @@ namespace services
             return;
         ComboInstance& combo = it->second;
         destroyCombo(combo);
+        clearEventState(combo); // VK-1524 — re-arm FirstEvent latches, drop grace
         combo.playing = false;
         combo.accumulator = 0.0f;
         combo.prewarmApplied = false;
@@ -854,6 +1149,7 @@ namespace services
     {
         // Tear down live children and reset the schedule to t=0.
         destroyCombo(combo);
+        clearEventState(combo); // VK-1524 — seek/prewarm never routes events; drop latches + grace
         combo.timeline.rewind();
         combo.accumulator = 0.0f;
         for (auto& step : combo.steps)
@@ -941,6 +1237,9 @@ namespace services
             step.frozenByCull = false;
             step.payload.reset();
         }
+        // VK-1524 — at completion the combo has no live children (anyLive counts event-children +
+        // grace), so eventChildren is already empty; re-arm the FirstEvent latches for the next loop.
+        clearEventState(combo);
         combo.accumulator = 0.0f;
         combo.playing = true;
     }
@@ -1005,6 +1304,26 @@ namespace services
                 step.frozenByCull = false;
             }
         }
+        // VK-1524 — freeze/thaw the world-anchored event-children in lockstep with the step children.
+        for (auto& ec : combo.eventChildren)
+        {
+            if (ec.childId == 0)
+                continue;
+            if (frozen)
+            {
+                events::vfxruntime::StopVFXInstanceCommand stopCmd;
+                stopCmd.instanceId = ec.childId;
+                dispatcher.execute(stopCmd);
+                ec.frozenByCull = true;
+            }
+            else if (ec.frozenByCull)
+            {
+                events::vfxruntime::PlayVFXInstanceCommand playCmd;
+                playCmd.instanceId = ec.childId;
+                dispatcher.execute(playCmd);
+                ec.frozenByCull = false;
+            }
+        }
     }
 
     void VFXSequenceRuntimeServiceImpl::update(float deltaTime)
@@ -1022,6 +1341,11 @@ namespace services
             for (const auto& p : invalidations)
                 invalidateSequence(p);
         }
+
+        // VK-1524 — route marshalled particle events to StepOutput receivers at the TOP of the tick
+        // (forward-only), before the deterministic timeline advances and before the reap/completion
+        // pass, so a source that emitted last frame is still resolvable this frame.
+        drainParticleEvents();
 
         if (combos.empty())
             return;
@@ -1110,13 +1434,45 @@ namespace services
                 playingQuery.instanceId = step.childId;
                 if (!dispatcher.query(playingQuery))
                 {
+                    // VK-1524 — a source step's final death/collision event arrives a few frames
+                    // after its child stops (GPU readback + FIFO latency). Keep its id routable for
+                    // a short grace so that trailing event still spawns the bound receiver.
+                    if (!step.def->outputEventName.empty())
+                    {
+                        const int stepIndex = static_cast<int>(&step - combo.steps.data());
+                        combo.retiredSourceGrace.push_back(
+                            ComboInstance::RetiredSource{step.childId, stepIndex, kSourceGraceFrames});
+                    }
                     step.childId = 0;
                     step.payload.reset();
                 }
             }
 
+            // VK-1524 — reap finished event-children (world-anchored fire-and-forget instances).
+            for (size_t k = 0; k < combo.eventChildren.size();)
+            {
+                events::vfxruntime::IsVFXInstancePlayingQuery playingQuery;
+                playingQuery.instanceId = combo.eventChildren[k].childId;
+                if (combo.eventChildren[k].childId == 0 || !dispatcher.query(playingQuery))
+                    combo.eventChildren.erase(combo.eventChildren.begin() + static_cast<long>(k));
+                else
+                    ++k;
+            }
+
+            // VK-1524 — age out the just-retired-source grace window.
+            for (size_t k = 0; k < combo.retiredSourceGrace.size();)
+            {
+                if (--combo.retiredSourceGrace[k].framesLeft <= 0)
+                    combo.retiredSourceGrace.erase(combo.retiredSourceGrace.begin() + static_cast<long>(k));
+                else
+                    ++k;
+            }
+
             // Combo is finished once it has played, every step has spawned, and no children remain.
-            bool anyLive = false;
+            // VK-1524 — event-children and an active source-grace window also count as "live" so a
+            // combo neither auto-destroys while a StepOutput source can still emit nor while an
+            // event-child is still playing.
+            bool anyLive = !combo.eventChildren.empty() || !combo.retiredSourceGrace.empty();
             for (const auto& step : combo.steps)
             {
                 if (step.childId != 0)

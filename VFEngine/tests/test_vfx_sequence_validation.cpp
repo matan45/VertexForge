@@ -129,4 +129,119 @@ TEST_SUITE("VFXSequenceValidation")
         CHECK_FALSE(hasDiagnostic(report, vfx::validation::Severity::Warning, "EmptyCue"));
         CHECK_FALSE(hasDiagnostic(report, vfx::validation::Severity::Info, "matches no cue-driven step"));
     }
+
+    TEST_CASE("VK-1524 — StepOutput binding diagnostics")
+    {
+        using Severity = vfx::validation::Severity;
+
+        SUBCASE("a valid source -> receiver binding produces no errors")
+        {
+            vfx::VFXSequenceData data;
+            auto src = makeValidStep();
+            src.label = "src";
+            src.outputEventName = "impact";
+            src.outputEventType = vfx::VFXEventType::OnCollision;
+            data.steps.push_back(src);
+
+            auto recv = makeValidStep();
+            recv.label = "recv";
+            recv.trigger = vfx::VFXStepTrigger::StepOutput;
+            recv.sourceStepIndex = 0;
+            recv.sourceEventName = "impact";
+            data.steps.push_back(recv);
+
+            const auto report = vfx::validation::validateSequence(data);
+            CHECK_FALSE(report.hasErrors());
+        }
+
+        SUBCASE("missing source, empty name, self-dep, non-VFX source, name mismatch, dual-role")
+        {
+            vfx::VFXSequenceData data;
+
+            auto missing = makeValidStep(); // 0
+            missing.trigger = vfx::VFXStepTrigger::StepOutput;
+            missing.sourceStepIndex = 99;
+            missing.sourceEventName = "";
+            data.steps.push_back(missing);
+
+            auto self = makeValidStep(); // 1
+            self.trigger = vfx::VFXStepTrigger::StepOutput;
+            self.sourceStepIndex = 1;
+            self.sourceEventName = "x";
+            data.steps.push_back(self);
+
+            vfx::VFXSequenceStep sound; // 2 — non-VFX source
+            sound.kind = vfx::VFXStepKind::Sound;
+            sound.label = "sound-src";
+            sound.audioRef = asset::AssetRef::fromGUID(asset::AssetGUID::fromValue(0xABC002));
+            sound.outputEventName = "boom";
+            data.steps.push_back(sound);
+
+            auto badSrc = makeValidStep(); // 3 — receiver of the non-VFX source
+            badSrc.trigger = vfx::VFXStepTrigger::StepOutput;
+            badSrc.sourceStepIndex = 2;
+            badSrc.sourceEventName = "boom";
+            data.steps.push_back(badSrc);
+
+            auto realSrc = makeValidStep(); // 4 — VFX source publishing "impact"
+            realSrc.outputEventName = "impact";
+            data.steps.push_back(realSrc);
+
+            auto mismatch = makeValidStep(); // 5 — binds a name the source doesn't publish
+            mismatch.trigger = vfx::VFXStepTrigger::StepOutput;
+            mismatch.sourceStepIndex = 4;
+            mismatch.sourceEventName = "wrong";
+            data.steps.push_back(mismatch);
+
+            auto dual = makeValidStep(); // 6 — both a source and a StepOutput receiver
+            dual.trigger = vfx::VFXStepTrigger::StepOutput;
+            dual.sourceStepIndex = 4;
+            dual.sourceEventName = "impact";
+            dual.outputEventName = "chain";
+            data.steps.push_back(dual);
+
+            const auto report = vfx::validation::validateSequence(data);
+            CHECK(hasDiagnostic(report, Severity::Error, "missing source step"));
+            CHECK(hasDiagnostic(report, Severity::Error, "no source event name"));
+            CHECK(hasDiagnostic(report, Severity::Error, "self-dependency"));
+            CHECK(hasDiagnostic(report, Severity::Error, "not a VFX step"));
+            CHECK(hasDiagnostic(report, Severity::Error, "does not publish an event named 'wrong'"));
+            CHECK(hasDiagnostic(report, Severity::Error, "both an event source"));
+        }
+
+        SUBCASE("a socket on a StepOutput receiver warns (world-anchored)")
+        {
+            vfx::VFXSequenceData data;
+            auto src = makeValidStep();
+            src.outputEventName = "impact";
+            data.steps.push_back(src);
+            auto recv = makeValidStep();
+            recv.trigger = vfx::VFXStepTrigger::StepOutput;
+            recv.sourceStepIndex = 0;
+            recv.sourceEventName = "impact";
+            recv.socketName = "hand_R";
+            data.steps.push_back(recv);
+            const auto report = vfx::validation::validateSequence(data);
+            CHECK(hasDiagnostic(report, Severity::Warning, "world-anchored"));
+        }
+
+        SUBCASE("a 2-cycle of dual-role steps is reported")
+        {
+            vfx::VFXSequenceData data;
+            auto a = makeValidStep();
+            a.outputEventName = "a";
+            a.trigger = vfx::VFXStepTrigger::StepOutput;
+            a.sourceStepIndex = 1;
+            a.sourceEventName = "b";
+            data.steps.push_back(a);
+            auto b = makeValidStep();
+            b.outputEventName = "b";
+            b.trigger = vfx::VFXStepTrigger::StepOutput;
+            b.sourceStepIndex = 0;
+            b.sourceEventName = "a";
+            data.steps.push_back(b);
+            const auto report = vfx::validation::validateSequence(data);
+            CHECK(hasDiagnostic(report, Severity::Error, "dependency cycle"));
+        }
+    }
 }

@@ -86,6 +86,20 @@ namespace services
             bool socketWarned = false;   // warn-once when a socket can't be resolved
             std::vector<ActiveStep> steps;
 
+            // VK-1524 — StepOutput receivers. Event-children are world-anchored, fire-and-forget
+            // instances spawned when a bound source step publishes a particle event; they are NOT
+            // 1:1 with steps (EveryEvent spawns many per receiver), so they live in their own list
+            // rather than in ActiveStep::childId. `firstEventConsumed` (sized to steps) is the
+            // FirstEvent latch per receiving step. `retiredSourceGrace` keeps a just-reaped source
+            // step's instance id routable for a few frames so its trailing death/collision event
+            // (which arrives ~2-3 frames late via GPU readback + the render->update FIFO) still
+            // resolves to the source before the combo completes.
+            struct EventChild { VFXInstanceId childId = 0; int receivingStepIndex = -1; bool frozenByCull = false; };
+            struct RetiredSource { VFXInstanceId childId = 0; int stepIndex = -1; int framesLeft = 0; };
+            std::vector<EventChild> eventChildren;
+            std::vector<bool> firstEventConsumed;
+            std::vector<RetiredSource> retiredSourceGrace;
+
             // VK-1451 — deterministic transport state. The simulated clock now lives in
             // `timeline` (timeline.elapsed()); `accumulator` carries the sub-fixedStep
             // remainder so the spawn schedule is independent of frame pacing.
@@ -128,6 +142,25 @@ namespace services
         std::mutex sequenceInvalidationMutex;
         std::vector<std::string> pendingSequenceInvalidations;
 
+        // VK-1524 — particle step-output events. VFXParticleEventNotification is published on the
+        // render thread (GPU readback in VFXSceneRenderer::processEvents); the subscription
+        // callback only pushes a mirror of its fields into this FIFO under `particleEventMutex`.
+        // update() drains it at the top on the update thread and routes each event to the owning
+        // combo's StepOutput receivers. A local mirror struct (like CachedCull) keeps this HEADER
+        // free of the services::events VFX headers, which would shadow the global ::events namespace.
+        struct PendingParticleEvent
+        {
+            uint32_t eventType = 0;
+            glm::vec3 position{0.0f};
+            glm::vec3 velocity{0.0f};
+            glm::vec3 color{1.0f};
+            float size = 1.0f;
+            VFXInstanceId parentInstanceId = 0;
+        };
+        std::mutex particleEventMutex;
+        std::vector<PendingParticleEvent> pendingParticleEvents;
+        ::events::SubscriptionToken particleEventToken;
+
         // Sequence assets are cached as shared_ptr so each combo's step pointers stay valid.
         std::unordered_map<std::string, std::shared_ptr<const vfx::VFXSequenceData>> sequenceCache;
 
@@ -156,6 +189,17 @@ namespace services
         void invalidateSequence(const std::string& path);
         void spawnStep(ComboInstance& combo, int stepIndex, const glm::mat4& stepParent,
                        const vfx::VFXCuePayload* payload = nullptr);
+        // VK-1524 — drain the marshalled particle-event FIFO (top of update(), forward-only) and
+        // route each event to the owning combo's StepOutput receivers. Queries the cull/tier
+        // snapshot internally (only when there are events to route) so spawnEventChild reuses the
+        // pre-spawn cull/tier gate.
+        void drainParticleEvents();
+        // VK-1524 — spawn one world-anchored, fire-and-forget event-child for a StepOutput receiver
+        // at the event's world position + the receiver's local offset. Returns 0 on cull/failure.
+        VFXInstanceId spawnEventChild(ComboInstance& combo, int receivingStepIndex,
+                                      const vfx::VFXEventPayload& payload);
+        // VK-1524 — destroy every event-child and reset the FirstEvent latches + grace list.
+        void clearEventState(ComboInstance& combo);
         // VK-1496 — typed-step fan-out (Sound + ScriptCue). Plain glm/int signatures so the
         // header pulls in NO audio events header (audio commands are dispatched from the .cpp
         // only, avoiding the services::events -> ::events namespace-shadowing pitfall).

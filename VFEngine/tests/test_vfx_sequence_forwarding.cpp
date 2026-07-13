@@ -141,6 +141,54 @@ namespace
         REQUIRE(vfx::VFXSequenceAsset::save(data, p.string()));
         return p.string();
     }
+
+    // VK-1524 — a source VFX step publishing "impact" on collision + a StepOutput receiver
+    // bound to it with a local (0,1,0) offset.
+    vfx::VFXSequenceData makeStepOutputSequence(vfx::VFXEventConsumption consumption, uint32_t budget)
+    {
+        vfx::VFXSequenceData data;
+        data.name = "stepout";
+
+        vfx::VFXSequenceStep src;
+        src.vfxRef = makeResolvingRef(0xE001, "assets/vfx/proj.vfVFX");
+        src.label = "proj";
+        src.startTime = 0.0f;
+        src.outputEventName = "impact";
+        src.outputEventType = vfx::VFXEventType::OnCollision;
+        data.steps.push_back(src);
+
+        vfx::VFXSequenceStep recv;
+        recv.vfxRef = makeResolvingRef(0xE002, "assets/vfx/boom.vfVFX");
+        recv.label = "boom";
+        recv.trigger = vfx::VFXStepTrigger::StepOutput;
+        recv.sourceStepIndex = 0;
+        recv.sourceEventName = "impact";
+        recv.eventConsumption = consumption;
+        recv.eventBudget = budget;
+        recv.localPosition = glm::vec3(0.0f, 1.0f, 0.0f);
+        data.steps.push_back(recv);
+        return data;
+    }
+
+    void publishParticleEvent(uint32_t eventType, VFXInstanceId parentInstanceId, const glm::vec3& pos,
+                              const glm::vec3& vel = glm::vec3(0.0f))
+    {
+        services::events::vfxruntime::VFXParticleEventNotification n;
+        n.eventType = eventType;
+        n.position = pos;
+        n.velocity = vel;
+        n.parentInstanceId = parentInstanceId;
+        ::events::EventDispatcher::instance().publish(n);
+    }
+
+    int countCreatesWithPath(const MockVFXRuntime& mock, const std::string& path)
+    {
+        int n = 0;
+        for (const auto& c : mock.creates)
+            if (c.path == path)
+                ++n;
+        return n;
+    }
 }
 
 TEST_SUITE("VFXSequenceForwarding")
@@ -1103,5 +1151,114 @@ TEST_SUITE("VFXSequenceForwarding")
         // The crux: looping must never tear down + recreate. One-shot children self-destruct
         // provider-side; the loop restart destroys nothing, so no DestroyVFXInstance is ever issued.
         CHECK(mock.destroys.empty());
+    }
+
+    // -------- VK-1524: StepOutput receiver spawns at the source's particle event location --------
+    TEST_CASE("a StepOutput FirstEvent receiver spawns once at the world event position")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        const std::string path =
+            saveSequence("StepOut_First.vfVFXSequence",
+                         makeStepOutputSequence(vfx::VFXEventConsumption::FirstEvent, 16));
+
+        VFXSequenceRuntimeServiceImpl svc;
+        svc.registerEventHandlers(); // installs the VFXParticleEventNotification subscription
+
+        // A moving parent — the world-space event position must NOT be re-transformed by it.
+        const glm::mat4 parent = glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f));
+        auto combo = svc.createCombo(path, parent, 0, /*autoDestroyOnFinish*/ true);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+
+        svc.update(0.1f); // source (step 0) spawns; the StepOutput receiver does NOT
+        REQUIRE(mock.creates.size() == 1);
+        const VFXInstanceId sourceId = mock.creates[0].id;
+        CHECK(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 0);
+
+        // A collision event at world (5,6,7) for the source's child.
+        publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnCollision), sourceId,
+                             glm::vec3(5.0f, 6.0f, 7.0f));
+        svc.update(1.0f / 60.0f);
+
+        // The receiver spawned exactly once, world-anchored: translate(eventPos) * local(0,1,0),
+        // with the combo parent (10,0,0) NOT applied again.
+        REQUIRE(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 1);
+        glm::mat4 recvXform{1.0f};
+        for (const auto& c : mock.creates)
+            if (c.path == "assets/vfx/boom.vfVFX")
+                recvXform = c.worldTransform;
+        CHECK(recvXform[3].x == doctest::Approx(5.0f));
+        CHECK(recvXform[3].y == doctest::Approx(7.0f)); // 6 + local 1
+        CHECK(recvXform[3].z == doctest::Approx(7.0f));
+
+        // A second event is ignored (FirstEvent latched); a mismatched event type never fires.
+        publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnCollision), sourceId,
+                             glm::vec3(0.0f));
+        publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnDeath), sourceId, glm::vec3(0.0f));
+        svc.update(1.0f / 60.0f);
+        CHECK(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 1);
+    }
+
+    TEST_CASE("a StepOutput EveryEvent receiver spawns per event, bounded by its budget")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        const std::string path =
+            saveSequence("StepOut_Every.vfVFXSequence",
+                         makeStepOutputSequence(vfx::VFXEventConsumption::EveryEvent, /*budget*/ 2));
+
+        VFXSequenceRuntimeServiceImpl svc;
+        svc.registerEventHandlers();
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, true);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+
+        svc.update(0.1f);
+        REQUIRE(mock.creates.size() == 1);
+        const VFXInstanceId sourceId = mock.creates[0].id;
+
+        // Five collision events in one tick; the live budget of 2 caps the spawns (mock keeps
+        // every child "live", so liveForR saturates at the budget).
+        for (int i = 0; i < 5; ++i)
+            publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnCollision), sourceId,
+                                 glm::vec3(static_cast<float>(i), 0.0f, 0.0f));
+        svc.update(1.0f / 60.0f);
+        CHECK(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 2);
+    }
+
+    TEST_CASE("a source reaped this frame still routes its trailing event via the grace window")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        const std::string path =
+            saveSequence("StepOut_Grace.vfVFXSequence",
+                         makeStepOutputSequence(vfx::VFXEventConsumption::FirstEvent, 16));
+
+        VFXSequenceRuntimeServiceImpl svc;
+        svc.registerEventHandlers();
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, true);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+
+        svc.update(0.1f);
+        REQUIRE(mock.creates.size() == 1);
+        const VFXInstanceId sourceId = mock.creates[0].id;
+
+        // The source child finishes (provider auto-destroy) BEFORE its trailing collision event
+        // arrives. The reap moves it into the grace window; the event must still route.
+        mock.live.erase(sourceId);
+        svc.update(1.0f / 60.0f); // reap the source -> grace armed
+
+        publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnCollision), sourceId,
+                             glm::vec3(1.0f, 2.0f, 3.0f));
+        svc.update(1.0f / 60.0f);
+        CHECK(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 1);
     }
 }

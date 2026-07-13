@@ -161,6 +161,7 @@ namespace vfx::validation
         std::unordered_map<std::string, std::vector<int>> exactCueSteps;
         std::unordered_map<std::string, std::vector<int>> normalizedCueSteps;
         std::unordered_map<int, std::vector<int>> variantGroups; // VK-1497
+        std::unordered_map<int, int> outputEdges;                // VK-1524: receiver step -> source step
 
         for (int i = 0; i < static_cast<int>(sequence.steps.size()); ++i)
         {
@@ -299,6 +300,72 @@ namespace vfx::validation
 
             if (step.kind == VFXStepKind::VFX) // overrides only apply to VFX children
                 detail::validateOverrides(report, step.overrides, i, step);
+
+            // VK-1524 — step-output event binding validation.
+            const bool isSource = !detail::trim(step.outputEventName).empty();
+            const bool isReceiver = (step.trigger == VFXStepTrigger::StepOutput);
+            if (isSource && isReceiver)
+            {
+                detail::addStep(report, Severity::Error, i, step,
+                                "a step cannot be both an event source and a StepOutput receiver.");
+            }
+            if (isReceiver)
+            {
+                if (!detail::trim(step.socketName).empty())
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    "StepOutput spawns are world-anchored; the socket is ignored.");
+                }
+                if (detail::trim(step.sourceEventName).empty())
+                {
+                    detail::addStep(report, Severity::Error, i, step,
+                                    "StepOutput binding has no source event name.");
+                }
+                const int src = step.sourceStepIndex;
+                if (src < 0 || src >= static_cast<int>(sequence.steps.size()))
+                {
+                    detail::addStep(report, Severity::Error, i, step,
+                                    "StepOutput binds to a missing source step (index " +
+                                        std::to_string(src) + ").");
+                }
+                else if (src == i)
+                {
+                    detail::addStep(report, Severity::Error, i, step,
+                                    "StepOutput binds to itself (self-dependency).");
+                }
+                else
+                {
+                    const VFXSequenceStep& source = sequence.steps[static_cast<size_t>(src)];
+                    if (source.kind != VFXStepKind::VFX)
+                    {
+                        detail::addStep(report, Severity::Error, i, step,
+                                        "source step " + std::to_string(src) +
+                                            " is not a VFX step; only VFX steps emit particle events.");
+                    }
+                    else if (detail::trim(source.outputEventName).empty())
+                    {
+                        detail::addStep(report, Severity::Error, i, step,
+                                        "source step " + std::to_string(src) + " publishes no named output.");
+                    }
+                    else if (source.outputEventName != step.sourceEventName)
+                    {
+                        detail::addStep(report, Severity::Error, i, step,
+                                        "source step " + std::to_string(src) +
+                                            " does not publish an event named '" + step.sourceEventName + "'.");
+                    }
+                    outputEdges[i] = src; // for the post-loop cycle pass
+                }
+                if (step.eventConsumption == VFXEventConsumption::EveryEvent && step.eventBudget == 0)
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    "EveryEvent consumption with an event budget of 0 never spawns.");
+                }
+                if (step.inheritNormal)
+                {
+                    detail::addStep(report, Severity::Info, i, step,
+                                    "normal inheritance has no producer yet and is ignored this version.");
+                }
+            }
         }
 
         for (const auto& [cue, steps] : exactCueSteps)
@@ -319,6 +386,37 @@ namespace vfx::validation
                 detail::add(report, Severity::Info, members.front(),
                             "Variant group " + std::to_string(group) +
                                 " has a single member; it always plays.");
+            }
+        }
+
+        // VK-1524 — dependency-cycle detection over receiver->source edges. Each receiver has at
+        // most one outgoing edge (a functional graph), so a cycle is found by walking each chain
+        // and revisiting a node already on the current path. Bipartite-by-construction today (a
+        // source is Time/Cue, a receiver is StepOutput, and dual-role is an Error above), so this
+        // is defensive insurance that also surfaces a clear "cycle" diagnostic if the model relaxes.
+        {
+            std::unordered_set<int> settled;
+            for (const auto& [start, _] : outputEdges)
+            {
+                if (settled.count(start))
+                    continue;
+                std::unordered_set<int> path;
+                std::vector<int> chain;
+                int node = start;
+                while (outputEdges.count(node) && !path.count(node) && !settled.count(node))
+                {
+                    path.insert(node);
+                    chain.push_back(node);
+                    node = outputEdges.at(node);
+                }
+                if (outputEdges.count(node) && path.count(node))
+                {
+                    detail::addStep(report, Severity::Error, node,
+                                    sequence.steps[static_cast<size_t>(node)],
+                                    "is part of a StepOutput dependency cycle.");
+                }
+                for (int n : chain)
+                    settled.insert(n);
             }
         }
 

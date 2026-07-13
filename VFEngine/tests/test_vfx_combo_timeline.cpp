@@ -38,6 +38,18 @@ namespace
         return s;
     }
 
+    // VK-1524 — a StepOutput receiver: the timeline must never schedule it (it spawns from a
+    // runtime particle event in the service), and it must not block completion.
+    VFXSequenceStep eventStep(int sourceStepIndex, const std::string& eventName)
+    {
+        VFXSequenceStep s;
+        s.trigger = VFXStepTrigger::StepOutput;
+        s.sourceStepIndex = sourceStepIndex;
+        s.sourceEventName = eventName;
+        s.startTime = 0.0f; // even at t=0 it must NOT auto-spawn
+        return s;
+    }
+
     // Collect only the spawned step indices (in emission order) from an event list.
     std::vector<int> spawnIndices(const std::vector<ComboEvent>& events)
     {
@@ -542,5 +554,37 @@ TEST_SUITE("VFXComboTimeline")
 
         // Stable path (rewind keeps the same seed): identical resolution every iteration.
         CHECK(VFXComboTimeline::resolvePlays(data, base) == VFXComboTimeline::resolvePlays(data, base));
+    }
+
+    TEST_CASE("VK-1524 — a StepOutput receiver is never scheduled and never blocks completion")
+    {
+        VFXSequenceData data;
+        data.steps.push_back(timeStep(0.0f));          // 0: normal time step
+        data.steps.push_back(cueStep("go"));           // 1: cue step
+        data.steps.push_back(eventStep(0, "impact"));  // 2: StepOutput receiver (startTime 0)
+
+        VFXComboTimeline timeline;
+        timeline.reset(data, 123u);
+
+        std::vector<ComboEvent> out;
+        timeline.advance(1.0f, out); // well past every startTime
+        // Only the time step spawns; the StepOutput receiver must NOT (even though startTime==0).
+        CHECK(spawnIndices(out) == std::vector<int>{0});
+        CHECK(timeline.isSpawned(0));
+        CHECK_FALSE(timeline.isSpawned(2));
+
+        // Firing the receiver's would-be cue name does nothing (it is not cue-driven).
+        out.clear();
+        timeline.fireCue("impact", out);
+        CHECK(spawnIndices(out).empty());
+        CHECK_FALSE(timeline.isSpawned(2));
+
+        // The cue step still spawns on its cue; the StepOutput receiver stays unspawned.
+        out.clear();
+        timeline.fireCue("go", out);
+        CHECK(spawnIndices(out) == std::vector<int>{1});
+
+        // Completion ignores the never-firing StepOutput receiver, so the combo can finish.
+        CHECK(timeline.allStepsSpawned());
     }
 }

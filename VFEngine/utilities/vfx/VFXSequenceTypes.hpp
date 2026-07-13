@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../asset/AssetRef.hpp"
+#include "VFXEventTypes.hpp"
 #include "VFXParameterRegistry.hpp"
 #include "VFXTypes.hpp"
 #include <glm/glm.hpp>
@@ -32,15 +33,47 @@ namespace vfx
         ScriptCue = 2   // publish a named cue to gameplay scripts (onComboCue)
     };
 
-    // Optional gameplay payload carried by an event marker or a ScriptCue step.
-    // Declared before VFXSequenceStep because a ScriptCue step embeds one by value.
+    // VK-1524 — what schedules a step. Additive tag: absent in <=v1.5 files, where the
+    // codec derives it from `cueName` (empty => Time, non-empty => Cue) so old assets load
+    // unchanged.
+    //   Time       - fires when the combo clock reaches `startTime` (default; pre-v1.6 time-driven).
+    //   Cue        - fires when a matching named cue is triggered (pre-v1.6 cue-driven).
+    //   StepOutput - fires when a bound source step publishes a named particle event; the step
+    //                spawns at that event's WORLD-space location. Never scheduled by the timeline.
+    enum class VFXStepTrigger : uint8_t
+    {
+        Time = 0,
+        Cue = 1,
+        StepOutput = 2
+    };
+
+    // VK-1524 — how a StepOutput receiver consumes matching source events.
+    //   FirstEvent - spawn exactly once, from the first matching event.
+    //   EveryEvent - spawn once per matching event, bounded by the receiver's `eventBudget`.
+    enum class VFXEventConsumption : uint8_t
+    {
+        FirstEvent = 0,
+        EveryEvent = 1
+    };
+
+    // Optional gameplay payload carried by an event marker, a ScriptCue step, or (VK-1524)
+    // a particle step-output event. Declared before VFXSequenceStep because a ScriptCue step
+    // embeds one by value. This is the single spawn payload shared by every producer — cue
+    // markers, CPU particle events, and (future) VK-1501 GPU event->child requests — so the
+    // receiving seam (spawnStep with payload.position) never needs another schema redesign.
     struct VFXCuePayload
     {
         std::optional<glm::vec3> position;
+        std::optional<glm::vec3> velocity;   // VK-1524 — impact velocity (particle events)
+        std::optional<glm::vec3> normal;     // VK-1524 — reserved: no GPU normal producer yet
         std::optional<glm::vec4> color;
         std::optional<float> scalar;
         std::vector<VFXParamOverride> custom;
     };
+
+    // VK-1524 — clarity alias for the particle-event / GPU-event spawn payload. It is the same
+    // type as VFXCuePayload (one consumer: spawnStep); the alias documents intent at call sites.
+    using VFXEventPayload = VFXCuePayload;
 
     // One entry in a combo/sequence, placed in time (or behind a named cue) with an
     // optional local transform and socket attachment. `kind` selects the payload:
@@ -84,6 +117,30 @@ namespace vfx
         float probability = 1.0f;   // ungrouped: independent play chance in [0,1] (>=1 always plays)
         int32_t variantGroup = -1;  // >=0: exactly one member of the group plays (uniform in v1);
                                     //      probability is reserved as a future selection weight
+
+        // VK-1524 — scheduling trigger. Pre-v1.6 assets have no `trigger` field; the codec
+        // derives it from `cueName` (empty => Time, non-empty => Cue) so behavior is unchanged.
+        VFXStepTrigger trigger = VFXStepTrigger::Time;
+
+        // VK-1524 [source] — this step publishes a named spatial output when its live child
+        // .vfVFX emits `outputEventType` (death/collision/...). Empty name => not a source.
+        // A step must not be both a source and a StepOutput receiver (validation Error).
+        std::string outputEventName;
+        vfx::VFXEventType outputEventType = vfx::VFXEventType::OnDeath;
+
+        // VK-1524 [receiver] — when `trigger == StepOutput`, bind to source step `sourceStepIndex`
+        // and match its output `sourceEventName`; spawn at the event's world position offset by
+        // this step's local transform. Socket is ignored for StepOutput steps (world-anchored).
+        int32_t sourceStepIndex = -1;
+        std::string sourceEventName;
+        VFXEventConsumption eventConsumption = VFXEventConsumption::FirstEvent;
+        uint32_t eventBudget = 16;  // EveryEvent: max LIVE event-children spawned by this receiver
+        // Which impact fields the receiver inherits from the event payload (position is always
+        // applied — it is the spawn anchor). Opt-in, mirroring the emitter sub-emitter inherit flags.
+        bool inheritVelocity = false;
+        bool inheritColor = false;
+        bool inheritScalar = false;
+        bool inheritNormal = false;  // reserved: no GPU normal producer yet (inert this slice)
     };
 
     // A one-shot timeline event marker (VK-1451). When the combo clock crosses

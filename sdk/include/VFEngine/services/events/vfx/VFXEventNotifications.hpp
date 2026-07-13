@@ -14,6 +14,10 @@ namespace services::events::vfxruntime
         uint32_t eventType = 0;
         glm::vec3 position{0.0f};
         glm::vec3 velocity{0.0f};
+        // VK-1524 — impact color/size, carried straight from the GPU event so a StepOutput
+        // receiver can inherit them. Additive: existing subscribers ignore the new fields.
+        glm::vec3 color{1.0f};
+        float size = 1.0f;
         uint32_t emitterIndex = 0;
         uint32_t parentInstanceId = 0;
         uint32_t entityId = 0;

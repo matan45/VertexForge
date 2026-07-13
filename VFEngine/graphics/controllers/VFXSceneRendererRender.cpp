@@ -183,6 +183,13 @@ namespace controllers
         if (lastFrameEventCount == 0)
             return;
 
+        // VK-1524 — bound notify-only publishes per parent per frame so a high-death emitter with
+        // notify enabled but no sub-emitter cannot flood the event bus (the sequence receiver-side
+        // budget is the primary control; this is a backstop). Sub-emitter-coupled publishes are
+        // already bounded by MAX_SUB_EMITTERS_PER_PARENT.
+        constexpr uint32_t kMaxNotifyPublishesPerParent = 32;
+        std::unordered_map<VFXInstanceId, uint32_t> notifyPublishesByParent;
+
         for (uint32_t i = 0; i < lastFrameEventCount; ++i)
         {
             const auto& event = lastFrameEvents[i];
@@ -223,14 +230,19 @@ namespace controllers
                     parentSubCount++;
             }
 
-            // VK-1460: restore dev behavior — suppress BOTH the sub-emitter spawn and the
-            // VFXParticleEventNotification when there is no sub-VFX path or the per-parent
-            // cap is reached (dev `continue`d in both cases). Publishing past the cap
-            // spammed subscribed gameplay/script listeners every frame.
-            if (typeConfig.vfxPath.empty() || parentSubCount >= MAX_SUB_EMITTERS_PER_PARENT)
+            // VK-1460 / VK-1524: a sub-emitter spawns only when there is a sub-VFX path with
+            // per-parent cap headroom. The VFXParticleEventNotification publishes when we spawn
+            // (unchanged) OR when the event opts into `notify` (VK-1524 notify-only source, no
+            // sub-emitter). notify=false keeps the pre-VK-1524 gate byte-identical: no path or no
+            // headroom => no publish (which was VK-1460's anti-spam behavior).
+            const bool canSpawnSub =
+                !typeConfig.vfxPath.empty() && parentSubCount < MAX_SUB_EMITTERS_PER_PARENT;
+            if (!canSpawnSub && !typeConfig.notify)
                 continue;
 
-            uint32_t headroom = MAX_SUB_EMITTERS_PER_PARENT - parentSubCount;
+            // headroom==0 (or empty path) => evaluateEventSpawnCount returns 0, so the spawn loop
+            // below no-ops for a notify-only event.
+            uint32_t headroom = canSpawnSub ? (MAX_SUB_EMITTERS_PER_PARENT - parentSubCount) : 0u;
             uint32_t spawnCount = vfx::evaluateEventSpawnCount(
                 typeConfig, headroom,
                 [&]() { return vfx::eventProbabilityRoll(parentSeed, i, eventType); });
@@ -271,10 +283,21 @@ namespace controllers
                 }
             }
 
+            // VK-1524 — a notify-only publish (no sub-emitter this event) is rate-capped per parent.
+            if (!canSpawnSub)
+            {
+                uint32_t& published = notifyPublishesByParent[parentId];
+                if (published >= kMaxNotifyPublishesPerParent)
+                    continue;
+                ++published;
+            }
+
             services::events::vfxruntime::VFXParticleEventNotification notification;
             notification.eventType = event.eventType;
             notification.position = glm::vec3(event.position.x, event.position.y, event.position.z);
             notification.velocity = glm::vec3(event.velocity.x, event.velocity.y, event.velocity.z);
+            notification.color = glm::vec3(event.color.x, event.color.y, event.color.z); // VK-1524
+            notification.size = event.size;                                              // VK-1524
             notification.emitterIndex = event.emitterIndex;
             notification.parentInstanceId = parentId;
             notification.entityId = parentEntityId;

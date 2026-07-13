@@ -1302,6 +1302,21 @@ namespace editor::vfxeditor
                 ImGui::SameLine(100.0f);
                 changed |= ImGui::Checkbox("##inheritSize", &eventConfig.inheritSize);
 
+                // VK-1524: publish a CPU notification for this event without needing a sub-emitter
+                // child, so a VFX-sequence StepOutput source (or a script listener) can react to
+                // the death/collision location. Off => behavior is byte-identical to pre-VK-1524.
+                ImGui::Text("Notify (CPU)");
+                ImGui::SameLine(100.0f);
+                changed |= ImGui::Checkbox("##notify", &eventConfig.notify);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip(
+                        "Publish a particle-event notification (position/velocity/color/size)\n"
+                        "even with no sub-VFX path, so a VFX-sequence Step Output receiver can\n"
+                        "spawn at this event's world location. Leave off if the event already\n"
+                        "spawns a sub-emitter (that already notifies).");
+                }
+
                 // VK-1501: GPU fast path (spark-on-impact). Only OnDeath/OnCollision qualify.
                 if (entry.type == vfx::VFXEventType::OnDeath ||
                     entry.type == vfx::VFXEventType::OnCollision)

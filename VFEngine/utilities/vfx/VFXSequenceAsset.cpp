@@ -352,6 +352,8 @@ namespace vfx
         bool payloadEmpty(const VFXCuePayload& payload)
         {
             return !payload.position.has_value() &&
+                   !payload.velocity.has_value() &&
+                   !payload.normal.has_value() &&
                    !payload.color.has_value() &&
                    !payload.scalar.has_value() &&
                    payload.custom.empty();
@@ -362,6 +364,10 @@ namespace vfx
             json j;
             if (payload.position)
                 j["position"] = vec3ToJson(*payload.position);
+            if (payload.velocity)
+                j["velocity"] = vec3ToJson(*payload.velocity);
+            if (payload.normal)
+                j["normal"] = vec3ToJson(*payload.normal);
             if (payload.color)
                 j["color"] = vec4ToJson(*payload.color);
             if (payload.scalar)
@@ -384,6 +390,10 @@ namespace vfx
 
             if (j.contains("position"))
                 payload.position = jsonToVec3(j["position"], glm::vec3(0.0f));
+            if (j.contains("velocity"))
+                payload.velocity = jsonToVec3(j["velocity"], glm::vec3(0.0f));
+            if (j.contains("normal"))
+                payload.normal = jsonToVec3(j["normal"], glm::vec3(0.0f));
             if (j.contains("color"))
                 payload.color = jsonToVec4(j["color"], glm::vec4(1.0f));
             if (j.contains("scalar") && j["scalar"].is_number())
@@ -435,6 +445,19 @@ namespace vfx
         // VK-1497 — deterministic per-step variety (additive; tolerant reader defaults them).
         j["probability"] = step.probability;
         j["variantGroup"] = step.variantGroup;
+
+        // VK-1524 — trigger + source output declaration + StepOutput receiver binding (additive).
+        j["trigger"] = static_cast<int>(static_cast<uint8_t>(step.trigger));
+        j["outputEventName"] = step.outputEventName;
+        j["outputEventType"] = static_cast<int>(static_cast<uint8_t>(step.outputEventType));
+        j["sourceStepIndex"] = step.sourceStepIndex;
+        j["sourceEventName"] = step.sourceEventName;
+        j["eventConsumption"] = static_cast<int>(static_cast<uint8_t>(step.eventConsumption));
+        j["eventBudget"] = step.eventBudget;
+        j["inheritVelocity"] = step.inheritVelocity;
+        j["inheritColor"] = step.inheritColor;
+        j["inheritScalar"] = step.inheritScalar;
+        j["inheritNormal"] = step.inheritNormal;
 
         return j;
     }
@@ -538,6 +561,25 @@ namespace vfx
         // pre-VK-1497 file loads exactly like a default-constructed step: always play, no group).
         step.probability = j.value("probability", 1.0f);
         step.variantGroup = j.value("variantGroup", -1);
+
+        // VK-1524 — trigger (back-compat: pre-1.6 files have no `trigger` key; derive it from
+        // `cueName` so time/cue behavior is byte-identical) + source output + StepOutput binding.
+        const int defaultTrigger = static_cast<int>(static_cast<uint8_t>(
+            step.cueName.empty() ? VFXStepTrigger::Time : VFXStepTrigger::Cue));
+        step.trigger = static_cast<VFXStepTrigger>(
+            static_cast<uint8_t>(j.value("trigger", defaultTrigger)));
+        step.outputEventName = j.value("outputEventName", "");
+        step.outputEventType = static_cast<VFXEventType>(static_cast<uint8_t>(
+            j.value("outputEventType", static_cast<int>(static_cast<uint8_t>(VFXEventType::OnDeath)))));
+        step.sourceStepIndex = j.value("sourceStepIndex", -1);
+        step.sourceEventName = j.value("sourceEventName", "");
+        step.eventConsumption = static_cast<VFXEventConsumption>(
+            static_cast<uint8_t>(j.value("eventConsumption", 0)));
+        step.eventBudget = j.value("eventBudget", 16u);
+        step.inheritVelocity = j.value("inheritVelocity", false);
+        step.inheritColor = j.value("inheritColor", false);
+        step.inheritScalar = j.value("inheritScalar", false);
+        step.inheritNormal = j.value("inheritNormal", false);
 
         return step;
     }
