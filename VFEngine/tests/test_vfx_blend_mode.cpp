@@ -171,7 +171,7 @@ TEST_SUITE("VFXBlendMode")
 
             const fs::path path = blendTestRoot() / "Blend.vfVFX";
             REQUIRE(vfx::VFXAsset::save(path.string(), data));
-            CHECK(readFileText(path).find("\"version\": \"1.1\"") != std::string::npos);
+            CHECK(readFileText(path).find("\"version\": \"1.2\"") != std::string::npos);
 
             auto loaded = vfx::VFXAsset::load(path.string());
             REQUIRE(loaded.has_value());

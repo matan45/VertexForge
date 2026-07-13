@@ -90,7 +90,7 @@ namespace
 
 TEST_SUITE("VFXBoundsSerialization")
 {
-    TEST_CASE(".vfVFX round-trips bounds, scalability and cullEligible; stamps 1.1")
+    TEST_CASE(".vfVFX round-trips bounds, scalability and cullEligible; stamps 1.2")
     {
         resetBoundsTestRoot();
 
@@ -98,7 +98,7 @@ TEST_SUITE("VFXBoundsSerialization")
         const fs::path path = boundsTestRoot() / "BoundsFX.vfVFX";
 
         REQUIRE(vfx::VFXAsset::save(path.string(), original));
-        CHECK(readVersionField(path) == "1.1");
+        CHECK(readVersionField(path) == "1.2");
 
         auto loadedOpt = vfx::VFXAsset::load(path.string());
         REQUIRE(loadedOpt.has_value());
