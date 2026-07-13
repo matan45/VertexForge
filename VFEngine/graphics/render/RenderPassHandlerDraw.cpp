@@ -478,6 +478,48 @@ namespace render
                 vk::ImageAspectFlagBits::eColor);
     }
 
+    bool RenderPassHandler::vfxNeedsPrevFrameDepth() const
+    {
+        return vfxRuntimeProvider && vfxRuntimeProvider->needsPrevFrameDepth();
+    }
+
+    void RenderPassHandler::updateVFXPrevFrameDepth(uint32_t imageIndex)
+    {
+        if (!vfxRuntimeProvider)
+            return;
+
+        // Ramp-up: only expose the real depth once both flight slots have been written by the DepthCopy
+        // pass at least once, so the sim never samples an undefined-layout image (fallback is bound until
+        // then). Resets automatically when prevFrameDepth is torn down (resize / disable).
+        if (offscreenResources.prevFrameDepthCreated)
+        {
+            if (prevFrameDepthReadyCounter <= core::MAX_FRAMES_IN_FLIGHT)
+                ++prevFrameDepthReadyCounter;
+        }
+        else
+        {
+            prevFrameDepthReadyCounter = 0;
+        }
+
+        const bool depthReady = offscreenResources.prevFrameDepthCreated
+            && prevFrameDepthReadyCounter > core::MAX_FRAMES_IN_FLIGHT;
+
+        std::vector<vk::ImageView> slots;
+        if (depthReady)
+        {
+            slots.reserve(core::MAX_FRAMES_IN_FLIGHT);
+            for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+                slots.push_back(offscreenResources.prevFrameDepth[i].imageView);
+        }
+
+        // Read the slot NOT written by this frame's DepthCopy (which writes imageIndex % N) to avoid a
+        // same-frame write-after-read; for MAX_FRAMES_IN_FLIGHT this is always a different, already-written
+        // slot holding the previous frame's depth (fence-safe by graphics-queue submission order).
+        const uint32_t readSlot = (imageIndex + 1u) % core::MAX_FRAMES_IN_FLIGHT;
+
+        vfxRuntimeProvider->setPrevFrameDepth(slots, readSlot, depthReady);
+    }
+
     void RenderPassHandler::drawSceneMeshesGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();

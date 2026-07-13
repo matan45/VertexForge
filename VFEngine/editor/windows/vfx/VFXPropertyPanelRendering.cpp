@@ -1272,6 +1272,48 @@ namespace editor::vfxeditor
                 ImGui::PopID();
             }
         }
+
+        // VK-1502: depth-buffer collision (independent of the analytic collision above).
+        auto depthEnableIt = node.properties.find("depthCollisionEnabled");
+        if (depthEnableIt != node.properties.end())
+        {
+            if (auto* depthEnableVal = std::get_if<bool>(&depthEnableIt->second.value))
+            {
+                ImGui::Separator();
+                ImGui::Text("Depth Collision");
+                ImGui::SameLine();
+                if (ImGui::Checkbox("##depthCollisionEnable", depthEnableVal))
+                    notifyChanged();
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Collides against the scene depth buffer (last frame) so particles\n"
+                                      "bounce off on-screen geometry without analytic colliders.\n"
+                                      "Reuses Bounce/Friction/Life Loss. On-screen only; not shown in preview.");
+
+                if (*depthEnableVal)
+                {
+                    struct DepthSlider { const char* key; const char* label; float min; float max; };
+                    static constexpr DepthSlider depthSliders[] = {
+                        {"depthCollisionThickness",       "Thickness",  0.0f, 5.0f},
+                        {"depthCollisionNormalInfluence", "Normal Inf", 0.0f, 1.0f},
+                    };
+                    for (const auto& s : depthSliders)
+                    {
+                        auto it = node.properties.find(s.key);
+                        if (it == node.properties.end()) continue;
+                        auto* val = std::get_if<float>(&it->second.value);
+                        if (!val) continue;
+
+                        ImGui::Text("%s", s.label);
+                        ImGui::SameLine(100.0f);
+                        ImGui::SetNextItemWidth(inputWidth);
+                        ImGui::PushID(s.key);
+                        if (ImGui::SliderFloat("##slider", val, s.min, s.max, "%.2f"))
+                            notifyChanged();
+                        ImGui::PopID();
+                    }
+                }
+            }
+        }
     }
 
     namespace

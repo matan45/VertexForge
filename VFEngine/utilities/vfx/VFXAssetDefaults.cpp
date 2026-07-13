@@ -245,6 +245,19 @@ namespace vfx
                 "collisionLifetimeLoss", VFXPropertyType::Float,
                 EmitterDefaults::COLLISION_LIFETIME_LOSS, 0.0f, 1.0f
             };
+            // VK-1502: depth-buffer collision (additive; older .vfVFX fall back to these defaults).
+            node.properties["depthCollisionEnabled"] = VFXProperty{
+                "depthCollisionEnabled", VFXPropertyType::Bool,
+                EmitterDefaults::DEPTH_COLLISION_ENABLED, 0.0f, 1.0f
+            };
+            node.properties["depthCollisionThickness"] = VFXProperty{
+                "depthCollisionThickness", VFXPropertyType::Float,
+                EmitterDefaults::DEPTH_COLLISION_THICKNESS, 0.0f, 5.0f
+            };
+            node.properties["depthCollisionNormalInfluence"] = VFXProperty{
+                "depthCollisionNormalInfluence", VFXPropertyType::Float,
+                EmitterDefaults::DEPTH_COLLISION_NORMAL_INFLUENCE, 0.0f, 1.0f
+            };
             node.properties["distortionEnabled"] = VFXProperty{
                 "distortionEnabled", VFXPropertyType::Bool,
                 false, 0.0f, 1.0f

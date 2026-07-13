@@ -309,6 +309,13 @@ namespace render::vfx
         float collisionFriction = 0.1f;
         float collisionLifetimeLoss = 0.0f;
 
+        // VK-1502: depth-buffer collision (GPU only — collides against last-frame scene depth so particles
+        // bounce off arbitrary on-screen geometry without analytic colliders). Reuses bounce/friction/
+        // lifetime-loss above. Not shown in the CPU editor preview (like the other collision modes).
+        bool depthCollisionEnabled = false;
+        float depthCollisionThickness = 0.25f;       // world-space shell depth behind the visible surface
+        float depthCollisionNormalInfluence = 1.0f;  // 0 = camera-facing normal, 1 = depth-derived normal
+
         // Distortion
         bool distortionEnabled = false;
         float distortionStrength = 0.1f;

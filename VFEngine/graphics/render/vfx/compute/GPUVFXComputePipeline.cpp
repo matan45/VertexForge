@@ -3,7 +3,10 @@
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
+#include "../../../core/BufferUtilities.hpp"
+#include "../../../core/ImageUtilities.hpp"
 #include "print/Log.hpp"
+#include <cstring>
 
 namespace render::vfx
 {
@@ -29,6 +32,7 @@ namespace render::vfx
         createComputePipeline();
         createDescriptorPool();
         allocateDescriptorSet();
+        createDepthCollisionResources(); // VK-1502
 
         initialized = true;
     }
@@ -41,6 +45,31 @@ namespace render::vfx
         }
 
         vk::Device vkDevice = device.getLogicalDevice();
+
+        // VK-1502: depth-buffer collision resources.
+        if (fallbackDepthImageView)
+        {
+            vkDevice.destroyImageView(fallbackDepthImageView);
+            fallbackDepthImageView = nullptr;
+        }
+        if (fallbackDepthImage)
+        {
+            vkDevice.destroyImage(fallbackDepthImage);
+            fallbackDepthImage = nullptr;
+            device.getMemoryManager().free(fallbackDepthAllocation);
+        }
+        if (depthSampler)
+        {
+            vkDevice.destroySampler(depthSampler);
+            depthSampler = nullptr;
+        }
+        if (cameraSSBO)
+        {
+            vkDevice.destroyBuffer(cameraSSBO);
+            cameraSSBO = nullptr;
+            device.getMemoryManager().free(cameraSSBOAllocation);
+            cameraSSBOMapped = nullptr;
+        }
 
         if (computePipeline)
         {
@@ -75,16 +104,25 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        constexpr uint32_t BINDING_COUNT = 12; // VK-1501: +childSpawnBuffer at binding 11
+        // Bindings 0-11 are storage buffers (11 = childSpawnBuffer, VK-1501). VK-1502 adds binding 12 =
+        // camera as a read-only SSBO, and binding 13 = last-frame depth (combined-image-sampler array,
+        // one element per frame-in-flight).
+        constexpr uint32_t STORAGE_BINDING_COUNT = 13; // 0-11 buffers + 12 camera SSBO
+        constexpr uint32_t BINDING_COUNT = 14;         // + 13 depth sampler array
         std::array<vk::DescriptorSetLayoutBinding, BINDING_COUNT> bindings{};
 
-        for (uint32_t i = 0; i < BINDING_COUNT; ++i)
+        for (uint32_t i = 0; i < STORAGE_BINDING_COUNT; ++i)
         {
             bindings[i].binding = i;
             bindings[i].descriptorType = vk::DescriptorType::eStorageBuffer;
             bindings[i].descriptorCount = 1;
             bindings[i].stageFlags = vk::ShaderStageFlagBits::eCompute;
         }
+
+        bindings[13].binding = 13; // VK-1502: prevFrameDepth[MAX_FRAMES_IN_FLIGHT]
+        bindings[13].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[13].descriptorCount = core::MAX_FRAMES_IN_FLIGHT;
+        bindings[13].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
     }
@@ -138,11 +176,13 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 12; // VK-1501
+        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
+        poolSizes[0].descriptorCount = 13; // 0-11 buffers + 12 camera SSBO (VK-1502)
+        poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[1].descriptorCount = core::MAX_FRAMES_IN_FLIGHT; // 13 = prevFrameDepth[] (VK-1502)
 
-        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()));
     }
 
     void GPUVFXComputePipeline::allocateDescriptorSet()
@@ -189,8 +229,8 @@ namespace render::vfx
 
         // Buffers ordered by binding index: particle(0), config(1), state(2),
         // drawCommand(3), lut(4), ribbonRing(5), ribbonHead(6), event(7),
-        // collider(8), terrain(9), spawnRequest(10), childSpawn(11)
-        std::array<vk::Buffer, 12> bufferHandles = {
+        // collider(8), terrain(9), spawnRequest(10), childSpawn(11), camera SSBO(12, VK-1502)
+        std::array<vk::Buffer, 13> bufferHandles = {
             cachedBuffers.particleBuffer,
             cachedBuffers.configBuffer,
             cachedBuffers.stateBuffer,
@@ -202,13 +242,14 @@ namespace render::vfx
             cachedBuffers.colliderBuffer,
             cachedBuffers.terrainBuffer,
             cachedBuffers.spawnRequestBuffer,
-            cachedBuffers.childSpawnBuffer
+            cachedBuffers.childSpawnBuffer,
+            cameraSSBO
         };
 
-        std::array<vk::DescriptorBufferInfo, 12> bufferInfos{};
-        std::array<vk::WriteDescriptorSet, 12> writes{};
+        std::array<vk::DescriptorBufferInfo, 13> bufferInfos{};
+        std::array<vk::WriteDescriptorSet, 14> writes{};
 
-        for (uint32_t i = 0; i < 12; ++i)
+        for (uint32_t i = 0; i < 13; ++i)
         {
             bufferInfos[i].buffer = bufferHandles[i];
             bufferInfos[i].offset = 0;
@@ -221,9 +262,103 @@ namespace render::vfx
             writes[i].pBufferInfo = &bufferInfos[i];
         }
 
+        // VK-1502: last-frame depth sampler array (binding 13). Bind the real prevFrameDepth views when
+        // available, else the 1x1 fallback (value 1.0 = far => "no hit"). Layout is eShaderReadOnlyOptimal
+        // for both (fallback is transitioned once at creation; prevFrameDepth is left in it by DepthCopy).
+        std::array<vk::DescriptorImageInfo, core::MAX_FRAMES_IN_FLIGHT> depthInfos{};
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            depthInfos[i].imageView = boundDepthViews[i] ? boundDepthViews[i] : fallbackDepthImageView;
+            depthInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            depthInfos[i].sampler = depthSampler;
+        }
+
+        writes[13].dstSet = descriptorSet;
+        writes[13].dstBinding = 13;
+        writes[13].descriptorCount = core::MAX_FRAMES_IN_FLIGHT;
+        writes[13].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        writes[13].pImageInfo = depthInfos.data();
+
         vkDevice.updateDescriptorSets(writes, {});
 
         descriptorsNeedUpdate = false;
+    }
+
+    void GPUVFXComputePipeline::createDepthCollisionResources()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Camera SSBO (host-visible, mapped) bound at binding 12; the renderer refreshes it each frame.
+        core::BufferInfoRequest cameraRequest(vkDevice, device.getPhysicalDevice());
+        cameraRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        cameraRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        cameraRequest.size = sizeof(GPUVFXCameraUBO);
+        core::BufferUtilities::createBuffer(cameraRequest, cameraSSBO, cameraSSBOAllocation, device.getMemoryManager());
+        cameraSSBOMapped = cameraSSBOAllocation.mappedPtr;
+        if (cameraSSBOMapped)
+        {
+            std::memcpy(cameraSSBOMapped, &cpuCamera, sizeof(cpuCamera)); // depthCollisionActive defaults to 0 (off)
+        }
+
+        depthSampler = core::ImageUtilities::createVFXDepthSampler(vkDevice);
+
+        // 1x1 fallback depth (value 1.0 = far). Bound whenever no real last-frame depth is available so the
+        // binding-13 sampler array is always valid (the set layout is UpdateAfterBind but not PartiallyBound).
+        core::ImageInfoRequest fallbackInfo(
+            vkDevice, device.getPhysicalDevice(),
+            1, 1, 1, 1,
+            vk::Format::eR32Sfloat,
+            vk::ImageTiling::eOptimal,
+            vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+            vk::MemoryPropertyFlagBits::eDeviceLocal);
+        core::ImageUtilities::createImage(fallbackInfo, fallbackDepthImage, fallbackDepthAllocation, device.getMemoryManager());
+
+        core::ImageViewInfoRequest fallbackView(
+            vkDevice, fallbackDepthImage,
+            vk::Format::eR32Sfloat,
+            vk::ImageAspectFlagBits::eColor,
+            vk::ImageViewType::e2D);
+        core::ImageUtilities::createImageView(fallbackView, fallbackDepthImageView);
+
+        const float farValue = 1.0f; // uploadStagedPixelData leaves the image in eShaderReadOnlyOptimal
+        core::ImageUtilities::uploadStagedPixelData(device, fallbackDepthImage, &farValue, sizeof(farValue), 1, 1);
+    }
+
+    void GPUVFXComputePipeline::updateCameraUBO(
+        const glm::mat4& view, const glm::mat4& projection,
+        const glm::vec3& cameraPos, float time, float nearPlane, float farPlane)
+    {
+        // Update only the view/projection fields on the CPU shadow; the depth-collision state fields
+        // (depthCollisionActive / prevDepthSlot) are owned by setDepthCollisionState and preserved here.
+        cpuCamera.view = view;
+        cpuCamera.projection = projection;
+        cpuCamera.cameraPos = cameraPos;
+        cpuCamera.time = time;
+        cpuCamera.nearPlane = nearPlane;
+        cpuCamera.farPlane = farPlane;
+        if (cameraSSBOMapped)
+        {
+            std::memcpy(cameraSSBOMapped, &cpuCamera, sizeof(cpuCamera));
+        }
+    }
+
+    void GPUVFXComputePipeline::setDepthCollisionState(uint32_t prevDepthSlot, bool active)
+    {
+        cpuCamera.prevDepthSlot = prevDepthSlot;
+        cpuCamera.depthCollisionActive = active ? 1u : 0u;
+        if (cameraSSBOMapped)
+        {
+            std::memcpy(cameraSSBOMapped, &cpuCamera, sizeof(cpuCamera));
+        }
+    }
+
+    void GPUVFXComputePipeline::setPrevFrameDepthImages(const std::array<vk::ImageView, core::MAX_FRAMES_IN_FLIGHT>& views)
+    {
+        if (views != boundDepthViews)
+        {
+            boundDepthViews = views;
+            descriptorsNeedUpdate = true; // rewrite binding 13 on the next dispatch (image identity changed)
+        }
     }
 
     void GPUVFXComputePipeline::dispatch(

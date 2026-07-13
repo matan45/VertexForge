@@ -45,6 +45,17 @@ namespace services
 
         virtual void setSceneDepthImageView(vk::ImageView depthView) = 0;
 
+        // VK-1502: depth-buffer collision. needsPrevFrameDepth() drives lazy creation of the last-frame
+        // depth copies (prevFrameDepth) even when upscaling is off. setPrevFrameDepth feeds the sim the depth
+        // views (one per frame-in-flight; empty => bind the fallback), which slot to sample this frame, and
+        // whether depth collision is active (true only once the depth is populated and shader-readable).
+        // Default-empty so existing test/plugin providers stay source-compatible.
+        virtual bool needsPrevFrameDepth() const { return false; }
+        virtual void setPrevFrameDepth(const std::vector<vk::ImageView>& slots, uint32_t readSlot, bool active)
+        {
+            (void)slots; (void)readSlot; (void)active;
+        }
+
         // Called before render pass to dispatch compute shaders (GPU mode)
         virtual void recordComputeCommands(const vk::CommandBuffer& cmd) = 0;
 

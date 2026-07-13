@@ -70,6 +70,10 @@ namespace core
         void setCamera(const services::VFXCameraParams& camera) override;
         void setSceneDepthImageView(vk::ImageView depthView) override;
 
+        // VK-1502: depth-buffer collision plumbing.
+        bool needsPrevFrameDepth() const override;
+        void setPrevFrameDepth(const std::vector<vk::ImageView>& slots, uint32_t readSlot, bool active) override;
+
         // Compute commands (call before render pass)
         void recordComputeCommands(const vk::CommandBuffer& cmd) override;
 

@@ -232,6 +232,19 @@ namespace core
         }
     }
 
+    bool VFXRuntimeAdapter::needsPrevFrameDepth() const
+    {
+        return renderer && renderer->needsPrevFrameDepth();
+    }
+
+    void VFXRuntimeAdapter::setPrevFrameDepth(const std::vector<vk::ImageView>& slots, uint32_t readSlot, bool active)
+    {
+        if (renderer)
+        {
+            renderer->setPrevFrameDepth(slots, readSlot, active);
+        }
+    }
+
     void VFXRuntimeAdapter::recordComputeCommands(const vk::CommandBuffer& cmd)
     {
         if (renderer)

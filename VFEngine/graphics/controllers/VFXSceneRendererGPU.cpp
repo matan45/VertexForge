@@ -625,6 +625,13 @@ namespace controllers
         gpuConfig.collisionFriction = cpuConfig.collisionFriction;
         gpuConfig.collisionLifetimeLoss = cpuConfig.collisionLifetimeLoss;
         gpuConfig.terrainCollisionEnabled = cpuConfig.collisionEnabled ? 1u : 0u;
+
+        // VK-1502: depth-buffer collision. Reuses the bounce/friction/lifetime-loss response above; gated
+        // by modifierFlags bit 25 so the sim only samples last-frame depth when enabled.
+        gpuConfig.depthCollisionThickness = cpuConfig.depthCollisionThickness;
+        gpuConfig.depthCollisionNormalInfluence = cpuConfig.depthCollisionNormalInfluence;
+        if (cpuConfig.depthCollisionEnabled)
+            gpuConfig.modifierFlags |= render::vfx::ModifierFlags::DepthCollision;
         gpuConfig.lightingInfluence = cpuConfig.lightingInfluence;
         gpuConfig.normalMode = cpuConfig.normalMode;
         gpuConfig.ambientAmount = cpuConfig.ambientAmount;

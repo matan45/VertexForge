@@ -237,6 +237,11 @@ namespace vfx
         inline constexpr float COLLISION_FRICTION = 0.1f;
         inline constexpr float COLLISION_LIFETIME_LOSS = 0.0f;
 
+        // VK-1502: depth-buffer collision (collides against last-frame scene depth).
+        inline constexpr bool DEPTH_COLLISION_ENABLED = false;
+        inline constexpr float DEPTH_COLLISION_THICKNESS = 0.25f;
+        inline constexpr float DEPTH_COLLISION_NORMAL_INFLUENCE = 1.0f;
+
         // Events
         inline constexpr bool EVENT_ON_SPAWN_ENABLED = false;
         inline constexpr bool EVENT_ON_DEATH_ENABLED = false;

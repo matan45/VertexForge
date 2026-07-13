@@ -297,6 +297,12 @@ namespace controllers
         void setCamera(const services::VFXCameraParams& camera);
 
         void setSceneDepthImageView(vk::ImageView depthView);
+
+        // VK-1502: depth-buffer collision. needsPrevFrameDepth() is true when any instance has depth
+        // collision enabled; setPrevFrameDepth feeds the last-frame depth views + active slot to the sim.
+        bool needsPrevFrameDepth() const;
+        void setPrevFrameDepth(const std::vector<vk::ImageView>& slots, uint32_t readSlot, bool active);
+
         void setSceneColliders(const std::vector<render::vfx::GPUCollider>& colliders);
         void setTerrainHeightfield(const render::vfx::GPUTerrainHeightfield& header,
                                     std::vector<float> heights);

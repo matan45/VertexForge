@@ -224,6 +224,13 @@ namespace vfx
         config.collisionLifetimeLoss = std::clamp(
             getFloat(*emitterNode, "collisionLifetimeLoss", EmitterDefaults::COLLISION_LIFETIME_LOSS), 0.0f, 1.0f);
 
+        // VK-1502: depth-buffer collision
+        config.depthCollisionEnabled = getBool(*emitterNode, "depthCollisionEnabled", EmitterDefaults::DEPTH_COLLISION_ENABLED);
+        config.depthCollisionThickness = std::max(0.0f,
+            getFloat(*emitterNode, "depthCollisionThickness", EmitterDefaults::DEPTH_COLLISION_THICKNESS));
+        config.depthCollisionNormalInfluence = std::clamp(
+            getFloat(*emitterNode, "depthCollisionNormalInfluence", EmitterDefaults::DEPTH_COLLISION_NORMAL_INFLUENCE), 0.0f, 1.0f);
+
         // Distortion
         config.distortionEnabled = getBool(*emitterNode, "distortionEnabled", false);
         config.distortionStrength = std::clamp(

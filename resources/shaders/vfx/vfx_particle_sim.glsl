@@ -13,6 +13,7 @@ const uint MODIFIER_SPEED_OVER_LIFETIME = 4u;
 const uint MODIFIER_ROTATION_OVER_LIFETIME = 8u;
 const uint MODIFIER_SIZE_BY_SPEED = 4194304u;  // 1 << 22 (VK-1473)
 const uint MODIFIER_COLOR_BY_SPEED = 8388608u; // 1 << 23 (VK-1473)
+const uint MODIFIER_DEPTH_COLLISION = 33554432u; // 1 << 25 (VK-1502)
 
 const uint FORCE_GRAVITY = 16u;
 const uint FORCE_WIND = 32u;
@@ -156,6 +157,24 @@ layout(std430, set = 0, binding = 11) buffer ChildSpawnBuffer {
     uint childSpawnCounters[CHILD_COUNTER_COUNT];
     GPUVFXSpawnRequest childSpawnRequests[];
 };
+
+// VK-1502: depth-buffer collision inputs. Mirror of C++ GPUVFXCameraUBO (bound here as a read-only SSBO
+// so the sim inherits the already-enabled storage-buffer UpdateAfterBind feature instead of relying on
+// uniform-buffer UAB). std430 layout matches the 160-byte C++ struct exactly.
+layout(std430, set = 0, binding = 12) readonly buffer CameraBuffer {
+    mat4 view;
+    mat4 projection;
+    vec3 cameraPos;
+    float time;
+    float nearPlane;
+    float farPlane;
+    uint depthCollisionActive; // 1 iff a valid last-frame depth is bound AND some emitter wants it
+    uint prevDepthSlot;        // which prevFrameDepth[] element to sample this frame
+} cam;
+
+// Last-frame scene depth, double-buffered per frame-in-flight (MAX_FRAMES_IN_FLIGHT = 2). Populated by the
+// DepthCopy pass and kept in eShaderReadOnlyOptimal; the active slot for this frame is cam.prevDepthSlot.
+layout(set = 0, binding = 13) uniform sampler2D prevFrameDepth[2];
 
 const uint COLLIDER_SPHERE  = 0u;
 const uint COLLIDER_BOX     = 1u;
@@ -1055,6 +1074,93 @@ void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterI
     }
 }
 
+// VK-1502: reconstruct a view-space position from a UV + hardware depth. Assumes a standard perspective
+// RH_ZO projection (GLM_FORCE_DEPTH_ZERO_TO_ONE, NDC depth in [0,1], no reverse-Z). cam.projection is
+// column-major, indexed [col][row].
+vec3 reconstructViewPosDC(vec2 uv, float ndcZ)
+{
+    float viewZ = cam.projection[3][2] / (-ndcZ - cam.projection[2][2]); // negative in front of the camera
+    vec2 ndcXY = uv * 2.0 - 1.0;
+    float viewX = ndcXY.x * (-viewZ) / cam.projection[0][0];
+    float viewY = ndcXY.y * (-viewZ) / cam.projection[1][1];
+    return vec3(viewX, viewY, viewZ);
+}
+
+// VK-1502: depth-buffer collision. Projects the particle to screen, samples LAST-FRAME scene depth
+// (prevFrameDepth, populated by DepthCopy and left shader-readable), and if the particle sits within a
+// thickness shell behind the visible surface, applies the SAME bounce/friction/lifetime-loss response as
+// the analytic/terrain colliders, using a depth-derived surface normal. The sim dispatches before the
+// opaque pass, so the depth is inherently one frame behind (Niagara's model). On-screen geometry only;
+// off-screen / sky / behind-camera particles fall through gracefully. Compute has no fragment derivatives,
+// so the normal is built from explicit neighbor taps with textureLod (no implicit LOD in compute).
+void applyDepthCollision(inout GPUParticle p, GPUEmitterConfig config, uint emitterIdx, inout bool collisionEventFired)
+{
+    uint slot = cam.prevDepthSlot;
+
+    vec4 viewPos = cam.view * vec4(p.position, 1.0);
+    vec4 clip = cam.projection * viewPos;
+    if (clip.w <= 0.0)
+        return; // behind the camera
+
+    vec2 uv = (clip.xy / clip.w) * 0.5 + 0.5;
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0))))
+        return; // off-screen: no depth to test against
+
+    float ndcZ = textureLod(prevFrameDepth[slot], uv, 0.0).r;
+    if (ndcZ >= 0.99999)
+        return; // sky / cleared depth (far plane): nothing to collide with
+
+    float surfDist = -(cam.projection[3][2] / (-ndcZ - cam.projection[2][2])); // camera->surface distance (positive)
+    float partDist = -viewPos.z;                                               // camera->particle distance (positive)
+
+    float penetration = partDist - surfDist;
+    if (penetration <= 0.0 || penetration > config.depthCollisionThickness)
+        return; // in front of the surface, or too far behind it (a different, occluded object)
+
+    vec3 camFacing = normalize(cam.cameraPos - p.position);
+
+    // Surface normal from depth derivatives: reconstruct the center + two neighbor texels and take the cross.
+    vec2 texel = 1.0 / vec2(textureSize(prevFrameDepth[slot], 0));
+    vec3 pC = reconstructViewPosDC(uv, ndcZ);
+    vec3 pR = reconstructViewPosDC(uv + vec2(texel.x, 0.0), textureLod(prevFrameDepth[slot], uv + vec2(texel.x, 0.0), 0.0).r);
+    vec3 pU = reconstructViewPosDC(uv + vec2(0.0, texel.y), textureLod(prevFrameDepth[slot], uv + vec2(0.0, texel.y), 0.0).r);
+    vec3 nView = cross(pR - pC, pU - pC);
+    float nlen = length(nView);
+    vec3 depthNormal = camFacing;
+    if (nlen > 1e-8)
+    {
+        nView /= nlen;
+        if (nView.z < 0.0)
+            nView = -nView; // face the camera (+Z in view space)
+        depthNormal = normalize(transpose(mat3(cam.view)) * nView); // rigid view: inverse rotation = transpose
+    }
+
+    vec3 n = normalize(mix(camFacing, depthNormal, clamp(config.depthCollisionNormalInfluence, 0.0, 1.0)));
+
+    // Reuse the exact analytic/terrain collision response (bounce / friction / lifetime-loss / event).
+    p.position += n * penetration;
+
+    float vn = dot(p.velocity, n);
+    if (vn < 0.0)
+    {
+        vec3 vNormal = n * vn;
+        vec3 vTangent = p.velocity - vNormal;
+        p.velocity = vTangent * (1.0 - config.collisionFriction)
+                   - vNormal * config.collisionBounce;
+    }
+
+    if (config.collisionLifetimeLoss > 0.0)
+    {
+        p.lifetime += p.maxLifetime * config.collisionLifetimeLoss;
+    }
+
+    if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
+    {
+        emitEvent(config, 2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
+        collisionEventFired = true;
+    }
+}
+
 vec3 sanitizeKillVolumeNormal(vec3 normal)
 {
     float lenSq = dot(normal, normal);
@@ -1150,10 +1256,16 @@ void main()
             bool collisionEventFired = false;
             applyCollisions(p, config, pc.emitterIndex, collisionEventFired);
             applyTerrainCollision(p, config, pc.emitterIndex, collisionEventFired);
+            if ((config.modifierFlags & MODIFIER_DEPTH_COLLISION) != 0u && cam.depthCollisionActive != 0u)
+            {
+                applyDepthCollision(p, config, pc.emitterIndex, collisionEventFired);
+            }
 
             float lifetimeRatio = p.lifetime / p.maxLifetime;
 
-            if (config.modifierFlags != 0u)
+            // Exclude the depth-collision bit from the "has any modifier" gate: it is a collision toggle, not
+            // a modifier, and a depth-collision-only emitter must still take the legacy alpha-fade path below.
+            if ((config.modifierFlags & ~MODIFIER_DEPTH_COLLISION) != 0u)
             {
                 applyModifiers(p, config, lifetimeRatio);
             }

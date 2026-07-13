@@ -114,6 +114,10 @@ struct GPUEmitterConfig
     // bits 0-7 = child region (0xFF = none), bit 8 inheritColor, bit 9 inheritSize, bit 10 inheritVelocity.
     // Mirror of C++ GPUEmitterConfig::eventChildSlot (see utilities/vfx/VFXChildSpawn.hpp).
     uint eventChildSlot;
+
+    // VK-1502: depth-buffer collision params (reserved tail slots @504/508). Gated by MODIFIER_DEPTH_COLLISION.
+    float depthCollisionThickness;      // world-space shell depth behind the visible surface
+    float depthCollisionNormalInfluence; // [0,1]: 0 = camera-facing normal, 1 = depth-derived normal
 };
 
 // VK-1481 Phase 2: per-emitter render-only data read by the merged (multi-draw) VFX pass, indexed by

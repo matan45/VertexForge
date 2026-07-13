@@ -19,6 +19,7 @@
 #include "vfx/VFXSortOrder.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <random>
@@ -1343,6 +1344,37 @@ namespace controllers
             gpuRibbonPipeline->updateCameraUBO(camera.view, camera.projection, camera.cameraPos,
                                                camera.time, camera.nearPlane, camera.farPlane);
         }
+
+        // VK-1502: the sim compute reads the same camera to project particles against last-frame depth.
+        if (gpuComputePipeline && gpuComputePipeline->isInitialized())
+        {
+            gpuComputePipeline->updateCameraUBO(camera.view, camera.projection, camera.cameraPos,
+                                                camera.time, camera.nearPlane, camera.farPlane);
+        }
+    }
+
+    bool VFXSceneRenderer::needsPrevFrameDepth() const
+    {
+        for (const auto& [id, instance] : instances)
+        {
+            if (instance.config.depthCollisionEnabled)
+                return true;
+        }
+        return false;
+    }
+
+    void VFXSceneRenderer::setPrevFrameDepth(const std::vector<vk::ImageView>& slots, uint32_t readSlot, bool active)
+    {
+        if (!gpuComputePipeline || !gpuComputePipeline->isInitialized())
+            return;
+
+        // Empty slots => bind the fallback (during ramp-up, or when depth collision is inactive).
+        std::array<vk::ImageView, core::MAX_FRAMES_IN_FLIGHT> views{};
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT && i < slots.size(); ++i)
+            views[i] = slots[i];
+
+        gpuComputePipeline->setPrevFrameDepthImages(views);
+        gpuComputePipeline->setDepthCollisionState(readSlot, active);
     }
 
     void VFXSceneRenderer::setSceneDepthImageView(vk::ImageView depthView)

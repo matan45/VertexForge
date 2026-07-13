@@ -46,7 +46,8 @@ namespace render::vfx
         inline constexpr uint32_t GlowOverLifetime = 1 << 15;
         inline constexpr uint32_t SizeBySpeed = 1u << 22;  // VK-1473: sample size curve by normalized speed
         inline constexpr uint32_t ColorBySpeed = 1u << 23; // VK-1473: sample color gradient by normalized speed
-        // Bits 24-31 free for future modifiers (e.g. VK-1474 C2 reserved 24/25 if ever node-driven).
+        inline constexpr uint32_t DepthCollision = 1u << 25; // VK-1502: collide particles against last-frame scene depth
+        // Bits 24, 26-31 free for future modifiers.
     }
 
     namespace ForceFlags
@@ -195,6 +196,12 @@ namespace render::vfx
         // 24-31 and tail offsets 504/508 stay reserved for VK-1502. Pack/unpack helpers live in
         // utilities/vfx/VFXChildSpawn.hpp; the GLSL mirror is in vfx_gpu_types.glsl (keep in sync).
         uint32_t eventChildSlot = 0xFFFFFFFFu;
+
+        // VK-1502: depth-buffer collision (gated by ModifierFlags::DepthCollision, bit 25). These fill the
+        // last two reserved tail slots (offsets 504/508) so the struct stays exactly 512 bytes. Keep the
+        // GLSL mirror in vfx_gpu_types.glsl in sync.
+        float depthCollisionThickness = 0.25f;       // world-space shell depth behind the visible surface
+        float depthCollisionNormalInfluence = 1.0f;  // [0,1]: 0 = camera-facing normal, 1 = depth-derived normal
     };
     static_assert(sizeof(GPUEmitterConfig) == 512, "GPUEmitterConfig must be 512 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -262,6 +269,8 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, meshOrientationParams) == 480, "GPUEmitterConfig::meshOrientationParams offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, meshOrientationMode) == 496, "GPUEmitterConfig::meshOrientationMode offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, eventChildSlot) == 500, "GPUEmitterConfig::eventChildSlot offset mismatch"); // VK-1501
+    static_assert(offsetof(GPUEmitterConfig, depthCollisionThickness) == 504, "GPUEmitterConfig::depthCollisionThickness offset mismatch"); // VK-1502
+    static_assert(offsetof(GPUEmitterConfig, depthCollisionNormalInfluence) == 508, "GPUEmitterConfig::depthCollisionNormalInfluence offset mismatch"); // VK-1502
 
     struct alignas(16) GPUEmitterState
     {
@@ -426,8 +435,10 @@ namespace render::vfx
         float time;
         float nearPlane = 0.1f;
         float farPlane = 1000.0f;
-        float _pad1 = 0.0f;
-        float _pad2 = 0.0f;
+        // VK-1502: the sim compute reads this struct as an SSBO for depth-buffer collision. These two
+        // former pad words carry the collision state (render pipelines zero-init the struct and ignore them).
+        uint32_t depthCollisionActive = 0; // 1 iff a valid last-frame depth is bound AND some emitter wants it
+        uint32_t prevDepthSlot = 0;        // which prevFrameDepth[] element to sample (imageIndex % MAX_FRAMES_IN_FLIGHT)
     };
     static_assert(sizeof(GPUVFXCameraUBO) == 160, "GPUVFXCameraUBO must be 160 bytes");
     static_assert(offsetof(GPUVFXCameraUBO, view) == 0, "GPUVFXCameraUBO::view offset mismatch");
@@ -436,6 +447,8 @@ namespace render::vfx
     static_assert(offsetof(GPUVFXCameraUBO, time) == 140, "GPUVFXCameraUBO::time offset mismatch");
     static_assert(offsetof(GPUVFXCameraUBO, nearPlane) == 144, "GPUVFXCameraUBO::nearPlane offset mismatch");
     static_assert(offsetof(GPUVFXCameraUBO, farPlane) == 148, "GPUVFXCameraUBO::farPlane offset mismatch");
+    static_assert(offsetof(GPUVFXCameraUBO, depthCollisionActive) == 152, "GPUVFXCameraUBO::depthCollisionActive offset mismatch"); // VK-1502
+    static_assert(offsetof(GPUVFXCameraUBO, prevDepthSlot) == 156, "GPUVFXCameraUBO::prevDepthSlot offset mismatch"); // VK-1502
 
     struct GPUVFXComputePushConstants
     {

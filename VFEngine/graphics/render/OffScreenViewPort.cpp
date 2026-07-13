@@ -88,6 +88,21 @@ namespace render
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[currentFrame]);
         (void)result;
 
+        // VK-1502: lazily create last-frame depth copies when a VFX emitter enables depth-buffer collision
+        // (so the DepthCopy pass runs and the sim can sample last-frame depth). Idempotent; created here —
+        // before this frame's graph is built and before the async-compute record — so DepthCopy is included
+        // this frame. Zero cost when no emitter enables it. Teardown/resize destroys it; this recreates it.
+        if (!offscreenResources.prevFrameDepthCreated && renderPassHandler && renderPassHandler->vfxNeedsPrevFrameDepth())
+        {
+            vk::Extent2D renderExtent = swapChain.getSwapchainExtent();
+            createPrevFrameDepthResources(renderExtent.width, renderExtent.height);
+        }
+
+        // VK-1502: feed the VFX sim the last-frame depth views + active slot BEFORE both the async-compute
+        // record (below) and the sync draw (which both dispatch the sim this frame).
+        if (renderPassHandler)
+            renderPassHandler->updateVFXPrevFrameDepth(imageIndex);
+
         // Read back previous frame's results and update brush overlay BEFORE rendering
         // so the overlay position matches the current raycast hit in this frame's render
         renderPassHandler->readBackLightOcclusionResults();
