@@ -147,17 +147,15 @@ TEST_CASE("VFXShapePlacement: Ring draws the arc out in order")
     checkVecApprox(vfxspOrderedCurve(ShapeType::Ring, dims, 0.5f), glm::vec3(0.0f, 0.0f, radius));
     checkVecApprox(vfxspOrderedCurve(ShapeType::Ring, dims, 1.0f), glm::vec3(-radius, 0.0f, 0.0f));
 
-    // On the ring (r == radius, y == 0) and the swept angle is monotonic non-decreasing.
-    float prevAngle = -1e9f;
+    // Each sample sits on the ring (r == radius, y == 0) exactly at the swept angle start + t*arc,
+    // which increases monotonically with t. Checking against the analytic parametrization is a stronger
+    // assertion than atan2 monotonicity and avoids the atan2 branch cut at +/-pi at the arc endpoint.
     for (int i = 0; i <= 16; ++i)
     {
         float t = static_cast<float>(i) / 16.0f;
+        float theta = start + t * arc;
         glm::vec3 p = vfxspOrderedCurve(ShapeType::Ring, dims, t);
-        CHECK(std::sqrt(p.x * p.x + p.z * p.z) == doctest::Approx(radius).epsilon(1e-4f));
-        CHECK(p.y == doctest::Approx(0.0f));
-        float angle = std::atan2(p.z, p.x); // within [0, pi] for this arc, so atan2 is monotonic here
-        CHECK(angle >= prevAngle - 1e-4f);
-        prevAngle = angle;
+        checkVecApprox(p, glm::vec3(radius * std::cos(theta), 0.0f, radius * std::sin(theta)));
     }
 }
 
