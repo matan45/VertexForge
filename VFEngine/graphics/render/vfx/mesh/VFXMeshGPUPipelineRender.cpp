@@ -103,8 +103,15 @@ namespace render::vfx
             : vk::ImageLayout::eShaderReadOnlyOptimal;
         depthInfo.sampler = depthSampler ? depthSampler : textureSampler;
 
+        // VK-1526: per-emitter mesh-material SSBO (whole range; always valid once created at init).
+        vk::DescriptorBufferInfo materialInfo{};
+        materialInfo.buffer = materialSlotsBuffer;
+        materialInfo.offset = 0;
+        materialInfo.range = static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_EMITTERS) * sizeof(VFXMeshMaterialSlots);
+
         // VK-1481: binding 1 (per-emitter texture) is gone; the texture lives in the bindless set.
-        std::array<vk::WriteDescriptorSet, 4> writes{};
+        // VK-1526: binding 5 is the per-emitter mesh-material SSBO.
+        std::array<vk::WriteDescriptorSet, 5> writes{};
 
         writes[0].dstSet = dstSet;
         writes[0].dstBinding = 0;
@@ -129,6 +136,12 @@ namespace render::vfx
         writes[3].descriptorCount = 1;
         writes[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[3].pImageInfo = &depthInfo;
+
+        writes[4].dstSet = dstSet;
+        writes[4].dstBinding = 5;
+        writes[4].descriptorCount = 1;
+        writes[4].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[4].pBufferInfo = &materialInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
     }
@@ -207,6 +220,113 @@ namespace render::vfx
         }
     }
 
+    void VFXMeshGPUPipeline::releaseMaterialMaps(EmitterRenderConfig& config)
+    {
+        // Release the exact bindless refs each map took (paths were only stored on a successful acquire),
+        // with the same srgb flag used to acquire (srgb is part of the ref-table key).
+        if (bindless)
+        {
+            if (!config.matAlbedoPath.empty())   bindless->release(config.matAlbedoPath, /*srgb=*/true);
+            if (!config.matNormalPath.empty())   bindless->release(config.matNormalPath, /*srgb=*/false);
+            if (!config.matOrmPath.empty())      bindless->release(config.matOrmPath, /*srgb=*/false);
+            if (!config.matEmissivePath.empty()) bindless->release(config.matEmissivePath, /*srgb=*/true);
+        }
+        config.matAlbedoPath.clear();
+        config.matNormalPath.clear();
+        config.matOrmPath.clear();
+        config.matEmissivePath.clear();
+    }
+
+    void VFXMeshGPUPipeline::uploadMaterialSlot(uint32_t emitterIndex, const VFXMeshMaterialSlots& slots) const
+    {
+        if (!materialSlotsMapped || emitterIndex >= GPUVFXConstants::MAX_EMITTERS)
+        {
+            return;
+        }
+        std::memcpy(static_cast<uint8_t*>(materialSlotsMapped) + static_cast<size_t>(emitterIndex) * sizeof(VFXMeshMaterialSlots),
+                    &slots, sizeof(VFXMeshMaterialSlots));
+    }
+
+    void VFXMeshGPUPipeline::setEmitterMaterial(uint32_t emitterIndex, const ResolvedVFXMeshMaterial& resolved)
+    {
+        auto& config = emitterConfigs[emitterIndex];
+
+        // Called at (re)configure time (not per-frame): release the previously-held maps, then re-acquire.
+        // The bindless table's deferred teardown makes re-setting the same material safe (a re-acquire in
+        // the teardown window reuses the resident texture).
+        releaseMaterialMaps(config);
+
+        VFXMeshMaterialSlots slots{}; // materialFlags == 0 => the mesh shader takes the legacy single-.vfImage path
+
+        if (resolved.hasMaterial && bindless)
+        {
+            uint32_t flags = MeshMaterialFlags::HasMaterial;
+
+            // baseColor (sRGB). A missing map => white default; the albedo tint still colors the shard.
+            if (!resolved.albedoPath.empty())
+            {
+                const uint32_t idx = bindless->acquire(resolved.albedoPath, /*srgb=*/true);
+                slots.baseColorIdx = idx;
+                if (idx != bindless->defaultWhiteIndex())
+                {
+                    config.matAlbedoPath = resolved.albedoPath;
+                }
+            }
+
+            // normal (linear). Flag HasNormal only when a real map loaded; otherwise the shader keeps the
+            // geometric normal (bindless->acquire returns the white default on empty/miss, never the neutral
+            // normal, so gate on the flag instead of the slot).
+            if (!resolved.normalPath.empty())
+            {
+                const uint32_t idx = bindless->acquire(resolved.normalPath, /*srgb=*/false);
+                if (idx != bindless->defaultWhiteIndex())
+                {
+                    slots.normalIdx = idx;
+                    config.matNormalPath = resolved.normalPath;
+                    flags |= MeshMaterialFlags::HasNormal;
+                }
+            }
+
+            // ORM (linear, R=AO/G=Rough/B=Metal). Flag UsesORM only when a real map loaded; else the shader
+            // uses the scalar metallic/roughness/ao below.
+            if (resolved.usesORM && !resolved.ormPath.empty())
+            {
+                const uint32_t idx = bindless->acquire(resolved.ormPath, /*srgb=*/false);
+                if (idx != bindless->defaultWhiteIndex())
+                {
+                    slots.ormIdx = idx;
+                    config.matOrmPath = resolved.ormPath;
+                    flags |= MeshMaterialFlags::UsesORM;
+                }
+            }
+
+            // emissive (sRGB).
+            if (!resolved.emissivePath.empty())
+            {
+                const uint32_t idx = bindless->acquire(resolved.emissivePath, /*srgb=*/true);
+                if (idx != bindless->defaultWhiteIndex())
+                {
+                    slots.emissiveIdx = idx;
+                    config.matEmissivePath = resolved.emissivePath;
+                    flags |= MeshMaterialFlags::HasEmissive;
+                }
+            }
+
+            slots.materialFlags = flags;
+            slots.metallic = resolved.metallic;
+            slots.roughness = resolved.roughness;
+            slots.ao = resolved.ao;
+            slots.emissionStrength = resolved.emissionStrength;
+            slots.albedoTintR = resolved.albedoTint.r;
+            slots.albedoTintG = resolved.albedoTint.g;
+            slots.albedoTintB = resolved.albedoTint.b;
+            slots.albedoTintA = resolved.albedoTint.a;
+        }
+
+        config.materialSlots = slots;
+        uploadMaterialSlot(emitterIndex, slots);
+    }
+
     void VFXMeshGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
                                                          float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
                                                          const glm::vec3& glowColor, int32_t sortOrder)
@@ -227,6 +347,10 @@ namespace render::vfx
             {
                 bindless->release(configIt->second.texturePath, /*srgb=*/true);
             }
+            // VK-1526: drop the material maps' bindless refs and zero the SSBO slot so a future emitter
+            // reusing this index does not inherit stale material data.
+            releaseMaterialMaps(configIt->second);
+            uploadMaterialSlot(emitterIndex, VFXMeshMaterialSlots{});
             emitterConfigs.erase(configIt);
         }
         emitterMeshes.erase(emitterIndex);

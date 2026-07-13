@@ -11,6 +11,8 @@
 #include "../render/vfx/distortion/VFXDistortionPipeline.hpp"
 #include "../render/vfx/bindless/VFXBindlessTextures.hpp"
 #include "../render/vfx/particle/VFXEmitterPool.hpp"
+#include "../render/vfx/mesh/VFXMeshMaterialResolver.hpp"
+#include "../render/material/MaterialPBRExtractor.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
@@ -23,6 +25,7 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <unordered_set>
 
 namespace controllers
 {
@@ -35,6 +38,34 @@ namespace controllers
     VFXSceneRenderer::~VFXSceneRenderer()
     {
         cleanUp();
+    }
+
+    void VFXSceneRenderer::applyMeshMaterial(uint32_t emitterIndex, const std::string& materialPath)
+    {
+        if (!gpuMeshPipeline)
+        {
+            return;
+        }
+        if (materialPath.empty())
+        {
+            gpuMeshPipeline->setEmitterMaterial(emitterIndex, {}); // clear -> single-.vfImage path
+            return;
+        }
+
+        // VK-1526: pull the material's PBR texture set + scalars and resolve to the VFX-representable subset.
+        // A failed extraction (invalid path) yields hasMaterial == false -> setEmitterMaterial clears it.
+        const auto pbr = render::mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath);
+        const auto resolved = render::vfx::resolveVFXMeshMaterial(&pbr);
+        if (resolved.warnSeparateOrmMaps)
+        {
+            static std::unordered_set<std::string> warned;
+            if (warned.insert(materialPath).second)
+            {
+                vfLogWarning("VFX mesh material '{}' uses separate metallic/roughness/AO maps; VFX packs ORM "
+                             "only — using the ORM/scalar path.", materialPath);
+            }
+        }
+        gpuMeshPipeline->setEmitterMaterial(emitterIndex, resolved);
     }
 
     void VFXSceneRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
@@ -257,6 +288,7 @@ namespace controllers
         {
             gpuMeshPipeline->setEmitterMesh(instances[id].gpuEmitterIndex, storedConfig.meshPath);
             gpuMeshPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
+            applyMeshMaterial(instances[id].gpuEmitterIndex, storedConfig.materialPath); // VK-1526
             gpuMeshPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                         storedConfig.alphaClipThreshold,
                                                         storedConfig.blendMode,
@@ -511,6 +543,7 @@ namespace controllers
         {
             gpuMeshPipeline->setEmitterMesh(allocation.emitterIndex, storedConfig.meshPath);
             gpuMeshPipeline->setEmitterTexture(allocation.emitterIndex, storedConfig.texturePath);
+            applyMeshMaterial(allocation.emitterIndex, storedConfig.materialPath); // VK-1526
             gpuMeshPipeline->setEmitterRenderingConfig(allocation.emitterIndex,
                 storedConfig.alphaClipThreshold, storedConfig.blendMode, glowColor, storedConfig.sortOrder);
         }

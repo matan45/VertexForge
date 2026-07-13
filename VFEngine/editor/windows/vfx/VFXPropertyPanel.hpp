@@ -90,6 +90,7 @@ namespace editor::vfxeditor
         void drawFlipbookProperties(vfx::VFXNode& node);
         void drawRenderingProperties(vfx::VFXNode& node);
         void drawMeshPathSelector(vfx::VFXNode& node, float inputWidth);
+        void drawMaterialSelector(vfx::VFXNode& node, float inputWidth); // VK-1526
         void drawRibbonProperties(vfx::VFXNode& node, float inputWidth);
         void drawUVScrollProperties(vfx::VFXNode& node, float inputWidth);
         void drawBurstProperties(vfx::VFXNode& node, float inputWidth);

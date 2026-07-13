@@ -78,6 +78,7 @@ namespace controllers
         float stretchMultiplier = 1.0f;
 
         std::string meshPath;
+        std::string materialPath; // VK-1526: optional .vfMat/.vfMatInstance for mesh particles (empty = .vfImage path)
 
         // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
         ::vfx::VFXOrientationMode meshOrientationMode = ::vfx::VFXOrientationMode::VelocityForward;

@@ -143,3 +143,28 @@ struct VFXDistortionRenderData
     float _pad0;
     float _pad1;
 };
+
+// VK-1526: per-emitter PBR material for MESH-render particles (mirror of C++
+// render::vfx::VFXMeshMaterialSlots, std430, 64 B). Indexed by pc.emitterIndex. materialFlags bit 0
+// (VFX_MAT_HAS_MATERIAL) unset => the mesh shader takes the legacy single-.vfImage path.
+struct VFXMeshMaterialSlots
+{
+    uint  baseColorIdx;
+    uint  normalIdx;
+    uint  ormIdx;
+    uint  emissiveIdx;
+    uint  materialFlags;
+    float metallic;
+    float roughness;
+    float ao;
+    float emissionStrength;
+    float albedoTintR;
+    float albedoTintG;
+    float albedoTintB;
+    float albedoTintA;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+};
+// materialFlags bit constants (VFX_MAT_*) live in vfx_pbr_shading.glsl, shared by the runtime + preview
+// mesh shaders (the preview shader includes that but not this file).

@@ -631,6 +631,52 @@ namespace editor::vfxeditor
         }
     }
 
+    // VK-1526: optional PBR material picker for mesh particles (beside the Mesh + Texture pickers). When set,
+    // mesh shards shade PBR from the .vfMat/.vfMatInstance texture set instead of the single .vfImage albedo.
+    void VFXPropertyPanel::drawMaterialSelector(vfx::VFXNode& node, float inputWidth)
+    {
+        auto matIt = node.properties.find("materialRef");
+        if (matIt == node.properties.end()) return;
+
+        auto* matVal = std::get_if<std::string>(&matIt->second.value);
+        if (!matVal) return;
+
+        ImGui::Text("Material");
+        ImGui::SameLine(100.0f);
+        std::string display = matVal->empty() ? "(none)" : std::filesystem::path(*matVal).filename().string();
+        char buf[256];
+        std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        ImGui::SetNextItemWidth(inputWidth * 1.5f);
+        ImGui::InputText("##panel_materialRef", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Optional .vfMat / .vfMatInstance. When set, mesh shards shade PBR from the\n"
+                              "material's texture set (normal/roughness/metallic/emissive) instead of the\n"
+                              "single Texture above.");
+        ImGui::SameLine();
+        if (ImGui::Button("...##materialBrowse"))
+        {
+            nfd::FileDialog dialog;
+            std::string path = dialog.openFileDialog({
+                {L"VF Material", L"*.vfMat;*.vfMatInstance"}
+            });
+            if (!path.empty())
+            {
+                *matVal = path;
+                notifyChanged();
+            }
+        }
+        if (!matVal->empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("X##materialClear"))
+            {
+                matVal->clear();
+                notifyChanged();
+            }
+        }
+    }
+
     void VFXPropertyPanel::drawRibbonProperties(vfx::VFXNode& node, float inputWidth)
     {
         struct RibbonEntry { const char* key; const char* label; float step; const char* fmt; };
@@ -757,7 +803,14 @@ namespace editor::vfxeditor
         }
 
         if (currentRenderMode == 3)
+        {
             drawMeshPathSelector(node, inputWidth);
+            // VK-1526: ensure the material prop exists so pre-VK-1526 mesh effects can be edited, then draw it.
+            if (node.properties.find("materialRef") == node.properties.end())
+                node.properties["materialRef"] = vfx::VFXProperty{
+                    "materialRef", vfx::VFXPropertyType::String, std::string(""), 0.0f, 0.0f};
+            drawMaterialSelector(node, inputWidth);
+        }
 
         // VK-1476: mesh-particle orientation (only for the Mesh Particle render mode).
         if (currentRenderMode == 3)
@@ -1477,6 +1530,7 @@ namespace editor::vfxeditor
             "colorValueVariance", "alphaVariance",
             "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
             "flipbookRandomStart", "flipbookFrameBlend", "alphaClipThreshold", "additiveBlend", "blendMode", "meshPath",
+            "materialRef", // VK-1526
             "meshOrientationMode", "meshOrientationAxis", "meshOrientationSpinRate",
             "sortOrder", "renderMode", "softParticleDistance", "stretchMultiplier",
             "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",

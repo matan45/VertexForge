@@ -13,6 +13,7 @@
 #include "../compute/GPUVFXTypes.hpp"
 
 #include <cassert>
+#include <cstring>
 
 
 namespace render::vfx
@@ -65,7 +66,7 @@ namespace render::vfx
             }
 
             createBuffers();
-            if (!cameraUBO)
+            if (!cameraUBO || !materialSlotsBuffer)
             {
                 vfLogError("VFXMeshGPUPipeline: Failed to create buffers");
                 cleanup();
@@ -160,6 +161,9 @@ namespace render::vfx
         cameraUBOMapped = nullptr;
         core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
 
+        materialSlotsMapped = nullptr; // VK-1526
+        core::BufferUtilities::destroyBuffer(vkDevice, materialSlotsBuffer, materialSlotsAllocation, device.getMemoryManager());
+
         if (depthSampler)
         {
             vkDevice.destroySampler(depthSampler);
@@ -220,7 +224,8 @@ namespace render::vfx
     {
         // VK-1481: binding 1 (per-emitter texture) removed — textures now live in the shared
         // bindless set (set 4). The numeric gap at binding 1 is legal.
-        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        // VK-1526: binding 5 added for the per-emitter mesh-material SSBO (fragment-only).
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
 
         // Binding 0: Camera UBO
         bindings[0].binding = 0;
@@ -246,6 +251,12 @@ namespace render::vfx
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
+        // VK-1526 Binding 5: per-emitter mesh-material SSBO (VFXMeshMaterialSlots[])
+        bindings[4].binding = 5;
+        bindings[4].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -266,7 +277,7 @@ namespace render::vfx
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[1].descriptorCount = 1;                      // scene depth
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = 2;                      // particle + config SSBO
+        poolSizes[2].descriptorCount = 3;                      // VK-1526: particle + config + material SSBO
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -366,6 +377,20 @@ namespace render::vfx
         uboRequest.size = sizeof(GPUVFXCameraUBO);
         core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
         cameraUBOMapped = cameraUBOAllocation.mappedPtr;
+
+        // VK-1526: per-emitter mesh-material SSBO (host-visible mapped). Zero-initialized so every slot's
+        // materialFlags starts at 0 (legacy single-.vfImage path) until an emitter assigns a material.
+        core::BufferInfoRequest matRequest(vkDevice, device.getPhysicalDevice());
+        matRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        matRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                vk::MemoryPropertyFlagBits::eHostCoherent;
+        matRequest.size = static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_EMITTERS) * sizeof(VFXMeshMaterialSlots);
+        core::BufferUtilities::createBuffer(matRequest, materialSlotsBuffer, materialSlotsAllocation, device.getMemoryManager());
+        materialSlotsMapped = materialSlotsAllocation.mappedPtr;
+        if (materialSlotsMapped)
+        {
+            std::memset(materialSlotsMapped, 0, static_cast<size_t>(matRequest.size));
+        }
     }
 
     void VFXMeshGPUPipeline::createDefaultTexture()

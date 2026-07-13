@@ -440,6 +440,10 @@ namespace controllers
 
         bool initGPUMode(vk::Format colorFormat, vk::Format depthFormat);
         void cleanupGPUMode();
+
+        // VK-1526: resolve an optional PBR material (.vfMat/.vfMatInstance) and push it to a mesh emitter,
+        // or clear it (empty path => the single-.vfImage path). Shared by createInstance + the revive path.
+        void applyMeshMaterial(uint32_t emitterIndex, const std::string& materialPath);
         void updateGPU(float deltaTime);
         void recordGPUDrawCommands(vk::CommandBuffer cmd);
         void processPendingEmitterFrees();

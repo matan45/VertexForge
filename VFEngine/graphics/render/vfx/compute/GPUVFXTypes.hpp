@@ -516,6 +516,42 @@ namespace render::vfx
     };
     static_assert(sizeof(VFXDistortionRenderData) == 16, "VFXDistortionRenderData must be 16 bytes (std430 array stride)");
 
+    // VK-1526: per-emitter PBR material for MESH-render particles. GPUEmitterConfig is full (512B, no free
+    // tail bytes), so an optional material's texture slots + scalars ride this dedicated SSBO instead,
+    // indexed by pc.emitterIndex (mirrors the VFXEmitterRenderData per-emitter render-SSBO pattern). std430;
+    // all members are 4-byte scalars so the array stride is exactly 64 bytes. The GLSL mirror lives in
+    // vfx_gpu_types.glsl (keep field-for-field in sync). materialFlags bit 0 (HasMaterial) unset => the mesh
+    // shader takes the byte-identical legacy single-.vfImage path and every other field is ignored.
+    struct VFXMeshMaterialSlots
+    {
+        uint32_t baseColorIdx = 0;      // bindless slot for baseColor/albedo (0 = white default)
+        uint32_t normalIdx = 0;         // bindless slot for normal map (neutral-normal when unset)
+        uint32_t ormIdx = 0;            // bindless slot for packed ORM (R=AO, G=Rough, B=Metal); white when unset
+        uint32_t emissiveIdx = 0;       // bindless slot for emissive (white when unset; gated by HasEmissive)
+        uint32_t materialFlags = 0;     // MeshMaterialFlags bitfield
+        float metallic = 0.0f;          // scalar fallback when no ORM map
+        float roughness = 0.5f;         // scalar fallback when no ORM map
+        float ao = 1.0f;                // scalar fallback when no ORM map
+        float emissionStrength = 0.0f;  // emissive multiplier
+        float albedoTintR = 1.0f;       // material baseColor tint (multiplied with particle color)
+        float albedoTintG = 1.0f;
+        float albedoTintB = 1.0f;
+        float albedoTintA = 1.0f;
+        float _pad0 = 0.0f;
+        float _pad1 = 0.0f;
+        float _pad2 = 0.0f;
+    };
+    static_assert(sizeof(VFXMeshMaterialSlots) == 64, "VFXMeshMaterialSlots must be 64 bytes (std430 array stride)");
+
+    // VK-1526: bit flags packed into VFXMeshMaterialSlots::materialFlags.
+    namespace MeshMaterialFlags
+    {
+        inline constexpr uint32_t HasMaterial = 1u << 0; // sentinel: 0 => legacy single-.vfImage path
+        inline constexpr uint32_t UsesORM     = 1u << 1; // sample ormIdx for AO/roughness/metallic
+        inline constexpr uint32_t HasNormal   = 1u << 2; // sample normalIdx and perturb the geometric normal
+        inline constexpr uint32_t HasEmissive = 1u << 3; // sample emissiveIdx (else emissive = 0)
+    }
+
     // Push constant for the merged draw: gl_DrawID identifies the sub-draw within the run; the shader
     // computes emitterSlot = runBaseSlot + gl_DrawID to index configs[] and the render-data SSBO.
     struct GPUVFXMergedPushConstants

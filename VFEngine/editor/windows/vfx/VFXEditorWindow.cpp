@@ -209,6 +209,7 @@ namespace windows
         params.stretchMultiplier = getFloat(*emitterNode, "stretchMultiplier", vfx::EmitterDefaults::STRETCH_MULTIPLIER);
 
         params.meshPath = getString(*emitterNode, "meshPath", "");
+        params.materialPath = getString(*emitterNode, "materialRef", ""); // VK-1526
 
         // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
         params.meshOrientationMode = vfx::stringToOrientationMode(getString(*emitterNode, "meshOrientationMode", ""));

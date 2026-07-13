@@ -155,6 +155,9 @@ namespace vfx
             getFloat(*emitterNode, "stretchMultiplier", EmitterDefaults::STRETCH_MULTIPLIER));
 
         config.meshPath = getString(*emitterNode, "meshPath", "");
+        // VK-1526: optional PBR material for mesh particles. Missing key (legacy assets) => "" => the
+        // byte-identical single-.vfImage path.
+        config.materialPath = getString(*emitterNode, "materialRef", "");
 
         // VK-1476: mesh-particle orientation. Missing keys (legacy assets) fall back to
         // VelocityForward + axis (0,1,0), so old effects load byte-identically.

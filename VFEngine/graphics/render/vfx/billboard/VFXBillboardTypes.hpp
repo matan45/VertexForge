@@ -266,6 +266,11 @@ namespace render::vfx
         
         std::string meshPath;
 
+        // VK-1526: optional PBR material (.vfMat / .vfMatInstance) for MESH-render particles. When set, mesh
+        // shards shade PBR from the material's texture set + scalars instead of the single texturePath albedo.
+        // Empty (default) => byte-identical single-.vfImage path. Sprites/billboards ignore this.
+        std::string materialPath;
+
         // VK-1476: MESH-render-mode orientation. Only read when renderMode == MeshParticle.
         // VelocityForward reproduces the legacy nose-first basis exactly (byte-identical default).
         // Tumble/AxisLock spin at meshOrientationSpinRate (rad/s); AxisLock spins about

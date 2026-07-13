@@ -135,6 +135,11 @@ namespace render::vfx
 
         customTexture.reset();
         currentTexturePath.clear();
+        matAlbedoTexture.reset();   // VK-1526
+        matNormalTexture.reset();
+        matOrmTexture.reset();
+        matEmissiveTexture.reset();
+        currentMaterialKey.clear();
         currentMeshPath.clear();
         currentMeshId.clear();
         meshVertexBuffer = nullptr;
@@ -162,17 +167,22 @@ namespace render::vfx
 
     void VFXMeshPreviewPipeline::createDescriptorSetLayout()
     {
-        std::vector<vk::DescriptorSetLayoutBinding> bindings(2);
+        // VK-1526: binding 0 now also feeds the fragment stage (cameraPos for the PBR view vector); bindings
+        // 2-5 are the material PBR maps (albedo/normal/ORM/emissive) beside the legacy .vfImage at binding 1.
+        std::vector<vk::DescriptorSetLayoutBinding> bindings(6);
 
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
         bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
-        bindings[1].binding = 1;
-        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        for (uint32_t b = 1; b <= 5; ++b)
+        {
+            bindings[b].binding = b;
+            bindings[b].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            bindings[b].descriptorCount = 1;
+            bindings[b].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        }
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -187,7 +197,7 @@ namespace render::vfx
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[0].descriptorCount = 1;
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[1].descriptorCount = 1;
+        poolSizes[1].descriptorCount = 5; // VK-1526: .vfImage (binding 1) + 4 material maps (bindings 2-5)
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -225,28 +235,44 @@ namespace render::vfx
         uboWrite.descriptorCount = 1;
         uboWrite.pBufferInfo = &uboBufferInfo;
 
-        vk::DescriptorImageInfo textureImageInfo{};
-        textureImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        if (customTexture)
+        // VK-1526: bindings 1-5 are combined-image-samplers (.vfImage albedo + 4 material maps). Unset maps
+        // fall back to the 1x1 white default; the fragment shader gates each material sample on a flag anyway.
+        auto imageInfoFor = [&](const std::unique_ptr<core::Texture>& tex) {
+            vk::DescriptorImageInfo info{};
+            info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            if (tex)
+            {
+                info.imageView = tex->getImageView();
+                info.sampler = tex->getSampler();
+            }
+            else
+            {
+                info.imageView = defaultTextureImageView;
+                info.sampler = textureSampler;
+            }
+            return info;
+        };
+
+        std::array<vk::DescriptorImageInfo, 5> imageInfos = {
+            imageInfoFor(customTexture),        // binding 1: .vfImage albedo
+            imageInfoFor(matAlbedoTexture),     // binding 2
+            imageInfoFor(matNormalTexture),     // binding 3
+            imageInfoFor(matOrmTexture),        // binding 4
+            imageInfoFor(matEmissiveTexture)    // binding 5
+        };
+
+        std::array<vk::WriteDescriptorSet, 6> descriptorWrites{};
+        descriptorWrites[0] = uboWrite;
+        for (uint32_t i = 0; i < 5; ++i)
         {
-            textureImageInfo.imageView = customTexture->getImageView();
-            textureImageInfo.sampler = customTexture->getSampler();
-        }
-        else
-        {
-            textureImageInfo.imageView = defaultTextureImageView;
-            textureImageInfo.sampler = textureSampler;
+            descriptorWrites[i + 1].dstSet = descriptorSet;
+            descriptorWrites[i + 1].dstBinding = i + 1;
+            descriptorWrites[i + 1].dstArrayElement = 0;
+            descriptorWrites[i + 1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            descriptorWrites[i + 1].descriptorCount = 1;
+            descriptorWrites[i + 1].pImageInfo = &imageInfos[i];
         }
 
-        vk::WriteDescriptorSet textureWrite{};
-        textureWrite.dstSet = descriptorSet;
-        textureWrite.dstBinding = 1;
-        textureWrite.dstArrayElement = 0;
-        textureWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        textureWrite.descriptorCount = 1;
-        textureWrite.pImageInfo = &textureImageInfo;
-
-        std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {uboWrite, textureWrite};
         device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
     }
 

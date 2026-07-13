@@ -134,6 +134,12 @@ namespace vfx
                 "meshPath", VFXPropertyType::String,
                 std::string(""), 0.0f, 0.0f
             };
+            // VK-1526: optional PBR material (.vfMat / .vfMatInstance) for mesh particles. Empty => the
+            // legacy single-.vfImage path. Stored as an asset path (auto-recorded into .vfmeta deps).
+            node.properties["materialRef"] = VFXProperty{
+                "materialRef", VFXPropertyType::String,
+                std::string(""), 0.0f, 0.0f
+            };
             // VK-1476: mesh-particle orientation (only used when renderMode == MeshParticle).
             node.properties["meshOrientationMode"] = VFXProperty{
                 "meshOrientationMode", VFXPropertyType::String,
