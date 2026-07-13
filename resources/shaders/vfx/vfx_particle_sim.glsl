@@ -622,7 +622,13 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         }
         if (pc.particlesPerRequest > 0u)
         {
-            p.color *= unpackUnorm4x8(p.packedColorMult);
+            uint varianceSeed = pcg_hash(p.spawnSeed);
+            float colorValueMult = 1.0 + config.colorValueVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_COLOR_VALUE);
+            float alphaMult = 1.0 + config.alphaVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ALPHA);
+            p.color *= vec4(colorValueMult, colorValueMult, colorValueMult, alphaMult) *
+                unpackUnorm4x8(p.packedColorMult);
         }
         else
         {
@@ -716,7 +722,13 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
             colorBase = config.startColor;
             if (pc.particlesPerRequest > 0u)
             {
-                colorBase *= unpackUnorm4x8(p.packedColorMult);
+                uint varianceSeed = pcg_hash(p.spawnSeed);
+                float colorValueMult = 1.0 + config.colorValueVariance *
+                    vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_COLOR_VALUE);
+                float alphaMult = 1.0 + config.alphaVariance *
+                    vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ALPHA);
+                colorBase *= vec4(colorValueMult, colorValueMult, colorValueMult, alphaMult) *
+                    unpackUnorm4x8(p.packedColorMult);
             }
             else
             {
@@ -1092,7 +1104,9 @@ void main()
                 {
                     float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
                     float alphaMult = (pc.particlesPerRequest > 0u)
-                        ? unpackUnorm4x8(p.packedColorMult).a
+                        ? (1.0 + config.alphaVariance * vfxVarianceSigned(
+                              pcg_hash(p.spawnSeed), VFX_VAR_STREAM_ALPHA)) *
+                          unpackUnorm4x8(p.packedColorMult).a
                         : unpackHalf2x16(p.packedColorMult).y;
                     p.color.a = config.startColor.a * alphaMult * (1.0 - fadeProgress);
                 }
@@ -1223,19 +1237,18 @@ void main()
             p.color = config.startColor;
             p.color.rgb *= colorValueMult;
             p.color.a *= alphaMult;
-            vec4 channelColorMult = vec4(colorValueMult, colorValueMult, colorValueMult, alphaMult);
+            vec4 channelTint = vec4(1.0);
             if (channelSpawn && (requestFlags & SPAWN_REQUEST_HAS_TINT) != 0u)
             {
-                vec4 tint = unpackUnorm4x8(requestPackedColor);
-                p.color *= tint;
-                channelColorMult *= tint;
+                channelTint = unpackUnorm4x8(requestPackedColor);
+                p.color *= channelTint;
             }
             p.rotation = config.rotationVariance *
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ROTATION);
             p.angularVelocity = config.angularVelocityVariance *
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ANGULAR_VELOCITY);
             p.packedColorMult = channelSpawn
-                ? packUnorm4x8(clamp(channelColorMult, vec4(0.0), vec4(1.0)))
+                ? packUnorm4x8(channelTint)
                 : packHalf2x16(vec2(colorValueMult, alphaMult));
 
             p.initialSize = p.size;
