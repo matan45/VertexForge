@@ -75,7 +75,7 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        constexpr uint32_t BINDING_COUNT = 10;
+        constexpr uint32_t BINDING_COUNT = 11;
         std::array<vk::DescriptorSetLayoutBinding, BINDING_COUNT> bindings{};
 
         for (uint32_t i = 0; i < BINDING_COUNT; ++i)
@@ -140,7 +140,7 @@ namespace render::vfx
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 10;
+        poolSize.descriptorCount = 11;
 
         descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
     }
@@ -169,7 +169,8 @@ namespace render::vfx
             buffers.ribbonHeadBuffer != cachedBuffers.ribbonHeadBuffer ||
             buffers.eventBuffer != cachedBuffers.eventBuffer ||
             buffers.colliderBuffer != cachedBuffers.colliderBuffer ||
-            buffers.terrainBuffer != cachedBuffers.terrainBuffer)
+            buffers.terrainBuffer != cachedBuffers.terrainBuffer ||
+            buffers.spawnRequestBuffer != cachedBuffers.spawnRequestBuffer)
         {
             cachedBuffers = buffers;
             descriptorsNeedUpdate = true;
@@ -187,8 +188,8 @@ namespace render::vfx
 
         // Buffers ordered by binding index: particle(0), config(1), state(2),
         // drawCommand(3), lut(4), ribbonRing(5), ribbonHead(6), event(7),
-        // collider(8), terrain(9)
-        std::array<vk::Buffer, 10> bufferHandles = {
+        // collider(8), terrain(9), spawnRequest(10)
+        std::array<vk::Buffer, 11> bufferHandles = {
             cachedBuffers.particleBuffer,
             cachedBuffers.configBuffer,
             cachedBuffers.stateBuffer,
@@ -198,13 +199,14 @@ namespace render::vfx
             cachedBuffers.ribbonHeadBuffer,
             cachedBuffers.eventBuffer,
             cachedBuffers.colliderBuffer,
-            cachedBuffers.terrainBuffer
+            cachedBuffers.terrainBuffer,
+            cachedBuffers.spawnRequestBuffer
         };
 
-        std::array<vk::DescriptorBufferInfo, 10> bufferInfos{};
-        std::array<vk::WriteDescriptorSet, 10> writes{};
+        std::array<vk::DescriptorBufferInfo, 11> bufferInfos{};
+        std::array<vk::WriteDescriptorSet, 11> writes{};
 
-        for (uint32_t i = 0; i < 10; ++i)
+        for (uint32_t i = 0; i < 11; ++i)
         {
             bufferInfos[i].buffer = bufferHandles[i];
             bufferInfos[i].offset = 0;
@@ -227,7 +229,9 @@ namespace render::vfx
         uint32_t emitterIndex,
         uint32_t particleCount,
         uint32_t frameNumber,
-        uint32_t emitterCount)
+        uint32_t emitterCount,
+        uint32_t channelRequestBase,
+        uint32_t particlesPerRequest)
     {
         if (!initialized || particleCount == 0)
         {
@@ -247,6 +251,8 @@ namespace render::vfx
         pushConstants.emitterIndex = emitterIndex;
         pushConstants.frameNumber = frameNumber;
         pushConstants.emitterCount = emitterCount;
+        pushConstants.channelRequestBase = channelRequestBase;
+        pushConstants.particlesPerRequest = particlesPerRequest;
 
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
                           0, sizeof(GPUVFXComputePushConstants), &pushConstants);
@@ -262,7 +268,7 @@ namespace render::vfx
         vk::Buffer eventBuffer)
     {
         std::vector<vk::BufferMemoryBarrier> barriers;
-        barriers.reserve(4);
+        barriers.reserve(5);
 
         vk::BufferMemoryBarrier stateBarrier{};
         stateBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -297,6 +303,17 @@ namespace render::vfx
             eventBarrier.offset = 0;
             eventBarrier.size = VK_WHOLE_SIZE;
             barriers.push_back(eventBarrier);
+        }
+
+        if (cachedBuffers.spawnRequestBuffer)
+        {
+            vk::BufferMemoryBarrier spawnRequestBarrier{};
+            spawnRequestBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            spawnRequestBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            spawnRequestBarrier.buffer = cachedBuffers.spawnRequestBuffer;
+            spawnRequestBarrier.offset = 0;
+            spawnRequestBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(spawnRequestBarrier);
         }
 
         cmd.pipelineBarrier(
@@ -390,7 +407,7 @@ namespace render::vfx
         vk::Buffer drawCommandBuffer,
         vk::Buffer particleBuffer)
     {
-        std::array<vk::BufferMemoryBarrier, 3> barriers{};
+        std::vector<vk::BufferMemoryBarrier> barriers(3);
 
         barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -409,6 +426,17 @@ namespace render::vfx
         barriers[2].buffer = particleBuffer;
         barriers[2].offset = 0;
         barriers[2].size = VK_WHOLE_SIZE;
+
+        if (cachedBuffers.spawnRequestBuffer)
+        {
+            vk::BufferMemoryBarrier spawnRequestBarrier{};
+            spawnRequestBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+            spawnRequestBarrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+            spawnRequestBarrier.buffer = cachedBuffers.spawnRequestBuffer;
+            spawnRequestBarrier.offset = 0;
+            spawnRequestBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(spawnRequestBarrier);
+        }
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,

@@ -48,7 +48,9 @@ namespace render::vfx
             uint32_t emitterIndex,
             uint32_t particleCount,
             uint32_t frameNumber,
-            uint32_t emitterCount
+            uint32_t emitterCount,
+            uint32_t channelRequestBase = 0,
+            uint32_t particlesPerRequest = 0
         );
 
         void insertBarriersAfterCompute(vk::CommandBuffer cmd, const GPUVFXBufferSet& buffers);

@@ -123,6 +123,22 @@ layout(std430, set = 0, binding = 9) readonly buffer TerrainHeightfieldBuffer {
     float terrainHeights[];
 };
 
+struct GPUVFXSpawnRequest
+{
+    vec3 position;
+    float scale;
+    vec3 direction;
+    uint packedColor;
+    uint seed;
+    uint flags;
+    uint reservedTemplate;
+    uint pad;
+};
+
+layout(std430, set = 0, binding = 10) readonly buffer SpawnRequestBuffer {
+    GPUVFXSpawnRequest spawnRequests[];
+};
+
 const uint COLLIDER_SPHERE  = 0u;
 const uint COLLIDER_BOX     = 1u;
 const uint COLLIDER_CAPSULE = 2u;
@@ -136,6 +152,7 @@ const uint MAX_VFX_EVENTS = 256u;
 
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
 const uint RENDER_MODE_RIBBON = 4u;
+const uint SPAWN_REQUEST_HAS_TINT = 1u;
 
 // LUT_FLAG_* / LUT_CH_* / vfxNormalize01 now live in vfx_lut.glsl (shared with the ribbon shader).
 
@@ -143,6 +160,8 @@ layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     uint frameNumber;
     uint emitterCount;
+    uint channelRequestBase;
+    uint particlesPerRequest;
 } pc;
 
 const uint FLAG_PLAYING = 1u;
@@ -601,9 +620,16 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         {
             p.color = mix(config.colorStart, config.colorEnd, lifetimeRatio);
         }
-        vec2 colorMult = unpackHalf2x16(p.packedColorMult);
-        p.color.rgb *= colorMult.x;
-        p.color.a *= colorMult.y;
+        if (pc.particlesPerRequest > 0u)
+        {
+            p.color *= unpackUnorm4x8(p.packedColorMult);
+        }
+        else
+        {
+            vec2 colorMult = unpackHalf2x16(p.packedColorMult);
+            p.color.rgb *= colorMult.x;
+            p.color.a *= colorMult.y;
+        }
     }
 
     if ((config.modifierFlags & MODIFIER_SIZE_OVER_LIFETIME) != 0u)
@@ -687,10 +713,17 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         }
         else
         {
-            vec2 cm = unpackHalf2x16(p.packedColorMult);
             colorBase = config.startColor;
-            colorBase.rgb *= cm.x;
-            colorBase.a *= cm.y;
+            if (pc.particlesPerRequest > 0u)
+            {
+                colorBase *= unpackUnorm4x8(p.packedColorMult);
+            }
+            else
+            {
+                vec2 cm = unpackHalf2x16(p.packedColorMult);
+                colorBase.rgb *= cm.x;
+                colorBase.a *= cm.y;
+            }
         }
         p.color = colorBase * colorBySpeed;
     }
@@ -1058,7 +1091,10 @@ void main()
                 if (lifetimeRatio > FADE_START)
                 {
                     float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
-                    p.color.a = config.startColor.a * unpackHalf2x16(p.packedColorMult).y * (1.0 - fadeProgress);
+                    float alphaMult = (pc.particlesPerRequest > 0u)
+                        ? unpackUnorm4x8(p.packedColorMult).a
+                        : unpackHalf2x16(p.packedColorMult).y;
+                    p.color.a = config.startColor.a * alphaMult * (1.0 - fadeProgress);
                 }
             }
 
@@ -1109,17 +1145,60 @@ void main()
 
         if (spawnSlot < spawnThisFrame)
         {
-            isActive = true;
+            bool channelSpawn = pc.particlesPerRequest > 0u;
+            bool requestValid = true;
+            float requestScale = 1.0;
+            vec3 requestDirection = vec3(0.0);
+            uint requestPackedColor = 0u;
+            uint requestFlags = 0u;
 
-            vec3 localPos = generateSpawnPosition(seed, config);
+            if (channelSpawn)
+            {
+                uint requestOffset = spawnSlot / pc.particlesPerRequest;
+                uint requestCapacity = uint(spawnRequests.length());
+                if (pc.channelRequestBase >= requestCapacity)
+                {
+                    requestValid = false;
+                }
+                else if (requestOffset >= requestCapacity - pc.channelRequestBase)
+                {
+                    requestValid = false;
+                }
+                else
+                {
+                    uint requestIndex = pc.channelRequestBase + requestOffset;
+                    GPUVFXSpawnRequest request = spawnRequests[requestIndex];
+                    uint subParticleIndex = spawnSlot % pc.particlesPerRequest;
+                    seed = pcg_hash(request.seed ^ pcg_hash(subParticleIndex + 0x9E3779B9u));
+                    requestScale = max(request.scale, 0.0);
+                    requestDirection = request.direction;
+                    requestPackedColor = request.packedColor;
+                    requestFlags = request.flags;
+                    p.position = request.position;
+                }
+            }
 
-            // Sub-frame interpolation: distribute this frame's spawns along the
-            // emitter's path from last frame to avoid beads-on-a-string clumping.
-            float spawnFrac = (spawnThisFrame > 1u)
-                ? float(spawnSlot) / float(spawnThisFrame - 1u)
-                : 1.0;
-            vec3 spawnOrigin = mix(vec3(states[pc.emitterIndex].prevWorldTransform[3]),
-                                   vec3(worldTransform[3]), spawnFrac);
+            if (requestValid)
+            {
+                isActive = true;
+
+                vec3 localPos = generateSpawnPosition(seed, config);
+                vec3 spawnOrigin;
+                if (channelSpawn)
+                {
+                    spawnOrigin = p.position;
+                    localPos *= requestScale;
+                }
+                else
+                {
+                    // Sub-frame interpolation: distribute this frame's spawns along the
+                    // emitter's path from last frame to avoid beads-on-a-string clumping.
+                    float spawnFrac = (spawnThisFrame > 1u)
+                        ? float(spawnSlot) / float(spawnThisFrame - 1u)
+                        : 1.0;
+                    spawnOrigin = mix(vec3(states[pc.emitterIndex].prevWorldTransform[3]),
+                                      vec3(worldTransform[3]), spawnFrac);
+                }
 
             mat3 rotation = mat3(worldTransform);
             p.position = spawnOrigin + rotation * localPos;
@@ -1140,23 +1219,40 @@ void main()
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ALPHA);
 
             p.maxLifetime = config.lifetime * lifetimeMult;
-            p.size = config.startSize * sizeMult;
+            p.size = config.startSize * sizeMult * requestScale;
             p.color = config.startColor;
             p.color.rgb *= colorValueMult;
             p.color.a *= alphaMult;
+            vec4 channelColorMult = vec4(colorValueMult, colorValueMult, colorValueMult, alphaMult);
+            if (channelSpawn && (requestFlags & SPAWN_REQUEST_HAS_TINT) != 0u)
+            {
+                vec4 tint = unpackUnorm4x8(requestPackedColor);
+                p.color *= tint;
+                channelColorMult *= tint;
+            }
             p.rotation = config.rotationVariance *
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ROTATION);
             p.angularVelocity = config.angularVelocityVariance *
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ANGULAR_VELOCITY);
-            p.packedColorMult = packHalf2x16(vec2(colorValueMult, alphaMult));
+            p.packedColorMult = channelSpawn
+                ? packUnorm4x8(clamp(channelColorMult, vec4(0.0), vec4(1.0)))
+                : packHalf2x16(vec2(colorValueMult, alphaMult));
 
             p.initialSize = p.size;
             p.initialSpeed = config.startSpeed * speedMult;
 
             vec3 dir = generateDirectionFromShape(seed, localPos, config);
+            bool hasWorldDirection = channelSpawn && dot(requestDirection, requestDirection) > 1e-8;
+            if (hasWorldDirection)
+            {
+                dir = normalize(requestDirection);
+            }
             p.velocity = dir * p.initialSpeed;
 
-            p.velocity = rotation * p.velocity;
+            if (!hasWorldDirection)
+            {
+                p.velocity = rotation * p.velocity;
+            }
 
             vec4 emitterVel = states[pc.emitterIndex].emitterVelocityAndInherit;
             p.velocity += emitterVel.xyz * emitterVel.w;
@@ -1170,6 +1266,7 @@ void main()
             if ((config.eventFlags & EVENT_FLAG_ON_SPAWN) != 0u)
             {
                 emitEvent(0u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+            }
             }
         }
     }

@@ -146,6 +146,31 @@ namespace render::vfx
         cmd.copyBuffer(stateStagingBuffers[currentFrameIndex], stateBuffer, copyRegion);
     }
 
+    GPUVFXSpawnRequest* GPUVFXBufferManager::mapSpawnRequestStaging()
+    {
+        if (!initialized || !spawnRequestStagingMapped[currentFrameIndex])
+        {
+            return nullptr;
+        }
+
+        return static_cast<GPUVFXSpawnRequest*>(spawnRequestStagingMapped[currentFrameIndex]);
+    }
+
+    void GPUVFXBufferManager::uploadSpawnRequestBuffer(vk::CommandBuffer cmd)
+    {
+        if (!initialized || !spawnRequestStagingBuffers[currentFrameIndex] || !spawnRequestBuffer)
+        {
+            return;
+        }
+
+        vk::BufferCopy copyRegion{};
+        copyRegion.srcOffset = 0;
+        copyRegion.dstOffset = 0;
+        copyRegion.size = getSpawnRequestBufferSize();
+
+        cmd.copyBuffer(spawnRequestStagingBuffers[currentFrameIndex], spawnRequestBuffer, copyRegion);
+    }
+
     void GPUVFXBufferManager::clearDrawCommands(vk::CommandBuffer cmd)
     {
         if (!initialized || !drawCommandBuffer)

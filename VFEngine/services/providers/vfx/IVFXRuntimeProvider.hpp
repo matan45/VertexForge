@@ -25,6 +25,10 @@ namespace services
 
         // Instance management
         virtual VFXInstanceId createInstance(const VFXRuntimeParams& params) = 0;
+        // Optional additive capability so existing test/plugin providers remain source
+        // compatible; the runtime adapter overrides both methods.
+        virtual VFXInstanceId createChannel(const std::string&, uint32_t) { return 0; }
+        virtual void emitToChannel(VFXInstanceId, const VFXChannelEmitParams&) {}
         virtual void destroyInstance(VFXInstanceId id) = 0;
 
         // Instance control
@@ -110,6 +114,12 @@ namespace services
             uint32_t rawEventsThisFrame = 0;
             uint32_t eventBudget = 0;
             bool eventsDropped = false;
+            uint32_t channelListeners = 0;
+            uint32_t channelRawRequests = 0;
+            uint32_t channelAcceptedRequests = 0;
+            uint32_t channelRingDroppedRequests = 0;
+            uint32_t channelParticleDroppedRequests = 0;
+            uint32_t channelRequestBudget = 0;
         };
         virtual BudgetStats getBudgetStats() const = 0;
 

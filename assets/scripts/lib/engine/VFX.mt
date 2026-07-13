@@ -109,6 +109,40 @@ public class VFX {
         return _native_vfx_spawnAt(path, x, y, z, true);
     }
 
+    // Create or retrieve a persistent GPU-only listener for a compatible
+    // deterministic one-shot asset. Returns 0 when the asset is unsupported or
+    // the listener cannot be allocated. The authored burst determines how many
+    // particles each request produces.
+    public static function createChannel(string path): int {
+        return _native_vfx_createChannel(path);
+    }
+
+    // Create a channel with an explicit particle count per request.
+    public static function createChannelWithCount(string path, int particlesPerRequest): int {
+        return _native_vfx_createChannelWithCount(path, particlesPerRequest);
+    }
+
+    // Submit one world-space spawn request with authored color, unit scale, and
+    // no direction override. Requests may be dropped when GPU capacity is full.
+    public static function channelEmit(int channelId, float x, float y, float z): void {
+        _native_vfx_channelEmit(channelId, x, y, z);
+    }
+
+    // Submit one request with a multiplicative RGBA tint. Components are clamped
+    // to [0, 1]; alpha participates in the multiplication.
+    public static function channelEmitTinted(int channelId, float x, float y, float z,
+            float r, float g, float b, float a): void {
+        _native_vfx_channelEmitTinted(channelId, x, y, z, r, g, b, a);
+    }
+
+    // Submit a fully specified request. Position and direction are world-space;
+    // scale multiplies shape extent and particle size. White RGBA is neutral.
+    public static function channelEmitFull(int channelId, float x, float y, float z,
+            float scale, float dx, float dy, float dz,
+            float r, float g, float b, float a): void {
+        _native_vfx_channelEmitFull(channelId, x, y, z, scale, dx, dy, dz, r, g, b, a);
+    }
+
     // Destroy a spawned instance
     public static function destroyInstance(int instanceId): void {
         _native_vfx_destroyInstance(instanceId);

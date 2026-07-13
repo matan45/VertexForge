@@ -53,6 +53,8 @@ namespace core
 
         // Instance management
         services::VFXInstanceId createInstance(const services::VFXRuntimeParams& params) override;
+        services::VFXInstanceId createChannel(const std::string& path, uint32_t particlesPerRequest) override;
+        void emitToChannel(services::VFXInstanceId id, const services::VFXChannelEmitParams& params) override;
         void destroyInstance(services::VFXInstanceId id) override;
 
         // Instance control

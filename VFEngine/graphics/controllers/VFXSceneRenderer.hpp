@@ -119,6 +119,14 @@ namespace controllers
         float cullDistanceSqOverride = -1.0f; // <0 => use the global VFX cull distance
         int updateInterval = 1;               // >1 => simulate only every Nth frame
         int updatePhase = 0;                  // frame offset so throttled emitters spread out
+
+        // VK-1500: a channel listener owns one large GPU slice and consumes batched
+        // world-space spawn requests instead of running the authored emission schedule.
+        bool channelListener = false;
+        uint32_t channelParticlesPerRequest = 0;
+        uint32_t channelRequestBase = 0;
+        uint32_t channelAcceptedRequests = 0;
+        std::vector<render::vfx::GPUVFXSpawnRequest> pendingChannelRequests;
     };
 
     class VFXSceneRenderer
@@ -144,6 +152,17 @@ namespace controllers
 
         std::unordered_map<VFXInstanceId, VFXRuntimeInstance> instances;
         std::unordered_map<uint32_t, VFXInstanceId> emitterIndexToInstanceId;
+
+        // Stable listener ordering makes global-ring overflow deterministic. The
+        // rotating start index prevents one busy channel from starving later ones.
+        std::unordered_map<std::string, VFXInstanceId> channelsByPath;
+        std::vector<VFXInstanceId> channelOrder;
+        size_t channelRoundRobinStart = 0;
+        uint64_t channelEmitSequence = 0;
+        uint32_t channelRawRequestsThisFrame = 0;
+        uint32_t channelAcceptedRequestsThisFrame = 0;
+        uint32_t channelRingDroppedThisFrame = 0;
+        uint32_t channelParticleDroppedThisFrame = 0;
 
         // VK-1460: emitter slots whose draw command was left live last frame. Used by the
         // selective draw-command clear in recordComputeCommands so a temporally-throttled
@@ -234,6 +253,13 @@ namespace controllers
         void setGPUDrivenEnabled(bool enabled);
 
         VFXInstanceId createInstance(const VFXRuntimeParams& params);
+        VFXInstanceId createChannel(const std::string& path, uint32_t particlesPerRequest = 0);
+        void emitToChannel(VFXInstanceId id,
+                           const glm::vec3& position,
+                           float scale,
+                           const glm::vec3& direction,
+                           uint32_t packedTint,
+                           bool hasTint);
         void destroyInstance(VFXInstanceId id);
         void destroyAllInstances();
 
@@ -332,6 +358,12 @@ namespace controllers
             uint32_t rawEventsThisFrame = 0;
             uint32_t eventBudget = 0;
             bool eventsDropped = false;
+            uint32_t channelListeners = 0;
+            uint32_t channelRawRequests = 0;
+            uint32_t channelAcceptedRequests = 0;
+            uint32_t channelRingDroppedRequests = 0;
+            uint32_t channelParticleDroppedRequests = 0;
+            uint32_t channelRequestBudget = 0;
         };
 
         VFXBudgetStats getBudgetStats() const;

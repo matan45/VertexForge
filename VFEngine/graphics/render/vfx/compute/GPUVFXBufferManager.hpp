@@ -60,6 +60,12 @@ namespace render::vfx
         core::VulkanAllocation terrainAllocation;
         void* terrainMapped = nullptr;
 
+        vk::Buffer spawnRequestBuffer;
+        core::VulkanAllocation spawnRequestAllocation;
+        std::array<vk::Buffer, core::MAX_FRAMES_IN_FLIGHT> spawnRequestStagingBuffers{};
+        std::array<core::VulkanAllocation, core::MAX_FRAMES_IN_FLIGHT> spawnRequestStagingAllocations{};
+        std::array<void*, core::MAX_FRAMES_IN_FLIGHT> spawnRequestStagingMapped{};
+
         uint32_t maxParticles = 0;
         uint32_t maxEmitters = 0;
         uint32_t currentFrameIndex = 0;
@@ -102,12 +108,13 @@ namespace render::vfx
         vk::Buffer getEventBuffer() const { return eventBuffer; }
         vk::Buffer getColliderBuffer() const { return colliderBuffer; }
         vk::Buffer getTerrainBuffer() const { return terrainBuffer; }
+        vk::Buffer getSpawnRequestBuffer() const { return spawnRequestBuffer; }
 
         GPUVFXBufferSet getBufferSet() const
         {
             return {particleBuffer, configBuffer, stateBuffer, drawCommandBuffer,
                     lutBuffer, ribbonRingBuffer, ribbonHeadBuffer, eventBuffer,
-                    colliderBuffer, terrainBuffer};
+                    colliderBuffer, terrainBuffer, spawnRequestBuffer};
         }
 
         vk::DeviceSize getParticleBufferSize() const;
@@ -120,6 +127,7 @@ namespace render::vfx
         vk::DeviceSize getEventBufferSize() const;
         vk::DeviceSize getColliderBufferSize() const;
         vk::DeviceSize getTerrainBufferSize() const;
+        vk::DeviceSize getSpawnRequestBufferSize() const;
 
         void updateSceneColliders(const std::vector<GPUCollider>& colliders, uint32_t count);
         void updateTerrainHeightfield(const GPUTerrainHeightfield& header,
@@ -138,6 +146,8 @@ namespace render::vfx
         void resetActiveCount(vk::CommandBuffer cmd, uint32_t emitterIndex);
         void resetAllActiveCounts(vk::CommandBuffer cmd);
         void uploadStateBuffer(vk::CommandBuffer cmd);
+        GPUVFXSpawnRequest* mapSpawnRequestStaging();
+        void uploadSpawnRequestBuffer(vk::CommandBuffer cmd);
         void clearDrawCommands(vk::CommandBuffer cmd);
         // VK-1460: zero a single emitter's draw command (used by the selective per-frame
         // clear so temporally-throttled emitters keep their command on off-frames).
@@ -186,6 +196,7 @@ namespace render::vfx
         bool createEventBuffers();
         bool createColliderBuffer();
         bool createTerrainBuffer();
+        bool createSpawnRequestBuffer();
         void destroyBuffers();
     };
 }

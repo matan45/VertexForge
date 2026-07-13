@@ -240,4 +240,47 @@ namespace render::vfx
         }
         return false;
     }
+
+    bool GPUVFXBufferManager::createSpawnRequestBuffer()
+    {
+        core::BufferInfoRequest deviceRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            getSpawnRequestBufferSize(),
+            vk::BufferUsageFlagBits::eStorageBuffer |
+            vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+
+        core::BufferUtilities::createBuffer(deviceRequest, spawnRequestBuffer,
+            spawnRequestAllocation, device.getMemoryManager());
+        if (!spawnRequestBuffer || !spawnRequestAllocation)
+        {
+            return false;
+        }
+
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            core::BufferInfoRequest stagingRequest(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                getSpawnRequestBufferSize(),
+                vk::BufferUsageFlagBits::eTransferSrc,
+                vk::MemoryPropertyFlagBits::eHostVisible |
+                vk::MemoryPropertyFlagBits::eHostCoherent
+            );
+
+            core::BufferUtilities::createBuffer(stagingRequest, spawnRequestStagingBuffers[i],
+                spawnRequestStagingAllocations[i], device.getMemoryManager());
+            if (!spawnRequestStagingBuffers[i] || !spawnRequestStagingAllocations[i])
+            {
+                return false;
+            }
+
+            spawnRequestStagingMapped[i] = spawnRequestStagingAllocations[i].mappedPtr;
+            std::memset(spawnRequestStagingMapped[i], 0, getSpawnRequestBufferSize());
+        }
+
+        return true;
+    }
 }

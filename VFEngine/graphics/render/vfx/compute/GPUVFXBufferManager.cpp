@@ -93,6 +93,13 @@ namespace render::vfx
                 return false;
             }
 
+            if (!createSpawnRequestBuffer())
+            {
+                vfLogError("GPUVFXBufferManager: Failed to create spawn request buffers");
+                destroyBuffers();
+                return false;
+            }
+
             initialized = true;
             vfLogInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
                        maxParticles, maxEmitters,
@@ -100,7 +107,9 @@ namespace render::vfx
                            getStateBufferSize() + getDrawCommandBufferSize() +
                            getLUTBufferSize() + getRibbonRingBufferSize() +
                            getRibbonHeadBufferSize() + getEventBufferSize() +
-                           getColliderBufferSize() + getTerrainBufferSize()) / (1024.0f * 1024.0f));
+                           getColliderBufferSize() + getTerrainBufferSize() +
+                           getSpawnRequestBufferSize() * (1 + core::MAX_FRAMES_IN_FLIGHT)) /
+                           (1024.0f * 1024.0f));
             return true;
         }
         catch (const vk::OutOfDeviceMemoryError& e)
@@ -149,6 +158,15 @@ namespace render::vfx
         colliderMapped = nullptr;
         lutMapped = nullptr;
         configMapped = nullptr;
+
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            spawnRequestStagingMapped[i] = nullptr;
+            core::BufferUtilities::destroyBuffer(vkDevice, spawnRequestStagingBuffers[i],
+                spawnRequestStagingAllocations[i], device.getMemoryManager());
+        }
+        core::BufferUtilities::destroyBuffer(vkDevice, spawnRequestBuffer,
+            spawnRequestAllocation, device.getMemoryManager());
 
         for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
         {
@@ -229,5 +247,11 @@ namespace render::vfx
     vk::DeviceSize GPUVFXBufferManager::getTerrainBufferSize() const
     {
         return static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_TERRAIN_HEIGHTFIELD_BYTES);
+    }
+
+    vk::DeviceSize GPUVFXBufferManager::getSpawnRequestBufferSize() const
+    {
+        return static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_SPAWN_REQUESTS) *
+               sizeof(GPUVFXSpawnRequest);
     }
 }

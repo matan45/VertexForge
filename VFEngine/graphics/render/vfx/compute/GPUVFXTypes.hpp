@@ -347,6 +347,34 @@ namespace render::vfx
     static_assert(offsetof(GPUVFXEvent, color) == 32, "GPUVFXEvent::color offset mismatch");
     static_assert(offsetof(GPUVFXEvent, size) == 44, "GPUVFXEvent::size offset mismatch");
 
+    // VK-1500: one world-space impact request consumed by a persistent channel listener.
+    // This layout is mirrored by GPUVFXSpawnRequest in vfx_particle_sim.glsl (std430).
+    struct alignas(16) GPUVFXSpawnRequest
+    {
+        glm::vec3 position;
+        float scale = 1.0f;
+        glm::vec3 direction{0.0f};
+        uint32_t packedColor = 0;
+        uint32_t seed = 0;
+        uint32_t flags = 0;
+        uint32_t reservedTemplate = 0;
+        uint32_t pad = 0;
+    };
+    static_assert(sizeof(GPUVFXSpawnRequest) == 48, "GPUVFXSpawnRequest must be 48 bytes for GPU alignment");
+    static_assert(offsetof(GPUVFXSpawnRequest, position) == 0, "GPUVFXSpawnRequest::position offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, scale) == 12, "GPUVFXSpawnRequest::scale offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, direction) == 16, "GPUVFXSpawnRequest::direction offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, packedColor) == 28, "GPUVFXSpawnRequest::packedColor offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, seed) == 32, "GPUVFXSpawnRequest::seed offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, flags) == 36, "GPUVFXSpawnRequest::flags offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, reservedTemplate) == 40, "GPUVFXSpawnRequest::reservedTemplate offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, pad) == 44, "GPUVFXSpawnRequest::pad offset mismatch");
+
+    namespace SpawnRequestFlags
+    {
+        inline constexpr uint32_t HasTint = 1u << 0;
+    }
+
     struct alignas(16) GPUCollider
     {
         glm::vec4 positionAndType;  // xyz=world center, w=float(type: 0=Sphere, 1=Box, 2=Capsule)
@@ -368,6 +396,8 @@ namespace render::vfx
         inline constexpr uint32_t MAX_VFX_EVENTS_PER_FRAME = 256;
         inline constexpr uint32_t MAX_SCENE_COLLIDERS = 256;
         inline constexpr uint32_t MAX_TERRAIN_HEIGHTFIELD_BYTES = 4 * 1024 * 1024;
+        inline constexpr uint32_t MAX_SPAWN_REQUESTS = 4096;
+        inline constexpr uint32_t CHANNEL_PARTICLES_PER_EMITTER = 8192;
     }
 
     namespace EmitterFlags
@@ -401,11 +431,15 @@ namespace render::vfx
         uint32_t emitterIndex;
         uint32_t frameNumber;
         uint32_t emitterCount;
+        uint32_t channelRequestBase;
+        uint32_t particlesPerRequest;
     };
-    static_assert(sizeof(GPUVFXComputePushConstants) == 12, "Push constants must be 12 bytes");
+    static_assert(sizeof(GPUVFXComputePushConstants) == 20, "Push constants must be 20 bytes");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterIndex) == 0, "GPUVFXComputePushConstants::emitterIndex offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, frameNumber) == 4, "GPUVFXComputePushConstants::frameNumber offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterCount) == 8, "GPUVFXComputePushConstants::emitterCount offset mismatch");
+    static_assert(offsetof(GPUVFXComputePushConstants, channelRequestBase) == 12, "GPUVFXComputePushConstants::channelRequestBase offset mismatch");
+    static_assert(offsetof(GPUVFXComputePushConstants, particlesPerRequest) == 16, "GPUVFXComputePushConstants::particlesPerRequest offset mismatch");
 
     struct GPUVFXBillboardPushConstants
     {
@@ -481,6 +515,7 @@ namespace render::vfx
         vk::Buffer eventBuffer;
         vk::Buffer colliderBuffer;
         vk::Buffer terrainBuffer;
+        vk::Buffer spawnRequestBuffer;
     };
 
     struct VFXFlipbookPushConstants

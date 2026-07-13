@@ -21,6 +21,8 @@
 #include <random>
 #include <type_traits>
 #include <algorithm>
+#include <cstring>
+#include <limits>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace controllers
@@ -185,6 +187,79 @@ namespace controllers
         processEvents();
         cleanupFinishedSubEmitters(deltaTime);
 
+        // VK-1500: drain channel queues once into the current frame's linear request
+        // staging buffer. Rotate the first listener each frame so global-ring pressure
+        // cannot permanently starve channels created later.
+        channelRawRequestsThisFrame = 0;
+        channelAcceptedRequestsThisFrame = 0;
+        channelRingDroppedThisFrame = 0;
+        channelParticleDroppedThisFrame = 0;
+        uint32_t ringCursor = 0;
+        auto* requestStaging = static_cast<render::vfx::GPUVFXSpawnRequest*>(
+            gpuBufferManager->mapSpawnRequestStaging());
+        if (!channelOrder.empty())
+        {
+            channelRoundRobinStart %= channelOrder.size();
+            for (size_t offset = 0; offset < channelOrder.size(); ++offset)
+            {
+                const size_t orderIndex = (channelRoundRobinStart + offset) % channelOrder.size();
+                auto instanceIt = instances.find(channelOrder[orderIndex]);
+                if (instanceIt == instances.end() || !instanceIt->second.channelListener)
+                    continue;
+
+                auto& channel = instanceIt->second;
+                channel.channelRequestBase = ringCursor;
+                channel.channelAcceptedRequests = 0;
+
+                const uint64_t raw = channel.pendingChannelRequests.size();
+                channelRawRequestsThisFrame += static_cast<uint32_t>(
+                    std::min<uint64_t>(raw, std::numeric_limits<uint32_t>::max()));
+
+                const uint32_t particleRequestCapacity = channel.channelParticlesPerRequest > 0
+                    ? channel.gpuParticleCount / channel.channelParticlesPerRequest
+                    : 0;
+                const uint64_t particleLimited = std::min<uint64_t>(raw, particleRequestCapacity);
+                const uint64_t particleDropped = raw - particleLimited;
+                channelParticleDroppedThisFrame += static_cast<uint32_t>(
+                    std::min<uint64_t>(particleDropped, std::numeric_limits<uint32_t>::max()));
+
+                const uint32_t ringRemaining =
+                    render::vfx::GPUVFXConstants::MAX_SPAWN_REQUESTS - ringCursor;
+                const uint32_t accepted = static_cast<uint32_t>(
+                    std::min<uint64_t>(particleLimited, ringRemaining));
+                const uint64_t ringDropped = particleLimited - accepted;
+                channelRingDroppedThisFrame += static_cast<uint32_t>(
+                    std::min<uint64_t>(ringDropped, std::numeric_limits<uint32_t>::max()));
+
+                if (accepted > 0 && requestStaging)
+                {
+                    std::memcpy(requestStaging + ringCursor,
+                                channel.pendingChannelRequests.data(),
+                                static_cast<size_t>(accepted) * sizeof(render::vfx::GPUVFXSpawnRequest));
+                    channel.channelAcceptedRequests = accepted;
+                    channelAcceptedRequestsThisFrame += accepted;
+                    ringCursor += accepted;
+                }
+                channel.pendingChannelRequests.clear();
+            }
+            channelRoundRobinStart = (channelRoundRobinStart + 1) % channelOrder.size();
+        }
+
+        if (channelRingDroppedThisFrame > 0 &&
+            vfx::VFXRuntimeDiagnostics::instance().report(
+                "VFX channels", "spawn-request ring saturated; excess requests were dropped"))
+        {
+            vfLogWarning("VFX spawn-request ring saturated; {} requests dropped this frame",
+                         channelRingDroppedThisFrame);
+        }
+        if (channelParticleDroppedThisFrame > 0 &&
+            vfx::VFXRuntimeDiagnostics::instance().report(
+                "VFX channels", "listener particle capacity saturated; excess requests were dropped"))
+        {
+            vfLogWarning("VFX channel particle capacity saturated; {} requests dropped this frame",
+                         channelParticleDroppedThisFrame);
+        }
+
         for (auto& [id, instance] : instances)
         {
             if (!instance.gpuDriven && instance.particleSystem && instance.active)
@@ -227,7 +302,14 @@ namespace controllers
             uint32_t spawnThisFrame = 0;
             bool canSpawn = instance.loop || (instance.emissionTime < instance.config.lifetime);
 
-            if (instance.active && canSpawn)
+            if (instance.channelListener)
+            {
+                const uint64_t spawnCount = static_cast<uint64_t>(instance.channelAcceptedRequests) *
+                    instance.channelParticlesPerRequest;
+                spawnThisFrame = static_cast<uint32_t>(
+                    std::min<uint64_t>(spawnCount, instance.gpuParticleCount));
+            }
+            else if (instance.active && canSpawn)
             {
                 float lodAdjustedRate = instance.config.spawnRate * instance.lodSpawnMultiplier;
                 instance.spawnAccumulator += lodAdjustedRate * effectiveDt;

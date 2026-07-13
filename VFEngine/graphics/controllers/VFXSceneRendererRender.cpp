@@ -40,6 +40,7 @@ namespace controllers
 
         gpuBufferManager->clearParticleBufferIfNeeded(cmd);
         gpuBufferManager->uploadStateBuffer(cmd);
+        gpuBufferManager->uploadSpawnRequestBuffer(cmd);
 
         // VK-1460: selective draw-command clear (replaces the wholesale per-frame clear).
         // Each emitter's draw command points at its persistent per-emitter particle region
@@ -109,7 +110,9 @@ namespace controllers
                 instance.gpuEmitterIndex,
                 instance.gpuParticleCount,
                 frameNumber,
-                gpuBufferManager->getMaxEmitters()
+                gpuBufferManager->getMaxEmitters(),
+                instance.channelListener ? instance.channelRequestBase : 0u,
+                instance.channelListener ? instance.channelParticlesPerRequest : 0u
             );
         }
 
@@ -295,6 +298,9 @@ namespace controllers
 
     bool VFXSceneRenderer::isEmitterInFrustum(const VFXRuntimeInstance& instance) const
     {
+        if (instance.channelListener)
+            return true;
+
         if (!frustumPlanesValid)
             return true;
 
@@ -322,6 +328,9 @@ namespace controllers
 
     bool VFXSceneRenderer::isEmitterDistanceCulled(const VFXRuntimeInstance& instance) const
     {
+        if (instance.channelListener)
+            return false;
+
         // Camera-relative effects follow the camera and are never distance-culled.
         if (instance.cameraRelative)
             return false;
@@ -346,7 +355,7 @@ namespace controllers
 
     void VFXSceneRenderer::updateInstanceLOD(VFXRuntimeInstance& instance) const
     {
-        if (instance.cameraRelative)
+        if (instance.cameraRelative || instance.channelListener)
         {
             instance.currentLOD = 0;
             instance.lodSpawnMultiplier = 1.0f;

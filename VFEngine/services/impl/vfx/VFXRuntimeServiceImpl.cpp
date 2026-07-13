@@ -26,6 +26,18 @@ namespace services
                 return createInstance(cmd.params);
             });
 
+        dispatcher.registerCommandHandler<events::vfxruntime::CreateVFXChannelCommand>(
+            [this](const events::vfxruntime::CreateVFXChannelCommand& cmd)
+            {
+                return createChannel(cmd.vfxAssetPath, cmd.particlesPerRequest);
+            });
+
+        dispatcher.registerCommandHandler<events::vfxruntime::EmitToVFXChannelCommand>(
+            [this](const events::vfxruntime::EmitToVFXChannelCommand& cmd)
+            {
+                emitToChannel(cmd.channelId, cmd.params);
+            });
+
         dispatcher.registerCommandHandler<events::vfxruntime::DestroyVFXInstanceCommand>(
             [this](const events::vfxruntime::DestroyVFXInstanceCommand& cmd)
             {
@@ -107,6 +119,12 @@ namespace services
                 result.rawEventsThisFrame = bs.rawEventsThisFrame;
                 result.eventBudget = bs.eventBudget;
                 result.eventsDropped = bs.eventsDropped;
+                result.channelListeners = bs.channelListeners;
+                result.channelRawRequests = bs.channelRawRequests;
+                result.channelAcceptedRequests = bs.channelAcceptedRequests;
+                result.channelRingDroppedRequests = bs.channelRingDroppedRequests;
+                result.channelParticleDroppedRequests = bs.channelParticleDroppedRequests;
+                result.channelRequestBudget = bs.channelRequestBudget;
                 return result;
             });
 
@@ -269,6 +287,21 @@ namespace services
         return vfxProvider->createInstance(params);
     }
 
+    VFXInstanceId VFXRuntimeServiceImpl::createChannel(const std::string& path,
+                                                       uint32_t particlesPerRequest)
+    {
+        if (!vfxProvider || path.empty())
+            return 0;
+        return vfxProvider->createChannel(path, particlesPerRequest);
+    }
+
+    void VFXRuntimeServiceImpl::emitToChannel(VFXInstanceId id,
+                                              const VFXChannelEmitParams& params)
+    {
+        if (vfxProvider && id != 0)
+            vfxProvider->emitToChannel(id, params);
+    }
+
     void VFXRuntimeServiceImpl::destroyInstance(VFXInstanceId id)
     {
         socketAttachments.erase(id);
@@ -385,6 +418,12 @@ namespace services
             stats.rawEventsThisFrame = ps.rawEventsThisFrame;
             stats.eventBudget = ps.eventBudget;
             stats.eventsDropped = ps.eventsDropped;
+            stats.channelListeners = ps.channelListeners;
+            stats.channelRawRequests = ps.channelRawRequests;
+            stats.channelAcceptedRequests = ps.channelAcceptedRequests;
+            stats.channelRingDroppedRequests = ps.channelRingDroppedRequests;
+            stats.channelParticleDroppedRequests = ps.channelParticleDroppedRequests;
+            stats.channelRequestBudget = ps.channelRequestBudget;
         }
         return stats;
     }

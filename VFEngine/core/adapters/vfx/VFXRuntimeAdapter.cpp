@@ -90,6 +90,28 @@ namespace core
         return renderer->createInstance(controllerParams);
     }
 
+    services::VFXInstanceId VFXRuntimeAdapter::createChannel(const std::string& path,
+                                                             uint32_t particlesPerRequest)
+    {
+        if (!renderer)
+        {
+            vfLogWarning("VFXRuntimeAdapter::createChannel called before init");
+            return 0;
+        }
+
+        return renderer->createChannel(path, particlesPerRequest);
+    }
+
+    void VFXRuntimeAdapter::emitToChannel(services::VFXInstanceId id,
+                                          const services::VFXChannelEmitParams& params)
+    {
+        if (renderer)
+        {
+            renderer->emitToChannel(id, params.position, params.scale, params.direction,
+                                    params.packedTint, params.hasTint);
+        }
+    }
+
     void VFXRuntimeAdapter::destroyInstance(services::VFXInstanceId id)
     {
         if (renderer)
@@ -330,6 +352,12 @@ namespace core
             stats.rawEventsThisFrame = rs.rawEventsThisFrame;
             stats.eventBudget = rs.eventBudget;
             stats.eventsDropped = rs.eventsDropped;
+            stats.channelListeners = rs.channelListeners;
+            stats.channelRawRequests = rs.channelRawRequests;
+            stats.channelAcceptedRequests = rs.channelAcceptedRequests;
+            stats.channelRingDroppedRequests = rs.channelRingDroppedRequests;
+            stats.channelParticleDroppedRequests = rs.channelParticleDroppedRequests;
+            stats.channelRequestBudget = rs.channelRequestBudget;
         }
         return stats;
     }

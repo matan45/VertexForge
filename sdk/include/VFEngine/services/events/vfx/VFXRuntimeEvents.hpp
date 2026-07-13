@@ -21,6 +21,21 @@ namespace services::events::vfxruntime
         std::string_view getName() const override { return "CreateVFXInstance"; }
     };
 
+    struct CreateVFXChannelCommand : ::events::ICommand<VFXInstanceId>
+    {
+        std::string vfxAssetPath;
+        // 0 derives the count from the compatible authored burst configuration.
+        uint32_t particlesPerRequest = 0;
+        std::string_view getName() const override { return "CreateVFXChannel"; }
+    };
+
+    struct EmitToVFXChannelCommand : ::events::ICommand<void>
+    {
+        VFXInstanceId channelId = 0;
+        VFXChannelEmitParams params;
+        std::string_view getName() const override { return "EmitToVFXChannel"; }
+    };
+
     struct DestroyVFXInstanceCommand : ::events::ICommand<void>
     {
         VFXInstanceId instanceId = 0;
@@ -108,6 +123,12 @@ namespace services::events::vfxruntime
         uint32_t rawEventsThisFrame = 0;
         uint32_t eventBudget = 0;
         bool eventsDropped = false;
+        uint32_t channelListeners = 0;
+        uint32_t channelRawRequests = 0;
+        uint32_t channelAcceptedRequests = 0;
+        uint32_t channelRingDroppedRequests = 0;
+        uint32_t channelParticleDroppedRequests = 0;
+        uint32_t channelRequestBudget = 0;
     };
 
     struct GetVFXBudgetStatsQuery : ::events::IQuery<VFXBudgetStatsResult>

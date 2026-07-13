@@ -84,6 +84,23 @@ namespace windows
             }
         }
 
+        if (budget.channelRequestBudget > 0)
+        {
+            ImGui::Text("Spawn requests: %u / %u (raw %u)",
+                        budget.channelAcceptedRequests,
+                        budget.channelRequestBudget,
+                        budget.channelRawRequests);
+            if (budget.channelRingDroppedRequests > 0 || budget.channelParticleDroppedRequests > 0)
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.2f, 1.0f),
+                    "(dropped: ring %u, particles %u)",
+                    budget.channelRingDroppedRequests,
+                    budget.channelParticleDroppedRequests);
+            }
+            ImGui::Text("Channel listeners: %u", budget.channelListeners);
+        }
+
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Text("LOD Distribution:");
@@ -232,6 +249,12 @@ namespace windows
             budget.rawEventsThisFrame = r.rawEventsThisFrame;
             budget.eventBudget = r.eventBudget;
             budget.eventsDropped = r.eventsDropped;
+            budget.channelListeners = r.channelListeners;
+            budget.channelRawRequests = r.channelRawRequests;
+            budget.channelAcceptedRequests = r.channelAcceptedRequests;
+            budget.channelRingDroppedRequests = r.channelRingDroppedRequests;
+            budget.channelParticleDroppedRequests = r.channelParticleDroppedRequests;
+            budget.channelRequestBudget = r.channelRequestBudget;
         }
         catch (const std::exception&) { /* no runtime provider */ }
 

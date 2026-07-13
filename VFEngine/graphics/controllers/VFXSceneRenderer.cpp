@@ -14,10 +14,13 @@
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
+#include "vfx/VFXRuntimeDiagnostics.hpp"
+#include "vfx/VFXChannelMath.hpp"
 #include "vfx/VFXSortOrder.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <random>
 
 namespace controllers
@@ -288,6 +291,188 @@ namespace controllers
         return id;
     }
 
+    VFXInstanceId VFXSceneRenderer::createChannel(const std::string& path,
+                                                   uint32_t particlesPerRequest)
+    {
+        if (path.empty() || !gpuDrivenEnabled || !gpuBufferManager)
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(
+                    "VFX channel", "channel creation requires an initialized GPU VFX renderer"))
+            {
+                vfLogWarning("VFX channel creation failed: GPU VFX is unavailable");
+            }
+            return 0;
+        }
+
+        if (auto existing = channelsByPath.find(path); existing != channelsByPath.end())
+        {
+            auto instanceIt = instances.find(existing->second);
+            if (instanceIt != instances.end() && instanceIt->second.channelListener)
+            {
+                if (particlesPerRequest != 0 &&
+                    particlesPerRequest != instanceIt->second.channelParticlesPerRequest &&
+                    vfx::VFXRuntimeDiagnostics::instance().report(
+                        path, "channel already exists; the original particles-per-request value wins"))
+                {
+                    vfLogWarning("VFX channel '{}' already exists with {} particles/request (requested {})",
+                                 path, instanceIt->second.channelParticlesPerRequest, particlesPerRequest);
+                }
+                return existing->second;
+            }
+            channelsByPath.erase(existing);
+        }
+
+        auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(path);
+        if (!configOpt.has_value())
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(path, "failed to load channel asset"))
+                vfLogWarning("Failed to create VFX channel: cannot load asset '{}'", path);
+            return 0;
+        }
+
+        render::vfx::VFXEmitterConfig config = std::move(configOpt.value());
+        configCache[path] = config;
+
+        const auto compatibility = vfx::channel::validateCompatibility(
+            config.spawnRate, config.bursts);
+        const auto particleCount = vfx::channel::resolveParticlesPerRequest(
+            config.bursts,
+            render::vfx::GPUVFXConstants::CHANNEL_PARTICLES_PER_EMITTER,
+            particlesPerRequest != 0 ? std::optional<uint32_t>(particlesPerRequest) : std::nullopt);
+        if (compatibility != vfx::channel::CompatibilityError::None || !particleCount)
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(
+                    path, "channel assets must be deterministic immediate one-shot bursts"))
+            {
+                vfLogWarning("VFX asset '{}' is not channel-compatible or requests too many particles", path);
+            }
+            return 0;
+        }
+        const uint32_t selectedCount = particleCount.particlesPerRequest;
+
+        auto allocation = gpuBufferManager->allocateEmitter(
+            render::vfx::GPUVFXConstants::CHANNEL_PARTICLES_PER_EMITTER);
+        if (allocation.emitterIndex == UINT32_MAX)
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(
+                    path, "unable to allocate the dedicated GPU channel particle slice"))
+            {
+                vfLogWarning("VFX channel '{}' could not allocate {} contiguous GPU particles",
+                             path, render::vfx::GPUVFXConstants::CHANNEL_PARTICLES_PER_EMITTER);
+            }
+            return 0;
+        }
+
+        const VFXInstanceId id = nextInstanceId++;
+        VFXRuntimeInstance instance;
+        instance.id = id;
+        instance.assetPath = path;
+        instance.config = std::move(config);
+        instance.config.spawnRate = 0.0f;
+        instance.config.bursts.clear();
+        instance.worldTransform = glm::mat4(1.0f);
+        instance.prevWorldTransform = glm::mat4(1.0f);
+        instance.loop = true;
+        instance.active = true;
+        instance.priority = services::VFXEmitterPriority::Critical;
+        instance.poolable = false;
+        instance.autoDestroy = false;
+        instance.gpuDriven = true;
+        instance.gpuEmitterIndex = allocation.emitterIndex;
+        instance.gpuParticleOffset = allocation.particleOffset;
+        instance.gpuParticleCount = allocation.particleCount;
+        instance.seed = pickInstanceSeed(0);
+        instance.channelListener = true;
+        instance.channelParticlesPerRequest = selectedCount;
+        instance.updateInterval = 1;
+        instance.currentLOD = 0;
+        instance.lodSpawnMultiplier = 1.0f;
+
+        instances.emplace(id, std::move(instance));
+        emitterIndexToInstanceId[allocation.emitterIndex] = id;
+        channelsByPath[path] = id;
+        channelOrder.push_back(id);
+
+        const auto& storedConfig = instances.at(id).config;
+        const glm::vec3 glowColor =
+            ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(storedConfig.modifiers);
+        if (gpuRenderPipeline)
+        {
+            gpuRenderPipeline->setEmitterTexture(allocation.emitterIndex, storedConfig.texturePath);
+            gpuRenderPipeline->setEmitterRenderingConfig(allocation.emitterIndex,
+                storedConfig.alphaClipThreshold, storedConfig.blendMode, glowColor, storedConfig.sortOrder);
+            gpuRenderPipeline->setEmitterRenderMode(allocation.emitterIndex,
+                static_cast<uint32_t>(storedConfig.renderMode));
+            gpuRenderPipeline->setEmitterDistortionEnabled(allocation.emitterIndex,
+                storedConfig.distortionEnabled);
+        }
+        if (gpuMeshPipeline && storedConfig.renderMode == render::vfx::VFXRenderMode::MeshParticle)
+        {
+            gpuMeshPipeline->setEmitterMesh(allocation.emitterIndex, storedConfig.meshPath);
+            gpuMeshPipeline->setEmitterTexture(allocation.emitterIndex, storedConfig.texturePath);
+            gpuMeshPipeline->setEmitterRenderingConfig(allocation.emitterIndex,
+                storedConfig.alphaClipThreshold, storedConfig.blendMode, glowColor, storedConfig.sortOrder);
+        }
+        if (gpuRibbonPipeline && storedConfig.renderMode == render::vfx::VFXRenderMode::Ribbon)
+        {
+            gpuRibbonPipeline->setEmitterTexture(allocation.emitterIndex, storedConfig.texturePath);
+            gpuRibbonPipeline->setEmitterRenderingConfig(allocation.emitterIndex,
+                storedConfig.alphaClipThreshold, storedConfig.blendMode, glowColor, storedConfig.sortOrder);
+        }
+        if (storedConfig.distortionEnabled)
+        {
+            ++activeDistortionCount;
+            if (gpuDistortionPipeline)
+            {
+                gpuDistortionPipeline->setEmitterDistortionTexture(
+                    allocation.emitterIndex, storedConfig.distortionTexturePath);
+                gpuDistortionPipeline->setEmitterDistortionConfig(
+                    allocation.emitterIndex, storedConfig.distortionStrength);
+            }
+        }
+
+        vfLogInfo("Created GPU VFX channel {} for '{}' ({} particles/request, {} capacity)",
+                  id, path, selectedCount, allocation.particleCount);
+        return id;
+    }
+
+    void VFXSceneRenderer::emitToChannel(VFXInstanceId id,
+                                         const glm::vec3& position,
+                                         float scale,
+                                         const glm::vec3& direction,
+                                         uint32_t packedTint,
+                                         bool hasTint)
+    {
+        auto it = instances.find(id);
+        if (it == instances.end() || !it->second.channelListener)
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(
+                    "VFX channel", "emit requested for an invalid channel id"))
+                vfLogWarning("Ignoring VFX channel emit for invalid channel id {}", id);
+            return;
+        }
+
+        const auto finiteVec3 = [](const glm::vec3& value) {
+            return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+        };
+        if (!finiteVec3(position))
+            return;
+        scale = vfx::channel::sanitizeScale(scale);
+
+        render::vfx::GPUVFXSpawnRequest request{};
+        request.position = position;
+        request.scale = scale;
+        request.direction = finiteVec3(direction)
+            ? vfx::channel::sanitizeDirection(direction)
+            : glm::vec3(0.0f);
+        request.packedColor = packedTint;
+        request.flags = hasTint ? render::vfx::SpawnRequestFlags::HasTint : 0u;
+
+        request.seed = vfx::channel::deriveRequestSeed(++channelEmitSequence, position);
+
+        it->second.pendingChannelRequests.push_back(request);
+    }
+
     render::vfx::VFXEmitterConfig VFXSceneRenderer::loadConfigCached(const std::string& path)
     {
         auto cacheIt = configCache.find(path);
@@ -548,6 +733,19 @@ namespace controllers
         auto it = instances.find(id);
         if (it != instances.end())
         {
+            if (it->second.channelListener)
+            {
+                auto channelIt = channelsByPath.find(it->second.assetPath);
+                if (channelIt != channelsByPath.end() && channelIt->second == id)
+                    channelsByPath.erase(channelIt);
+                channelOrder.erase(std::remove(channelOrder.begin(), channelOrder.end(), id),
+                                   channelOrder.end());
+                if (channelOrder.empty())
+                    channelRoundRobinStart = 0;
+                else
+                    channelRoundRobinStart %= channelOrder.size();
+            }
+
             // A dormant instance already released its distortion count when it was retired;
             // don't double-decrement when the pool later evicts and truly destroys it.
             if (!it->second.dormant && it->second.config.distortionEnabled && activeDistortionCount > 0)
@@ -624,6 +822,10 @@ namespace controllers
         activeDistortionCount = 0;
         instances.clear();
         emitterIndexToInstanceId.clear();
+        channelsByPath.clear();
+        channelOrder.clear();
+        channelRoundRobinStart = 0;
+        channelEmitSequence = 0;
         configCache.clear();
         instancePool.clear();
 
@@ -919,7 +1121,9 @@ namespace controllers
         std::vector<VFXProxyLight> lights;
         for (const auto& [id, instance] : instances)
         {
-            if (!instance.active || !instance.config.lightEmissionEnabled)
+            // A channel has no single representative world origin; request positions
+            // are GPU-only, so an origin proxy light would be actively misleading.
+            if (!instance.active || instance.channelListener || !instance.config.lightEmissionEnabled)
                 continue;
             if (lights.size() >= MAX_PROXY_LIGHTS)
                 break;
@@ -1213,6 +1417,12 @@ namespace controllers
         stats.rawEventsThisFrame = lastFrameRawEventCount;
         stats.eventBudget = render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME;
         stats.eventsDropped = lastFrameRawEventCount > render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME;
+        stats.channelListeners = static_cast<uint32_t>(channelOrder.size());
+        stats.channelRawRequests = channelRawRequestsThisFrame;
+        stats.channelAcceptedRequests = channelAcceptedRequestsThisFrame;
+        stats.channelRingDroppedRequests = channelRingDroppedThisFrame;
+        stats.channelParticleDroppedRequests = channelParticleDroppedThisFrame;
+        stats.channelRequestBudget = render::vfx::GPUVFXConstants::MAX_SPAWN_REQUESTS;
 
         return stats;
     }
