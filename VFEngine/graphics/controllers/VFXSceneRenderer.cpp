@@ -731,6 +731,9 @@ namespace controllers
         instance.lodBias = 0.0f;
         instance.burstClampWarned = false;
         instance.dormant = false;
+        // VK-1503: a revived pooled one-shot starts unsuppressed (stale flag would
+        // otherwise soft-stop the fresh spawn).
+        instance.significanceEvicted = false;
 
         // Reset scalability-derived per-instance state, then re-apply for this spawn.
         instance.cullDistanceSqOverride = -1.0f;
