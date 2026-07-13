@@ -68,9 +68,13 @@ namespace render::vfx
         inline constexpr uint32_t ShapeSphere = 1 << 8;
         inline constexpr uint32_t ShapeCone = 1 << 9;
         inline constexpr uint32_t ShapeBox = 1 << 10;
-        inline constexpr uint32_t ShapeTorus = 1 << 11;
+        inline constexpr uint32_t ShapeTorus = 1 << 11; // VK-1525: now a real 3-D torus (was a flat circle)
         inline constexpr uint32_t EmitFromSurface = 1 << 12;
         inline constexpr uint32_t RandomDirection = 1 << 13;
+        inline constexpr uint32_t ShapeRing = 1u << 14;        // VK-1525: flat ring / arc / annulus (XZ plane)
+        inline constexpr uint32_t OrderedPlacement = 1u << 15; // VK-1525: draw the shape out in spawn order (opt-in)
+        // ShapeFlags packs into GPUEmitterConfig::shapeFlags (a SEPARATE uint32 from modifierFlags);
+        // bits 0-7 and 16-31 remain free here.
     }
 
     namespace FlipbookFlags
@@ -148,7 +152,9 @@ namespace render::vfx
         float lightingInfluence = 0.0f;       // 0 = unlit (default), 1 = fully lit
         int32_t normalMode = 0;               // 0 = sphere, 1 = view-aligned, 2 = mesh
         float ambientAmount = 0.3f;           // ambient light contribution
-        float _lightPad0 = 0.0f;
+        // VK-1525: reclaimed lighting pad (offset 332). Previous-frame ordered sweep t, used together with
+        // the per-frame spawnFrac to smear a batch of spawns across the sub-frame sweep (0 when not ordered).
+        float orderedSweepTPrev = 0.0f;
 
         // Distortion
         uint32_t distortionEnabled = 0;
@@ -163,8 +169,9 @@ namespace render::vfx
         float colorValueVariance = 0.0f;
         float alphaVariance = 0.0f;
         float emissiveIntensity = 1.0f;
-        float _variancePad1 = 0.0f;
-        float _variancePad2 = 0.0f;
+        // VK-1525: reclaimed variance pads (offsets 376/380). Ordered / path-driven spawn placement.
+        float orderedJitter = 0.0f; // per-particle scatter off the on-curve point (world units, 0 = exact)
+        float orderedSweepT = 0.0f; // current-frame sweep parameter t in [0,1] (CPU-computed from emitter age)
 
         // Forces added in VK-1465 (flags ForceFlags::Drag / Attractor / AttractorKill).
         // Two vec4s, independent lanes so both forces can be active at once.
@@ -248,6 +255,7 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, lightingInfluence) == 320, "GPUEmitterConfig::lightingInfluence offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, normalMode) == 324, "GPUEmitterConfig::normalMode offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, ambientAmount) == 328, "GPUEmitterConfig::ambientAmount offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, orderedSweepTPrev) == 332, "GPUEmitterConfig::orderedSweepTPrev offset mismatch"); // VK-1525
     static_assert(offsetof(GPUEmitterConfig, distortionEnabled) == 336, "GPUEmitterConfig::distortionEnabled offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, distortionStrength) == 340, "GPUEmitterConfig::distortionStrength offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, sizeVariance) == 344, "GPUEmitterConfig::sizeVariance offset mismatch");
@@ -258,8 +266,8 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, colorValueVariance) == 364, "GPUEmitterConfig::colorValueVariance offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, alphaVariance) == 368, "GPUEmitterConfig::alphaVariance offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, emissiveIntensity) == 372, "GPUEmitterConfig::emissiveIntensity offset mismatch");
-    static_assert(offsetof(GPUEmitterConfig, _variancePad1) == 376, "GPUEmitterConfig::_variancePad1 offset mismatch");
-    static_assert(offsetof(GPUEmitterConfig, _variancePad2) == 380, "GPUEmitterConfig::_variancePad2 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, orderedJitter) == 376, "GPUEmitterConfig::orderedJitter offset mismatch"); // VK-1525
+    static_assert(offsetof(GPUEmitterConfig, orderedSweepT) == 380, "GPUEmitterConfig::orderedSweepT offset mismatch"); // VK-1525
     static_assert(offsetof(GPUEmitterConfig, attractorParams) == 384, "GPUEmitterConfig::attractorParams offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, dragAttractorExtra) == 400, "GPUEmitterConfig::dragAttractorExtra offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, curlNoiseParams) == 416, "GPUEmitterConfig::curlNoiseParams offset mismatch");

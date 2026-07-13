@@ -374,12 +374,12 @@ namespace editor::vfxeditor
                 activeType = vfx::stringToShapeType(*val);
         }
 
-        const char* shapeItems[] = {"Point", "Sphere", "Cone", "Box", "Torus"};
+        const char* shapeItems[] = {"Point", "Sphere", "Cone", "Box", "Torus", "Ring"};
         int currentShape = static_cast<int>(activeType);
         ImGui::Text("Shape Type");
         ImGui::SameLine(120.0f);
         ImGui::SetNextItemWidth(inputWidth * 1.8f);
-        if (ImGui::Combo("##shapeType", &currentShape, shapeItems, 5))
+        if (ImGui::Combo("##shapeType", &currentShape, shapeItems, IM_ARRAYSIZE(shapeItems)))
         {
             activeType = static_cast<vfx::ShapeType>(currentShape);
             vfx::applyShapeTypeProperties(node, activeType);
@@ -462,9 +462,62 @@ namespace editor::vfxeditor
             drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
             break;
         }
+        case vfx::ShapeType::Ring: {
+            static constexpr ShapeEntry entries[] = {
+                {"radius",     "Radius",            0.1f},
+                {"thickness",  "Thickness",         0.02f},
+                {"arc",        "Arc (rad)",         0.05f},
+                {"startAngle", "Start Angle (rad)", 0.05f},
+            };
+            drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
         case vfx::ShapeType::Point:
         default:
             break;
+        }
+
+        // VK-1525: ordered / path-driven placement (applies to all shapes). Ensure the properties exist
+        // for shape nodes authored before this feature (pre-create), then draw the controls.
+        auto ensureProp = [&](const char* key, vfx::VFXPropertyType type, auto value, float mn, float mx) {
+            if (node.properties.find(key) == node.properties.end())
+                node.properties[key] = vfx::VFXProperty{key, type, value, mn, mx};
+        };
+        ensureProp("ordered", vfx::VFXPropertyType::Bool, false, 0.0f, 1.0f);
+        ensureProp("orderedLoop", vfx::VFXPropertyType::Bool, false, 0.0f, 1.0f);
+        ensureProp("sweepDuration", vfx::VFXPropertyType::Float, 1.0f, 0.05f, 60.0f);
+        ensureProp("orderedJitter", vfx::VFXPropertyType::Float, 0.0f, 0.0f, 10.0f);
+
+        ImGui::Spacing();
+        ImGui::Text("Ordered / Draw-Out");
+        ImGui::Separator();
+
+        vfx::VFXProperty& orderedProp = node.properties["ordered"];
+        ImGui::PushID("ordered");
+        if (drawScalarProperty("Ordered", orderedProp, inputWidth))
+            notifyChanged();
+        ImGui::PopID();
+
+        bool orderedOn = false;
+        if (auto* v = std::get_if<bool>(&orderedProp.value))
+            orderedOn = *v;
+
+        if (orderedOn)
+        {
+            ImGui::PushID("sweepDuration");
+            if (drawScalarProperty("Sweep Duration", node.properties["sweepDuration"], inputWidth, 0.05f))
+                notifyChanged();
+            ImGui::PopID();
+
+            ImGui::PushID("orderedLoop");
+            if (drawScalarProperty("Loop", node.properties["orderedLoop"], inputWidth))
+                notifyChanged();
+            ImGui::PopID();
+
+            ImGui::PushID("orderedJitter");
+            if (drawScalarProperty("Jitter", node.properties["orderedJitter"], inputWidth, 0.01f))
+                notifyChanged();
+            ImGui::PopID();
         }
     }
 

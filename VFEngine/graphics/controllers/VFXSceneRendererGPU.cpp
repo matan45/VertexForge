@@ -16,6 +16,7 @@
 #include "vfx/VFXKillVolume.hpp"
 #include "vfx/VFXRuntimeDiagnostics.hpp"
 #include "vfx/VFXShapeTypes.hpp"
+#include "vfx/VFXShapePlacementMath.hpp"
 #include "vfx/VFXOrientationMode.hpp"
 #include "print/Log.hpp"
 #include <random>
@@ -366,6 +367,18 @@ namespace controllers
             // VK-1501: route resolved OnDeath/OnCollision fast-path children into the GPU child ring.
             gpuConfig.eventChildSlot = instance.resolvedEventChildSlot;
 
+            // VK-1525: ordered placement sweep parameter. Derived from emissionTime (already advanced this
+            // frame and set directly by seekInstance), so the "draw-out" replays identically under
+            // playback and sequence seek/prewarm. tPrev + tCurr smear a multi-spawn batch across the frame.
+            if (instance.config.shape.ordered)
+            {
+                const auto& shapeCfg = instance.config.shape;
+                gpuConfig.orderedSweepT = ::vfx::vfxspOrderedProgress(
+                    instance.emissionTime, shapeCfg.sweepDuration, shapeCfg.orderedLoop);
+                gpuConfig.orderedSweepTPrev = ::vfx::vfxspOrderedProgress(
+                    std::max(0.0f, instance.emissionTime - effectiveDt), shapeCfg.sweepDuration, shapeCfg.orderedLoop);
+            }
+
             gpuConfig.colliderCount = (instance.config.collisionEnabled && instance.currentLOD == 0)
                                           ? sceneColliderCount : 0;
 
@@ -601,6 +614,7 @@ namespace controllers
         case ::vfx::ShapeType::Cone:   gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeCone; break;
         case ::vfx::ShapeType::Box:    gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeBox; break;
         case ::vfx::ShapeType::Torus:  gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeTorus; break;
+        case ::vfx::ShapeType::Ring:   gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeRing; break;
         case ::vfx::ShapeType::Point:
         default: break;
         }
@@ -610,6 +624,15 @@ namespace controllers
 
         if (cpuConfig.shape.randomDirection)
             gpuConfig.shapeFlags |= render::vfx::ShapeFlags::RandomDirection;
+
+        // VK-1525: ordered / path-driven placement (opt-in). The sweep parameter (orderedSweepT/Prev)
+        // depends on the emitter's emission time and is filled by the caller; here we only set the gate
+        // flag and the per-particle jitter so a non-ordered emitter uploads a byte-identical config.
+        if (cpuConfig.shape.ordered)
+        {
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::OrderedPlacement;
+            gpuConfig.orderedJitter = cpuConfig.shape.orderedJitter;
+        }
 
         gpuConfig.flipbookColumns = static_cast<float>(cpuConfig.flipbookColumns);
         gpuConfig.flipbookRows = static_cast<float>(cpuConfig.flipbookRows);

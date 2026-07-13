@@ -74,7 +74,7 @@ struct GPUEmitterConfig
     float lightingInfluence;
     uint normalMode;
     float ambientAmount;
-    float _lightPad0;
+    float orderedSweepTPrev; // VK-1525: reclaimed pad (offset 332) - previous-frame ordered sweep t
 
     // Distortion
     uint distortionEnabled;
@@ -89,8 +89,8 @@ struct GPUEmitterConfig
     float colorValueVariance;
     float alphaVariance;
     float emissiveIntensity;
-    float _variancePad1;
-    float _variancePad2;
+    float orderedJitter; // VK-1525: reclaimed pad (offset 376) - per-particle scatter off the on-curve point
+    float orderedSweepT; // VK-1525: reclaimed pad (offset 380) - current-frame ordered sweep t in [0,1]
 
     // Forces added in VK-1465 (mirror of C++ GPUEmitterConfig).
     vec4 attractorParams;     // xyz = center (world space), w = strength

@@ -1,4 +1,5 @@
 #include "VFXParticleSystem.hpp"
+#include "vfx/VFXShapePlacementMath.hpp"
 #include <glm/gtc/constants.hpp>
 
 namespace render::vfx
@@ -7,6 +8,16 @@ namespace render::vfx
     {
         const auto& shape = config.shape;
         bool surfaceOnly = (shape.emitFrom == ::vfx::EmitFrom::Surface);
+
+        // VK-1525: ordered / path-driven placement — walk the shape by emitter age instead of filling
+        // randomly, via the shared VFXShapePlacementMath (so the CPU preview matches the GPU sim). progress
+        // is derived from emissionTime, which the preview reproduces deterministically under seek/prewarm.
+        if (shape.ordered)
+        {
+            float progress = ::vfx::vfxspOrderedProgress(emissionTime, shape.sweepDuration, shape.orderedLoop);
+            uint32_t jitterSeed = static_cast<uint32_t>(rng());
+            return ::vfx::vfxspOrderedPosition(shape.type, shape.dimensions, progress, shape.orderedJitter, jitterSeed);
+        }
 
         switch (shape.type)
         {
@@ -21,6 +32,10 @@ namespace render::vfx
 
         case ::vfx::ShapeType::Torus:
             return generateTorusPosition(shape.dimensions.x, shape.dimensions.y, surfaceOnly);
+
+        case ::vfx::ShapeType::Ring:
+            return generateRingPosition(shape.dimensions.x, shape.dimensions.y,
+                                        shape.dimensions.z, shape.dimensions.w, surfaceOnly);
 
         case ::vfx::ShapeType::Point:
         default:
@@ -140,6 +155,20 @@ namespace render::vfx
         );
     }
 
+    // VK-1525: flat ring / arc / annulus in the XZ plane (mirror of the GLSL generateRingPosition).
+    glm::vec3 VFXParticleSystem::generateRingPosition(float radius, float thickness, float arcSpan, float startAngle, bool surfaceOnly)
+    {
+        float theta = startAngle + unitDist(rng) * arcSpan;
+
+        float r = radius;
+        if (!surfaceOnly)
+        {
+            r = radius + (unitDist(rng) * 2.0f - 1.0f) * thickness;
+        }
+
+        return glm::vec3(r * std::cos(theta), 0.0f, r * std::sin(theta));
+    }
+
     glm::vec3 VFXParticleSystem::generateDirectionFromShape(const glm::vec3& position)
     {
         const auto& shape = config.shape;
@@ -213,6 +242,18 @@ namespace render::vfx
                 {
                     return tubeDir / tubeLen;
                 }
+            }
+            return glm::vec3(0.0f, 1.0f, 0.0f);
+        }
+
+        case ::vfx::ShapeType::Ring:
+        {
+            // Radial-outward in the ring plane; upward fallback at the exact center.
+            glm::vec3 radial = glm::vec3(position.x, 0.0f, position.z);
+            float radialLen = glm::length(radial);
+            if (radialLen > 0.001f)
+            {
+                return radial / radialLen;
             }
             return glm::vec3(0.0f, 1.0f, 0.0f);
         }

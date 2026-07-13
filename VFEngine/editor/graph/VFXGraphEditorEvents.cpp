@@ -635,6 +635,21 @@ namespace editor::graph
             false, 0.0f, 1.0f
         };
 
+        // VK-1525: ordered / path-driven placement. These apply to every shape and persist across
+        // shape-type switches (applyShapeTypeProperties only rebuilds the per-shape dimension keys).
+        node.properties["ordered"] = vfx::VFXProperty{
+            "ordered", vfx::VFXPropertyType::Bool, false, 0.0f, 1.0f
+        };
+        node.properties["orderedLoop"] = vfx::VFXProperty{
+            "orderedLoop", vfx::VFXPropertyType::Bool, false, 0.0f, 1.0f
+        };
+        node.properties["sweepDuration"] = vfx::VFXProperty{
+            "sweepDuration", vfx::VFXPropertyType::Float, 1.0f, 0.05f, 60.0f
+        };
+        node.properties["orderedJitter"] = vfx::VFXProperty{
+            "orderedJitter", vfx::VFXPropertyType::Float, 0.0f, 0.0f, 10.0f
+        };
+
         vfx::applyShapeTypeProperties(node, shapeType);
     }
 

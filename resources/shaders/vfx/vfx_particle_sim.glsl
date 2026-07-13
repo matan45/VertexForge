@@ -4,6 +4,7 @@
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #include "vfx_gpu_types.glsl"
+#include "vfx_shape_placement.glsl" // VK-1525: SHAPE_* consts + ordered/ring placement math
 #include "vfx_variance.glsl"
 #include "vfx_lut.glsl"
 
@@ -25,12 +26,8 @@ const uint FORCE_ATTRACTOR_KILL = 262144u; // 1 << 18
 const uint FORCE_CURL_NOISE = 524288u;   // 1 << 19
 const uint FORCE_KILL_VOLUME = 1048576u; // 1 << 20
 
-const uint SHAPE_SPHERE = 256u;
-const uint SHAPE_CONE = 512u;
-const uint SHAPE_BOX = 1024u;
-const uint SHAPE_CIRCLE = 2048u;
-const uint SHAPE_EMIT_FROM_SURFACE = 4096u;
-const uint SHAPE_RANDOM_DIRECTION = 8192u;
+// SHAPE_* constants (SHAPE_SPHERE/CONE/BOX/TORUS/RING/ORDERED/EMIT_FROM_SURFACE/RANDOM_DIRECTION)
+// live in vfx_shape_placement.glsl (included above).
 
 const uint MODIFIER_GLOW_OVER_LIFETIME = 32768u;
 
@@ -320,16 +317,37 @@ vec3 generateBoxPosition(inout uint seed, vec3 halfExtents, bool surfaceOnly)
     return vec3(u * halfExtents.x, v * halfExtents.y, -halfExtents.z);
 }
 
-vec3 generateCirclePosition(inout uint seed, float radius, float arc, bool surfaceOnly)
+// VK-1525: real 3-D torus (major = ring radius, minor = tube radius). Mirrors the CPU
+// preview VFXParticleSystem::generateTorusPosition so runtime and preview agree (the
+// old flat-circle interpretation of bit 11 is gone).
+vec3 generateTorusPosition3D(inout uint seed, float majorRadius, float minorRadius, bool surfaceOnly)
 {
-    float theta = randomFloat(seed) * arc;
+    float theta = randomFloat(seed) * 6.28318530718;
+    float phi = randomFloat(seed) * 6.28318530718;
 
-    if (surfaceOnly)
+    float tubeRadius = minorRadius;
+    if (!surfaceOnly)
     {
-        return vec3(radius * cos(theta), 0.0, radius * sin(theta));
+        tubeRadius = minorRadius * sqrt(randomFloat(seed));
     }
 
-    float r = radius * sqrt(randomFloat(seed));
+    float ringDist = majorRadius + tubeRadius * cos(phi);
+    return vec3(ringDist * cos(theta), tubeRadius * sin(phi), ringDist * sin(theta));
+}
+
+// VK-1525: flat ring / arc / annulus in the XZ plane. Surface = centerline outline at
+// `radius`; Volume = annular band of half-width `thickness` around it. `arcSpan` (radians)
+// and `startAngle` bound the swept arc (a full 2*pi ring by default).
+vec3 generateRingPosition(inout uint seed, float radius, float thickness, float arcSpan, float startAngle, bool surfaceOnly)
+{
+    float theta = startAngle + randomFloat(seed) * arcSpan;
+
+    float r = radius;
+    if (!surfaceOnly)
+    {
+        r = radius + (randomFloat(seed) * 2.0 - 1.0) * thickness;
+    }
+
     return vec3(r * cos(theta), 0.0, r * sin(theta));
 }
 
@@ -349,9 +367,14 @@ vec3 generateSpawnPosition(inout uint seed, GPUEmitterConfig config)
     {
         return generateBoxPosition(seed, config.shapeDimensions.xyz, surfaceOnly);
     }
-    else if ((config.shapeFlags & SHAPE_CIRCLE) != 0u)
+    else if ((config.shapeFlags & SHAPE_TORUS) != 0u)
     {
-        return generateCirclePosition(seed, config.shapeDimensions.x, config.shapeDimensions.y, surfaceOnly);
+        return generateTorusPosition3D(seed, config.shapeDimensions.x, config.shapeDimensions.y, surfaceOnly);
+    }
+    else if ((config.shapeFlags & SHAPE_RING) != 0u)
+    {
+        return generateRingPosition(seed, config.shapeDimensions.x, config.shapeDimensions.y,
+                                    config.shapeDimensions.z, config.shapeDimensions.w, surfaceOnly);
     }
 
     return vec3(0.0);
@@ -399,8 +422,28 @@ vec3 generateDirectionFromShape(inout uint seed, vec3 position, GPUEmitterConfig
         else
             return vec3(0.0, 0.0, position.z > 0.0 ? 1.0 : -1.0);
     }
-    else if ((config.shapeFlags & SHAPE_CIRCLE) != 0u)
+    else if ((config.shapeFlags & SHAPE_TORUS) != 0u)
     {
+        // Tube-outward normal (mirror of the CPU preview torus direction).
+        vec3 radial = vec3(position.x, 0.0, position.z);
+        float radialLen = length(radial);
+        if (radialLen > 0.001)
+        {
+            vec3 ringPoint = (radial / radialLen) * config.shapeDimensions.x;
+            vec3 tubeDir = position - ringPoint;
+            float tubeLen = length(tubeDir);
+            if (tubeLen > 0.001)
+                return tubeDir / tubeLen;
+        }
+        return vec3(0.0, 1.0, 0.0);
+    }
+    else if ((config.shapeFlags & SHAPE_RING) != 0u)
+    {
+        // Radial-outward in the ring plane; upward fallback at the exact center.
+        vec3 radial = vec3(position.x, 0.0, position.z);
+        float radialLen = length(radial);
+        if (radialLen > 0.001)
+            return radial / radialLen;
         return vec3(0.0, 1.0, 0.0);
     }
 
@@ -1394,7 +1437,31 @@ void main()
             {
                 isActive = true;
 
-                vec3 localPos = generateSpawnPosition(seed, config);
+                // Sub-frame fraction across this frame's spawn batch. Drives both the
+                // ordered-placement sweep and the emitter-origin de-clumping below.
+                float spawnFrac = (spawnThisFrame > 1u)
+                    ? float(spawnSlot) / float(spawnThisFrame - 1u)
+                    : 1.0;
+
+                // VK-1525: ordered / path-driven placement (opt-in, normal emitter spawns only).
+                bool orderedSpawn = !useRequest && (config.shapeFlags & SHAPE_ORDERED) != 0u;
+
+                vec3 localPos;
+                if (orderedSpawn)
+                {
+                    // Place along the shape by emitter age (progress), not randomly. progress
+                    // interpolates the sub-frame batch across the [prev, curr] sweep t. The jitter
+                    // seed is frame-independent (age + slot, not frameNumber) so seek/prewarm replay.
+                    float progress = mix(config.orderedSweepTPrev, config.orderedSweepT, spawnFrac);
+                    uint jitterSeed = pcg_hash(config.seed ^ pcg_hash(uint(progress * 65535.0) ^ spawnSlot));
+                    localPos = vfxspOrderedPosition(config.shapeFlags, config.shapeDimensions,
+                                                    progress, config.orderedJitter, jitterSeed);
+                }
+                else
+                {
+                    localPos = generateSpawnPosition(seed, config);
+                }
+
                 vec3 spawnOrigin;
                 if (useRequest)
                 {
@@ -1405,9 +1472,6 @@ void main()
                 {
                     // Sub-frame interpolation: distribute this frame's spawns along the
                     // emitter's path from last frame to avoid beads-on-a-string clumping.
-                    float spawnFrac = (spawnThisFrame > 1u)
-                        ? float(spawnSlot) / float(spawnThisFrame - 1u)
-                        : 1.0;
                     spawnOrigin = mix(vec3(states[pc.emitterIndex].prevWorldTransform[3]),
                                       vec3(worldTransform[3]), spawnFrac);
                 }
