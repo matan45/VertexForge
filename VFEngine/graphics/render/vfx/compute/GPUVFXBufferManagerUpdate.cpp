@@ -238,7 +238,7 @@ namespace render::vfx
         // Counters live at the head of the buffer as [half0: R uints][half1: R uints]. R*4 is a
         // multiple of 4, so both the offset and size satisfy vkCmdFillBuffer's alignment.
         const vk::DeviceSize halfCounters =
-            static_cast<vk::DeviceSize>(vfx::child::CHILD_MAX_REGIONS) * sizeof(uint32_t);
+            static_cast<vk::DeviceSize>(::vfx::child::CHILD_MAX_REGIONS) * sizeof(uint32_t);
 
         if (!childSpawnCleared)
         {

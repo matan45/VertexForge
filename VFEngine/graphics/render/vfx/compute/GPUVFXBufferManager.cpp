@@ -271,10 +271,10 @@ namespace render::vfx
         // VK-1501 std430 layout: [2*R counters (uint)] followed by [2*R*K requests]. The counter
         // block is 2*R*4 bytes; with R even it is 16-byte aligned so the request array begins with
         // no std430 padding (must match the ChildSpawnBuffer block in vfx_particle_sim.glsl).
-        const vk::DeviceSize regions = static_cast<vk::DeviceSize>(vfx::child::CHILD_MAX_REGIONS);
+        const vk::DeviceSize regions = static_cast<vk::DeviceSize>(::vfx::child::CHILD_MAX_REGIONS);
         const vk::DeviceSize counters = 2u * regions * sizeof(uint32_t);
         const vk::DeviceSize data =
-            2u * regions * vfx::child::CHILD_MAX_REQUESTS_PER_REGION * sizeof(GPUVFXSpawnRequest);
+            2u * regions * ::vfx::child::CHILD_MAX_REQUESTS_PER_REGION * sizeof(GPUVFXSpawnRequest);
         return counters + data;
     }
 }
