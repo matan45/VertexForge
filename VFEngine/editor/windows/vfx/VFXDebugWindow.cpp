@@ -131,9 +131,9 @@ namespace windows
                 significanceBudgetInput = 0;
             try
             {
-                events::EventDispatcher::instance().execute(
-                    services::events::vfxruntime::SetVFXSignificanceBudgetCommand{
-                        static_cast<uint32_t>(significanceBudgetInput)});
+                services::events::vfxruntime::SetVFXSignificanceBudgetCommand cmd;
+                cmd.budget = static_cast<uint32_t>(significanceBudgetInput);
+                events::EventDispatcher::instance().execute(cmd);
             }
             catch (const std::exception&) { /* no runtime provider */ }
         }
