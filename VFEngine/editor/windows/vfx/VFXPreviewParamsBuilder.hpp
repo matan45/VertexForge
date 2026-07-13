@@ -70,6 +70,8 @@ namespace editor::vfxeditor
         params.emitDirection = getVec3(*emitterNode, "startVelocity", glm::vec3(0.0f, 1.0f, 0.0f));
         params.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         params.looping = getBool(*emitterNode, "looping", vfx::EmitterDefaults::LOOPING);
+        params.loopDuration = std::max(0.0f,
+            getFloat(*emitterNode, "loopDuration", vfx::EmitterDefaults::LOOP_DURATION));
         params.texturePath = getString(*emitterNode, "texture", "");
         params.sizeVariance = std::clamp(getFloat(*emitterNode, "sizeVariance", vfx::EmitterDefaults::SIZE_VARIANCE), 0.0f, 1.0f);
         params.lifetimeVariance = std::clamp(getFloat(*emitterNode, "lifetimeVariance", vfx::EmitterDefaults::LIFETIME_VARIANCE), 0.0f, 1.0f);

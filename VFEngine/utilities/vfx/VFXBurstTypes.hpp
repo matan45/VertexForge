@@ -1,8 +1,10 @@
 #pragma once
 
 #include "VFXTypes.hpp"
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -37,6 +39,61 @@ namespace vfx
         return "burst" + std::to_string(index) + field;
     }
 
+    namespace detail
+    {
+        template <typename Rand01>
+        uint32_t evaluateOneBurst(const VFXBurst& burst, float prevTime, float newTime,
+                                  Rand01& rand01, int& remainingEvaluations)
+        {
+            if (newTime <= prevTime || remainingEvaluations <= 0 ||
+                burst.count <= 0 || burst.probability <= 0.0f ||
+                !std::isfinite(burst.time) || !std::isfinite(burst.interval) ||
+                !std::isfinite(burst.probability))
+            {
+                return 0;
+            }
+
+            uint32_t total = 0;
+            if (burst.interval <= 0.0f || burst.cycles == 1)
+            {
+                // Single fire at burst.time. In a looped schedule the shared budget
+                // bounds the number of re-armed single fires across period slices.
+                if (burst.time >= prevTime && burst.time < newTime)
+                {
+                    --remainingEvaluations;
+                    if (burst.probability >= 1.0f || rand01() <= burst.probability)
+                        total += static_cast<uint32_t>(burst.count);
+                }
+                return total;
+            }
+
+            // First cycle index whose fire time >= prevTime.
+            float relative = (prevTime - burst.time) / burst.interval;
+            int64_t k = (relative <= 0.0f) ? 0 : static_cast<int64_t>(std::ceil(relative));
+
+            while (remainingEvaluations > 0)
+            {
+                if (burst.cycles > 0 && k >= burst.cycles)
+                    break;
+
+                float fireTime = burst.time + static_cast<float>(k) * burst.interval;
+                if (fireTime >= newTime)
+                    break;
+
+                --remainingEvaluations;
+                if (fireTime >= prevTime)
+                {
+                    if (burst.probability >= 1.0f || rand01() <= burst.probability)
+                        total += static_cast<uint32_t>(burst.count);
+                }
+
+                ++k;
+            }
+
+            return total;
+        }
+    }
+
     // Stateless burst schedule evaluation: returns the number of particles due in
     // the half-open emission-time window [prevTime, newTime). Because the window is
     // half-open and consecutive frames tile the timeline, every cycle fires exactly
@@ -52,42 +109,131 @@ namespace vfx
         uint32_t total = 0;
         for (const auto& burst : bursts)
         {
-            if (burst.count <= 0 || burst.probability <= 0.0f)
-                continue;
+            int remainingEvaluations = BurstDefaults::MAX_CYCLES_PER_WINDOW;
+            total += detail::evaluateOneBurst(
+                burst, prevTime, newTime, rand01, remainingEvaluations);
+        }
 
-            if (burst.interval <= 0.0f || burst.cycles == 1)
+        return total;
+    }
+
+    // Resolves the period used to re-arm finite bursts. A positive authored value
+    // is exact. Zero derives a period from the emitter lifetime and finite burst
+    // schedule; invalid authored values disable wrapping defensively.
+    inline float resolveBurstLoopPeriod(const std::vector<VFXBurst>& bursts,
+                                        float configuredDuration, float emitterLifetime)
+    {
+        if (std::isfinite(configuredDuration) && configuredDuration > 0.0f)
+            return configuredDuration;
+        if (configuredDuration != 0.0f)
+            return 0.0f;
+
+        double period = (std::isfinite(emitterLifetime) && emitterLifetime > 0.0f)
+                            ? static_cast<double>(emitterLifetime)
+                            : 0.0;
+        float latestFire = 0.0f;
+        for (const auto& burst : bursts)
+        {
+            if (burst.cycles <= 0 || burst.count <= 0 || burst.probability <= 0.0f ||
+                !std::isfinite(burst.time) || burst.time < 0.0f ||
+                !std::isfinite(burst.interval))
             {
-                // Single fire at burst.time
-                if (burst.time >= prevTime && burst.time < newTime)
-                {
-                    if (burst.probability >= 1.0f || rand01() <= burst.probability)
-                        total += static_cast<uint32_t>(burst.count);
-                }
                 continue;
             }
 
-            // First cycle index whose fire time >= prevTime
-            float relative = (prevTime - burst.time) / burst.interval;
-            int64_t k = (relative <= 0.0f) ? 0 : static_cast<int64_t>(std::ceil(relative));
-
-            int evaluated = 0;
-            while (evaluated < BurstDefaults::MAX_CYCLES_PER_WINDOW)
+            float fireTime = burst.time;
+            double scheduleEnd = static_cast<double>(burst.time);
+            if (burst.interval > 0.0f)
             {
-                if (burst.cycles > 0 && k >= burst.cycles)
-                    break;
-
-                float fireTime = burst.time + static_cast<float>(k) * burst.interval;
-                if (fireTime >= newTime)
-                    break;
-
-                if (fireTime >= prevTime)
+                if (burst.cycles > 1)
                 {
-                    if (burst.probability >= 1.0f || rand01() <= burst.probability)
-                        total += static_cast<uint32_t>(burst.count);
+                    fireTime = burst.time +
+                        static_cast<float>(burst.cycles - 1) * burst.interval;
                 }
+                scheduleEnd = static_cast<double>(burst.time) +
+                    static_cast<double>(burst.cycles) * static_cast<double>(burst.interval);
+            }
 
-                ++k;
-                ++evaluated;
+            if (!std::isfinite(fireTime) || !std::isfinite(scheduleEnd))
+                continue;
+
+            latestFire = std::max(latestFire, fireTime);
+            period = std::max(period, scheduleEnd);
+        }
+
+        if (!std::isfinite(period) || period <= 0.0 ||
+            period > static_cast<double>(std::numeric_limits<float>::max()))
+        {
+            return 0.0f;
+        }
+
+        float resolved = static_cast<float>(period);
+        if (resolved <= latestFire)
+        {
+            resolved = std::nextafter(latestFire, std::numeric_limits<float>::infinity());
+        }
+        return (std::isfinite(resolved) && resolved > 0.0f) ? resolved : 0.0f;
+    }
+
+    // Loop-aware stateless evaluation. Infinite schedules (cycles <= 0) retain
+    // their absolute timeline; finite schedules are evaluated in local period
+    // slices. One budget is shared across every slice for each authored burst.
+    template <typename Rand01>
+    uint32_t evaluateBurstSpawnsLooped(const std::vector<VFXBurst>& bursts,
+                                       float prevTime, float newTime, float loopPeriod,
+                                       Rand01&& rand01)
+    {
+        if (newTime <= prevTime)
+            return 0;
+        if (!std::isfinite(loopPeriod) || loopPeriod <= 0.0f)
+            return evaluateBurstSpawns(bursts, prevTime, newTime, rand01);
+
+        uint32_t total = 0;
+        const double period = static_cast<double>(loopPeriod);
+        const double windowEnd = static_cast<double>(newTime);
+
+        for (const auto& burst : bursts)
+        {
+            int remainingEvaluations = BurstDefaults::MAX_CYCLES_PER_WINDOW;
+            if (burst.cycles <= 0)
+            {
+                total += detail::evaluateOneBurst(
+                    burst, prevTime, newTime, rand01, remainingEvaluations);
+                continue;
+            }
+
+            double current = std::max(0.0, static_cast<double>(prevTime));
+            int slices = 0;
+            while (current < windowEnd && remainingEvaluations > 0 &&
+                   slices < BurstDefaults::MAX_CYCLES_PER_WINDOW)
+            {
+                double periodIndex = std::floor(current / period);
+                double periodStart = periodIndex * period;
+                double localStart = current - periodStart;
+
+                const double seamTolerance = std::numeric_limits<double>::epsilon() *
+                    std::max({1.0, std::abs(current), period}) * 4.0;
+                if (localStart < 0.0 && localStart >= -seamTolerance)
+                    localStart = 0.0;
+                if (period - localStart <= seamTolerance)
+                {
+                    periodStart += period;
+                    localStart = 0.0;
+                }
+                localStart = std::clamp(localStart, 0.0, period);
+
+                const double sliceEnd = std::min(windowEnd, periodStart + period);
+                if (!(sliceEnd > current))
+                    break;
+
+                const double localEnd = std::clamp(
+                    localStart + (sliceEnd - current), localStart, period);
+                total += detail::evaluateOneBurst(
+                    burst, static_cast<float>(localStart), static_cast<float>(localEnd),
+                    rand01, remainingEvaluations);
+
+                current = sliceEnd;
+                ++slices;
             }
         }
 

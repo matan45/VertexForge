@@ -157,4 +157,31 @@ TEST_SUITE("VFXParticleSimParity")
         // Forces-only emitter: modifierFlags != 0 -> fade suppressed, alpha stays full.
         CHECK(alphaNearEndOfLife(true) == doctest::Approx(1.0f));
     }
+
+    TEST_CASE("finite bursts re-arm in the CPU particle system only when looping")
+    {
+        JobSystemScope jobs;
+
+        auto run = [](bool looping) {
+            render::vfx::VFXEmitterConfig config = singleParticleConfig(0.0f);
+            config.looping = looping;
+            config.loopDuration = 1.0f;
+            config.lifetime = 10.0f;
+
+            render::vfx::VFXParticleSystem system;
+            system.setSeed(1527);
+            system.setEmitterConfig(config);
+            system.setPlaying(true);
+
+            system.update(0.5f); // [0.0, 0.5): first fire at local t=0
+            CHECK(system.getActiveParticleCount() == 1);
+            system.update(0.5f); // [0.5, 1.0): half-open seam excludes next loop
+            CHECK(system.getActiveParticleCount() == 1);
+            system.update(0.5f); // [1.0, 1.5): looped fire at local t=0
+            return system.getActiveParticleCount();
+        };
+
+        CHECK(run(true) == 2);
+        CHECK(run(false) == 1);
+    }
 }

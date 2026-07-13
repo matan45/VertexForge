@@ -104,8 +104,12 @@ namespace render::vfx
         {
             std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
             float prevEmissionTime = emissionTime - deltaTime;
-            uint32_t burstSpawns = ::vfx::evaluateBurstSpawns(
-                config.bursts, prevEmissionTime, emissionTime,
+            float loopPeriod = config.looping
+                ? ::vfx::resolveBurstLoopPeriod(
+                    config.bursts, config.loopDuration, config.lifetime)
+                : 0.0f;
+            uint32_t burstSpawns = ::vfx::evaluateBurstSpawnsLooped(
+                config.bursts, prevEmissionTime, emissionTime, loopPeriod,
                 [this, &dist01]() { return dist01(rng); });
 
             for (uint32_t i = 0; i < burstSpawns; ++i)

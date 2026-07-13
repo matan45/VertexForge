@@ -32,6 +32,10 @@ namespace vfx
                 "looping", VFXPropertyType::Bool,
                 EmitterDefaults::LOOPING, 0.0f, 1.0f
             };
+            node.properties["loopDuration"] = VFXProperty{
+                "loopDuration", VFXPropertyType::Float,
+                EmitterDefaults::LOOP_DURATION, 0.0f, 60.0f
+            };
             node.properties["inheritVelocityRatio"] = VFXProperty{
                 "inheritVelocityRatio", VFXPropertyType::Float,
                 EmitterDefaults::INHERIT_VELOCITY_RATIO, 0.0f, 1.0f

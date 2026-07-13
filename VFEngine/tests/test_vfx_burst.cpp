@@ -1,5 +1,7 @@
 #include <doctest.h>
 #include <vfx/VFXBurstTypes.hpp>
+#include <array>
+#include <limits>
 
 // ============================================================
 // VFX burst emission schedule tests (stateless window evaluation)
@@ -108,6 +110,132 @@ TEST_CASE("runaway tiny intervals are bounded per window") {
     std::vector<vfx::VFXBurst> bursts{{0.0f, 1, 0, 0.0001f, 1.0f}};
     uint32_t spawned = vfx::evaluateBurstSpawns(bursts, 0.0f, 10.0f, always);
     CHECK(spawned <= static_cast<uint32_t>(vfx::BurstDefaults::MAX_CYCLES_PER_WINDOW));
+}
+
+TEST_CASE("automatic loop period uses lifetime floor and complete finite schedule") {
+    const std::vector<vfx::VFXBurst> repro{{0.15f, 700, 4, 1.0f, 1.0f}};
+    CHECK(vfx::resolveBurstLoopPeriod(repro, 0.0f, 2.0f) == doctest::Approx(4.15f));
+    CHECK(vfx::resolveBurstLoopPeriod(repro, 1.25f, 2.0f) == doctest::Approx(1.25f));
+
+    const std::vector<vfx::VFXBurst> immediate{{0.0f, 1, 1, 0.0f, 1.0f}};
+    CHECK(vfx::resolveBurstLoopPeriod(immediate, 0.0f, 2.0f) == doctest::Approx(2.0f));
+
+    const std::vector<vfx::VFXBurst> empty;
+    CHECK(vfx::resolveBurstLoopPeriod(empty, 0.0f, 3.0f) == doctest::Approx(3.0f));
+
+    const std::vector<vfx::VFXBurst> disabled{{100.0f, 0, 1, 1.0f, 1.0f}};
+    CHECK(vfx::resolveBurstLoopPeriod(disabled, 0.0f, 2.0f) == doctest::Approx(2.0f));
+}
+
+TEST_CASE("automatic loop period stays strictly beyond the last finite fire") {
+    const std::vector<vfx::VFXBurst> collapsed{{5.0f, 1, 4, 0.0f, 1.0f}};
+    const float period = vfx::resolveBurstLoopPeriod(collapsed, 0.0f, 2.0f);
+    CHECK(period > 5.0f);
+    CHECK(std::isfinite(period));
+
+    const std::vector<vfx::VFXBurst> onlyAtZero{{0.0f, 1, 1, 0.0f, 1.0f}};
+    CHECK(vfx::resolveBurstLoopPeriod(onlyAtZero, 0.0f, 0.0f) == 0.0f);
+}
+
+TEST_CASE("invalid configured loop periods disable wrapping") {
+    const std::vector<vfx::VFXBurst> bursts{{0.0f, 1, 1, 1.0f, 1.0f}};
+    CHECK(vfx::resolveBurstLoopPeriod(bursts, -1.0f, 2.0f) == 0.0f);
+    CHECK(vfx::resolveBurstLoopPeriod(
+        bursts, std::numeric_limits<float>::infinity(), 2.0f) == 0.0f);
+    CHECK(vfx::resolveBurstLoopPeriod(
+        bursts, std::numeric_limits<float>::quiet_NaN(), 2.0f) == 0.0f);
+}
+
+TEST_CASE("finite bursts re-arm once per loop period") {
+    const std::vector<vfx::VFXBurst> repro{{0.15f, 700, 4, 1.0f, 1.0f}};
+    constexpr float period = 4.15f;
+
+    CHECK(vfx::evaluateBurstSpawnsLooped(repro, 0.0f, period, period, always) == 2800);
+    CHECK(vfx::evaluateBurstSpawnsLooped(repro, period, 8.30f, period, always) == 2800);
+    CHECK(vfx::evaluateBurstSpawnsLooped(repro, 0.0f, 12.45f, period, always) == 8400);
+
+    CHECK(vfx::evaluateBurstSpawnsLooped(repro, 4.145f, 4.155f, period, always) == 0);
+    CHECK(vfx::evaluateBurstSpawnsLooped(repro, 4.29f, 4.31f, period, always) == 700);
+}
+
+TEST_CASE("loop seams preserve half-open window behavior") {
+    const std::vector<vfx::VFXBurst> bursts{{0.0f, 1, 1, 0.5f, 1.0f}};
+    constexpr float period = 1.0f;
+    const float before = std::nextafter(period, 0.0f);
+    const float after = std::nextafter(period, 2.0f);
+
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, 0.0f, period, period, always) == 1);
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, period, 2.0f, period, always) == 1);
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, before, period, period, always) == 0);
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, period, after, period, always) == 1);
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, before, after, period, always) == 1);
+}
+
+TEST_CASE("unbounded bursts remain on their absolute schedule while finite bursts loop") {
+    const std::vector<vfx::VFXBurst> bursts{
+        {0.15f, 700, 4, 1.0f, 1.0f},
+        {0.0f, 5, 0, 1.0f, 1.0f},
+    };
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, 0.0f, 8.30f, 4.15f, always) == 5645);
+
+    const std::vector<vfx::VFXBurst> negativeCycles{{0.0f, 5, -1, 1.0f, 1.0f}};
+    CHECK(vfx::evaluateBurstSpawnsLooped(
+        negativeCycles, 0.0f, 8.30f, 4.15f, always) == 45);
+}
+
+TEST_CASE("looped probability rolls stay burst-major and chronological") {
+    const std::vector<vfx::VFXBurst> bursts{
+        {0.0f, 1, 1, 0.5f, 0.5f},
+        {0.0f, 10, 1, 0.5f, 0.5f},
+    };
+    const std::array<float, 4> rolls{0.0f, 0.0f, 1.0f, 1.0f};
+    size_t rollIndex = 0;
+    auto sequence = [&]() { return rolls.at(rollIndex++); };
+
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, 0.0f, 2.0f, 1.0f, sequence) == 2);
+    CHECK(rollIndex == rolls.size());
+}
+
+TEST_CASE("looped evaluation shares one safety budget across all period slices") {
+    const std::vector<vfx::VFXBurst> bursts{{0.0f, 1, 64, 0.001f, 0.5f}};
+    int rolls = 0;
+    auto countingAlways = [&]() {
+        ++rolls;
+        return 0.0f;
+    };
+
+    const uint32_t spawned = vfx::evaluateBurstSpawnsLooped(
+        bursts, 0.0f, 10.0f, 0.064f, countingAlways);
+    CHECK(spawned == static_cast<uint32_t>(vfx::BurstDefaults::MAX_CYCLES_PER_WINDOW));
+    CHECK(rolls == vfx::BurstDefaults::MAX_CYCLES_PER_WINDOW);
+}
+
+TEST_CASE("looped evaluation handles negative time and invalid period fallback") {
+    const std::vector<vfx::VFXBurst> bursts{{0.0f, 3, 1, 0.5f, 1.0f}};
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, -1.0f, 0.0f, 1.0f, always) == 0);
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, -0.1f, 0.1f, 1.0f, always) == 3);
+
+    const uint32_t ordinary = vfx::evaluateBurstSpawns(bursts, 0.0f, 2.0f, always);
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, 0.0f, 2.0f, 0.0f, always) == ordinary);
+    CHECK(vfx::evaluateBurstSpawnsLooped(
+        bursts, 0.0f, 2.0f, std::numeric_limits<float>::quiet_NaN(), always) == ordinary);
+    CHECK(vfx::evaluateBurstSpawnsLooped(
+        bursts, 0.0f, 2.0f, std::numeric_limits<float>::infinity(), always) == ordinary);
+
+    CHECK(vfx::evaluateBurstSpawnsLooped(
+        bursts, 1'000'000.0f, 1'000'001.0f, 1.0f, always) == 3);
+}
+
+TEST_CASE("degenerate windows and guaranteed probabilities consume no RNG") {
+    const std::vector<vfx::VFXBurst> bursts{{0.0f, 1, 1, 0.5f, 1.0f}};
+    int rolls = 0;
+    auto counting = [&]() {
+        ++rolls;
+        return 0.0f;
+    };
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, 1.0f, 1.0f, 1.0f, counting) == 0);
+    CHECK(vfx::evaluateBurstSpawnsLooped(bursts, 0.0f, 2.0f, 1.0f, counting) == 2);
+    CHECK(rolls == 0);
 }
 
 // ---- node property round-trip ----

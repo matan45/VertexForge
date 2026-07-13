@@ -25,6 +25,7 @@ namespace plugin {
     // v17: registerUITexture/unregisterUITexture on PluginContext — expose a plugin
     //      2D texture as a generic UI image source (bind any plugin/GPU texture to a
     //      UIImageComponent by key; used for a smooth minimap fog-of-war overlay).
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 17;
+    // v18: VFXPreviewParams appends loopDuration for finite-burst loop previews.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 18;
 
 }

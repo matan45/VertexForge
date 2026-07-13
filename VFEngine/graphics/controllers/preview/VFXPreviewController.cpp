@@ -51,6 +51,7 @@ namespace controllers
             config.emitDirection = params.emitDirection;
             config.texturePath = params.texturePath;
             config.looping = params.looping;
+            config.loopDuration = params.loopDuration;
             config.sizeVariance = params.sizeVariance;
             config.lifetimeVariance = params.lifetimeVariance;
             config.speedVariance = params.speedVariance;

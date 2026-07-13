@@ -82,6 +82,7 @@ namespace editor::vfxeditor
             {"startSize",     "Start Size", 0.1f},
             {"startVelocity", "Velocity",   0.1f},
             {"looping",       "Looping",    0.1f},
+            {"loopDuration",  "Loop Duration (0 = Auto)", 0.1f},
         };
 
         for (const auto& entry : entries)
@@ -1524,7 +1525,7 @@ namespace editor::vfxeditor
     {
         static const std::unordered_set<std::string> handledProperties = {
             "spawnRate", "lifetime", "startSize", "startVelocity",
-            "startColor", "looping", "texture",
+            "startColor", "looping", "loopDuration", "texture",
             "sizeVariance", "lifetimeVariance", "speedVariance",
             "rotationVariance", "angularVelocityVariance",
             "colorValueVariance", "alphaVariance",

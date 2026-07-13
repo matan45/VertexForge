@@ -341,8 +341,14 @@ namespace controllers
                 if (!instance.config.bursts.empty())
                 {
                     float prevEmissionTime = instance.emissionTime - effectiveDt;
-                    uint32_t burstSpawns = ::vfx::evaluateBurstSpawns(
+                    float loopPeriod = instance.loop
+                        ? ::vfx::resolveBurstLoopPeriod(
+                            instance.config.bursts, instance.config.loopDuration,
+                            instance.config.lifetime)
+                        : 0.0f;
+                    uint32_t burstSpawns = ::vfx::evaluateBurstSpawnsLooped(
                         instance.config.bursts, prevEmissionTime, instance.emissionTime,
+                        loopPeriod,
                         [&dist01]() { return dist01(gen); });
                     burstSpawns = static_cast<uint32_t>(
                         static_cast<float>(burstSpawns) * instance.lodSpawnMultiplier);

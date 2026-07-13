@@ -187,6 +187,7 @@ namespace vfx
         inline constexpr float START_SIZE = 1.0f;
         inline constexpr float START_SPEED = 1.0f;
         inline constexpr bool LOOPING = true;
+        inline constexpr float LOOP_DURATION = 0.0f;
         inline constexpr float INHERIT_VELOCITY_RATIO = 0.0f;
         inline constexpr float SIZE_VARIANCE = 0.0f;
         inline constexpr float LIFETIME_VARIANCE = 0.0f;

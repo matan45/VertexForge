@@ -8,6 +8,7 @@
 #include "VFXShapeConfigLoader.hpp"
 #include "VFXBurstTypes.hpp"
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <string_view>
 
@@ -107,6 +108,9 @@ namespace vfx
         config.emitDirection = getVec3(*emitterNode, "startVelocity", glm::vec3(0.0f, 1.0f, 0.0f));
         config.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         config.looping = getBool(*emitterNode, "looping", EmitterDefaults::LOOPING);
+        config.loopDuration = getFloat(*emitterNode, "loopDuration", EmitterDefaults::LOOP_DURATION);
+        if (!std::isfinite(config.loopDuration) || config.loopDuration < 0.0f)
+            config.loopDuration = EmitterDefaults::LOOP_DURATION;
         config.texturePath = getString(*emitterNode, "texture", "");
         config.inheritVelocityRatio = std::clamp(
             getFloat(*emitterNode, "inheritVelocityRatio", EmitterDefaults::INHERIT_VELOCITY_RATIO), 0.0f, 1.0f);
