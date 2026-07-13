@@ -2,7 +2,7 @@
 //
 //   1. .vfVFX round-trip: a VFXData carrying Fixed bounds, an enabled per-tier
 //      scalability profile and cullEligible=true must save and reload field-by-
-//      field identical, and the saved file must stamp version "1.1".
+//      field identical, and the saved file must stamp the current version "1.2".
 //   2. Backward compatibility: a hand-written 1.0-style .vfVFX with none of the
 //      Phase-4 keys loads with the neutral struct defaults (Auto bounds,
 //      scalability disabled, cull off).
