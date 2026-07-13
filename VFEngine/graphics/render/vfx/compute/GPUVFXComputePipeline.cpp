@@ -75,7 +75,7 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        constexpr uint32_t BINDING_COUNT = 11;
+        constexpr uint32_t BINDING_COUNT = 12; // VK-1501: +childSpawnBuffer at binding 11
         std::array<vk::DescriptorSetLayoutBinding, BINDING_COUNT> bindings{};
 
         for (uint32_t i = 0; i < BINDING_COUNT; ++i)
@@ -140,7 +140,7 @@ namespace render::vfx
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 11;
+        poolSize.descriptorCount = 12; // VK-1501
 
         descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
     }
@@ -170,7 +170,8 @@ namespace render::vfx
             buffers.eventBuffer != cachedBuffers.eventBuffer ||
             buffers.colliderBuffer != cachedBuffers.colliderBuffer ||
             buffers.terrainBuffer != cachedBuffers.terrainBuffer ||
-            buffers.spawnRequestBuffer != cachedBuffers.spawnRequestBuffer)
+            buffers.spawnRequestBuffer != cachedBuffers.spawnRequestBuffer ||
+            buffers.childSpawnBuffer != cachedBuffers.childSpawnBuffer)
         {
             cachedBuffers = buffers;
             descriptorsNeedUpdate = true;
@@ -188,8 +189,8 @@ namespace render::vfx
 
         // Buffers ordered by binding index: particle(0), config(1), state(2),
         // drawCommand(3), lut(4), ribbonRing(5), ribbonHead(6), event(7),
-        // collider(8), terrain(9), spawnRequest(10)
-        std::array<vk::Buffer, 11> bufferHandles = {
+        // collider(8), terrain(9), spawnRequest(10), childSpawn(11)
+        std::array<vk::Buffer, 12> bufferHandles = {
             cachedBuffers.particleBuffer,
             cachedBuffers.configBuffer,
             cachedBuffers.stateBuffer,
@@ -200,13 +201,14 @@ namespace render::vfx
             cachedBuffers.eventBuffer,
             cachedBuffers.colliderBuffer,
             cachedBuffers.terrainBuffer,
-            cachedBuffers.spawnRequestBuffer
+            cachedBuffers.spawnRequestBuffer,
+            cachedBuffers.childSpawnBuffer
         };
 
-        std::array<vk::DescriptorBufferInfo, 11> bufferInfos{};
-        std::array<vk::WriteDescriptorSet, 11> writes{};
+        std::array<vk::DescriptorBufferInfo, 12> bufferInfos{};
+        std::array<vk::WriteDescriptorSet, 12> writes{};
 
-        for (uint32_t i = 0; i < 11; ++i)
+        for (uint32_t i = 0; i < 12; ++i)
         {
             bufferInfos[i].buffer = bufferHandles[i];
             bufferInfos[i].offset = 0;
@@ -231,7 +233,8 @@ namespace render::vfx
         uint32_t frameNumber,
         uint32_t emitterCount,
         uint32_t channelRequestBase,
-        uint32_t particlesPerRequest)
+        uint32_t particlesPerRequest,
+        uint32_t gpuChildRegion)
     {
         if (!initialized || particleCount == 0)
         {
@@ -253,6 +256,7 @@ namespace render::vfx
         pushConstants.emitterCount = emitterCount;
         pushConstants.channelRequestBase = channelRequestBase;
         pushConstants.particlesPerRequest = particlesPerRequest;
+        pushConstants.gpuChildRegion = gpuChildRegion;
 
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
                           0, sizeof(GPUVFXComputePushConstants), &pushConstants);
@@ -268,7 +272,7 @@ namespace render::vfx
         vk::Buffer eventBuffer)
     {
         std::vector<vk::BufferMemoryBarrier> barriers;
-        barriers.reserve(5);
+        barriers.reserve(6);
 
         vk::BufferMemoryBarrier stateBarrier{};
         stateBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -316,12 +320,53 @@ namespace render::vfx
             barriers.push_back(spawnRequestBarrier);
         }
 
+        if (cachedBuffers.childSpawnBuffer)
+        {
+            // VK-1501: the counter reset (fillBuffer) must be visible before parents atomicAdd this
+            // frame's write-half counters; children also read (read-half) so include ShaderRead.
+            vk::BufferMemoryBarrier childSpawnBarrier{};
+            childSpawnBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            childSpawnBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+            childSpawnBarrier.buffer = cachedBuffers.childSpawnBuffer;
+            childSpawnBarrier.offset = 0;
+            childSpawnBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(childSpawnBarrier);
+        }
+
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,
             vk::PipelineStageFlagBits::eComputeShader,
             {},
             {},
             barriers,
+            {}
+        );
+    }
+
+    void GPUVFXComputePipeline::insertChildSpawnComputeBarrier(vk::CommandBuffer cmd)
+    {
+        // VK-1501: cross-frame RAW. The previous frame's parent appends (ShaderWrite) into what is now
+        // the read half must be visible to this frame's child-listener reads (ShaderRead). Consecutive
+        // frames can overlap on the GPU, so submission order alone is insufficient -- an explicit
+        // compute->compute dependency is required. This runs once before the dispatch loop.
+        if (!cachedBuffers.childSpawnBuffer)
+        {
+            return;
+        }
+
+        vk::BufferMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.buffer = cachedBuffers.childSpawnBuffer;
+        barrier.offset = 0;
+        barrier.size = VK_WHOLE_SIZE;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {},
+            {},
+            {barrier},
             {}
         );
     }
@@ -436,6 +481,19 @@ namespace render::vfx
             spawnRequestBarrier.offset = 0;
             spawnRequestBarrier.size = VK_WHOLE_SIZE;
             barriers.push_back(spawnRequestBarrier);
+        }
+
+        if (cachedBuffers.childSpawnBuffer)
+        {
+            // VK-1501: WAR -- the previous frame's child reads and parent writes must complete before
+            // this frame's fillBuffer counter reset (TransferWrite) overwrites the write-half counters.
+            vk::BufferMemoryBarrier childSpawnBarrier{};
+            childSpawnBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+            childSpawnBarrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+            childSpawnBarrier.buffer = cachedBuffers.childSpawnBuffer;
+            childSpawnBarrier.offset = 0;
+            childSpawnBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(childSpawnBarrier);
         }
 
         cmd.pipelineBarrier(

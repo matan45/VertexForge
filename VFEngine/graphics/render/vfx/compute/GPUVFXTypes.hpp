@@ -186,6 +186,15 @@ namespace render::vfx
         // render mode reads these. Mode 0 (VelocityForward) is the legacy default.
         glm::vec4 meshOrientationParams{0.0f}; // xyz = axis-lock axis (world, normalized), w = spin rate (rad/s)
         uint32_t meshOrientationMode = 0;      // vfx::VFXOrientationMode (0 = VelocityForward)
+
+        // VK-1501: GPU event->child fast path. Packs two 16-bit "child slots" (one per fast-path
+        // event type) into the last free tail uint. Low half = OnDeath, high half = OnCollision.
+        // Per half: bits 0-7 = child region index into the process-wide childSpawnBuffer
+        // (0xFF = no fast-path child), bit 8 = inheritColor, bit 9 = inheritSize, bit 10 =
+        // inheritVelocity. Presence is the sentinel test (no modifierFlags bit consumed) so bits
+        // 24-31 and tail offsets 504/508 stay reserved for VK-1502. Pack/unpack helpers live in
+        // utilities/vfx/VFXChildSpawn.hpp; the GLSL mirror is in vfx_gpu_types.glsl (keep in sync).
+        uint32_t eventChildSlot = 0xFFFFFFFFu;
     };
     static_assert(sizeof(GPUEmitterConfig) == 512, "GPUEmitterConfig must be 512 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -252,6 +261,7 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, modifierSpeedRanges) == 464, "GPUEmitterConfig::modifierSpeedRanges offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, meshOrientationParams) == 480, "GPUEmitterConfig::meshOrientationParams offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, meshOrientationMode) == 496, "GPUEmitterConfig::meshOrientationMode offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, eventChildSlot) == 500, "GPUEmitterConfig::eventChildSlot offset mismatch"); // VK-1501
 
     struct alignas(16) GPUEmitterState
     {
@@ -373,6 +383,7 @@ namespace render::vfx
     namespace SpawnRequestFlags
     {
         inline constexpr uint32_t HasTint = 1u << 0;
+        inline constexpr uint32_t GpuValid = 1u << 1; // VK-1501: set on GPU-appended event->child requests
     }
 
     struct alignas(16) GPUCollider
@@ -433,13 +444,15 @@ namespace render::vfx
         uint32_t emitterCount;
         uint32_t channelRequestBase;
         uint32_t particlesPerRequest;
+        uint32_t gpuChildRegion = 0xFFFFFFFFu; // VK-1501: child region for a GPU event->child listener dispatch; 0xFFFFFFFF = not a GPU child
     };
-    static_assert(sizeof(GPUVFXComputePushConstants) == 20, "Push constants must be 20 bytes");
+    static_assert(sizeof(GPUVFXComputePushConstants) == 24, "Push constants must be 24 bytes");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterIndex) == 0, "GPUVFXComputePushConstants::emitterIndex offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, frameNumber) == 4, "GPUVFXComputePushConstants::frameNumber offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterCount) == 8, "GPUVFXComputePushConstants::emitterCount offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, channelRequestBase) == 12, "GPUVFXComputePushConstants::channelRequestBase offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, particlesPerRequest) == 16, "GPUVFXComputePushConstants::particlesPerRequest offset mismatch");
+    static_assert(offsetof(GPUVFXComputePushConstants, gpuChildRegion) == 20, "GPUVFXComputePushConstants::gpuChildRegion offset mismatch");
 
     struct GPUVFXBillboardPushConstants
     {
@@ -516,6 +529,7 @@ namespace render::vfx
         vk::Buffer colliderBuffer;
         vk::Buffer terrainBuffer;
         vk::Buffer spawnRequestBuffer;
+        vk::Buffer childSpawnBuffer; // VK-1501: GPU event->child request ring (binding 11)
     };
 
     struct VFXFlipbookPushConstants

@@ -1195,6 +1195,24 @@ namespace editor::vfxeditor
                 ImGui::SameLine(100.0f);
                 changed |= ImGui::Checkbox("##inheritSize", &eventConfig.inheritSize);
 
+                // VK-1501: GPU fast path (spark-on-impact). Only OnDeath/OnCollision qualify.
+                if (entry.type == vfx::VFXEventType::OnDeath ||
+                    entry.type == vfx::VFXEventType::OnCollision)
+                {
+                    ImGui::Text("GPU Fast Path");
+                    ImGui::SameLine(100.0f);
+                    changed |= ImGui::Checkbox("##gpuFastPath", &eventConfig.gpuFastPath);
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip(
+                            "Spawn the child GPU-side via the request ring (~1 frame later).\n"
+                            "No CPU readback and no child instance slot; depth-1 only.\n"
+                            "Falls back to the CPU path when Probability < 1, when the child\n"
+                            "regions are exhausted, or the child isn't burst-compatible.\n"
+                            "No gameplay event notification is published on the fast path.");
+                    }
+                }
+
                 ImGui::Spacing();
             }
             ImGui::PopID();

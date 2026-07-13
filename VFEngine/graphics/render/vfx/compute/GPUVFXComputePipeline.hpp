@@ -50,10 +50,16 @@ namespace render::vfx
             uint32_t frameNumber,
             uint32_t emitterCount,
             uint32_t channelRequestBase = 0,
-            uint32_t particlesPerRequest = 0
+            uint32_t particlesPerRequest = 0,
+            uint32_t gpuChildRegion = 0xFFFFFFFFu // VK-1501: child region for a GPU event->child listener
         );
 
         void insertBarriersAfterCompute(vk::CommandBuffer cmd, const GPUVFXBufferSet& buffers);
+
+        // VK-1501: compute->compute dependency so the previous frame's parent writes into the child
+        // ring are visible to this frame's child-listener reads (the accepted 1-frame latency). Must be
+        // issued once before the dispatch loop; the read/write halves are otherwise disjoint per frame.
+        void insertChildSpawnComputeBarrier(vk::CommandBuffer cmd);
 
         void insertBarriersBeforeCompute(
             vk::CommandBuffer cmd,

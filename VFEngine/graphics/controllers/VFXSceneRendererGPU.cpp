@@ -304,8 +304,20 @@ namespace controllers
 
             if (instance.channelListener)
             {
-                const uint64_t spawnCount = static_cast<uint64_t>(instance.channelAcceptedRequests) *
-                    instance.channelParticlesPerRequest;
+                uint64_t spawnCount;
+                if (instance.gpuChildRegion != 0xFFFFFFFFu)
+                {
+                    // VK-1501: GPU event->child listener. The per-frame request count is produced on
+                    // the GPU (no CPU readback), so dispatch a coarse upper bound of a full region;
+                    // the shader gates each slot against the previous frame's GPU-written counter.
+                    spawnCount = static_cast<uint64_t>(vfx::child::CHILD_MAX_REQUESTS_PER_REGION) *
+                        instance.channelParticlesPerRequest;
+                }
+                else
+                {
+                    spawnCount = static_cast<uint64_t>(instance.channelAcceptedRequests) *
+                        instance.channelParticlesPerRequest;
+                }
                 spawnThisFrame = static_cast<uint32_t>(
                     std::min<uint64_t>(spawnCount, instance.gpuParticleCount));
             }
@@ -341,6 +353,9 @@ namespace controllers
             // its emission schedule. The shader still folds particleIdx/frameNumber into
             // the per-particle RNG, so visuals stay varied without being random per frame.
             auto gpuConfig = toGPUConfig(instance.config, effectiveDt, instance.gpuParticleCount, instance.seed);
+
+            // VK-1501: route resolved OnDeath/OnCollision fast-path children into the GPU child ring.
+            gpuConfig.eventChildSlot = instance.resolvedEventChildSlot;
 
             gpuConfig.colliderCount = (instance.config.collisionEnabled && instance.currentLOD == 0)
                                           ? sceneColliderCount : 0;

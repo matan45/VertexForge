@@ -139,6 +139,24 @@ layout(std430, set = 0, binding = 10) readonly buffer SpawnRequestBuffer {
     GPUVFXSpawnRequest spawnRequests[];
 };
 
+// VK-1501: GPU event->child fast path. Sibling ring to binding 10 but GPU-WRITABLE: parents append
+// child spawn requests here on death/collision; a persistent child listener consumes them next frame.
+// Ping-pong by frame parity keeps the writer (this frame) and reader (next frame) on disjoint halves,
+// so there is no read-while-write race despite the undefined per-emitter dispatch order. Layout
+// mirrors the C++ childSpawnBuffer sizing (utilities/vfx/VFXChildSpawn.hpp).
+const uint CHILD_MAX_REGIONS = 64u;
+const uint CHILD_MAX_REQUESTS_PER_REGION = 256u;
+const uint CHILD_COUNTER_COUNT = 2u * CHILD_MAX_REGIONS;
+const uint CHILD_REGION_NONE = 0xFFu;
+const uint CHILD_INHERIT_COLOR_BIT = 1u << 8;
+const uint CHILD_INHERIT_SIZE_BIT = 1u << 9;
+const uint CHILD_INHERIT_VEL_BIT = 1u << 10;
+
+layout(std430, set = 0, binding = 11) buffer ChildSpawnBuffer {
+    uint childSpawnCounters[CHILD_COUNTER_COUNT];
+    GPUVFXSpawnRequest childSpawnRequests[];
+};
+
 const uint COLLIDER_SPHERE  = 0u;
 const uint COLLIDER_BOX     = 1u;
 const uint COLLIDER_CAPSULE = 2u;
@@ -153,6 +171,7 @@ const uint MAX_VFX_EVENTS = 256u;
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
 const uint RENDER_MODE_RIBBON = 4u;
 const uint SPAWN_REQUEST_HAS_TINT = 1u;
+const uint SPAWN_REQUEST_GPU_VALID = 2u; // VK-1501: set on GPU-appended event->child requests
 
 // LUT_FLAG_* / LUT_CH_* / vfxNormalize01 now live in vfx_lut.glsl (shared with the ribbon shader).
 
@@ -162,6 +181,7 @@ layout(push_constant) uniform PushConstants {
     uint emitterCount;
     uint channelRequestBase;
     uint particlesPerRequest;
+    uint gpuChildRegion; // VK-1501: child region for a GPU event->child listener dispatch; 0xFFFFFFFF = not a GPU child
 } pc;
 
 const uint FLAG_PLAYING = 1u;
@@ -741,8 +761,47 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
     }
 }
 
-void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx, vec3 color, float size)
+// VK-1501: append one GPU event->child spawn request into this frame's write parity half of the
+// given child region. Bounded by CHILD_MAX_REQUESTS_PER_REGION (overflow increments the counter but
+// drops the write; the reader clamps to the same cap next frame, so overflow degrades gracefully).
+void appendChildRequest(uint childHalf, vec3 pos, vec3 vel, vec3 color, float size)
 {
+    uint region = childHalf & CHILD_REGION_NONE;
+    uint writeHalf = pc.frameNumber & 1u;
+    uint base = writeHalf * CHILD_MAX_REGIONS + region;
+    uint slot = atomicAdd(childSpawnCounters[base], 1u);
+    if (slot < CHILD_MAX_REQUESTS_PER_REGION)
+    {
+        GPUVFXSpawnRequest r;
+        r.position = pos;
+        r.scale = ((childHalf & CHILD_INHERIT_SIZE_BIT) != 0u) ? max(size, 0.0) : 1.0;
+        r.direction = ((childHalf & CHILD_INHERIT_VEL_BIT) != 0u) ? vel : vec3(0.0);
+        r.packedColor = packUnorm4x8(vec4(clamp(color, 0.0, 1.0), 1.0));
+        r.seed = pcg_hash(floatBitsToUint(pos.x) ^ (pc.frameNumber * 2654435761u) ^ (slot * 40503u) ^ region);
+        r.flags = SPAWN_REQUEST_GPU_VALID |
+                  (((childHalf & CHILD_INHERIT_COLOR_BIT) != 0u) ? SPAWN_REQUEST_HAS_TINT : 0u);
+        r.reservedTemplate = 0u;
+        r.pad = 0u;
+        childSpawnRequests[base * CHILD_MAX_REQUESTS_PER_REGION + slot] = r;
+    }
+}
+
+void emitEvent(GPUEmitterConfig config, uint type, vec3 pos, vec3 vel, uint emitterIdx, vec3 color, float size)
+{
+    // VK-1501: route death/collision to the GPU child ring when a fast-path child is configured. This
+    // deliberately skips the CPU event buffer entirely for that pair (no readback, no notification, and
+    // the 256/frame event-buffer stats stay unchanged). Non-fast-path events fall through as before.
+    if (type == 1u || type == 2u)
+    {
+        uint childHalf = (type == 2u) ? ((config.eventChildSlot >> 16) & 0xFFFFu)
+                                      : (config.eventChildSlot & 0xFFFFu);
+        if ((childHalf & CHILD_REGION_NONE) != CHILD_REGION_NONE)
+        {
+            appendChildRequest(childHalf, pos, vel, color, size);
+            return;
+        }
+    }
+
     uint idx = atomicAdd(eventCount, 1u);
     if (idx < MAX_VFX_EVENTS)
     {
@@ -845,7 +904,7 @@ void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint em
 
         if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
         {
-            emitEvent(2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
+            emitEvent(config, 2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
             collisionEventFired = true;
         }
     }
@@ -989,7 +1048,7 @@ void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterI
 
             if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
             {
-                emitEvent(2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
+                emitEvent(config, 2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
                 collisionEventFired = true;
             }
         }
@@ -1075,7 +1134,7 @@ void main()
         {
             if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
             {
-                emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                emitEvent(config, 1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
             }
             p.size = 0.0;
             isActive = false;
@@ -1117,7 +1176,7 @@ void main()
                 float prevRatio = (p.lifetime - config.deltaTime) / p.maxLifetime;
                 if (prevRatio < config.lifetimeThreshold && lifetimeRatio >= config.lifetimeThreshold)
                 {
-                    emitEvent(3u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                    emitEvent(config, 3u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                 }
             }
 
@@ -1132,7 +1191,7 @@ void main()
                 {
                     if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
                     {
-                        emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                        emitEvent(config, 1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                     }
                     p.size = 0.0;
                     isActive = false;
@@ -1145,7 +1204,7 @@ void main()
             {
                 if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
                 {
-                    emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                    emitEvent(config, 1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                 }
                 p.size = 0.0;
                 isActive = false;
@@ -1160,13 +1219,40 @@ void main()
         if (spawnSlot < spawnThisFrame)
         {
             bool channelSpawn = pc.particlesPerRequest > 0u;
+            bool gpuChildSpawn = pc.gpuChildRegion != 0xFFFFFFFFu; // VK-1501
+            bool useRequest = channelSpawn || gpuChildSpawn;
             bool requestValid = true;
             float requestScale = 1.0;
             vec3 requestDirection = vec3(0.0);
             uint requestPackedColor = 0u;
             uint requestFlags = 0u;
 
-            if (channelSpawn)
+            if (gpuChildSpawn)
+            {
+                // VK-1501: consume GPU-appended child requests from the previous-frame parity half.
+                // The count is GPU-authoritative (clamped to the per-region cap) so no CPU readback is
+                // ever needed; the read half has no concurrent writer this frame (plain loads are safe).
+                uint readHalf = (pc.frameNumber & 1u) ^ 1u;
+                uint base = readHalf * CHILD_MAX_REGIONS + pc.gpuChildRegion;
+                uint count = min(childSpawnCounters[base], CHILD_MAX_REQUESTS_PER_REGION);
+                uint requestOffset = spawnSlot / pc.particlesPerRequest;
+                if (requestOffset >= count)
+                {
+                    requestValid = false;
+                }
+                else
+                {
+                    GPUVFXSpawnRequest request = childSpawnRequests[base * CHILD_MAX_REQUESTS_PER_REGION + requestOffset];
+                    uint subParticleIndex = spawnSlot % pc.particlesPerRequest;
+                    seed = pcg_hash(request.seed ^ pcg_hash(subParticleIndex + 0x9E3779B9u));
+                    requestScale = max(request.scale, 0.0);
+                    requestDirection = request.direction;
+                    requestPackedColor = request.packedColor;
+                    requestFlags = request.flags;
+                    p.position = request.position;
+                }
+            }
+            else if (channelSpawn)
             {
                 uint requestOffset = spawnSlot / pc.particlesPerRequest;
                 uint requestCapacity = uint(spawnRequests.length());
@@ -1198,7 +1284,7 @@ void main()
 
                 vec3 localPos = generateSpawnPosition(seed, config);
                 vec3 spawnOrigin;
-                if (channelSpawn)
+                if (useRequest)
                 {
                     spawnOrigin = p.position;
                     localPos *= requestScale;
@@ -1238,7 +1324,7 @@ void main()
             p.color.rgb *= colorValueMult;
             p.color.a *= alphaMult;
             vec4 channelTint = vec4(1.0);
-            if (channelSpawn && (requestFlags & SPAWN_REQUEST_HAS_TINT) != 0u)
+            if (useRequest && (requestFlags & SPAWN_REQUEST_HAS_TINT) != 0u)
             {
                 channelTint = unpackUnorm4x8(requestPackedColor);
                 p.color *= channelTint;
@@ -1247,7 +1333,7 @@ void main()
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ROTATION);
             p.angularVelocity = config.angularVelocityVariance *
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ANGULAR_VELOCITY);
-            p.packedColorMult = channelSpawn
+            p.packedColorMult = useRequest
                 ? packUnorm4x8(channelTint)
                 : packHalf2x16(vec2(colorValueMult, alphaMult));
 
@@ -1255,7 +1341,7 @@ void main()
             p.initialSpeed = config.startSpeed * speedMult;
 
             vec3 dir = generateDirectionFromShape(seed, localPos, config);
-            bool hasWorldDirection = channelSpawn && dot(requestDirection, requestDirection) > 1e-8;
+            bool hasWorldDirection = useRequest && dot(requestDirection, requestDirection) > 1e-8;
             if (hasWorldDirection)
             {
                 dir = normalize(requestDirection);
@@ -1278,7 +1364,7 @@ void main()
 
             if ((config.eventFlags & EVENT_FLAG_ON_SPAWN) != 0u)
             {
-                emitEvent(0u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                emitEvent(config, 0u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
             }
             }
         }

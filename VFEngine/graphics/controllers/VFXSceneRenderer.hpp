@@ -5,6 +5,7 @@
 #include "../../services/data/VFXTypes.hpp"
 #include "vfx/VFXScalability.hpp"
 #include "vfx/VFXHandlePool.hpp"
+#include "vfx/VFXChildSpawn.hpp" // VK-1501: GPU event->child region allocator + slot packing
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -127,6 +128,14 @@ namespace controllers
         uint32_t channelRequestBase = 0;
         uint32_t channelAcceptedRequests = 0;
         std::vector<render::vfx::GPUVFXSpawnRequest> pendingChannelRequests;
+
+        // VK-1501: GPU event->child fast path.
+        // Parent: the packed eventChildSlot (child regions + inherit bits) marshalled into the GPU
+        // emitter config; 0xFFFFFFFF = no fast-path child on any event.
+        uint32_t resolvedEventChildSlot = 0xFFFFFFFFu;
+        // Listener: set when this channel listener is fed by GPU event appends (owns one child region).
+        bool gpuFastPathChild = false;
+        uint32_t gpuChildRegion = 0xFFFFFFFFu; // 0xFFFFFFFF = not a GPU event->child listener
     };
 
     class VFXSceneRenderer
@@ -157,6 +166,9 @@ namespace controllers
         // rotating start index prevents one busy channel from starving later ones.
         std::unordered_map<std::string, VFXInstanceId> channelsByPath;
         std::vector<VFXInstanceId> channelOrder;
+        // VK-1501: assigns each fast-path child channel (by asset path) one region in the GPU
+        // event->child ring; released when the owning channel listener is destroyed.
+        vfx::child::VFXChildRegionAllocator childRegionAllocator;
         size_t channelRoundRobinStart = 0;
         uint64_t channelEmitSequence = 0;
         uint32_t channelRawRequestsThisFrame = 0;
@@ -419,6 +431,11 @@ namespace controllers
                                    const render::vfx::VFXEmitterConfig& baseConfig,
                                    const vfx::VFXScalabilityLevel& level);
         void retireInstanceToDormant(VFXInstanceId id);
+
+        // VK-1501: resolve a GPU-driven parent's OnDeath/OnCollision fast-path children into
+        // persistent channel listeners + ring regions, and pack the result into
+        // resolvedEventChildSlot. No-op for channel listeners and CPU-simulated instances.
+        void resolveFastPathChildren(VFXInstanceId parentId);
 
         render::vfx::GPUEmitterConfig toGPUConfig(
             const render::vfx::VFXEmitterConfig& cpuConfig,

@@ -109,6 +109,11 @@ struct GPUEmitterConfig
     // Mesh-particle orientation added in VK-1476 (mirror of C++ GPUEmitterConfig).
     vec4 meshOrientationParams; // xyz = axis-lock axis (world, normalized), w = spin rate (rad/s)
     uint meshOrientationMode;   // vfx::VFXOrientationMode (0 = VelocityForward)
+
+    // VK-1501: GPU event->child fast path. Two packed 16-bit halves (low = OnDeath, high = OnCollision):
+    // bits 0-7 = child region (0xFF = none), bit 8 inheritColor, bit 9 inheritSize, bit 10 inheritVelocity.
+    // Mirror of C++ GPUEmitterConfig::eventChildSlot (see utilities/vfx/VFXChildSpawn.hpp).
+    uint eventChildSlot;
 };
 
 // VK-1481 Phase 2: per-emitter render-only data read by the merged (multi-draw) VFX pass, indexed by

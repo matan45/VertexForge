@@ -73,6 +73,8 @@ namespace controllers
 
         gpuBufferManager->resetAllActiveCounts(cmd);
         gpuBufferManager->clearEventBuffer(cmd);
+        // VK-1501: zero this frame's write-half child-request counters before parents append.
+        gpuBufferManager->clearChildSpawnCounters(cmd, frameNumber & 1u);
 
         gpuComputePipeline->insertBarriersBeforeCompute(
             cmd,
@@ -81,6 +83,9 @@ namespace controllers
             gpuBufferManager->getParticleBuffer(),
             gpuBufferManager->getEventBuffer()
         );
+
+        // VK-1501: make the previous frame's parent child-writes visible to this frame's child reads.
+        gpuComputePipeline->insertChildSpawnComputeBarrier(cmd);
 
         for (const auto& [id, instance] : instances)
         {
@@ -112,7 +117,8 @@ namespace controllers
                 frameNumber,
                 gpuBufferManager->getMaxEmitters(),
                 instance.channelListener ? instance.channelRequestBase : 0u,
-                instance.channelListener ? instance.channelParticlesPerRequest : 0u
+                instance.channelListener ? instance.channelParticlesPerRequest : 0u,
+                instance.gpuChildRegion // VK-1501: 0xFFFFFFFF unless this is a GPU event->child listener
             );
         }
 

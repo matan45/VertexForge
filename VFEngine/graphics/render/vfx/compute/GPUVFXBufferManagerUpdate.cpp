@@ -228,6 +228,30 @@ namespace render::vfx
         cmd.fillBuffer(eventBuffer, 0, sizeof(uint32_t), 0);
     }
 
+    void GPUVFXBufferManager::clearChildSpawnCounters(vk::CommandBuffer cmd, uint32_t writeHalf)
+    {
+        if (!initialized || !childSpawnBuffer)
+        {
+            return;
+        }
+
+        // Counters live at the head of the buffer as [half0: R uints][half1: R uints]. R*4 is a
+        // multiple of 4, so both the offset and size satisfy vkCmdFillBuffer's alignment.
+        const vk::DeviceSize halfCounters =
+            static_cast<vk::DeviceSize>(vfx::child::CHILD_MAX_REGIONS) * sizeof(uint32_t);
+
+        if (!childSpawnCleared)
+        {
+            // First use: zero BOTH parity halves so frame 0's reader can't observe garbage counts.
+            cmd.fillBuffer(childSpawnBuffer, 0, halfCounters * 2u, 0);
+            childSpawnCleared = true;
+            return;
+        }
+
+        // Reset only the write half; the read half holds last frame's finalized counts.
+        cmd.fillBuffer(childSpawnBuffer, (writeHalf & 1u) * halfCounters, halfCounters, 0);
+    }
+
     void GPUVFXBufferManager::copyEventBufferToReadback(vk::CommandBuffer cmd)
     {
         if (!initialized || !eventBuffer || !eventReadbackBuffers[currentFrameIndex])

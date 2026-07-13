@@ -283,4 +283,22 @@ namespace render::vfx
 
         return true;
     }
+
+    bool GPUVFXBufferManager::createChildSpawnBuffer()
+    {
+        // VK-1501: single device-local, GPU-written ring (no staging). The counters are zeroed on
+        // the GPU via clearChildSpawnCounters (fillBuffer), so the buffer needs TransferDst.
+        core::BufferInfoRequest request(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            getChildSpawnBufferSize(),
+            vk::BufferUsageFlagBits::eStorageBuffer |
+            vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+
+        core::BufferUtilities::createBuffer(request, childSpawnBuffer,
+            childSpawnAllocation, device.getMemoryManager());
+        return childSpawnBuffer && childSpawnAllocation;
+    }
 }

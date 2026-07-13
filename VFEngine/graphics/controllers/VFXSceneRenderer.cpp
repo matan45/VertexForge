@@ -286,9 +286,109 @@ namespace controllers
             }
         }
 
+        // VK-1501: resolve OnDeath/OnCollision GPU fast-path children (GPU-driven parents only).
+        if (instances[id].gpuDriven)
+            resolveFastPathChildren(id);
+
         vfLogDebug("Created VFX instance {} from asset: {} (GPU: {})",
                    id, params.vfxAssetPath, instances[id].gpuDriven);
         return id;
+    }
+
+    void VFXSceneRenderer::resolveFastPathChildren(VFXInstanceId parentId)
+    {
+        // Snapshot the per-event authoring we need first: createChannel() below mutates the
+        // instances map (and can rehash it), so we must not hold a VFXRuntimeInstance& across it.
+        struct PendingChild
+        {
+            bool collision = false; // false = OnDeath, true = OnCollision
+            std::string path;
+            bool inheritColor = false;
+            bool inheritSize = false;
+            bool inheritVelocity = false;
+        };
+        std::vector<PendingChild> pending;
+        {
+            auto it = instances.find(parentId);
+            if (it == instances.end() || it->second.channelListener)
+                return;
+
+            const auto& events = it->second.config.events;
+            const vfx::VFXEventType eligible[2] = {vfx::VFXEventType::OnDeath, vfx::VFXEventType::OnCollision};
+            for (vfx::VFXEventType type : eligible)
+            {
+                const auto& tc = events.types[static_cast<size_t>(type)];
+                // GPU fast path is opt-in and only applies to deterministic children (probability 1);
+                // probability<1 (or an ineligible/disabled event) stays on the CPU readback path.
+                if (tc.enabled && tc.gpuFastPath && !tc.vfxPath.empty() && tc.probability >= 1.0f)
+                {
+                    pending.push_back(PendingChild{type == vfx::VFXEventType::OnCollision, tc.vfxPath,
+                                                   tc.inheritColor, tc.inheritSize,
+                                                   tc.inheritVelocityScale > 0.0f});
+                }
+            }
+        }
+
+        uint32_t deathHalf = vfx::child::noneHalf();
+        uint32_t collisionHalf = vfx::child::noneHalf();
+
+        for (const auto& child : pending)
+        {
+            // Reuse (or create) the persistent channel listener for this child asset -- the same
+            // lifecycle VK-1500 uses; createChannel dedups by path. Returns 0 when the asset is not
+            // channel-compatible or a GPU slice can't be allocated -> fall back to the CPU path.
+            VFXInstanceId childId = createChannel(child.path, 0);
+            if (childId == 0)
+                continue;
+
+            auto childIt = instances.find(childId);
+            if (childIt == instances.end())
+                continue;
+            VFXRuntimeInstance& listener = childIt->second;
+
+            if (!listener.gpuFastPathChild)
+            {
+                // First fast-path use of this channel: assign it a ring region.
+                if (auto region = childRegionAllocator.acquire(child.path))
+                {
+                    listener.gpuFastPathChild = true;
+                    listener.gpuChildRegion = *region;
+                }
+
+                // Depth-1: a fast-path child that itself declares a fast-path event cannot spawn a
+                // grandchild GPU-side (its own eventChildSlot is never resolved). Warn once.
+                bool grandchild = false;
+                for (uint32_t i = 0; i < vfx::VFX_EVENT_TYPE_COUNT; ++i)
+                {
+                    const auto& gtc = listener.config.events.types[i];
+                    if (gtc.enabled && gtc.gpuFastPath && !gtc.vfxPath.empty())
+                    {
+                        grandchild = true;
+                        break;
+                    }
+                }
+                if (grandchild && vfx::VFXRuntimeDiagnostics::instance().report(
+                                      child.path, "GPU event->child spawning is depth-1"))
+                {
+                    vfLogWarning("VFX '{}' is used as a GPU event->child; its own GPU fast-path events "
+                                 "are ignored (depth-1 only)",
+                                 child.path);
+                }
+            }
+
+            if (!listener.gpuFastPathChild)
+                continue; // region pool exhausted -> CPU fallback for this event
+
+            const uint32_t packedHalf = vfx::child::packHalf(
+                listener.gpuChildRegion, child.inheritColor, child.inheritSize, child.inheritVelocity);
+            if (child.collision)
+                collisionHalf = packedHalf;
+            else
+                deathHalf = packedHalf;
+        }
+
+        if (auto it = instances.find(parentId); it != instances.end())
+            it->second.resolvedEventChildSlot = vfx::child::packSlot(deathHalf, collisionHalf);
     }
 
     VFXInstanceId VFXSceneRenderer::createChannel(const std::string& path,
@@ -744,6 +844,10 @@ namespace controllers
                     channelRoundRobinStart = 0;
                 else
                     channelRoundRobinStart %= channelOrder.size();
+
+                // VK-1501: return this listener's GPU event->child ring region to the pool.
+                if (it->second.gpuFastPathChild)
+                    childRegionAllocator.release(it->second.assetPath);
             }
 
             // A dormant instance already released its distortion count when it was retired;
@@ -826,6 +930,7 @@ namespace controllers
         channelOrder.clear();
         channelRoundRobinStart = 0;
         channelEmitSequence = 0;
+        childRegionAllocator.reset(); // VK-1501: bulk clear bypasses per-listener region release
         configCache.clear();
         instancePool.clear();
 

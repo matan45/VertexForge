@@ -100,6 +100,13 @@ namespace render::vfx
                 return false;
             }
 
+            if (!createChildSpawnBuffer())
+            {
+                vfLogError("GPUVFXBufferManager: Failed to create child spawn buffer");
+                destroyBuffers();
+                return false;
+            }
+
             initialized = true;
             vfLogInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
                        maxParticles, maxEmitters,
@@ -108,7 +115,8 @@ namespace render::vfx
                            getLUTBufferSize() + getRibbonRingBufferSize() +
                            getRibbonHeadBufferSize() + getEventBufferSize() +
                            getColliderBufferSize() + getTerrainBufferSize() +
-                           getSpawnRequestBufferSize() * (1 + core::MAX_FRAMES_IN_FLIGHT)) /
+                           getSpawnRequestBufferSize() * (1 + core::MAX_FRAMES_IN_FLIGHT) +
+                           getChildSpawnBufferSize()) /
                            (1024.0f * 1024.0f));
             return true;
         }
@@ -147,6 +155,7 @@ namespace render::vfx
         activeEmitterCount = 0;
         initialized = false;
         particleBufferCleared = false;
+        childSpawnCleared = false;
 
     }
 
@@ -167,6 +176,8 @@ namespace render::vfx
         }
         core::BufferUtilities::destroyBuffer(vkDevice, spawnRequestBuffer,
             spawnRequestAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, childSpawnBuffer,
+            childSpawnAllocation, device.getMemoryManager());
 
         for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
         {
@@ -253,5 +264,17 @@ namespace render::vfx
     {
         return static_cast<vk::DeviceSize>(GPUVFXConstants::MAX_SPAWN_REQUESTS) *
                sizeof(GPUVFXSpawnRequest);
+    }
+
+    vk::DeviceSize GPUVFXBufferManager::getChildSpawnBufferSize() const
+    {
+        // VK-1501 std430 layout: [2*R counters (uint)] followed by [2*R*K requests]. The counter
+        // block is 2*R*4 bytes; with R even it is 16-byte aligned so the request array begins with
+        // no std430 padding (must match the ChildSpawnBuffer block in vfx_particle_sim.glsl).
+        const vk::DeviceSize regions = static_cast<vk::DeviceSize>(vfx::child::CHILD_MAX_REGIONS);
+        const vk::DeviceSize counters = 2u * regions * sizeof(uint32_t);
+        const vk::DeviceSize data =
+            2u * regions * vfx::child::CHILD_MAX_REQUESTS_PER_REGION * sizeof(GPUVFXSpawnRequest);
+        return counters + data;
     }
 }
