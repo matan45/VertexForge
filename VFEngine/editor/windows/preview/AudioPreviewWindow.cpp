@@ -4,10 +4,24 @@
 #include "asset/AssetRef.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/audio/AudioEvents.hpp"
+#include "math/TransformUtils.hpp"
 #include <filesystem>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+
+namespace
+{
+    // VK-1511: current listener pose for 3D audition. ListenerState's own defaults
+    // already equal OpenAL's default listener (origin, -Z forward, +Y up), so the
+    // returned value is a valid placement even before ViewPort dispatches its first
+    // per-frame SetListenerPositionCommand (the `valid` flag is only a quality hint).
+    events::audio::ListenerState currentListener()
+    {
+        events::audio::GetListenerStateQuery query;
+        return events::EventDispatcher::instance().query(query);
+    }
+}
 
 namespace
 {
@@ -74,6 +88,7 @@ namespace windows
         }
         
         updateAsyncLoading();
+        updateAudition3D();     // VK-1511: advance orbit + resync the 3D source each frame
 
         if (initialSize.x <= 0.0f)
         {
@@ -87,6 +102,19 @@ namespace windows
             if (isOpen)
             {
                 maximizer.drawButton();
+
+                // VK-1511: mode toggle. Top toolbar (not inside the Playback header) so it
+                // stays visible when Playback is collapsed and reads as a mode switch.
+                ImGui::SameLine();
+                if (ImGui::Checkbox("3D Audition", &audition3D))
+                {
+                    stopCurrentPlayback();  // never let the 2D and 3D paths sound at once
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Audition through the real 3D attenuation / cone / "
+                                      "distance-LPF / HRTF path (no scene entity)");
+                }
 
                 static float panelWidth = 150.0f;
                 const float splitterThickness = 5.0f;
@@ -372,12 +400,43 @@ namespace windows
                 {
                     if (!currentAudioHandle.isValid())
                     {
-                        events::audio::PlayStreamingSoundCommand playCmd;
-                        playCmd.path = audioPath;
-                        playCmd.params.volume = volume;
-                        playCmd.params.loop = loopEnabled;
-                        playCmd.params.pitch = pitch;
-                        currentAudioHandle = dispatcher.execute(playCmd);
+                        if (audition3D)
+                        {
+                            // Real 3D path (non-streaming — the only path SetSoundTransform
+                            // can move; streaming handles are a no-op). Distance-LPF, HRTF and
+                            // stereo-spatialize all ride this path automatically.
+                            const events::audio::ListenerState lis = currentListener();
+                            const glm::vec3 offset = math::polarOffsetInBasis(
+                                lis.forward, lis.up, auditionDistance, auditionAzimuth, auditionElevation);
+                            const glm::vec3 srcPos = lis.position + offset;
+                            const glm::vec3 toListener = lis.position - srcPos;
+
+                            events::audio::PlaySound3DCommand playCmd;
+                            playCmd.path = audioPath;               // non-streaming full-buffer (path-keyed)
+                            playCmd.position = srcPos;
+                            playCmd.params.volume = volume;
+                            playCmd.params.loop = loopEnabled;
+                            playCmd.params.pitch = pitch;
+                            playCmd.params.minDistance = auditionMinDistance;
+                            playCmd.params.maxDistance = auditionMaxDistance;
+                            playCmd.params.enableDistanceFilter = true;   // distance-LPF ON (per Jira)
+                            playCmd.params.filterStartDistance = 5.0f;
+                            playCmd.params.filterMaxDistance = auditionMaxDistance;
+                            playCmd.params.filterIntensity = 1.0f;
+                            // Face the listener (immaterial while cones stay omni, robust if narrowed).
+                            playCmd.params.direction = (glm::dot(toListener, toListener) > 1e-8f)
+                                ? glm::normalize(toListener) : glm::vec3(0.0f, 0.0f, -1.0f);
+                            currentAudioHandle = dispatcher.execute(playCmd);
+                        }
+                        else
+                        {
+                            events::audio::PlayStreamingSoundCommand playCmd;
+                            playCmd.path = audioPath;
+                            playCmd.params.volume = volume;
+                            playCmd.params.loop = loopEnabled;
+                            playCmd.params.pitch = pitch;
+                            currentAudioHandle = dispatcher.execute(playCmd);
+                        }
                     }
                     else
                     {
@@ -390,14 +449,7 @@ namespace windows
             
             if (ImGui::Button("Stop", ImVec2(-1, 0)))
             {
-                if (currentAudioHandle.isValid())
-                {
-                    events::audio::StopSoundCommand stopCmd;
-                    stopCmd.handle = currentAudioHandle;
-                    dispatcher.execute(stopCmd);
-                    currentAudioHandle = {};
-                }
-                playbackPosition = 0.0f;
+                stopCurrentPlayback();
             }
 
             ImGui::Checkbox("Loop", &loopEnabled);
@@ -462,7 +514,111 @@ namespace windows
                     dispatcher.execute(pitchCmd);
                 }
             }
+
+            // VK-1511: 3D audition controls. Distance / azimuth / elevation are LIVE
+            // (updateAudition3D re-derives gain/pan each frame from the source position);
+            // min/max distance are fixed at source creation, hence "applies on next Play".
+            if (audition3D)
+            {
+                ImGui::Separator();
+                ImGui::TextDisabled("3D Audition");
+
+                ImGui::Text("Distance");
+                ImGui::SetNextItemWidth(-1);
+                ImGui::SliderFloat("##AudDist", &auditionDistance, 0.0f, auditionMaxDistance,
+                                   "%.1f m", ImGuiSliderFlags_AlwaysClamp);
+
+                ImGui::Text("Azimuth");
+                ImGui::BeginDisabled(autoOrbit);
+                ImGui::SetNextItemWidth(-1);
+                ImGui::SliderFloat("##AudAzim", &auditionAzimuth, -180.0f, 180.0f,
+                                   "%.0f deg", ImGuiSliderFlags_AlwaysClamp);
+                ImGui::EndDisabled();
+
+                ImGui::Text("Elevation");
+                ImGui::SetNextItemWidth(-1);
+                ImGui::SliderFloat("##AudElev", &auditionElevation, -85.0f, 85.0f,
+                                   "%.0f deg", ImGuiSliderFlags_AlwaysClamp);
+
+                ImGui::Checkbox("Auto-orbit", &autoOrbit);
+                if (autoOrbit)
+                {
+                    ImGui::Text("Orbit speed");
+                    ImGui::SetNextItemWidth(-1);
+                    ImGui::SliderFloat("##AudOrbit", &orbitSpeedDegPerSec, 5.0f, 180.0f,
+                                       "%.0f d/s", ImGuiSliderFlags_AlwaysClamp);
+                }
+
+                if (ImGui::TreeNode("Attenuation (applies on next Play)"))
+                {
+                    ImGui::SetNextItemWidth(-1);
+                    ImGui::SliderFloat("##AudMin", &auditionMinDistance, 0.1f, 20.0f,
+                                       "min %.1f", ImGuiSliderFlags_AlwaysClamp);
+                    ImGui::SetNextItemWidth(-1);
+                    ImGui::SliderFloat("##AudMax", &auditionMaxDistance, 5.0f, 500.0f,
+                                       "max %.0f", ImGuiSliderFlags_AlwaysClamp);
+                    if (auditionMaxDistance < auditionMinDistance + 1.0f)
+                        auditionMaxDistance = auditionMinDistance + 1.0f;
+                    if (auditionDistance > auditionMaxDistance)
+                        auditionDistance = auditionMaxDistance;
+                    ImGui::TreePop();
+                }
+            }
         }
+    }
+
+    void AudioPreviewWindow::stopCurrentPlayback()
+    {
+        if (currentAudioHandle.isValid())
+        {
+            events::audio::StopSoundCommand stopCmd;
+            stopCmd.handle = currentAudioHandle;
+            events::EventDispatcher::instance().execute(stopCmd);
+            currentAudioHandle = {};
+        }
+        isPlaying = false;
+        playbackPosition = 0.0f;
+    }
+
+    void AudioPreviewWindow::updateAudition3D()
+    {
+        if (!audition3D || !currentAudioHandle.isValid())
+        {
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Only move a source that is actually sounding — also stops us spamming a
+        // finished/stopped (non-looping) source with transform commands.
+        events::audio::IsSoundPlayingQuery playingQuery;
+        playingQuery.handle = currentAudioHandle;
+        if (!dispatcher.query(playingQuery))
+        {
+            return;
+        }
+
+        if (autoOrbit)
+        {
+            const float dt = ImGui::GetIO().DeltaTime;
+            auditionAzimuth += orbitSpeedDegPerSec * dt;
+            if (auditionAzimuth > 180.0f) auditionAzimuth -= 360.0f;
+            else if (auditionAzimuth < -180.0f) auditionAzimuth += 360.0f;
+        }
+
+        const events::audio::ListenerState lis = currentListener();
+        const glm::vec3 offset = math::polarOffsetInBasis(
+            lis.forward, lis.up, auditionDistance, auditionAzimuth, auditionElevation);
+        const glm::vec3 srcPos = lis.position + offset;
+        const glm::vec3 toListener = lis.position - srcPos;
+
+        events::audio::SetSoundTransformCommand xf;
+        xf.handle = currentAudioHandle;
+        xf.position = srcPos;
+        xf.direction = (glm::dot(toListener, toListener) > 1e-8f)
+            ? glm::normalize(toListener) : glm::vec3(0.0f, 0.0f, -1.0f);
+        xf.velocity = glm::vec3(0.0f);   // VK-1506 doppler stays additive/zero on this path
+        dispatcher.execute(xf);
     }
 
     void AudioPreviewWindow::drawWaveformPanel()

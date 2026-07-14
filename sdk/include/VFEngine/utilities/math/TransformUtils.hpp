@@ -103,4 +103,42 @@ namespace math
         if (glm::dot(v, v) > maxSpeed * maxSpeed) return glm::vec3(0.0f);
         return v;
     }
+
+    // VK-1511: polar offset of an audition source relative to a listener, expressed
+    // in the listener's own basis. Returns the WORLD vector to ADD to the listener
+    // position. Engine convention (right-handed, -Z forward, +Y up):
+    //   azimuth     0deg -> +forward  (in front)
+    //   azimuth   +90deg -> +right    (right = normalize(cross(forward, up)))
+    //   elevation +90deg -> +up
+    // The passed-in up is re-orthogonalized (Gram-Schmidt), so a listener up that is
+    // not exactly perpendicular to forward still yields an orthonormal basis. A
+    // degenerate forward, or an up parallel to forward, falls back to a world
+    // reference axis so the result is always finite (no NaN).
+    inline glm::vec3 polarOffsetInBasis(const glm::vec3& forwardIn, const glm::vec3& upIn,
+                                        float distance, float azimuthDeg, float elevationDeg)
+    {
+        // Normalize forward; fall back to engine -Z if degenerate.
+        glm::vec3 forward = forwardIn;
+        const float fLen = glm::length(forward);
+        forward = (fLen > 1e-6f) ? forward / fLen : glm::vec3(0.0f, 0.0f, -1.0f);
+
+        // right = forward x up. If up is parallel to forward the cross collapses;
+        // pick a reference axis that isn't parallel to forward and rebuild.
+        glm::vec3 right = glm::cross(forward, upIn);
+        if (glm::dot(right, right) < 1e-12f)
+        {
+            const glm::vec3 ref = (std::abs(forward.y) < 0.99f)
+                ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+            right = glm::cross(forward, ref);
+        }
+        right = glm::normalize(right);
+
+        const glm::vec3 up = glm::normalize(glm::cross(right, forward));  // re-orthogonalized
+
+        const float az = glm::radians(azimuthDeg);
+        const float el = glm::radians(elevationDeg);
+        const glm::vec3 dir = std::cos(el) * (std::cos(az) * forward + std::sin(az) * right)
+                            + std::sin(el) * up;
+        return distance * dir;
+    }
 }

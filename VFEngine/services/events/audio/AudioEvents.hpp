@@ -18,6 +18,17 @@ namespace events::audio {
         std::string_view getName() const override { return "SetListenerPosition"; }
     };
 
+    // VK-1511: read model for the last listener pose set on the (main) dispatch
+    // thread. Defaults mirror OpenAL's default listener (origin, -Z forward, +Y up),
+    // so a query issued before ViewPort's first per-frame dispatch still yields a
+    // valid (origin-anchored) placement. See GetListenerStateQuery in QUERIES.
+    struct ListenerState {
+        glm::vec3 position{0.0f};
+        glm::vec3 forward{0.0f, 0.0f, -1.0f};
+        glm::vec3 up{0.0f, 1.0f, 0.0f};
+        bool valid = false;
+    };
+
     // ============================================================
     // SOUND PLAYBACK COMMANDS
     // ============================================================
@@ -105,6 +116,13 @@ namespace events::audio {
     struct GetDurationQuery : ::events::IQuery<float> {
         services::AudioHandle handle;
         std::string_view getName() const override { return "GetDuration"; }
+    };
+
+    // VK-1511: read back the last listener pose from AudioServiceImpl's main-thread
+    // cache (written by the SetListenerPositionCommand handler — never the
+    // audio-thread snapshot, avoiding the VK-1354 don't-race-the-snapshot hazard).
+    struct GetListenerStateQuery : ::events::IQuery<ListenerState> {
+        std::string_view getName() const override { return "GetListenerState"; }
     };
 
 }

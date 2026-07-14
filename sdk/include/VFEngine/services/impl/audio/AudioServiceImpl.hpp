@@ -1,6 +1,7 @@
 #pragma once
 #include "../../interfaces/audio/IAudioService.hpp"
 #include "../../providers/audio/IAudioProvider.hpp"
+#include "../../events/audio/AudioEvents.hpp"
 
 namespace services {
 
@@ -63,6 +64,12 @@ namespace services {
         AudioPlayParams convertParams(const AudioParams& params) const;
 
         IAudioProvider* audioProvider;
+
+        // VK-1511: main-thread cache of the last listener pose. Written by the
+        // SetListenerPositionCommand handler, read by GetListenerStateQuery — both
+        // run synchronously on the main dispatch thread (editor: ViewPort is the sole
+        // writer), so no atomics are needed and the audio-thread snapshot is bypassed.
+        events::audio::ListenerState cachedListener;
     };
 
 }

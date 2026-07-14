@@ -125,4 +125,66 @@ TEST_SUITE("AudioSpatial")
         CHECK(std::abs(fast.y) < kEps);
         CHECK(std::abs(fast.z) < kEps);
     }
+
+    // VK-1511: polar offset of an audition source in the listener basis, used by the
+    // Audio Preview window's 3D-audition mode to place a source relative to the
+    // camera-driven listener.
+    TEST_CASE("polarOffsetInBasis: azimuth cardinals in the listener basis")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f), up(0.0f, 1.0f, 0.0f);
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f,   0.0f, 0.0f), glm::vec3(0, 0, -1))); // +forward
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f,  90.0f, 0.0f), glm::vec3(1, 0,  0))); // +right
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, 180.0f, 0.0f), glm::vec3(0, 0,  1))); // behind
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, -90.0f, 0.0f), glm::vec3(-1, 0, 0))); // -right
+    }
+
+    TEST_CASE("polarOffsetInBasis: elevation drives the up axis")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f), up(0.0f, 1.0f, 0.0f);
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, 0.0f,  90.0f), glm::vec3(0,  1, 0)));
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, 0.0f, -90.0f), glm::vec3(0, -1, 0)));
+        // At the pole, azimuth is irrelevant.
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, 47.0f, 90.0f), glm::vec3(0, 1, 0)));
+    }
+
+    TEST_CASE("polarOffsetInBasis: distance scales magnitude, not direction")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f), up(0.0f, 1.0f, 0.0f);
+        const glm::vec3 o1 = math::polarOffsetInBasis(fwd, up, 1.0f, 33.0f, 21.0f);
+        const glm::vec3 o5 = math::polarOffsetInBasis(fwd, up, 5.0f, 33.0f, 21.0f);
+        CHECK(std::abs(glm::length(o1) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::length(o5) - 5.0f) < 1e-4f);
+        CHECK(approxVec(o5, o1 * 5.0f));
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 0.0f, 33.0f, 21.0f), glm::vec3(0.0f)));
+    }
+
+    TEST_CASE("polarOffsetInBasis: non-orthogonal up is re-orthogonalized")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f);
+        const glm::vec3 tiltedUp(0.0f, 1.0f, 0.4f); // has a forward-parallel component
+        // az0/el0 depends only on forward -> exact regardless of up tilt.
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, tiltedUp, 1.0f, 0.0f, 0.0f), glm::vec3(0, 0, -1)));
+        // The elevation axis must be perpendicular to forward and unit length.
+        const glm::vec3 upOff = math::polarOffsetInBasis(fwd, tiltedUp, 1.0f, 0.0f, 90.0f);
+        CHECK(std::abs(glm::length(upOff) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::dot(glm::normalize(upOff), fwd)) < 1e-4f);
+    }
+
+    TEST_CASE("polarOffsetInBasis: degenerate up parallel to forward is guarded")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f);
+        const glm::vec3 parallelUp(0.0f, 0.0f, -1.0f); // cross(forward, up) == 0
+        const glm::vec3 f = math::polarOffsetInBasis(fwd, parallelUp, 1.0f,  0.0f,  0.0f);
+        const glm::vec3 r = math::polarOffsetInBasis(fwd, parallelUp, 1.0f, 90.0f,  0.0f);
+        const glm::vec3 u = math::polarOffsetInBasis(fwd, parallelUp, 1.0f,  0.0f, 90.0f);
+        CHECK(std::isfinite(r.x)); CHECK(std::isfinite(r.y)); CHECK(std::isfinite(r.z));
+        CHECK(std::abs(glm::length(f) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::length(r) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::length(u) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::dot(f, r)) < 1e-4f);
+        CHECK(std::abs(glm::dot(f, u)) < 1e-4f);
+        CHECK(std::abs(glm::dot(r, u)) < 1e-4f);
+        CHECK(approxVec(f, glm::vec3(0, 0, -1)));   // world-up fallback keeps forward on -Z
+        CHECK(approxVec(u, glm::vec3(0, 1,  0)));   // and el 90 on world +Y
+    }
 }

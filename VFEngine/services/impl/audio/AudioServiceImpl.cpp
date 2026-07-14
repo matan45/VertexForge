@@ -23,6 +23,14 @@ namespace services {
         dispatcher.registerCommandHandler<events::audio::SetListenerPositionCommand>(
             [this](const auto& cmd) {
                 setListenerPosition(cmd.position, cmd.forward, cmd.up, cmd.velocity);
+                // VK-1511: cache the pose so the editor's 3D-audition mode can read it
+                // back on the main thread (race-free — this handler is the sole writer).
+                cachedListener = {cmd.position, cmd.forward, cmd.up, /*valid=*/true};
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetListenerStateQuery>(
+            [this](const auto&) {
+                return cachedListener;
             });
 
         // Sound Playback Commands

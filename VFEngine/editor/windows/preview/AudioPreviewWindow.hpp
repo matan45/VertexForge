@@ -97,6 +97,19 @@ namespace windows
         services::AudioHandle currentAudioHandle;
         float audioDurationSeconds = 0.0f;
 
+        // VK-1511: 3D audition mode. Auditions the clip through the real 3D
+        // attenuation / cone / distance-LPF / HRTF path with NO scene entity — the
+        // source is driven each frame relative to the live (camera) listener.
+        bool audition3D = false;
+        float auditionDistance = 5.0f;     // metres from listener
+        float auditionAzimuth = 0.0f;      // deg; 0 = front, +90 = listener's right
+        float auditionElevation = 0.0f;    // deg; +90 = directly above
+        bool autoOrbit = false;
+        float orbitSpeedDegPerSec = 45.0f;
+        // Attenuation tuning (applied at Play — OpenAL fixes distance params at source creation).
+        float auditionMinDistance = 1.0f;  // gain == 1.0 within this radius
+        float auditionMaxDistance = 50.0f; // gain floor beyond; also the distance-slider max
+
     public:
         explicit AudioPreviewWindow(const std::string& filePath);
         ~AudioPreviewWindow() override;
@@ -114,5 +127,10 @@ namespace windows
         void drawLevelMeters(ImVec2 pos, ImVec2 size);
         void drawSpectrumStrip(ImVec2 pos, float width, float height);
         void drawLoadingIndicator();
+
+        // VK-1511: stop + reset the current handle (used on any 2D<->3D mode switch so
+        // the two paths never sound at once); advance orbit + re-sync the 3D source pos.
+        void stopCurrentPlayback();
+        void updateAudition3D();
     };
 }
