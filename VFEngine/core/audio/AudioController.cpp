@@ -287,6 +287,14 @@ namespace core::audio
         return audioSystem->getCurrentSettings();
     }
 
+    types::AudioHrtfStatus AudioController::getHrtfStatus() const
+    {
+        // VK-1508: audioSystem caches the status in a std::atomic (written on the audio
+        // thread), so this main-thread read never touches the OpenAL device/context.
+        if (!initialized) return types::AudioHrtfStatus::Unsupported;
+        return audioSystem->getHrtfStatus();
+    }
+
     // === Audio Buses ===
 
     void AudioController::createBus(const std::string& busName, const std::string& parentName)

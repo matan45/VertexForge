@@ -156,6 +156,10 @@ namespace core {
         return audioController->getCurrentSettings();
     }
 
+    types::AudioHrtfStatus AudioAdapter::getHrtfStatus() const {
+        return audioController->getHrtfStatus();
+    }
+
     void AudioAdapter::createBus(const std::string& busName, const std::string& parentName) {
         audioController->createBus(busName, parentName);
     }

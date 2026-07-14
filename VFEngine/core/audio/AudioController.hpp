@@ -81,6 +81,7 @@ namespace core::audio {
         // === Audio Settings ===
         void applySettings(const types::AudioSettings& settings);
         types::AudioSettings getCurrentSettings() const;
+        types::AudioHrtfStatus getHrtfStatus() const;
 
         // === Audio Buses ===
         void createBus(const std::string& busName, const std::string& parentName = "Master");

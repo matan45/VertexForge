@@ -73,6 +73,7 @@ namespace services {
         // === Audio Settings ===
         virtual void applySettings(const types::AudioSettings& settings) = 0;
         virtual types::AudioSettings getCurrentSettings() const = 0;
+        virtual types::AudioHrtfStatus getHrtfStatus() const = 0;
 
         // === Audio Buses ===
         virtual void createBus(const std::string& busName, const std::string& parentName = "Master") = 0;

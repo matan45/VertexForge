@@ -16,6 +16,13 @@ namespace events::audio
         std::string_view getName() const override { return "GetAudioSettings"; }
     };
 
+    // VK-1508: live device HRTF status (Enabled/Disabled/Denied/...), distinct from the
+    // requested enableHrtf setting — the driver may refuse HRTF (non-headphone output etc.).
+    struct GetHrtfStatusQuery : ::events::IQuery<types::AudioHrtfStatus>
+    {
+        std::string_view getName() const override { return "GetHrtfStatus"; }
+    };
+
     // VK-1506: broadcast when audio settings are applied so main-thread consumers
     // (AudioSceneUpdater's doppler teleport guard) can cache the value instead of
     // querying the full settings struct every frame.

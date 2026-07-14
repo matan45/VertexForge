@@ -164,6 +164,12 @@ namespace services {
                 return audioProvider->getCurrentSettings();
             });
 
+        // VK-1508: report the live device HRTF status for the editor's status line.
+        dispatcher.registerQueryHandler<events::audio::GetHrtfStatusQuery>(
+            [this](const auto&) {
+                return audioProvider->getHrtfStatus();
+            });
+
         // Audio Bus Commands
         dispatcher.registerCommandHandler<events::audio::CreateBusCommand>(
             [this](const auto& cmd) {

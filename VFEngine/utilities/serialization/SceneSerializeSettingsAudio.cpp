@@ -273,6 +273,8 @@ namespace serialization
                 settings.speedOfSound = listener["speedOfSound"].get<float>();
             if (listener.contains("maxDopplerSpeed") && listener["maxDopplerSpeed"].is_number())
                 settings.maxDopplerSpeed = listener["maxDopplerSpeed"].get<float>();
+            if (listener.contains("enableHrtf") && listener["enableHrtf"].is_boolean())
+                settings.enableHrtf = listener["enableHrtf"].get<bool>();
         }
 
         void deserializeAudioDistModel(const json& j, types::AudioSettings& settings)
@@ -377,7 +379,8 @@ namespace serialization
             {"masterVolume", settings.masterVolume},
             {"dopplerFactor", settings.dopplerFactor},
             {"speedOfSound", settings.speedOfSound},
-            {"maxDopplerSpeed", settings.maxDopplerSpeed}
+            {"maxDopplerSpeed", settings.maxDopplerSpeed},
+            {"enableHrtf", settings.enableHrtf}
         };
 
         j["distanceModel"] = {

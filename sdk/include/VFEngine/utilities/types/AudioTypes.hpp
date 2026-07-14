@@ -18,6 +18,35 @@ namespace types
         ExponentDistanceClamped = 6
     };
 
+    // VK-1508: live HRTF (binaural) state reported by the OpenAL device.
+    // Values 0..5 deliberately match ALC_HRTF_*_SOFT so the audio backend can
+    // static_cast the raw ALC status straight into this enum; -1 = extension absent.
+    enum class AudioHrtfStatus : int
+    {
+        Unsupported = -1,
+        Disabled = 0,
+        Enabled = 1,
+        Denied = 2,
+        Required = 3,
+        HeadphonesDetected = 4,
+        UnsupportedFormat = 5
+    };
+
+    inline const char* audioHrtfStatusToString(AudioHrtfStatus status)
+    {
+        switch (status)
+        {
+        case AudioHrtfStatus::Disabled:           return "Disabled";
+        case AudioHrtfStatus::Enabled:            return "Enabled";
+        case AudioHrtfStatus::Denied:             return "Denied";
+        case AudioHrtfStatus::Required:           return "Required";
+        case AudioHrtfStatus::HeadphonesDetected: return "Headphones detected";
+        case AudioHrtfStatus::UnsupportedFormat:  return "Unsupported format";
+        case AudioHrtfStatus::Unsupported:        return "Not supported";
+        }
+        return "Not supported";
+    }
+
     struct AudioBusDefinition
     {
         std::string name;
@@ -44,6 +73,9 @@ namespace types
         AudioDistanceModel distanceModel = AudioDistanceModel::InverseDistanceClamped;
         float defaultRolloffFactor = 1.0f;
 
+        // VK-1508: request binaural HRTF rendering on the OpenAL device (headphones).
+        bool enableHrtf = false;
+
         bool enableDistanceFilter = true;
         float defaultFilterStartDistance = 10.0f;
         float defaultFilterMaxDistance = 100.0f;
@@ -61,6 +93,7 @@ namespace types
             settings.maxDopplerSpeed = 343.3f;
             settings.distanceModel = AudioDistanceModel::InverseDistanceClamped;
             settings.defaultRolloffFactor = 1.0f;
+            settings.enableHrtf = false;
             settings.enableDistanceFilter = true;
             settings.defaultFilterStartDistance = 10.0f;
             settings.defaultFilterMaxDistance = 100.0f;

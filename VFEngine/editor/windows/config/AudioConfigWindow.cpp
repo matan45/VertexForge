@@ -134,6 +134,48 @@ namespace windows
             ImGui::PopItemWidth();
             ImGui::TextDisabled("Teleport guard: single-frame moves faster than this get no pitch shift");
 
+            ImGui::Spacing();
+
+            // VK-1508: HRTF (binaural) toggle + live device status line. The checkbox rides
+            // the existing Apply/Save flow (ApplyAudioSettingsCommand carries the whole struct);
+            // the status line reflects the ACTUAL device state, which can differ from the request.
+            if (ImGui::Checkbox("Enable HRTF (Binaural)##Config", &settings.enableHrtf))
+            {
+                isDirty = true;
+            }
+            ImGui::TextDisabled("Head-tracked binaural rendering for headphones (OpenAL Soft)");
+
+            types::AudioHrtfStatus hrtfStatus = types::AudioHrtfStatus::Unsupported;
+            try
+            {
+                hrtfStatus = events::EventDispatcher::instance().query(events::audio::GetHrtfStatusQuery{});
+            }
+            catch (...)
+            {
+                hrtfStatus = types::AudioHrtfStatus::Unsupported;
+            }
+
+            ImGui::Text("Device status:");
+            ImGui::SameLine();
+            switch (hrtfStatus)
+            {
+            case types::AudioHrtfStatus::Enabled:
+            case types::AudioHrtfStatus::Required:
+            case types::AudioHrtfStatus::HeadphonesDetected:
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "%s", types::audioHrtfStatusToString(hrtfStatus));
+                break;
+            case types::AudioHrtfStatus::Denied:
+            case types::AudioHrtfStatus::UnsupportedFormat:
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", types::audioHrtfStatusToString(hrtfStatus));
+                break;
+            case types::AudioHrtfStatus::Unsupported:
+                ImGui::TextDisabled("%s", types::audioHrtfStatusToString(hrtfStatus));
+                break;
+            default: // Disabled
+                ImGui::TextUnformatted(types::audioHrtfStatusToString(hrtfStatus));
+                break;
+            }
+
             ImGui::Unindent();
         }
     }
