@@ -69,7 +69,9 @@ namespace services {
         // SetListenerPositionCommand handler, read by GetListenerStateQuery — both
         // run synchronously on the main dispatch thread (editor: ViewPort is the sole
         // writer), so no atomics are needed and the audio-thread snapshot is bypassed.
-        events::audio::ListenerState cachedListener;
+        // Leading :: — inside `namespace services` a plain `events::` binds to the
+        // `services::events` namespace (VFXPreviewEvents.hpp), not global ::events.
+        ::events::audio::ListenerState cachedListener;
     };
 
 }

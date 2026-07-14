@@ -23,6 +23,10 @@ namespace windows
         uint32_t sampleRate = 0;
         uint32_t frames = 0;
         size_t dataSizeBytes = 0;
+        // VK-1512: .vfAudio header import-info (already parsed into audioData) + on-disk size.
+        resource::AudioCompressionFormat compressionFormat = resource::AudioCompressionFormat::PCM;
+        resource::AudioLoadType loadType = resource::AudioLoadType::DecompressOnLoad;
+        size_t onDiskSizeBytes = 0;
         std::shared_ptr<resource::AudioData> audioData; // retained decoded PCM (VK-1510)
     };
 
@@ -37,6 +41,13 @@ namespace windows
         uint32_t sampleRate = 0;
         uint32_t frames = 0;
         size_t dataSizeBytes = 0;
+        // VK-1512: cached .vfAudio import-info shown in the Info panel. Sourced from the
+        // retained audioData (fully populated from the header by AudioResource::loadAudio),
+        // cached into members to match this file's scalar-copy idiom. Read only when
+        // audioLoaded == true, so the defaults below never render.
+        resource::AudioCompressionFormat compressionFormat = resource::AudioCompressionFormat::PCM;
+        resource::AudioLoadType loadType = resource::AudioLoadType::DecompressOnLoad;
+        size_t onDiskSizeBytes = 0;
         bool loadFailed = false;
         bool audioLoaded = false;
 

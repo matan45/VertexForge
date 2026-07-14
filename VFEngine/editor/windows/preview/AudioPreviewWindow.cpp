@@ -6,6 +6,7 @@
 #include "events/audio/AudioEvents.hpp"
 #include "math/TransformUtils.hpp"
 #include <filesystem>
+#include <system_error>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -44,6 +45,34 @@ namespace
             return viewStart + static_cast<double>((x - canvasX) / canvasW) * viewSpan;
         }
     };
+}
+
+namespace
+{
+    // VK-1512: display strings for the .vfAudio import-info panel. These map the resource::
+    // on-disk enums (NOT the 3-value importConfig:: variants). "Format" doubles as the
+    // lossless/lossy quality indicator — the exact import quality tier and forceMono flag
+    // are not persisted after import, so they are unrecoverable and deliberately not shown.
+    // No default: case so a future enum value trips -Wswitch here.
+    const char* formatDisplay(resource::AudioCompressionFormat f)
+    {
+        switch (f)
+        {
+        case resource::AudioCompressionFormat::PCM:    return "PCM (lossless)";
+        case resource::AudioCompressionFormat::Vorbis: return "Vorbis (lossy)";
+        }
+        return "Unknown";
+    }
+
+    const char* loadTypeDisplay(resource::AudioLoadType t)
+    {
+        switch (t)
+        {
+        case resource::AudioLoadType::DecompressOnLoad: return "Decompress on load";
+        case resource::AudioLoadType::Streaming:        return "Streaming";
+        }
+        return "Unknown";
+    }
 }
 
 namespace windows
@@ -197,6 +226,9 @@ namespace windows
                     sampleRate = result.sampleRate;
                     frames = result.frames;
                     dataSizeBytes = result.dataSizeBytes;
+                    compressionFormat = result.compressionFormat;
+                    loadType = result.loadType;
+                    onDiskSizeBytes = result.onDiskSizeBytes;
                     audioData = std::move(result.audioData); // retain PCM for meters/spectrum
                     audioDurationSeconds = (sampleRate > 0)
                         ? static_cast<float>(frames) / static_cast<float>(sampleRate)
@@ -257,6 +289,15 @@ namespace windows
             result.sampleRate = audioPtr->sampleRate;
             result.frames = audioPtr->frames;
             result.dataSizeBytes = audioPtr->data.size() * sizeof(short);
+
+            // VK-1512: .vfAudio header fields (parsed into audioData by AudioResource::loadAudio,
+            // AudioResource.cpp:317-318) + on-disk file size. compressedData is emptied during
+            // decode, so the on-disk size must come from the file itself, not audioData.
+            result.compressionFormat = audioPtr->compressionFormat;
+            result.loadType = audioPtr->loadType;
+            std::error_code sizeEc;
+            const auto diskSize = std::filesystem::file_size(path, sizeEc);
+            result.onDiskSizeBytes = sizeEc ? 0 : static_cast<size_t>(diskSize);
 
             // Retain the decoded PCM; the UI thread buckets/analyzes it directly (VK-1510).
             result.audioData = std::move(audioPtr);
@@ -351,16 +392,41 @@ namespace windows
 
         ImGui::Spacing();
         
-        ImGui::Text("Channels: %u", channels);
+        const char* channelLayout = (channels == 1) ? "Mono"
+                                  : (channels == 2) ? "Stereo"
+                                                    : "Multi-channel";
+        ImGui::Text("Channels: %u (%s)", channels, channelLayout);
+
+        // VK-1512: advisory hint (softened from the VK-1507 badge) — a multi-channel clip
+        // downmixes on a 3D source, so a force-mono reimport is smaller and spatializes
+        // cleaner. Advisory only: a stereo music/streaming clip is legitimately stereo.
+        // Wrapped because the InfoPanel child is narrow (~120-150px). Same yellow as the badge.
+        if (channels > 1)
+        {
+            const char* who = (channels == 2) ? "Stereo" : "Multi-channel";
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+            ImGui::TextWrapped("%s - consider force-mono reimport for 3D use", who);
+            ImGui::PopStyleColor();
+        }
+
+        // VK-1512: .vfAudio import-info carried by the retained audioData (no header re-read).
+        ImGui::Text("Format:");
+        ImGui::Text("  %s", formatDisplay(compressionFormat));
+        ImGui::Text("Load Type:");
+        ImGui::Text("  %s", loadTypeDisplay(loadType));
+
         ImGui::Text("Sample Rate:");
         ImGui::Text("  %u Hz", sampleRate);
         ImGui::Text("Frames: %u", frames);
 
         ImGui::Spacing();
         
-        size_t dataSizeKB = dataSizeBytes / 1024;
-        ImGui::Text("Data Size:");
-        ImGui::Text("  %zu KB", dataSizeKB);
+        // VK-1512: on-disk (.vfAudio file) vs decoded PCM footprint — for a Vorbis clip the
+        // former is far smaller, which explains the "Format: Vorbis (lossy)" line above.
+        ImGui::Text("On-disk:");
+        ImGui::Text("  %zu KB", onDiskSizeBytes / 1024);
+        ImGui::Text("Decoded (RAM):");
+        ImGui::Text("  %zu KB", dataSizeBytes / 1024);
 
         ImGui::Separator();
         ImGui::Spacing();
