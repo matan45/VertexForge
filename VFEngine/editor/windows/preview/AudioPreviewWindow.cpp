@@ -7,6 +7,30 @@
 #include <filesystem>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+
+namespace
+{
+    // Bridges whole-file frame indices <-> waveform-canvas pixels for the current view
+    // range. The single transform used by re-bucketing, the playhead, and scrubbing —
+    // keeping all three consistent through zoom/scroll.
+    struct ViewMap
+    {
+        float canvasX = 0.0f;
+        float canvasW = 1.0f;
+        double viewStart = 0.0; // frames
+        double viewSpan = 1.0;  // frames (> 0)
+
+        float frameToX(double f) const
+        {
+            return canvasX + static_cast<float>((f - viewStart) / viewSpan * static_cast<double>(canvasW));
+        }
+        double xToFrame(float x) const
+        {
+            return viewStart + static_cast<double>((x - canvasX) / canvasW) * viewSpan;
+        }
+    };
+}
 
 namespace windows
 {
@@ -32,6 +56,8 @@ namespace windows
             stopCmd.handle = currentAudioHandle;
             events::EventDispatcher::instance().execute(stopCmd);
         }
+
+        audioData.reset(); // free retained PCM (~tens of MB for long clips)
     }
 
     void AudioPreviewWindow::draw()
@@ -104,6 +130,16 @@ namespace windows
 
     void AudioPreviewWindow::startAsyncLoad()
     {
+        // Reset retained PCM + derived view/meter/spectrum state before a (re)load.
+        audioData.reset();
+        viewBuckets.clear();
+        viewStartFrame = viewEndFrame = 0;
+        cachedViewStart = cachedViewEnd = SIZE_MAX;
+        cachedBucketCount = -1;
+        meterRms.clear();
+        meterPeakHold.clear();
+        spectrumBars.clear();
+
         loadingInProgress.store(true);
         loadingCancelled.store(false);
         loadingStatus = "Loading audio file...";
@@ -133,10 +169,19 @@ namespace windows
                     sampleRate = result.sampleRate;
                     frames = result.frames;
                     dataSizeBytes = result.dataSizeBytes;
-                    waveformCache = std::move(result.waveformCache);
+                    audioData = std::move(result.audioData); // retain PCM for meters/spectrum
                     audioDurationSeconds = (sampleRate > 0)
                         ? static_cast<float>(frames) / static_cast<float>(sampleRate)
                         : 0.0f;
+
+                    // Init the waveform view to the full file and invalidate the bucket cache.
+                    viewStartFrame = 0;
+                    viewEndFrame = frames;
+                    cachedViewStart = cachedViewEnd = SIZE_MAX;
+                    cachedBucketCount = -1;
+                    meterRms.assign(channels, 0.0f);
+                    meterPeakHold.assign(channels, 0.0f);
+
                     audioLoaded = true;
                 }
                 else
@@ -185,7 +230,8 @@ namespace windows
             result.frames = audioPtr->frames;
             result.dataSizeBytes = audioPtr->data.size() * sizeof(short);
 
-            result.waveformCache = generateWaveformCache(*audioPtr, audioPtr->channels);
+            // Retain the decoded PCM; the UI thread buckets/analyzes it directly (VK-1510).
+            result.audioData = std::move(audioPtr);
 
             result.success = true;
         }
@@ -199,45 +245,6 @@ namespace windows
         }
 
         return result;
-    }
-
-    std::vector<WaveformPoint> AudioPreviewWindow::generateWaveformCache(const resource::AudioData& data, uint32_t numChannels)
-    {
-        std::vector<WaveformPoint> cache;
-
-        if (data.data.empty() || numChannels == 0)
-        {
-            return cache;
-        }
-
-        cache.reserve(WAVEFORM_RESOLUTION);
-
-        size_t numSamples = data.data.size() / numChannels;
-        size_t samplesPerPoint = std::max(size_t(1), numSamples / WAVEFORM_RESOLUTION);
-
-        for (size_t i = 0; i < WAVEFORM_RESOLUTION; ++i)
-        {
-            size_t sampleStart = i * samplesPerPoint * numChannels;
-            size_t sampleEnd = std::min(sampleStart + samplesPerPoint * numChannels, data.data.size());
-
-            short minVal = 0, maxVal = 0;
-            for (size_t j = sampleStart; j < sampleEnd; j += numChannels)
-            {
-                for (uint32_t ch = 0; ch < numChannels && j + ch < sampleEnd; ++ch)
-                {
-                    short sample = data.data[j + ch];
-                    minVal = std::min(minVal, sample);
-                    maxVal = std::max(maxVal, sample);
-                }
-            }
-
-            WaveformPoint point;
-            point.minVal = static_cast<float>(minVal) / 32768.0f;
-            point.maxVal = static_cast<float>(maxVal) / 32768.0f;
-            cache.push_back(point);
-        }
-
-        return cache;
     }
 
     void AudioPreviewWindow::drawLoadingIndicator()
@@ -463,61 +470,133 @@ namespace windows
         ImGui::Text("Waveform");
         ImGui::Separator();
 
-        if (loadFailed || !audioLoaded || waveformCache.empty())
+        if (loadFailed || !audioLoaded || !audioData || frames == 0 || channels == 0)
         {
             ImGui::TextDisabled("No waveform data");
             return;
         }
 
-        ImVec2 availSize = ImGui::GetContentRegionAvail();
-        ImVec2 canvasPos = ImGui::GetCursorScreenPos();
-        ImVec2 canvasSize(availSize.x, availSize.y - 10.0f);
-        
+        ImGuiIO& io = ImGui::GetIO();
+        const float dt = io.DeltaTime;
+
+        const ImVec2 availSize = ImGui::GetContentRegionAvail();
+        const ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+
+        // Reserve a meter strip on the right and (when open) a spectrum footer below.
+        const float meterW = static_cast<float>(channels) * METER_COL_W + static_cast<float>(channels + 1) * 3.0f;
+        const float headerH = ImGui::GetFrameHeightWithSpacing();
+        const float footer = spectrumOpen ? (SPECTRUM_HEIGHT + headerH) : headerH;
+        const float canvasW = std::max(50.0f, availSize.x - meterW - 6.0f);
+        const ImVec2 canvasSize(canvasW, std::max(40.0f, availSize.y - footer - 10.0f));
+
         ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        // Background + zero line.
         drawList->AddRectFilled(canvasPos,
-            ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
-            IM_COL32(30, 30, 30, 255));
-        
-        float centerY = canvasPos.y + canvasSize.y * 0.5f;
-        drawList->AddLine(
-            ImVec2(canvasPos.x, centerY),
-            ImVec2(canvasPos.x + canvasSize.x, centerY),
-            IM_COL32(60, 60, 60, 255));
-        
-        ImU32 waveColor = IM_COL32(100, 180, 255, 255);
-        float halfHeight = canvasSize.y * 0.45f;
-        float xScale = canvasSize.x / static_cast<float>(waveformCache.size());
+            ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), IM_COL32(30, 30, 30, 255));
+        const float centerY = canvasPos.y + canvasSize.y * 0.5f;
+        drawList->AddLine(ImVec2(canvasPos.x, centerY),
+            ImVec2(canvasPos.x + canvasSize.x, centerY), IM_COL32(60, 60, 60, 255));
 
-        for (size_t i = 0; i < waveformCache.size(); ++i)
+        // Playhead in whole-file frames (playbackPosition was refreshed by drawInfoPanel this frame).
+        currentPlayheadFrame = static_cast<size_t>(std::llround(
+            static_cast<double>(playbackPosition) * static_cast<double>(frames)));
+
+        // Guard the view range (init at load; never a zero/inverted/out-of-range span).
+        if (viewEndFrame <= viewStartFrame || viewEndFrame > frames)
         {
-            const auto& point = waveformCache[i];
-            float x = canvasPos.x + i * xScale;
-            float y1 = centerY - point.maxVal * halfHeight;
-            float y2 = centerY - point.minVal * halfHeight;
-
-            drawList->AddLine(ImVec2(x, y1), ImVec2(x, y2), waveColor);
+            viewStartFrame = 0;
+            viewEndFrame = frames;
         }
-        
+
+        const ViewMap map{ canvasPos.x, canvasSize.x,
+                           static_cast<double>(viewStartFrame),
+                           static_cast<double>(viewEndFrame - viewStartFrame) };
+
+        // Re-bucket only when the view range or bucket count changed (steady state = no work).
+        const int bucketCount = std::clamp(static_cast<int>(std::floor(canvasSize.x)), 1, MAX_BUCKETS);
+        if (viewStartFrame != cachedViewStart || viewEndFrame != cachedViewEnd || bucketCount != cachedBucketCount)
+        {
+            viewBuckets = resource::computeWaveformBuckets(
+                audioData->data, channels, viewStartFrame, viewEndFrame, static_cast<size_t>(bucketCount));
+            cachedViewStart = viewStartFrame;
+            cachedViewEnd = viewEndFrame;
+            cachedBucketCount = bucketCount;
+        }
+
+        // Waveform bars.
+        const ImU32 waveColor = IM_COL32(100, 180, 255, 255);
+        const float halfHeight = canvasSize.y * 0.45f;
+        if (!viewBuckets.empty())
+        {
+            const float xScale = canvasSize.x / static_cast<float>(viewBuckets.size());
+            for (size_t i = 0; i < viewBuckets.size(); ++i)
+            {
+                const auto& pt = viewBuckets[i];
+                const float x = canvasPos.x + static_cast<float>(i) * xScale;
+                const float y1 = centerY - pt.maxVal * halfHeight;
+                const float y2 = centerY - pt.minVal * halfHeight;
+                drawList->AddLine(ImVec2(x, y1), ImVec2(x, y2), waveColor);
+            }
+        }
+
+        // Playhead (drawn only when inside the visible range — may scroll off when zoomed).
         if (playbackPosition > 0.0f || isPlaying)
         {
-            float playheadX = canvasPos.x + playbackPosition * canvasSize.x;
-            drawList->AddLine(
-                ImVec2(playheadX, canvasPos.y),
-                ImVec2(playheadX, canvasPos.y + canvasSize.y),
-                IM_COL32(255, 100, 100, 255),
-                2.0f);
+            const float px = map.frameToX(static_cast<double>(currentPlayheadFrame));
+            if (px >= canvasPos.x && px <= canvasPos.x + canvasSize.x)
+            {
+                drawList->AddLine(ImVec2(px, canvasPos.y),
+                    ImVec2(px, canvasPos.y + canvasSize.y), IM_COL32(255, 100, 100, 255), 2.0f);
+            }
         }
-        
-        // Click/drag on waveform to scrub playback position
+
+        // Interaction surface over the waveform canvas only (excludes the meter strip).
         ImGui::SetCursorScreenPos(canvasPos);
-        ImGui::InvisibleButton("##WaveformCanvas", canvasSize);
-        if (ImGui::IsItemActive())
+        ImGui::InvisibleButton("##WaveformCanvas", canvasSize,
+            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle);
+        const bool hovered = ImGui::IsItemHovered();
+        const bool active = ImGui::IsItemActive();
+
+        // Wheel zoom, cursor-anchored (can't zoom out past the full view, nor in past the min span).
+        if (hovered && io.MouseWheel != 0.0f)
+        {
+            const double span = static_cast<double>(viewEndFrame - viewStartFrame);
+            const double minSpan = std::min(static_cast<double>(MIN_VIEW_FRAMES), static_cast<double>(frames));
+            const double cursorFrame = map.xToFrame(io.MousePos.x);
+            const double newSpan = std::clamp(span * std::pow(0.85, static_cast<double>(io.MouseWheel)),
+                                              minSpan, static_cast<double>(frames));
+            const double frac = (span > 0.0) ? (cursorFrame - static_cast<double>(viewStartFrame)) / span : 0.0;
+            double ns = cursorFrame - frac * newSpan;
+            double ne = ns + newSpan;
+            if (ns < 0.0) { ne -= ns; ns = 0.0; }
+            if (ne > static_cast<double>(frames)) { ns -= (ne - static_cast<double>(frames)); ne = static_cast<double>(frames); }
+            viewStartFrame = static_cast<size_t>(std::max(0.0, ns));
+            viewEndFrame = static_cast<size_t>(std::min(static_cast<double>(frames), ne));
+            if (viewEndFrame <= viewStartFrame) { viewStartFrame = 0; viewEndFrame = frames; }
+        }
+
+        // Left-drag scrub (unchanged semantics) / middle-drag pan — mutually exclusive.
+        if (active && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             isScrubbing = true;
-            float clickX = (ImGui::GetIO().MousePos.x - canvasPos.x) / canvasSize.x;
-            playbackPosition = std::clamp(clickX, 0.0f, 1.0f);
+            const double f = std::clamp(map.xToFrame(io.MousePos.x), 0.0, static_cast<double>(frames));
+            playbackPosition = (frames > 0) ? static_cast<float>(f / static_cast<double>(frames)) : 0.0f;
         }
-        if (ImGui::IsItemDeactivated())
+        else if (active && ImGui::IsMouseDown(ImGuiMouseButton_Middle))
+        {
+            const double fpp = static_cast<double>(viewEndFrame - viewStartFrame) / static_cast<double>(canvasSize.x);
+            const double shift = -static_cast<double>(io.MouseDelta.x) * fpp;
+            double ns = static_cast<double>(viewStartFrame) + shift;
+            double ne = static_cast<double>(viewEndFrame) + shift;
+            if (ns < 0.0) { ne -= ns; ns = 0.0; }
+            if (ne > static_cast<double>(frames)) { ns -= (ne - static_cast<double>(frames)); ne = static_cast<double>(frames); }
+            viewStartFrame = static_cast<size_t>(std::max(0.0, ns));
+            viewEndFrame = static_cast<size_t>(std::min(static_cast<double>(frames), ne));
+        }
+
+        // Scrub-on-release: seek only if we were scrubbing (not panning).
+        if (ImGui::IsItemDeactivated() && isScrubbing)
         {
             isScrubbing = false;
             if (currentAudioHandle.isValid() && audioDurationSeconds > 0.0f)
@@ -526,6 +605,104 @@ namespace windows
                 seekCmd.handle = currentAudioHandle;
                 seekCmd.seconds = playbackPosition * audioDurationSeconds;
                 events::EventDispatcher::instance().execute(seekCmd);
+            }
+        }
+
+        // Level meters: per-channel RMS + peak-hold at the polled playhead.
+        if (meterRms.size() != channels) meterRms.assign(channels, 0.0f);
+        if (meterPeakHold.size() != channels) meterPeakHold.assign(channels, 0.0f);
+        if (isPlaying && !isScrubbing && sampleRate > 0)
+        {
+            const size_t win = static_cast<size_t>(METER_WINDOW_SEC * static_cast<float>(sampleRate));
+            const auto levels = resource::computeWindowLevels(audioData->data, channels, currentPlayheadFrame, win);
+            for (uint32_t c = 0; c < channels; ++c)
+            {
+                const float rms = (c < levels.size()) ? levels[c].rms : 0.0f;
+                const float pk = (c < levels.size()) ? levels[c].peak : 0.0f;
+                meterRms[c] = rms;
+                meterPeakHold[c] = std::max(meterPeakHold[c] - PEAK_DECAY_PER_SEC * dt, pk);
+            }
+        }
+        else
+        {
+            for (uint32_t c = 0; c < channels; ++c)
+            {
+                meterRms[c] = std::max(0.0f, meterRms[c] - PEAK_DECAY_PER_SEC * dt);
+                meterPeakHold[c] = std::max(0.0f, meterPeakHold[c] - PEAK_DECAY_PER_SEC * dt);
+            }
+        }
+        drawLevelMeters(ImVec2(canvasPos.x + canvasSize.x + 6.0f, canvasPos.y), ImVec2(meterW, canvasSize.y));
+
+        // Spectrum footer (collapsible, default closed; no FFT work while collapsed).
+        ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + canvasSize.y + 4.0f));
+        spectrumOpen = ImGui::CollapsingHeader("Spectrum");
+        if (spectrumOpen)
+        {
+            const ImVec2 sp = ImGui::GetCursorScreenPos();
+            drawSpectrumStrip(sp, canvasSize.x, SPECTRUM_HEIGHT);
+            ImGui::Dummy(ImVec2(canvasSize.x, SPECTRUM_HEIGHT));
+        }
+    }
+
+    void AudioPreviewWindow::drawLevelMeters(ImVec2 pos, ImVec2 size)
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(24, 24, 24, 255));
+
+        if (channels == 0)
+        {
+            return;
+        }
+
+        const float gap = 3.0f;
+        for (uint32_t c = 0; c < channels; ++c)
+        {
+            const float bx = pos.x + gap + static_cast<float>(c) * (METER_COL_W + gap);
+            const float bTop = pos.y + gap;
+            const float bBot = pos.y + size.y - gap;
+            const float bh = std::max(1.0f, bBot - bTop);
+
+            dl->AddRectFilled(ImVec2(bx, bTop), ImVec2(bx + METER_COL_W, bBot), IM_COL32(40, 40, 40, 255));
+
+            const float rms = (c < meterRms.size()) ? std::clamp(meterRms[c], 0.0f, 1.0f) : 0.0f;
+            const float fillH = rms * bh;
+            const ImU32 col = (rms < 0.7f) ? IM_COL32(90, 200, 90, 255)
+                            : (rms < 0.9f) ? IM_COL32(220, 200, 60, 255)
+                                           : IM_COL32(230, 80, 60, 255);
+            dl->AddRectFilled(ImVec2(bx, bBot - fillH), ImVec2(bx + METER_COL_W, bBot), col);
+
+            const float pk = (c < meterPeakHold.size()) ? std::clamp(meterPeakHold[c], 0.0f, 1.0f) : 0.0f;
+            const float py = bBot - pk * bh;
+            dl->AddLine(ImVec2(bx, py), ImVec2(bx + METER_COL_W, py), IM_COL32(240, 240, 240, 255), 2.0f);
+        }
+    }
+
+    void AudioPreviewWindow::drawSpectrumStrip(ImVec2 pos, float width, float height)
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), IM_COL32(20, 20, 20, 255));
+
+        // Recompute only while playing; otherwise hold the last bars (frozen when paused).
+        if (audioData && isPlaying && !isScrubbing && sampleRate > 0)
+        {
+            const size_t start = (currentPlayheadFrame > resource::kFftSize / 2)
+                                     ? currentPlayheadFrame - resource::kFftSize / 2
+                                     : 0;
+            const auto mags = resource::computeSpectrum(audioData->data, channels, start, resource::WindowFn::Hann);
+            const int barCount = std::clamp(static_cast<int>(width / 4.0f), 8, 128);
+            spectrumBars = resource::binSpectrumLog(mags, sampleRate, static_cast<size_t>(barCount));
+        }
+
+        if (!spectrumBars.empty())
+        {
+            const float bw = width / static_cast<float>(spectrumBars.size());
+            for (size_t i = 0; i < spectrumBars.size(); ++i)
+            {
+                const float m = std::clamp(spectrumBars[i], 0.0f, 1.0f);
+                const float h = std::sqrt(m) * height; // sqrt lifts small magnitudes for visibility
+                const float x0 = pos.x + static_cast<float>(i) * bw;
+                dl->AddRectFilled(ImVec2(x0, pos.y + height - h),
+                    ImVec2(x0 + std::max(1.0f, bw - 1.0f), pos.y + height), IM_COL32(120, 220, 140, 255));
             }
         }
     }

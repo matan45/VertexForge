@@ -2,21 +2,18 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "PreviewWindowChrome.hpp"
 #include "resource/Types.hpp"
+#include "resource/AudioAnalysis.hpp"
 #include "interfaces/audio/IAudioService.hpp"
 #include <string>
 #include <vector>
 #include <future>
 #include <atomic>
+#include <memory>
+#include <cstdint>
 
 namespace windows
 {
    
-    struct WaveformPoint
-    {
-        float minVal;
-        float maxVal;
-    };
-    
     struct AudioLoadResult
     {
         bool success = false;
@@ -26,7 +23,7 @@ namespace windows
         uint32_t sampleRate = 0;
         uint32_t frames = 0;
         size_t dataSizeBytes = 0;
-        std::vector<WaveformPoint> waveformCache;
+        std::shared_ptr<resource::AudioData> audioData; // retained decoded PCM (VK-1510)
     };
 
     class AudioPreviewWindow : public controllers::imguiHandler::ImguiWindow
@@ -43,11 +40,40 @@ namespace windows
         bool loadFailed = false;
         bool audioLoaded = false;
 
-      
-        std::vector<WaveformPoint> waveformCache;
-        static constexpr size_t WAVEFORM_RESOLUTION = 1024;
+        // Retained decoded PCM (VK-1510): meters + spectrum read from this on the UI thread.
+        std::shared_ptr<resource::AudioData> audioData;
 
-       
+        // Waveform view range in per-channel FRAME units; [start,end) == [0,frames] is the
+        // min-zoom full view. All draw/playhead/scrub math routes through this range.
+        size_t viewStartFrame = 0;
+        size_t viewEndFrame = 0;
+
+        // Re-bucket cache + invalidation guard (only re-bucket when view or width changes).
+        std::vector<resource::WaveformBucket> viewBuckets;
+        size_t cachedViewStart = SIZE_MAX;
+        size_t cachedViewEnd = SIZE_MAX;
+        int cachedBucketCount = -1;
+
+        // Current playhead in whole-file frames (derived each frame).
+        size_t currentPlayheadFrame = 0;
+
+        // Per-channel level meters (normalized 0..1) + peak-hold state.
+        std::vector<float> meterRms;
+        std::vector<float> meterPeakHold;
+
+        // Spectrum strip (collapsible, default closed).
+        bool spectrumOpen = false;
+        std::vector<float> spectrumBars;
+
+        // Tuning.
+        static constexpr size_t MIN_VIEW_FRAMES = 256;   // deepest zoom
+        static constexpr int MAX_BUCKETS = 2048;         // ~1 bar/px cap
+        static constexpr float METER_WINDOW_SEC = 0.05f; // RMS window
+        static constexpr float PEAK_DECAY_PER_SEC = 0.6f;
+        static constexpr float METER_COL_W = 22.0f;      // px per channel bar
+        static constexpr float SPECTRUM_HEIGHT = 90.0f;
+
+
         bool isOpen = true;
         bool needsInit = true;
 
@@ -83,9 +109,10 @@ namespace windows
         void startAsyncLoad();
         void updateAsyncLoading();
         AudioLoadResult loadAudioBackground(const std::string& path);
-        static std::vector<WaveformPoint> generateWaveformCache(const resource::AudioData& data, uint32_t channels);
         void drawInfoPanel();
         void drawWaveformPanel();
+        void drawLevelMeters(ImVec2 pos, ImVec2 size);
+        void drawSpectrumStrip(ImVec2 pos, float width, float height);
         void drawLoadingIndicator();
     };
 }
