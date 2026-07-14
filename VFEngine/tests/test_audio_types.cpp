@@ -2,7 +2,7 @@
 #include <types/AudioTypes.hpp>
 #include <types/AudioEffectTypes.hpp>
 #include <variant>
-#include <string_view>
+#include <string>
 
 // ============================================================
 // VK-1060: Audio types unit tests
@@ -142,13 +142,13 @@ TEST_CASE("AudioHrtfStatus: enum ordinals match ALC_HRTF_*_SOFT (0..5)") {
 
 TEST_CASE("audioHrtfStatusToString: maps every status value") {
     using types::AudioHrtfStatus;
-    CHECK(std::string_view(types::audioHrtfStatusToString(AudioHrtfStatus::Unsupported)) == "Not supported");
-    CHECK(std::string_view(types::audioHrtfStatusToString(AudioHrtfStatus::Disabled)) == "Disabled");
-    CHECK(std::string_view(types::audioHrtfStatusToString(AudioHrtfStatus::Enabled)) == "Enabled");
-    CHECK(std::string_view(types::audioHrtfStatusToString(AudioHrtfStatus::Denied)) == "Denied");
-    CHECK(std::string_view(types::audioHrtfStatusToString(AudioHrtfStatus::Required)) == "Required");
-    CHECK(std::string_view(types::audioHrtfStatusToString(AudioHrtfStatus::HeadphonesDetected)) == "Headphones detected");
-    CHECK(std::string_view(types::audioHrtfStatusToString(AudioHrtfStatus::UnsupportedFormat)) == "Unsupported format");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Unsupported)) == "Not supported");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Disabled)) == "Disabled");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Enabled)) == "Enabled");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Denied)) == "Denied");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Required)) == "Required");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::HeadphonesDetected)) == "Headphones detected");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::UnsupportedFormat)) == "Unsupported format");
 }
 
 } // TEST_SUITE
