@@ -73,8 +73,9 @@ namespace render::vfx
         inline constexpr uint32_t RandomDirection = 1 << 13;
         inline constexpr uint32_t ShapeRing = 1u << 14;        // VK-1525: flat ring / arc / annulus (XZ plane)
         inline constexpr uint32_t OrderedPlacement = 1u << 15; // VK-1525: draw the shape out in spawn order (opt-in)
+        inline constexpr uint32_t ShapeLine = 1u << 16;        // line segment along dims.xyz, centered (random = along it)
         // ShapeFlags packs into GPUEmitterConfig::shapeFlags (a SEPARATE uint32 from modifierFlags);
-        // bits 0-7 and 16-31 remain free here.
+        // bits 0-7 and 17-31 remain free here.
     }
 
     namespace FlipbookFlags

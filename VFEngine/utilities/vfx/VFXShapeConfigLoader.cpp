@@ -86,6 +86,12 @@ namespace vfx
             config.dimensions.z = getFloat(node, "arc", ShapeDefaults::RING_ARC);
             config.dimensions.w = getFloat(node, "startAngle", ShapeDefaults::RING_START_ANGLE);
             break;
+
+        case ShapeType::Line:
+            // dims.xyz = half-vector (center -> one end) in emitter-local space; spans -dims..+dims.
+            config.dimensions = glm::vec4(
+                getVec3(node, "lineHalf", glm::vec3(ShapeDefaults::LINE_HALF_X, 0.0f, 0.0f)), 0.0f);
+            break;
         }
 
         // VK-1525: ordered / path-driven placement (all shapes). Missing keys => feature off, so

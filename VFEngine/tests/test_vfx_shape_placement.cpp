@@ -75,8 +75,20 @@ TEST_CASE("VFXShapePlacement: ShapeType::Ring appends without renumbering")
     CHECK(static_cast<int>(ShapeType::Point) == 0);
     CHECK(static_cast<int>(ShapeType::Torus) == 4);
     CHECK(static_cast<int>(ShapeType::Ring) == 5);
+    CHECK(static_cast<int>(ShapeType::Line) == 6);
     CHECK(vfx::stringToShapeType("Ring") == ShapeType::Ring);
+    CHECK(vfx::stringToShapeType("Line") == ShapeType::Line);
     CHECK(std::string(vfx::shapeTypeToString(ShapeType::Ring)) == "Ring");
+    CHECK(std::string(vfx::shapeTypeToString(ShapeType::Line)) == "Line");
+}
+
+TEST_CASE("VFXShapePlacement: Line ordered curve is a centered segment along dims.xyz")
+{
+    const glm::vec3 half(2.5f, 0.0f, 0.0f);
+    const glm::vec4 dims(half, 0.0f);
+    checkVecApprox(vfxspOrderedCurve(ShapeType::Line, dims, 0.0f), -half);
+    checkVecApprox(vfxspOrderedCurve(ShapeType::Line, dims, 0.5f), glm::vec3(0.0f));
+    checkVecApprox(vfxspOrderedCurve(ShapeType::Line, dims, 1.0f), half);
 }
 
 // ---------------------------------------------------------------------------

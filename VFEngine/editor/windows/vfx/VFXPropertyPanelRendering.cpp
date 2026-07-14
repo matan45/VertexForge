@@ -375,7 +375,7 @@ namespace editor::vfxeditor
                 activeType = vfx::stringToShapeType(*val);
         }
 
-        const char* shapeItems[] = {"Point", "Sphere", "Cone", "Box", "Torus", "Ring"};
+        const char* shapeItems[] = {"Point", "Sphere", "Cone", "Box", "Torus", "Ring", "Line"};
         int currentShape = static_cast<int>(activeType);
         ImGui::Text("Shape Type");
         ImGui::SameLine(120.0f);
@@ -469,6 +469,13 @@ namespace editor::vfxeditor
                 {"thickness",  "Thickness",         0.02f},
                 {"arc",        "Arc (rad)",         0.05f},
                 {"startAngle", "Start Angle (rad)", 0.05f},
+            };
+            drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::ShapeType::Line: {
+            static constexpr ShapeEntry entries[] = {
+                {"lineHalf", "Half Vector", 0.1f},
             };
             drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
             break;

@@ -650,6 +650,7 @@ namespace controllers
         case ::vfx::ShapeType::Box:    gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeBox; break;
         case ::vfx::ShapeType::Torus:  gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeTorus; break;
         case ::vfx::ShapeType::Ring:   gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeRing; break;
+        case ::vfx::ShapeType::Line:   gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeLine; break;
         case ::vfx::ShapeType::Point:
         default: break;
         }

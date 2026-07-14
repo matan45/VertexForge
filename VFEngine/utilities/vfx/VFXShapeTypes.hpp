@@ -13,7 +13,8 @@ namespace vfx
         Cone,
         Box,
         Torus,
-        Ring // VK-1525: flat ring / arc / annulus (append only - never renumber)
+        Ring, // VK-1525: flat ring / arc / annulus (append only - never renumber)
+        Line  // line segment along dims.xyz, centered (-dims -> +dims); random = along it. append only
     };
 
     enum class EmitFrom : uint8_t
@@ -60,6 +61,7 @@ namespace vfx
         inline constexpr float RING_THICKNESS = 0.1f;
         inline constexpr float RING_ARC = 6.28318530718f; // 2*pi (full ring)
         inline constexpr float RING_START_ANGLE = 0.0f;
+        inline constexpr float LINE_HALF_X = 0.5f; // default line = 1 unit along local X (centered)
     }
 
     inline glm::vec4 getDefaultDimensions(ShapeType type)
@@ -79,6 +81,8 @@ namespace vfx
         case ShapeType::Ring:
             return glm::vec4(ShapeDefaults::RING_RADIUS, ShapeDefaults::RING_THICKNESS,
                              ShapeDefaults::RING_ARC, ShapeDefaults::RING_START_ANGLE);
+        case ShapeType::Line:
+            return glm::vec4(ShapeDefaults::LINE_HALF_X, 0.0f, 0.0f, 0.0f);
         default:
             return glm::vec4(0.0f);
         }
@@ -94,6 +98,7 @@ namespace vfx
         case ShapeType::Box:    return "Box";
         case ShapeType::Torus: return "Torus";
         case ShapeType::Ring:   return "Ring";
+        case ShapeType::Line:   return "Line";
         default:                return "Point";
         }
     }
@@ -105,6 +110,7 @@ namespace vfx
         if (str == "Box")    return ShapeType::Box;
         if (str == "Torus") return ShapeType::Torus;
         if (str == "Ring")   return ShapeType::Ring;
+        if (str == "Line")   return ShapeType::Line;
         return ShapeType::Point;
     }
 

@@ -33,6 +33,9 @@ namespace render::vfx
         case ::vfx::ShapeType::Box:
             return generateBoxPosition(glm::vec3(shape.dimensions), surfaceOnly);
 
+        case ::vfx::ShapeType::Line:
+            return generateLinePosition(glm::vec3(shape.dimensions));
+
         case ::vfx::ShapeType::Torus:
             return generateTorusPosition(shape.dimensions.x, shape.dimensions.y, surfaceOnly);
 
@@ -95,6 +98,12 @@ namespace render::vfx
             y,
             r * std::sin(theta)
         );
+    }
+
+    glm::vec3 VFXParticleSystem::generateLinePosition(const glm::vec3& halfVec)
+    {
+        // Mirror of GLSL generateLinePosition: centered segment -halfVec -> +halfVec.
+        return halfVec * (unitDist(rng) * 2.0f - 1.0f);
     }
 
     glm::vec3 VFXParticleSystem::generateBoxPosition(const glm::vec3& halfExtents, bool surfaceOnly)

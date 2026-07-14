@@ -275,6 +275,13 @@ vec3 generateConePosition(inout uint seed, float baseRadius, float height, float
     return vec3(r * cos(theta), y, r * sin(theta));
 }
 
+vec3 generateLinePosition(inout uint seed, vec3 halfVec)
+{
+    // Line segment centered on the emitter: -halfVec -> +halfVec along dims.xyz. A random
+    // point stays ON the segment (mix(-h, h, t) == h*(2t-1)). Emitter rotation orients it.
+    return halfVec * (randomFloat(seed) * 2.0 - 1.0);
+}
+
 vec3 generateBoxPosition(inout uint seed, vec3 halfExtents, bool surfaceOnly)
 {
     if (!surfaceOnly)
@@ -366,6 +373,10 @@ vec3 generateSpawnPosition(inout uint seed, GPUEmitterConfig config)
     else if ((config.shapeFlags & SHAPE_BOX) != 0u)
     {
         return generateBoxPosition(seed, config.shapeDimensions.xyz, surfaceOnly);
+    }
+    else if ((config.shapeFlags & SHAPE_LINE) != 0u)
+    {
+        return generateLinePosition(seed, config.shapeDimensions.xyz);
     }
     else if ((config.shapeFlags & SHAPE_TORUS) != 0u)
     {

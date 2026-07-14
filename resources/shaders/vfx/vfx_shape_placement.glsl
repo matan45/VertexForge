@@ -17,6 +17,7 @@ const uint SHAPE_EMIT_FROM_SURFACE = 4096u; // 1 << 12
 const uint SHAPE_RANDOM_DIRECTION = 8192u;  // 1 << 13
 const uint SHAPE_RING = 16384u;             // 1 << 14 (VK-1525: flat ring / arc / annulus)
 const uint SHAPE_ORDERED = 32768u;          // 1 << 15 (VK-1525: draw the shape out in spawn order)
+const uint SHAPE_LINE = 65536u;             // 1 << 16 (line segment along dims.xyz, centered)
 
 const float VFXSP_TWO_PI = 6.28318530718;
 
@@ -85,6 +86,11 @@ vec3 vfxspOrderedCurve(uint shapeFlags, vec4 dims, float progress)
         return vec3(ringR * cos(theta), y, ringR * sin(theta));
     }
     else if ((shapeFlags & SHAPE_BOX) != 0u)
+    {
+        vec3 half3 = dims.xyz;
+        return mix(-half3, half3, progress);
+    }
+    else if ((shapeFlags & SHAPE_LINE) != 0u)
     {
         vec3 half3 = dims.xyz;
         return mix(-half3, half3, progress);
