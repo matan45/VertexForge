@@ -172,10 +172,21 @@ namespace controllers
         // Stable listener ordering makes global-ring overflow deterministic. The
         // rotating start index prevents one busy channel from starving later ones.
         std::unordered_map<std::string, VFXInstanceId> channelsByPath;
+        // VK-1501 (review #3): GPU event->child listeners are keyed in a SEPARATE registry from
+        // script channels (VK-1500) so the two never dedup onto one listener. A single listener can
+        // serve only one spawn source per frame (its GPU child region OR channelAcceptedRequests),
+        // so a shared instance silently zeroed the other role's spawns.
+        std::unordered_map<std::string, VFXInstanceId> gpuChildChannelsByPath;
         std::vector<VFXInstanceId> channelOrder;
         // VK-1501: assigns each fast-path child channel (by asset path) one region in the GPU
         // event->child ring; released when the owning channel listener is destroyed.
         vfx::child::VFXChildRegionAllocator childRegionAllocator;
+        // review #14: child-ring regions referenced by a live fast-path parent this frame (and
+        // last, for the binding-11 ping-pong — a parent writes child requests one frame before the
+        // listener consumes them). A GPU event->child listener whose region is in neither set has no
+        // live parent that can feed it, so it skips its full-region dispatch that frame.
+        std::unordered_set<uint32_t> activeChildRegions;
+        std::unordered_set<uint32_t> prevActiveChildRegions;
         size_t channelRoundRobinStart = 0;
         uint64_t channelEmitSequence = 0;
         uint32_t channelRawRequestsThisFrame = 0;
@@ -280,7 +291,8 @@ namespace controllers
         void setGPUDrivenEnabled(bool enabled);
 
         VFXInstanceId createInstance(const VFXRuntimeParams& params);
-        VFXInstanceId createChannel(const std::string& path, uint32_t particlesPerRequest = 0);
+        VFXInstanceId createChannel(const std::string& path, uint32_t particlesPerRequest = 0,
+                                    bool forGpuChild = false);
         void emitToChannel(VFXInstanceId id,
                            const glm::vec3& position,
                            float scale,

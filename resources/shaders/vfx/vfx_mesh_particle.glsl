@@ -204,8 +204,11 @@ void main() {
         vec3 lit;
         if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
             vec3 V = normalize(camera.cameraPos - fragWorldPos);
-            lit = evaluateVFXPBRLighting(fragWorldPos, surf.N, V, surf.albedo,
+            vec3 litFull = evaluateVFXPBRLighting(fragWorldPos, surf.N, V, surf.albedo,
                 surf.metallic, surf.roughness, surf.F0, surf.ao, fragViewDepth, config.ambientAmount);
+            // Blend by lightingInfluence, mirroring the legacy path's mix(baseColor, litColor,
+            // influence) (review #7): a fractional influence is a partial lit/flat mix, not a gate.
+            lit = mix(surf.albedo, litFull, config.lightingInfluence);
         } else {
             // Additive / unlit: flat albedo (mirrors the legacy unlit gating).
             lit = surf.albedo;

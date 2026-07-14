@@ -23,12 +23,27 @@
 #include <random>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace services
 {
     namespace
     {
+        // Minimal RAII scope-exit: runs `fn` when the scope is left by ANY path (normal
+        // return or an exception unwinding through it). Used to balance comboTeardownGuard so
+        // a throwing dispatch can never leave the guard stuck >0 (review #11). No generic
+        // scope-guard exists in the codebase; this is deliberately file-local and tiny.
+        template <typename F>
+        struct ScopeExit
+        {
+            F fn;
+            explicit ScopeExit(F&& f) : fn(std::move(f)) {}
+            ~ScopeExit() { fn(); }
+            ScopeExit(const ScopeExit&) = delete;
+            ScopeExit& operator=(const ScopeExit&) = delete;
+        };
+
         std::string normalizeSequenceCachePath(const std::string& path)
         {
             if (path.empty())
@@ -698,6 +713,11 @@ namespace services
                     continue;
                 if (recvDef->sourceStepIndex != srcIdx || recvDef->sourceEventName != outName)
                     continue;
+                // VK-1497 — honor the per-step play/probability/variant mask the timeline resolved
+                // for this run; a receiver rolled out of this run must not fire on source events.
+                // Timeline-driven paths and the editor preview already guard with !plays_[i] — review #4.
+                if (!combo.timeline.isPlaying(static_cast<int>(r)))
+                    continue;
 
                 if (recvDef->eventConsumption == vfx::VFXEventConsumption::FirstEvent)
                 {
@@ -1049,11 +1069,17 @@ namespace services
         combo.timeline.fireCue(cueName, events);
         // VK-1496 — guard the reference held across the (script-invoking) publish/apply so a
         // re-entrant Destroy/Reset of this combo is deferred, not applied to `it` mid-call.
+        // RAII so a throwing publish/apply cannot leave the guard stuck >0 (review #11); the
+        // drain is try-guarded because it may run while an exception is unwinding.
         ++comboTeardownGuard;
+        ScopeExit teardownGuard([this] {
+            if (--comboTeardownGuard == 0)
+            {
+                try { drainPendingComboTeardowns(); } catch (...) {}
+            }
+        });
         publishCueFired(combo, cueName, payload);
         applyComboEvents(combo, events, comboParent, &payload);
-        if (--comboTeardownGuard == 0)
-            drainPendingComboTeardowns();
     }
 
     bool VFXSequenceRuntimeServiceImpl::isComboPlaying(VFXComboInstanceId id) const
@@ -1360,7 +1386,15 @@ namespace services
 
         // VK-1496 — hold combo destroy/reset requests raised re-entrantly by a ScriptCue's
         // onComboCue until the loop releases `it`; applied by drainPendingComboTeardowns() below.
+        // RAII so a throwing dispatcher.execute/query in the loop cannot leave the guard stuck
+        // >0 (which would defer every future teardown forever and leak combos) — review #11.
         ++comboTeardownGuard;
+        ScopeExit teardownGuard([this] {
+            if (--comboTeardownGuard == 0)
+            {
+                try { drainPendingComboTeardowns(); } catch (...) {}
+            }
+        });
         for (auto it = combos.begin(); it != combos.end();)
         {
             ComboInstance& combo = it->second;
@@ -1501,8 +1535,8 @@ namespace services
             ++it;
         }
 
-        if (--comboTeardownGuard == 0)
-            drainPendingComboTeardowns();
+        // comboTeardownGuard is released (and pending teardowns drained) by teardownGuard's
+        // ScopeExit as this function returns, even on an exception — review #11.
     }
 
     void VFXSequenceRuntimeServiceImpl::setComboPaused(VFXComboInstanceId id, bool paused)

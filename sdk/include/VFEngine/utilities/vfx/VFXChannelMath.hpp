@@ -237,10 +237,14 @@ namespace vfx::channel
         return result != 0u ? result : 0xA511E9B3u;
     }
 
-    // Must remain in lockstep with the channel branch in vfx_particle_sim.glsl.
+    // Must remain in lockstep with the channel / gpu-child spawn branch in
+    // vfx_particle_sim.glsl:
+    //   seed = pcg_hash(request.seed ^ pcg_hash(subParticleIndex + 0x9E3779B9u))
+    // `hash` above is the exact pcg_hash mirror (same constants), so this reproduces
+    // the GPU's per-particle seed bit-for-bit. Verified by test_vfx_channel.cpp.
     inline uint32_t deriveParticleSeed(uint32_t requestSeed, uint32_t subParticleIndex)
     {
-        return hash(requestSeed * 747796405u + subParticleIndex);
+        return hash(requestSeed ^ hash(subParticleIndex + 0x9E3779B9u));
     }
 
     inline uint32_t packUNorm8(float value)

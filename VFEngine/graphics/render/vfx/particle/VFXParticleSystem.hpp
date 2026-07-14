@@ -93,5 +93,10 @@ namespace render::vfx
         std::uniform_real_distribution<float> unitDist{0.0f, 1.0f};
 
         uint32_t storedSeed = 0; // VK-1451: 0 => legacy time-seeded; non-zero => deterministic
+        // review #8: per-frame spawn-batch index for ordered placement. Reset each update() and
+        // incremented per ordered spawn, it mirrors the GPU sim's spawnSlot so the ordered jitter
+        // seed is a deterministic function of (storedSeed, progress, slot) — reproducible under
+        // seek/prewarm — instead of drawing from the global rng stream.
+        uint32_t orderedSpawnSlot = 0;
     };
 }

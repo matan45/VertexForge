@@ -10,12 +10,15 @@ namespace render::vfx
         bool surfaceOnly = (shape.emitFrom == ::vfx::EmitFrom::Surface);
 
         // VK-1525: ordered / path-driven placement — walk the shape by emitter age instead of filling
-        // randomly, via the shared VFXShapePlacementMath (so the CPU preview matches the GPU sim). progress
-        // is derived from emissionTime, which the preview reproduces deterministically under seek/prewarm.
+        // randomly, via the shared VFXShapePlacementMath (so the CPU preview matches the GPU sim).
+        // review #8: derive the jitter seed the same way the GPU sim does — from (storedSeed, progress,
+        // spawn slot) via the shared vfxspOrderedJitterSeed helper — instead of the global rng stream.
+        // That makes the scatter a pure function of emitter state, so it reproduces under seek/prewarm
+        // and tracks the runtime look, rather than depending on how many particles spawned this session.
         if (shape.ordered)
         {
             float progress = ::vfx::vfxspOrderedProgress(emissionTime, shape.sweepDuration, shape.orderedLoop);
-            uint32_t jitterSeed = static_cast<uint32_t>(rng());
+            uint32_t jitterSeed = ::vfx::vfxspOrderedJitterSeed(storedSeed, progress, orderedSpawnSlot++);
             return ::vfx::vfxspOrderedPosition(shape.type, shape.dimensions, progress, shape.orderedJitter, jitterSeed);
         }
 

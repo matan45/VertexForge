@@ -353,7 +353,12 @@ namespace controllers
                 const auto& tc = events.types[static_cast<size_t>(type)];
                 // GPU fast path is opt-in and only applies to deterministic children (probability 1);
                 // probability<1 (or an ineligible/disabled event) stays on the CPU readback path.
-                if (tc.enabled && tc.gpuFastPath && !tc.vfxPath.empty() && tc.probability >= 1.0f)
+                // Also excluded when the event opts into `notify` (review #2): a notify source needs
+                // the CPU-side VFXParticleEventNotification (StepOutput receivers, script listeners),
+                // which the fast path bypasses entirely. Falling back to the CPU readback path both
+                // publishes the notification AND still spawns the child sub-emitter.
+                if (tc.enabled && tc.gpuFastPath && !tc.vfxPath.empty() && tc.probability >= 1.0f &&
+                    !tc.notify)
                 {
                     pending.push_back(PendingChild{type == vfx::VFXEventType::OnCollision, tc.vfxPath,
                                                    tc.inheritColor, tc.inheritSize,
@@ -370,7 +375,7 @@ namespace controllers
             // Reuse (or create) the persistent channel listener for this child asset -- the same
             // lifecycle VK-1500 uses; createChannel dedups by path. Returns 0 when the asset is not
             // channel-compatible or a GPU slice can't be allocated -> fall back to the CPU path.
-            VFXInstanceId childId = createChannel(child.path, 0);
+            VFXInstanceId childId = createChannel(child.path, 0, /*forGpuChild=*/true);
             if (childId == 0)
                 continue;
 
@@ -425,7 +430,8 @@ namespace controllers
     }
 
     VFXInstanceId VFXSceneRenderer::createChannel(const std::string& path,
-                                                   uint32_t particlesPerRequest)
+                                                   uint32_t particlesPerRequest,
+                                                   bool forGpuChild)
     {
         if (path.empty() || !gpuDrivenEnabled || !gpuBufferManager)
         {
@@ -437,7 +443,10 @@ namespace controllers
             return 0;
         }
 
-        if (auto existing = channelsByPath.find(path); existing != channelsByPath.end())
+        // Script channels (VK-1500) and GPU event->child listeners (VK-1501) dedup in SEPARATE
+        // registries so they never collide on one shared listener (review #3).
+        auto& registry = forGpuChild ? gpuChildChannelsByPath : channelsByPath;
+        if (auto existing = registry.find(path); existing != registry.end())
         {
             auto instanceIt = instances.find(existing->second);
             if (instanceIt != instances.end() && instanceIt->second.channelListener)
@@ -452,7 +461,7 @@ namespace controllers
                 }
                 return existing->second;
             }
-            channelsByPath.erase(existing);
+            registry.erase(existing);
         }
 
         auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(path);
@@ -523,7 +532,7 @@ namespace controllers
 
         instances.emplace(id, std::move(instance));
         emitterIndexToInstanceId[allocation.emitterIndex] = id;
-        channelsByPath[path] = id;
+        registry[path] = id;
         channelOrder.push_back(id);
 
         const auto& storedConfig = instances.at(id).config;
@@ -872,9 +881,14 @@ namespace controllers
         {
             if (it->second.channelListener)
             {
-                auto channelIt = channelsByPath.find(it->second.assetPath);
-                if (channelIt != channelsByPath.end() && channelIt->second == id)
-                    channelsByPath.erase(channelIt);
+                // The listener lives in exactly one of the two registries (keyed by assetPath);
+                // erase the id-matched entry from whichever holds it (review #3).
+                for (auto* registry : {&channelsByPath, &gpuChildChannelsByPath})
+                {
+                    auto channelIt = registry->find(it->second.assetPath);
+                    if (channelIt != registry->end() && channelIt->second == id)
+                        registry->erase(channelIt);
+                }
                 channelOrder.erase(std::remove(channelOrder.begin(), channelOrder.end(), id),
                                    channelOrder.end());
                 if (channelOrder.empty())
@@ -964,6 +978,7 @@ namespace controllers
         instances.clear();
         emitterIndexToInstanceId.clear();
         channelsByPath.clear();
+        gpuChildChannelsByPath.clear(); // review #3: GPU event->child registry
         channelOrder.clear();
         channelRoundRobinStart = 0;
         channelEmitSequence = 0;

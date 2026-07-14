@@ -19,8 +19,10 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <random>
 #include <set>
 #include <string>
@@ -157,6 +159,23 @@ TEST_SUITE("VFXSignificanceScorer")
         // Emitter on the camera: eps floor keeps it finite (no divide-by-zero).
         CHECK(vfx::significanceScore(1.0f, 0.0f) ==
               doctest::Approx(1.0f / vfx::kSignificanceEpsilon));
+    }
+
+    TEST_CASE("non-finite inputs sanitize to 0 so the sort ordering stays total (review #9)")
+    {
+        // A NaN/Inf transform or camera position must not produce a NaN score: that would make
+        // moreSignificant() violate std::sort's strict-weak-ordering (UB). Sanitized to 0 = least
+        // significant (evicted first), and the comparator stays asymmetric against finite scores.
+        const float nanScore = vfx::significanceScore(std::numeric_limits<float>::quiet_NaN(), 100.0f);
+        const float infDist = vfx::significanceScore(1.0f, std::numeric_limits<float>::infinity());
+        CHECK(nanScore == 0.0f);
+        CHECK(infDist == 0.0f);
+        CHECK(std::isfinite(nanScore));
+
+        vfx::VFXSignificanceCandidate bad = cand(1, nanScore, true);
+        vfx::VFXSignificanceCandidate good = cand(2, vfx::significanceScore(1.0f, 4.0f), true);
+        CHECK(vfx::moreSignificant(good, bad));
+        CHECK_FALSE(vfx::moreSignificant(bad, good));
     }
 
     TEST_CASE("protected candidates always outrank evictable ones regardless of score")

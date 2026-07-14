@@ -41,6 +41,15 @@ float vfxspRandomFloat(inout uint seed)
     return float(seed) / float(0xFFFFFFFFu);
 }
 
+// Deterministic per-particle jitter seed for ordered placement (mirror of
+// VFXShapePlacementMath.hpp::vfxspOrderedJitterSeed): emitter seed + quantized sweep
+// progress + the particle's spawn slot (index within the frame's spawn batch).
+// Frame-independent so seek/prewarm replay reproduce the same scatter.
+uint vfxspOrderedJitterSeed(uint emitterSeed, float progress, uint spawnSlot)
+{
+    return vfxspHash(emitterSeed ^ vfxspHash(uint(progress * 65535.0) ^ spawnSlot));
+}
+
 // --- Ordered placement -----------------------------------------------------------
 
 // On-curve point for `progress` in [0,1], per shape (dims packing matches ShapeConfig;

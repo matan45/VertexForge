@@ -88,6 +88,7 @@ namespace render::vfx
 
         // Spawning must remain sequential (uses rng and shared ribbon state)
         bool canSpawn = config.looping || (emissionTime < config.lifetime);
+        orderedSpawnSlot = 0; // review #8: per-frame ordered spawn-batch index (mirrors GPU spawnSlot)
 
         if (config.spawnRate > 0.0f && canSpawn)
         {

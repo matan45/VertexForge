@@ -48,6 +48,18 @@ namespace vfx
         return static_cast<float>(seed) / static_cast<float>(0xFFFFFFFFu);
     }
 
+    // Deterministic per-particle jitter seed for ordered placement — the exact mirror
+    // of the inline derivation in vfx_particle_sim.glsl / vfx_shape_placement.glsl, so
+    // the CPU preview and the GPU sim scatter ordered particles identically. Keyed on
+    // the emitter seed, the quantized sweep progress, and the particle's spawn slot
+    // (its index within the frame's spawn batch), it reproduces under seek/prewarm —
+    // unlike drawing from a running RNG stream. Truncation of progress*65535 matches
+    // GLSL uint(float) (progress is in [0,1], so it is always non-negative).
+    inline uint32_t vfxspOrderedJitterSeed(uint32_t emitterSeed, float progress, uint32_t spawnSlot)
+    {
+        return vfxspHash(emitterSeed ^ vfxspHash(static_cast<uint32_t>(progress * 65535.0f) ^ spawnSlot));
+    }
+
     // --- Sweep parameter (host-side; the GPU consumes the uploaded result) -------
 
     // Normalized sweep parameter for the emitter's current age. `emitterAge` is the

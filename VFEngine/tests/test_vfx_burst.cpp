@@ -112,26 +112,29 @@ TEST_CASE("runaway tiny intervals are bounded per window") {
     CHECK(spawned <= static_cast<uint32_t>(vfx::BurstDefaults::MAX_CYCLES_PER_WINDOW));
 }
 
-TEST_CASE("automatic loop period uses lifetime floor and complete finite schedule") {
+TEST_CASE("burst looping is opt-in: only a positive configured duration sets a period") {
+    // review #5 — loopDuration == 0 no longer derives a period from the lifetime/schedule; it
+    // means "no burst re-arm" (finite bursts fire once). Only a positive authored value loops.
     const std::vector<vfx::VFXBurst> repro{{0.15f, 700, 4, 1.0f, 1.0f}};
-    CHECK(vfx::resolveBurstLoopPeriod(repro, 0.0f, 2.0f) == doctest::Approx(4.15f));
+    CHECK(vfx::resolveBurstLoopPeriod(repro, 0.0f, 2.0f) == 0.0f);
     CHECK(vfx::resolveBurstLoopPeriod(repro, 1.25f, 2.0f) == doctest::Approx(1.25f));
 
     const std::vector<vfx::VFXBurst> immediate{{0.0f, 1, 1, 0.0f, 1.0f}};
-    CHECK(vfx::resolveBurstLoopPeriod(immediate, 0.0f, 2.0f) == doctest::Approx(2.0f));
+    CHECK(vfx::resolveBurstLoopPeriod(immediate, 0.0f, 2.0f) == 0.0f);
 
     const std::vector<vfx::VFXBurst> empty;
-    CHECK(vfx::resolveBurstLoopPeriod(empty, 0.0f, 3.0f) == doctest::Approx(3.0f));
+    CHECK(vfx::resolveBurstLoopPeriod(empty, 0.0f, 3.0f) == 0.0f);
 
     const std::vector<vfx::VFXBurst> disabled{{100.0f, 0, 1, 1.0f, 1.0f}};
-    CHECK(vfx::resolveBurstLoopPeriod(disabled, 0.0f, 2.0f) == doctest::Approx(2.0f));
+    CHECK(vfx::resolveBurstLoopPeriod(disabled, 0.0f, 2.0f) == 0.0f);
 }
 
-TEST_CASE("automatic loop period stays strictly beyond the last finite fire") {
+TEST_CASE("a positive configured loop period is honored verbatim; zero disables wrapping") {
+    // review #5 — the derive-from-lifetime path is gone: an explicit positive period is returned
+    // as-is (the author's choice), and 0 means no wrapping regardless of the burst schedule.
     const std::vector<vfx::VFXBurst> collapsed{{5.0f, 1, 4, 0.0f, 1.0f}};
-    const float period = vfx::resolveBurstLoopPeriod(collapsed, 0.0f, 2.0f);
-    CHECK(period > 5.0f);
-    CHECK(std::isfinite(period));
+    CHECK(vfx::resolveBurstLoopPeriod(collapsed, 3.0f, 2.0f) == doctest::Approx(3.0f));
+    CHECK(vfx::resolveBurstLoopPeriod(collapsed, 0.0f, 2.0f) == 0.0f);
 
     const std::vector<vfx::VFXBurst> onlyAtZero{{0.0f, 1, 1, 0.0f, 1.0f}};
     CHECK(vfx::resolveBurstLoopPeriod(onlyAtZero, 0.0f, 0.0f) == 0.0f);

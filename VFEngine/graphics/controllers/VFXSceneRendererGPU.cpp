@@ -16,6 +16,7 @@
 #include "vfx/VFXKillVolume.hpp"
 #include "vfx/VFXRuntimeDiagnostics.hpp"
 #include "vfx/VFXShapeTypes.hpp"
+#include "vfx/VFXChannelMath.hpp" // review #15: shared ring-packing helpers
 #include "vfx/VFXShapePlacementMath.hpp"
 #include "vfx/VFXOrientationMode.hpp"
 #include "print/Log.hpp"
@@ -203,7 +204,12 @@ namespace controllers
             channelRoundRobinStart %= channelOrder.size();
             for (size_t offset = 0; offset < channelOrder.size(); ++offset)
             {
-                const size_t orderIndex = (channelRoundRobinStart + offset) % channelOrder.size();
+                // review #15: use the shared VK-1500 helpers (fairOrderIndex / limitByParticleCapacity
+                // / packRequests) that the doctests exercise, so the shipped ring math cannot drift
+                // from the tested implementation.
+                const size_t orderIndex = vfx::channel::fairOrderIndex(
+                    static_cast<uint32_t>(offset), static_cast<uint32_t>(channelOrder.size()),
+                    channelRoundRobinStart);
                 auto instanceIt = instances.find(channelOrder[orderIndex]);
                 if (instanceIt == instances.end() || !instanceIt->second.channelListener)
                     continue;
@@ -216,22 +222,17 @@ namespace controllers
                 channelRawRequestsThisFrame += static_cast<uint32_t>(
                     std::min<uint64_t>(raw, std::numeric_limits<uint32_t>::max()));
 
-                const uint32_t particleRequestCapacity = channel.channelParticlesPerRequest > 0
-                    ? channel.gpuParticleCount / channel.channelParticlesPerRequest
-                    : 0;
-                const uint64_t particleLimited = std::min<uint64_t>(raw, particleRequestCapacity);
-                const uint64_t particleDropped = raw - particleLimited;
+                const auto capped = vfx::channel::limitByParticleCapacity(
+                    raw, channel.channelParticlesPerRequest, channel.gpuParticleCount);
                 channelParticleDroppedThisFrame += static_cast<uint32_t>(
-                    std::min<uint64_t>(particleDropped, std::numeric_limits<uint32_t>::max()));
+                    std::min<uint64_t>(capped.droppedRequests, std::numeric_limits<uint32_t>::max()));
 
-                const uint32_t ringRemaining =
-                    render::vfx::GPUVFXConstants::MAX_SPAWN_REQUESTS - ringCursor;
-                const uint32_t accepted = static_cast<uint32_t>(
-                    std::min<uint64_t>(particleLimited, ringRemaining));
-                const uint64_t ringDropped = particleLimited - accepted;
+                const auto packed = vfx::channel::packRequests(
+                    ringCursor, render::vfx::GPUVFXConstants::MAX_SPAWN_REQUESTS, capped.acceptedRequests);
                 channelRingDroppedThisFrame += static_cast<uint32_t>(
-                    std::min<uint64_t>(ringDropped, std::numeric_limits<uint32_t>::max()));
+                    std::min<uint64_t>(packed.dropped, std::numeric_limits<uint32_t>::max()));
 
+                const uint32_t accepted = packed.accepted;
                 if (accepted > 0 && requestStaging)
                 {
                     std::memcpy(requestStaging + ringCursor,
@@ -279,6 +280,25 @@ namespace controllers
         // a single particle. No-op (clears stray flags once) when the budget is 0.
         applySignificanceCap();
 
+        // review #14: collect the child-ring regions referenced by a live fast-path parent this
+        // frame. A GPU event->child listener whose region has no live parent (all parents gone)
+        // then skips its full 256-request dispatch below instead of paying it every frame. Keep
+        // last frame's set too: a parent writes child requests one frame before the listener reads
+        // them (binding-11 ping-pong), so a region live last frame must still dispatch this frame.
+        prevActiveChildRegions.swap(activeChildRegions);
+        activeChildRegions.clear();
+        for (const auto& [pid, parent] : instances)
+        {
+            if (parent.resolvedEventChildSlot == vfx::child::PACKED_NONE)
+                continue;
+            const uint32_t deathHalf = vfx::child::halfOf(parent.resolvedEventChildSlot, false);
+            const uint32_t collisionHalf = vfx::child::halfOf(parent.resolvedEventChildSlot, true);
+            if (vfx::child::hasRegion(deathHalf))
+                activeChildRegions.insert(vfx::child::regionOf(deathHalf));
+            if (vfx::child::hasRegion(collisionHalf))
+                activeChildRegions.insert(vfx::child::regionOf(collisionHalf));
+        }
+
         for (auto& [id, instance] : instances)
         {
             if (!instance.gpuDriven || !instance.active)
@@ -320,8 +340,17 @@ namespace controllers
                     // VK-1501: GPU event->child listener. The per-frame request count is produced on
                     // the GPU (no CPU readback), so dispatch a coarse upper bound of a full region;
                     // the shader gates each slot against the previous frame's GPU-written counter.
-                    spawnCount = static_cast<uint64_t>(vfx::child::CHILD_MAX_REQUESTS_PER_REGION) *
-                        instance.channelParticlesPerRequest;
+                    // review #14 — but only when a live parent referenced this region this frame or
+                    // last (parents write child requests one frame before this listener reads them).
+                    // With no live parent the region can produce nothing, so skip the dispatch; the
+                    // listener's existing particles keep simulating like any idle channel.
+                    const bool regionActive =
+                        activeChildRegions.count(instance.gpuChildRegion) != 0 ||
+                        prevActiveChildRegions.count(instance.gpuChildRegion) != 0;
+                    spawnCount = regionActive
+                        ? static_cast<uint64_t>(vfx::child::CHILD_MAX_REQUESTS_PER_REGION) *
+                              instance.channelParticlesPerRequest
+                        : 0;
                 }
                 else
                 {

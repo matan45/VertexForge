@@ -69,7 +69,14 @@ namespace core
         value::Value velocityObj = interpreter->createObject("Vec3f",
             {value::Value(velX), value::Value(velY), value::Value(velZ)});
 
-        for (const auto& [instanceId, entityHandle] : instanceToEntity)
+        // Snapshot the (instanceId, entityHandle) pairs before dispatching: a script's
+        // onVFXParticleEvent can synchronously destroy or spawn an entity, which erases
+        // from / rehashes instanceToEntity mid-iteration and would invalidate a live
+        // iterator. Iterating a copy keeps the loop valid; the find() calls below
+        // re-validate that each instance still exists before we touch it.
+        const std::vector<std::pair<uint64_t, ::services::EntityHandle>> listeners(
+            instanceToEntity.begin(), instanceToEntity.end());
+        for (const auto& [instanceId, entityHandle] : listeners)
         {
             auto interfaceIt = instanceToInterfaces.find(instanceId);
             if (interfaceIt == instanceToInterfaces.end() ||
@@ -117,7 +124,14 @@ namespace core
              value::Value(col.a),
              value::Value(hasScl), value::Value(scl)});
 
-        for (const auto& [instanceId, entityHandle] : instanceToEntity)
+        // Snapshot the (instanceId, entityHandle) pairs before dispatching: a script's
+        // onComboCue can synchronously destroy or spawn an entity (the hook is meant for
+        // exactly that), which erases from / rehashes instanceToEntity mid-iteration and
+        // would invalidate a live iterator. Iterating a copy keeps the loop valid; the
+        // find() calls below re-validate that each instance still exists before we touch it.
+        const std::vector<std::pair<uint64_t, ::services::EntityHandle>> listeners(
+            instanceToEntity.begin(), instanceToEntity.end());
+        for (const auto& [instanceId, entityHandle] : listeners)
         {
             auto interfaceIt = instanceToInterfaces.find(instanceId);
             if (interfaceIt == instanceToInterfaces.end() ||

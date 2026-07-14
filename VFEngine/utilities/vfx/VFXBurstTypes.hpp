@@ -117,62 +117,21 @@ namespace vfx
         return total;
     }
 
-    // Resolves the period used to re-arm finite bursts. A positive authored value
-    // is exact. Zero derives a period from the emitter lifetime and finite burst
-    // schedule; invalid authored values disable wrapping defensively.
+    // Resolves the period used to re-arm finite bursts. Burst looping is OPT-IN
+    // (VK-1524 review #5): only a positive authored duration wraps finite bursts.
+    // Zero (the default) and any non-finite/negative value disable wrapping, so a
+    // finite burst fires exactly once on the absolute emission timeline — matching
+    // pre-loop behavior and not silently re-arming one-shot bursts on looping
+    // emitters. Infinite bursts (cycles <= 0) still repeat via their own interval
+    // inside evaluateBurstSpawns, independent of this period.
     inline float resolveBurstLoopPeriod(const std::vector<VFXBurst>& bursts,
                                         float configuredDuration, float emitterLifetime)
     {
+        (void)bursts;         // period is no longer derived from the burst schedule
+        (void)emitterLifetime; // or the emitter lifetime — looping is explicit only
         if (std::isfinite(configuredDuration) && configuredDuration > 0.0f)
             return configuredDuration;
-        if (configuredDuration != 0.0f)
-            return 0.0f;
-
-        double period = (std::isfinite(emitterLifetime) && emitterLifetime > 0.0f)
-                            ? static_cast<double>(emitterLifetime)
-                            : 0.0;
-        float latestFire = 0.0f;
-        for (const auto& burst : bursts)
-        {
-            if (burst.cycles <= 0 || burst.count <= 0 || burst.probability <= 0.0f ||
-                !std::isfinite(burst.time) || burst.time < 0.0f ||
-                !std::isfinite(burst.interval))
-            {
-                continue;
-            }
-
-            float fireTime = burst.time;
-            double scheduleEnd = static_cast<double>(burst.time);
-            if (burst.interval > 0.0f)
-            {
-                if (burst.cycles > 1)
-                {
-                    fireTime = burst.time +
-                        static_cast<float>(burst.cycles - 1) * burst.interval;
-                }
-                scheduleEnd = static_cast<double>(burst.time) +
-                    static_cast<double>(burst.cycles) * static_cast<double>(burst.interval);
-            }
-
-            if (!std::isfinite(fireTime) || !std::isfinite(scheduleEnd))
-                continue;
-
-            latestFire = std::max(latestFire, fireTime);
-            period = std::max(period, scheduleEnd);
-        }
-
-        if (!std::isfinite(period) || period <= 0.0 ||
-            period > static_cast<double>(std::numeric_limits<float>::max()))
-        {
-            return 0.0f;
-        }
-
-        float resolved = static_cast<float>(period);
-        if (resolved <= latestFire)
-        {
-            resolved = std::nextafter(latestFire, std::numeric_limits<float>::infinity());
-        }
-        return (std::isfinite(resolved) && resolved > 0.0f) ? resolved : 0.0f;
+        return 0.0f; // 0 / invalid => no burst re-arm (finite bursts fire once)
     }
 
     // Loop-aware stateless evaluation. Infinite schedules (cycles <= 0) retain

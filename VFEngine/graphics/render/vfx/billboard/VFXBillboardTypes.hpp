@@ -229,7 +229,7 @@ namespace render::vfx
         float coneSpread = 0.5f;  // radians, cone half-angle for emission direction
         std::string texturePath;
         bool looping = true;
-        float loopDuration = 0.0f; // 0 = derive from lifetime and finite burst schedule
+        float loopDuration = 0.0f; // 0 = no burst re-arm (finite bursts fire once); >0 = re-arm bursts every N seconds
         // Fraction of the emitter's own world velocity passed to new particles (0..1)
         float inheritVelocityRatio = 0.0f;
 

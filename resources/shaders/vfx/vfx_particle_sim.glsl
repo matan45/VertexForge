@@ -369,6 +369,11 @@ vec3 generateSpawnPosition(inout uint seed, GPUEmitterConfig config)
     }
     else if ((config.shapeFlags & SHAPE_TORUS) != 0u)
     {
+        // NOTE (VK-1524): SHAPE_TORUS (bit 11) is a 3-D torus — shapeDimensions.x is the ring
+        // radius, shapeDimensions.y is the tube radius. This deliberately replaces the former
+        // flat-circle interpretation of this bit (where .y was the swept arc) and now matches the
+        // CPU preview (vfxspOrderedCurve / generateTorusPosition3D). Pre-existing Torus .vfVFX
+        // assets change footprint accordingly — an intentional, un-migrated change, not a regression.
         return generateTorusPosition3D(seed, config.shapeDimensions.x, config.shapeDimensions.y, surfaceOnly);
     }
     else if ((config.shapeFlags & SHAPE_RING) != 0u)
@@ -704,7 +709,11 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         }
         if (pc.particlesPerRequest > 0u)
         {
-            uint varianceSeed = pcg_hash(p.spawnSeed);
+            // Request particles store the channel tint (not the variance multiplier) in
+            // packedColorMult, so color/alpha variance is recomputed here every frame. Key
+            // it off the RAW p.spawnSeed to match the spawn-frame bake (~line 1485); hashing
+            // it diverged the seed and popped the color after frame 0 (review #6).
+            uint varianceSeed = p.spawnSeed;
             float colorValueMult = 1.0 + config.colorValueVariance *
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_COLOR_VALUE);
             float alphaMult = 1.0 + config.alphaVariance *
@@ -804,7 +813,9 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
             colorBase = config.startColor;
             if (pc.particlesPerRequest > 0u)
             {
-                uint varianceSeed = pcg_hash(p.spawnSeed);
+                // Raw p.spawnSeed to match the spawn-frame bake (review #6): request
+                // particles recompute variance each frame, so the seed must not be hashed.
+                uint varianceSeed = p.spawnSeed;
                 float colorValueMult = 1.0 + config.colorValueVariance *
                     vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_COLOR_VALUE);
                 float alphaMult = 1.0 + config.alphaVariance *
@@ -1319,7 +1330,7 @@ void main()
                     float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
                     float alphaMult = (pc.particlesPerRequest > 0u)
                         ? (1.0 + config.alphaVariance * vfxVarianceSigned(
-                              pcg_hash(p.spawnSeed), VFX_VAR_STREAM_ALPHA)) *
+                              p.spawnSeed, VFX_VAR_STREAM_ALPHA)) * // raw seed: match spawn bake (review #6)
                           unpackUnorm4x8(p.packedColorMult).a
                         : unpackHalf2x16(p.packedColorMult).y;
                     p.color.a = config.startColor.a * alphaMult * (1.0 - fadeProgress);
@@ -1453,7 +1464,9 @@ void main()
                     // interpolates the sub-frame batch across the [prev, curr] sweep t. The jitter
                     // seed is frame-independent (age + slot, not frameNumber) so seek/prewarm replay.
                     float progress = mix(config.orderedSweepTPrev, config.orderedSweepT, spawnFrac);
-                    uint jitterSeed = pcg_hash(config.seed ^ pcg_hash(uint(progress * 65535.0) ^ spawnSlot));
+                    // Shared with the CPU preview (VFXShapePlacementMath::vfxspOrderedJitterSeed)
+                    // so ordered scatter is bit-identical on GPU and in the editor (review #8).
+                    uint jitterSeed = vfxspOrderedJitterSeed(config.seed, progress, spawnSlot);
                     localPos = vfxspOrderedPosition(config.shapeFlags, config.shapeDimensions,
                                                     progress, config.orderedJitter, jitterSeed);
                 }

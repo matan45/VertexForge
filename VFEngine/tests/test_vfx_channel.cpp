@@ -217,6 +217,22 @@ TEST_SUITE("VFXChannel")
         CHECK(deriveParticleSeed(seed, 1u) != deriveParticleSeed(seed + 1u, 1u));
     }
 
+    TEST_CASE("deriveParticleSeed matches the GPU channel-spawn formula bit-for-bit")
+    {
+        // review #13 — pin the CPU helper to the shader's derivation so the documented lockstep
+        // is actually enforced:
+        //   seed = pcg_hash(request.seed ^ pcg_hash(subParticleIndex + 0x9E3779B9u))
+        // pcgHash below is the exact vfx_particle_sim.glsl pcg_hash mirror (same constants).
+        auto pcgHash = [](uint32_t v) -> uint32_t {
+            const uint32_t state = v * 747796405u + 2891336453u;
+            const uint32_t word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+            return (word >> 22u) ^ word;
+        };
+        for (uint32_t s : {0u, 1u, 42u, 0x9E3779B9u, 0xFFFFFFFFu})
+            for (uint32_t i : {0u, 1u, 7u, 255u})
+                CHECK(deriveParticleSeed(s, i) == pcgHash(s ^ pcgHash(i + 0x9E3779B9u)));
+    }
+
     TEST_CASE("RGBA8 packing clamps, rounds, and does not use black as a tint sentinel")
     {
         CHECK(packColorRGBA8(1.0f, 0.5f, 0.0f, 1.0f) == 0xFF0080FFu);

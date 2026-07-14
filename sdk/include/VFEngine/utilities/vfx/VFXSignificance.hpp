@@ -15,6 +15,7 @@
 // selection, and the hysteresis directly, with no rendering dependencies.
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -44,9 +45,15 @@ namespace vfx
     }
 
     // Importance of a live instance: higher = keep. Closer effects and higher-
-    // significance effects score higher. Always finite (eps floor on the denominator).
+    // significance effects score higher. Always finite: a non-finite input (a NaN/Inf
+    // transform or camera position feeding distanceSq, or NaN authored significance)
+    // is sanitized to 0, because a NaN score would make moreSignificant() violate
+    // std::sort's strict-weak-ordering (UB). 0 == least significant (evicted first),
+    // which is the safe outcome for an effect whose position is already garbage.
     inline float significanceScore(float significance, float distanceSq)
     {
+        if (!std::isfinite(significance) || !std::isfinite(distanceSq))
+            return 0.0f;
         return significance / std::max(distanceSq, kSignificanceEpsilon);
     }
 
