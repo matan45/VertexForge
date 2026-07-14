@@ -85,6 +85,7 @@ namespace services {
         virtual void setBusSoloed(const std::string& busName, bool soloed) = 0;
         virtual float getBusVolume(const std::string& busName) const = 0;
         virtual bool isBusMuted(const std::string& busName) const = 0;
+        virtual bool isBusSoloed(const std::string& busName) const = 0;
         virtual std::vector<std::string> getBusNames() const = 0;
         virtual void saveMixSnapshot(const std::string& name) = 0;
         virtual void loadMixSnapshot(const std::string& name) = 0;

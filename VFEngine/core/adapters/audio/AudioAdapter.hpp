@@ -65,6 +65,7 @@ namespace core
         void setBusSoloed(const std::string& busName, bool soloed) override;
         float getBusVolume(const std::string& busName) const override;
         bool isBusMuted(const std::string& busName) const override;
+        bool isBusSoloed(const std::string& busName) const override;
         std::vector<std::string> getBusNames() const override;
         void saveMixSnapshot(const std::string& name) override;
         void loadMixSnapshot(const std::string& name) override;

@@ -43,6 +43,7 @@ namespace services {
         void setBusSoloed(const std::string& busName, bool soloed) override;
         [[nodiscard]] float getBusVolume(const std::string& busName) const override;
         [[nodiscard]] bool isBusMuted(const std::string& busName) const override;
+        [[nodiscard]] bool isBusSoloed(const std::string& busName) const override;
         [[nodiscard]] std::vector<std::string> getBusNames() const override;
         void saveMixSnapshot(const std::string& name) override;
         void loadMixSnapshot(const std::string& name) override;

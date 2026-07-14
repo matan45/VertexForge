@@ -39,6 +39,11 @@ namespace events::audio {
         std::string_view getName() const override { return "IsBusMuted"; }
     };
 
+    struct IsBusSoloedQuery : ::events::IQuery<bool> {
+        std::string busName;
+        std::string_view getName() const override { return "IsBusSoloed"; }
+    };
+
     struct GetBusNamesQuery : ::events::IQuery<std::vector<std::string>> {
         std::string_view getName() const override { return "GetBusNames"; }
     };

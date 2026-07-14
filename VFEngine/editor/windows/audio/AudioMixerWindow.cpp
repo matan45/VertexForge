@@ -81,10 +81,14 @@ namespace windows
             if (muted) ImGui::PopStyleColor();
 
             ImGui::SameLine();
+            events::audio::IsBusSoloedQuery soloQuery; soloQuery.busName = name;
+            bool soloed = dispatcher.query(soloQuery);
+            if (soloed) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.65f, 0.15f, 1.0f));
             if (ImGui::Button("S", ImVec2(25, 20))) {
-                events::audio::SetBusSoloedCommand cmd; cmd.busName = name; cmd.soloed = true;
+                events::audio::SetBusSoloedCommand cmd; cmd.busName = name; cmd.soloed = !soloed;
                 dispatcher.execute(cmd);
             }
+            if (soloed) ImGui::PopStyleColor();
 
             ImGui::PopID();
             ImGui::EndGroup();

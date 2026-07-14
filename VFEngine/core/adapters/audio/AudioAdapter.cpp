@@ -184,6 +184,10 @@ namespace core {
         return audioController->isBusMuted(busName);
     }
 
+    bool AudioAdapter::isBusSoloed(const std::string& busName) const {
+        return audioController->isBusSoloed(busName);
+    }
+
     std::vector<std::string> AudioAdapter::getBusNames() const {
         return audioController->getBusNames();
     }

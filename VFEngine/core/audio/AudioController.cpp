@@ -333,6 +333,12 @@ namespace core::audio
         return busManager->isBusMuted(busName);
     }
 
+    bool AudioController::isBusSoloed(const std::string& busName) const
+    {
+        if (!initialized) return false;
+        return busManager->isBusSoloed(busName);
+    }
+
     std::vector<std::string> AudioController::getBusNames() const
     {
         if (!initialized) return {};

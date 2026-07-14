@@ -217,6 +217,11 @@ namespace services {
                 return isBusMuted(query.busName);
             });
 
+        dispatcher.registerQueryHandler<events::audio::IsBusSoloedQuery>(
+            [this](const auto& query) {
+                return isBusSoloed(query.busName);
+            });
+
         dispatcher.registerQueryHandler<events::audio::GetBusNamesQuery>(
             [this](const auto&) {
                 return getBusNames();
@@ -367,6 +372,10 @@ namespace services {
 
     bool AudioServiceImpl::isBusMuted(const std::string& busName) const {
         return audioProvider->isBusMuted(busName);
+    }
+
+    bool AudioServiceImpl::isBusSoloed(const std::string& busName) const {
+        return audioProvider->isBusSoloed(busName);
     }
 
     std::vector<std::string> AudioServiceImpl::getBusNames() const {
