@@ -15,4 +15,13 @@ namespace events::audio
     {
         std::string_view getName() const override { return "GetAudioSettings"; }
     };
+
+    // VK-1506: broadcast when audio settings are applied so main-thread consumers
+    // (AudioSceneUpdater's doppler teleport guard) can cache the value instead of
+    // querying the full settings struct every frame.
+    struct AudioSettingsChangedNotification : ::events::INotification
+    {
+        float maxDopplerSpeed = 343.3f;
+        std::string_view getName() const override { return "AudioSettingsChanged"; }
+    };
 }

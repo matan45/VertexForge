@@ -15,9 +15,11 @@ namespace core::audio
         ALCcontext* context = nullptr;
         bool initialized = false;
         bool efxSupported = false;
+        bool spatializeSupported = false;
         types::AudioSettings currentSettings = types::AudioSettings::createDefault();
 
         static bool s_efxAvailable;
+        static bool s_spatializeAvailable;
 
     public:
         // EFX filter function pointers (loaded dynamically)
@@ -66,6 +68,12 @@ namespace core::audio
 
         bool isEfxSupported() const { return efxSupported; }
         static bool isEfxAvailable() { return s_efxAvailable; }
+
+        // AL_SOFT_source_spatialize: lets OpenAL-soft spatialize non-mono buffers
+        // when forced on 3D sources. Static getter because AudioSource reaches
+        // AudioSystem only through statics (no instance pointer).
+        bool isSpatializeSupported() const { return spatializeSupported; }
+        static bool isSpatializeAvailable() { return s_spatializeAvailable; }
 
         // Global audio settings
         void setMasterVolume(float volume);

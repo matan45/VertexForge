@@ -46,7 +46,8 @@ namespace services {
 
         virtual void setListenerPosition(const glm::vec3& position,
                                          const glm::vec3& forward,
-                                         const glm::vec3& up = glm::vec3(0, 1, 0)) = 0;
+                                         const glm::vec3& up = glm::vec3(0, 1, 0),
+                                         const glm::vec3& velocity = glm::vec3(0.0f)) = 0;
 
         // === Sound Playback ===
 

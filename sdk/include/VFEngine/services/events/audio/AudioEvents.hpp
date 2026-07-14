@@ -14,6 +14,7 @@ namespace events::audio {
         glm::vec3 position;
         glm::vec3 forward;
         glm::vec3 up{0.0f, 1.0f, 0.0f};
+        glm::vec3 velocity{0.0f};  // VK-1506 doppler; zero on the editor path
         std::string_view getName() const override { return "SetListenerPosition"; }
     };
 

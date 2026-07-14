@@ -390,6 +390,10 @@ namespace windows
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Auto: short audio (<10s) decompresses on load for low latency; long audio streams from disk");
 
+                ImGui::Checkbox("Force Mono", &audioForceMono);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Downmix to mono at import. Required for 3D spatialization (OpenAL only spatializes mono) and halves the stored data");
+
                 ImGui::Unindent();
             }
 
@@ -408,6 +412,7 @@ namespace windows
                     config.compressionQuality = compressionQuality;
                     config.audioConfig.quality = audioQuality;
                     config.audioConfig.loadType = audioLoadType;
+                    config.audioConfig.forceMono = audioForceMono;
                     config.customOptions = customOptions[i];
                     importFiles.emplace_back(req.path, config);
                     filePaths.push_back(req.path);

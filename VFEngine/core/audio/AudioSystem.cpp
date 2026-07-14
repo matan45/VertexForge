@@ -5,6 +5,7 @@
 namespace core::audio {
 
     bool AudioSystem::s_efxAvailable = false;
+    bool AudioSystem::s_spatializeAvailable = false;
     LPALGENFILTERS AudioSystem::alGenFilters = nullptr;
     LPALDELETEFILTERS AudioSystem::alDeleteFilters = nullptr;
     LPALFILTERI AudioSystem::alFilteri = nullptr;
@@ -58,6 +59,15 @@ namespace core::audio {
 
         alDistanceModel(AL_INVERSE_DISTANCE_CLAMPED);
 
+        // AL (not ALC) extension — queried without a device argument. When present,
+        // 3D sources force AL_SOURCE_SPATIALIZE_SOFT so stereo/multichannel clips are
+        // downmixed and spatialized instead of silently playing un-spatialized.
+        spatializeSupported = alIsExtensionPresent("AL_SOFT_source_spatialize") == AL_TRUE;
+        if (!spatializeSupported)
+        {
+            vfLogWarning("OpenAL AL_SOFT_source_spatialize not available - stereo 3D clips won't spatialize (force-mono import recommended)");
+        }
+
         efxSupported = alcIsExtensionPresent(device, "ALC_EXT_EFX") == ALC_TRUE;
         if (efxSupported)
         {
@@ -110,6 +120,7 @@ namespace core::audio {
             vfLogWarning("OpenAL EFX extension not available - distance filtering disabled");
         }
         s_efxAvailable = efxSupported;
+        s_spatializeAvailable = spatializeSupported;
 
         initialized = true;
 

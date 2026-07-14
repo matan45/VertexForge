@@ -1,5 +1,6 @@
 #include "AudioSource.hpp"
 #include "AudioSystem.hpp"
+#include <AL/alext.h> // AL_SOURCE_SPATIALIZE_SOFT / AL_AUTO_SOFT (not in <AL/al.h>)
 #include <algorithm>
 
 namespace core::audio
@@ -242,6 +243,16 @@ namespace core::audio
 
         spatialEnabled = is3D;
         alSourcei(sourceId, AL_SOURCE_RELATIVE, is3D ? AL_FALSE : AL_TRUE);
+
+        // Force spatialization for 3D sources so stereo/multichannel clips are
+        // downmixed and spatialized instead of playing flat (AL_AUTO_SOFT only
+        // spatializes mono). AL_AUTO_SOFT restores the default for 2D sources,
+        // which matters because pooled sources are recycled across 2D/3D plays.
+        if (AudioSystem::isSpatializeAvailable())
+        {
+            alSourcei(sourceId, AL_SOURCE_SPATIALIZE_SOFT, is3D ? AL_TRUE : AL_AUTO_SOFT);
+        }
+
         AudioSystem::checkError("set3D");
     }
 

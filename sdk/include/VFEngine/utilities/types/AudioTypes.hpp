@@ -38,6 +38,9 @@ namespace types
         float masterVolume = 1.0f;
         float dopplerFactor = 1.0f;
         float speedOfSound = 343.3f;
+        // VK-1506: a single-frame move implying a higher speed (m/s) is treated as a
+        // teleport and produces no doppler pitch shift. Consumed by AudioSceneUpdater.
+        float maxDopplerSpeed = 343.3f;
         AudioDistanceModel distanceModel = AudioDistanceModel::InverseDistanceClamped;
         float defaultRolloffFactor = 1.0f;
 
@@ -55,6 +58,7 @@ namespace types
             settings.masterVolume = 1.0f;
             settings.dopplerFactor = 1.0f;
             settings.speedOfSound = 343.3f;
+            settings.maxDopplerSpeed = 343.3f;
             settings.distanceModel = AudioDistanceModel::InverseDistanceClamped;
             settings.defaultRolloffFactor = 1.0f;
             settings.enableDistanceFilter = true;

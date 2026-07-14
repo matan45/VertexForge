@@ -7,6 +7,8 @@
 #include "events/audio/AudioBusEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "resource/VfAudioHeader.hpp"
+#include "resource/Types.hpp"
 #include <imgui.h>
 #include <fstream>
 #include <cmath>
@@ -120,13 +122,44 @@ namespace windows::details
 
         if (audioData.audioRef.isValid())
         {
-            std::string filename = audioData.audioRef.resolve();
+            const std::string fullPath = audioData.audioRef.resolve();
+
+            std::string filename = fullPath;
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
                 filename = filename.substr(lastSlash + 1);
             }
             ImGui::Text("File: %s", filename.c_str());
+
+            // Advisory badge: OpenAL spatializes mono best. A stereo clip on a 3D
+            // source is downmixed at runtime (AL_SOURCE_SPATIALIZE_SOFT), but a
+            // Force-Mono reimport is smaller and spatializes cleaner. Re-read the
+            // .vfAudio header only when the resolved path changes (no per-frame IO).
+            if (fullPath != cachedStereoPath)
+            {
+                cachedStereoPath = fullPath;
+                cachedIsStereo = false;
+                std::ifstream headerFile(fullPath, std::ios::binary);
+                if (headerFile.good())
+                {
+                    resource::VfAudioHeader header;
+                    resource::readVfAudioHeader(headerFile, header);
+                    // The reader performs no validation, so only trust the channel
+                    // count when the stream read succeeded and the file is a .vfAudio.
+                    if (headerFile.good() &&
+                        header.fileType == static_cast<uint8_t>(resource::FileType::AUDIO))
+                    {
+                        cachedIsStereo = header.channels > 1;
+                    }
+                }
+            }
+
+            if (cachedIsStereo)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+                                   "Stereo clip - reimport with Force Mono for full spatialization");
+            }
         }
         else
         {
