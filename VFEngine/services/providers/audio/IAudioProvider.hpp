@@ -58,6 +58,8 @@ namespace services {
         virtual bool isPlaying(AudioHandleId handle) const = 0;
         virtual void setVolume(AudioHandleId handle, float volume) = 0;
         virtual void setPitch(AudioHandleId handle, float pitch) = 0;
+        virtual void setSourceTransform(AudioHandleId handle, const glm::vec3& position,
+                                        const glm::vec3& direction, const glm::vec3& velocity) = 0;
 
         // === Listener ===
         virtual void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,

@@ -187,6 +187,7 @@ namespace handlers
         customPipelineService.reset();
         pluginTextureService.reset();
         debugDrawService.reset();
+        reverbCameraSubscription.unsubscribe();  // VK-1505: drop reverb sub before its target dies.
         audioSceneUpdater.reset();
         worldSectorService.reset();
         assetLifecycleService.reset();

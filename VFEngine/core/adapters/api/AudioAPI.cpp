@@ -12,6 +12,7 @@
 #include "types/AudioEffectTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "math/TransformUtils.hpp"
 
 namespace core::api
 {
@@ -135,13 +136,7 @@ namespace core::api
                     if (registry.all_of<components::TransformComponent>(*entity))
                     {
                         auto& transform = registry.get<components::TransformComponent>(*entity);
-                        float yawRad = glm::radians(transform.rotation.y);
-                        float pitchRad = glm::radians(transform.rotation.x);
-                        glm::vec3 forward;
-                        forward.x = -std::sin(yawRad) * std::cos(pitchRad);
-                        forward.y = std::sin(pitchRad);
-                        forward.z = -std::cos(yawRad) * std::cos(pitchRad);
-                        cmd.params.direction = glm::normalize(forward);
+                        cmd.params.direction = math::forwardFromEulerDegrees(transform.rotation);
                     }
 
                     cmd.params.busName = audioComp.busName;

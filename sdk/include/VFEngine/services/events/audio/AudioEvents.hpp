@@ -61,6 +61,16 @@ namespace events::audio {
         std::string_view getName() const override { return "SetSoundPitch"; }
     };
 
+    // Per-frame re-sync of a playing 3D source's transform (VK-1505: sounds follow
+    // moving entities). velocity is reserved for VK-1506 doppler (dispatched as 0 today).
+    struct SetSoundTransformCommand : ::events::ICommand<void> {
+        services::AudioHandle handle;
+        glm::vec3 position;
+        glm::vec3 direction{0.0f, 0.0f, -1.0f};
+        glm::vec3 velocity{0.0f};
+        std::string_view getName() const override { return "SetSoundTransform"; }
+    };
+
     // ============================================================
     // STREAMING AUDIO COMMANDS
     // ============================================================

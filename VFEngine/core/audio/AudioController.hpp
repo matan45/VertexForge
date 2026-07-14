@@ -66,6 +66,8 @@ namespace core::audio {
         bool isPlaying(AudioHandle handle) const;
         void setVolume(AudioHandle handle, float volume);
         void setPitch(AudioHandle handle, float pitch);
+        void setSourceTransform(AudioHandle handle, const glm::vec3& position,
+                                const glm::vec3& direction, const glm::vec3& velocity);
 
         // === Listener ===
         void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,

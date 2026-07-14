@@ -85,6 +85,9 @@ namespace core::audio
         void setPosition(const glm::vec3& position);
         glm::vec3 getPosition() const;
 
+        // AL_VELOCITY for doppler (VK-1506). Set to 0 by VK-1505's follow loop.
+        void setVelocity(const glm::vec3& velocity);
+
         void set3D(bool is3D);
 
         void setMinDistance(float distance);

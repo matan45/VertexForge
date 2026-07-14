@@ -220,6 +220,13 @@ namespace core::audio
         AudioSystem::checkError("setPosition");
     }
 
+    void AudioSource::setVelocity(const glm::vec3& velocity)
+    {
+        if (!isValid()) return;
+        alSource3f(sourceId, AL_VELOCITY, velocity.x, velocity.y, velocity.z);
+        AudioSystem::checkError("setVelocity");
+    }
+
     glm::vec3 AudioSource::getPosition() const
     {
         if (!isValid()) return glm::vec3(0.0f);

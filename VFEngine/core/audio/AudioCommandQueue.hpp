@@ -30,6 +30,16 @@ namespace core::audio
     struct SetVolumeCmd { AudioHandle handle; float volume; };
     struct SetPitchCmd { AudioHandle handle; float pitch; };
 
+    // Per-frame re-sync of a playing 3D source's transform (VK-1505: sounds follow
+    // moving entities). velocity is plumbed for VK-1506 doppler but dispatched as 0 today.
+    struct SetSourceTransformCmd
+    {
+        AudioHandle handle;
+        glm::vec3 position;
+        glm::vec3 direction;
+        glm::vec3 velocity;
+    };
+
     struct SetListenerCmd
     {
         glm::vec3 position;
@@ -93,7 +103,7 @@ namespace core::audio
 
     using AudioCommand = std::variant<
         PlaySoundCmd, StopSoundCmd, PauseSoundCmd, ResumeSoundCmd,
-        SetVolumeCmd, SetPitchCmd, SetListenerCmd, SetPlaybackPosCmd,
+        SetVolumeCmd, SetPitchCmd, SetSourceTransformCmd, SetListenerCmd, SetPlaybackPosCmd,
         ApplySettingsCmd, BusVolumeCmd, BusMuteCmd, BusSoloCmd, CreateBusCmd,
         AddBusEffectCmd, RemoveBusEffectCmd, UpdateBusEffectCmd,
         SetBusEffectEnabledCmd, SetBusEffectWetDryCmd,

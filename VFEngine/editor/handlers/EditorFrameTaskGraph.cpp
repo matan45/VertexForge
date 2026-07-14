@@ -123,6 +123,19 @@ namespace handlers
         // thread. The AudioListener task was strictly redundant here, so the
         // fix is simply to remove it. Runtime keeps its own AudioListener
         // task because it has no ViewPort to do the work.
+        //
+        // VK-1505: emitter following (updateEmitters) is independent of the
+        // listener - it re-syncs each playing 3D source from its entity's world
+        // transform - so it lives in its own main-thread-pinned task below.
+        // Reverb-zone tracking is restored separately via a
+        // CameraPositionUpdatedNotification subscription in EditorServiceBootstrap
+        // (same authoritative viewport position ViewPort already dispatches).
+        frameTaskGraph->addTask("AudioEmitters", [this]() {
+            if (audioSceneUpdater) {
+                audioSceneUpdater->updateEmitters(
+                    static_cast<float>(engineTime::Timer::getGameDeltaTime()));
+            }
+        }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
         frameTaskGraph->addTask("Weather", [this]() {
             float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
@@ -228,6 +241,8 @@ namespace handlers
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");
+        // VK-1505: emitters must read up-to-date WorldTransformComponents.
+        frameTaskGraph->addDependency("AudioEmitters", "Transforms");
         frameTaskGraph->addDependency("LateScripts", "Transforms");
         frameTaskGraph->addDependency("ImGuiDraw", "LateScripts");
         frameTaskGraph->addDependency("Render", "ImGuiDraw");

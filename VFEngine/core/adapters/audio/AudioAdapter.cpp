@@ -126,6 +126,11 @@ namespace core {
         audioController->setPitch(handle, pitch);
     }
 
+    void AudioAdapter::setSourceTransform(services::AudioHandleId handle, const glm::vec3& position,
+                                          const glm::vec3& direction, const glm::vec3& velocity) {
+        audioController->setSourceTransform(handle, position, direction, velocity);
+    }
+
     void AudioAdapter::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
                                             const glm::vec3& up) {
         audioController->setListenerPosition(position, forward, up);

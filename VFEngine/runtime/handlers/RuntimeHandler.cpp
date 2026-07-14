@@ -564,6 +564,9 @@ namespace handlers {
         frameTaskGraph->addTask("AudioListener", [this]() {
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
+                // VK-1505: re-sync playing 3D emitters so sounds follow moving entities.
+                audioSceneUpdater->updateEmitters(
+                    static_cast<float>(engineTime::Timer::getGameDeltaTime()));
             }
         }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 

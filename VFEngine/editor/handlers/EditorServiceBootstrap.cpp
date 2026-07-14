@@ -9,6 +9,7 @@
 #include "impl/editor/EditorModeServiceImpl.hpp"
 #include "impl/audio/AudioServiceImpl.hpp"
 #include "impl/scripting/ScriptingServiceImpl.hpp"
+#include "events/render/RenderEvents.hpp"
 #include "impl/editor/UndoRedoServiceImpl.hpp"
 #include "impl/project/FileOperationsServiceImpl.hpp"
 #include "impl/physics/PhysicsServiceImpl.hpp"
@@ -159,6 +160,21 @@ namespace handlers
         auto* reverbZoneMgr = static_cast<core::audio::ReverbZoneManager*>(
             bootstrap->getAudioProvider()->getReverbZoneManager());
         audioSceneUpdater->setReverbZoneManager(reverbZoneMgr);
+
+        // VK-1505 (bug B4): restore editor reverb-zone tracking. The editor never invokes
+        // AudioSceneUpdater, so reverb zones stopped following the listener when the old
+        // AudioListener task was removed. ViewPort::updateRendererCameras publishes
+        // CameraPositionUpdatedNotification every frame on the main thread with the SAME
+        // position it feeds the listener command, so drive reverb-only updates from it -
+        // no second/conflicting listener dispatch. ScopedSubscription auto-unsubscribes
+        // with EditorHandler (and is dropped explicitly before audioSceneUpdater in cleanUp).
+        reverbCameraSubscription = events::ScopedSubscription(
+            events::EventDispatcher::instance()
+                .subscribe<events::render::CameraPositionUpdatedNotification>(
+                    [this](const events::render::CameraPositionUpdatedNotification& notif) {
+                        if (audioSceneUpdater)
+                            audioSceneUpdater->updateReverbZones(notif.position);
+                    }));
 
         saveService = std::make_unique<services::SaveService>(
             bootstrap->getSceneGraphSystem(),

@@ -241,6 +241,28 @@ namespace core::audio
                     if (source) source->setPitch(command.pitch);
                 }
             }
+            else if constexpr (std::is_same_v<T, SetSourceTransformCmd>)
+            {
+                AudioHandle internal = resolveHandle(command.handle);
+                if (StreamingAudioManager::isStreamingHandle(internal))
+                {
+                    // VK-1505: streaming 3D positioning is intentionally a no-op.
+                    // StreamingAudioSource::applyConfig ignores is3D/position and never
+                    // flips AL_SOURCE_RELATIVE, so a streaming source is listener-relative
+                    // and per-frame position would be meaningless. Full streaming-3D
+                    // spatialization is a separate follow-up ticket.
+                }
+                else
+                {
+                    AudioSource* source = deps.sourceManager->getSource(internal);
+                    if (source)
+                    {
+                        source->setPosition(command.position);
+                        source->setDirection(command.direction);
+                        source->setVelocity(command.velocity);
+                    }
+                }
+            }
             else if constexpr (std::is_same_v<T, SetListenerCmd>)
             {
                 listenerPosition = command.position;

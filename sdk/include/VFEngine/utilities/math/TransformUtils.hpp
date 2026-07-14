@@ -66,4 +66,28 @@ namespace math
         transform = glm::scale(transform, scale);
         return transform;
     }
+
+    // Unit forward vector from an Euler rotation in DEGREES (x = pitch, y = yaw),
+    // in the engine's right-handed, -Z-forward convention. Single source of truth
+    // for AudioAPI (play-time source direction) and AudioSceneUpdater (per-frame
+    // emitter follow + listener forward). Extracted verbatim from the previously
+    // duplicated inline math so behaviour is unchanged.
+    inline glm::vec3 forwardFromEulerDegrees(const glm::vec3& eulerDegrees)
+    {
+        const float yawRad = glm::radians(eulerDegrees.y);
+        const float pitchRad = glm::radians(eulerDegrees.x);
+        glm::vec3 forward;
+        forward.x = -std::sin(yawRad) * std::cos(pitchRad);
+        forward.y = std::sin(pitchRad);
+        forward.z = -std::cos(yawRad) * std::cos(pitchRad);
+        return glm::normalize(forward);
+    }
+
+    // Dirty-check predicate: true when b has moved from a by more than eps.
+    // Squared-distance compare (no sqrt); reused for both position and direction deltas.
+    inline bool positionMovedBeyond(const glm::vec3& a, const glm::vec3& b, float eps)
+    {
+        const glm::vec3 d = b - a;
+        return glm::dot(d, d) > eps * eps;
+    }
 }

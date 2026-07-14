@@ -3,6 +3,7 @@
 #include <string>
 #include <atomic>
 #include "WindowImguiHandler.hpp"
+#include "events/EventDispatcher.hpp"
 
 #include "interfaces/project/ISceneService.hpp"
 #include "interfaces/render/IEditorRenderService.hpp"
@@ -132,6 +133,9 @@ namespace handlers {
 		std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
 		std::shared_ptr<services::INavmeshService> navmeshService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
+		// VK-1505: editor reverb-zone tracking. Declared AFTER audioSceneUpdater so it is
+		// destroyed FIRST (unsubscribes before the updater it captures is torn down).
+		events::ScopedSubscription reverbCameraSubscription;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;
 		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;

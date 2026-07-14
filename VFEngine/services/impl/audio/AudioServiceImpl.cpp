@@ -111,6 +111,16 @@ namespace services {
                 setPitch(cmd.handle, cmd.pitch);
             });
 
+        // VK-1505: per-frame emitter transform re-sync. Engine-internal loop (driven by
+        // AudioSceneUpdater), not a script-facing verb, so it calls the provider directly
+        // rather than adding a method to IAudioService (mirrors the snapshot handlers above).
+        dispatcher.registerCommandHandler<events::audio::SetSoundTransformCommand>(
+            [this](const auto& cmd) {
+                if (audioProvider)
+                    audioProvider->setSourceTransform(cmd.handle.id, cmd.position,
+                                                      cmd.direction, cmd.velocity);
+            });
+
         // Streaming Audio Commands
         dispatcher.registerCommandHandler<events::audio::PlayStreamingSoundCommand>(
             [this](const auto& cmd) {

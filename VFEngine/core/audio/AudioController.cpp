@@ -227,6 +227,13 @@ namespace core::audio
         commandQueue->enqueue(SetPitchCmd{handle, pitch});
     }
 
+    void AudioController::setSourceTransform(AudioHandle handle, const glm::vec3& position,
+                                             const glm::vec3& direction, const glm::vec3& velocity)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetSourceTransformCmd{handle, position, direction, velocity});
+    }
+
     void AudioController::stopAll()
     {
         if (!initialized || !commandQueue) return;

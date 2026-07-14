@@ -41,6 +41,8 @@ namespace core
         bool isPlaying(services::AudioHandleId handle) const override;
         void setVolume(services::AudioHandleId handle, float volume) override;
         void setPitch(services::AudioHandleId handle, float pitch) override;
+        void setSourceTransform(services::AudioHandleId handle, const glm::vec3& position,
+                                const glm::vec3& direction, const glm::vec3& velocity) override;
 
         // === Listener ===
         void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
