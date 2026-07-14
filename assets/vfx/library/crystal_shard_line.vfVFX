@@ -1,0 +1,108 @@
+{
+    "version": "1.0",
+    "uuid": "920000000000000210",
+    "name": "Crystal Shard Line",
+    "graph": {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "Emitter",
+                "name": "Emitter",
+                "position": [100.0, 200.0],
+                "properties": {
+                    "spawnRate": { "type": "Float", "value": 45.0 },
+                    "lifetime": { "type": "Float", "value": 1.3 },
+                    "lifetimeVariance": { "type": "Float", "value": 0.3 },
+                    "startSize": { "type": "Float", "value": 0.32 },
+                    "sizeVariance": { "type": "Float", "value": 0.5 },
+                    "startSpeed": { "type": "Float", "value": 1.0 },
+                    "speedVariance": { "type": "Float", "value": 0.6 },
+                    "startVelocity": { "type": "Vec3", "value": [0.0, 0.5, 0.0] },
+                    "startColor": { "type": "Color", "value": [0.95, 0.12, 0.12, 0.9] },
+                    "alphaVariance": { "type": "Float", "value": 0.15 },
+                    "looping": { "type": "Bool", "value": true },
+                    "texture": { "type": "String", "value": "" },
+                    "burstCount": { "type": "Int", "value": 0 },
+                    "additiveBlend": { "type": "Bool", "value": false },
+                    "blendMode": { "type": "String", "value": "alpha" },
+                    "alphaClipThreshold": { "type": "Float", "value": 0.02 },
+                    "renderMode": { "type": "Int", "value": 3 },
+                    "meshPath": { "type": "String", "value": "assets/vfx/library/ice_shard.vfMesh" },
+                    "meshOrientationMode": { "type": "String", "value": "tumble" },
+                    "meshOrientationAxis": { "type": "Vec3", "value": [0.0, 1.0, 0.0] },
+                    "meshOrientationSpinRate": { "type": "Float", "value": 20.0 },
+                    "emissiveIntensity": { "type": "Float", "value": 2.4 },
+                    "lightingInfluence": { "type": "Float", "value": 0.3 },
+                    "normalMode": { "type": "Int", "value": 2 },
+                    "ambientAmount": { "type": "Float", "value": 0.5 },
+                    "rotationVariance": { "type": "Float", "value": 180.0 },
+                    "angularVelocityVariance": { "type": "Float", "value": 420.0 },
+                    "coneSpread": { "type": "Float", "value": 0.5 }
+                }
+            },
+            {
+                "id": 3,
+                "type": "SizeOverLifetime",
+                "name": "Size Over Lifetime",
+                "position": [330.0, 100.0],
+                "properties": {
+                    "curve": { "type": "Curve", "value": { "keys": [[0.0, 0.2, 0.0, 0.0], [0.15, 1.15, 0.0, 0.0], [0.8, 0.95, 0.0, 0.0], [1.0, 0.1, 0.0, 0.0]] } }
+                }
+            },
+            {
+                "id": 4,
+                "type": "ColorOverLifetime",
+                "name": "Color Over Lifetime",
+                "position": [530.0, 100.0],
+                "properties": {
+                    "gradient": { "type": "Gradient", "value": { "stops": [
+                        [0.0, 1.0, 0.35, 0.25, 0.0],
+                        [0.12, 0.95, 0.15, 0.12, 0.9],
+                        [0.7, 0.5, 0.06, 0.06, 0.5],
+                        [1.0, 0.2, 0.02, 0.02, 0.0]
+                    ] } }
+                }
+            },
+            {
+                "id": 5,
+                "type": "ForceGravity",
+                "name": "Gravity",
+                "position": [730.0, 100.0],
+                "properties": {
+                    "direction": { "type": "Vec3", "value": [0.0, -1.0, 0.0] },
+                    "strength": { "type": "Float", "value": 1.6 }
+                }
+            },
+            {
+                "id": 10,
+                "type": "Shape",
+                "name": "Line",
+                "position": [100.0, 420.0],
+                "properties": {
+                    "shapeType": { "type": "String", "value": "Line" },
+                    "emitFrom": { "type": "String", "value": "Volume" },
+                    "randomDirection": { "type": "Bool", "value": false },
+                    "lineHalf": { "type": "Vec3", "value": [2.6, 0.0, 0.0] },
+                    "ordered": { "type": "Bool", "value": true },
+                    "orderedLoop": { "type": "Bool", "value": true },
+                    "sweepDuration": { "type": "Float", "value": 1.1 },
+                    "orderedJitter": { "type": "Float", "value": 0.35 }
+                }
+            },
+            {
+                "id": 2,
+                "type": "OutSystem",
+                "name": "Output",
+                "position": [930.0, 200.0],
+                "properties": {}
+            }
+        ],
+        "links": [
+            { "id": 1, "sourceNode": 1, "targetNode": 3, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 2, "sourceNode": 3, "targetNode": 4, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 3, "sourceNode": 4, "targetNode": 5, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 4, "sourceNode": 5, "targetNode": 2, "sourcePin": "Output", "targetPin": "Input" },
+            { "id": 5, "sourceNode": 10, "targetNode": 1, "sourcePin": "Output", "targetPin": "Shape" }
+        ]
+    }
+}
