@@ -8,6 +8,8 @@ namespace core::audio {
 
     class ReverbZoneManager;
 
+    #pragma warning(push)
+    #pragma warning(disable: 4251)  // private emitterCache is an impl detail, not DLL ABI
     class VF_AUDIO_API AudioSceneUpdater {
     public:
         explicit AudioSceneUpdater() = default;
@@ -42,5 +44,6 @@ namespace core::audio {
         ReverbZoneManager* reverbZoneManager = nullptr;
         std::unordered_map<std::uint64_t, EmitterCacheEntry> emitterCache;
     };
+    #pragma warning(pop)
 
 }
