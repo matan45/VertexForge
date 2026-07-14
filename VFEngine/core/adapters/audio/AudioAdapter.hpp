@@ -46,7 +46,7 @@ namespace core
 
         // === Listener ===
         void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
-                                 const glm::vec3& up) override;
+                                 const glm::vec3& up, const glm::vec3& velocity) override;
 
         // === Playback Position ===
         float getPlaybackPosition(services::AudioHandleId handle) const override;

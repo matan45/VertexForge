@@ -271,6 +271,8 @@ namespace serialization
                 settings.dopplerFactor = listener["dopplerFactor"].get<float>();
             if (listener.contains("speedOfSound") && listener["speedOfSound"].is_number())
                 settings.speedOfSound = listener["speedOfSound"].get<float>();
+            if (listener.contains("maxDopplerSpeed") && listener["maxDopplerSpeed"].is_number())
+                settings.maxDopplerSpeed = listener["maxDopplerSpeed"].get<float>();
         }
 
         void deserializeAudioDistModel(const json& j, types::AudioSettings& settings)
@@ -374,7 +376,8 @@ namespace serialization
         j["listener"] = {
             {"masterVolume", settings.masterVolume},
             {"dopplerFactor", settings.dopplerFactor},
-            {"speedOfSound", settings.speedOfSound}
+            {"speedOfSound", settings.speedOfSound},
+            {"maxDopplerSpeed", settings.maxDopplerSpeed}
         };
 
         j["distanceModel"] = {

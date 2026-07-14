@@ -26,6 +26,7 @@
 #include "interfaces/weather/IWeatherService.hpp"
 #include "interfaces/time/ITimeService.hpp"
 #include "events/EventTypes.hpp"
+#include "events/EventDispatcher.hpp"
 
 namespace services {
     class FrameTaskGraph;
@@ -74,6 +75,9 @@ namespace handlers {
         std::shared_ptr<services::INavmeshService> navmeshService;
         std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
+        // VK-1506: caches the doppler teleport-guard speed from applied audio settings.
+        // Declared AFTER audioSceneUpdater so it unsubscribes before the updater is gone.
+        events::ScopedSubscription audioSettingsSubscription;
         std::shared_ptr<services::IRenderTextureService> renderTextureService;
         std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
         std::shared_ptr<services::IControllerService> controllerService;

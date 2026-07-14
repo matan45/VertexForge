@@ -268,6 +268,7 @@ namespace core::audio
                 listenerPosition = command.position;
                 deps.listener->setPosition(command.position);
                 deps.listener->setOrientation(command.forward, command.up);
+                deps.listener->setVelocity(command.velocity);
             }
             else if constexpr (std::is_same_v<T, SetPlaybackPosCmd>)
             {

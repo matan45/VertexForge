@@ -132,8 +132,8 @@ namespace core {
     }
 
     void AudioAdapter::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
-                                            const glm::vec3& up) {
-        audioController->setListenerPosition(position, forward, up);
+                                            const glm::vec3& up, const glm::vec3& velocity) {
+        audioController->setListenerPosition(position, forward, up, velocity);
     }
 
     float AudioAdapter::getPlaybackPosition(services::AudioHandleId handle) const {

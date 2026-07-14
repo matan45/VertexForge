@@ -94,4 +94,35 @@ TEST_SUITE("AudioSpatial")
         const glm::vec3 b = a + glm::vec3(2e-3f, 0.0f, 0.0f);
         CHECK(math::positionMovedBeyond(a, b, eps) == math::positionMovedBeyond(b, a, eps));
     }
+
+    // VK-1506: doppler velocity from a per-frame finite difference, with a
+    // divide-by-zero guard and a teleport guard.
+    TEST_CASE("computeClampedVelocity: finite difference + dt and teleport guards")
+    {
+        constexpr float maxSpeed = 343.3f;
+
+        // Normal motion: 2 units over 0.5 s -> 4 units/s along +x.
+        CHECK(approxVec(math::computeClampedVelocity(glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f),
+                                                     0.5f, maxSpeed),
+                        glm::vec3(4.0f, 0.0f, 0.0f)));
+
+        // dt <= 0 -> zero (paused frame / first sample), never a division by zero.
+        CHECK(approxVec(math::computeClampedVelocity(glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f),
+                                                     0.0f, maxSpeed), glm::vec3(0.0f)));
+        CHECK(approxVec(math::computeClampedVelocity(glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f),
+                                                     -0.1f, maxSpeed), glm::vec3(0.0f)));
+
+        // Teleport: 100 units in ~one frame (~6250 u/s) exceeds the cap -> zero (no chirp).
+        CHECK(approxVec(math::computeClampedVelocity(glm::vec3(0.0f), glm::vec3(100.0f, 0.0f, 0.0f),
+                                                     0.016f, maxSpeed), glm::vec3(0.0f)));
+
+        // Just under the cap -> preserved (a fast fly-by still bends pitch).
+        // ~342 u/s along +x at 60 fps.
+        const glm::vec3 fast = math::computeClampedVelocity(
+            glm::vec3(0.0f), glm::vec3(5.7f, 0.0f, 0.0f), 0.016666667f, maxSpeed);
+        CHECK(fast.x > 300.0f);
+        CHECK(fast.x < maxSpeed);
+        CHECK(std::abs(fast.y) < kEps);
+        CHECK(std::abs(fast.z) < kEps);
+    }
 }

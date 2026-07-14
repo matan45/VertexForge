@@ -36,6 +36,7 @@
 #include "impl/vfx/VFXSequencePlayModeHandler.hpp"
 #include "impl/vfx/VFXSequenceRuntimeServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/audio/AudioSettingsEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
@@ -274,6 +275,16 @@ namespace handlers {
         auto* reverbZoneMgr = static_cast<core::audio::ReverbZoneManager*>(
             bootstrap->getAudioProvider()->getReverbZoneManager());
         audioSceneUpdater->setReverbZoneManager(reverbZoneMgr);
+
+        // VK-1506: cache the doppler teleport-guard speed from applied audio settings
+        // (dispatched at scene load). Subscribed before the first scene loads.
+        audioSettingsSubscription = events::ScopedSubscription(
+            events::EventDispatcher::instance()
+                .subscribe<events::audio::AudioSettingsChangedNotification>(
+                    [this](const events::audio::AudioSettingsChangedNotification& n) {
+                        if (audioSceneUpdater)
+                            audioSceneUpdater->setMaxDopplerSpeed(n.maxDopplerSpeed);
+                    }));
 
         scriptingService = std::make_shared<services::ScriptingServiceImpl>(
             bootstrap->getScriptingProvider(),
@@ -563,10 +574,11 @@ namespace handlers {
         // With per-layer barriers removed (VK-1385) a worker would otherwise run this.
         frameTaskGraph->addTask("AudioListener", [this]() {
             if (audioSceneUpdater) {
-                audioSceneUpdater->updateListenerFromPrimaryCamera();
+                const float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
+                // VK-1506: listener (camera) velocity feeds doppler.
+                audioSceneUpdater->updateListenerFromPrimaryCamera(dt);
                 // VK-1505: re-sync playing 3D emitters so sounds follow moving entities.
-                audioSceneUpdater->updateEmitters(
-                    static_cast<float>(engineTime::Timer::getGameDeltaTime()));
+                audioSceneUpdater->updateEmitters(dt);
             }
         }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 

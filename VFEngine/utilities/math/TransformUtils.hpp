@@ -90,4 +90,17 @@ namespace math
         const glm::vec3 d = b - a;
         return glm::dot(d, d) > eps * eps;
     }
+
+    // VK-1506 doppler: per-frame velocity from a finite position difference.
+    // Returns zero for dt <= 0 (paused frame / first sample) and when the implied
+    // speed exceeds maxSpeed (teleport guard — a warp must not chirp). Squared
+    // compare avoids the sqrt. maxSpeed is expected to be > 0.
+    inline glm::vec3 computeClampedVelocity(const glm::vec3& prev, const glm::vec3& curr,
+                                            float dt, float maxSpeed)
+    {
+        if (dt <= 0.0f) return glm::vec3(0.0f);
+        const glm::vec3 v = (curr - prev) / dt;
+        if (glm::dot(v, v) > maxSpeed * maxSpeed) return glm::vec3(0.0f);
+        return v;
+    }
 }

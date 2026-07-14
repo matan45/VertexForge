@@ -136,6 +136,9 @@ namespace handlers {
 		// VK-1505: editor reverb-zone tracking. Declared AFTER audioSceneUpdater so it is
 		// destroyed FIRST (unsubscribes before the updater it captures is torn down).
 		events::ScopedSubscription reverbCameraSubscription;
+		// VK-1506: caches the doppler teleport-guard speed from applied audio settings.
+		// Same destruction-order rule (after audioSceneUpdater).
+		events::ScopedSubscription audioSettingsSubscription;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;
 		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;

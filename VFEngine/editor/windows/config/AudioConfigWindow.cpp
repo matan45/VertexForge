@@ -123,6 +123,17 @@ namespace windows
             ImGui::PopItemWidth();
             ImGui::TextDisabled("Default: 343.3 m/s (speed of sound in air)");
 
+            ImGui::Spacing();
+
+            ImGui::Text("Max Doppler Speed");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragFloat("##MaxDopplerSpeed", &settings.maxDopplerSpeed, 1.0f, 1.0f, 10000.0f, "%.1f m/s"))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+            ImGui::TextDisabled("Teleport guard: single-frame moves faster than this get no pitch shift");
+
             ImGui::Unindent();
         }
     }

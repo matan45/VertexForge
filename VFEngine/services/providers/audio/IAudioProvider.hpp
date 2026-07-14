@@ -63,7 +63,7 @@ namespace services {
 
         // === Listener ===
         virtual void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
-                                          const glm::vec3& up) = 0;
+                                          const glm::vec3& up, const glm::vec3& velocity) = 0;
 
         // === Playback Position ===
         virtual float getPlaybackPosition(AudioHandleId handle) const = 0;

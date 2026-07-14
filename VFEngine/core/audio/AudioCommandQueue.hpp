@@ -45,6 +45,7 @@ namespace core::audio
         glm::vec3 position;
         glm::vec3 forward;
         glm::vec3 up;
+        glm::vec3 velocity;  // VK-1506 doppler (0 on the editor path)
     };
 
     struct SetPlaybackPosCmd

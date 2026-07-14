@@ -64,6 +64,7 @@
 #include "../audio/AudioSceneUpdater.hpp"
 #include "../audio/ReverbZoneManager.hpp"
 #include "events/EventDispatcher.hpp"
+#include "events/audio/AudioSettingsEvents.hpp"
 #include "events/vegetation/GrassEvents.hpp"
 #include "providers/vegetation/IGrassRenderProvider.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -174,6 +175,17 @@ namespace handlers
                     [this](const events::render::CameraPositionUpdatedNotification& notif) {
                         if (audioSceneUpdater)
                             audioSceneUpdater->updateReverbZones(notif.position);
+                    }));
+
+        // VK-1506: cache the doppler teleport-guard speed whenever audio settings apply
+        // (scene load or the AudioConfigWindow slider). Editor listener velocity itself
+        // stays zero; this only bounds the source-velocity teleport guard.
+        audioSettingsSubscription = events::ScopedSubscription(
+            events::EventDispatcher::instance()
+                .subscribe<events::audio::AudioSettingsChangedNotification>(
+                    [this](const events::audio::AudioSettingsChangedNotification& n) {
+                        if (audioSceneUpdater)
+                            audioSceneUpdater->setMaxDopplerSpeed(n.maxDopplerSpeed);
                     }));
 
         saveService = std::make_unique<services::SaveService>(

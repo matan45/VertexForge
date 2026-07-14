@@ -14,7 +14,8 @@ namespace services {
         // === Listener (Camera/Player) ===
         void setListenerPosition(const glm::vec3& position,
                                  const glm::vec3& forward,
-                                 const glm::vec3& up = glm::vec3(0, 1, 0)) override;
+                                 const glm::vec3& up = glm::vec3(0, 1, 0),
+                                 const glm::vec3& velocity = glm::vec3(0.0f)) override;
 
         // === Sound Playback ===
         [[nodiscard]] AudioHandle playSound3D(const std::string& path, const glm::vec3& position,

@@ -11,13 +11,24 @@ namespace core::audio {
 
     void AudioSceneUpdater::updateListenerFromCamera(const glm::vec3& position,
                                                       const glm::vec3& forward,
-                                                      const glm::vec3& up)
+                                                      const glm::vec3& up,
+                                                      float dt)
     {
+        // VK-1506: listener velocity from a per-frame finite difference (runtime path only;
+        // the editor dispatches the listener from ViewPort with velocity 0). dt <= 0 or a
+        // teleport-sized jump yields zero, so a camera cut never chirps.
+        glm::vec3 velocity(0.0f);
+        if (hasLastListener)
+            velocity = math::computeClampedVelocity(lastListenerPosition, position, dt, maxDopplerSpeed);
+        lastListenerPosition = position;
+        hasLastListener = true;
+
         auto& dispatcher = events::EventDispatcher::instance();
         events::audio::SetListenerPositionCommand cmd;
         cmd.position = position;
         cmd.forward = forward;
         cmd.up = up;
+        cmd.velocity = velocity;
         dispatcher.execute(cmd);
 
         updateReverbZones(position);
@@ -32,7 +43,7 @@ namespace core::audio {
         }
     }
 
-    void AudioSceneUpdater::updateListenerFromPrimaryCamera()
+    void AudioSceneUpdater::updateListenerFromPrimaryCamera(float dt)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::CameraComponent,
@@ -67,7 +78,7 @@ namespace core::audio {
 
             glm::vec3 up(0.0f, 1.0f, 0.0f);
 
-            updateListenerFromCamera(position, forward, up);
+            updateListenerFromCamera(position, forward, up, dt);
 
             break;  // Only use first primary camera
         }
@@ -75,14 +86,16 @@ namespace core::audio {
 
     void AudioSceneUpdater::updateEmitters(float dt)
     {
-        (void)dt;  // Reserved for VK-1506 doppler: velocity = (pos - cachedPos) / dt.
-
         auto& registry = scene::EntityRegistry::getRegistry();
         auto& dispatcher = events::EventDispatcher::instance();
 
         // 1 mm / unit-vector delta before a source is re-dispatched — a stationary
         // emitter costs one map lookup and zero commands per frame.
         constexpr float kEmitterEps = 1e-3f;
+
+        // VK-1506: below this speed (mm/s) an emitter is treated as at rest — the doppler
+        // velocity is flushed to zero so a stopped source stops pitch-shifting.
+        constexpr float kVelocityEps = 1e-3f;
 
         auto view = registry.view<components::AudioSource3DComponent,
                                   components::TransformComponent,
@@ -127,11 +140,28 @@ namespace core::audio {
             const glm::vec3 pos = glm::vec3(worldTransform.worldMatrix[3]);
             const glm::vec3 dir = math::forwardFromEulerDegrees(transform.rotation);
 
+            // Existing slot, or a fresh default one. known/seen were captured from `it` above;
+            // `it` is not used past this point (this may insert and invalidate it).
+            EmitterCacheEntry& entry = emitterCache[key];
+
+            // VK-1506: velocity from a single-frame finite difference. The basis
+            // (lastFramePosition) is refreshed EVERY frame below — independent of the
+            // dispatch dirty-check — so slow movers aren't over-estimated by a stale delta.
+            // A handle change resets the basis (guarded by matching handle); dt <= 0 or a
+            // teleport-sized jump yields zero (no chirp).
+            glm::vec3 velocity(0.0f);
+            if (entry.hasLastFrame && entry.handle == comp.activeHandle)
+                velocity = math::computeClampedVelocity(entry.lastFramePosition, pos, dt, maxDopplerSpeed);
+            const bool moving = glm::dot(velocity, velocity) > kVelocityEps * kVelocityEps;
+
             // Dirty-check against the LAST DISPATCHED transform (not last frame), so slow
             // sub-epsilon drift still accumulates to a re-sync instead of being lost forever.
+            // The final term flushes a single zero-velocity update when a moving source comes
+            // to rest, so OpenAL's AL_VELOCITY doesn't stay stuck (phantom doppler).
             const bool dirty = !known
-                            || math::positionMovedBeyond(it->second.position, pos, kEmitterEps)
-                            || math::positionMovedBeyond(it->second.direction, dir, kEmitterEps);
+                            || math::positionMovedBeyond(entry.position, pos, kEmitterEps)
+                            || math::positionMovedBeyond(entry.direction, dir, kEmitterEps)
+                            || (entry.velocityDispatched && !moving);
 
             if (dirty)
             {
@@ -139,15 +169,19 @@ namespace core::audio {
                 cmd.handle = services::AudioHandle{comp.activeHandle};
                 cmd.position = pos;
                 cmd.direction = dir;
-                cmd.velocity = glm::vec3(0.0f);  // VK-1506 fills this from (pos - cachedPos)/dt.
+                cmd.velocity = velocity;
                 dispatcher.execute(cmd);
-                emitterCache[key] = EmitterCacheEntry{comp.activeHandle, pos, dir, seen};
+                entry.position = pos;
+                entry.direction = dir;
+                entry.velocityDispatched = moving;
             }
-            else
-            {
-                // Not re-synced this frame: keep the last-dispatched pos/dir, refresh the latch.
-                it->second.seenPlaying = seen;
-            }
+
+            // Per-frame bookkeeping (always): refresh the velocity basis and the seen latch,
+            // keeping the last-dispatched pos/dir untouched when not re-synced this frame.
+            entry.handle = comp.activeHandle;
+            entry.lastFramePosition = pos;
+            entry.hasLastFrame = true;
+            entry.seenPlaying = seen;
         }
     }
 

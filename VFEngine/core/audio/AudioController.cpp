@@ -241,10 +241,10 @@ namespace core::audio
     }
 
     void AudioController::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
-                                              const glm::vec3& up)
+                                              const glm::vec3& up, const glm::vec3& velocity)
     {
         if (!initialized || !commandQueue) return;
-        commandQueue->enqueue(SetListenerCmd{position, forward, up});
+        commandQueue->enqueue(SetListenerCmd{position, forward, up, velocity});
     }
 
     // === Playback Position ===

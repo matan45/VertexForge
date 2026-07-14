@@ -22,7 +22,7 @@ namespace services {
         // Listener Commands
         dispatcher.registerCommandHandler<events::audio::SetListenerPositionCommand>(
             [this](const auto& cmd) {
-                setListenerPosition(cmd.position, cmd.forward, cmd.up);
+                setListenerPosition(cmd.position, cmd.forward, cmd.up, cmd.velocity);
             });
 
         // Sound Playback Commands
@@ -152,6 +152,10 @@ namespace services {
         dispatcher.registerCommandHandler<events::audio::ApplyAudioSettingsCommand>(
             [this](const auto& cmd) {
                 audioProvider->applySettings(cmd.settings);
+                // VK-1506: let main-thread consumers cache the doppler teleport guard.
+                events::audio::AudioSettingsChangedNotification note;
+                note.maxDopplerSpeed = cmd.settings.maxDopplerSpeed;
+                ::events::EventDispatcher::instance().publish(note);
                 return true;
             });
 
@@ -257,8 +261,9 @@ namespace services {
 
     void AudioServiceImpl::setListenerPosition(const glm::vec3& position,
                                                 const glm::vec3& forward,
-                                                const glm::vec3& up) {
-        audioProvider->setListenerPosition(position, forward, up);
+                                                const glm::vec3& up,
+                                                const glm::vec3& velocity) {
+        audioProvider->setListenerPosition(position, forward, up, velocity);
     }
 
     AudioHandle AudioServiceImpl::playSound3D(const std::string& path, const glm::vec3& position,
