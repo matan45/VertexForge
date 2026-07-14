@@ -53,6 +53,8 @@ namespace core
 
         // Instance management
         services::VFXInstanceId createInstance(const services::VFXRuntimeParams& params) override;
+        services::VFXInstanceId createChannel(const std::string& path, uint32_t particlesPerRequest) override;
+        void emitToChannel(services::VFXInstanceId id, const services::VFXChannelEmitParams& params) override;
         void destroyInstance(services::VFXInstanceId id) override;
 
         // Instance control
@@ -67,6 +69,10 @@ namespace core
         void update(float deltaTime) override;
         void setCamera(const services::VFXCameraParams& camera) override;
         void setSceneDepthImageView(vk::ImageView depthView) override;
+
+        // VK-1502: depth-buffer collision plumbing.
+        bool needsPrevFrameDepth() const override;
+        void setPrevFrameDepth(const std::vector<vk::ImageView>& slots, uint32_t readSlot, bool active) override;
 
         // Compute commands (call before render pass)
         void recordComputeCommands(const vk::CommandBuffer& cmd) override;
@@ -105,6 +111,7 @@ namespace core
         // VK-1453 (Phase 4)
         CullState getCullState() const override;
         void setQualityTier(vfx::VFXQualityTier tier) override;
+        void setSignificanceBudget(uint32_t budget) override;
         std::vector<InstanceDebugInfo> getInstanceDebugInfo() const override;
     };
 }

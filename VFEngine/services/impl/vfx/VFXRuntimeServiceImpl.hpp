@@ -39,6 +39,8 @@ namespace services
         void registerEventHandlers();
 
         VFXInstanceId createInstance(const VFXRuntimeParams& params);
+        VFXInstanceId createChannel(const std::string& path, uint32_t particlesPerRequest);
+        void emitToChannel(VFXInstanceId id, const VFXChannelEmitParams& params);
         void destroyInstance(VFXInstanceId id);
         void applyInstanceOverrides(VFXInstanceId id, const VFXEmitterOverrides& overrides);
         void setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform);
@@ -70,6 +72,15 @@ namespace services
             uint32_t rawEventsThisFrame = 0;
             uint32_t eventBudget = 0;
             bool eventsDropped = false;
+            uint32_t channelListeners = 0;
+            uint32_t channelRawRequests = 0;
+            uint32_t channelAcceptedRequests = 0;
+            uint32_t channelRingDroppedRequests = 0;
+            uint32_t channelParticleDroppedRequests = 0;
+            uint32_t channelRequestBudget = 0;
+            // VK-1503 (M4 slice-c)
+            uint32_t evictedInstances = 0; // instances soft-stopped by the significance cap this frame
+            uint32_t maxLiveInstances = 0; // active significance budget (0 => unlimited)
         };
         BudgetStats getBudgetStats() const;
     };

@@ -84,6 +84,23 @@ namespace windows
             }
         }
 
+        if (budget.channelRequestBudget > 0)
+        {
+            ImGui::Text("Spawn requests: %u / %u (raw %u)",
+                        budget.channelAcceptedRequests,
+                        budget.channelRequestBudget,
+                        budget.channelRawRequests);
+            if (budget.channelRingDroppedRequests > 0 || budget.channelParticleDroppedRequests > 0)
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.2f, 1.0f),
+                    "(dropped: ring %u, particles %u)",
+                    budget.channelRingDroppedRequests,
+                    budget.channelParticleDroppedRequests);
+            }
+            ImGui::Text("Channel listeners: %u", budget.channelListeners);
+        }
+
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Text("LOD Distribution:");
@@ -101,6 +118,30 @@ namespace windows
             ImGui::Text("  Cull distance:        %.1f", budget.vfxCullDistance);
         else
             ImGui::TextDisabled("  Cull distance:        (unlimited)");
+
+        // VK-1503 (M4 slice-c) — significance cap: bound the number of live effect
+        // instances by importance. 0 = unlimited (disabled). Setting a budget dispatches
+        // SetVFXSignificanceBudgetCommand to the runtime.
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Text("Significance Cap:");
+        if (ImGui::InputInt("Max live instances (0=unlimited)", &significanceBudgetInput))
+        {
+            if (significanceBudgetInput < 0)
+                significanceBudgetInput = 0;
+            try
+            {
+                services::events::vfxruntime::SetVFXSignificanceBudgetCommand cmd;
+                cmd.budget = static_cast<uint32_t>(significanceBudgetInput);
+                events::EventDispatcher::instance().execute(cmd);
+            }
+            catch (const std::exception&) { /* no runtime provider */ }
+        }
+        if (budget.maxLiveInstances > 0)
+            ImGui::Text("  Evicted (soft-stopped): %u / cap %u", budget.evictedInstances,
+                        budget.maxLiveInstances);
+        else
+            ImGui::TextDisabled("  Cap disabled (unlimited)");
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -232,6 +273,14 @@ namespace windows
             budget.rawEventsThisFrame = r.rawEventsThisFrame;
             budget.eventBudget = r.eventBudget;
             budget.eventsDropped = r.eventsDropped;
+            budget.channelListeners = r.channelListeners;
+            budget.channelRawRequests = r.channelRawRequests;
+            budget.channelAcceptedRequests = r.channelAcceptedRequests;
+            budget.channelRingDroppedRequests = r.channelRingDroppedRequests;
+            budget.channelParticleDroppedRequests = r.channelParticleDroppedRequests;
+            budget.channelRequestBudget = r.channelRequestBudget;
+            budget.evictedInstances = r.evictedInstances;
+            budget.maxLiveInstances = r.maxLiveInstances;
         }
         catch (const std::exception&) { /* no runtime provider */ }
 

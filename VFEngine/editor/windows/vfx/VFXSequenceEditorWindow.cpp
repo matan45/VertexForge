@@ -46,6 +46,7 @@ namespace windows
 
         vfx::VFXSequenceData* data = nullptr;
         std::vector<int> starts, ends, snapStarts, snapEnds;
+        mutable std::string labelScratch; // VK-1524 — backing store for GetItemLabel suffixes
 
         void sync(vfx::VFXSequenceData* d)
         {
@@ -102,7 +103,17 @@ namespace windows
             if (!data || index < 0 || index >= static_cast<int>(data->steps.size()))
                 return "";
             const auto& s = data->steps[static_cast<size_t>(index)];
-            return s.label.empty() ? "(step)" : s.label.c_str();
+            labelScratch = s.label.empty() ? "(step)" : s.label;
+            // VK-1524 — a StepOutput clip never plays on the timeline; it waits for a source
+            // step's runtime particle event. Make that explicit and note its source binding.
+            if (s.trigger == vfx::VFXStepTrigger::StepOutput)
+            {
+                labelScratch += "  [waiting for event";
+                if (s.sourceStepIndex >= 0)
+                    labelScratch += " <- step " + std::to_string(s.sourceStepIndex);
+                labelScratch += "]";
+            }
+            return labelScratch.c_str();
         }
 
         void Get(int index, int** start, int** end, int* type, unsigned int* color) override
@@ -114,8 +125,25 @@ namespace windows
             if (type) *type = 0;
             if (color)
             {
-                const bool cue = data && !data->steps[static_cast<size_t>(index)].cueName.empty();
-                *color = cue ? 0xFF888888u : 0xFFC84FF7u; // gray = cue-driven, pink = time-driven
+                *color = 0xFFC84FF7u; // default pink (time-driven VFX)
+                if (data && index < static_cast<int>(data->steps.size()))
+                {
+                    const auto& s = data->steps[static_cast<size_t>(index)];
+                    if (s.trigger == vfx::VFXStepTrigger::StepOutput)
+                    {
+                        *color = 0xFFE0A020u; // blue-ish = StepOutput receiver (waits for an event)
+                    }
+                    else if (!s.cueName.empty())
+                    {
+                        *color = 0xFF888888u; // gray = cue-driven (any kind) takes precedence
+                    }
+                    else switch (s.kind) // VK-1496 — tint time-driven clips by kind (ABGR)
+                    {
+                    case vfx::VFXStepKind::Sound:     *color = 0xFF00A5FFu; break; // amber
+                    case vfx::VFXStepKind::ScriptCue: *color = 0xFF4FC84Fu; break; // green
+                    default:                          *color = 0xFFC84FF7u; break; // pink (VFX)
+                    }
+                }
             }
         }
     };
@@ -398,6 +426,18 @@ namespace windows
         ImGui::SetItemTooltip("Union each step's bounds (transformed by its placement) and capture as the sequence's Fixed bounds.");
         ImGui::SameLine();
         ImGui::Checkbox("Show Bounds", &showBounds);
+        if (data)
+        {
+            // VK-1498 — asset-level loop variety flag. Only meaningful when the sequence is
+            // looped at runtime (VFXSequenceComponent::loop); ignored otherwise.
+            ImGui::SameLine();
+            ImGui::TextDisabled("|");
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Stable Loop", &data->stableLoop))
+                isDirty = true;
+            ImGui::SetItemTooltip("When this sequence is looped at runtime, replay the identical variant every "
+                                  "iteration.\nOff (default) = re-roll probability / variant-group variety each loop.");
+        }
 
         ImGui::Separator();
     }
@@ -670,6 +710,11 @@ namespace windows
             return;
         }
 
+        // VK-1497 — resolve which steps play at the current preview seed so we can grey the
+        // ones this run skips (probability roll lost, or a variant-group member that isn't the
+        // winner). Same source of truth the runtime and composited preview use.
+        const std::vector<bool> plays = vfx::VFXComboTimeline::resolvePlays(*data, effectivePreviewSeed());
+
         for (int i = 0; i < static_cast<int>(data->steps.size()); ++i)
         {
             auto& step = data->steps[static_cast<size_t>(i)];
@@ -679,6 +724,12 @@ namespace windows
             if (ImGui::SmallButton(ICON_FA_ARROW_UP "##MoveStepUp") && i > 0)
             {
                 std::swap(data->steps[static_cast<size_t>(i)], data->steps[static_cast<size_t>(i - 1)]);
+                // VK-1524 — keep StepOutput bindings pointing at the same source after the swap.
+                for (auto& st : data->steps)
+                {
+                    if (st.sourceStepIndex == i) st.sourceStepIndex = i - 1;
+                    else if (st.sourceStepIndex == i - 1) st.sourceStepIndex = i;
+                }
                 if (selectedStep == i) selectedStep = i - 1;
                 else if (selectedStep == i - 1) selectedStep = i;
                 isDirty = true;
@@ -690,6 +741,12 @@ namespace windows
             if (ImGui::SmallButton(ICON_FA_ARROW_DOWN "##MoveStepDown") && i + 1 < static_cast<int>(data->steps.size()))
             {
                 std::swap(data->steps[static_cast<size_t>(i)], data->steps[static_cast<size_t>(i + 1)]);
+                // VK-1524 — keep StepOutput bindings pointing at the same source after the swap.
+                for (auto& st : data->steps)
+                {
+                    if (st.sourceStepIndex == i) st.sourceStepIndex = i + 1;
+                    else if (st.sourceStepIndex == i + 1) st.sourceStepIndex = i;
+                }
                 if (selectedStep == i) selectedStep = i + 1;
                 else if (selectedStep == i + 1) selectedStep = i;
                 isDirty = true;
@@ -700,6 +757,13 @@ namespace windows
             ImGui::SameLine();
             if (ImGui::SmallButton("X"))
             {
+                // VK-1524 — remap StepOutput bindings before the erase: a receiver of the removed
+                // step loses its source (-1); references to later steps shift down by one.
+                for (auto& st : data->steps)
+                {
+                    if (st.sourceStepIndex == i) st.sourceStepIndex = -1;
+                    else if (st.sourceStepIndex > i) --st.sourceStepIndex;
+                }
                 data->steps.erase(data->steps.begin() + i);
                 if (selectedStep == i) selectedStep = -1;
                 else if (selectedStep > i) --selectedStep;
@@ -711,8 +775,13 @@ namespace windows
             ImGui::SameLine();
 
             std::string label = step.label.empty() ? ("(step " + std::to_string(i) + ")") : step.label;
+            const bool skipped = i < static_cast<int>(plays.size()) && !plays[static_cast<size_t>(i)];
+            if (skipped) // VK-1497 — grey steps this run resolves out (mirrors the composited preview)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
             if (ImGui::Selectable(label.c_str(), selectedStep == i))
                 selectedStep = i;
+            if (skipped)
+                ImGui::PopStyleColor();
 
             ImGui::PopID();
         }
@@ -728,42 +797,21 @@ namespace windows
 
         auto& step = data->steps[static_cast<size_t>(selectedStep)];
 
-        // --- Child .vfVFX reference (drop target) ---
-        ImGui::TextUnformatted("VFX Asset");
-        std::string refLabel;
-        if (step.vfxRef.isValid())
+        // --- Kind (VK-1496) — selects the payload and swaps the field set below ---
+        const char* kindNames[] = {"VFX", "Sound", "Script Cue"};
+        int kindIdx = static_cast<int>(step.kind);
+        if (kindIdx < 0 || kindIdx >= IM_ARRAYSIZE(kindNames))
+            kindIdx = 0;
+        if (ImGui::Combo("Kind", &kindIdx, kindNames, IM_ARRAYSIZE(kindNames)))
         {
-            const std::string& resolved = step.vfxRef.resolve();
-            refLabel = resolved.empty() ? "(missing)" : fs::path(resolved).filename().string();
-        }
-        else
-        {
-            refLabel = "(none) - drop a .vfVFX here";
-        }
-
-        bool missing = step.vfxRef.isValid() && step.vfxRef.resolve().empty();
-        if (missing)
-            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 80, 80, 255));
-        ImGui::Button(refLabel.c_str(), ImVec2(-1.0f, 0.0f));
-        if (missing)
-            ImGui::PopStyleColor();
-
-        // Reuses the content-browser single-asset drag payload (DND_CONTENT_BROWSER)
-        // via the shared helper, restricted to .vfVFX.
-        if (auto dropped = acceptAssetDropOnLastItem("##vfxSeqRef", {".vfvfx"}))
-        {
-            auto ref = asset::AssetRef::fromPath(*dropped);
-            if (ref.isValid())
-            {
-                step.vfxRef = ref;
-                isDirty = true;
-                vfxCache.clear();
-                previewDirty = true; // force the preview to reload this step
-            }
+            step.kind = static_cast<vfx::VFXStepKind>(kindIdx);
+            isDirty = true;
+            previewDirty = true; // a converted step drops out of / into the composited preview
         }
 
         ImGui::Separator();
 
+        // --- Common fields (every kind) ---
         char labelBuf[256];
         std::strncpy(labelBuf, step.label.c_str(), sizeof(labelBuf) - 1);
         labelBuf[sizeof(labelBuf) - 1] = '\0';
@@ -776,53 +824,337 @@ namespace windows
         if (ImGui::DragFloat("Start Time", &step.startTime, 0.01f, 0.0f, 1000.0f, "%.2f s"))
             isDirty = true;
 
-        char cueBuf[256];
-        std::strncpy(cueBuf, step.cueName.c_str(), sizeof(cueBuf) - 1);
-        cueBuf[sizeof(cueBuf) - 1] = '\0';
-        if (ImGui::InputText("Cue Name", cueBuf, IM_ARRAYSIZE(cueBuf)))
+        // --- Trigger (VK-1524): Time / Cue / Step Output ---
+        int triggerIdx = static_cast<int>(step.trigger);
+        if (triggerIdx < 0 || triggerIdx > 2)
+            triggerIdx = 0;
+        const char* triggerNames[] = {"Time", "Cue", "Step Output"};
+        if (ImGui::Combo("Trigger", &triggerIdx, triggerNames, IM_ARRAYSIZE(triggerNames)))
         {
-            step.cueName = cueBuf;
+            step.trigger = static_cast<vfx::VFXStepTrigger>(triggerIdx);
+            // Keep cueName consistent with the mode so the timeline (which keys Time/Cue on
+            // cueName) and this combo agree: Cue needs a non-empty name; Time/StepOutput have none.
+            if (step.trigger == vfx::VFXStepTrigger::Cue)
+            {
+                if (step.cueName.empty())
+                    step.cueName = "cue";
+            }
+            else
+            {
+                step.cueName.clear();
+            }
+            // A StepOutput receiver cannot also declare a source output (dual-role validation Error).
+            if (step.trigger == vfx::VFXStepTrigger::StepOutput)
+                step.outputEventName.clear();
             isDirty = true;
+            previewDirty = true;
         }
         ImGui::SameLine();
         ImGui::TextDisabled("(?)");
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Empty = time-driven (uses Start Time). Otherwise fired by a named cue.");
+            ImGui::SetTooltip("Time = fires at Start Time. Cue = fired by a named cue (triggerComboCue). "
+                              "Step Output = spawns at a source step's particle event world location.");
 
-        ImGui::Separator();
+        if (step.trigger == vfx::VFXStepTrigger::Cue)
+        {
+            char cueBuf[256];
+            std::strncpy(cueBuf, step.cueName.c_str(), sizeof(cueBuf) - 1);
+            cueBuf[sizeof(cueBuf) - 1] = '\0';
+            if (ImGui::InputText("Cue Name", cueBuf, IM_ARRAYSIZE(cueBuf)))
+            {
+                step.cueName = cueBuf;
+                isDirty = true;
+            }
+        }
+        else if (step.trigger == vfx::VFXStepTrigger::StepOutput)
+        {
+            // Source dropdown — VFX steps that declare an output event name (never self).
+            std::string currentSrc = "(select a source)";
+            if (step.sourceStepIndex >= 0 && step.sourceStepIndex < static_cast<int>(data->steps.size()))
+            {
+                const auto& s = data->steps[static_cast<size_t>(step.sourceStepIndex)];
+                currentSrc = "Step " + std::to_string(step.sourceStepIndex) +
+                             (s.label.empty() ? "" : (" (" + s.label + ")"));
+            }
+            if (ImGui::BeginCombo("Source Step", currentSrc.c_str()))
+            {
+                for (int s = 0; s < static_cast<int>(data->steps.size()); ++s)
+                {
+                    if (s == selectedStep)
+                        continue; // no self-dependency
+                    const auto& cand = data->steps[static_cast<size_t>(s)];
+                    if (cand.kind != vfx::VFXStepKind::VFX || cand.outputEventName.empty())
+                        continue; // only a VFX step publishing an output can be a source
+                    const std::string entry = "Step " + std::to_string(s) +
+                                              (cand.label.empty() ? "" : (" (" + cand.label + ")")) +
+                                              "  ->  '" + cand.outputEventName + "'";
+                    if (ImGui::Selectable(entry.c_str(), step.sourceStepIndex == s))
+                    {
+                        step.sourceStepIndex = s;
+                        step.sourceEventName = cand.outputEventName; // auto-fill the bound name
+                        isDirty = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
 
-        if (ImGui::DragFloat3("Local Position", &step.localPosition.x, 0.05f))
+            char evBuf[256];
+            std::strncpy(evBuf, step.sourceEventName.c_str(), sizeof(evBuf) - 1);
+            evBuf[sizeof(evBuf) - 1] = '\0';
+            if (ImGui::InputText("Event Name", evBuf, IM_ARRAYSIZE(evBuf)))
+            {
+                step.sourceEventName = evBuf;
+                isDirty = true;
+            }
+
+            const char* consumeNames[] = {"First Event", "Every Event"};
+            int consumeIdx = static_cast<int>(step.eventConsumption);
+            if (consumeIdx < 0 || consumeIdx > 1)
+                consumeIdx = 0;
+            if (ImGui::Combo("Consumption", &consumeIdx, consumeNames, IM_ARRAYSIZE(consumeNames)))
+            {
+                step.eventConsumption = static_cast<vfx::VFXEventConsumption>(consumeIdx);
+                isDirty = true;
+            }
+            if (step.eventConsumption == vfx::VFXEventConsumption::EveryEvent)
+            {
+                int budget = static_cast<int>(step.eventBudget);
+                if (ImGui::InputInt("Event Budget", &budget, 1, 4))
+                {
+                    step.eventBudget = budget < 0 ? 0u : static_cast<uint32_t>(budget);
+                    isDirty = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Max simultaneous live event-children this receiver spawns.");
+            }
+
+            ImGui::TextUnformatted("Inherit from impact:");
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Velocity", &step.inheritVelocity))
+                isDirty = true;
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Color", &step.inheritColor))
+                isDirty = true;
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Size", &step.inheritScalar))
+                isDirty = true;
+        }
+
+        // VK-1497 — deterministic per-step variety (resolved from the combo seed at rewind()).
+        if (ImGui::DragFloat("Probability", &step.probability, 0.01f, 0.0f, 1.0f, "%.2f"))
+        {
             isDirty = true;
-        if (ImGui::DragFloat3("Local Euler (deg)", &step.localEulerDeg.x, 0.5f))
-            isDirty = true;
-        if (ImGui::DragFloat3("Local Scale", &step.localScale.x, 0.01f, 0.0001f, 1000.0f))
-            isDirty = true;
-
-        drawSocketField(step);
-
-        ImGui::Separator();
-
-        if (ImGui::Checkbox("Loop", &step.loop))
-            isDirty = true;
-
-        if (ImGui::DragFloat("Duration", &step.duration, 0.01f, 0.0f, 1000.0f, "%.2f s"))
-            isDirty = true;
+            previewDirty = true; // changes which steps the composited preview fires
+        }
         ImGui::SameLine();
         ImGui::TextDisabled("(?)");
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("0 = play to completion");
+            ImGui::SetTooltip("Independent chance this step plays (deterministic per combo seed). "
+                              "Inside a variant group it acts as a selection weight, ignored "
+                              "(uniform) in this version.");
 
-        const char* stopModes[] = {"Play To Completion", "Stop After Duration"};
-        int stopIdx = static_cast<int>(step.stopMode);
-        if (ImGui::Combo("Stop Mode", &stopIdx, stopModes, IM_ARRAYSIZE(stopModes)))
+        int variantGroupProxy = step.variantGroup;
+        if (ImGui::InputInt("Variant Group", &variantGroupProxy, 1, 10))
         {
-            step.stopMode = static_cast<vfx::VFXStepStopMode>(stopIdx);
+            step.variantGroup = variantGroupProxy < 0 ? -1 : variantGroupProxy;
             isDirty = true;
+            previewDirty = true;
         }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("-1 = none. Steps sharing a group id >= 0 are mutually exclusive: "
+                              "exactly one member plays per combo seed (chosen uniformly).");
 
         ImGui::Separator();
 
-        drawOverrideList(step.overrides, "Overrides");
+        // --- Kind-specific fields ---
+        if (step.kind == vfx::VFXStepKind::VFX)
+        {
+            ImGui::TextUnformatted("VFX Asset");
+            std::string refLabel;
+            if (step.vfxRef.isValid())
+            {
+                const std::string& resolved = step.vfxRef.resolve();
+                refLabel = resolved.empty() ? "(missing)" : fs::path(resolved).filename().string();
+            }
+            else
+            {
+                refLabel = "(none) - drop a .vfVFX here";
+            }
+
+            bool missing = step.vfxRef.isValid() && step.vfxRef.resolve().empty();
+            if (missing)
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 80, 80, 255));
+            ImGui::Button(refLabel.c_str(), ImVec2(-1.0f, 0.0f));
+            if (missing)
+                ImGui::PopStyleColor();
+
+            // Reuses the content-browser single-asset drag payload (DND_CONTENT_BROWSER)
+            // via the shared helper, restricted to .vfVFX.
+            if (auto dropped = acceptAssetDropOnLastItem("##vfxSeqRef", {".vfvfx"}))
+            {
+                auto ref = asset::AssetRef::fromPath(*dropped);
+                if (ref.isValid())
+                {
+                    step.vfxRef = ref;
+                    isDirty = true;
+                    vfxCache.clear();
+                    previewDirty = true; // force the preview to reload this step
+                }
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::DragFloat3("Local Position", &step.localPosition.x, 0.05f))
+                isDirty = true;
+            if (ImGui::DragFloat3("Local Euler (deg)", &step.localEulerDeg.x, 0.5f))
+                isDirty = true;
+            if (ImGui::DragFloat3("Local Scale", &step.localScale.x, 0.01f, 0.0001f, 1000.0f))
+                isDirty = true;
+
+            if (step.trigger == vfx::VFXStepTrigger::StepOutput)
+                ImGui::TextDisabled("Socket ignored (StepOutput spawns are world-anchored).");
+            else
+                drawSocketField(step);
+
+            ImGui::Separator();
+
+            if (ImGui::Checkbox("Loop", &step.loop))
+                isDirty = true;
+
+            if (ImGui::DragFloat("Duration", &step.duration, 0.01f, 0.0f, 1000.0f, "%.2f s"))
+                isDirty = true;
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("0 = play to completion");
+
+            const char* stopModes[] = {"Play To Completion", "Stop After Duration"};
+            int stopIdx = static_cast<int>(step.stopMode);
+            if (ImGui::Combo("Stop Mode", &stopIdx, stopModes, IM_ARRAYSIZE(stopModes)))
+            {
+                step.stopMode = static_cast<vfx::VFXStepStopMode>(stopIdx);
+                isDirty = true;
+            }
+
+            ImGui::Separator();
+
+            drawOverrideList(step.overrides, "Overrides");
+
+            // VK-1524 — source output declaration. A Time/Cue VFX step can publish a named spatial
+            // output when its particles emit a death/collision event; StepOutput receivers bind to
+            // it. A StepOutput receiver cannot also be a source (dual-role validation Error).
+            if (step.trigger != vfx::VFXStepTrigger::StepOutput)
+            {
+                ImGui::Separator();
+                ImGui::TextUnformatted("Step Output (publish to receivers)");
+                char outBuf[256];
+                std::strncpy(outBuf, step.outputEventName.c_str(), sizeof(outBuf) - 1);
+                outBuf[sizeof(outBuf) - 1] = '\0';
+                if (ImGui::InputText("Output Name", outBuf, IM_ARRAYSIZE(outBuf)))
+                {
+                    step.outputEventName = outBuf;
+                    isDirty = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Empty = not a source. Set a name to publish this step's particle "
+                                      "event location to StepOutput receivers.");
+                if (!step.outputEventName.empty())
+                {
+                    const char* evNames[] = {"On Spawn", "On Death", "On Collision", "On Lifetime Threshold"};
+                    int evIdx = static_cast<int>(step.outputEventType);
+                    if (evIdx < 0 || evIdx > 3)
+                        evIdx = static_cast<int>(vfx::VFXEventType::OnDeath);
+                    if (ImGui::Combo("Output Event", &evIdx, evNames, IM_ARRAYSIZE(evNames)))
+                    {
+                        step.outputEventType = static_cast<vfx::VFXEventType>(evIdx);
+                        isDirty = true;
+                    }
+                    ImGui::TextDisabled("Enable this event (and its Notify flag) on the source .vfVFX.");
+                }
+            }
+        }
+        else if (step.kind == vfx::VFXStepKind::Sound)
+        {
+            ImGui::TextUnformatted("Audio Asset");
+            std::string audioLabel;
+            if (step.audioRef.isValid())
+            {
+                const std::string& resolved = step.audioRef.resolve();
+                audioLabel = resolved.empty() ? "(missing)" : fs::path(resolved).filename().string();
+            }
+            else
+            {
+                audioLabel = "(none) - drop a .vfAudio here";
+            }
+
+            bool audioMissing = step.audioRef.isValid() && step.audioRef.resolve().empty();
+            if (audioMissing)
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 80, 80, 255));
+            ImGui::Button(audioLabel.c_str(), ImVec2(-1.0f, 0.0f));
+            if (audioMissing)
+                ImGui::PopStyleColor();
+
+            if (auto dropped = acceptAssetDropOnLastItem("##vfxSeqAudioRef", {".vfaudio"}))
+            {
+                auto ref = asset::AssetRef::fromPath(*dropped);
+                if (ref.isValid())
+                {
+                    step.audioRef = ref;
+                    isDirty = true;
+                }
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::DragFloat("Volume", &step.volume, 0.01f, 0.0f, 2.0f, "%.2f"))
+                isDirty = true;
+            if (ImGui::DragFloat("Pitch", &step.pitch, 0.01f, 0.1f, 4.0f, "%.2f"))
+                isDirty = true;
+            if (ImGui::Checkbox("Spatialized (3D)", &step.spatialized))
+                isDirty = true;
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("On = 3D at the step's world transform; off = 2D. Sound is fire-and-forget "
+                                  "(no loop / stop) and is silent during editor scrub — audible only in play mode.");
+
+            if (step.spatialized)
+            {
+                if (ImGui::DragFloat3("Local Position", &step.localPosition.x, 0.05f))
+                    isDirty = true;
+                drawSocketField(step);
+            }
+        }
+        else if (step.kind == vfx::VFXStepKind::ScriptCue)
+        {
+            char emitBuf[256];
+            std::strncpy(emitBuf, step.emitCueName.c_str(), sizeof(emitBuf) - 1);
+            emitBuf[sizeof(emitBuf) - 1] = '\0';
+            if (ImGui::InputText("Emit Cue", emitBuf, IM_ARRAYSIZE(emitBuf)))
+            {
+                step.emitCueName = emitBuf;
+                isDirty = true;
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Cue published to gameplay scripts (onComboCue) when this step fires. "
+                                  "Fires on forward playback only — silent during editor scrub/seek.");
+
+            ImGui::Separator();
+            ImGui::TextUnformatted("Payload");
+            drawCuePayload(step.cuePayload);
+        }
+        else
+        {
+            ImGui::TextDisabled("Unknown step kind.");
+        }
     }
 
     void VFXSequenceEditorWindow::drawTimeline()
@@ -994,6 +1326,14 @@ namespace windows
         }
     }
 
+    uint32_t VFXSequenceEditorWindow::effectivePreviewSeed() const
+    {
+        // Mirror buildSequenceDesc's normalization exactly: preview seed override, else the
+        // asset seed, and 0 maps to a stable non-zero value (deriveSeed does the same).
+        const uint32_t s = (data && previewSeed == 0) ? data->seed : previewSeed;
+        return s != 0 ? s : 1u;
+    }
+
     services::VFXSequencePreviewDesc VFXSequenceEditorWindow::buildSequenceDesc() const
     {
         services::VFXSequencePreviewDesc desc;
@@ -1006,11 +1346,27 @@ namespace windows
         for (const auto& marker : data->eventMarkers)
             desc.markers.emplace_back(marker.time, marker.cueName);
 
-        const uint32_t comboSeed = desc.seed != 0 ? desc.seed : 1u;
+        const uint32_t comboSeed = effectivePreviewSeed(); // == the step-list mask seed (VK-1497)
+
+        // VK-1497 — resolve variety once so the preview drops steps this run skips, exactly as
+        // the runtime timeline does (same pure function, same seed).
+        const std::vector<bool> plays = vfx::VFXComboTimeline::resolvePlays(*data, comboSeed);
 
         for (size_t i = 0; i < data->steps.size(); ++i)
         {
             const auto& step = data->steps[i];
+            if (i < plays.size() && !plays[i]) // VK-1497 — probability/variant-group skipped
+                continue;
+            // VK-1524 — StepOutput receivers spawn from runtime particle events, which never fire
+            // in the event-free CPU preview. Skip them so the preview shows a "waiting for event"
+            // clip instead of fabricating a non-deterministic spawn (upholds the no-fabrication rule).
+            if (step.trigger == vfx::VFXStepTrigger::StepOutput)
+                continue;
+            // VK-1496 — the composited preview is VFX-only. Skip Sound/ScriptCue kinds up front
+            // so a step converted away from VFX but retaining a stale vfxRef doesn't render a
+            // ghost effect (and typed steps stay silent/visual-free in the editor by construction).
+            if (step.kind != vfx::VFXStepKind::VFX)
+                continue;
             if (!step.vfxRef.isValid())
                 continue;
             const std::string path = step.vfxRef.resolve();
@@ -1062,6 +1418,8 @@ namespace windows
         math::AABB result;
         for (const auto& step : data->steps)
         {
+            if (step.kind != vfx::VFXStepKind::VFX) // VK-1496 — only VFX steps contribute bounds
+                continue;
             if (!step.vfxRef.isValid())
                 continue;
             const std::string path = step.vfxRef.resolve();

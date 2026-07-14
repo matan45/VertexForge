@@ -15,6 +15,11 @@ namespace services
     class ScriptInterpreter;
 }
 
+namespace vfx
+{
+    struct VFXCuePayload;
+}
+
 namespace core
 {
     class ScriptVFXEventBridge
@@ -32,7 +37,9 @@ namespace core
         // at loadScript time - dispatch gates must use these constants, never
         // fresh string literals, or the callback silently never fires.
         static constexpr const char* kVFXEventListener = "IVFXEventListener";
-        static constexpr std::array<const char*, 1> kRequiredInterfaces = { kVFXEventListener };
+        static constexpr const char* kVFXComboCueListener = "IVFXComboCueListener";
+        static constexpr std::array<const char*, 2> kRequiredInterfaces = {
+            kVFXEventListener, kVFXComboCueListener };
 
         ScriptVFXEventBridge(
             ::services::ScriptInterpreter* interpreter,
@@ -48,5 +55,8 @@ namespace core
                               float posX, float posY, float posZ,
                               float velX, float velY, float velZ,
                               uint32_t entityId);
+
+        void dispatchComboCue(uint32_t comboId, const std::string& cueName,
+                              const ::vfx::VFXCuePayload& payload);
     };
 }

@@ -4,6 +4,7 @@
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #include "vfx_gpu_types.glsl"
+#include "vfx_shape_placement.glsl" // VK-1525: SHAPE_* consts + ordered/ring placement math
 #include "vfx_variance.glsl"
 #include "vfx_lut.glsl"
 
@@ -13,6 +14,7 @@ const uint MODIFIER_SPEED_OVER_LIFETIME = 4u;
 const uint MODIFIER_ROTATION_OVER_LIFETIME = 8u;
 const uint MODIFIER_SIZE_BY_SPEED = 4194304u;  // 1 << 22 (VK-1473)
 const uint MODIFIER_COLOR_BY_SPEED = 8388608u; // 1 << 23 (VK-1473)
+const uint MODIFIER_DEPTH_COLLISION = 33554432u; // 1 << 25 (VK-1502)
 
 const uint FORCE_GRAVITY = 16u;
 const uint FORCE_WIND = 32u;
@@ -24,12 +26,8 @@ const uint FORCE_ATTRACTOR_KILL = 262144u; // 1 << 18
 const uint FORCE_CURL_NOISE = 524288u;   // 1 << 19
 const uint FORCE_KILL_VOLUME = 1048576u; // 1 << 20
 
-const uint SHAPE_SPHERE = 256u;
-const uint SHAPE_CONE = 512u;
-const uint SHAPE_BOX = 1024u;
-const uint SHAPE_CIRCLE = 2048u;
-const uint SHAPE_EMIT_FROM_SURFACE = 4096u;
-const uint SHAPE_RANDOM_DIRECTION = 8192u;
+// SHAPE_* constants (SHAPE_SPHERE/CONE/BOX/TORUS/RING/ORDERED/EMIT_FROM_SURFACE/RANDOM_DIRECTION)
+// live in vfx_shape_placement.glsl (included above).
 
 const uint MODIFIER_GLOW_OVER_LIFETIME = 32768u;
 
@@ -123,6 +121,58 @@ layout(std430, set = 0, binding = 9) readonly buffer TerrainHeightfieldBuffer {
     float terrainHeights[];
 };
 
+struct GPUVFXSpawnRequest
+{
+    vec3 position;
+    float scale;
+    vec3 direction;
+    uint packedColor;
+    uint seed;
+    uint flags;
+    uint reservedTemplate;
+    uint pad;
+};
+
+layout(std430, set = 0, binding = 10) readonly buffer SpawnRequestBuffer {
+    GPUVFXSpawnRequest spawnRequests[];
+};
+
+// VK-1501: GPU event->child fast path. Sibling ring to binding 10 but GPU-WRITABLE: parents append
+// child spawn requests here on death/collision; a persistent child listener consumes them next frame.
+// Ping-pong by frame parity keeps the writer (this frame) and reader (next frame) on disjoint halves,
+// so there is no read-while-write race despite the undefined per-emitter dispatch order. Layout
+// mirrors the C++ childSpawnBuffer sizing (utilities/vfx/VFXChildSpawn.hpp).
+const uint CHILD_MAX_REGIONS = 64u;
+const uint CHILD_MAX_REQUESTS_PER_REGION = 256u;
+const uint CHILD_COUNTER_COUNT = 2u * CHILD_MAX_REGIONS;
+const uint CHILD_REGION_NONE = 0xFFu;
+const uint CHILD_INHERIT_COLOR_BIT = 1u << 8;
+const uint CHILD_INHERIT_SIZE_BIT = 1u << 9;
+const uint CHILD_INHERIT_VEL_BIT = 1u << 10;
+
+layout(std430, set = 0, binding = 11) buffer ChildSpawnBuffer {
+    uint childSpawnCounters[CHILD_COUNTER_COUNT];
+    GPUVFXSpawnRequest childSpawnRequests[];
+};
+
+// VK-1502: depth-buffer collision inputs. Mirror of C++ GPUVFXCameraUBO (bound here as a read-only SSBO
+// so the sim inherits the already-enabled storage-buffer UpdateAfterBind feature instead of relying on
+// uniform-buffer UAB). std430 layout matches the 160-byte C++ struct exactly.
+layout(std430, set = 0, binding = 12) readonly buffer CameraBuffer {
+    mat4 view;
+    mat4 projection;
+    vec3 cameraPos;
+    float time;
+    float nearPlane;
+    float farPlane;
+    uint depthCollisionActive; // 1 iff a valid last-frame depth is bound AND some emitter wants it
+    uint prevDepthSlot;        // which prevFrameDepth[] element to sample this frame
+} cam;
+
+// Last-frame scene depth, double-buffered per frame-in-flight (MAX_FRAMES_IN_FLIGHT = 2). Populated by the
+// DepthCopy pass and kept in eShaderReadOnlyOptimal; the active slot for this frame is cam.prevDepthSlot.
+layout(set = 0, binding = 13) uniform sampler2D prevFrameDepth[2];
+
 const uint COLLIDER_SPHERE  = 0u;
 const uint COLLIDER_BOX     = 1u;
 const uint COLLIDER_CAPSULE = 2u;
@@ -136,6 +186,8 @@ const uint MAX_VFX_EVENTS = 256u;
 
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
 const uint RENDER_MODE_RIBBON = 4u;
+const uint SPAWN_REQUEST_HAS_TINT = 1u;
+const uint SPAWN_REQUEST_GPU_VALID = 2u; // VK-1501: set on GPU-appended event->child requests
 
 // LUT_FLAG_* / LUT_CH_* / vfxNormalize01 now live in vfx_lut.glsl (shared with the ribbon shader).
 
@@ -143,6 +195,9 @@ layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     uint frameNumber;
     uint emitterCount;
+    uint channelRequestBase;
+    uint particlesPerRequest;
+    uint gpuChildRegion; // VK-1501: child region for a GPU event->child listener dispatch; 0xFFFFFFFF = not a GPU child
 } pc;
 
 const uint FLAG_PLAYING = 1u;
@@ -220,6 +275,13 @@ vec3 generateConePosition(inout uint seed, float baseRadius, float height, float
     return vec3(r * cos(theta), y, r * sin(theta));
 }
 
+vec3 generateLinePosition(inout uint seed, vec3 halfVec)
+{
+    // Line segment centered on the emitter: -halfVec -> +halfVec along dims.xyz. A random
+    // point stays ON the segment (mix(-h, h, t) == h*(2t-1)). Emitter rotation orients it.
+    return halfVec * (randomFloat(seed) * 2.0 - 1.0);
+}
+
 vec3 generateBoxPosition(inout uint seed, vec3 halfExtents, bool surfaceOnly)
 {
     if (!surfaceOnly)
@@ -262,16 +324,37 @@ vec3 generateBoxPosition(inout uint seed, vec3 halfExtents, bool surfaceOnly)
     return vec3(u * halfExtents.x, v * halfExtents.y, -halfExtents.z);
 }
 
-vec3 generateCirclePosition(inout uint seed, float radius, float arc, bool surfaceOnly)
+// VK-1525: real 3-D torus (major = ring radius, minor = tube radius). Mirrors the CPU
+// preview VFXParticleSystem::generateTorusPosition so runtime and preview agree (the
+// old flat-circle interpretation of bit 11 is gone).
+vec3 generateTorusPosition3D(inout uint seed, float majorRadius, float minorRadius, bool surfaceOnly)
 {
-    float theta = randomFloat(seed) * arc;
+    float theta = randomFloat(seed) * 6.28318530718;
+    float phi = randomFloat(seed) * 6.28318530718;
 
-    if (surfaceOnly)
+    float tubeRadius = minorRadius;
+    if (!surfaceOnly)
     {
-        return vec3(radius * cos(theta), 0.0, radius * sin(theta));
+        tubeRadius = minorRadius * sqrt(randomFloat(seed));
     }
 
-    float r = radius * sqrt(randomFloat(seed));
+    float ringDist = majorRadius + tubeRadius * cos(phi);
+    return vec3(ringDist * cos(theta), tubeRadius * sin(phi), ringDist * sin(theta));
+}
+
+// VK-1525: flat ring / arc / annulus in the XZ plane. Surface = centerline outline at
+// `radius`; Volume = annular band of half-width `thickness` around it. `arcSpan` (radians)
+// and `startAngle` bound the swept arc (a full 2*pi ring by default).
+vec3 generateRingPosition(inout uint seed, float radius, float thickness, float arcSpan, float startAngle, bool surfaceOnly)
+{
+    float theta = startAngle + randomFloat(seed) * arcSpan;
+
+    float r = radius;
+    if (!surfaceOnly)
+    {
+        r = radius + (randomFloat(seed) * 2.0 - 1.0) * thickness;
+    }
+
     return vec3(r * cos(theta), 0.0, r * sin(theta));
 }
 
@@ -291,9 +374,23 @@ vec3 generateSpawnPosition(inout uint seed, GPUEmitterConfig config)
     {
         return generateBoxPosition(seed, config.shapeDimensions.xyz, surfaceOnly);
     }
-    else if ((config.shapeFlags & SHAPE_CIRCLE) != 0u)
+    else if ((config.shapeFlags & SHAPE_LINE) != 0u)
     {
-        return generateCirclePosition(seed, config.shapeDimensions.x, config.shapeDimensions.y, surfaceOnly);
+        return generateLinePosition(seed, config.shapeDimensions.xyz);
+    }
+    else if ((config.shapeFlags & SHAPE_TORUS) != 0u)
+    {
+        // NOTE (VK-1524): SHAPE_TORUS (bit 11) is a 3-D torus — shapeDimensions.x is the ring
+        // radius, shapeDimensions.y is the tube radius. This deliberately replaces the former
+        // flat-circle interpretation of this bit (where .y was the swept arc) and now matches the
+        // CPU preview (vfxspOrderedCurve / generateTorusPosition3D). Pre-existing Torus .vfVFX
+        // assets change footprint accordingly — an intentional, un-migrated change, not a regression.
+        return generateTorusPosition3D(seed, config.shapeDimensions.x, config.shapeDimensions.y, surfaceOnly);
+    }
+    else if ((config.shapeFlags & SHAPE_RING) != 0u)
+    {
+        return generateRingPosition(seed, config.shapeDimensions.x, config.shapeDimensions.y,
+                                    config.shapeDimensions.z, config.shapeDimensions.w, surfaceOnly);
     }
 
     return vec3(0.0);
@@ -341,8 +438,28 @@ vec3 generateDirectionFromShape(inout uint seed, vec3 position, GPUEmitterConfig
         else
             return vec3(0.0, 0.0, position.z > 0.0 ? 1.0 : -1.0);
     }
-    else if ((config.shapeFlags & SHAPE_CIRCLE) != 0u)
+    else if ((config.shapeFlags & SHAPE_TORUS) != 0u)
     {
+        // Tube-outward normal (mirror of the CPU preview torus direction).
+        vec3 radial = vec3(position.x, 0.0, position.z);
+        float radialLen = length(radial);
+        if (radialLen > 0.001)
+        {
+            vec3 ringPoint = (radial / radialLen) * config.shapeDimensions.x;
+            vec3 tubeDir = position - ringPoint;
+            float tubeLen = length(tubeDir);
+            if (tubeLen > 0.001)
+                return tubeDir / tubeLen;
+        }
+        return vec3(0.0, 1.0, 0.0);
+    }
+    else if ((config.shapeFlags & SHAPE_RING) != 0u)
+    {
+        // Radial-outward in the ring plane; upward fallback at the exact center.
+        vec3 radial = vec3(position.x, 0.0, position.z);
+        float radialLen = length(radial);
+        if (radialLen > 0.001)
+            return radial / radialLen;
         return vec3(0.0, 1.0, 0.0);
     }
 
@@ -601,9 +718,26 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         {
             p.color = mix(config.colorStart, config.colorEnd, lifetimeRatio);
         }
-        vec2 colorMult = unpackHalf2x16(p.packedColorMult);
-        p.color.rgb *= colorMult.x;
-        p.color.a *= colorMult.y;
+        if (pc.particlesPerRequest > 0u)
+        {
+            // Request particles store the channel tint (not the variance multiplier) in
+            // packedColorMult, so color/alpha variance is recomputed here every frame. Key
+            // it off the RAW p.spawnSeed to match the spawn-frame bake (~line 1485); hashing
+            // it diverged the seed and popped the color after frame 0 (review #6).
+            uint varianceSeed = p.spawnSeed;
+            float colorValueMult = 1.0 + config.colorValueVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_COLOR_VALUE);
+            float alphaMult = 1.0 + config.alphaVariance *
+                vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ALPHA);
+            p.color *= vec4(colorValueMult, colorValueMult, colorValueMult, alphaMult) *
+                unpackUnorm4x8(p.packedColorMult);
+        }
+        else
+        {
+            vec2 colorMult = unpackHalf2x16(p.packedColorMult);
+            p.color.rgb *= colorMult.x;
+            p.color.a *= colorMult.y;
+        }
     }
 
     if ((config.modifierFlags & MODIFIER_SIZE_OVER_LIFETIME) != 0u)
@@ -687,17 +821,71 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         }
         else
         {
-            vec2 cm = unpackHalf2x16(p.packedColorMult);
             colorBase = config.startColor;
-            colorBase.rgb *= cm.x;
-            colorBase.a *= cm.y;
+            if (pc.particlesPerRequest > 0u)
+            {
+                // Raw p.spawnSeed to match the spawn-frame bake (review #6): request
+                // particles recompute variance each frame, so the seed must not be hashed.
+                uint varianceSeed = p.spawnSeed;
+                float colorValueMult = 1.0 + config.colorValueVariance *
+                    vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_COLOR_VALUE);
+                float alphaMult = 1.0 + config.alphaVariance *
+                    vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ALPHA);
+                colorBase *= vec4(colorValueMult, colorValueMult, colorValueMult, alphaMult) *
+                    unpackUnorm4x8(p.packedColorMult);
+            }
+            else
+            {
+                vec2 cm = unpackHalf2x16(p.packedColorMult);
+                colorBase.rgb *= cm.x;
+                colorBase.a *= cm.y;
+            }
         }
         p.color = colorBase * colorBySpeed;
     }
 }
 
-void emitEvent(uint type, vec3 pos, vec3 vel, uint emitterIdx, vec3 color, float size)
+// VK-1501: append one GPU event->child spawn request into this frame's write parity half of the
+// given child region. Bounded by CHILD_MAX_REQUESTS_PER_REGION (overflow increments the counter but
+// drops the write; the reader clamps to the same cap next frame, so overflow degrades gracefully).
+void appendChildRequest(uint childHalf, vec3 pos, vec3 vel, vec3 color, float size)
 {
+    uint region = childHalf & CHILD_REGION_NONE;
+    uint writeHalf = pc.frameNumber & 1u;
+    uint base = writeHalf * CHILD_MAX_REGIONS + region;
+    uint slot = atomicAdd(childSpawnCounters[base], 1u);
+    if (slot < CHILD_MAX_REQUESTS_PER_REGION)
+    {
+        GPUVFXSpawnRequest r;
+        r.position = pos;
+        r.scale = ((childHalf & CHILD_INHERIT_SIZE_BIT) != 0u) ? max(size, 0.0) : 1.0;
+        r.direction = ((childHalf & CHILD_INHERIT_VEL_BIT) != 0u) ? vel : vec3(0.0);
+        r.packedColor = packUnorm4x8(vec4(clamp(color, 0.0, 1.0), 1.0));
+        r.seed = pcg_hash(floatBitsToUint(pos.x) ^ (pc.frameNumber * 2654435761u) ^ (slot * 40503u) ^ region);
+        r.flags = SPAWN_REQUEST_GPU_VALID |
+                  (((childHalf & CHILD_INHERIT_COLOR_BIT) != 0u) ? SPAWN_REQUEST_HAS_TINT : 0u);
+        r.reservedTemplate = 0u;
+        r.pad = 0u;
+        childSpawnRequests[base * CHILD_MAX_REQUESTS_PER_REGION + slot] = r;
+    }
+}
+
+void emitEvent(GPUEmitterConfig config, uint type, vec3 pos, vec3 vel, uint emitterIdx, vec3 color, float size)
+{
+    // VK-1501: route death/collision to the GPU child ring when a fast-path child is configured. This
+    // deliberately skips the CPU event buffer entirely for that pair (no readback, no notification, and
+    // the 256/frame event-buffer stats stay unchanged). Non-fast-path events fall through as before.
+    if (type == 1u || type == 2u)
+    {
+        uint childHalf = (type == 2u) ? ((config.eventChildSlot >> 16) & 0xFFFFu)
+                                      : (config.eventChildSlot & 0xFFFFu);
+        if ((childHalf & CHILD_REGION_NONE) != CHILD_REGION_NONE)
+        {
+            appendChildRequest(childHalf, pos, vel, color, size);
+            return;
+        }
+    }
+
     uint idx = atomicAdd(eventCount, 1u);
     if (idx < MAX_VFX_EVENTS)
     {
@@ -800,7 +988,7 @@ void applyTerrainCollision(inout GPUParticle p, GPUEmitterConfig config, uint em
 
         if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
         {
-            emitEvent(2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
+            emitEvent(config, 2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
             collisionEventFired = true;
         }
     }
@@ -944,10 +1132,97 @@ void applyCollisions(inout GPUParticle p, GPUEmitterConfig config, uint emitterI
 
             if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
             {
-                emitEvent(2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
+                emitEvent(config, 2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
                 collisionEventFired = true;
             }
         }
+    }
+}
+
+// VK-1502: reconstruct a view-space position from a UV + hardware depth. Assumes a standard perspective
+// RH_ZO projection (GLM_FORCE_DEPTH_ZERO_TO_ONE, NDC depth in [0,1], no reverse-Z). cam.projection is
+// column-major, indexed [col][row].
+vec3 reconstructViewPosDC(vec2 uv, float ndcZ)
+{
+    float viewZ = cam.projection[3][2] / (-ndcZ - cam.projection[2][2]); // negative in front of the camera
+    vec2 ndcXY = uv * 2.0 - 1.0;
+    float viewX = ndcXY.x * (-viewZ) / cam.projection[0][0];
+    float viewY = ndcXY.y * (-viewZ) / cam.projection[1][1];
+    return vec3(viewX, viewY, viewZ);
+}
+
+// VK-1502: depth-buffer collision. Projects the particle to screen, samples LAST-FRAME scene depth
+// (prevFrameDepth, populated by DepthCopy and left shader-readable), and if the particle sits within a
+// thickness shell behind the visible surface, applies the SAME bounce/friction/lifetime-loss response as
+// the analytic/terrain colliders, using a depth-derived surface normal. The sim dispatches before the
+// opaque pass, so the depth is inherently one frame behind (Niagara's model). On-screen geometry only;
+// off-screen / sky / behind-camera particles fall through gracefully. Compute has no fragment derivatives,
+// so the normal is built from explicit neighbor taps with textureLod (no implicit LOD in compute).
+void applyDepthCollision(inout GPUParticle p, GPUEmitterConfig config, uint emitterIdx, inout bool collisionEventFired)
+{
+    uint slot = cam.prevDepthSlot;
+
+    vec4 viewPos = cam.view * vec4(p.position, 1.0);
+    vec4 clip = cam.projection * viewPos;
+    if (clip.w <= 0.0)
+        return; // behind the camera
+
+    vec2 uv = (clip.xy / clip.w) * 0.5 + 0.5;
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0))))
+        return; // off-screen: no depth to test against
+
+    float ndcZ = textureLod(prevFrameDepth[slot], uv, 0.0).r;
+    if (ndcZ >= 0.99999)
+        return; // sky / cleared depth (far plane): nothing to collide with
+
+    float surfDist = -(cam.projection[3][2] / (-ndcZ - cam.projection[2][2])); // camera->surface distance (positive)
+    float partDist = -viewPos.z;                                               // camera->particle distance (positive)
+
+    float penetration = partDist - surfDist;
+    if (penetration <= 0.0 || penetration > config.depthCollisionThickness)
+        return; // in front of the surface, or too far behind it (a different, occluded object)
+
+    vec3 camFacing = normalize(cam.cameraPos - p.position);
+
+    // Surface normal from depth derivatives: reconstruct the center + two neighbor texels and take the cross.
+    vec2 texel = 1.0 / vec2(textureSize(prevFrameDepth[slot], 0));
+    vec3 pC = reconstructViewPosDC(uv, ndcZ);
+    vec3 pR = reconstructViewPosDC(uv + vec2(texel.x, 0.0), textureLod(prevFrameDepth[slot], uv + vec2(texel.x, 0.0), 0.0).r);
+    vec3 pU = reconstructViewPosDC(uv + vec2(0.0, texel.y), textureLod(prevFrameDepth[slot], uv + vec2(0.0, texel.y), 0.0).r);
+    vec3 nView = cross(pR - pC, pU - pC);
+    float nlen = length(nView);
+    vec3 depthNormal = camFacing;
+    if (nlen > 1e-8)
+    {
+        nView /= nlen;
+        if (nView.z < 0.0)
+            nView = -nView; // face the camera (+Z in view space)
+        depthNormal = normalize(transpose(mat3(cam.view)) * nView); // rigid view: inverse rotation = transpose
+    }
+
+    vec3 n = normalize(mix(camFacing, depthNormal, clamp(config.depthCollisionNormalInfluence, 0.0, 1.0)));
+
+    // Reuse the exact analytic/terrain collision response (bounce / friction / lifetime-loss / event).
+    p.position += n * penetration;
+
+    float vn = dot(p.velocity, n);
+    if (vn < 0.0)
+    {
+        vec3 vNormal = n * vn;
+        vec3 vTangent = p.velocity - vNormal;
+        p.velocity = vTangent * (1.0 - config.collisionFriction)
+                   - vNormal * config.collisionBounce;
+    }
+
+    if (config.collisionLifetimeLoss > 0.0)
+    {
+        p.lifetime += p.maxLifetime * config.collisionLifetimeLoss;
+    }
+
+    if (!collisionEventFired && (config.eventFlags & EVENT_FLAG_ON_COLLISION) != 0u)
+    {
+        emitEvent(config, 2u, p.position, p.velocity, emitterIdx, p.color.rgb, p.size);
+        collisionEventFired = true;
     }
 }
 
@@ -1030,7 +1305,7 @@ void main()
         {
             if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
             {
-                emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                emitEvent(config, 1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
             }
             p.size = 0.0;
             isActive = false;
@@ -1046,10 +1321,16 @@ void main()
             bool collisionEventFired = false;
             applyCollisions(p, config, pc.emitterIndex, collisionEventFired);
             applyTerrainCollision(p, config, pc.emitterIndex, collisionEventFired);
+            if ((config.modifierFlags & MODIFIER_DEPTH_COLLISION) != 0u && cam.depthCollisionActive != 0u)
+            {
+                applyDepthCollision(p, config, pc.emitterIndex, collisionEventFired);
+            }
 
             float lifetimeRatio = p.lifetime / p.maxLifetime;
 
-            if (config.modifierFlags != 0u)
+            // Exclude the depth-collision bit from the "has any modifier" gate: it is a collision toggle, not
+            // a modifier, and a depth-collision-only emitter must still take the legacy alpha-fade path below.
+            if ((config.modifierFlags & ~MODIFIER_DEPTH_COLLISION) != 0u)
             {
                 applyModifiers(p, config, lifetimeRatio);
             }
@@ -1058,7 +1339,12 @@ void main()
                 if (lifetimeRatio > FADE_START)
                 {
                     float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
-                    p.color.a = config.startColor.a * unpackHalf2x16(p.packedColorMult).y * (1.0 - fadeProgress);
+                    float alphaMult = (pc.particlesPerRequest > 0u)
+                        ? (1.0 + config.alphaVariance * vfxVarianceSigned(
+                              p.spawnSeed, VFX_VAR_STREAM_ALPHA)) * // raw seed: match spawn bake (review #6)
+                          unpackUnorm4x8(p.packedColorMult).a
+                        : unpackHalf2x16(p.packedColorMult).y;
+                    p.color.a = config.startColor.a * alphaMult * (1.0 - fadeProgress);
                 }
             }
 
@@ -1067,7 +1353,7 @@ void main()
                 float prevRatio = (p.lifetime - config.deltaTime) / p.maxLifetime;
                 if (prevRatio < config.lifetimeThreshold && lifetimeRatio >= config.lifetimeThreshold)
                 {
-                    emitEvent(3u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                    emitEvent(config, 3u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                 }
             }
 
@@ -1082,7 +1368,7 @@ void main()
                 {
                     if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
                     {
-                        emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                        emitEvent(config, 1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                     }
                     p.size = 0.0;
                     isActive = false;
@@ -1095,7 +1381,7 @@ void main()
             {
                 if ((config.eventFlags & EVENT_FLAG_ON_DEATH) != 0u)
                 {
-                    emitEvent(1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                    emitEvent(config, 1u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
                 }
                 p.size = 0.0;
                 isActive = false;
@@ -1109,17 +1395,110 @@ void main()
 
         if (spawnSlot < spawnThisFrame)
         {
-            isActive = true;
+            bool channelSpawn = pc.particlesPerRequest > 0u;
+            bool gpuChildSpawn = pc.gpuChildRegion != 0xFFFFFFFFu; // VK-1501
+            bool useRequest = channelSpawn || gpuChildSpawn;
+            bool requestValid = true;
+            float requestScale = 1.0;
+            vec3 requestDirection = vec3(0.0);
+            uint requestPackedColor = 0u;
+            uint requestFlags = 0u;
 
-            vec3 localPos = generateSpawnPosition(seed, config);
+            if (gpuChildSpawn)
+            {
+                // VK-1501: consume GPU-appended child requests from the previous-frame parity half.
+                // The count is GPU-authoritative (clamped to the per-region cap) so no CPU readback is
+                // ever needed; the read half has no concurrent writer this frame (plain loads are safe).
+                uint readHalf = (pc.frameNumber & 1u) ^ 1u;
+                uint base = readHalf * CHILD_MAX_REGIONS + pc.gpuChildRegion;
+                uint count = min(childSpawnCounters[base], CHILD_MAX_REQUESTS_PER_REGION);
+                uint requestOffset = spawnSlot / pc.particlesPerRequest;
+                if (requestOffset >= count)
+                {
+                    requestValid = false;
+                }
+                else
+                {
+                    GPUVFXSpawnRequest request = childSpawnRequests[base * CHILD_MAX_REQUESTS_PER_REGION + requestOffset];
+                    uint subParticleIndex = spawnSlot % pc.particlesPerRequest;
+                    seed = pcg_hash(request.seed ^ pcg_hash(subParticleIndex + 0x9E3779B9u));
+                    requestScale = max(request.scale, 0.0);
+                    requestDirection = request.direction;
+                    requestPackedColor = request.packedColor;
+                    requestFlags = request.flags;
+                    p.position = request.position;
+                }
+            }
+            else if (channelSpawn)
+            {
+                uint requestOffset = spawnSlot / pc.particlesPerRequest;
+                uint requestCapacity = uint(spawnRequests.length());
+                if (pc.channelRequestBase >= requestCapacity)
+                {
+                    requestValid = false;
+                }
+                else if (requestOffset >= requestCapacity - pc.channelRequestBase)
+                {
+                    requestValid = false;
+                }
+                else
+                {
+                    uint requestIndex = pc.channelRequestBase + requestOffset;
+                    GPUVFXSpawnRequest request = spawnRequests[requestIndex];
+                    uint subParticleIndex = spawnSlot % pc.particlesPerRequest;
+                    seed = pcg_hash(request.seed ^ pcg_hash(subParticleIndex + 0x9E3779B9u));
+                    requestScale = max(request.scale, 0.0);
+                    requestDirection = request.direction;
+                    requestPackedColor = request.packedColor;
+                    requestFlags = request.flags;
+                    p.position = request.position;
+                }
+            }
 
-            // Sub-frame interpolation: distribute this frame's spawns along the
-            // emitter's path from last frame to avoid beads-on-a-string clumping.
-            float spawnFrac = (spawnThisFrame > 1u)
-                ? float(spawnSlot) / float(spawnThisFrame - 1u)
-                : 1.0;
-            vec3 spawnOrigin = mix(vec3(states[pc.emitterIndex].prevWorldTransform[3]),
-                                   vec3(worldTransform[3]), spawnFrac);
+            if (requestValid)
+            {
+                isActive = true;
+
+                // Sub-frame fraction across this frame's spawn batch. Drives both the
+                // ordered-placement sweep and the emitter-origin de-clumping below.
+                float spawnFrac = (spawnThisFrame > 1u)
+                    ? float(spawnSlot) / float(spawnThisFrame - 1u)
+                    : 1.0;
+
+                // VK-1525: ordered / path-driven placement (opt-in, normal emitter spawns only).
+                bool orderedSpawn = !useRequest && (config.shapeFlags & SHAPE_ORDERED) != 0u;
+
+                vec3 localPos;
+                if (orderedSpawn)
+                {
+                    // Place along the shape by emitter age (progress), not randomly. progress
+                    // interpolates the sub-frame batch across the [prev, curr] sweep t. The jitter
+                    // seed is frame-independent (age + slot, not frameNumber) so seek/prewarm replay.
+                    float progress = mix(config.orderedSweepTPrev, config.orderedSweepT, spawnFrac);
+                    // Shared with the CPU preview (VFXShapePlacementMath::vfxspOrderedJitterSeed)
+                    // so ordered scatter is bit-identical on GPU and in the editor (review #8).
+                    uint jitterSeed = vfxspOrderedJitterSeed(config.seed, progress, spawnSlot);
+                    localPos = vfxspOrderedPosition(config.shapeFlags, config.shapeDimensions,
+                                                    progress, config.orderedJitter, jitterSeed);
+                }
+                else
+                {
+                    localPos = generateSpawnPosition(seed, config);
+                }
+
+                vec3 spawnOrigin;
+                if (useRequest)
+                {
+                    spawnOrigin = p.position;
+                    localPos *= requestScale;
+                }
+                else
+                {
+                    // Sub-frame interpolation: distribute this frame's spawns along the
+                    // emitter's path from last frame to avoid beads-on-a-string clumping.
+                    spawnOrigin = mix(vec3(states[pc.emitterIndex].prevWorldTransform[3]),
+                                      vec3(worldTransform[3]), spawnFrac);
+                }
 
             mat3 rotation = mat3(worldTransform);
             p.position = spawnOrigin + rotation * localPos;
@@ -1140,23 +1519,39 @@ void main()
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ALPHA);
 
             p.maxLifetime = config.lifetime * lifetimeMult;
-            p.size = config.startSize * sizeMult;
+            p.size = config.startSize * sizeMult * requestScale;
             p.color = config.startColor;
             p.color.rgb *= colorValueMult;
             p.color.a *= alphaMult;
+            vec4 channelTint = vec4(1.0);
+            if (useRequest && (requestFlags & SPAWN_REQUEST_HAS_TINT) != 0u)
+            {
+                channelTint = unpackUnorm4x8(requestPackedColor);
+                p.color *= channelTint;
+            }
             p.rotation = config.rotationVariance *
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ROTATION);
             p.angularVelocity = config.angularVelocityVariance *
                 vfxVarianceSigned(varianceSeed, VFX_VAR_STREAM_ANGULAR_VELOCITY);
-            p.packedColorMult = packHalf2x16(vec2(colorValueMult, alphaMult));
+            p.packedColorMult = useRequest
+                ? packUnorm4x8(channelTint)
+                : packHalf2x16(vec2(colorValueMult, alphaMult));
 
             p.initialSize = p.size;
             p.initialSpeed = config.startSpeed * speedMult;
 
             vec3 dir = generateDirectionFromShape(seed, localPos, config);
+            bool hasWorldDirection = useRequest && dot(requestDirection, requestDirection) > 1e-8;
+            if (hasWorldDirection)
+            {
+                dir = normalize(requestDirection);
+            }
             p.velocity = dir * p.initialSpeed;
 
-            p.velocity = rotation * p.velocity;
+            if (!hasWorldDirection)
+            {
+                p.velocity = rotation * p.velocity;
+            }
 
             vec4 emitterVel = states[pc.emitterIndex].emitterVelocityAndInherit;
             p.velocity += emitterVel.xyz * emitterVel.w;
@@ -1169,7 +1564,8 @@ void main()
 
             if ((config.eventFlags & EVENT_FLAG_ON_SPAWN) != 0u)
             {
-                emitEvent(0u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+                emitEvent(config, 0u, p.position, p.velocity, pc.emitterIndex, p.color.rgb, p.size);
+            }
             }
         }
     }

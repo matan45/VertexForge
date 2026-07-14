@@ -9,6 +9,18 @@ namespace services
 {
     using VFXInstanceId = uint32_t;
 
+    // A lightweight world-space request submitted to a persistent GPU VFX channel.
+    // packedTint stores RGBA8 as R | (G << 8) | (B << 16) | (A << 24).
+    // hasTint distinguishes an omitted tint from valid transparent black.
+    struct VFXChannelEmitParams
+    {
+        glm::vec3 position{0.0f};
+        float scale = 1.0f;
+        glm::vec3 direction{0.0f};
+        uint32_t packedTint = 0xFFFFFFFFu;
+        bool hasTint = false;
+    };
+
     enum class VFXEmitterPriority : uint8_t
     {
         Critical = 0,

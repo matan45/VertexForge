@@ -352,6 +352,8 @@ namespace vfx
         bool payloadEmpty(const VFXCuePayload& payload)
         {
             return !payload.position.has_value() &&
+                   !payload.velocity.has_value() &&
+                   !payload.normal.has_value() &&
                    !payload.color.has_value() &&
                    !payload.scalar.has_value() &&
                    payload.custom.empty();
@@ -362,6 +364,10 @@ namespace vfx
             json j;
             if (payload.position)
                 j["position"] = vec3ToJson(*payload.position);
+            if (payload.velocity)
+                j["velocity"] = vec3ToJson(*payload.velocity);
+            if (payload.normal)
+                j["normal"] = vec3ToJson(*payload.normal);
             if (payload.color)
                 j["color"] = vec4ToJson(*payload.color);
             if (payload.scalar)
@@ -384,6 +390,10 @@ namespace vfx
 
             if (j.contains("position"))
                 payload.position = jsonToVec3(j["position"], glm::vec3(0.0f));
+            if (j.contains("velocity"))
+                payload.velocity = jsonToVec3(j["velocity"], glm::vec3(0.0f));
+            if (j.contains("normal"))
+                payload.normal = jsonToVec3(j["normal"], glm::vec3(0.0f));
             if (j.contains("color"))
                 payload.color = jsonToVec4(j["color"], glm::vec4(1.0f));
             if (j.contains("scalar") && j["scalar"].is_number())
@@ -403,6 +413,7 @@ namespace vfx
     json VFXSequenceAsset::serializeStep(const VFXSequenceStep& step)
     {
         json j;
+        j["kind"] = static_cast<int>(static_cast<uint8_t>(step.kind)); // VK-1496
         serialization::writeAssetRef(j, "vfxRef", step.vfxRef);
         j["label"] = step.label;
         j["startTime"] = step.startTime;
@@ -420,6 +431,34 @@ namespace vfx
             overrides.push_back(serializeParamOverride(overrideValue));
         j["overrides"] = overrides;
 
+        // VK-1496 — Sound fields (written for all kinds; tolerant reader ignores when unused).
+        serialization::writeAssetRef(j, "audioRef", step.audioRef);
+        j["volume"] = step.volume;
+        j["pitch"] = step.pitch;
+        j["spatialized"] = step.spatialized;
+
+        // VK-1496 — ScriptCue fields. cuePayload only when non-empty (matches marker codec).
+        j["emitCueName"] = step.emitCueName;
+        if (!payloadEmpty(step.cuePayload))
+            j["cuePayload"] = serializePayload(step.cuePayload);
+
+        // VK-1497 — deterministic per-step variety (additive; tolerant reader defaults them).
+        j["probability"] = step.probability;
+        j["variantGroup"] = step.variantGroup;
+
+        // VK-1524 — trigger + source output declaration + StepOutput receiver binding (additive).
+        j["trigger"] = static_cast<int>(static_cast<uint8_t>(step.trigger));
+        j["outputEventName"] = step.outputEventName;
+        j["outputEventType"] = static_cast<int>(static_cast<uint8_t>(step.outputEventType));
+        j["sourceStepIndex"] = step.sourceStepIndex;
+        j["sourceEventName"] = step.sourceEventName;
+        j["eventConsumption"] = static_cast<int>(static_cast<uint8_t>(step.eventConsumption));
+        j["eventBudget"] = step.eventBudget;
+        j["inheritVelocity"] = step.inheritVelocity;
+        j["inheritColor"] = step.inheritColor;
+        j["inheritScalar"] = step.inheritScalar;
+        j["inheritNormal"] = step.inheritNormal;
+
         return j;
     }
 
@@ -427,8 +466,13 @@ namespace vfx
     {
         VFXSequenceStep step;
 
+        // VK-1496 — read `kind` BEFORE the vfxRef gate. Absent in v1.3 files => VFX, so
+        // the gate stays byte-identical for old assets. Only VFX steps require a vfxRef;
+        // Sound/ScriptCue (and unknown future kinds) legitimately have none.
+        step.kind = static_cast<VFXStepKind>(static_cast<uint8_t>(j.value("kind", 0)));
         step.vfxRef = serialization::readAssetRef(j, "vfxRef");
-        if (!step.vfxRef.isValid())
+        step.audioRef = serialization::readAssetRef(j, "audioRef");
+        if (step.kind == VFXStepKind::VFX && !step.vfxRef.isValid())
         {
             return std::nullopt;
         }
@@ -504,6 +548,38 @@ namespace vfx
                 }
             }
         }
+
+        // VK-1496 — Sound + ScriptCue fields (tolerant; absent keys keep struct defaults).
+        step.volume = j.value("volume", 1.0f);
+        step.pitch = j.value("pitch", 1.0f);
+        step.spatialized = j.value("spatialized", false);
+        step.emitCueName = j.value("emitCueName", "");
+        if (j.contains("cuePayload"))
+            step.cuePayload = deserializePayload(j["cuePayload"]);
+
+        // VK-1497 — per-step variety (tolerant; defaults MUST match struct defaults so a
+        // pre-VK-1497 file loads exactly like a default-constructed step: always play, no group).
+        step.probability = j.value("probability", 1.0f);
+        step.variantGroup = j.value("variantGroup", -1);
+
+        // VK-1524 — trigger (back-compat: pre-1.6 files have no `trigger` key; derive it from
+        // `cueName` so time/cue behavior is byte-identical) + source output + StepOutput binding.
+        const int defaultTrigger = static_cast<int>(static_cast<uint8_t>(
+            step.cueName.empty() ? VFXStepTrigger::Time : VFXStepTrigger::Cue));
+        step.trigger = static_cast<VFXStepTrigger>(
+            static_cast<uint8_t>(j.value("trigger", defaultTrigger)));
+        step.outputEventName = j.value("outputEventName", "");
+        step.outputEventType = static_cast<VFXEventType>(static_cast<uint8_t>(
+            j.value("outputEventType", static_cast<int>(static_cast<uint8_t>(VFXEventType::OnDeath)))));
+        step.sourceStepIndex = j.value("sourceStepIndex", -1);
+        step.sourceEventName = j.value("sourceEventName", "");
+        step.eventConsumption = static_cast<VFXEventConsumption>(
+            static_cast<uint8_t>(j.value("eventConsumption", 0)));
+        step.eventBudget = j.value("eventBudget", 16u);
+        step.inheritVelocity = j.value("inheritVelocity", false);
+        step.inheritColor = j.value("inheritColor", false);
+        step.inheritScalar = j.value("inheritScalar", false);
+        step.inheritNormal = j.value("inheritNormal", false);
 
         return step;
     }
@@ -590,6 +666,9 @@ namespace vfx
                     data.bounds.extents = jsonToVec3(boundsJson["extents"], glm::vec3(0.0f));
             }
 
+            // VK-1498 — stable-loop flag (tolerant; absent => false = re-roll variety each loop).
+            data.stableLoop = j.value("stableLoop", false);
+
             if (warningCount > 0)
                 vfLogWarning("Loaded VFX sequence '{}' with {} warning(s)", data.name, warningCount);
 
@@ -648,6 +727,9 @@ namespace vfx
             boundsJson["extents"] = vec3ToJson(data.bounds.extents);
             j["bounds"] = std::move(boundsJson);
         }
+
+        // VK-1498 — stable-loop flag.
+        j["stableLoop"] = data.stableLoop;
 
         try
         {

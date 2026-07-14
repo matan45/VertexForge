@@ -46,7 +46,8 @@ namespace render::vfx
         inline constexpr uint32_t GlowOverLifetime = 1 << 15;
         inline constexpr uint32_t SizeBySpeed = 1u << 22;  // VK-1473: sample size curve by normalized speed
         inline constexpr uint32_t ColorBySpeed = 1u << 23; // VK-1473: sample color gradient by normalized speed
-        // Bits 24-31 free for future modifiers (e.g. VK-1474 C2 reserved 24/25 if ever node-driven).
+        inline constexpr uint32_t DepthCollision = 1u << 25; // VK-1502: collide particles against last-frame scene depth
+        // Bits 24, 26-31 free for future modifiers.
     }
 
     namespace ForceFlags
@@ -67,9 +68,14 @@ namespace render::vfx
         inline constexpr uint32_t ShapeSphere = 1 << 8;
         inline constexpr uint32_t ShapeCone = 1 << 9;
         inline constexpr uint32_t ShapeBox = 1 << 10;
-        inline constexpr uint32_t ShapeTorus = 1 << 11;
+        inline constexpr uint32_t ShapeTorus = 1 << 11; // VK-1525: now a real 3-D torus (was a flat circle)
         inline constexpr uint32_t EmitFromSurface = 1 << 12;
         inline constexpr uint32_t RandomDirection = 1 << 13;
+        inline constexpr uint32_t ShapeRing = 1u << 14;        // VK-1525: flat ring / arc / annulus (XZ plane)
+        inline constexpr uint32_t OrderedPlacement = 1u << 15; // VK-1525: draw the shape out in spawn order (opt-in)
+        inline constexpr uint32_t ShapeLine = 1u << 16;        // line segment along dims.xyz, centered (random = along it)
+        // ShapeFlags packs into GPUEmitterConfig::shapeFlags (a SEPARATE uint32 from modifierFlags);
+        // bits 0-7 and 17-31 remain free here.
     }
 
     namespace FlipbookFlags
@@ -147,7 +153,9 @@ namespace render::vfx
         float lightingInfluence = 0.0f;       // 0 = unlit (default), 1 = fully lit
         int32_t normalMode = 0;               // 0 = sphere, 1 = view-aligned, 2 = mesh
         float ambientAmount = 0.3f;           // ambient light contribution
-        float _lightPad0 = 0.0f;
+        // VK-1525: reclaimed lighting pad (offset 332). Previous-frame ordered sweep t, used together with
+        // the per-frame spawnFrac to smear a batch of spawns across the sub-frame sweep (0 when not ordered).
+        float orderedSweepTPrev = 0.0f;
 
         // Distortion
         uint32_t distortionEnabled = 0;
@@ -162,8 +170,9 @@ namespace render::vfx
         float colorValueVariance = 0.0f;
         float alphaVariance = 0.0f;
         float emissiveIntensity = 1.0f;
-        float _variancePad1 = 0.0f;
-        float _variancePad2 = 0.0f;
+        // VK-1525: reclaimed variance pads (offsets 376/380). Ordered / path-driven spawn placement.
+        float orderedJitter = 0.0f; // per-particle scatter off the on-curve point (world units, 0 = exact)
+        float orderedSweepT = 0.0f; // current-frame sweep parameter t in [0,1] (CPU-computed from emitter age)
 
         // Forces added in VK-1465 (flags ForceFlags::Drag / Attractor / AttractorKill).
         // Two vec4s, independent lanes so both forces can be active at once.
@@ -186,6 +195,21 @@ namespace render::vfx
         // render mode reads these. Mode 0 (VelocityForward) is the legacy default.
         glm::vec4 meshOrientationParams{0.0f}; // xyz = axis-lock axis (world, normalized), w = spin rate (rad/s)
         uint32_t meshOrientationMode = 0;      // vfx::VFXOrientationMode (0 = VelocityForward)
+
+        // VK-1501: GPU event->child fast path. Packs two 16-bit "child slots" (one per fast-path
+        // event type) into the last free tail uint. Low half = OnDeath, high half = OnCollision.
+        // Per half: bits 0-7 = child region index into the process-wide childSpawnBuffer
+        // (0xFF = no fast-path child), bit 8 = inheritColor, bit 9 = inheritSize, bit 10 =
+        // inheritVelocity. Presence is the sentinel test (no modifierFlags bit consumed) so bits
+        // 24-31 and tail offsets 504/508 stay reserved for VK-1502. Pack/unpack helpers live in
+        // utilities/vfx/VFXChildSpawn.hpp; the GLSL mirror is in vfx_gpu_types.glsl (keep in sync).
+        uint32_t eventChildSlot = 0xFFFFFFFFu;
+
+        // VK-1502: depth-buffer collision (gated by ModifierFlags::DepthCollision, bit 25). These fill the
+        // last two reserved tail slots (offsets 504/508) so the struct stays exactly 512 bytes. Keep the
+        // GLSL mirror in vfx_gpu_types.glsl in sync.
+        float depthCollisionThickness = 0.25f;       // world-space shell depth behind the visible surface
+        float depthCollisionNormalInfluence = 1.0f;  // [0,1]: 0 = camera-facing normal, 1 = depth-derived normal
     };
     static_assert(sizeof(GPUEmitterConfig) == 512, "GPUEmitterConfig must be 512 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -232,6 +256,7 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, lightingInfluence) == 320, "GPUEmitterConfig::lightingInfluence offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, normalMode) == 324, "GPUEmitterConfig::normalMode offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, ambientAmount) == 328, "GPUEmitterConfig::ambientAmount offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, orderedSweepTPrev) == 332, "GPUEmitterConfig::orderedSweepTPrev offset mismatch"); // VK-1525
     static_assert(offsetof(GPUEmitterConfig, distortionEnabled) == 336, "GPUEmitterConfig::distortionEnabled offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, distortionStrength) == 340, "GPUEmitterConfig::distortionStrength offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, sizeVariance) == 344, "GPUEmitterConfig::sizeVariance offset mismatch");
@@ -242,8 +267,8 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, colorValueVariance) == 364, "GPUEmitterConfig::colorValueVariance offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, alphaVariance) == 368, "GPUEmitterConfig::alphaVariance offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, emissiveIntensity) == 372, "GPUEmitterConfig::emissiveIntensity offset mismatch");
-    static_assert(offsetof(GPUEmitterConfig, _variancePad1) == 376, "GPUEmitterConfig::_variancePad1 offset mismatch");
-    static_assert(offsetof(GPUEmitterConfig, _variancePad2) == 380, "GPUEmitterConfig::_variancePad2 offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, orderedJitter) == 376, "GPUEmitterConfig::orderedJitter offset mismatch"); // VK-1525
+    static_assert(offsetof(GPUEmitterConfig, orderedSweepT) == 380, "GPUEmitterConfig::orderedSweepT offset mismatch"); // VK-1525
     static_assert(offsetof(GPUEmitterConfig, attractorParams) == 384, "GPUEmitterConfig::attractorParams offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, dragAttractorExtra) == 400, "GPUEmitterConfig::dragAttractorExtra offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, curlNoiseParams) == 416, "GPUEmitterConfig::curlNoiseParams offset mismatch");
@@ -252,6 +277,9 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, modifierSpeedRanges) == 464, "GPUEmitterConfig::modifierSpeedRanges offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, meshOrientationParams) == 480, "GPUEmitterConfig::meshOrientationParams offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, meshOrientationMode) == 496, "GPUEmitterConfig::meshOrientationMode offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, eventChildSlot) == 500, "GPUEmitterConfig::eventChildSlot offset mismatch"); // VK-1501
+    static_assert(offsetof(GPUEmitterConfig, depthCollisionThickness) == 504, "GPUEmitterConfig::depthCollisionThickness offset mismatch"); // VK-1502
+    static_assert(offsetof(GPUEmitterConfig, depthCollisionNormalInfluence) == 508, "GPUEmitterConfig::depthCollisionNormalInfluence offset mismatch"); // VK-1502
 
     struct alignas(16) GPUEmitterState
     {
@@ -347,6 +375,35 @@ namespace render::vfx
     static_assert(offsetof(GPUVFXEvent, color) == 32, "GPUVFXEvent::color offset mismatch");
     static_assert(offsetof(GPUVFXEvent, size) == 44, "GPUVFXEvent::size offset mismatch");
 
+    // VK-1500: one world-space impact request consumed by a persistent channel listener.
+    // This layout is mirrored by GPUVFXSpawnRequest in vfx_particle_sim.glsl (std430).
+    struct alignas(16) GPUVFXSpawnRequest
+    {
+        glm::vec3 position;
+        float scale = 1.0f;
+        glm::vec3 direction{0.0f};
+        uint32_t packedColor = 0;
+        uint32_t seed = 0;
+        uint32_t flags = 0;
+        uint32_t reservedTemplate = 0;
+        uint32_t pad = 0;
+    };
+    static_assert(sizeof(GPUVFXSpawnRequest) == 48, "GPUVFXSpawnRequest must be 48 bytes for GPU alignment");
+    static_assert(offsetof(GPUVFXSpawnRequest, position) == 0, "GPUVFXSpawnRequest::position offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, scale) == 12, "GPUVFXSpawnRequest::scale offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, direction) == 16, "GPUVFXSpawnRequest::direction offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, packedColor) == 28, "GPUVFXSpawnRequest::packedColor offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, seed) == 32, "GPUVFXSpawnRequest::seed offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, flags) == 36, "GPUVFXSpawnRequest::flags offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, reservedTemplate) == 40, "GPUVFXSpawnRequest::reservedTemplate offset mismatch");
+    static_assert(offsetof(GPUVFXSpawnRequest, pad) == 44, "GPUVFXSpawnRequest::pad offset mismatch");
+
+    namespace SpawnRequestFlags
+    {
+        inline constexpr uint32_t HasTint = 1u << 0;
+        inline constexpr uint32_t GpuValid = 1u << 1; // VK-1501: set on GPU-appended event->child requests
+    }
+
     struct alignas(16) GPUCollider
     {
         glm::vec4 positionAndType;  // xyz=world center, w=float(type: 0=Sphere, 1=Box, 2=Capsule)
@@ -368,6 +425,8 @@ namespace render::vfx
         inline constexpr uint32_t MAX_VFX_EVENTS_PER_FRAME = 256;
         inline constexpr uint32_t MAX_SCENE_COLLIDERS = 256;
         inline constexpr uint32_t MAX_TERRAIN_HEIGHTFIELD_BYTES = 4 * 1024 * 1024;
+        inline constexpr uint32_t MAX_SPAWN_REQUESTS = 4096;
+        inline constexpr uint32_t CHANNEL_PARTICLES_PER_EMITTER = 8192;
     }
 
     namespace EmitterFlags
@@ -385,8 +444,10 @@ namespace render::vfx
         float time;
         float nearPlane = 0.1f;
         float farPlane = 1000.0f;
-        float _pad1 = 0.0f;
-        float _pad2 = 0.0f;
+        // VK-1502: the sim compute reads this struct as an SSBO for depth-buffer collision. These two
+        // former pad words carry the collision state (render pipelines zero-init the struct and ignore them).
+        uint32_t depthCollisionActive = 0; // 1 iff a valid last-frame depth is bound AND some emitter wants it
+        uint32_t prevDepthSlot = 0;        // which prevFrameDepth[] element to sample (imageIndex % MAX_FRAMES_IN_FLIGHT)
     };
     static_assert(sizeof(GPUVFXCameraUBO) == 160, "GPUVFXCameraUBO must be 160 bytes");
     static_assert(offsetof(GPUVFXCameraUBO, view) == 0, "GPUVFXCameraUBO::view offset mismatch");
@@ -395,17 +456,25 @@ namespace render::vfx
     static_assert(offsetof(GPUVFXCameraUBO, time) == 140, "GPUVFXCameraUBO::time offset mismatch");
     static_assert(offsetof(GPUVFXCameraUBO, nearPlane) == 144, "GPUVFXCameraUBO::nearPlane offset mismatch");
     static_assert(offsetof(GPUVFXCameraUBO, farPlane) == 148, "GPUVFXCameraUBO::farPlane offset mismatch");
+    static_assert(offsetof(GPUVFXCameraUBO, depthCollisionActive) == 152, "GPUVFXCameraUBO::depthCollisionActive offset mismatch"); // VK-1502
+    static_assert(offsetof(GPUVFXCameraUBO, prevDepthSlot) == 156, "GPUVFXCameraUBO::prevDepthSlot offset mismatch"); // VK-1502
 
     struct GPUVFXComputePushConstants
     {
         uint32_t emitterIndex;
         uint32_t frameNumber;
         uint32_t emitterCount;
+        uint32_t channelRequestBase;
+        uint32_t particlesPerRequest;
+        uint32_t gpuChildRegion = 0xFFFFFFFFu; // VK-1501: child region for a GPU event->child listener dispatch; 0xFFFFFFFF = not a GPU child
     };
-    static_assert(sizeof(GPUVFXComputePushConstants) == 12, "Push constants must be 12 bytes");
+    static_assert(sizeof(GPUVFXComputePushConstants) == 24, "Push constants must be 24 bytes");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterIndex) == 0, "GPUVFXComputePushConstants::emitterIndex offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, frameNumber) == 4, "GPUVFXComputePushConstants::frameNumber offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterCount) == 8, "GPUVFXComputePushConstants::emitterCount offset mismatch");
+    static_assert(offsetof(GPUVFXComputePushConstants, channelRequestBase) == 12, "GPUVFXComputePushConstants::channelRequestBase offset mismatch");
+    static_assert(offsetof(GPUVFXComputePushConstants, particlesPerRequest) == 16, "GPUVFXComputePushConstants::particlesPerRequest offset mismatch");
+    static_assert(offsetof(GPUVFXComputePushConstants, gpuChildRegion) == 20, "GPUVFXComputePushConstants::gpuChildRegion offset mismatch");
 
     struct GPUVFXBillboardPushConstants
     {
@@ -448,6 +517,42 @@ namespace render::vfx
     };
     static_assert(sizeof(VFXDistortionRenderData) == 16, "VFXDistortionRenderData must be 16 bytes (std430 array stride)");
 
+    // VK-1526: per-emitter PBR material for MESH-render particles. GPUEmitterConfig is full (512B, no free
+    // tail bytes), so an optional material's texture slots + scalars ride this dedicated SSBO instead,
+    // indexed by pc.emitterIndex (mirrors the VFXEmitterRenderData per-emitter render-SSBO pattern). std430;
+    // all members are 4-byte scalars so the array stride is exactly 64 bytes. The GLSL mirror lives in
+    // vfx_gpu_types.glsl (keep field-for-field in sync). materialFlags bit 0 (HasMaterial) unset => the mesh
+    // shader takes the byte-identical legacy single-.vfImage path and every other field is ignored.
+    struct VFXMeshMaterialSlots
+    {
+        uint32_t baseColorIdx = 0;      // bindless slot for baseColor/albedo (0 = white default)
+        uint32_t normalIdx = 0;         // bindless slot for normal map (neutral-normal when unset)
+        uint32_t ormIdx = 0;            // bindless slot for packed ORM (R=AO, G=Rough, B=Metal); white when unset
+        uint32_t emissiveIdx = 0;       // bindless slot for emissive (white when unset; gated by HasEmissive)
+        uint32_t materialFlags = 0;     // MeshMaterialFlags bitfield
+        float metallic = 0.0f;          // scalar fallback when no ORM map
+        float roughness = 0.5f;         // scalar fallback when no ORM map
+        float ao = 1.0f;                // scalar fallback when no ORM map
+        float emissionStrength = 0.0f;  // emissive multiplier
+        float albedoTintR = 1.0f;       // material baseColor tint (multiplied with particle color)
+        float albedoTintG = 1.0f;
+        float albedoTintB = 1.0f;
+        float albedoTintA = 1.0f;
+        float _pad0 = 0.0f;
+        float _pad1 = 0.0f;
+        float _pad2 = 0.0f;
+    };
+    static_assert(sizeof(VFXMeshMaterialSlots) == 64, "VFXMeshMaterialSlots must be 64 bytes (std430 array stride)");
+
+    // VK-1526: bit flags packed into VFXMeshMaterialSlots::materialFlags.
+    namespace MeshMaterialFlags
+    {
+        inline constexpr uint32_t HasMaterial = 1u << 0; // sentinel: 0 => legacy single-.vfImage path
+        inline constexpr uint32_t UsesORM     = 1u << 1; // sample ormIdx for AO/roughness/metallic
+        inline constexpr uint32_t HasNormal   = 1u << 2; // sample normalIdx and perturb the geometric normal
+        inline constexpr uint32_t HasEmissive = 1u << 3; // sample emissiveIdx (else emissive = 0)
+    }
+
     // Push constant for the merged draw: gl_DrawID identifies the sub-draw within the run; the shader
     // computes emitterSlot = runBaseSlot + gl_DrawID to index configs[] and the render-data SSBO.
     struct GPUVFXMergedPushConstants
@@ -481,6 +586,8 @@ namespace render::vfx
         vk::Buffer eventBuffer;
         vk::Buffer colliderBuffer;
         vk::Buffer terrainBuffer;
+        vk::Buffer spawnRequestBuffer;
+        vk::Buffer childSpawnBuffer; // VK-1501: GPU event->child request ring (binding 11)
     };
 
     struct VFXFlipbookPushConstants

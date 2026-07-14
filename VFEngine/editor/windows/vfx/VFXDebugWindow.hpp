@@ -36,6 +36,15 @@ namespace windows
             uint32_t rawEventsThisFrame = 0;
             uint32_t eventBudget = 0;
             bool eventsDropped = false;
+            uint32_t channelListeners = 0;
+            uint32_t channelRawRequests = 0;
+            uint32_t channelAcceptedRequests = 0;
+            uint32_t channelRingDroppedRequests = 0;
+            uint32_t channelParticleDroppedRequests = 0;
+            uint32_t channelRequestBudget = 0;
+            // VK-1503 (M4 slice-c)
+            uint32_t evictedInstances = 0;
+            uint32_t maxLiveInstances = 0;
         };
 
         struct ComboStats
@@ -70,6 +79,9 @@ namespace windows
         ComboStats combos;
         std::vector<InstanceEntry> instances;
         std::vector<WarningEntry> warnings;
+
+        // VK-1503 (M4 slice-c) — editable significance-cap budget lever (0 = unlimited).
+        int significanceBudgetInput = 0;
 
     public:
         VFXDebugWindow() = default;

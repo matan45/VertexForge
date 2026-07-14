@@ -16,11 +16,15 @@
 #include "vfx/VFXKillVolume.hpp"
 #include "vfx/VFXRuntimeDiagnostics.hpp"
 #include "vfx/VFXShapeTypes.hpp"
+#include "vfx/VFXChannelMath.hpp" // review #15: shared ring-packing helpers
+#include "vfx/VFXShapePlacementMath.hpp"
 #include "vfx/VFXOrientationMode.hpp"
 #include "print/Log.hpp"
 #include <random>
 #include <type_traits>
 #include <algorithm>
+#include <cstring>
+#include <limits>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace controllers
@@ -185,6 +189,79 @@ namespace controllers
         processEvents();
         cleanupFinishedSubEmitters(deltaTime);
 
+        // VK-1500: drain channel queues once into the current frame's linear request
+        // staging buffer. Rotate the first listener each frame so global-ring pressure
+        // cannot permanently starve channels created later.
+        channelRawRequestsThisFrame = 0;
+        channelAcceptedRequestsThisFrame = 0;
+        channelRingDroppedThisFrame = 0;
+        channelParticleDroppedThisFrame = 0;
+        uint32_t ringCursor = 0;
+        auto* requestStaging = static_cast<render::vfx::GPUVFXSpawnRequest*>(
+            gpuBufferManager->mapSpawnRequestStaging());
+        if (!channelOrder.empty())
+        {
+            channelRoundRobinStart %= channelOrder.size();
+            for (size_t offset = 0; offset < channelOrder.size(); ++offset)
+            {
+                // review #15: use the shared VK-1500 helpers (fairOrderIndex / limitByParticleCapacity
+                // / packRequests) that the doctests exercise, so the shipped ring math cannot drift
+                // from the tested implementation.
+                const size_t orderIndex = vfx::channel::fairOrderIndex(
+                    static_cast<uint32_t>(offset), static_cast<uint32_t>(channelOrder.size()),
+                    channelRoundRobinStart);
+                auto instanceIt = instances.find(channelOrder[orderIndex]);
+                if (instanceIt == instances.end() || !instanceIt->second.channelListener)
+                    continue;
+
+                auto& channel = instanceIt->second;
+                channel.channelRequestBase = ringCursor;
+                channel.channelAcceptedRequests = 0;
+
+                const uint64_t raw = channel.pendingChannelRequests.size();
+                channelRawRequestsThisFrame += static_cast<uint32_t>(
+                    std::min<uint64_t>(raw, std::numeric_limits<uint32_t>::max()));
+
+                const auto capped = vfx::channel::limitByParticleCapacity(
+                    raw, channel.channelParticlesPerRequest, channel.gpuParticleCount);
+                channelParticleDroppedThisFrame += static_cast<uint32_t>(
+                    std::min<uint64_t>(capped.droppedRequests, std::numeric_limits<uint32_t>::max()));
+
+                const auto packed = vfx::channel::packRequests(
+                    ringCursor, render::vfx::GPUVFXConstants::MAX_SPAWN_REQUESTS, capped.acceptedRequests);
+                channelRingDroppedThisFrame += static_cast<uint32_t>(
+                    std::min<uint64_t>(packed.dropped, std::numeric_limits<uint32_t>::max()));
+
+                const uint32_t accepted = packed.accepted;
+                if (accepted > 0 && requestStaging)
+                {
+                    std::memcpy(requestStaging + ringCursor,
+                                channel.pendingChannelRequests.data(),
+                                static_cast<size_t>(accepted) * sizeof(render::vfx::GPUVFXSpawnRequest));
+                    channel.channelAcceptedRequests = accepted;
+                    channelAcceptedRequestsThisFrame += accepted;
+                    ringCursor += accepted;
+                }
+                channel.pendingChannelRequests.clear();
+            }
+            channelRoundRobinStart = (channelRoundRobinStart + 1) % channelOrder.size();
+        }
+
+        if (channelRingDroppedThisFrame > 0 &&
+            vfx::VFXRuntimeDiagnostics::instance().report(
+                "VFX channels", "spawn-request ring saturated; excess requests were dropped"))
+        {
+            vfLogWarning("VFX spawn-request ring saturated; {} requests dropped this frame",
+                         channelRingDroppedThisFrame);
+        }
+        if (channelParticleDroppedThisFrame > 0 &&
+            vfx::VFXRuntimeDiagnostics::instance().report(
+                "VFX channels", "listener particle capacity saturated; excess requests were dropped"))
+        {
+            vfLogWarning("VFX channel particle capacity saturated; {} requests dropped this frame",
+                         channelParticleDroppedThisFrame);
+        }
+
         for (auto& [id, instance] : instances)
         {
             if (!instance.gpuDriven && instance.particleSystem && instance.active)
@@ -196,6 +273,31 @@ namespace controllers
         // Burst probability RNG only — emitter seed is now the stable per-instance value
         // (VK-1451). Burst jitter stays frame-random (accepted GPU micro-nondeterminism).
         std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+
+        // VK-1503 — rank live instances by significance and soft-stop the least-
+        // significant fire-and-forget one-shots when a scene-wide budget is set. Runs
+        // before the spawn walk so a below-budget newcomer is suppressed before it emits
+        // a single particle. No-op (clears stray flags once) when the budget is 0.
+        applySignificanceCap();
+
+        // review #14: collect the child-ring regions referenced by a live fast-path parent this
+        // frame. A GPU event->child listener whose region has no live parent (all parents gone)
+        // then skips its full 256-request dispatch below instead of paying it every frame. Keep
+        // last frame's set too: a parent writes child requests one frame before the listener reads
+        // them (binding-11 ping-pong), so a region live last frame must still dispatch this frame.
+        prevActiveChildRegions.swap(activeChildRegions);
+        activeChildRegions.clear();
+        for (const auto& [pid, parent] : instances)
+        {
+            if (parent.resolvedEventChildSlot == vfx::child::PACKED_NONE)
+                continue;
+            const uint32_t deathHalf = vfx::child::halfOf(parent.resolvedEventChildSlot, false);
+            const uint32_t collisionHalf = vfx::child::halfOf(parent.resolvedEventChildSlot, true);
+            if (vfx::child::hasRegion(deathHalf))
+                activeChildRegions.insert(vfx::child::regionOf(deathHalf));
+            if (vfx::child::hasRegion(collisionHalf))
+                activeChildRegions.insert(vfx::child::regionOf(collisionHalf));
+        }
 
         for (auto& [id, instance] : instances)
         {
@@ -225,9 +327,40 @@ namespace controllers
             instance.emissionTime += effectiveDt;
 
             uint32_t spawnThisFrame = 0;
-            bool canSpawn = instance.loop || (instance.emissionTime < instance.config.lifetime);
+            // VK-1503 — a significance-evicted instance emits nothing new (soft-stop);
+            // its already-spawned particles keep simulating and fade out naturally.
+            bool canSpawn = !instance.significanceEvicted &&
+                            (instance.loop || (instance.emissionTime < instance.config.lifetime));
 
-            if (instance.active && canSpawn)
+            if (instance.channelListener)
+            {
+                uint64_t spawnCount;
+                if (instance.gpuChildRegion != 0xFFFFFFFFu)
+                {
+                    // VK-1501: GPU event->child listener. The per-frame request count is produced on
+                    // the GPU (no CPU readback), so dispatch a coarse upper bound of a full region;
+                    // the shader gates each slot against the previous frame's GPU-written counter.
+                    // review #14 — but only when a live parent referenced this region this frame or
+                    // last (parents write child requests one frame before this listener reads them).
+                    // With no live parent the region can produce nothing, so skip the dispatch; the
+                    // listener's existing particles keep simulating like any idle channel.
+                    const bool regionActive =
+                        activeChildRegions.count(instance.gpuChildRegion) != 0 ||
+                        prevActiveChildRegions.count(instance.gpuChildRegion) != 0;
+                    spawnCount = regionActive
+                        ? static_cast<uint64_t>(vfx::child::CHILD_MAX_REQUESTS_PER_REGION) *
+                              instance.channelParticlesPerRequest
+                        : 0;
+                }
+                else
+                {
+                    spawnCount = static_cast<uint64_t>(instance.channelAcceptedRequests) *
+                        instance.channelParticlesPerRequest;
+                }
+                spawnThisFrame = static_cast<uint32_t>(
+                    std::min<uint64_t>(spawnCount, instance.gpuParticleCount));
+            }
+            else if (instance.active && canSpawn)
             {
                 float lodAdjustedRate = instance.config.spawnRate * instance.lodSpawnMultiplier;
                 instance.spawnAccumulator += lodAdjustedRate * effectiveDt;
@@ -237,8 +370,14 @@ namespace controllers
                 if (!instance.config.bursts.empty())
                 {
                     float prevEmissionTime = instance.emissionTime - effectiveDt;
-                    uint32_t burstSpawns = ::vfx::evaluateBurstSpawns(
+                    float loopPeriod = instance.loop
+                        ? ::vfx::resolveBurstLoopPeriod(
+                            instance.config.bursts, instance.config.loopDuration,
+                            instance.config.lifetime)
+                        : 0.0f;
+                    uint32_t burstSpawns = ::vfx::evaluateBurstSpawnsLooped(
                         instance.config.bursts, prevEmissionTime, instance.emissionTime,
+                        loopPeriod,
                         [&dist01]() { return dist01(gen); });
                     burstSpawns = static_cast<uint32_t>(
                         static_cast<float>(burstSpawns) * instance.lodSpawnMultiplier);
@@ -259,6 +398,21 @@ namespace controllers
             // its emission schedule. The shader still folds particleIdx/frameNumber into
             // the per-particle RNG, so visuals stay varied without being random per frame.
             auto gpuConfig = toGPUConfig(instance.config, effectiveDt, instance.gpuParticleCount, instance.seed);
+
+            // VK-1501: route resolved OnDeath/OnCollision fast-path children into the GPU child ring.
+            gpuConfig.eventChildSlot = instance.resolvedEventChildSlot;
+
+            // VK-1525: ordered placement sweep parameter. Derived from emissionTime (already advanced this
+            // frame and set directly by seekInstance), so the "draw-out" replays identically under
+            // playback and sequence seek/prewarm. tPrev + tCurr smear a multi-spawn batch across the frame.
+            if (instance.config.shape.ordered)
+            {
+                const auto& shapeCfg = instance.config.shape;
+                gpuConfig.orderedSweepT = ::vfx::vfxspOrderedProgress(
+                    instance.emissionTime, shapeCfg.sweepDuration, shapeCfg.orderedLoop);
+                gpuConfig.orderedSweepTPrev = ::vfx::vfxspOrderedProgress(
+                    std::max(0.0f, instance.emissionTime - effectiveDt), shapeCfg.sweepDuration, shapeCfg.orderedLoop);
+            }
 
             gpuConfig.colliderCount = (instance.config.collisionEnabled && instance.currentLOD == 0)
                                           ? sceneColliderCount : 0;
@@ -495,6 +649,8 @@ namespace controllers
         case ::vfx::ShapeType::Cone:   gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeCone; break;
         case ::vfx::ShapeType::Box:    gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeBox; break;
         case ::vfx::ShapeType::Torus:  gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeTorus; break;
+        case ::vfx::ShapeType::Ring:   gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeRing; break;
+        case ::vfx::ShapeType::Line:   gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeLine; break;
         case ::vfx::ShapeType::Point:
         default: break;
         }
@@ -504,6 +660,15 @@ namespace controllers
 
         if (cpuConfig.shape.randomDirection)
             gpuConfig.shapeFlags |= render::vfx::ShapeFlags::RandomDirection;
+
+        // VK-1525: ordered / path-driven placement (opt-in). The sweep parameter (orderedSweepT/Prev)
+        // depends on the emitter's emission time and is filled by the caller; here we only set the gate
+        // flag and the per-particle jitter so a non-ordered emitter uploads a byte-identical config.
+        if (cpuConfig.shape.ordered)
+        {
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::OrderedPlacement;
+            gpuConfig.orderedJitter = cpuConfig.shape.orderedJitter;
+        }
 
         gpuConfig.flipbookColumns = static_cast<float>(cpuConfig.flipbookColumns);
         gpuConfig.flipbookRows = static_cast<float>(cpuConfig.flipbookRows);
@@ -528,6 +693,13 @@ namespace controllers
         gpuConfig.collisionFriction = cpuConfig.collisionFriction;
         gpuConfig.collisionLifetimeLoss = cpuConfig.collisionLifetimeLoss;
         gpuConfig.terrainCollisionEnabled = cpuConfig.collisionEnabled ? 1u : 0u;
+
+        // VK-1502: depth-buffer collision. Reuses the bounce/friction/lifetime-loss response above; gated
+        // by modifierFlags bit 25 so the sim only samples last-frame depth when enabled.
+        gpuConfig.depthCollisionThickness = cpuConfig.depthCollisionThickness;
+        gpuConfig.depthCollisionNormalInfluence = cpuConfig.depthCollisionNormalInfluence;
+        if (cpuConfig.depthCollisionEnabled)
+            gpuConfig.modifierFlags |= render::vfx::ModifierFlags::DepthCollision;
         gpuConfig.lightingInfluence = cpuConfig.lightingInfluence;
         gpuConfig.normalMode = cpuConfig.normalMode;
         gpuConfig.ambientAmount = cpuConfig.ambientAmount;

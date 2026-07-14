@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../billboard/VFXBillboardTypes.hpp"
+#include "VFXMeshMaterialResolver.hpp"
 #include "vfx/VFXBlendMode.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <memory>
@@ -40,6 +41,16 @@ namespace render::vfx
         float orientAxisY = 1.0f;
         float orientAxisZ = 0.0f;
         float meshOrientationSpinRate = 1.0f;
+        // VK-1526: PBR material params (materialFlags == 0 => legacy single-.vfImage path).
+        uint32_t materialFlags = 0;
+        float metallic = 0.0f;
+        float roughness = 0.5f;
+        float ao = 1.0f;
+        float emissionStrength = 0.0f;
+        float albedoTintR = 1.0f;
+        float albedoTintG = 1.0f;
+        float albedoTintB = 1.0f;
+        float albedoTintA = 1.0f;
     };
 
     class VFXMeshPreviewPipeline
@@ -85,6 +96,13 @@ namespace render::vfx
         std::unique_ptr<core::Texture> customTexture;
         std::string currentTexturePath;
 
+        // VK-1526: material PBR maps (bound at set 0 bindings 2-5; sampled only on the HAS_MATERIAL branch).
+        std::unique_ptr<core::Texture> matAlbedoTexture;
+        std::unique_ptr<core::Texture> matNormalTexture;
+        std::unique_ptr<core::Texture> matOrmTexture;
+        std::unique_ptr<core::Texture> matEmissiveTexture;
+        std::string currentMaterialKey; // albedo|normal|orm|emissive change key (skip reloads when unchanged)
+
         VFXMeshPreviewPushConstants pushConstants;
 
     public:
@@ -103,6 +121,9 @@ namespace render::vfx
         void setParticleInstances(const std::vector<VFXInstanceData>& instances);
 
         void setTexture(const std::string& texturePath);
+        // VK-1526: assign (or clear) a PBR material for the preview. `resolved.hasMaterial == false` clears it,
+        // restoring the single-.vfImage path. Loads the material's maps into the set-0 material samplers.
+        void setMaterial(const ResolvedVFXMeshMaterial& resolved);
         void setMesh(const std::string& meshPath);
         void setRenderingConfig(float alphaClipThreshold, ::vfx::VFXBlendMode blendMode,
                                 const glm::vec3& glowColor = glm::vec3(1.0f),

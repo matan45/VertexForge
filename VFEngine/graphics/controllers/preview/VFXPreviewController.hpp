@@ -78,6 +78,7 @@ namespace controllers
         float stretchMultiplier = 1.0f;
 
         std::string meshPath;
+        std::string materialPath; // VK-1526: optional .vfMat/.vfMatInstance for mesh particles (empty = .vfImage path)
 
         // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
         ::vfx::VFXOrientationMode meshOrientationMode = ::vfx::VFXOrientationMode::VelocityForward;
@@ -109,6 +110,8 @@ namespace controllers
         float collisionBounce = 0.5f;
         float collisionFriction = 0.1f;
         float collisionLifetimeLoss = 0.0f;
+
+        float loopDuration = 0.0f;
     };
 
     // VK-1451 — one step of a composited sequence preview (controller-side mirror of

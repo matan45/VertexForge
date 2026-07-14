@@ -8,6 +8,7 @@
 #include "../../core/VulkanContext.hpp"
 #include "../../render/vfx/billboard/VFXBillboardPipeline.hpp"
 #include "../../render/vfx/mesh/VFXMeshPreviewPipeline.hpp"
+#include "../../render/material/MaterialPBRExtractor.hpp" // VK-1526
 #include "../../render/vfx/ribbon/VFXRibbonPreviewPipeline.hpp"
 #include "../../render/vfx/particle/VFXParticleSystem.hpp"
 #include "../../render/mesh/MeshGPUCache.hpp"
@@ -23,6 +24,22 @@ namespace controllers
 {
     namespace
     {
+        // VK-1526: resolve an optional PBR material for a mesh preview pipeline (empty => single-.vfImage path).
+        void applyMeshPreviewMaterial(render::vfx::VFXMeshPreviewPipeline* mesh, const std::string& materialPath)
+        {
+            if (!mesh)
+            {
+                return;
+            }
+            if (materialPath.empty())
+            {
+                mesh->setMaterial({}); // clear -> legacy single-.vfImage path
+                return;
+            }
+            const auto pbr = render::mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath);
+            mesh->setMaterial(render::vfx::resolveVFXMeshMaterial(&pbr));
+        }
+
         render::vfx::VFXEmitterConfig buildEmitterConfig(const VFXPreviewParams& params)
         {
             render::vfx::VFXEmitterConfig config;
@@ -34,6 +51,7 @@ namespace controllers
             config.emitDirection = params.emitDirection;
             config.texturePath = params.texturePath;
             config.looping = params.looping;
+            config.loopDuration = params.loopDuration;
             config.sizeVariance = params.sizeVariance;
             config.lifetimeVariance = params.lifetimeVariance;
             config.speedVariance = params.speedVariance;
@@ -148,6 +166,7 @@ namespace controllers
         {
             meshPipeline->setTexture(currentParams.texturePath);
         }
+        applyMeshPreviewMaterial(meshPipeline.get(), currentParams.materialPath); // VK-1526
         meshPipeline->setRenderingConfig(currentParams.alphaClipThreshold, currentParams.blendMode, fbConfig.glowColor,
                                           currentParams.emissiveIntensity,
                                           currentParams.uvScrollSpeedU, currentParams.uvScrollSpeedV);
@@ -712,6 +731,7 @@ namespace controllers
                 bundle.mesh->setMesh(params.meshPath);
             if (!params.texturePath.empty())
                 bundle.mesh->setTexture(params.texturePath);
+            applyMeshPreviewMaterial(bundle.mesh.get(), params.materialPath); // VK-1526
             bundle.mesh->setRenderingConfig(params.alphaClipThreshold, params.blendMode, fbConfig.glowColor,
                                             params.emissiveIntensity,
                                             params.uvScrollSpeedU, params.uvScrollSpeedV);

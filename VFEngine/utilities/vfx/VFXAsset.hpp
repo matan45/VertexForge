@@ -9,9 +9,11 @@
 namespace vfx
 {
     // 1.1 (VK-1453) adds the optional bounds / scalability / cullEligible block.
+    // 1.2 (VK-1503) adds the optional per-asset `significance` weight.
     // The loader stays version-agnostic (tolerant j.value / j.contains defaults),
-    // so 1.0 assets load unchanged (Auto bounds, disabled scalability, cull off).
-    inline constexpr const char* VFX_FORMAT_VERSION = "1.1";
+    // so 1.0/1.1 assets load unchanged (Auto bounds, disabled scalability, cull off,
+    // significance 1.0).
+    inline constexpr const char* VFX_FORMAT_VERSION = "1.2";
 
     class VFXAsset
     {

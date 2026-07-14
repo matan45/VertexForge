@@ -229,6 +229,7 @@ namespace render::vfx
         float coneSpread = 0.5f;  // radians, cone half-angle for emission direction
         std::string texturePath;
         bool looping = true;
+        float loopDuration = 0.0f; // 0 = no burst re-arm (finite bursts fire once); >0 = re-arm bursts every N seconds
         // Fraction of the emitter's own world velocity passed to new particles (0..1)
         float inheritVelocityRatio = 0.0f;
 
@@ -265,6 +266,11 @@ namespace render::vfx
         float stretchMultiplier = 1.0f;
         
         std::string meshPath;
+
+        // VK-1526: optional PBR material (.vfMat / .vfMatInstance) for MESH-render particles. When set, mesh
+        // shards shade PBR from the material's texture set + scalars instead of the single texturePath albedo.
+        // Empty (default) => byte-identical single-.vfImage path. Sprites/billboards ignore this.
+        std::string materialPath;
 
         // VK-1476: MESH-render-mode orientation. Only read when renderMode == MeshParticle.
         // VelocityForward reproduces the legacy nose-first basis exactly (byte-identical default).
@@ -309,6 +315,13 @@ namespace render::vfx
         float collisionFriction = 0.1f;
         float collisionLifetimeLoss = 0.0f;
 
+        // VK-1502: depth-buffer collision (GPU only — collides against last-frame scene depth so particles
+        // bounce off arbitrary on-screen geometry without analytic colliders). Reuses bounce/friction/
+        // lifetime-loss above. Not shown in the CPU editor preview (like the other collision modes).
+        bool depthCollisionEnabled = false;
+        float depthCollisionThickness = 0.25f;       // world-space shell depth behind the visible surface
+        float depthCollisionNormalInfluence = 1.0f;  // 0 = camera-facing normal, 1 = depth-derived normal
+
         // Distortion
         bool distortionEnabled = false;
         float distortionStrength = 0.1f;
@@ -317,6 +330,10 @@ namespace render::vfx
         // VK-1453 (Phase 4) — per-quality-tier scalability profile (CPU-only; disabled
         // by default so the resolved level is neutral and runtime behavior is unchanged).
         ::vfx::VFXScalability scalability;
+
+        // VK-1503 (M4 slice-c) — per-asset importance weight for the significance cap
+        // (default 1.0 = neutral). Copied onto the live instance at createInstance.
+        float significance = 1.0f;
     };
 
     struct VFXFlipbookConfig

@@ -88,6 +88,7 @@ namespace render::vfx
 
         // Spawning must remain sequential (uses rng and shared ribbon state)
         bool canSpawn = config.looping || (emissionTime < config.lifetime);
+        orderedSpawnSlot = 0; // review #8: per-frame ordered spawn-batch index (mirrors GPU spawnSlot)
 
         if (config.spawnRate > 0.0f && canSpawn)
         {
@@ -104,8 +105,12 @@ namespace render::vfx
         {
             std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
             float prevEmissionTime = emissionTime - deltaTime;
-            uint32_t burstSpawns = ::vfx::evaluateBurstSpawns(
-                config.bursts, prevEmissionTime, emissionTime,
+            float loopPeriod = config.looping
+                ? ::vfx::resolveBurstLoopPeriod(
+                    config.bursts, config.loopDuration, config.lifetime)
+                : 0.0f;
+            uint32_t burstSpawns = ::vfx::evaluateBurstSpawnsLooped(
+                config.bursts, prevEmissionTime, emissionTime, loopPeriod,
                 [this, &dist01]() { return dist01(rng); });
 
             for (uint32_t i = 0; i < burstSpawns; ++i)

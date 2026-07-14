@@ -21,6 +21,21 @@ namespace services::events::vfxruntime
         std::string_view getName() const override { return "CreateVFXInstance"; }
     };
 
+    struct CreateVFXChannelCommand : ::events::ICommand<VFXInstanceId>
+    {
+        std::string vfxAssetPath;
+        // 0 derives the count from the compatible authored burst configuration.
+        uint32_t particlesPerRequest = 0;
+        std::string_view getName() const override { return "CreateVFXChannel"; }
+    };
+
+    struct EmitToVFXChannelCommand : ::events::ICommand<void>
+    {
+        VFXInstanceId channelId = 0;
+        VFXChannelEmitParams params;
+        std::string_view getName() const override { return "EmitToVFXChannel"; }
+    };
+
     struct DestroyVFXInstanceCommand : ::events::ICommand<void>
     {
         VFXInstanceId instanceId = 0;
@@ -108,6 +123,15 @@ namespace services::events::vfxruntime
         uint32_t rawEventsThisFrame = 0;
         uint32_t eventBudget = 0;
         bool eventsDropped = false;
+        uint32_t channelListeners = 0;
+        uint32_t channelRawRequests = 0;
+        uint32_t channelAcceptedRequests = 0;
+        uint32_t channelRingDroppedRequests = 0;
+        uint32_t channelParticleDroppedRequests = 0;
+        uint32_t channelRequestBudget = 0;
+        // VK-1503 (M4 slice-c)
+        uint32_t evictedInstances = 0; // instances soft-stopped by the significance cap this frame
+        uint32_t maxLiveInstances = 0; // active significance budget (0 => unlimited)
     };
 
     struct GetVFXBudgetStatsQuery : ::events::IQuery<VFXBudgetStatsResult>
@@ -167,6 +191,14 @@ namespace services::events::vfxruntime
     struct GetVFXQualityTierQuery : ::events::IQuery<vfx::VFXQualityTier>
     {
         std::string_view getName() const override { return "GetVFXQualityTier"; }
+    };
+
+    // VK-1503 (M4 slice-c) — scene-wide live-instance budget for the significance cap.
+    // 0 disables the cap (default). The demo/editor sets this to bound big battles.
+    struct SetVFXSignificanceBudgetCommand : ::events::ICommand<void>
+    {
+        uint32_t budget = 0;
+        std::string_view getName() const override { return "SetVFXSignificanceBudget"; }
     };
 
     // Per-instance debug snapshot for the VFX debug window (bounds/cull table).

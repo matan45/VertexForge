@@ -4,6 +4,7 @@
 #include <events/EventDispatcher.hpp>
 #include <events/vfx/VFXEventNotifications.hpp>
 #include <events/vfx/VFXRuntimeEvents.hpp>
+#include <events/audio/AudioEvents.hpp> // VK-1496 — mock the Sound-step audio dispatch
 #include <data/VFXTypes.hpp>
 #include <vfx/VFXSequenceAsset.hpp>
 #include <vfx/VFXSequenceTypes.hpp>
@@ -139,6 +140,54 @@ namespace
         fs::path p = testRoot() / fileName;
         REQUIRE(vfx::VFXSequenceAsset::save(data, p.string()));
         return p.string();
+    }
+
+    // VK-1524 — a source VFX step publishing "impact" on collision + a StepOutput receiver
+    // bound to it with a local (0,1,0) offset.
+    vfx::VFXSequenceData makeStepOutputSequence(vfx::VFXEventConsumption consumption, uint32_t budget)
+    {
+        vfx::VFXSequenceData data;
+        data.name = "stepout";
+
+        vfx::VFXSequenceStep src;
+        src.vfxRef = makeResolvingRef(0xE001, "assets/vfx/proj.vfVFX");
+        src.label = "proj";
+        src.startTime = 0.0f;
+        src.outputEventName = "impact";
+        src.outputEventType = vfx::VFXEventType::OnCollision;
+        data.steps.push_back(src);
+
+        vfx::VFXSequenceStep recv;
+        recv.vfxRef = makeResolvingRef(0xE002, "assets/vfx/boom.vfVFX");
+        recv.label = "boom";
+        recv.trigger = vfx::VFXStepTrigger::StepOutput;
+        recv.sourceStepIndex = 0;
+        recv.sourceEventName = "impact";
+        recv.eventConsumption = consumption;
+        recv.eventBudget = budget;
+        recv.localPosition = glm::vec3(0.0f, 1.0f, 0.0f);
+        data.steps.push_back(recv);
+        return data;
+    }
+
+    void publishParticleEvent(uint32_t eventType, VFXInstanceId parentInstanceId, const glm::vec3& pos,
+                              const glm::vec3& vel = glm::vec3(0.0f))
+    {
+        services::events::vfxruntime::VFXParticleEventNotification n;
+        n.eventType = eventType;
+        n.position = pos;
+        n.velocity = vel;
+        n.parentInstanceId = parentInstanceId;
+        ::events::EventDispatcher::instance().publish(n);
+    }
+
+    int countCreatesWithPath(const MockVFXRuntime& mock, const std::string& path)
+    {
+        int n = 0;
+        for (const auto& c : mock.creates)
+            if (c.path == path)
+                ++n;
+        return n;
     }
 }
 
@@ -771,6 +820,248 @@ TEST_SUITE("VFXSequenceForwarding")
         CHECK(mock.creates[0].path == "assets/vfx/early.vfVFX");
     }
 
+    // -------- seek/prewarm cross a cue marker WITHOUT publishing (VK-1495) --------
+    // The cue->script bridge (ScriptVFXEventBridge, Core) relies on this Services-layer
+    // invariant: replayTo() advances the timeline into a throwaway scratch vector and
+    // never calls publishCueFired, so scrub/seek/prewarm deliver no onComboCue. Forward
+    // update() DOES publish the same marker (see the marker-payload cases above, e.g. :375).
+    TEST_CASE("seek/prewarm replay across a cue marker does not publish a cue notification")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        vfx::VFXSequenceData data;
+        data.name = "seekNoPublish";
+        vfx::VFXSequenceStep s;
+        s.vfxRef = makeResolvingRef(0xF024, "assets/vfx/seek_signal.vfVFX");
+        s.cueName = "impact";
+        data.steps.push_back(s);
+        vfx::VFXSequenceEventMarker marker{0.1f, "impact"};
+        marker.payload.scalar = 3.0f;
+        data.eventMarkers.push_back(marker);
+
+        std::string path = saveSequence("Combo_SeekNoPublish.vfVFXSequence", data);
+
+        SUBCASE("seekCombo crosses the 0.1s marker")
+        {
+            VFXSequenceRuntimeServiceImpl svc;
+            auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+            svc.playCombo(combo);
+            svc.seekCombo(combo, 0.5f); // replayTo(0.5) crosses the marker, but must not publish
+            CHECK(notifications.empty());
+        }
+
+        SUBCASE("prewarm crosses the 0.1s marker")
+        {
+            VFXSequenceRuntimeServiceImpl svc;
+            auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false,
+                                         /*seed*/ 0u, /*prewarm*/ 0.5f, /*rate*/ -1.0f, /*fixedStep*/ -1.0f);
+            REQUIRE(combo != 0);
+            svc.playCombo(combo); // applies prewarm via replayTo — no publish
+            CHECK(notifications.empty());
+        }
+    }
+
+    // ============================================================
+    // VK-1496 — typed step kinds (Sound + ScriptCue).
+    // ============================================================
+
+    // -------- ScriptCue: publishes its cue forward, silent on seek --------
+    TEST_CASE("a ScriptCue step publishes its cue on forward update but not on seek (VK-1496)")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        vfx::VFXSequenceData data;
+        data.name = "scriptcue";
+        vfx::VFXSequenceStep s;
+        s.kind = vfx::VFXStepKind::ScriptCue;
+        s.startTime = 0.1f;
+        s.emitCueName = "OnPeak";
+        s.cuePayload.scalar = 7.0f;
+        data.steps.push_back(s);
+        std::string path = saveSequence("Combo_ScriptCue.vfVFXSequence", data);
+
+        SUBCASE("forward update crosses the fire time and publishes exactly once, spawns no child")
+        {
+            VFXSequenceRuntimeServiceImpl svc;
+            auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+            svc.playCombo(combo);
+            svc.update(0.2f); // elapsed 0.2 >= 0.1 => fires
+            REQUIRE(notifications.size() == 1);
+            CHECK(notifications[0].cueName == "OnPeak");
+            REQUIRE(notifications[0].payload.scalar.has_value());
+            CHECK(*notifications[0].payload.scalar == doctest::Approx(7.0f));
+            CHECK(mock.creates.empty()); // ScriptCue creates no VFX child
+        }
+
+        SUBCASE("seek across the fire time publishes nothing")
+        {
+            VFXSequenceRuntimeServiceImpl svc;
+            auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+            svc.playCombo(combo);
+            svc.seekCombo(combo, 0.5f); // replayTo crosses 0.1 but must stay silent
+            CHECK(notifications.empty());
+            CHECK(mock.creates.empty());
+        }
+    }
+
+    // -------- Sound: dispatches audio forward, silent on seek --------
+    TEST_CASE("a Sound step dispatches audio on forward update and stays silent on seek (VK-1496)")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        struct AudioRec { std::string path; glm::vec3 position{0.0f}; float volume = 0.0f; float pitch = 0.0f; bool is3D = false; };
+        std::vector<AudioRec> plays;
+        auto& d = ::events::EventDispatcher::instance();
+        d.registerCommandHandler<::events::audio::PlaySound3DCommand>(
+            [&plays](const ::events::audio::PlaySound3DCommand& c) -> services::AudioHandle {
+                plays.push_back({c.path, c.position, c.params.volume, c.params.pitch, true});
+                return services::AudioHandle{1};
+            });
+        d.registerCommandHandler<::events::audio::PlayStreamingSoundCommand>(
+            [&plays](const ::events::audio::PlayStreamingSoundCommand& c) -> services::AudioHandle {
+                plays.push_back({c.path, glm::vec3(0.0f), c.params.volume, c.params.pitch, false});
+                return services::AudioHandle{2};
+            });
+
+        vfx::VFXSequenceData data;
+        data.name = "sound";
+        vfx::VFXSequenceStep s;
+        s.kind = vfx::VFXStepKind::Sound;
+        s.audioRef = makeResolvingRef(0xA001, "assets/audio/boom.vfAudio");
+        s.startTime = 0.1f;
+        s.volume = 0.5f;
+        s.pitch = 1.5f;
+        s.spatialized = true;
+        s.localPosition = glm::vec3(2.0f, 0.0f, 0.0f);
+        data.steps.push_back(s);
+        std::string path = saveSequence("Combo_Sound.vfVFXSequence", data);
+        const glm::mat4 parent = glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f));
+
+        SUBCASE("forward update dispatches one 3D play at parent*local world position")
+        {
+            VFXSequenceRuntimeServiceImpl svc;
+            auto combo = svc.createCombo(path, parent, 0, false);
+            svc.playCombo(combo);
+            svc.update(0.2f);
+            REQUIRE(plays.size() == 1);
+            CHECK(plays[0].is3D);
+            CHECK(plays[0].path == "assets/audio/boom.vfAudio");
+            CHECK(plays[0].volume == doctest::Approx(0.5f));
+            CHECK(plays[0].pitch == doctest::Approx(1.5f));
+            CHECK(plays[0].position.x == doctest::Approx(12.0f)); // parent(+10) * local(+2)
+            CHECK(mock.creates.empty());                          // no VFX child
+        }
+
+        SUBCASE("seek across the fire time dispatches no audio")
+        {
+            VFXSequenceRuntimeServiceImpl svc;
+            auto combo = svc.createCombo(path, parent, 0, false);
+            svc.playCombo(combo);
+            svc.seekCombo(combo, 0.5f);
+            CHECK(plays.empty());
+        }
+
+        // Unregister so the lambdas capturing local `plays` never outlive this test.
+        d.unregisterCommandHandler<::events::audio::PlaySound3DCommand>();
+        d.unregisterCommandHandler<::events::audio::PlayStreamingSoundCommand>();
+    }
+
+    // -------- Sound: headless safety (no audio handler must not throw) --------
+    TEST_CASE("a Sound step with no audio handler does not throw (VK-1496)")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        // Guarantee absence regardless of test order.
+        auto& d = ::events::EventDispatcher::instance();
+        d.unregisterCommandHandler<::events::audio::PlaySound3DCommand>();
+        d.unregisterCommandHandler<::events::audio::PlayStreamingSoundCommand>();
+
+        vfx::VFXSequenceData data;
+        data.name = "soundNoHandler";
+        vfx::VFXSequenceStep s;
+        s.kind = vfx::VFXStepKind::Sound;
+        s.audioRef = makeResolvingRef(0xA002, "assets/audio/x.vfAudio");
+        s.startTime = 0.0f;
+        s.spatialized = false;
+        data.steps.push_back(s);
+        std::string path = saveSequence("Combo_SoundNoHandler.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, false);
+        svc.playCombo(combo);
+        // EventDispatcher::execute would throw with no handler; fireSoundStep's try/catch swallows it.
+        CHECK_NOTHROW(svc.update(0.1f));
+    }
+
+    // -------- re-entrancy: destroying a combo from onComboCue is deferred --------
+    TEST_CASE("destroying a combo from its own onComboCue is deferred, not applied mid-iteration (VK-1496)")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        // Combo A: a ScriptCue step at t=0 whose cue destroys A synchronously.
+        vfx::VFXSequenceData dataA;
+        dataA.name = "reentrantA";
+        {
+            vfx::VFXSequenceStep s;
+            s.kind = vfx::VFXStepKind::ScriptCue;
+            s.startTime = 0.0f;
+            s.emitCueName = "SelfDestruct";
+            dataA.steps.push_back(s);
+        }
+        std::string pathA = saveSequence("Combo_ReentrantA.vfVFXSequence", dataA);
+
+        // Combo B: an ordinary VFX step at t=0 that must still spawn its child this tick.
+        vfx::VFXSequenceData dataB;
+        dataB.name = "reentrantB";
+        {
+            vfx::VFXSequenceStep s;
+            s.vfxRef = makeResolvingRef(0xB001, "assets/vfx/b.vfVFX");
+            s.startTime = 0.0f;
+            s.loop = true;
+            dataB.steps.push_back(s);
+        }
+        std::string pathB = saveSequence("Combo_ReentrantB.vfVFXSequence", dataB);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        auto comboA = svc.createCombo(pathA, glm::mat4(1.0f), 0, false);
+        auto comboB = svc.createCombo(pathB, glm::mat4(1.0f), 0, false);
+        svc.playCombo(comboA);
+        svc.playCombo(comboB);
+
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { if (n.cueName == "SelfDestruct") svc.destroyCombo(n.comboId); }));
+
+        // A destroys itself mid-cue (deferred); the combos loop must not be corrupted, B must
+        // still spawn its child, and there must be no use-after-free.
+        CHECK_NOTHROW(svc.update(0.1f));
+        REQUIRE(mock.creates.size() == 1);
+        CHECK(mock.creates[0].path == "assets/vfx/b.vfVFX"); // B survived the loop
+        // A was erased by the drained deferral; a subsequent tick is safe.
+        CHECK_NOTHROW(svc.update(0.1f));
+        CHECK_FALSE(svc.isComboPlaying(comboA));
+    }
+
     // -------- prewarm at create fast-forwards the schedule before the first frame --------
     TEST_CASE("a combo created with prewarm spawns due steps immediately on play")
     {
@@ -796,5 +1087,178 @@ TEST_SUITE("VFXSequenceForwarding")
 
         REQUIRE(mock.creates.size() == 1);
         CHECK(mock.creates[0].path == "assets/vfx/pw.vfVFX");
+    }
+
+    // -------- VK-1498: whole-sequence loop replays without a Destroy/Create storm --------
+    TEST_CASE("a looping combo replays each cycle (one Create set per cycle, no Destroys) and re-fires cues")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        std::vector<services::events::vfxsequence::VFXComboCueFiredNotification> notifications;
+        ::events::ScopedSubscription sub(::events::EventDispatcher::instance().subscribe<
+            services::events::vfxsequence::VFXComboCueFiredNotification>(
+            [&](const auto& n) { notifications.push_back(n); }));
+
+        // Two one-shot steps + a marker. One-shot children are provider-auto-destroyed (simulated
+        // by erasing them from mock.live), so the combo genuinely completes each cycle and loops.
+        vfx::VFXSequenceData data;
+        data.name = "loopcombo";
+        {
+            vfx::VFXSequenceStep s0;
+            s0.vfxRef = makeResolvingRef(0xF0D0, "assets/vfx/l0.vfVFX");
+            s0.startTime = 0.0f;
+            s0.loop = false;
+            data.steps.push_back(s0);
+
+            vfx::VFXSequenceStep s1;
+            s1.vfxRef = makeResolvingRef(0xF0D1, "assets/vfx/l1.vfVFX");
+            s1.startTime = 0.5f;
+            s1.loop = false;
+            data.steps.push_back(s1);
+        }
+        data.eventMarkers.push_back(vfx::VFXSequenceEventMarker{0.3f, "beat"});
+        std::string path = saveSequence("Combo_Loop.vfVFXSequence", data);
+
+        VFXSequenceRuntimeServiceImpl svc;
+        // loopSequence = true (9th arg); autoDestroyOnFinish=false so the combo is never erased.
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, /*autoDestroyOnFinish*/ false,
+                                     /*seed*/ 0u, /*prewarm*/ -1.0f, /*rate*/ -1.0f, /*fixedStep*/ -1.0f,
+                                     /*loopSequence*/ true);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+
+        auto runOneCycle = [&]()
+        {
+            svc.update(0.1f);                        // step0 @0 spawns
+            REQUIRE(!mock.creates.empty());
+            mock.live.erase(mock.creates.back().id); // step0 child finishes (provider auto-destroy)
+            svc.update(0.5f);                        // elapsed 0.6: step1 spawns, marker@0.3 crosses
+            mock.live.erase(mock.creates.back().id); // step1 child finishes
+            svc.update(0.1f);                        // reap step1 -> complete -> restart (no new create)
+        };
+
+        runOneCycle();
+        CHECK(mock.creates.size() == 2);  // exactly one Create per step, once this cycle
+        CHECK(notifications.size() == 1); // marker fired once this cycle
+        CHECK(svc.isComboPlaying(combo)); // restarted, still playing
+
+        runOneCycle();
+        CHECK(mock.creates.size() == 4);  // +2 for the second cycle (a replay, NOT a per-frame storm)
+        CHECK(notifications.size() == 2); // the marker re-fires exactly once per iteration
+
+        // The crux: looping must never tear down + recreate. One-shot children self-destruct
+        // provider-side; the loop restart destroys nothing, so no DestroyVFXInstance is ever issued.
+        CHECK(mock.destroys.empty());
+    }
+
+    // -------- VK-1524: StepOutput receiver spawns at the source's particle event location --------
+    TEST_CASE("a StepOutput FirstEvent receiver spawns once at the world event position")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        const std::string path =
+            saveSequence("StepOut_First.vfVFXSequence",
+                         makeStepOutputSequence(vfx::VFXEventConsumption::FirstEvent, 16));
+
+        VFXSequenceRuntimeServiceImpl svc;
+        svc.registerEventHandlers(); // installs the VFXParticleEventNotification subscription
+
+        // A moving parent — the world-space event position must NOT be re-transformed by it.
+        const glm::mat4 parent = glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f));
+        auto combo = svc.createCombo(path, parent, 0, /*autoDestroyOnFinish*/ true);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+
+        svc.update(0.1f); // source (step 0) spawns; the StepOutput receiver does NOT
+        REQUIRE(mock.creates.size() == 1);
+        const VFXInstanceId sourceId = mock.creates[0].id;
+        CHECK(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 0);
+
+        // A collision event at world (5,6,7) for the source's child.
+        publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnCollision), sourceId,
+                             glm::vec3(5.0f, 6.0f, 7.0f));
+        svc.update(1.0f / 60.0f);
+
+        // The receiver spawned exactly once, world-anchored: translate(eventPos) * local(0,1,0),
+        // with the combo parent (10,0,0) NOT applied again.
+        REQUIRE(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 1);
+        glm::mat4 recvXform{1.0f};
+        for (const auto& c : mock.creates)
+            if (c.path == "assets/vfx/boom.vfVFX")
+                recvXform = c.worldTransform;
+        CHECK(recvXform[3].x == doctest::Approx(5.0f));
+        CHECK(recvXform[3].y == doctest::Approx(7.0f)); // 6 + local 1
+        CHECK(recvXform[3].z == doctest::Approx(7.0f));
+
+        // A second event is ignored (FirstEvent latched); a mismatched event type never fires.
+        publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnCollision), sourceId,
+                             glm::vec3(0.0f));
+        publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnDeath), sourceId, glm::vec3(0.0f));
+        svc.update(1.0f / 60.0f);
+        CHECK(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 1);
+    }
+
+    TEST_CASE("a StepOutput EveryEvent receiver spawns per event, bounded by its budget")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        const std::string path =
+            saveSequence("StepOut_Every.vfVFXSequence",
+                         makeStepOutputSequence(vfx::VFXEventConsumption::EveryEvent, /*budget*/ 2));
+
+        VFXSequenceRuntimeServiceImpl svc;
+        svc.registerEventHandlers();
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, true);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+
+        svc.update(0.1f);
+        REQUIRE(mock.creates.size() == 1);
+        const VFXInstanceId sourceId = mock.creates[0].id;
+
+        // Five collision events in one tick; the live budget of 2 caps the spawns (mock keeps
+        // every child "live", so liveForR saturates at the budget).
+        for (int i = 0; i < 5; ++i)
+            publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnCollision), sourceId,
+                                 glm::vec3(static_cast<float>(i), 0.0f, 0.0f));
+        svc.update(1.0f / 60.0f);
+        CHECK(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 2);
+    }
+
+    TEST_CASE("a source reaped this frame still routes its trailing event via the grace window")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+
+        const std::string path =
+            saveSequence("StepOut_Grace.vfVFXSequence",
+                         makeStepOutputSequence(vfx::VFXEventConsumption::FirstEvent, 16));
+
+        VFXSequenceRuntimeServiceImpl svc;
+        svc.registerEventHandlers();
+        auto combo = svc.createCombo(path, glm::mat4(1.0f), 0, true);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+
+        svc.update(0.1f);
+        REQUIRE(mock.creates.size() == 1);
+        const VFXInstanceId sourceId = mock.creates[0].id;
+
+        // The source child finishes (provider auto-destroy) BEFORE its trailing collision event
+        // arrives. The reap moves it into the grace window; the event must still route.
+        mock.live.erase(sourceId);
+        svc.update(1.0f / 60.0f); // reap the source -> grace armed
+
+        publishParticleEvent(static_cast<uint32_t>(vfx::VFXEventType::OnCollision), sourceId,
+                             glm::vec3(1.0f, 2.0f, 3.0f));
+        svc.update(1.0f / 60.0f);
+        CHECK(countCreatesWithPath(mock, "assets/vfx/boom.vfVFX") == 1);
     }
 }

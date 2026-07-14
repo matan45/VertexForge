@@ -79,7 +79,27 @@ namespace vfx
             config.dimensions.x = getFloat(node, "majorRadius", ShapeDefaults::TORUS_MAJOR_RADIUS);
             config.dimensions.y = getFloat(node, "minorRadius", ShapeDefaults::TORUS_MINOR_RADIUS);
             break;
+
+        case ShapeType::Ring:
+            config.dimensions.x = getFloat(node, "radius", ShapeDefaults::RING_RADIUS);
+            config.dimensions.y = getFloat(node, "thickness", ShapeDefaults::RING_THICKNESS);
+            config.dimensions.z = getFloat(node, "arc", ShapeDefaults::RING_ARC);
+            config.dimensions.w = getFloat(node, "startAngle", ShapeDefaults::RING_START_ANGLE);
+            break;
+
+        case ShapeType::Line:
+            // dims.xyz = half-vector (center -> one end) in emitter-local space; spans -dims..+dims.
+            config.dimensions = glm::vec4(
+                getVec3(node, "lineHalf", glm::vec3(ShapeDefaults::LINE_HALF_X, 0.0f, 0.0f)), 0.0f);
+            break;
         }
+
+        // VK-1525: ordered / path-driven placement (all shapes). Missing keys => feature off, so
+        // legacy .vfVFX assets load byte-identically (random placement).
+        config.ordered = getBool(node, "ordered", false);
+        config.orderedLoop = getBool(node, "orderedLoop", false);
+        config.sweepDuration = getFloat(node, "sweepDuration", 1.0f);
+        config.orderedJitter = getFloat(node, "orderedJitter", 0.0f);
 
         return config;
     }

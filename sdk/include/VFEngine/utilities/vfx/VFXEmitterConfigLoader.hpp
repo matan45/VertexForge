@@ -8,6 +8,7 @@
 #include "VFXShapeConfigLoader.hpp"
 #include "VFXBurstTypes.hpp"
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <string_view>
 
@@ -107,6 +108,9 @@ namespace vfx
         config.emitDirection = getVec3(*emitterNode, "startVelocity", glm::vec3(0.0f, 1.0f, 0.0f));
         config.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         config.looping = getBool(*emitterNode, "looping", EmitterDefaults::LOOPING);
+        config.loopDuration = getFloat(*emitterNode, "loopDuration", EmitterDefaults::LOOP_DURATION);
+        if (!std::isfinite(config.loopDuration) || config.loopDuration < 0.0f)
+            config.loopDuration = EmitterDefaults::LOOP_DURATION;
         config.texturePath = getString(*emitterNode, "texture", "");
         config.inheritVelocityRatio = std::clamp(
             getFloat(*emitterNode, "inheritVelocityRatio", EmitterDefaults::INHERIT_VELOCITY_RATIO), 0.0f, 1.0f);
@@ -155,6 +159,9 @@ namespace vfx
             getFloat(*emitterNode, "stretchMultiplier", EmitterDefaults::STRETCH_MULTIPLIER));
 
         config.meshPath = getString(*emitterNode, "meshPath", "");
+        // VK-1526: optional PBR material for mesh particles. Missing key (legacy assets) => "" => the
+        // byte-identical single-.vfImage path.
+        config.materialPath = getString(*emitterNode, "materialRef", "");
 
         // VK-1476: mesh-particle orientation. Missing keys (legacy assets) fall back to
         // VelocityForward + axis (0,1,0), so old effects load byte-identically.
@@ -224,6 +231,13 @@ namespace vfx
         config.collisionLifetimeLoss = std::clamp(
             getFloat(*emitterNode, "collisionLifetimeLoss", EmitterDefaults::COLLISION_LIFETIME_LOSS), 0.0f, 1.0f);
 
+        // VK-1502: depth-buffer collision
+        config.depthCollisionEnabled = getBool(*emitterNode, "depthCollisionEnabled", EmitterDefaults::DEPTH_COLLISION_ENABLED);
+        config.depthCollisionThickness = std::max(0.0f,
+            getFloat(*emitterNode, "depthCollisionThickness", EmitterDefaults::DEPTH_COLLISION_THICKNESS));
+        config.depthCollisionNormalInfluence = std::clamp(
+            getFloat(*emitterNode, "depthCollisionNormalInfluence", EmitterDefaults::DEPTH_COLLISION_NORMAL_INFLUENCE), 0.0f, 1.0f);
+
         // Distortion
         config.distortionEnabled = getBool(*emitterNode, "distortionEnabled", false);
         config.distortionStrength = std::clamp(
@@ -233,6 +247,9 @@ namespace vfx
         // VK-1453 (Phase 4) — carry the per-asset scalability profile (CPU-only,
         // disabled by default so it resolves to a neutral level).
         config.scalability = data.scalability;
+
+        // VK-1503 (M4 slice-c) — carry the per-asset significance weight.
+        config.significance = data.significance;
 
         return config;
     }

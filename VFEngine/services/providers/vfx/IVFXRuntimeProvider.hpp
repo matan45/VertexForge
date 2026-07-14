@@ -25,6 +25,10 @@ namespace services
 
         // Instance management
         virtual VFXInstanceId createInstance(const VFXRuntimeParams& params) = 0;
+        // Optional additive capability so existing test/plugin providers remain source
+        // compatible; the runtime adapter overrides both methods.
+        virtual VFXInstanceId createChannel(const std::string&, uint32_t) { return 0; }
+        virtual void emitToChannel(VFXInstanceId, const VFXChannelEmitParams&) {}
         virtual void destroyInstance(VFXInstanceId id) = 0;
 
         // Instance control
@@ -40,6 +44,17 @@ namespace services
         virtual void setCamera(const VFXCameraParams& camera) = 0;
 
         virtual void setSceneDepthImageView(vk::ImageView depthView) = 0;
+
+        // VK-1502: depth-buffer collision. needsPrevFrameDepth() drives lazy creation of the last-frame
+        // depth copies (prevFrameDepth) even when upscaling is off. setPrevFrameDepth feeds the sim the depth
+        // views (one per frame-in-flight; empty => bind the fallback), which slot to sample this frame, and
+        // whether depth collision is active (true only once the depth is populated and shader-readable).
+        // Default-empty so existing test/plugin providers stay source-compatible.
+        virtual bool needsPrevFrameDepth() const { return false; }
+        virtual void setPrevFrameDepth(const std::vector<vk::ImageView>& slots, uint32_t readSlot, bool active)
+        {
+            (void)slots; (void)readSlot; (void)active;
+        }
 
         // Called before render pass to dispatch compute shaders (GPU mode)
         virtual void recordComputeCommands(const vk::CommandBuffer& cmd) = 0;
@@ -110,6 +125,15 @@ namespace services
             uint32_t rawEventsThisFrame = 0;
             uint32_t eventBudget = 0;
             bool eventsDropped = false;
+            uint32_t channelListeners = 0;
+            uint32_t channelRawRequests = 0;
+            uint32_t channelAcceptedRequests = 0;
+            uint32_t channelRingDroppedRequests = 0;
+            uint32_t channelParticleDroppedRequests = 0;
+            uint32_t channelRequestBudget = 0;
+            // VK-1503 (M4 slice-c)
+            uint32_t evictedInstances = 0; // instances soft-stopped by the significance cap this frame
+            uint32_t maxLiveInstances = 0; // active significance budget (0 => unlimited)
         };
         virtual BudgetStats getBudgetStats() const = 0;
 
@@ -140,6 +164,11 @@ namespace services
 
         // Global VFX quality tier applied to scalability profiles at instance creation.
         virtual void setQualityTier(vfx::VFXQualityTier tier) { (void)tier; }
+
+        // VK-1503 (M4 slice-c) — scene-wide live-instance budget for the significance
+        // cap. 0 => disabled (default). Non-pure so existing test/plugin providers stay
+        // source-compatible; the runtime adapter overrides it.
+        virtual void setSignificanceBudget(uint32_t budget) { (void)budget; }
 
         // Per-instance debug snapshot for the VFX debug window (capped by the impl).
         struct InstanceDebugInfo

@@ -13,9 +13,66 @@
 #include "data/EntityConversion.hpp"
 #include "data/VFXOverrideApplier.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace core::api
 {
+    namespace
+    {
+        bool isFinite(const glm::vec3& value)
+        {
+            return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+        }
+
+        bool isFiniteColor(float r, float g, float b, float a)
+        {
+            return std::isfinite(r) && std::isfinite(g) && std::isfinite(b) && std::isfinite(a);
+        }
+
+        uint32_t packRGBA8(float r, float g, float b, float a)
+        {
+            const auto toByte = [](float channel)
+            {
+                return static_cast<uint32_t>(std::lround(std::clamp(channel, 0.0f, 1.0f) * 255.0f));
+            };
+
+            return toByte(r) |
+                   (toByte(g) << 8u) |
+                   (toByte(b) << 16u) |
+                   (toByte(a) << 24u);
+        }
+
+        bool tryGetChannelId(const value::Value& value, services::VFXInstanceId& outId)
+        {
+            const int64_t id = extractInt64(value);
+            if (id <= 0 || static_cast<uint64_t>(id) > std::numeric_limits<services::VFXInstanceId>::max())
+            {
+                return false;
+            }
+            outId = static_cast<services::VFXInstanceId>(id);
+            return true;
+        }
+
+        void submitChannelEmit(services::VFXInstanceId channelId,
+                               const glm::vec3& position,
+                               float scale,
+                               const glm::vec3& direction,
+                               uint32_t packedTint,
+                               bool hasTint)
+        {
+            services::events::vfxruntime::EmitToVFXChannelCommand cmd;
+            cmd.channelId = channelId;
+            cmd.params.position = position;
+            cmd.params.scale = scale;
+            cmd.params.direction = direction;
+            cmd.params.packedTint = packedTint;
+            cmd.params.hasTint = hasTint;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+    }
+
     void VFXAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -399,6 +456,115 @@ namespace core::api
                 }
 
                 return value::Value(static_cast<int64_t>(instanceId));
+            }});
+
+        // _native_vfx_createChannel(path) -> int channelId (0 on failure)
+        interpreter->registerNativeFunction("_native_vfx_createChannel",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() != 1)
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+
+                const std::string path = extractString(args[0], "VFX.createChannel");
+                if (path.empty())
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+
+                services::events::vfxruntime::CreateVFXChannelCommand cmd;
+                cmd.vfxAssetPath = path;
+                const services::VFXInstanceId channelId =
+                    events::EventDispatcher::instance().execute(cmd);
+                return value::Value(static_cast<int64_t>(channelId));
+            }});
+
+        // _native_vfx_createChannelWithCount(path, particlesPerRequest) -> int channelId
+        interpreter->registerNativeFunction("_native_vfx_createChannelWithCount",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() != 2)
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+
+                const std::string path = extractString(args[0], "VFX.createChannelWithCount");
+                const int64_t count = extractInt64(args[1]);
+                if (path.empty() || count <= 0 ||
+                    static_cast<uint64_t>(count) > std::numeric_limits<uint32_t>::max())
+                {
+                    return value::Value(static_cast<int64_t>(0));
+                }
+
+                services::events::vfxruntime::CreateVFXChannelCommand cmd;
+                cmd.vfxAssetPath = path;
+                cmd.particlesPerRequest = static_cast<uint32_t>(count);
+                const services::VFXInstanceId channelId =
+                    events::EventDispatcher::instance().execute(cmd);
+                return value::Value(static_cast<int64_t>(channelId));
+            }});
+
+        // _native_vfx_channelEmit(channelId, x, y, z) -> void
+        interpreter->registerNativeFunction("_native_vfx_channelEmit",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                services::VFXInstanceId channelId = 0;
+                if (args.size() != 4 || !tryGetChannelId(args[0], channelId))
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                const glm::vec3 position{extractFloat(args[1]), extractFloat(args[2]), extractFloat(args[3])};
+                if (isFinite(position))
+                {
+                    submitChannelEmit(channelId, position, 1.0f, glm::vec3(0.0f), 0xFFFFFFFFu, false);
+                }
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_channelEmitTinted(channelId, x, y, z, r, g, b, a) -> void
+        interpreter->registerNativeFunction("_native_vfx_channelEmitTinted",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                services::VFXInstanceId channelId = 0;
+                if (args.size() != 8 || !tryGetChannelId(args[0], channelId))
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                const glm::vec3 position{extractFloat(args[1]), extractFloat(args[2]), extractFloat(args[3])};
+                const float r = extractFloat(args[4]);
+                const float g = extractFloat(args[5]);
+                const float b = extractFloat(args[6]);
+                const float a = extractFloat(args[7]);
+                if (isFinite(position) && isFiniteColor(r, g, b, a))
+                {
+                    submitChannelEmit(channelId, position, 1.0f, glm::vec3(0.0f),
+                                      packRGBA8(r, g, b, a), true);
+                }
+                return value::Value(std::monostate{});
+            }});
+
+        // _native_vfx_channelEmitFull(channelId, x, y, z, scale, dx, dy, dz, r, g, b, a) -> void
+        interpreter->registerNativeFunction("_native_vfx_channelEmitFull",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                services::VFXInstanceId channelId = 0;
+                if (args.size() != 12 || !tryGetChannelId(args[0], channelId))
+                {
+                    return value::Value(std::monostate{});
+                }
+
+                const glm::vec3 position{extractFloat(args[1]), extractFloat(args[2]), extractFloat(args[3])};
+                const float scale = extractFloat(args[4]);
+                const glm::vec3 direction{extractFloat(args[5]), extractFloat(args[6]), extractFloat(args[7])};
+                const float r = extractFloat(args[8]);
+                const float g = extractFloat(args[9]);
+                const float b = extractFloat(args[10]);
+                const float a = extractFloat(args[11]);
+                if (isFinite(position) && std::isfinite(scale) && scale > 0.0f &&
+                    isFinite(direction) && isFiniteColor(r, g, b, a))
+                {
+                    submitChannelEmit(channelId, position, scale, direction,
+                                      packRGBA8(r, g, b, a), true);
+                }
+                return value::Value(std::monostate{});
             }});
 
         // _native_vfx_destroyInstance(instanceId) -> void

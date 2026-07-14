@@ -250,6 +250,9 @@ namespace render
         float currentTime = 0.0f;
 
         services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;
+        // VK-1502: frames elapsed since prevFrameDepth was (re)created; the sim binds the real depth (vs the
+        // fallback) only once both flight slots have been populated by the DepthCopy pass.
+        uint32_t prevFrameDepthReadyCounter = 0;
         services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
         services::IOceanRenderProvider* oceanRenderProvider = nullptr;
         services::IGrassRenderProvider* grassRenderProvider = nullptr;
@@ -585,6 +588,14 @@ namespace render
         void cleanUp();
 
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+
+        // VK-1502: true when a VFX emitter has depth-buffer collision enabled, so the OffScreenViewPort
+        // knows to create the last-frame depth copies (prevFrameDepth) even when upscaling is off.
+        bool vfxNeedsPrevFrameDepth() const;
+
+        // VK-1502: feed the VFX sim the last-frame depth views + which slot to sample this frame. Called
+        // once per frame (from OffScreenViewPort::render) before both the sync and async compute dispatch.
+        void updateVFXPrevFrameDepth(uint32_t imageIndex);
 
     private:
         void initGPUDrivenRenderer();

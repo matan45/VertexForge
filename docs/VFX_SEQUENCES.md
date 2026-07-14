@@ -3,9 +3,9 @@
 Compose several existing `.vfVFX` effects into one **timed combo** and play it
 standalone, from script, or automatically from an animation event. (VK-1425.)
 
-> **Scope:** combos run in the **editor (Play mode + the sequence editor preview)**.
-> Playing combos in an exported/shipped game is a tracked follow-up. Everything below
-> is for editor play/preview.
+> **Scope:** combos run in **editor Play mode, the sequence editor preview, and the
+> shipped/exported Runtime** (`RuntimeHandler` constructs the same
+> `VFXSequenceRuntimeServiceImpl` + `VFXSequencePlayModeHandler` the editor uses).
 
 ---
 
@@ -45,7 +45,8 @@ double-click it to open the **VFX Sequence Editor**.
 |---|---|
 | **VFX Asset** | the child `.vfVFX` (drag one onto the field). |
 | **Start Time** | *when* the step fires, in seconds from the combo's start. This is how you sequence: step A `0.0`, step B `0.5`, … |
-| **Cue Name** | empty = time-driven (uses Start Time). Non-empty = **cue-driven** (fires only on `triggerComboCue`). |
+| **Trigger** | **Time** (fires at Start Time), **Cue** (fired by `triggerComboCue`, uses Cue Name), or **Step Output** (spawns at a source step's particle-event location — see §6b). |
+| **Cue Name** | the named cue this step waits for when **Trigger = Cue**. |
 | **Local Position / Euler / Scale** | offset of this step relative to the combo's origin (or socket). |
 | **Socket** | optional bone socket this step follows (see §4). |
 | **Loop** | the child emitter loops while active. |
@@ -61,7 +62,23 @@ double-click it to open the **VFX Sequence Editor**.
 Add a **VFX Sequence** component to an entity:
 
 - **`sequenceRef` + `autoPlay`** → the combo plays when the entity enters Play mode
-  (optionally attached to a `socketName`, looped with `loop`).
+  (optionally attached to a `socketName`).
+- **`loop`** → when set, the whole sequence **replays** each time it finishes: the
+  timeline rewinds and the next tick re-spawns the steps and **re-fires the sounds,
+  script cues, and event markers** (each marker fires exactly once per iteration). This
+  is the "burning building" case — no babysitting script needed. Notes:
+  - By default each loop **re-rolls** any per-step variety (`probability` / `variantGroup`,
+    see §2) for variation; set the sequence's **Stable Loop** flag (asset setting) to
+    replay the *identical* variant every iteration. Either way the loop is fully
+    deterministic from the combo seed.
+  - A sequence whose *steps* are themselves looping emitters (per-step **Loop**) never
+    "finishes", so it is already continuous — whole-sequence replay simply never triggers.
+  - **Off-screen looping combos pause** (children stopped + hidden, the tick frozen) and
+    resume on re-entry — they are never destroyed. This whole-combo culling only kicks in
+    when the sequence has **authored Fixed bounds** (use *Recalc Bounds* in the editor);
+    with Auto/empty bounds the loop runs unculled. (Resume currently restarts a frozen
+    emitter's emission — a small visual pop on ambient effects; a non-resetting resume is
+    a tracked graphics follow-up.)
 - **`triggers[]`** → a map of `eventName → sequence (+ socket)`. When an authored
   animation notify event of that name fires on the entity, the engine spawns +
   attaches the combo automatically. **No script required.**
@@ -179,6 +196,62 @@ combo spawn (the trigger is queued and consumed on the next VFX tick) — visual
 imperceptible.
 
 ---
+
+## 6b. Step-output events — spawn a step at a particle event location (VK-1524)
+
+A step can start at the **exact world location** where an earlier step's particle
+produced a **death** or **collision**, instead of at the combo/socket transform. This
+connects effects such as **projectile → impact**, **trail → explosion**, and
+**charge → release** without gameplay code or duplicated positions.
+
+Two roles:
+
+- **Source step** — a normal Time/Cue **VFX** step that *publishes a named spatial output*
+  when its particles emit an event. In the step inspector set **Step Output ▸ Output Name**
+  (e.g. `impact`) and **Output Event** (On Death / On Collision). The source's `.vfVFX` must
+  have that event **enabled** with its **Notify (CPU)** flag on (in the VFX editor's event
+  section) so the engine publishes the event's location. `Notify` lets a source publish
+  *without* also spawning a sub-emitter, so you don't get a stray effect at the impact point.
+- **Receiver step** — set its **Trigger** to **Step Output**, pick the **Source Step** and
+  **Event Name**, a **Consumption** mode, and which impact fields to **inherit**. When the
+  bound event fires, the receiver spawns at the event's world position.
+
+**Consumption modes**
+
+| Mode | Behavior |
+|---|---|
+| **First Event** | spawn the receiver **once**, from the first matching event. |
+| **Every Event** | spawn **once per matching event**, bounded by the receiver's **Event Budget** (max simultaneous live event-children) and a per-frame safety cap. |
+
+**Transform** — the event position is **world-space**; the receiver's authored **Local
+Position/Euler/Scale** are applied *after* as an offset (`world = translate(eventPos) ·
+localTRS`). The combo/socket parent is **not** applied again (no double-transform), and a
+receiver's **socket is ignored** (it is world-anchored).
+
+**Inheritance** — optionally take the impact's **velocity** (→ emit direction + start speed),
+**color** (→ start color), and **size** (→ start size). (Normal is reserved — no producer yet.)
+
+**Determinism / preview** — particle events are runtime and non-deterministic, so they run
+**only during forward Play**, never in the sequence-editor preview or during seek/scrub. A
+StepOutput clip shows a **`[waiting for event]`** label in the timeline and never spawns in
+the CPU preview — attach to a real Play-mode combo to see it fire. Old (`≤ 1.5`) assets have
+no bindings and keep their exact Time/Cue behavior.
+
+**Validation** — the editor flags a missing/invalid source, a self-dependency, a dependency
+cycle, an empty event name, a source that isn't a VFX step or doesn't publish the bound name,
+and a step that is both a source and a receiver.
+
+### Integration contract for VK-1501 (GPU event → child)
+
+The receiving path is deliberately producer-agnostic. An event is consumed as a
+`vfx::VFXEventPayload` (an alias of `vfx::VFXCuePayload` in `utilities/vfx`, extended with
+`velocity`/`normal`) carrying a **world position** plus optional velocity/color/scalar/custom;
+the runtime service reverse-maps a `VFXParticleEventNotification`'s `parentInstanceId` to the
+owning combo step and spawns the receiver at `translate(position) · localTRS`. VK-1501's GPU
+fast path stays GPU-internal, but when it **falls back to CPU** it publishes the *same*
+`VFXParticleEventNotification` — so it feeds this identical receiving seam with **no further
+sequence-schema change**. A future GPU-originated *named* spatial output only needs to populate
+that payload; the sequence binding, consumption modes, and world-anchoring are already in place.
 
 ## 7. Serialization
 

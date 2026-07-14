@@ -167,6 +167,8 @@ namespace windows
         params.emitDirection = getVec3(*emitterNode, "startVelocity", glm::vec3(0.0f, 1.0f, 0.0f));
         params.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         params.looping = getBool(*emitterNode, "looping", vfx::EmitterDefaults::LOOPING);
+        params.loopDuration = std::max(0.0f,
+            getFloat(*emitterNode, "loopDuration", vfx::EmitterDefaults::LOOP_DURATION));
         params.texturePath = getString(*emitterNode, "texture", "");
         params.sizeVariance = std::clamp(
             getFloat(*emitterNode, "sizeVariance", vfx::EmitterDefaults::SIZE_VARIANCE), 0.0f, 1.0f);
@@ -209,6 +211,7 @@ namespace windows
         params.stretchMultiplier = getFloat(*emitterNode, "stretchMultiplier", vfx::EmitterDefaults::STRETCH_MULTIPLIER);
 
         params.meshPath = getString(*emitterNode, "meshPath", "");
+        params.materialPath = getString(*emitterNode, "materialRef", ""); // VK-1526
 
         // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
         params.meshOrientationMode = vfx::stringToOrientationMode(getString(*emitterNode, "meshOrientationMode", ""));
@@ -378,6 +381,15 @@ namespace windows
             ImGui::Spacing();
             ImGui::TextDisabled("Scalability profile");
             drawScalabilityControls();
+            ImGui::Spacing();
+            ImGui::TextDisabled("Significance (live-instance cap)");
+            if (vfxData &&
+                ImGui::DragFloat("Significance", &vfxData->significance, 0.05f, 0.0f, 1.0e6f))
+                isDirty = true;
+            ImGui::SetItemTooltip(
+                "Per-asset importance for the runtime significance cap (scored as "
+                "significance / distance^2). Higher = more likely to stay live when a "
+                "scene-wide live-instance budget is set. Default 1.0 is neutral.");
             ImGui::Unindent();
         }
 

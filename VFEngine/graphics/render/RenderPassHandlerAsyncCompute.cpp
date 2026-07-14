@@ -710,7 +710,20 @@ namespace render
         }
 
         if (vfxRuntimeProvider)
+        {
+            // VK-1502: feed the VFX sim camera on the async path too — the sync path feeds it via setCamera
+            // in drawSceneMeshesGraphManaged, which does not run when the sim is recorded on the async queue.
+            services::VFXCameraParams vfxCamera;
+            vfxCamera.view = currentView;
+            vfxCamera.projection = currentProjection;
+            vfxCamera.cameraPos = currentCameraPosition;
+            vfxCamera.time = currentTime;
+            vfxCamera.nearPlane = currentNearPlane;
+            vfxCamera.farPlane = currentFarPlane;
+            vfxRuntimeProvider->setCamera(vfxCamera);
+
             vfxRuntimeProvider->recordComputeCommands(asyncCmd);
+        }
 
         // Async compute motion vectors using previous-frame depth
         if (offscreenResources.prevFrameDepthCreated && offscreenResources.upscaleResourcesCreated)

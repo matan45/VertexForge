@@ -173,6 +173,11 @@ namespace vfx
         VFXBounds bounds;             // explicit/derived bounds for cull + viz
         VFXScalability scalability;   // per-quality-tier scalability profile (disabled by default)
         bool cullEligible = false;    // opt-in: allow pre-spawn distance+frustum culling
+
+        // VK-1503 (M4 slice-c) — per-asset importance weight for the significance cap.
+        // Scored as significance / max(distanceSq, eps) to keep the top-N live effects
+        // when a scene-wide budget is set. Default 1.0 is neutral (equal weight).
+        float significance = 1.0f;
     };
 
     namespace EmitterDefaults
@@ -182,6 +187,7 @@ namespace vfx
         inline constexpr float START_SIZE = 1.0f;
         inline constexpr float START_SPEED = 1.0f;
         inline constexpr bool LOOPING = true;
+        inline constexpr float LOOP_DURATION = 0.0f;
         inline constexpr float INHERIT_VELOCITY_RATIO = 0.0f;
         inline constexpr float SIZE_VARIANCE = 0.0f;
         inline constexpr float LIFETIME_VARIANCE = 0.0f;
@@ -236,6 +242,11 @@ namespace vfx
         inline constexpr float COLLISION_BOUNCE = 0.5f;
         inline constexpr float COLLISION_FRICTION = 0.1f;
         inline constexpr float COLLISION_LIFETIME_LOSS = 0.0f;
+
+        // VK-1502: depth-buffer collision (collides against last-frame scene depth).
+        inline constexpr bool DEPTH_COLLISION_ENABLED = false;
+        inline constexpr float DEPTH_COLLISION_THICKNESS = 0.25f;
+        inline constexpr float DEPTH_COLLISION_NORMAL_INFLUENCE = 1.0f;
 
         // Events
         inline constexpr bool EVENT_ON_SPAWN_ENABLED = false;

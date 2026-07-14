@@ -11,14 +11,21 @@
 #include "../render/vfx/distortion/VFXDistortionPipeline.hpp"
 #include "../render/vfx/bindless/VFXBindlessTextures.hpp"
 #include "../render/vfx/particle/VFXEmitterPool.hpp"
+#include "../render/vfx/mesh/VFXMeshMaterialResolver.hpp"
+#include "../render/material/MaterialPBRExtractor.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierConfigLoader.hpp"
+#include "vfx/VFXRuntimeDiagnostics.hpp"
+#include "vfx/VFXChannelMath.hpp"
 #include "vfx/VFXSortOrder.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
 #include <random>
+#include <unordered_set>
 
 namespace controllers
 {
@@ -31,6 +38,34 @@ namespace controllers
     VFXSceneRenderer::~VFXSceneRenderer()
     {
         cleanUp();
+    }
+
+    void VFXSceneRenderer::applyMeshMaterial(uint32_t emitterIndex, const std::string& materialPath)
+    {
+        if (!gpuMeshPipeline)
+        {
+            return;
+        }
+        if (materialPath.empty())
+        {
+            gpuMeshPipeline->setEmitterMaterial(emitterIndex, {}); // clear -> single-.vfImage path
+            return;
+        }
+
+        // VK-1526: pull the material's PBR texture set + scalars and resolve to the VFX-representable subset.
+        // A failed extraction (invalid path) yields hasMaterial == false -> setEmitterMaterial clears it.
+        const auto pbr = render::mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath);
+        const auto resolved = render::vfx::resolveVFXMeshMaterial(&pbr);
+        if (resolved.warnSeparateOrmMaps)
+        {
+            static std::unordered_set<std::string> warned;
+            if (warned.insert(materialPath).second)
+            {
+                vfLogWarning("VFX mesh material '{}' uses separate metallic/roughness/AO maps; VFX packs ORM "
+                             "only — using the ORM/scalar path.", materialPath);
+            }
+        }
+        gpuMeshPipeline->setEmitterMaterial(emitterIndex, resolved);
     }
 
     void VFXSceneRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
@@ -253,6 +288,7 @@ namespace controllers
         {
             gpuMeshPipeline->setEmitterMesh(instances[id].gpuEmitterIndex, storedConfig.meshPath);
             gpuMeshPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
+            applyMeshMaterial(instances[id].gpuEmitterIndex, storedConfig.materialPath); // VK-1526
             gpuMeshPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
                                                         storedConfig.alphaClipThreshold,
                                                         storedConfig.blendMode,
@@ -283,9 +319,301 @@ namespace controllers
             }
         }
 
+        // VK-1501: resolve OnDeath/OnCollision GPU fast-path children (GPU-driven parents only).
+        if (instances[id].gpuDriven)
+            resolveFastPathChildren(id);
+
         vfLogDebug("Created VFX instance {} from asset: {} (GPU: {})",
                    id, params.vfxAssetPath, instances[id].gpuDriven);
         return id;
+    }
+
+    void VFXSceneRenderer::resolveFastPathChildren(VFXInstanceId parentId)
+    {
+        // Snapshot the per-event authoring we need first: createChannel() below mutates the
+        // instances map (and can rehash it), so we must not hold a VFXRuntimeInstance& across it.
+        struct PendingChild
+        {
+            bool collision = false; // false = OnDeath, true = OnCollision
+            std::string path;
+            bool inheritColor = false;
+            bool inheritSize = false;
+            bool inheritVelocity = false;
+        };
+        std::vector<PendingChild> pending;
+        {
+            auto it = instances.find(parentId);
+            if (it == instances.end() || it->second.channelListener)
+                return;
+
+            const auto& events = it->second.config.events;
+            const vfx::VFXEventType eligible[2] = {vfx::VFXEventType::OnDeath, vfx::VFXEventType::OnCollision};
+            for (vfx::VFXEventType type : eligible)
+            {
+                const auto& tc = events.types[static_cast<size_t>(type)];
+                // GPU fast path is opt-in and only applies to deterministic children (probability 1);
+                // probability<1 (or an ineligible/disabled event) stays on the CPU readback path.
+                // Also excluded when the event opts into `notify` (review #2): a notify source needs
+                // the CPU-side VFXParticleEventNotification (StepOutput receivers, script listeners),
+                // which the fast path bypasses entirely. Falling back to the CPU readback path both
+                // publishes the notification AND still spawns the child sub-emitter.
+                if (tc.enabled && tc.gpuFastPath && !tc.vfxPath.empty() && tc.probability >= 1.0f &&
+                    !tc.notify)
+                {
+                    pending.push_back(PendingChild{type == vfx::VFXEventType::OnCollision, tc.vfxPath,
+                                                   tc.inheritColor, tc.inheritSize,
+                                                   tc.inheritVelocityScale > 0.0f});
+                }
+            }
+        }
+
+        uint32_t deathHalf = vfx::child::noneHalf();
+        uint32_t collisionHalf = vfx::child::noneHalf();
+
+        for (const auto& child : pending)
+        {
+            // Reuse (or create) the persistent channel listener for this child asset -- the same
+            // lifecycle VK-1500 uses; createChannel dedups by path. Returns 0 when the asset is not
+            // channel-compatible or a GPU slice can't be allocated -> fall back to the CPU path.
+            VFXInstanceId childId = createChannel(child.path, 0, /*forGpuChild=*/true);
+            if (childId == 0)
+                continue;
+
+            auto childIt = instances.find(childId);
+            if (childIt == instances.end())
+                continue;
+            VFXRuntimeInstance& listener = childIt->second;
+
+            if (!listener.gpuFastPathChild)
+            {
+                // First fast-path use of this channel: assign it a ring region.
+                if (auto region = childRegionAllocator.acquire(child.path))
+                {
+                    listener.gpuFastPathChild = true;
+                    listener.gpuChildRegion = *region;
+                }
+
+                // Depth-1: a fast-path child that itself declares a fast-path event cannot spawn a
+                // grandchild GPU-side (its own eventChildSlot is never resolved). Warn once.
+                bool grandchild = false;
+                for (uint32_t i = 0; i < vfx::VFX_EVENT_TYPE_COUNT; ++i)
+                {
+                    const auto& gtc = listener.config.events.types[i];
+                    if (gtc.enabled && gtc.gpuFastPath && !gtc.vfxPath.empty())
+                    {
+                        grandchild = true;
+                        break;
+                    }
+                }
+                if (grandchild && vfx::VFXRuntimeDiagnostics::instance().report(
+                                      child.path, "GPU event->child spawning is depth-1"))
+                {
+                    vfLogWarning("VFX '{}' is used as a GPU event->child; its own GPU fast-path events "
+                                 "are ignored (depth-1 only)",
+                                 child.path);
+                }
+            }
+
+            if (!listener.gpuFastPathChild)
+                continue; // region pool exhausted -> CPU fallback for this event
+
+            const uint32_t packedHalf = vfx::child::packHalf(
+                listener.gpuChildRegion, child.inheritColor, child.inheritSize, child.inheritVelocity);
+            if (child.collision)
+                collisionHalf = packedHalf;
+            else
+                deathHalf = packedHalf;
+        }
+
+        if (auto it = instances.find(parentId); it != instances.end())
+            it->second.resolvedEventChildSlot = vfx::child::packSlot(deathHalf, collisionHalf);
+    }
+
+    VFXInstanceId VFXSceneRenderer::createChannel(const std::string& path,
+                                                   uint32_t particlesPerRequest,
+                                                   bool forGpuChild)
+    {
+        if (path.empty() || !gpuDrivenEnabled || !gpuBufferManager)
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(
+                    "VFX channel", "channel creation requires an initialized GPU VFX renderer"))
+            {
+                vfLogWarning("VFX channel creation failed: GPU VFX is unavailable");
+            }
+            return 0;
+        }
+
+        // Script channels (VK-1500) and GPU event->child listeners (VK-1501) dedup in SEPARATE
+        // registries so they never collide on one shared listener (review #3).
+        auto& registry = forGpuChild ? gpuChildChannelsByPath : channelsByPath;
+        if (auto existing = registry.find(path); existing != registry.end())
+        {
+            auto instanceIt = instances.find(existing->second);
+            if (instanceIt != instances.end() && instanceIt->second.channelListener)
+            {
+                if (particlesPerRequest != 0 &&
+                    particlesPerRequest != instanceIt->second.channelParticlesPerRequest &&
+                    vfx::VFXRuntimeDiagnostics::instance().report(
+                        path, "channel already exists; the original particles-per-request value wins"))
+                {
+                    vfLogWarning("VFX channel '{}' already exists with {} particles/request (requested {})",
+                                 path, instanceIt->second.channelParticlesPerRequest, particlesPerRequest);
+                }
+                return existing->second;
+            }
+            registry.erase(existing);
+        }
+
+        auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(path);
+        if (!configOpt.has_value())
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(path, "failed to load channel asset"))
+                vfLogWarning("Failed to create VFX channel: cannot load asset '{}'", path);
+            return 0;
+        }
+
+        render::vfx::VFXEmitterConfig config = std::move(configOpt.value());
+        configCache[path] = config;
+
+        const auto compatibility = vfx::channel::validateCompatibility(
+            config.spawnRate, config.bursts);
+        const auto particleCount = vfx::channel::resolveParticlesPerRequest(
+            config.bursts,
+            render::vfx::GPUVFXConstants::CHANNEL_PARTICLES_PER_EMITTER,
+            particlesPerRequest != 0 ? std::optional<uint32_t>(particlesPerRequest) : std::nullopt);
+        if (compatibility != vfx::channel::CompatibilityError::None || !particleCount)
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(
+                    path, "channel assets must be deterministic immediate one-shot bursts"))
+            {
+                vfLogWarning("VFX asset '{}' is not channel-compatible or requests too many particles", path);
+            }
+            return 0;
+        }
+        const uint32_t selectedCount = particleCount.particlesPerRequest;
+
+        auto allocation = gpuBufferManager->allocateEmitter(
+            render::vfx::GPUVFXConstants::CHANNEL_PARTICLES_PER_EMITTER);
+        if (allocation.emitterIndex == UINT32_MAX)
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(
+                    path, "unable to allocate the dedicated GPU channel particle slice"))
+            {
+                vfLogWarning("VFX channel '{}' could not allocate {} contiguous GPU particles",
+                             path, render::vfx::GPUVFXConstants::CHANNEL_PARTICLES_PER_EMITTER);
+            }
+            return 0;
+        }
+
+        const VFXInstanceId id = nextInstanceId++;
+        VFXRuntimeInstance instance;
+        instance.id = id;
+        instance.assetPath = path;
+        instance.config = std::move(config);
+        instance.config.spawnRate = 0.0f;
+        instance.config.bursts.clear();
+        instance.worldTransform = glm::mat4(1.0f);
+        instance.prevWorldTransform = glm::mat4(1.0f);
+        instance.loop = true;
+        instance.active = true;
+        instance.priority = services::VFXEmitterPriority::Critical;
+        instance.poolable = false;
+        instance.autoDestroy = false;
+        instance.gpuDriven = true;
+        instance.gpuEmitterIndex = allocation.emitterIndex;
+        instance.gpuParticleOffset = allocation.particleOffset;
+        instance.gpuParticleCount = allocation.particleCount;
+        instance.seed = pickInstanceSeed(0);
+        instance.channelListener = true;
+        instance.channelParticlesPerRequest = selectedCount;
+        instance.updateInterval = 1;
+        instance.currentLOD = 0;
+        instance.lodSpawnMultiplier = 1.0f;
+
+        instances.emplace(id, std::move(instance));
+        emitterIndexToInstanceId[allocation.emitterIndex] = id;
+        registry[path] = id;
+        channelOrder.push_back(id);
+
+        const auto& storedConfig = instances.at(id).config;
+        const glm::vec3 glowColor =
+            ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(storedConfig.modifiers);
+        if (gpuRenderPipeline)
+        {
+            gpuRenderPipeline->setEmitterTexture(allocation.emitterIndex, storedConfig.texturePath);
+            gpuRenderPipeline->setEmitterRenderingConfig(allocation.emitterIndex,
+                storedConfig.alphaClipThreshold, storedConfig.blendMode, glowColor, storedConfig.sortOrder);
+            gpuRenderPipeline->setEmitterRenderMode(allocation.emitterIndex,
+                static_cast<uint32_t>(storedConfig.renderMode));
+            gpuRenderPipeline->setEmitterDistortionEnabled(allocation.emitterIndex,
+                storedConfig.distortionEnabled);
+        }
+        if (gpuMeshPipeline && storedConfig.renderMode == render::vfx::VFXRenderMode::MeshParticle)
+        {
+            gpuMeshPipeline->setEmitterMesh(allocation.emitterIndex, storedConfig.meshPath);
+            gpuMeshPipeline->setEmitterTexture(allocation.emitterIndex, storedConfig.texturePath);
+            applyMeshMaterial(allocation.emitterIndex, storedConfig.materialPath); // VK-1526
+            gpuMeshPipeline->setEmitterRenderingConfig(allocation.emitterIndex,
+                storedConfig.alphaClipThreshold, storedConfig.blendMode, glowColor, storedConfig.sortOrder);
+        }
+        if (gpuRibbonPipeline && storedConfig.renderMode == render::vfx::VFXRenderMode::Ribbon)
+        {
+            gpuRibbonPipeline->setEmitterTexture(allocation.emitterIndex, storedConfig.texturePath);
+            gpuRibbonPipeline->setEmitterRenderingConfig(allocation.emitterIndex,
+                storedConfig.alphaClipThreshold, storedConfig.blendMode, glowColor, storedConfig.sortOrder);
+        }
+        if (storedConfig.distortionEnabled)
+        {
+            ++activeDistortionCount;
+            if (gpuDistortionPipeline)
+            {
+                gpuDistortionPipeline->setEmitterDistortionTexture(
+                    allocation.emitterIndex, storedConfig.distortionTexturePath);
+                gpuDistortionPipeline->setEmitterDistortionConfig(
+                    allocation.emitterIndex, storedConfig.distortionStrength);
+            }
+        }
+
+        vfLogInfo("Created GPU VFX channel {} for '{}' ({} particles/request, {} capacity)",
+                  id, path, selectedCount, allocation.particleCount);
+        return id;
+    }
+
+    void VFXSceneRenderer::emitToChannel(VFXInstanceId id,
+                                         const glm::vec3& position,
+                                         float scale,
+                                         const glm::vec3& direction,
+                                         uint32_t packedTint,
+                                         bool hasTint)
+    {
+        auto it = instances.find(id);
+        if (it == instances.end() || !it->second.channelListener)
+        {
+            if (vfx::VFXRuntimeDiagnostics::instance().report(
+                    "VFX channel", "emit requested for an invalid channel id"))
+                vfLogWarning("Ignoring VFX channel emit for invalid channel id {}", id);
+            return;
+        }
+
+        const auto finiteVec3 = [](const glm::vec3& value) {
+            return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+        };
+        if (!finiteVec3(position))
+            return;
+        scale = vfx::channel::sanitizeScale(scale);
+
+        render::vfx::GPUVFXSpawnRequest request{};
+        request.position = position;
+        request.scale = scale;
+        request.direction = finiteVec3(direction)
+            ? vfx::channel::sanitizeDirection(direction)
+            : glm::vec3(0.0f);
+        request.packedColor = packedTint;
+        request.flags = hasTint ? render::vfx::SpawnRequestFlags::HasTint : 0u;
+
+        request.seed = vfx::channel::deriveRequestSeed(++channelEmitSequence, position);
+
+        it->second.pendingChannelRequests.push_back(request);
     }
 
     render::vfx::VFXEmitterConfig VFXSceneRenderer::loadConfigCached(const std::string& path)
@@ -445,6 +773,9 @@ namespace controllers
         instance.lodBias = 0.0f;
         instance.burstClampWarned = false;
         instance.dormant = false;
+        // VK-1503: a revived pooled one-shot starts unsuppressed (stale flag would
+        // otherwise soft-stop the fresh spawn).
+        instance.significanceEvicted = false;
 
         // Reset scalability-derived per-instance state, then re-apply for this spawn.
         instance.cullDistanceSqOverride = -1.0f;
@@ -548,6 +879,28 @@ namespace controllers
         auto it = instances.find(id);
         if (it != instances.end())
         {
+            if (it->second.channelListener)
+            {
+                // The listener lives in exactly one of the two registries (keyed by assetPath);
+                // erase the id-matched entry from whichever holds it (review #3).
+                for (auto* registry : {&channelsByPath, &gpuChildChannelsByPath})
+                {
+                    auto channelIt = registry->find(it->second.assetPath);
+                    if (channelIt != registry->end() && channelIt->second == id)
+                        registry->erase(channelIt);
+                }
+                channelOrder.erase(std::remove(channelOrder.begin(), channelOrder.end(), id),
+                                   channelOrder.end());
+                if (channelOrder.empty())
+                    channelRoundRobinStart = 0;
+                else
+                    channelRoundRobinStart %= channelOrder.size();
+
+                // VK-1501: return this listener's GPU event->child ring region to the pool.
+                if (it->second.gpuFastPathChild)
+                    childRegionAllocator.release(it->second.assetPath);
+            }
+
             // A dormant instance already released its distortion count when it was retired;
             // don't double-decrement when the pool later evicts and truly destroys it.
             if (!it->second.dormant && it->second.config.distortionEnabled && activeDistortionCount > 0)
@@ -624,6 +977,12 @@ namespace controllers
         activeDistortionCount = 0;
         instances.clear();
         emitterIndexToInstanceId.clear();
+        channelsByPath.clear();
+        gpuChildChannelsByPath.clear(); // review #3: GPU event->child registry
+        channelOrder.clear();
+        channelRoundRobinStart = 0;
+        channelEmitSequence = 0;
+        childRegionAllocator.reset(); // VK-1501: bulk clear bypasses per-listener region release
         configCache.clear();
         instancePool.clear();
 
@@ -856,11 +1215,85 @@ namespace controllers
         inst.firstFrame = false;
     }
 
+    void VFXSceneRenderer::applySignificanceCap()
+    {
+        // Disabled (default): clear any stray suppression once, then no-op. Guarantees
+        // byte-identical behavior with pre-VK-1503 when no scene-wide budget is set.
+        if (significanceBudget == 0)
+        {
+            if (significanceCapWasActive)
+            {
+                for (auto& [id, instance] : instances)
+                    instance.significanceEvicted = false;
+                significanceCapWasActive = false;
+            }
+            return;
+        }
+        significanceCapWasActive = true;
+
+        // Gather the live GPU population. distanceSq matches isEmitterDistanceCulled
+        // (emitter pos = worldTransform[3], no sqrt). Structurally-protected effects
+        // (loops / attached / camera-relative / channel listeners / Critical priority)
+        // are never evicted; only fire-and-forget one-shots are, so the existing reap
+        // loop finalises them once their particles drain.
+        significanceScratch.clear();
+        for (auto& [id, instance] : instances)
+        {
+            if (!instance.gpuDriven || !instance.active || instance.dormant)
+                continue;
+
+            const glm::vec3 emitterPos = glm::vec3(instance.worldTransform[3]);
+            const glm::vec3 diff = emitterPos - currentCameraPos;
+            const float distSq = glm::dot(diff, diff);
+
+            const bool evictable =
+                instance.autoDestroy && !instance.loop && !instance.cameraRelative &&
+                !instance.channelListener &&
+                instance.priority != services::VFXEmitterPriority::Critical;
+
+            vfx::VFXSignificanceCandidate cand;
+            cand.id = id;
+            cand.score = vfx::significanceScore(instance.config.significance, distSq);
+            cand.evictable = evictable;
+            cand.currentlyEvicted = instance.significanceEvicted;
+            significanceScratch.push_back(cand);
+        }
+
+        vfx::selectSignificanceEvictions(significanceScratch,
+                                         static_cast<int>(significanceBudget),
+                                         vfx::kSignificanceHysteresis,
+                                         significanceEvictScratch);
+
+        uint32_t evicted = 0;
+        for (size_t i = 0; i < significanceScratch.size(); ++i)
+        {
+            const bool ev = significanceEvictScratch[i] != 0;
+            auto it = instances.find(significanceScratch[i].id);
+            if (it != instances.end())
+                it->second.significanceEvicted = ev;
+            if (ev)
+                ++evicted;
+        }
+        significanceEvictedThisFrame = evicted;
+
+        if (evicted > 0 &&
+            vfx::VFXRuntimeDiagnostics::instance().report(
+                "VFX significance",
+                "live-instance budget saturated; least-significant one-shots soft-stopped"))
+        {
+            vfLogWarning("VFX significance cap saturated: {} instance(s) soft-stopped (budget {})",
+                         evicted, significanceBudget);
+        }
+    }
+
     void VFXSceneRenderer::update(float deltaTime)
     {
         // VK-1453: per-frame cull/throttle counters, reported via getBudgetStats.
         culledEmittersThisFrame = 0;
         throttledEmittersThisFrame = 0;
+        // VK-1503: reset here so it stays 0 when the cap is disabled or on the CPU path;
+        // applySignificanceCap() (inside updateGPU) sets it to the evicted count when active.
+        significanceEvictedThisFrame = 0;
 
         processPendingEmitterFrees();
 
@@ -919,7 +1352,9 @@ namespace controllers
         std::vector<VFXProxyLight> lights;
         for (const auto& [id, instance] : instances)
         {
-            if (!instance.active || !instance.config.lightEmissionEnabled)
+            // A channel has no single representative world origin; request positions
+            // are GPU-only, so an origin proxy light would be actively misleading.
+            if (!instance.active || instance.channelListener || !instance.config.lightEmissionEnabled)
                 continue;
             if (lights.size() >= MAX_PROXY_LIGHTS)
                 break;
@@ -1034,6 +1469,37 @@ namespace controllers
             gpuRibbonPipeline->updateCameraUBO(camera.view, camera.projection, camera.cameraPos,
                                                camera.time, camera.nearPlane, camera.farPlane);
         }
+
+        // VK-1502: the sim compute reads the same camera to project particles against last-frame depth.
+        if (gpuComputePipeline && gpuComputePipeline->isInitialized())
+        {
+            gpuComputePipeline->updateCameraUBO(camera.view, camera.projection, camera.cameraPos,
+                                                camera.time, camera.nearPlane, camera.farPlane);
+        }
+    }
+
+    bool VFXSceneRenderer::needsPrevFrameDepth() const
+    {
+        for (const auto& [id, instance] : instances)
+        {
+            if (instance.config.depthCollisionEnabled)
+                return true;
+        }
+        return false;
+    }
+
+    void VFXSceneRenderer::setPrevFrameDepth(const std::vector<vk::ImageView>& slots, uint32_t readSlot, bool active)
+    {
+        if (!gpuComputePipeline || !gpuComputePipeline->isInitialized())
+            return;
+
+        // Empty slots => bind the fallback (during ramp-up, or when depth collision is inactive).
+        std::array<vk::ImageView, core::MAX_FRAMES_IN_FLIGHT> views{};
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT && i < slots.size(); ++i)
+            views[i] = slots[i];
+
+        gpuComputePipeline->setPrevFrameDepthImages(views);
+        gpuComputePipeline->setDepthCollisionState(readSlot, active);
     }
 
     void VFXSceneRenderer::setSceneDepthImageView(vk::ImageView depthView)
@@ -1213,6 +1679,16 @@ namespace controllers
         stats.rawEventsThisFrame = lastFrameRawEventCount;
         stats.eventBudget = render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME;
         stats.eventsDropped = lastFrameRawEventCount > render::vfx::GPUVFXConstants::MAX_VFX_EVENTS_PER_FRAME;
+        stats.channelListeners = static_cast<uint32_t>(channelOrder.size());
+        stats.channelRawRequests = channelRawRequestsThisFrame;
+        stats.channelAcceptedRequests = channelAcceptedRequestsThisFrame;
+        stats.channelRingDroppedRequests = channelRingDroppedThisFrame;
+        stats.channelParticleDroppedRequests = channelParticleDroppedThisFrame;
+        stats.channelRequestBudget = render::vfx::GPUVFXConstants::MAX_SPAWN_REQUESTS;
+
+        // VK-1503 (M4 slice-c) — significance cap.
+        stats.evictedInstances = significanceEvictedThisFrame;
+        stats.maxLiveInstances = significanceBudget;
 
         return stats;
     }

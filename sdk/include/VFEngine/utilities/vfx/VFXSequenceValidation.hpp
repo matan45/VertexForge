@@ -160,19 +160,60 @@ namespace vfx::validation
 
         std::unordered_map<std::string, std::vector<int>> exactCueSteps;
         std::unordered_map<std::string, std::vector<int>> normalizedCueSteps;
+        std::unordered_map<int, std::vector<int>> variantGroups; // VK-1497
+        std::unordered_map<int, int> outputEdges;                // VK-1524: receiver step -> source step
 
         for (int i = 0; i < static_cast<int>(sequence.steps.size()); ++i)
         {
             const VFXSequenceStep& step = sequence.steps[static_cast<size_t>(i)];
 
-            if (!step.vfxRef.isValid())
+            // VK-1496 — kind-aware reference checks. Only VFX steps require a .vfVFX; a
+            // ref-less Sound/ScriptCue step is valid, so the pre-1.4 blanket Error would be a
+            // false positive (and would flip the whole report to hasErrors()).
+            switch (step.kind)
             {
-                detail::addStep(report, Severity::Error, i, step, "missing .vfVFX reference.");
-            }
-            else if (context.checkRefResolvable && step.vfxRef.resolve().empty())
-            {
-                detail::addStep(report, Severity::Warning, i, step,
-                                ".vfVFX reference does not currently resolve.");
+            case VFXStepKind::VFX:
+                if (!step.vfxRef.isValid())
+                {
+                    detail::addStep(report, Severity::Error, i, step, "missing .vfVFX reference.");
+                }
+                else if (context.checkRefResolvable && step.vfxRef.resolve().empty())
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    ".vfVFX reference does not currently resolve.");
+                }
+                break;
+            case VFXStepKind::Sound:
+                if (!step.audioRef.isValid())
+                {
+                    detail::addStep(report, Severity::Error, i, step, "missing .vfAudio reference.");
+                }
+                else if (context.checkRefResolvable && step.audioRef.resolve().empty())
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    ".vfAudio reference does not currently resolve.");
+                }
+                if (step.spatialized && step.localPosition == glm::vec3(0.0f) &&
+                    detail::trim(step.socketName).empty())
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    "spatialized sound has no local offset or socket; it plays at the combo origin.");
+                }
+                if (step.loop)
+                {
+                    detail::addStep(report, Severity::Info, i, step,
+                                    "loop is ignored for Sound steps in this version.");
+                }
+                break;
+            case VFXStepKind::ScriptCue:
+                if (detail::trim(step.emitCueName).empty())
+                {
+                    detail::addStep(report, Severity::Error, i, step, "ScriptCue step has an empty cue name.");
+                }
+                break;
+            default:
+                detail::addStep(report, Severity::Warning, i, step, "unknown step kind is ignored at runtime.");
+                break;
             }
 
             if (step.startTime < 0.0f)
@@ -184,6 +225,28 @@ namespace vfx::validation
             {
                 detail::addStep(report, Severity::Warning, i, step,
                                 "negative duration means no forced stop will be applied.");
+            }
+
+            // VK-1497 — per-step variety diagnostics.
+            if (step.probability < 0.0f || step.probability > 1.0f)
+            {
+                detail::addStep(report, Severity::Warning, i, step,
+                                "probability is outside [0,1]; it is treated as always/never play.");
+            }
+            if (step.variantGroup >= 0)
+            {
+                variantGroups[step.variantGroup].push_back(i);
+                if (step.probability != 1.0f)
+                {
+                    detail::addStep(report, Severity::Info, i, step,
+                                    "probability acts as a selection weight inside a variant group and "
+                                    "is ignored (uniform) in this version.");
+                }
+            }
+            else if (step.probability == 0.0f)
+            {
+                detail::addStep(report, Severity::Info, i, step,
+                                "probability 0 means this step never plays.");
             }
 
             const std::string trimmedCue = detail::trim(step.cueName);
@@ -235,7 +298,74 @@ namespace vfx::validation
                 }
             }
 
-            detail::validateOverrides(report, step.overrides, i, step);
+            if (step.kind == VFXStepKind::VFX) // overrides only apply to VFX children
+                detail::validateOverrides(report, step.overrides, i, step);
+
+            // VK-1524 — step-output event binding validation.
+            const bool isSource = !detail::trim(step.outputEventName).empty();
+            const bool isReceiver = (step.trigger == VFXStepTrigger::StepOutput);
+            if (isSource && isReceiver)
+            {
+                detail::addStep(report, Severity::Error, i, step,
+                                "a step cannot be both an event source and a StepOutput receiver.");
+            }
+            if (isReceiver)
+            {
+                if (!detail::trim(step.socketName).empty())
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    "StepOutput spawns are world-anchored; the socket is ignored.");
+                }
+                if (detail::trim(step.sourceEventName).empty())
+                {
+                    detail::addStep(report, Severity::Error, i, step,
+                                    "StepOutput binding has no source event name.");
+                }
+                const int src = step.sourceStepIndex;
+                if (src < 0 || src >= static_cast<int>(sequence.steps.size()))
+                {
+                    detail::addStep(report, Severity::Error, i, step,
+                                    "StepOutput binds to a missing source step (index " +
+                                        std::to_string(src) + ").");
+                }
+                else if (src == i)
+                {
+                    detail::addStep(report, Severity::Error, i, step,
+                                    "StepOutput binds to itself (self-dependency).");
+                }
+                else
+                {
+                    const VFXSequenceStep& source = sequence.steps[static_cast<size_t>(src)];
+                    if (source.kind != VFXStepKind::VFX)
+                    {
+                        detail::addStep(report, Severity::Error, i, step,
+                                        "source step " + std::to_string(src) +
+                                            " is not a VFX step; only VFX steps emit particle events.");
+                    }
+                    else if (detail::trim(source.outputEventName).empty())
+                    {
+                        detail::addStep(report, Severity::Error, i, step,
+                                        "source step " + std::to_string(src) + " publishes no named output.");
+                    }
+                    else if (source.outputEventName != step.sourceEventName)
+                    {
+                        detail::addStep(report, Severity::Error, i, step,
+                                        "source step " + std::to_string(src) +
+                                            " does not publish an event named '" + step.sourceEventName + "'.");
+                    }
+                    outputEdges[i] = src; // for the post-loop cycle pass
+                }
+                if (step.eventConsumption == VFXEventConsumption::EveryEvent && step.eventBudget == 0)
+                {
+                    detail::addStep(report, Severity::Warning, i, step,
+                                    "EveryEvent consumption with an event budget of 0 never spawns.");
+                }
+                if (step.inheritNormal)
+                {
+                    detail::addStep(report, Severity::Info, i, step,
+                                    "normal inheritance has no producer yet and is ignored this version.");
+                }
+            }
         }
 
         for (const auto& [cue, steps] : exactCueSteps)
@@ -244,6 +374,49 @@ namespace vfx::validation
             {
                 detail::add(report, Severity::Info, steps.front(),
                             "Cue '" + cue + "' fans out to " + std::to_string(steps.size()) + " steps.");
+            }
+        }
+
+        // VK-1497 — a variant group with a single member always plays; the author probably
+        // intended two or more mutually-exclusive variants.
+        for (const auto& [group, members] : variantGroups)
+        {
+            if (members.size() == 1)
+            {
+                detail::add(report, Severity::Info, members.front(),
+                            "Variant group " + std::to_string(group) +
+                                " has a single member; it always plays.");
+            }
+        }
+
+        // VK-1524 — dependency-cycle detection over receiver->source edges. Each receiver has at
+        // most one outgoing edge (a functional graph), so a cycle is found by walking each chain
+        // and revisiting a node already on the current path. Bipartite-by-construction today (a
+        // source is Time/Cue, a receiver is StepOutput, and dual-role is an Error above), so this
+        // is defensive insurance that also surfaces a clear "cycle" diagnostic if the model relaxes.
+        {
+            std::unordered_set<int> settled;
+            for (const auto& [start, _] : outputEdges)
+            {
+                if (settled.count(start))
+                    continue;
+                std::unordered_set<int> path;
+                std::vector<int> chain;
+                int node = start;
+                while (outputEdges.count(node) && !path.count(node) && !settled.count(node))
+                {
+                    path.insert(node);
+                    chain.push_back(node);
+                    node = outputEdges.at(node);
+                }
+                if (outputEdges.count(node) && path.count(node))
+                {
+                    detail::addStep(report, Severity::Error, node,
+                                    sequence.steps[static_cast<size_t>(node)],
+                                    "is part of a StepOutput dependency cycle.");
+                }
+                for (int n : chain)
+                    settled.insert(n);
             }
         }
 
@@ -277,6 +450,26 @@ namespace vfx::validation
             {
                 detail::add(report, Severity::Warning, -1,
                             "Event marker " + std::to_string(m) + " has an empty cue name.");
+            }
+        }
+
+        // VK-1498 — stableLoop only has an effect when there is VK-1497 variety to keep stable.
+        if (sequence.stableLoop)
+        {
+            bool hasVariety = !variantGroups.empty();
+            for (const auto& step : sequence.steps)
+            {
+                if (step.probability < 1.0f)
+                {
+                    hasVariety = true;
+                    break;
+                }
+            }
+            if (!hasVariety)
+            {
+                detail::add(report, Severity::Info, -1,
+                            "Stable Loop is set but no step has probability < 1 or a variant group; "
+                            "it has no effect.");
             }
         }
 

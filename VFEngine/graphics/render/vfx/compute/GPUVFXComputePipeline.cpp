@@ -3,7 +3,10 @@
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
+#include "../../../core/BufferUtilities.hpp"
+#include "../../../core/ImageUtilities.hpp"
 #include "print/Log.hpp"
+#include <cstring>
 
 namespace render::vfx
 {
@@ -29,6 +32,7 @@ namespace render::vfx
         createComputePipeline();
         createDescriptorPool();
         allocateDescriptorSet();
+        createDepthCollisionResources(); // VK-1502
 
         initialized = true;
     }
@@ -41,6 +45,31 @@ namespace render::vfx
         }
 
         vk::Device vkDevice = device.getLogicalDevice();
+
+        // VK-1502: depth-buffer collision resources.
+        if (fallbackDepthImageView)
+        {
+            vkDevice.destroyImageView(fallbackDepthImageView);
+            fallbackDepthImageView = nullptr;
+        }
+        if (fallbackDepthImage)
+        {
+            vkDevice.destroyImage(fallbackDepthImage);
+            fallbackDepthImage = nullptr;
+            device.getMemoryManager().free(fallbackDepthAllocation);
+        }
+        if (depthSampler)
+        {
+            vkDevice.destroySampler(depthSampler);
+            depthSampler = nullptr;
+        }
+        if (cameraSSBO)
+        {
+            vkDevice.destroyBuffer(cameraSSBO);
+            cameraSSBO = nullptr;
+            device.getMemoryManager().free(cameraSSBOAllocation);
+            cameraSSBOMapped = nullptr;
+        }
 
         if (computePipeline)
         {
@@ -75,16 +104,25 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        constexpr uint32_t BINDING_COUNT = 10;
+        // Bindings 0-11 are storage buffers (11 = childSpawnBuffer, VK-1501). VK-1502 adds binding 12 =
+        // camera as a read-only SSBO, and binding 13 = last-frame depth (combined-image-sampler array,
+        // one element per frame-in-flight).
+        constexpr uint32_t STORAGE_BINDING_COUNT = 13; // 0-11 buffers + 12 camera SSBO
+        constexpr uint32_t BINDING_COUNT = 14;         // + 13 depth sampler array
         std::array<vk::DescriptorSetLayoutBinding, BINDING_COUNT> bindings{};
 
-        for (uint32_t i = 0; i < BINDING_COUNT; ++i)
+        for (uint32_t i = 0; i < STORAGE_BINDING_COUNT; ++i)
         {
             bindings[i].binding = i;
             bindings[i].descriptorType = vk::DescriptorType::eStorageBuffer;
             bindings[i].descriptorCount = 1;
             bindings[i].stageFlags = vk::ShaderStageFlagBits::eCompute;
         }
+
+        bindings[13].binding = 13; // VK-1502: prevFrameDepth[MAX_FRAMES_IN_FLIGHT]
+        bindings[13].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[13].descriptorCount = core::MAX_FRAMES_IN_FLIGHT;
+        bindings[13].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
     }
@@ -138,11 +176,13 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 10;
+        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
+        poolSizes[0].descriptorCount = 13; // 0-11 buffers + 12 camera SSBO (VK-1502)
+        poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[1].descriptorCount = core::MAX_FRAMES_IN_FLIGHT; // 13 = prevFrameDepth[] (VK-1502)
 
-        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()));
     }
 
     void GPUVFXComputePipeline::allocateDescriptorSet()
@@ -169,7 +209,9 @@ namespace render::vfx
             buffers.ribbonHeadBuffer != cachedBuffers.ribbonHeadBuffer ||
             buffers.eventBuffer != cachedBuffers.eventBuffer ||
             buffers.colliderBuffer != cachedBuffers.colliderBuffer ||
-            buffers.terrainBuffer != cachedBuffers.terrainBuffer)
+            buffers.terrainBuffer != cachedBuffers.terrainBuffer ||
+            buffers.spawnRequestBuffer != cachedBuffers.spawnRequestBuffer ||
+            buffers.childSpawnBuffer != cachedBuffers.childSpawnBuffer)
         {
             cachedBuffers = buffers;
             descriptorsNeedUpdate = true;
@@ -187,8 +229,8 @@ namespace render::vfx
 
         // Buffers ordered by binding index: particle(0), config(1), state(2),
         // drawCommand(3), lut(4), ribbonRing(5), ribbonHead(6), event(7),
-        // collider(8), terrain(9)
-        std::array<vk::Buffer, 10> bufferHandles = {
+        // collider(8), terrain(9), spawnRequest(10), childSpawn(11), camera SSBO(12, VK-1502)
+        std::array<vk::Buffer, 13> bufferHandles = {
             cachedBuffers.particleBuffer,
             cachedBuffers.configBuffer,
             cachedBuffers.stateBuffer,
@@ -198,13 +240,16 @@ namespace render::vfx
             cachedBuffers.ribbonHeadBuffer,
             cachedBuffers.eventBuffer,
             cachedBuffers.colliderBuffer,
-            cachedBuffers.terrainBuffer
+            cachedBuffers.terrainBuffer,
+            cachedBuffers.spawnRequestBuffer,
+            cachedBuffers.childSpawnBuffer,
+            cameraSSBO
         };
 
-        std::array<vk::DescriptorBufferInfo, 10> bufferInfos{};
-        std::array<vk::WriteDescriptorSet, 10> writes{};
+        std::array<vk::DescriptorBufferInfo, 13> bufferInfos{};
+        std::array<vk::WriteDescriptorSet, 14> writes{};
 
-        for (uint32_t i = 0; i < 10; ++i)
+        for (uint32_t i = 0; i < 13; ++i)
         {
             bufferInfos[i].buffer = bufferHandles[i];
             bufferInfos[i].offset = 0;
@@ -217,9 +262,103 @@ namespace render::vfx
             writes[i].pBufferInfo = &bufferInfos[i];
         }
 
+        // VK-1502: last-frame depth sampler array (binding 13). Bind the real prevFrameDepth views when
+        // available, else the 1x1 fallback (value 1.0 = far => "no hit"). Layout is eShaderReadOnlyOptimal
+        // for both (fallback is transitioned once at creation; prevFrameDepth is left in it by DepthCopy).
+        std::array<vk::DescriptorImageInfo, core::MAX_FRAMES_IN_FLIGHT> depthInfos{};
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            depthInfos[i].imageView = boundDepthViews[i] ? boundDepthViews[i] : fallbackDepthImageView;
+            depthInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            depthInfos[i].sampler = depthSampler;
+        }
+
+        writes[13].dstSet = descriptorSet;
+        writes[13].dstBinding = 13;
+        writes[13].descriptorCount = core::MAX_FRAMES_IN_FLIGHT;
+        writes[13].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        writes[13].pImageInfo = depthInfos.data();
+
         vkDevice.updateDescriptorSets(writes, {});
 
         descriptorsNeedUpdate = false;
+    }
+
+    void GPUVFXComputePipeline::createDepthCollisionResources()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Camera SSBO (host-visible, mapped) bound at binding 12; the renderer refreshes it each frame.
+        core::BufferInfoRequest cameraRequest(vkDevice, device.getPhysicalDevice());
+        cameraRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        cameraRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        cameraRequest.size = sizeof(GPUVFXCameraUBO);
+        core::BufferUtilities::createBuffer(cameraRequest, cameraSSBO, cameraSSBOAllocation, device.getMemoryManager());
+        cameraSSBOMapped = cameraSSBOAllocation.mappedPtr;
+        if (cameraSSBOMapped)
+        {
+            std::memcpy(cameraSSBOMapped, &cpuCamera, sizeof(cpuCamera)); // depthCollisionActive defaults to 0 (off)
+        }
+
+        depthSampler = core::ImageUtilities::createVFXDepthSampler(vkDevice);
+
+        // 1x1 fallback depth (value 1.0 = far). Bound whenever no real last-frame depth is available so the
+        // binding-13 sampler array is always valid (the set layout is UpdateAfterBind but not PartiallyBound).
+        core::ImageInfoRequest fallbackInfo(
+            vkDevice, device.getPhysicalDevice(),
+            1, 1, 1, 1,
+            vk::Format::eR32Sfloat,
+            vk::ImageTiling::eOptimal,
+            vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+            vk::MemoryPropertyFlagBits::eDeviceLocal);
+        core::ImageUtilities::createImage(fallbackInfo, fallbackDepthImage, fallbackDepthAllocation, device.getMemoryManager());
+
+        core::ImageViewInfoRequest fallbackView(
+            vkDevice, fallbackDepthImage,
+            vk::Format::eR32Sfloat,
+            vk::ImageAspectFlagBits::eColor,
+            vk::ImageViewType::e2D);
+        core::ImageUtilities::createImageView(fallbackView, fallbackDepthImageView);
+
+        const float farValue = 1.0f; // uploadStagedPixelData leaves the image in eShaderReadOnlyOptimal
+        core::ImageUtilities::uploadStagedPixelData(device, fallbackDepthImage, &farValue, sizeof(farValue), 1, 1);
+    }
+
+    void GPUVFXComputePipeline::updateCameraUBO(
+        const glm::mat4& view, const glm::mat4& projection,
+        const glm::vec3& cameraPos, float time, float nearPlane, float farPlane)
+    {
+        // Update only the view/projection fields on the CPU shadow; the depth-collision state fields
+        // (depthCollisionActive / prevDepthSlot) are owned by setDepthCollisionState and preserved here.
+        cpuCamera.view = view;
+        cpuCamera.projection = projection;
+        cpuCamera.cameraPos = cameraPos;
+        cpuCamera.time = time;
+        cpuCamera.nearPlane = nearPlane;
+        cpuCamera.farPlane = farPlane;
+        if (cameraSSBOMapped)
+        {
+            std::memcpy(cameraSSBOMapped, &cpuCamera, sizeof(cpuCamera));
+        }
+    }
+
+    void GPUVFXComputePipeline::setDepthCollisionState(uint32_t prevDepthSlot, bool active)
+    {
+        cpuCamera.prevDepthSlot = prevDepthSlot;
+        cpuCamera.depthCollisionActive = active ? 1u : 0u;
+        if (cameraSSBOMapped)
+        {
+            std::memcpy(cameraSSBOMapped, &cpuCamera, sizeof(cpuCamera));
+        }
+    }
+
+    void GPUVFXComputePipeline::setPrevFrameDepthImages(const std::array<vk::ImageView, core::MAX_FRAMES_IN_FLIGHT>& views)
+    {
+        if (views != boundDepthViews)
+        {
+            boundDepthViews = views;
+            descriptorsNeedUpdate = true; // rewrite binding 13 on the next dispatch (image identity changed)
+        }
     }
 
     void GPUVFXComputePipeline::dispatch(
@@ -227,7 +366,10 @@ namespace render::vfx
         uint32_t emitterIndex,
         uint32_t particleCount,
         uint32_t frameNumber,
-        uint32_t emitterCount)
+        uint32_t emitterCount,
+        uint32_t channelRequestBase,
+        uint32_t particlesPerRequest,
+        uint32_t gpuChildRegion)
     {
         if (!initialized || particleCount == 0)
         {
@@ -247,6 +389,9 @@ namespace render::vfx
         pushConstants.emitterIndex = emitterIndex;
         pushConstants.frameNumber = frameNumber;
         pushConstants.emitterCount = emitterCount;
+        pushConstants.channelRequestBase = channelRequestBase;
+        pushConstants.particlesPerRequest = particlesPerRequest;
+        pushConstants.gpuChildRegion = gpuChildRegion;
 
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
                           0, sizeof(GPUVFXComputePushConstants), &pushConstants);
@@ -262,7 +407,7 @@ namespace render::vfx
         vk::Buffer eventBuffer)
     {
         std::vector<vk::BufferMemoryBarrier> barriers;
-        barriers.reserve(4);
+        barriers.reserve(6);
 
         vk::BufferMemoryBarrier stateBarrier{};
         stateBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -299,12 +444,64 @@ namespace render::vfx
             barriers.push_back(eventBarrier);
         }
 
+        if (cachedBuffers.spawnRequestBuffer)
+        {
+            vk::BufferMemoryBarrier spawnRequestBarrier{};
+            spawnRequestBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            spawnRequestBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            spawnRequestBarrier.buffer = cachedBuffers.spawnRequestBuffer;
+            spawnRequestBarrier.offset = 0;
+            spawnRequestBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(spawnRequestBarrier);
+        }
+
+        if (cachedBuffers.childSpawnBuffer)
+        {
+            // VK-1501: the counter reset (fillBuffer) must be visible before parents atomicAdd this
+            // frame's write-half counters; children also read (read-half) so include ShaderRead.
+            vk::BufferMemoryBarrier childSpawnBarrier{};
+            childSpawnBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            childSpawnBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+            childSpawnBarrier.buffer = cachedBuffers.childSpawnBuffer;
+            childSpawnBarrier.offset = 0;
+            childSpawnBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(childSpawnBarrier);
+        }
+
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,
             vk::PipelineStageFlagBits::eComputeShader,
             {},
             {},
             barriers,
+            {}
+        );
+    }
+
+    void GPUVFXComputePipeline::insertChildSpawnComputeBarrier(vk::CommandBuffer cmd)
+    {
+        // VK-1501: cross-frame RAW. The previous frame's parent appends (ShaderWrite) into what is now
+        // the read half must be visible to this frame's child-listener reads (ShaderRead). Consecutive
+        // frames can overlap on the GPU, so submission order alone is insufficient -- an explicit
+        // compute->compute dependency is required. This runs once before the dispatch loop.
+        if (!cachedBuffers.childSpawnBuffer)
+        {
+            return;
+        }
+
+        vk::BufferMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.buffer = cachedBuffers.childSpawnBuffer;
+        barrier.offset = 0;
+        barrier.size = VK_WHOLE_SIZE;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {},
+            {},
+            {barrier},
             {}
         );
     }
@@ -390,7 +587,7 @@ namespace render::vfx
         vk::Buffer drawCommandBuffer,
         vk::Buffer particleBuffer)
     {
-        std::array<vk::BufferMemoryBarrier, 3> barriers{};
+        std::vector<vk::BufferMemoryBarrier> barriers(3);
 
         barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -409,6 +606,30 @@ namespace render::vfx
         barriers[2].buffer = particleBuffer;
         barriers[2].offset = 0;
         barriers[2].size = VK_WHOLE_SIZE;
+
+        if (cachedBuffers.spawnRequestBuffer)
+        {
+            vk::BufferMemoryBarrier spawnRequestBarrier{};
+            spawnRequestBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+            spawnRequestBarrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+            spawnRequestBarrier.buffer = cachedBuffers.spawnRequestBuffer;
+            spawnRequestBarrier.offset = 0;
+            spawnRequestBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(spawnRequestBarrier);
+        }
+
+        if (cachedBuffers.childSpawnBuffer)
+        {
+            // VK-1501: WAR -- the previous frame's child reads and parent writes must complete before
+            // this frame's fillBuffer counter reset (TransferWrite) overwrites the write-half counters.
+            vk::BufferMemoryBarrier childSpawnBarrier{};
+            childSpawnBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+            childSpawnBarrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+            childSpawnBarrier.buffer = cachedBuffers.childSpawnBuffer;
+            childSpawnBarrier.offset = 0;
+            childSpawnBarrier.size = VK_WHOLE_SIZE;
+            barriers.push_back(childSpawnBarrier);
+        }
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,

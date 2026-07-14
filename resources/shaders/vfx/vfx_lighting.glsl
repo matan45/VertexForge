@@ -94,4 +94,49 @@ vec3 evaluateVFXLighting(
     return mix(baseColor, litColor, lightingInfluence);
 }
 
+// VK-1526: PBR lighting for mesh particles that reference a .vfMat/.vfMatInstance. Same clustered-light
+// walk as evaluateVFXLighting, but evaluates the engine's canonical Cook-Torrance BRDF from
+// lighting_functions.glsl (evaluateDirectionalLight/Point/Spot) so mesh shards match a static mesh using
+// that material. Prerequisites match evaluateVFXLighting (light sets 1-3 + cluster helpers); every includer
+// of this file already includes lighting_functions.glsl (evaluateVFXLighting depends on it too).
+vec3 evaluateVFXPBRLighting(
+    vec3 worldPos,
+    vec3 N,
+    vec3 V,
+    vec3 albedo,
+    float metallic,
+    float roughness,
+    vec3 F0,
+    float ao,
+    float viewDepth,
+    float ambientAmount)
+{
+    vec3 color = albedo * ambientAmount * ao;
+
+    // Directional lights
+    for (uint i = 0u; i < lightCounts.directionalCount && i < 4u; i++) {
+        color += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, directionalLights[i]);
+    }
+
+    // Clustered point + spot lights
+    uint clusterIdx = getClusterIndex(clusterParams, gl_FragCoord.xy, viewDepth);
+    ClusterLightData cluster = clusterLightGrid[clusterIdx];
+    uint pointCount = getClusterPointLightCount(cluster);
+    uint spotCount = getClusterSpotLightCount(cluster);
+
+    uint maxPts = min(pointCount, 8u);
+    for (uint i = 0u; i < maxPts; i++) {
+        uint lightIdx = lightIndexList[cluster.offset + i] & LIGHT_INDEX_MASK;
+        color += evaluatePointLight(worldPos, N, V, albedo, metallic, roughness, F0, pointLights[lightIdx]);
+    }
+
+    uint maxSpts = min(spotCount, 4u);
+    for (uint i = 0u; i < maxSpts; i++) {
+        uint lightIdx = lightIndexList[cluster.offset + pointCount + i] & LIGHT_INDEX_MASK;
+        color += evaluateSpotLight(worldPos, N, V, albedo, metallic, roughness, F0, spotLights[lightIdx]);
+    }
+
+    return color;
+}
+
 #endif // VFX_LIGHTING_GLSL

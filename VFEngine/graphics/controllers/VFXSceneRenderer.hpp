@@ -4,7 +4,9 @@
 #include "../render/vfx/compute/GPUVFXTypes.hpp"
 #include "../../services/data/VFXTypes.hpp"
 #include "vfx/VFXScalability.hpp"
+#include "vfx/VFXSignificance.hpp" // VK-1503: significance-cap scorer / top-N selection
 #include "vfx/VFXHandlePool.hpp"
+#include "vfx/VFXChildSpawn.hpp" // VK-1501: GPU event->child region allocator + slot packing
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -119,6 +121,28 @@ namespace controllers
         float cullDistanceSqOverride = -1.0f; // <0 => use the global VFX cull distance
         int updateInterval = 1;               // >1 => simulate only every Nth frame
         int updatePhase = 0;                  // frame offset so throttled emitters spread out
+
+        // VK-1503 (M4 slice-c) — significance-cap soft-stop flag. When true the cap has
+        // suppressed this instance's emission this frame; existing particles still
+        // simulate and fade. Sole writer is applySignificanceCap(); sole reader is the
+        // spawn gate in updateGPU/updateCPU.
+        bool significanceEvicted = false;
+
+        // VK-1500: a channel listener owns one large GPU slice and consumes batched
+        // world-space spawn requests instead of running the authored emission schedule.
+        bool channelListener = false;
+        uint32_t channelParticlesPerRequest = 0;
+        uint32_t channelRequestBase = 0;
+        uint32_t channelAcceptedRequests = 0;
+        std::vector<render::vfx::GPUVFXSpawnRequest> pendingChannelRequests;
+
+        // VK-1501: GPU event->child fast path.
+        // Parent: the packed eventChildSlot (child regions + inherit bits) marshalled into the GPU
+        // emitter config; 0xFFFFFFFF = no fast-path child on any event.
+        uint32_t resolvedEventChildSlot = 0xFFFFFFFFu;
+        // Listener: set when this channel listener is fed by GPU event appends (owns one child region).
+        bool gpuFastPathChild = false;
+        uint32_t gpuChildRegion = 0xFFFFFFFFu; // 0xFFFFFFFF = not a GPU event->child listener
     };
 
     class VFXSceneRenderer
@@ -144,6 +168,31 @@ namespace controllers
 
         std::unordered_map<VFXInstanceId, VFXRuntimeInstance> instances;
         std::unordered_map<uint32_t, VFXInstanceId> emitterIndexToInstanceId;
+
+        // Stable listener ordering makes global-ring overflow deterministic. The
+        // rotating start index prevents one busy channel from starving later ones.
+        std::unordered_map<std::string, VFXInstanceId> channelsByPath;
+        // VK-1501 (review #3): GPU event->child listeners are keyed in a SEPARATE registry from
+        // script channels (VK-1500) so the two never dedup onto one listener. A single listener can
+        // serve only one spawn source per frame (its GPU child region OR channelAcceptedRequests),
+        // so a shared instance silently zeroed the other role's spawns.
+        std::unordered_map<std::string, VFXInstanceId> gpuChildChannelsByPath;
+        std::vector<VFXInstanceId> channelOrder;
+        // VK-1501: assigns each fast-path child channel (by asset path) one region in the GPU
+        // event->child ring; released when the owning channel listener is destroyed.
+        vfx::child::VFXChildRegionAllocator childRegionAllocator;
+        // review #14: child-ring regions referenced by a live fast-path parent this frame (and
+        // last, for the binding-11 ping-pong — a parent writes child requests one frame before the
+        // listener consumes them). A GPU event->child listener whose region is in neither set has no
+        // live parent that can feed it, so it skips its full-region dispatch that frame.
+        std::unordered_set<uint32_t> activeChildRegions;
+        std::unordered_set<uint32_t> prevActiveChildRegions;
+        size_t channelRoundRobinStart = 0;
+        uint64_t channelEmitSequence = 0;
+        uint32_t channelRawRequestsThisFrame = 0;
+        uint32_t channelAcceptedRequestsThisFrame = 0;
+        uint32_t channelRingDroppedThisFrame = 0;
+        uint32_t channelParticleDroppedThisFrame = 0;
 
         // VK-1460: emitter slots whose draw command was left live last frame. Used by the
         // selective draw-command clear in recordComputeCommands so a temporally-throttled
@@ -199,6 +248,14 @@ namespace controllers
         uint32_t culledEmittersThisFrame = 0;
         uint32_t throttledEmittersThisFrame = 0;
 
+        // VK-1503 (M4 slice-c) — significance cap. Budget 0 => disabled (byte-identical
+        // with pre-VK-1503 behavior). Scratch buffers are reused every frame (no alloc).
+        uint32_t significanceBudget = 0;           // max live effect instances (0 = unlimited)
+        uint32_t significanceEvictedThisFrame = 0; // soft-stopped this frame (debug stat)
+        bool significanceCapWasActive = false;     // clears stray flags once when disabled
+        std::vector<vfx::VFXSignificanceCandidate> significanceScratch;
+        std::vector<char> significanceEvictScratch;
+
         glm::vec4 frustumPlanes[6]{};
         bool frustumPlanesValid = false;
 
@@ -234,6 +291,14 @@ namespace controllers
         void setGPUDrivenEnabled(bool enabled);
 
         VFXInstanceId createInstance(const VFXRuntimeParams& params);
+        VFXInstanceId createChannel(const std::string& path, uint32_t particlesPerRequest = 0,
+                                    bool forGpuChild = false);
+        void emitToChannel(VFXInstanceId id,
+                           const glm::vec3& position,
+                           float scale,
+                           const glm::vec3& direction,
+                           uint32_t packedTint,
+                           bool hasTint);
         void destroyInstance(VFXInstanceId id);
         void destroyAllInstances();
 
@@ -259,6 +324,12 @@ namespace controllers
         void setCamera(const services::VFXCameraParams& camera);
 
         void setSceneDepthImageView(vk::ImageView depthView);
+
+        // VK-1502: depth-buffer collision. needsPrevFrameDepth() is true when any instance has depth
+        // collision enabled; setPrevFrameDepth feeds the last-frame depth views + active slot to the sim.
+        bool needsPrevFrameDepth() const;
+        void setPrevFrameDepth(const std::vector<vk::ImageView>& slots, uint32_t readSlot, bool active);
+
         void setSceneColliders(const std::vector<render::vfx::GPUCollider>& colliders);
         void setTerrainHeightfield(const render::vfx::GPUTerrainHeightfield& header,
                                     std::vector<float> heights);
@@ -288,6 +359,11 @@ namespace controllers
         // VK-1453 (Phase 4) — global VFX quality tier. Selects the scalability level for
         // each instance at creation; existing instances are not retroactively re-scaled.
         void setQualityTier(vfx::VFXQualityTier tier) { currentTier = tier; }
+
+        // VK-1503 (M4 slice-c) — scene-wide live-instance budget for the significance
+        // cap. 0 disables the cap (default; existing scenes are byte-identical).
+        void setSignificanceBudget(uint32_t budget) { significanceBudget = budget; }
+        uint32_t getSignificanceBudget() const { return significanceBudget; }
 
         // Camera + cull-state snapshot so the combo service can pre-cull off-screen
         // fire-and-forget effects before spawning them.
@@ -332,6 +408,15 @@ namespace controllers
             uint32_t rawEventsThisFrame = 0;
             uint32_t eventBudget = 0;
             bool eventsDropped = false;
+            uint32_t channelListeners = 0;
+            uint32_t channelRawRequests = 0;
+            uint32_t channelAcceptedRequests = 0;
+            uint32_t channelRingDroppedRequests = 0;
+            uint32_t channelParticleDroppedRequests = 0;
+            uint32_t channelRequestBudget = 0;
+            // VK-1503 (M4 slice-c)
+            uint32_t evictedInstances = 0; // instances soft-stopped by the significance cap this frame
+            uint32_t maxLiveInstances = 0; // active significance budget (0 => unlimited)
         };
 
         VFXBudgetStats getBudgetStats() const;
@@ -367,6 +452,10 @@ namespace controllers
 
         bool initGPUMode(vk::Format colorFormat, vk::Format depthFormat);
         void cleanupGPUMode();
+
+        // VK-1526: resolve an optional PBR material (.vfMat/.vfMatInstance) and push it to a mesh emitter,
+        // or clear it (empty path => the single-.vfImage path). Shared by createInstance + the revive path.
+        void applyMeshMaterial(uint32_t emitterIndex, const std::string& materialPath);
         void updateGPU(float deltaTime);
         void recordGPUDrawCommands(vk::CommandBuffer cmd);
         void processPendingEmitterFrees();
@@ -378,6 +467,10 @@ namespace controllers
         void updateInstanceLOD(VFXRuntimeInstance& instance) const;
         VFXInstanceId findLowestPriorityInstance(services::VFXEmitterPriority belowPriority) const;
 
+        // VK-1503 (M4 slice-c) — rank live instances by significance and soft-stop the
+        // least-significant fire-and-forget one-shots over the scene-wide budget.
+        void applySignificanceCap();
+
         // VK-1453 (Phase 4) helpers.
         render::vfx::VFXEmitterConfig loadConfigCached(const std::string& path);
         uint32_t pickInstanceSeed(uint32_t explicitSeed);
@@ -387,6 +480,11 @@ namespace controllers
                                    const render::vfx::VFXEmitterConfig& baseConfig,
                                    const vfx::VFXScalabilityLevel& level);
         void retireInstanceToDormant(VFXInstanceId id);
+
+        // VK-1501: resolve a GPU-driven parent's OnDeath/OnCollision fast-path children into
+        // persistent channel listeners + ring regions, and pack the result into
+        // resolvedEventChildSlot. No-op for channel listeners and CPU-simulated instances.
+        void resolveFastPathChildren(VFXInstanceId parentId);
 
         render::vfx::GPUEmitterConfig toGPUConfig(
             const render::vfx::VFXEmitterConfig& cpuConfig,

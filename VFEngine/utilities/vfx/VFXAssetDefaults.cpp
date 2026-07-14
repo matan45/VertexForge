@@ -32,6 +32,10 @@ namespace vfx
                 "looping", VFXPropertyType::Bool,
                 EmitterDefaults::LOOPING, 0.0f, 1.0f
             };
+            node.properties["loopDuration"] = VFXProperty{
+                "loopDuration", VFXPropertyType::Float,
+                EmitterDefaults::LOOP_DURATION, 0.0f, 60.0f
+            };
             node.properties["inheritVelocityRatio"] = VFXProperty{
                 "inheritVelocityRatio", VFXPropertyType::Float,
                 EmitterDefaults::INHERIT_VELOCITY_RATIO, 0.0f, 1.0f
@@ -132,6 +136,12 @@ namespace vfx
             };
             node.properties["meshPath"] = VFXProperty{
                 "meshPath", VFXPropertyType::String,
+                std::string(""), 0.0f, 0.0f
+            };
+            // VK-1526: optional PBR material (.vfMat / .vfMatInstance) for mesh particles. Empty => the
+            // legacy single-.vfImage path. Stored as an asset path (auto-recorded into .vfmeta deps).
+            node.properties["materialRef"] = VFXProperty{
+                "materialRef", VFXPropertyType::String,
                 std::string(""), 0.0f, 0.0f
             };
             // VK-1476: mesh-particle orientation (only used when renderMode == MeshParticle).
@@ -244,6 +254,19 @@ namespace vfx
             node.properties["collisionLifetimeLoss"] = VFXProperty{
                 "collisionLifetimeLoss", VFXPropertyType::Float,
                 EmitterDefaults::COLLISION_LIFETIME_LOSS, 0.0f, 1.0f
+            };
+            // VK-1502: depth-buffer collision (additive; older .vfVFX fall back to these defaults).
+            node.properties["depthCollisionEnabled"] = VFXProperty{
+                "depthCollisionEnabled", VFXPropertyType::Bool,
+                EmitterDefaults::DEPTH_COLLISION_ENABLED, 0.0f, 1.0f
+            };
+            node.properties["depthCollisionThickness"] = VFXProperty{
+                "depthCollisionThickness", VFXPropertyType::Float,
+                EmitterDefaults::DEPTH_COLLISION_THICKNESS, 0.0f, 5.0f
+            };
+            node.properties["depthCollisionNormalInfluence"] = VFXProperty{
+                "depthCollisionNormalInfluence", VFXPropertyType::Float,
+                EmitterDefaults::DEPTH_COLLISION_NORMAL_INFLUENCE, 0.0f, 1.0f
             };
             node.properties["distortionEnabled"] = VFXProperty{
                 "distortionEnabled", VFXPropertyType::Bool,

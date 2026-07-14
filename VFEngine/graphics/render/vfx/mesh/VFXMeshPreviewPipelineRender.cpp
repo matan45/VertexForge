@@ -1,5 +1,6 @@
 #include "VFXMeshPreviewPipeline.hpp"
 #include "../../mesh/MeshGPUCache.hpp"
+#include "../compute/GPUVFXTypes.hpp" // VK-1526: MeshMaterialFlags
 #include "../../../core/Device.hpp"
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/OffScreen.hpp"
@@ -77,6 +78,88 @@ namespace render::vfx
             currentTexturePath.clear();
         }
 
+        updateDescriptorSet();
+    }
+
+    void VFXMeshPreviewPipeline::setMaterial(const ResolvedVFXMeshMaterial& resolved)
+    {
+        // Scalars/tint are cheap — always mirror them into the push constant.
+        pushConstants.metallic = resolved.metallic;
+        pushConstants.roughness = resolved.roughness;
+        pushConstants.ao = resolved.ao;
+        pushConstants.emissionStrength = resolved.emissionStrength;
+        pushConstants.albedoTintR = resolved.albedoTint.r;
+        pushConstants.albedoTintG = resolved.albedoTint.g;
+        pushConstants.albedoTintB = resolved.albedoTint.b;
+        pushConstants.albedoTintA = resolved.albedoTint.a;
+
+        // Recompute the material flags from whichever maps are currently loaded (+ ORM eligibility).
+        auto computeFlags = [&]() {
+            uint32_t flags = MeshMaterialFlags::HasMaterial;
+            if (matNormalTexture)                    flags |= MeshMaterialFlags::HasNormal;
+            if (resolved.usesORM && matOrmTexture)   flags |= MeshMaterialFlags::UsesORM;
+            if (matEmissiveTexture)                  flags |= MeshMaterialFlags::HasEmissive;
+            return flags;
+        };
+
+        if (!resolved.hasMaterial)
+        {
+            pushConstants.materialFlags = 0; // legacy single-.vfImage path
+            if (matAlbedoTexture || matNormalTexture || matOrmTexture || matEmissiveTexture || !currentMaterialKey.empty())
+            {
+                device.getLogicalDevice().waitIdle();
+                matAlbedoTexture.reset();
+                matNormalTexture.reset();
+                matOrmTexture.reset();
+                matEmissiveTexture.reset();
+                currentMaterialKey.clear();
+                updateDescriptorSet();
+            }
+            return;
+        }
+
+        const std::string ormPath = resolved.usesORM ? resolved.ormPath : std::string();
+        const std::string key = resolved.albedoPath + "|" + resolved.normalPath + "|" +
+                                ormPath + "|" + resolved.emissivePath;
+        if (key == currentMaterialKey)
+        {
+            // Maps unchanged — only the scalars/flags may have moved (e.g. a .vfMatInstance override).
+            pushConstants.materialFlags = computeFlags();
+            return;
+        }
+
+        device.getLogicalDevice().waitIdle();
+
+        auto loadMap = [&](std::unique_ptr<core::Texture>& tex, const std::string& path, vk::Format fmt) {
+            tex.reset();
+            if (path.empty() || !std::filesystem::exists(path))
+            {
+                if (!path.empty())
+                {
+                    vfLogWarning("VFX mesh preview material map not found: {}", path);
+                }
+                return;
+            }
+            try
+            {
+                tex = std::make_unique<core::Texture>(device);
+                tex->loadTextureFromFile(path, fmt, false);
+            }
+            catch (const std::exception& e)
+            {
+                vfLogError("Failed to load VFX mesh preview material map '{}': {}", path, e.what());
+                tex.reset();
+            }
+        };
+
+        // sRGB for baseColor/emissive; linear (Unorm) for normal/ORM — matches the runtime bindless formats.
+        loadMap(matAlbedoTexture, resolved.albedoPath, vk::Format::eR8G8B8A8Srgb);
+        loadMap(matNormalTexture, resolved.normalPath, vk::Format::eR8G8B8A8Unorm);
+        loadMap(matOrmTexture, ormPath, vk::Format::eR8G8B8A8Unorm);
+        loadMap(matEmissiveTexture, resolved.emissivePath, vk::Format::eR8G8B8A8Srgb);
+
+        currentMaterialKey = key;
+        pushConstants.materialFlags = computeFlags();
         updateDescriptorSet();
     }
 

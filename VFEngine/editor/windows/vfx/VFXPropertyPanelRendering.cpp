@@ -82,6 +82,7 @@ namespace editor::vfxeditor
             {"startSize",     "Start Size", 0.1f},
             {"startVelocity", "Velocity",   0.1f},
             {"looping",       "Looping",    0.1f},
+            {"loopDuration",  "Loop Duration (0 = Auto)", 0.1f},
         };
 
         for (const auto& entry : entries)
@@ -374,12 +375,12 @@ namespace editor::vfxeditor
                 activeType = vfx::stringToShapeType(*val);
         }
 
-        const char* shapeItems[] = {"Point", "Sphere", "Cone", "Box", "Torus"};
+        const char* shapeItems[] = {"Point", "Sphere", "Cone", "Box", "Torus", "Ring", "Line"};
         int currentShape = static_cast<int>(activeType);
         ImGui::Text("Shape Type");
         ImGui::SameLine(120.0f);
         ImGui::SetNextItemWidth(inputWidth * 1.8f);
-        if (ImGui::Combo("##shapeType", &currentShape, shapeItems, 5))
+        if (ImGui::Combo("##shapeType", &currentShape, shapeItems, IM_ARRAYSIZE(shapeItems)))
         {
             activeType = static_cast<vfx::ShapeType>(currentShape);
             vfx::applyShapeTypeProperties(node, activeType);
@@ -462,9 +463,69 @@ namespace editor::vfxeditor
             drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
             break;
         }
+        case vfx::ShapeType::Ring: {
+            static constexpr ShapeEntry entries[] = {
+                {"radius",     "Radius",            0.1f},
+                {"thickness",  "Thickness",         0.02f},
+                {"arc",        "Arc (rad)",         0.05f},
+                {"startAngle", "Start Angle (rad)", 0.05f},
+            };
+            drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
+        case vfx::ShapeType::Line: {
+            static constexpr ShapeEntry entries[] = {
+                {"lineHalf", "Half Vector", 0.1f},
+            };
+            drawDimensionEntries(entries, sizeof(entries) / sizeof(entries[0]));
+            break;
+        }
         case vfx::ShapeType::Point:
         default:
             break;
+        }
+
+        // VK-1525: ordered / path-driven placement (applies to all shapes). Ensure the properties exist
+        // for shape nodes authored before this feature (pre-create), then draw the controls.
+        auto ensureProp = [&](const char* key, vfx::VFXPropertyType type, auto value, float mn, float mx) {
+            if (node.properties.find(key) == node.properties.end())
+                node.properties[key] = vfx::VFXProperty{key, type, value, mn, mx};
+        };
+        ensureProp("ordered", vfx::VFXPropertyType::Bool, false, 0.0f, 1.0f);
+        ensureProp("orderedLoop", vfx::VFXPropertyType::Bool, false, 0.0f, 1.0f);
+        ensureProp("sweepDuration", vfx::VFXPropertyType::Float, 1.0f, 0.05f, 60.0f);
+        ensureProp("orderedJitter", vfx::VFXPropertyType::Float, 0.0f, 0.0f, 10.0f);
+
+        ImGui::Spacing();
+        ImGui::Text("Ordered / Draw-Out");
+        ImGui::Separator();
+
+        vfx::VFXProperty& orderedProp = node.properties["ordered"];
+        ImGui::PushID("ordered");
+        if (drawScalarProperty("Ordered", orderedProp, inputWidth))
+            notifyChanged();
+        ImGui::PopID();
+
+        bool orderedOn = false;
+        if (auto* v = std::get_if<bool>(&orderedProp.value))
+            orderedOn = *v;
+
+        if (orderedOn)
+        {
+            ImGui::PushID("sweepDuration");
+            if (drawScalarProperty("Sweep Duration", node.properties["sweepDuration"], inputWidth, 0.05f))
+                notifyChanged();
+            ImGui::PopID();
+
+            ImGui::PushID("orderedLoop");
+            if (drawScalarProperty("Loop", node.properties["orderedLoop"], inputWidth))
+                notifyChanged();
+            ImGui::PopID();
+
+            ImGui::PushID("orderedJitter");
+            if (drawScalarProperty("Jitter", node.properties["orderedJitter"], inputWidth, 0.01f))
+                notifyChanged();
+            ImGui::PopID();
         }
     }
 
@@ -573,6 +634,52 @@ namespace editor::vfxeditor
             if (ImGui::Button("X##meshClear"))
             {
                 meshVal->clear();
+                notifyChanged();
+            }
+        }
+    }
+
+    // VK-1526: optional PBR material picker for mesh particles (beside the Mesh + Texture pickers). When set,
+    // mesh shards shade PBR from the .vfMat/.vfMatInstance texture set instead of the single .vfImage albedo.
+    void VFXPropertyPanel::drawMaterialSelector(vfx::VFXNode& node, float inputWidth)
+    {
+        auto matIt = node.properties.find("materialRef");
+        if (matIt == node.properties.end()) return;
+
+        auto* matVal = std::get_if<std::string>(&matIt->second.value);
+        if (!matVal) return;
+
+        ImGui::Text("Material");
+        ImGui::SameLine(100.0f);
+        std::string display = matVal->empty() ? "(none)" : std::filesystem::path(*matVal).filename().string();
+        char buf[256];
+        std::strncpy(buf, display.c_str(), sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        ImGui::SetNextItemWidth(inputWidth * 1.5f);
+        ImGui::InputText("##panel_materialRef", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Optional .vfMat / .vfMatInstance. When set, mesh shards shade PBR from the\n"
+                              "material's texture set (normal/roughness/metallic/emissive) instead of the\n"
+                              "single Texture above.");
+        ImGui::SameLine();
+        if (ImGui::Button("...##materialBrowse"))
+        {
+            nfd::FileDialog dialog;
+            std::string path = dialog.openFileDialog({
+                {L"VF Material", L"*.vfMat;*.vfMatInstance"}
+            });
+            if (!path.empty())
+            {
+                *matVal = path;
+                notifyChanged();
+            }
+        }
+        if (!matVal->empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("X##materialClear"))
+            {
+                matVal->clear();
                 notifyChanged();
             }
         }
@@ -704,7 +811,14 @@ namespace editor::vfxeditor
         }
 
         if (currentRenderMode == 3)
+        {
             drawMeshPathSelector(node, inputWidth);
+            // VK-1526: ensure the material prop exists so pre-VK-1526 mesh effects can be edited, then draw it.
+            if (node.properties.find("materialRef") == node.properties.end())
+                node.properties["materialRef"] = vfx::VFXProperty{
+                    "materialRef", vfx::VFXPropertyType::String, std::string(""), 0.0f, 0.0f};
+            drawMaterialSelector(node, inputWidth);
+        }
 
         // VK-1476: mesh-particle orientation (only for the Mesh Particle render mode).
         if (currentRenderMode == 3)
@@ -1195,6 +1309,39 @@ namespace editor::vfxeditor
                 ImGui::SameLine(100.0f);
                 changed |= ImGui::Checkbox("##inheritSize", &eventConfig.inheritSize);
 
+                // VK-1524: publish a CPU notification for this event without needing a sub-emitter
+                // child, so a VFX-sequence StepOutput source (or a script listener) can react to
+                // the death/collision location. Off => behavior is byte-identical to pre-VK-1524.
+                ImGui::Text("Notify (CPU)");
+                ImGui::SameLine(100.0f);
+                changed |= ImGui::Checkbox("##notify", &eventConfig.notify);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip(
+                        "Publish a particle-event notification (position/velocity/color/size)\n"
+                        "even with no sub-VFX path, so a VFX-sequence Step Output receiver can\n"
+                        "spawn at this event's world location. Leave off if the event already\n"
+                        "spawns a sub-emitter (that already notifies).");
+                }
+
+                // VK-1501: GPU fast path (spark-on-impact). Only OnDeath/OnCollision qualify.
+                if (entry.type == vfx::VFXEventType::OnDeath ||
+                    entry.type == vfx::VFXEventType::OnCollision)
+                {
+                    ImGui::Text("GPU Fast Path");
+                    ImGui::SameLine(100.0f);
+                    changed |= ImGui::Checkbox("##gpuFastPath", &eventConfig.gpuFastPath);
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip(
+                            "Spawn the child GPU-side via the request ring (~1 frame later).\n"
+                            "No CPU readback and no child instance slot; depth-1 only.\n"
+                            "Falls back to the CPU path when Probability < 1, when the child\n"
+                            "regions are exhausted, or the child isn't burst-compatible.\n"
+                            "No gameplay event notification is published on the fast path.");
+                    }
+                }
+
                 ImGui::Spacing();
             }
             ImGui::PopID();
@@ -1252,6 +1399,48 @@ namespace editor::vfxeditor
                 if (ImGui::SliderFloat("##slider", val, 0.0f, 1.0f, "%.2f"))
                     notifyChanged();
                 ImGui::PopID();
+            }
+        }
+
+        // VK-1502: depth-buffer collision (independent of the analytic collision above).
+        auto depthEnableIt = node.properties.find("depthCollisionEnabled");
+        if (depthEnableIt != node.properties.end())
+        {
+            if (auto* depthEnableVal = std::get_if<bool>(&depthEnableIt->second.value))
+            {
+                ImGui::Separator();
+                ImGui::Text("Depth Collision");
+                ImGui::SameLine();
+                if (ImGui::Checkbox("##depthCollisionEnable", depthEnableVal))
+                    notifyChanged();
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Collides against the scene depth buffer (last frame) so particles\n"
+                                      "bounce off on-screen geometry without analytic colliders.\n"
+                                      "Reuses Bounce/Friction/Life Loss. On-screen only; not shown in preview.");
+
+                if (*depthEnableVal)
+                {
+                    struct DepthSlider { const char* key; const char* label; float min; float max; };
+                    static constexpr DepthSlider depthSliders[] = {
+                        {"depthCollisionThickness",       "Thickness",  0.0f, 5.0f},
+                        {"depthCollisionNormalInfluence", "Normal Inf", 0.0f, 1.0f},
+                    };
+                    for (const auto& s : depthSliders)
+                    {
+                        auto it = node.properties.find(s.key);
+                        if (it == node.properties.end()) continue;
+                        auto* val = std::get_if<float>(&it->second.value);
+                        if (!val) continue;
+
+                        ImGui::Text("%s", s.label);
+                        ImGui::SameLine(100.0f);
+                        ImGui::SetNextItemWidth(inputWidth);
+                        ImGui::PushID(s.key);
+                        if (ImGui::SliderFloat("##slider", val, s.min, s.max, "%.2f"))
+                            notifyChanged();
+                        ImGui::PopID();
+                    }
+                }
             }
         }
     }
@@ -1358,12 +1547,13 @@ namespace editor::vfxeditor
     {
         static const std::unordered_set<std::string> handledProperties = {
             "spawnRate", "lifetime", "startSize", "startVelocity",
-            "startColor", "looping", "texture",
+            "startColor", "looping", "loopDuration", "texture",
             "sizeVariance", "lifetimeVariance", "speedVariance",
             "rotationVariance", "angularVelocityVariance",
             "colorValueVariance", "alphaVariance",
             "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
             "flipbookRandomStart", "flipbookFrameBlend", "alphaClipThreshold", "additiveBlend", "blendMode", "meshPath",
+            "materialRef", // VK-1526
             "meshOrientationMode", "meshOrientationAxis", "meshOrientationSpinRate",
             "sortOrder", "renderMode", "softParticleDistance", "stretchMultiplier",
             "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",

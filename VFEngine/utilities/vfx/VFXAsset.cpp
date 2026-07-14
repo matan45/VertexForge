@@ -318,6 +318,15 @@ namespace vfx
             }
         }
 
+        // Additive in-memory migration for emitters authored before looping bursts
+        // gained an explicit period. The generic serializer persists it on next save.
+        if (node.type == VFXNodeType::Emitter)
+        {
+            node.properties.try_emplace("loopDuration", VFXProperty{
+                "loopDuration", VFXPropertyType::Float,
+                EmitterDefaults::LOOP_DURATION, 0.0f, 60.0f});
+        }
+
         // Emitter UI module visibility. Present key (incl. empty array) is authoritative;
         // absence means a pre-existing asset -> auto-detect which sections are configured.
         if (j.contains("enabledSections") && j["enabledSections"].is_array())
@@ -466,6 +475,9 @@ namespace vfx
 
             vfxData.cullEligible = j.value("cullEligible", false);
 
+            // VK-1503 — per-asset significance weight (tolerant; absent => neutral 1.0).
+            vfxData.significance = j.value("significance", 1.0f);
+
             if (warningCount > 0)
                 vfLogWarning("Loaded VFX '{}' with {} warning(s)", vfxData.name, warningCount);
 
@@ -537,6 +549,9 @@ namespace vfx
         }
 
         j["cullEligible"] = vfxData.cullEligible;
+
+        // VK-1503 — per-asset significance weight for the live-instance cap.
+        j["significance"] = vfxData.significance;
 
         try
         {

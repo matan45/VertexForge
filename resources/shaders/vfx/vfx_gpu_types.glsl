@@ -74,7 +74,7 @@ struct GPUEmitterConfig
     float lightingInfluence;
     uint normalMode;
     float ambientAmount;
-    float _lightPad0;
+    float orderedSweepTPrev; // VK-1525: reclaimed pad (offset 332) - previous-frame ordered sweep t
 
     // Distortion
     uint distortionEnabled;
@@ -89,8 +89,8 @@ struct GPUEmitterConfig
     float colorValueVariance;
     float alphaVariance;
     float emissiveIntensity;
-    float _variancePad1;
-    float _variancePad2;
+    float orderedJitter; // VK-1525: reclaimed pad (offset 376) - per-particle scatter off the on-curve point
+    float orderedSweepT; // VK-1525: reclaimed pad (offset 380) - current-frame ordered sweep t in [0,1]
 
     // Forces added in VK-1465 (mirror of C++ GPUEmitterConfig).
     vec4 attractorParams;     // xyz = center (world space), w = strength
@@ -109,6 +109,15 @@ struct GPUEmitterConfig
     // Mesh-particle orientation added in VK-1476 (mirror of C++ GPUEmitterConfig).
     vec4 meshOrientationParams; // xyz = axis-lock axis (world, normalized), w = spin rate (rad/s)
     uint meshOrientationMode;   // vfx::VFXOrientationMode (0 = VelocityForward)
+
+    // VK-1501: GPU event->child fast path. Two packed 16-bit halves (low = OnDeath, high = OnCollision):
+    // bits 0-7 = child region (0xFF = none), bit 8 inheritColor, bit 9 inheritSize, bit 10 inheritVelocity.
+    // Mirror of C++ GPUEmitterConfig::eventChildSlot (see utilities/vfx/VFXChildSpawn.hpp).
+    uint eventChildSlot;
+
+    // VK-1502: depth-buffer collision params (reserved tail slots @504/508). Gated by MODIFIER_DEPTH_COLLISION.
+    float depthCollisionThickness;      // world-space shell depth behind the visible surface
+    float depthCollisionNormalInfluence; // [0,1]: 0 = camera-facing normal, 1 = depth-derived normal
 };
 
 // VK-1481 Phase 2: per-emitter render-only data read by the merged (multi-draw) VFX pass, indexed by
@@ -134,3 +143,28 @@ struct VFXDistortionRenderData
     float _pad0;
     float _pad1;
 };
+
+// VK-1526: per-emitter PBR material for MESH-render particles (mirror of C++
+// render::vfx::VFXMeshMaterialSlots, std430, 64 B). Indexed by pc.emitterIndex. materialFlags bit 0
+// (VFX_MAT_HAS_MATERIAL) unset => the mesh shader takes the legacy single-.vfImage path.
+struct VFXMeshMaterialSlots
+{
+    uint  baseColorIdx;
+    uint  normalIdx;
+    uint  ormIdx;
+    uint  emissiveIdx;
+    uint  materialFlags;
+    float metallic;
+    float roughness;
+    float ao;
+    float emissionStrength;
+    float albedoTintR;
+    float albedoTintG;
+    float albedoTintB;
+    float albedoTintA;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+};
+// materialFlags bit constants (VFX_MAT_*) live in vfx_pbr_shading.glsl, shared by the runtime + preview
+// mesh shaders (the preview shader includes that but not this file).

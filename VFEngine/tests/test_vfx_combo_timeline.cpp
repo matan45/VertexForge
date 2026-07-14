@@ -38,6 +38,18 @@ namespace
         return s;
     }
 
+    // VK-1524 — a StepOutput receiver: the timeline must never schedule it (it spawns from a
+    // runtime particle event in the service), and it must not block completion.
+    VFXSequenceStep eventStep(int sourceStepIndex, const std::string& eventName)
+    {
+        VFXSequenceStep s;
+        s.trigger = VFXStepTrigger::StepOutput;
+        s.sourceStepIndex = sourceStepIndex;
+        s.sourceEventName = eventName;
+        s.startTime = 0.0f; // even at t=0 it must NOT auto-spawn
+        return s;
+    }
+
     // Collect only the spawned step indices (in emission order) from an event list.
     std::vector<int> spawnIndices(const std::vector<ComboEvent>& events)
     {
@@ -269,5 +281,310 @@ TEST_SUITE("VFXComboTimeline")
         for (int c = 0; c < 4; ++c)
             for (int r = 0; r < 4; ++r)
                 CHECK(got[c][r] == doctest::Approx(expected[c][r]));
+    }
+
+    // ============================================================
+    // VK-1497 — deterministic per-step variety (probability + variant groups).
+    // ============================================================
+
+    TEST_CASE("VK-1497: probability 0 and 1 are exact play/skip edges")
+    {
+        VFXSequenceData data;
+        VFXSequenceStep always = timeStep(0.0f);
+        always.probability = 1.0f;
+        VFXSequenceStep never = timeStep(0.0f);
+        never.probability = 0.0f;
+        data.steps.push_back(always); // 0
+        data.steps.push_back(never);  // 1
+
+        const std::vector<bool> plays = VFXComboTimeline::resolvePlays(data, 42u);
+        REQUIRE(plays.size() == 2);
+        CHECK(plays[0]);
+        CHECK_FALSE(plays[1]);
+
+        VFXComboTimeline tl;
+        tl.reset(data, 42u);
+        std::vector<ComboEvent> ev;
+        tl.advance(1.0f, ev);
+        CHECK(spawnIndices(ev) == std::vector<int>{0}); // the p=0 step never spawns
+        CHECK_FALSE(tl.isPlaying(1));
+        CHECK(tl.allStepsSpawned());                    // the skipped step must not stall completion
+    }
+
+    TEST_CASE("VK-1497: variety resolves identically across dt-chunking and rewind")
+    {
+        VFXSequenceData data;
+        VFXSequenceStep a = timeStep(0.0f);
+        a.probability = 0.5f;                 // 0 — ungrouped mid-probability
+        VFXSequenceStep g0 = timeStep(0.2f);
+        g0.variantGroup = 7;                  // 1 } variant group 7
+        VFXSequenceStep g1 = timeStep(0.4f);
+        g1.variantGroup = 7;                  // 2 }
+        VFXSequenceStep g2 = timeStep(0.6f);
+        g2.variantGroup = 7;                  // 3 }
+        VFXSequenceStep plain = timeStep(0.8f); // 4 — always plays
+        data.steps.push_back(a);
+        data.steps.push_back(g0);
+        data.steps.push_back(g1);
+        data.steps.push_back(g2);
+        data.steps.push_back(plain);
+
+        const uint32_t seed = 20260712u;
+
+        auto sortedSpawns = [](const std::vector<ComboEvent>& ev) {
+            std::vector<int> idx = spawnIndices(ev);
+            std::sort(idx.begin(), idx.end());
+            return idx;
+        };
+
+        // One big advance.
+        VFXComboTimeline big;
+        big.reset(data, seed);
+        std::vector<ComboEvent> evBig;
+        big.advance(5.0f, evBig);
+
+        // Many small advances to the same elapsed.
+        VFXComboTimeline small;
+        small.reset(data, seed);
+        std::vector<ComboEvent> evSmall;
+        for (int i = 0; i < 100; ++i)
+            small.advance(0.05f, evSmall);
+
+        // Play, then rewind and replay from t=0 (the seek / prewarm path).
+        VFXComboTimeline re;
+        re.reset(data, seed);
+        std::vector<ComboEvent> junk;
+        re.advance(5.0f, junk);
+        re.rewind();
+        std::vector<ComboEvent> evRe;
+        re.advance(5.0f, evRe);
+
+        const std::vector<int> idxBig = sortedSpawns(evBig);
+        CHECK(idxBig == sortedSpawns(evSmall));
+        CHECK(idxBig == sortedSpawns(evRe));
+
+        // Exactly one group-7 member {1,2,3} plays; the always-play step 4 is present.
+        int groupCount = 0;
+        for (int i : idxBig)
+            if (i == 1 || i == 2 || i == 3)
+                ++groupCount;
+        CHECK(groupCount == 1);
+        CHECK(std::find(idxBig.begin(), idxBig.end(), 4) != idxBig.end());
+    }
+
+    TEST_CASE("VK-1497: a variant group yields exactly one winner for every seed")
+    {
+        VFXSequenceData data;
+        for (int k = 0; k < 3; ++k)
+        {
+            VFXSequenceStep s = timeStep(0.0f);
+            s.variantGroup = 0;
+            data.steps.push_back(s);
+        }
+
+        int winnerCounts[3] = {0, 0, 0};
+        for (uint32_t seed = 1; seed <= 200; ++seed)
+        {
+            const std::vector<bool> plays = VFXComboTimeline::resolvePlays(data, seed);
+            REQUIRE(plays.size() == 3);
+            int count = 0;
+            int winner = -1;
+            for (int i = 0; i < 3; ++i)
+                if (plays[i])
+                {
+                    ++count;
+                    winner = i;
+                }
+            CHECK(count == 1); // exactly one member plays
+            if (winner >= 0)
+                ++winnerCounts[winner];
+        }
+        // Non-degenerate: over many seeds every member wins at least once.
+        CHECK(winnerCounts[0] > 0);
+        CHECK(winnerCounts[1] > 0);
+        CHECK(winnerCounts[2] > 0);
+    }
+
+    TEST_CASE("VK-1497: grouped members ignore probability — one still plays when all are 0")
+    {
+        VFXSequenceData data;
+        for (int k = 0; k < 3; ++k)
+        {
+            VFXSequenceStep s = timeStep(0.0f);
+            s.variantGroup = 2;
+            s.probability = 0.0f; // ignored inside a group
+            data.steps.push_back(s);
+        }
+
+        for (uint32_t seed = 1; seed <= 50; ++seed)
+        {
+            const std::vector<bool> plays = VFXComboTimeline::resolvePlays(data, seed);
+            int count = 0;
+            for (bool b : plays)
+                if (b)
+                    ++count;
+            CHECK(count == 1);
+        }
+    }
+
+    TEST_CASE("VK-1497: different seeds vary both the group winner and the ungrouped roll")
+    {
+        VFXSequenceData data;
+        VFXSequenceStep mid = timeStep(0.0f);
+        mid.probability = 0.5f;              // 0 — ungrouped
+        VFXSequenceStep g0 = timeStep(0.0f);
+        g0.variantGroup = 1;                 // 1 }
+        VFXSequenceStep g1 = timeStep(0.0f);
+        g1.variantGroup = 1;                 // 2 } group 1
+        VFXSequenceStep g2 = timeStep(0.0f);
+        g2.variantGroup = 1;                 // 3 }
+        data.steps.push_back(mid);
+        data.steps.push_back(g0);
+        data.steps.push_back(g1);
+        data.steps.push_back(g2);
+
+        bool sawPlay = false;
+        bool sawSkip = false;
+        int firstWinner = -1;
+        bool winnerVaried = false;
+        for (uint32_t seed = 1; seed <= 200; ++seed)
+        {
+            const std::vector<bool> plays = VFXComboTimeline::resolvePlays(data, seed);
+            if (plays[0])
+                sawPlay = true;
+            else
+                sawSkip = true;
+
+            int winner = -1;
+            for (int i = 1; i <= 3; ++i)
+                if (plays[i])
+                    winner = i;
+            if (firstWinner < 0)
+                firstWinner = winner;
+            else if (winner != firstWinner)
+                winnerVaried = true;
+        }
+        CHECK(sawPlay);      // the p=0.5 step plays for some seeds
+        CHECK(sawSkip);      // and is skipped for others
+        CHECK(winnerVaried); // the group winner isn't constant across seeds
+    }
+
+    // ============================================================
+    // VK-1498 — whole-sequence looping. The loop lives in the runtime service
+    // (restartComboForLoop) but its two primitives are the timeline's rewind() (stableLoop) and
+    // deriveLoopSeed()+reset() (variety). These verify markers re-fire exactly once per iteration
+    // and that the per-iteration seed stream is deterministic yet varied.
+    // ============================================================
+
+    TEST_CASE("VK-1498: deriveLoopSeed is stable, distinct per iteration, never zero, decorrelated")
+    {
+        CHECK(VFXComboTimeline::deriveLoopSeed(1234u, 1) == VFXComboTimeline::deriveLoopSeed(1234u, 1));
+        CHECK(VFXComboTimeline::deriveLoopSeed(1234u, 1) != VFXComboTimeline::deriveLoopSeed(1234u, 2));
+        CHECK(VFXComboTimeline::deriveLoopSeed(1u, 1) != VFXComboTimeline::deriveLoopSeed(2u, 1));
+        for (uint32_t i = 0; i < 64; ++i)
+            CHECK(VFXComboTimeline::deriveLoopSeed(0u, i) != 0u);
+        // A loop-iteration seed must not coincide with a child seed at the same index.
+        CHECK(VFXComboTimeline::deriveLoopSeed(1234u, 3) != VFXComboTimeline::deriveSeed(1234u, 3));
+    }
+
+    TEST_CASE("VK-1498: rewind loop re-fires the marker exactly once per iteration and repeats the schedule")
+    {
+        VFXSequenceData data;
+        data.steps.push_back(timeStep(0.0f));    // 0 — time-driven
+        data.steps.push_back(cueStep("boom"));   // 1 — cue-driven (fired by the marker)
+        data.eventMarkers.push_back(VFXSequenceEventMarker{0.3f, "boom"});
+
+        VFXComboTimeline tl;
+        tl.reset(data, 7u);
+
+        for (int iter = 0; iter < 3; ++iter)
+        {
+            std::vector<ComboEvent> ev;
+            tl.advance(1.0f, ev); // cross both the time step and the marker
+            const std::vector<int> spawns = spawnIndices(ev);
+            CHECK(std::find(spawns.begin(), spawns.end(), 0) != spawns.end()); // time step spawned
+            CHECK(std::find(spawns.begin(), spawns.end(), 1) != spawns.end()); // cue step via marker
+            REQUIRE(tl.firedMarkers().size() == 1);
+            CHECK(tl.firedMarkers()[0]); // marker fired exactly once this iteration
+            CHECK(tl.allStepsSpawned());
+
+            // Loop restart's stableLoop primitive: rewind() clears fired/spawned so the next
+            // iteration re-fires from t=0 (mirrors VFXSequenceRuntimeServiceImpl::restartComboForLoop).
+            tl.rewind();
+            CHECK(tl.elapsed() == doctest::Approx(0.0f));
+            CHECK_FALSE(tl.firedMarkers()[0]);
+            CHECK_FALSE(tl.allStepsSpawned());
+        }
+    }
+
+    TEST_CASE("VK-1498: re-seeding per iteration varies the variant winner; a stable seed keeps it fixed")
+    {
+        VFXSequenceData data;
+        for (int k = 0; k < 3; ++k)
+        {
+            VFXSequenceStep s = timeStep(0.0f);
+            s.variantGroup = 5;
+            data.steps.push_back(s);
+        }
+        const uint32_t base = 20260712u;
+
+        // Variety path (restartComboForLoop's !stableLoop branch): each iteration resolves with
+        // deriveLoopSeed(base, iter). Exactly one member wins each time, and the winner varies.
+        int firstWinner = -1;
+        bool winnerVaried = false;
+        for (uint32_t iter = 1; iter <= 200; ++iter)
+        {
+            const std::vector<bool> plays =
+                VFXComboTimeline::resolvePlays(data, VFXComboTimeline::deriveLoopSeed(base, iter));
+            int winner = -1;
+            int count = 0;
+            for (int i = 0; i < 3; ++i)
+                if (plays[i])
+                {
+                    winner = i;
+                    ++count;
+                }
+            CHECK(count == 1);
+            if (firstWinner < 0)
+                firstWinner = winner;
+            else if (winner != firstWinner)
+                winnerVaried = true;
+        }
+        CHECK(winnerVaried);
+
+        // Stable path (rewind keeps the same seed): identical resolution every iteration.
+        CHECK(VFXComboTimeline::resolvePlays(data, base) == VFXComboTimeline::resolvePlays(data, base));
+    }
+
+    TEST_CASE("VK-1524 — a StepOutput receiver is never scheduled and never blocks completion")
+    {
+        VFXSequenceData data;
+        data.steps.push_back(timeStep(0.0f));          // 0: normal time step
+        data.steps.push_back(cueStep("go"));           // 1: cue step
+        data.steps.push_back(eventStep(0, "impact"));  // 2: StepOutput receiver (startTime 0)
+
+        VFXComboTimeline timeline;
+        timeline.reset(data, 123u);
+
+        std::vector<ComboEvent> out;
+        timeline.advance(1.0f, out); // well past every startTime
+        // Only the time step spawns; the StepOutput receiver must NOT (even though startTime==0).
+        CHECK(spawnIndices(out) == std::vector<int>{0});
+        CHECK(timeline.isSpawned(0));
+        CHECK_FALSE(timeline.isSpawned(2));
+
+        // Firing the receiver's would-be cue name does nothing (it is not cue-driven).
+        out.clear();
+        timeline.fireCue("impact", out);
+        CHECK(spawnIndices(out).empty());
+        CHECK_FALSE(timeline.isSpawned(2));
+
+        // The cue step still spawns on its cue; the StepOutput receiver stays unspawned.
+        out.clear();
+        timeline.fireCue("go", out);
+        CHECK(spawnIndices(out) == std::vector<int>{1});
+
+        // Completion ignores the never-firing StepOutput receiver, so the combo can finish.
+        CHECK(timeline.allStepsSpawned());
     }
 }

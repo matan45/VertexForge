@@ -20,6 +20,10 @@ namespace vfx
         node.properties.erase("halfExtents");
         node.properties.erase("majorRadius");
         node.properties.erase("minorRadius");
+        node.properties.erase("thickness");   // VK-1525: Ring
+        node.properties.erase("arc");          // VK-1525: Ring
+        node.properties.erase("startAngle");   // VK-1525: Ring
+        node.properties.erase("lineHalf");     // Line
 
         switch (shapeType)
         {
@@ -63,6 +67,33 @@ namespace vfx
             node.properties["minorRadius"] = VFXProperty{
                 "minorRadius", VFXPropertyType::Float,
                 ShapeDefaults::TORUS_MINOR_RADIUS, 0.01f, 50.0f
+            };
+            break;
+
+        case ShapeType::Ring:
+            node.properties["radius"] = VFXProperty{
+                "radius", VFXPropertyType::Float,
+                ShapeDefaults::RING_RADIUS, 0.01f, 100.0f
+            };
+            node.properties["thickness"] = VFXProperty{
+                "thickness", VFXPropertyType::Float,
+                ShapeDefaults::RING_THICKNESS, 0.0f, 50.0f
+            };
+            node.properties["arc"] = VFXProperty{
+                "arc", VFXPropertyType::Float,
+                ShapeDefaults::RING_ARC, 0.0f, 6.28318530718f
+            };
+            node.properties["startAngle"] = VFXProperty{
+                "startAngle", VFXPropertyType::Float,
+                ShapeDefaults::RING_START_ANGLE, -6.28318530718f, 6.28318530718f
+            };
+            break;
+
+        case ShapeType::Line:
+            node.properties["lineHalf"] = VFXProperty{
+                "lineHalf", VFXPropertyType::Vec3,
+                glm::vec3(ShapeDefaults::LINE_HALF_X, 0.0f, 0.0f),
+                -100.0f, 100.0f
             };
             break;
 

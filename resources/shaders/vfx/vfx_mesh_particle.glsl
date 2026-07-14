@@ -123,6 +123,12 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
     GPUEmitterConfig configs[];
 };
 
+// VK-1526: per-emitter PBR material for mesh particles (mirror of VFXMeshMaterialSlots). Indexed by
+// pc.emitterIndex. materialFlags bit VFX_MAT_HAS_MATERIAL unset => the legacy single-.vfImage path below.
+layout(std430, set = 0, binding = 5) readonly buffer MeshMaterialBuffer {
+    VFXMeshMaterialSlots matSlots[];
+};
+
 layout(binding = 4) uniform sampler2D sceneDepthTexture;
 
 // Lighting types (struct definitions + cluster helpers)
@@ -161,6 +167,9 @@ layout(std430, set = 3, binding = 1) readonly buffer ClusterLightIndexListBuffer
 // VFX lighting evaluation (must come after buffer declarations above)
 #include "vfx_lighting.glsl"
 
+// VK-1526: shared PBR surface assembly (transport-agnostic; used by both runtime + preview mesh shaders).
+#include "vfx_pbr_shading.glsl"
+
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
@@ -172,23 +181,60 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 void main() {
-    vec4 texColor = texture(bindlessTextures[nonuniformEXT(pc.textureIndex)], fragTexCoord);
-    vec4 finalColor = texColor * fragColor;
-
     GPUEmitterConfig config = configs[pc.emitterIndex];
-    vec3 normal = normalize(fragNormal);
+    VFXMeshMaterialSlots mat = matSlots[pc.emitterIndex];
 
-    // Lighting: use scene lights when available, fallback to hard-coded for unlit
-    if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
-        finalColor.rgb = evaluateVFXLighting(
-            finalColor.rgb, normal, fragWorldPos, fragViewDepth,
-            config.ambientAmount, config.lightingInfluence);
+    vec4 finalColor;
+
+    if ((mat.materialFlags & VFX_MAT_HAS_MATERIAL) != 0u) {
+        // VK-1526 PBR path: shade from the referenced .vfMat/.vfMatInstance texture set + scalars,
+        // reusing the engine's canonical Cook-Torrance BRDF (parity with a static mesh using that material).
+        vec4 baseTexel     = texture(bindlessTextures[nonuniformEXT(mat.baseColorIdx)], fragTexCoord);
+        vec3 normalTexel   = texture(bindlessTextures[nonuniformEXT(mat.normalIdx)], fragTexCoord).xyz;
+        vec3 ormTexel      = texture(bindlessTextures[nonuniformEXT(mat.ormIdx)], fragTexCoord).rgb;
+        vec3 emissiveTexel = texture(bindlessTextures[nonuniformEXT(mat.emissiveIdx)], fragTexCoord).rgb;
+
+        VFXSurface surf = vfxBuildMeshSurface(
+            mat.materialFlags,
+            baseTexel, normalTexel, ormTexel, emissiveTexel,
+            mat.metallic, mat.roughness, mat.ao, mat.emissionStrength,
+            vec4(mat.albedoTintR, mat.albedoTintG, mat.albedoTintB, mat.albedoTintA), fragColor,
+            fragNormal, fragWorldPos, fragTexCoord);
+
+        vec3 lit;
+        if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
+            vec3 V = normalize(camera.cameraPos - fragWorldPos);
+            vec3 litFull = evaluateVFXPBRLighting(fragWorldPos, surf.N, V, surf.albedo,
+                surf.metallic, surf.roughness, surf.F0, surf.ao, fragViewDepth, config.ambientAmount);
+            // Blend by lightingInfluence, mirroring the legacy path's mix(baseColor, litColor,
+            // influence) (review #7): a fractional influence is a partial lit/flat mix, not a gate.
+            lit = mix(surf.albedo, litFull, config.lightingInfluence);
+        } else {
+            // Additive / unlit: flat albedo (mirrors the legacy unlit gating).
+            lit = surf.albedo;
+        }
+        finalColor = vec4(lit + surf.emissive, surf.alpha);
     } else {
-        // Fallback: basic hard-coded directional light for unlit mesh particles
-        vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
-        float diffuse = max(dot(normal, lightDir), 0.0) * 0.6 + 0.4;
-        finalColor.rgb *= diffuse;
+        // Legacy single-.vfImage path — byte-identical to pre-VK-1526.
+        vec4 texColor = texture(bindlessTextures[nonuniformEXT(pc.textureIndex)], fragTexCoord);
+        finalColor = texColor * fragColor;
+
+        vec3 normal = normalize(fragNormal);
+
+        // Lighting: use scene lights when available, fallback to hard-coded for unlit
+        if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
+            finalColor.rgb = evaluateVFXLighting(
+                finalColor.rgb, normal, fragWorldPos, fragViewDepth,
+                config.ambientAmount, config.lightingInfluence);
+        } else {
+            // Fallback: basic hard-coded directional light for unlit mesh particles
+            vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
+            float diffuse = max(dot(normal, lightDir), 0.0) * 0.6 + 0.4;
+            finalColor.rgb *= diffuse;
+        }
     }
+
+    // ---- Shared tail (VFX niceties applied to both paths): soft particles / glow / alpha clip / blend ----
 
     // Soft particles: fade near scene geometry
     if (config.softParticleDistance > 0.0) {

@@ -146,6 +146,31 @@ namespace render::vfx
         cmd.copyBuffer(stateStagingBuffers[currentFrameIndex], stateBuffer, copyRegion);
     }
 
+    GPUVFXSpawnRequest* GPUVFXBufferManager::mapSpawnRequestStaging()
+    {
+        if (!initialized || !spawnRequestStagingMapped[currentFrameIndex])
+        {
+            return nullptr;
+        }
+
+        return static_cast<GPUVFXSpawnRequest*>(spawnRequestStagingMapped[currentFrameIndex]);
+    }
+
+    void GPUVFXBufferManager::uploadSpawnRequestBuffer(vk::CommandBuffer cmd)
+    {
+        if (!initialized || !spawnRequestStagingBuffers[currentFrameIndex] || !spawnRequestBuffer)
+        {
+            return;
+        }
+
+        vk::BufferCopy copyRegion{};
+        copyRegion.srcOffset = 0;
+        copyRegion.dstOffset = 0;
+        copyRegion.size = getSpawnRequestBufferSize();
+
+        cmd.copyBuffer(spawnRequestStagingBuffers[currentFrameIndex], spawnRequestBuffer, copyRegion);
+    }
+
     void GPUVFXBufferManager::clearDrawCommands(vk::CommandBuffer cmd)
     {
         if (!initialized || !drawCommandBuffer)
@@ -201,6 +226,30 @@ namespace render::vfx
         }
 
         cmd.fillBuffer(eventBuffer, 0, sizeof(uint32_t), 0);
+    }
+
+    void GPUVFXBufferManager::clearChildSpawnCounters(vk::CommandBuffer cmd, uint32_t writeHalf)
+    {
+        if (!initialized || !childSpawnBuffer)
+        {
+            return;
+        }
+
+        // Counters live at the head of the buffer as [half0: R uints][half1: R uints]. R*4 is a
+        // multiple of 4, so both the offset and size satisfy vkCmdFillBuffer's alignment.
+        const vk::DeviceSize halfCounters =
+            static_cast<vk::DeviceSize>(::vfx::child::CHILD_MAX_REGIONS) * sizeof(uint32_t);
+
+        if (!childSpawnCleared)
+        {
+            // First use: zero BOTH parity halves so frame 0's reader can't observe garbage counts.
+            cmd.fillBuffer(childSpawnBuffer, 0, halfCounters * 2u, 0);
+            childSpawnCleared = true;
+            return;
+        }
+
+        // Reset only the write half; the read half holds last frame's finalized counts.
+        cmd.fillBuffer(childSpawnBuffer, (writeHalf & 1u) * halfCounters, halfCounters, 0);
     }
 
     void GPUVFXBufferManager::copyEventBufferToReadback(vk::CommandBuffer cmd)

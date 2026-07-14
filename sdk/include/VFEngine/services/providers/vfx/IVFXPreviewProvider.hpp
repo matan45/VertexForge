@@ -53,6 +53,7 @@ namespace services
         float stretchMultiplier = 1.0f;
 
         std::string meshPath;
+        std::string materialPath; // VK-1526: optional .vfMat/.vfMatInstance for mesh particles (empty = .vfImage path)
 
         // VK-1476: mesh orientation (only used when renderMode == MeshParticle).
         ::vfx::VFXOrientationMode meshOrientationMode = ::vfx::VFXOrientationMode::VelocityForward;
@@ -84,6 +85,9 @@ namespace services
         float collisionBounce = 0.5f;
         float collisionFriction = 0.1f;
         float collisionLifetimeLoss = 0.0f;
+
+        // Appended in plugin API v18 to preserve the ordering of existing fields.
+        float loopDuration = 0.0f;
     };
 
     // VK-1451 — one step of a composited sequence preview: a fully-built emitter

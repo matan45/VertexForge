@@ -48,6 +48,7 @@ namespace core
         controllerParams.emitDirection = params.emitDirection;
         controllerParams.texturePath = params.texturePath;
         controllerParams.looping = params.looping;
+        controllerParams.loopDuration = params.loopDuration;
         controllerParams.sizeVariance = params.sizeVariance;
         controllerParams.lifetimeVariance = params.lifetimeVariance;
         controllerParams.speedVariance = params.speedVariance;
@@ -70,6 +71,7 @@ namespace core
         controllerParams.softParticleDistance = params.softParticleDistance;
         controllerParams.stretchMultiplier = params.stretchMultiplier;
         controllerParams.meshPath = params.meshPath;
+        controllerParams.materialPath = params.materialPath; // VK-1526
         controllerParams.meshOrientationMode = params.meshOrientationMode; // VK-1476
         controllerParams.meshOrientationAxis = params.meshOrientationAxis;
         controllerParams.meshOrientationSpinRate = params.meshOrientationSpinRate;
