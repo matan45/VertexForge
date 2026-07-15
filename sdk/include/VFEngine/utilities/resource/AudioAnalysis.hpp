@@ -47,13 +47,15 @@ namespace resource
     };
 
     // VK-1514: compact whole-asset RMS envelopes for estimated bus metering. Code 0 is
-    // reserved for exact silence; positive codes cover the display's -60..0 dB range.
+    // reserved for silence and values at/below the display floor; positive codes cover
+    // the visible -60..0 dB range.
     inline constexpr std::size_t kEnvelopeWindowsPerSecond = 100;
     inline constexpr float       kEnvelopeFloorDb          = -60.0f;
+    inline constexpr float       kEnvelopeFloorLinear      = 0.001f;
 
     inline uint8_t encodeEnvelopeDb(float rms)
     {
-        if (!std::isfinite(rms) || rms <= 0.0f)
+        if (!std::isfinite(rms) || rms <= kEnvelopeFloorLinear)
             return 0;
 
         const float db = std::clamp(20.0f * std::log10(rms), kEnvelopeFloorDb, 0.0f);
@@ -139,7 +141,12 @@ namespace resource
             * static_cast<double>(kEnvelopeWindowsPerSecond);
         if (scaled >= static_cast<double>(envelope.size()))
             return decodeEnvelopeDb(envelope.back());
-        return decodeEnvelopeDb(envelope[static_cast<std::size_t>(scaled)]);
+        // Float playheads commonly represent exact 10 ms boundaries just below the
+        // integer (0.01f * 100 == 0.99999997). Nudge only numerical boundary noise.
+        const double stableIndex = std::floor(scaled + 1.0e-6);
+        const std::size_t index = std::min(
+            static_cast<std::size_t>(stableIndex), envelope.size() - 1);
+        return decodeEnvelopeDb(envelope[index]);
     }
 
     enum class WindowFn

@@ -47,6 +47,7 @@ namespace core::audio
 
         void startFadeOut(AudioHandle handle, float durationMs);
         void updateFades(float deltaTimeMs);
+        float getFadeGain(AudioHandle handle) const;
 
         size_t getActiveCount() const { return activeHandles.size(); }
         size_t getPoolSize() const { return sourcePool.size(); }

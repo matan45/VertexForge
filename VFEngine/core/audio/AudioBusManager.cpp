@@ -3,6 +3,7 @@
 #include "ReverbZoneManager.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <limits>
 
 namespace core::audio
 {
@@ -211,9 +212,13 @@ namespace core::audio
 
             const float dryRms = metering::finiteNonNegative(sample.dryRms);
             const float userVolume = metering::finiteNonNegative(trackedIt->second.userVolume);
-            const float amplitude = dryRms * userVolume;
-            if (std::isfinite(amplitude))
-                directPowerScratch[trackedIt->second.busId] += amplitude * amplitude;
+            const double amplitude = static_cast<double>(dryRms)
+                * static_cast<double>(userVolume);
+            const double power = amplitude * amplitude;
+            const double accumulated = static_cast<double>(
+                directPowerScratch[trackedIt->second.busId]) + power;
+            directPowerScratch[trackedIt->second.busId] = static_cast<float>(std::min(
+                accumulated, static_cast<double>(std::numeric_limits<float>::max())));
         }
 
         for (std::size_t i = 0; i < count; ++i)
@@ -345,6 +350,22 @@ namespace core::audio
             }
             trackedSources.erase(it);
         }
+    }
+
+    void AudioBusManager::detachSourceRouting(AudioHandle handle)
+    {
+        std::unique_lock lock(busMutex);
+        const auto it = trackedSources.find(handle);
+        if (it == trackedSources.end() || !sourceResolveCallback)
+            return;
+
+        const ALuint sourceId = sourceResolveCallback(handle);
+        if (sourceId == 0)
+            return;
+        if (effectManager)
+            effectManager->unrouteSource(sourceId, it->second.busId);
+        if (reverbZoneManager)
+            reverbZoneManager->unrouteSource(sourceId);
     }
 
     void AudioBusManager::setSourceUserVolume(AudioHandle handle, float volume)

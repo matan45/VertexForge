@@ -431,18 +431,14 @@ namespace core::audio
                     }
                     else
                     {
-                        // Unroute from reverb before fading
-                        if (deps.reverbZoneManager)
-                        {
-                            AudioSource* source = deps.sourceManager->getSource(internal);
-                            if (source)
-                                deps.reverbZoneManager->unrouteSource(source->getId());
-                        }
-                        deps.busManager->removeSource(internal);
+                        // Preserve the old immediate EFX/reverb detach while retaining
+                        // the bus record long enough to meter the audible fade ramp.
+                        deps.busManager->detachSourceRouting(internal);
                         deps.sourceManager->startFadeOut(internal, command.fadeDurationMs);
                     }
                 }
-                forgetVoice(command.handle);
+                if (StreamingAudioManager::isStreamingHandle(internal))
+                    forgetVoice(command.handle);
             }
             else if constexpr (std::is_same_v<T, StopAllCmd>)
             {
@@ -523,7 +519,12 @@ namespace core::audio
     void AudioThread::forgetVoice(AudioHandle externalHandle)
     {
         activeHandles.erase(externalHandle);
-        externalToInternal.erase(externalHandle);
+        if (const auto it = externalToInternal.find(externalHandle);
+            it != externalToInternal.end())
+        {
+            deps.busManager->removeSource(it->second);
+            externalToInternal.erase(it);
+        }
         voiceRecords.erase(externalHandle);
     }
 
@@ -589,7 +590,9 @@ namespace core::audio
                         const float distance = record.is3D
                             ? glm::distance(listenerPosition, record.position)
                             : 0.0f;
-                        sourceRms = envelope * estimateAudibleGain(1.0f, attenuation, distance);
+                        sourceRms = envelope
+                            * estimateAudibleGain(1.0f, attenuation, distance)
+                            * deps.sourceManager->getFadeGain(internal);
                     }
                 }
                 else

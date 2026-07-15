@@ -184,9 +184,11 @@ TEST_SUITE("AudioAnalysis")
         CHECK(resource::encodeEnvelopeDb(std::numeric_limits<float>::quiet_NaN()) == 0);
         CHECK(resource::encodeEnvelopeDb(std::numeric_limits<float>::infinity()) == 0);
         CHECK(resource::encodeEnvelopeDb(-1.0f) == 0);
+        CHECK(resource::encodeEnvelopeDb(resource::kEnvelopeFloorLinear) == 0);
+        CHECK(resource::encodeEnvelopeDb(std::pow(10.0f, -90.0f / 20.0f)) == 0);
 
         uint8_t previous = 0;
-        for (int db = -60; db <= 0; ++db)
+        for (int db = -59; db <= 0; ++db)
         {
             const float linear = std::pow(10.0f, static_cast<float>(db) / 20.0f);
             const uint8_t code = resource::encodeEnvelopeDb(linear);
@@ -195,6 +197,11 @@ TEST_SUITE("AudioAnalysis")
             const float decodedDb = 20.0f * std::log10(resource::decodeEnvelopeDb(code));
             CHECK(std::fabs(decodedDb - static_cast<float>(db)) <= 0.24f);
         }
+
+        const std::vector<short> belowFloor(100, 1);
+        const auto quietEnvelope = resource::buildRmsEnvelope(belowFloor, 1, 1000);
+        REQUIRE_FALSE(quietEnvelope.empty());
+        CHECK(quietEnvelope.front() == 0);
     }
 
     TEST_CASE("envelope: mono DC and sine pin RMS semantics")
@@ -264,6 +271,7 @@ TEST_SUITE("AudioAnalysis")
         CHECK(resource::sampleEnvelope(envelope, 0.0f) == 0.0f);
         CHECK(resource::sampleEnvelope(envelope, 0.01f) == doctest::Approx(resource::decodeEnvelopeDb(1)));
         CHECK(resource::sampleEnvelope(envelope, 0.02f) == doctest::Approx(1.0f));
+        CHECK(resource::sampleEnvelope(envelope, 0.029999995f) == doctest::Approx(1.0f));
         CHECK(resource::sampleEnvelope(envelope, 100.0f) == doctest::Approx(1.0f));
         CHECK(resource::sampleEnvelope(envelope, std::numeric_limits<float>::quiet_NaN()) == 0.0f);
     }

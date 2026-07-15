@@ -1,6 +1,7 @@
 #include "AudioSourceManager.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace core::audio {
 
@@ -77,6 +78,19 @@ namespace core::audio {
     void AudioSourceManager::releaseSource(AudioHandle handle) {
         auto it = activeHandles.find(handle);
         if (it == activeHandles.end()) {
+            auto fadeIt = std::find_if(fadingQueue.begin(), fadingQueue.end(),
+                [handle](const FadingSource& fading) { return fading.handle == handle; });
+            if (fadeIt == fadingQueue.end())
+                return;
+
+            if (fadeIt->poolIndex < sourcePool.size()) {
+                auto* source = sourcePool[fadeIt->poolIndex].get();
+                source->stop();
+                source->detachFilter();
+                source->setBuffer(0);
+                freeIndices.push_back(fadeIt->poolIndex);
+            }
+            fadingQueue.erase(fadeIt);
             return;
         }
 
@@ -95,7 +109,11 @@ namespace core::audio {
     AudioSource* AudioSourceManager::getSource(AudioHandle handle) {
         auto it = activeHandles.find(handle);
         if (it == activeHandles.end()) {
-            return nullptr;
+            const auto fadeIt = std::find_if(fadingQueue.begin(), fadingQueue.end(),
+                [handle](const FadingSource& fading) { return fading.handle == handle; });
+            if (fadeIt == fadingQueue.end() || fadeIt->poolIndex >= sourcePool.size())
+                return nullptr;
+            return sourcePool[fadeIt->poolIndex].get();
         }
 
         size_t index = it->second;
@@ -109,7 +127,11 @@ namespace core::audio {
     const AudioSource* AudioSourceManager::getSource(AudioHandle handle) const {
         auto it = activeHandles.find(handle);
         if (it == activeHandles.end()) {
-            return nullptr;
+            const auto fadeIt = std::find_if(fadingQueue.begin(), fadingQueue.end(),
+                [handle](const FadingSource& fading) { return fading.handle == handle; });
+            if (fadeIt == fadingQueue.end() || fadeIt->poolIndex >= sourcePool.size())
+                return nullptr;
+            return sourcePool[fadeIt->poolIndex].get();
         }
 
         size_t index = it->second;
@@ -199,6 +221,17 @@ namespace core::audio {
                 ++it;
             }
         }
+    }
+
+    float AudioSourceManager::getFadeGain(AudioHandle handle) const
+    {
+        const auto it = std::find_if(fadingQueue.begin(), fadingQueue.end(),
+            [handle](const FadingSource& fading) { return fading.handle == handle; });
+        if (it == fadingQueue.end())
+            return 1.0f;
+        if (!std::isfinite(it->totalMs) || it->totalMs <= 0.0f)
+            return 0.0f;
+        return std::clamp(it->remainingMs / it->totalMs, 0.0f, 1.0f);
     }
 
     void AudioSourceManager::updateFilters(const glm::vec3& listenerPos, float deltaTime) {

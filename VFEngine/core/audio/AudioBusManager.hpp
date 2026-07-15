@@ -94,6 +94,7 @@ namespace core::audio
 
         // Source-to-bus assignment
         void assignSource(AudioHandle handle, const std::string& busName, float userVolume);
+        void detachSourceRouting(AudioHandle handle);
         void removeSource(AudioHandle handle);
         void setSourceUserVolume(AudioHandle handle, float volume);
 

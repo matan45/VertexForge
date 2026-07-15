@@ -72,6 +72,25 @@ TEST_SUITE("AudioBusMetering")
         CHECK(out[0] == doctest::Approx(0.5f));
     }
 
+    TEST_CASE("soloed parent faders remain pre-parent while orphan edges bypass")
+    {
+        const auto bothSoloed = meter(
+            {BusNode{0, 0.25f, 0.25f, false, true},
+             BusNode{0, 0.5f, 0.125f, false, true}},
+            {0.0f, 1.0f});
+        CHECK(bothSoloed[1] == doctest::Approx(0.5f));
+        CHECK(bothSoloed[0] == doctest::Approx(0.125f));
+
+        const auto nestedOrphan = meter(
+            {BusNode{0, 0.25f, 0.0f, false, false},
+             BusNode{0, 0.5f, 0.5f, false, true},
+             BusNode{1, 0.5f, 0.25f, false, true}},
+            {0.0f, 0.0f, 1.0f});
+        CHECK(nestedOrphan[2] == doctest::Approx(0.5f));
+        CHECK(nestedOrphan[1] == doctest::Approx(0.25f));
+        CHECK(nestedOrphan[0] == doctest::Approx(0.25f));
+    }
+
     TEST_CASE("deep chain does not double-count and cycles terminate")
     {
         const auto chain = meter(
@@ -86,6 +105,23 @@ TEST_SUITE("AudioBusMetering")
         CHECK(cycle[1] == doctest::Approx(1.0f));
     }
 
+    TEST_CASE("traversal guard meters exactly 32 nodes of an over-deep chain")
+    {
+        constexpr std::size_t nodeCount =
+            core::audio::metering::kMaxTraversalDepth + 1;
+        std::vector<BusNode> nodes(nodeCount);
+        for (std::size_t i = 1; i < nodes.size(); ++i)
+            nodes[i].parentId = static_cast<uint32_t>(i - 1);
+
+        std::vector<float> directPower(nodeCount, 0.0f);
+        directPower.back() = 1.0f;
+        const auto out = meter(nodes, directPower);
+
+        CHECK(out.front() == 0.0f);
+        CHECK(out[1] == doctest::Approx(1.0f));
+        CHECK(out.back() == doctest::Approx(1.0f));
+    }
+
     TEST_CASE("invalid parents and non-finite values do not poison other buses")
     {
         const float nan = std::numeric_limits<float>::quiet_NaN();
@@ -93,6 +129,12 @@ TEST_SUITE("AudioBusMetering")
             {BusNode{99, nan, nan, false, false}, BusNode{1}}, {nan, 1.0f});
         CHECK(out[0] == 0.0f);
         CHECK(out[1] == doctest::Approx(1.0f));
+
+        const auto saturated = meter(
+            {BusNode{0, std::numeric_limits<float>::max(), 1.0f, false, false}},
+            {std::numeric_limits<float>::max()});
+        CHECK(std::isfinite(saturated[0]));
+        CHECK(saturated[0] > 0.0f);
     }
 
     TEST_CASE("peak hold rises immediately and decays safely")
