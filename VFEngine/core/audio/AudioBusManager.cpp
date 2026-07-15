@@ -192,7 +192,13 @@ namespace core::audio
         std::unique_lock lock(busMutex);
         const auto targetIt = nameToId.find(targetBus);
         const auto sourceIt = nameToId.find(config.sourceBus);
-        if (targetIt == nameToId.end() || sourceIt == nameToId.end())
+        if (targetIt == nameToId.end())
+        {
+            vfLogWarning("AudioBusManager: Cannot configure ducking for unknown target bus '{}'",
+                         targetBus);
+            return false;
+        }
+        if (sourceIt == nameToId.end())
         {
             vfLogWarning("AudioBusManager: Cannot duck '{}' from unknown source bus '{}'",
                          targetBus, config.sourceBus);

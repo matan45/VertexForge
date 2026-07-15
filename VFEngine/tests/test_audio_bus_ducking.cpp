@@ -46,7 +46,7 @@ TEST_SUITE("AudioBusDucking")
         config.attackMs = 100.0f;
 
         DuckEnvelope envelope;
-        envelope.update(1.0f, config, 0.1f);
+        static_cast<void>(envelope.update(1.0f, config, 0.1f));
         const float expectedReduction = config.amountDb * (1.0f - std::exp(-1.0f));
         CHECK(envelope.reduction() == doctest::Approx(expectedReduction).epsilon(0.0001));
     }
@@ -62,7 +62,7 @@ TEST_SUITE("AudioBusDucking")
         float previous = envelope.reduction();
         for (int i = 0; i < 20; ++i)
         {
-            envelope.update(1.0f, config, 0.01f);
+            static_cast<void>(envelope.update(1.0f, config, 0.01f));
             CHECK(envelope.reduction() >= previous);
             CHECK(envelope.reduction() <= config.amountDb);
             previous = envelope.reduction();
@@ -71,7 +71,7 @@ TEST_SUITE("AudioBusDucking")
         for (int i = 0; i < 1000 && !envelope.isUnity(); ++i)
         {
             previous = envelope.reduction();
-            envelope.update(0.0f, config, 0.01f);
+            static_cast<void>(envelope.update(0.0f, config, 0.01f));
             CHECK(envelope.reduction() <= previous);
             CHECK(envelope.reduction() >= 0.0f);
         }
@@ -87,10 +87,10 @@ TEST_SUITE("AudioBusDucking")
 
         DuckEnvelope oneStep;
         DuckEnvelope tenSteps;
-        oneStep.update(1.0f, config, 0.1f);
+        static_cast<void>(oneStep.update(1.0f, config, 0.1f));
         for (int i = 0; i < 10; ++i)
         {
-            tenSteps.update(1.0f, config, 0.01f);
+            static_cast<void>(tenSteps.update(1.0f, config, 0.01f));
         }
         CHECK(tenSteps.reduction() == doctest::Approx(oneStep.reduction()).epsilon(0.0001));
     }
@@ -107,11 +107,12 @@ TEST_SUITE("AudioBusDucking")
               == doctest::Approx(dbToLinear(-24.0f)));
         CHECK(envelope.update(0.0f, config, 0.01f) == 1.0f);
 
-        envelope.update(1.0f, config, 0.01f);
+        static_cast<void>(envelope.update(1.0f, config, 0.01f));
         const float held = envelope.reduction();
-        envelope.update(0.0f, config, -1.0f);
+        static_cast<void>(envelope.update(0.0f, config, -1.0f));
         CHECK(envelope.reduction() == held);
-        envelope.update(0.0f, config, std::numeric_limits<float>::quiet_NaN());
+        static_cast<void>(
+            envelope.update(0.0f, config, std::numeric_limits<float>::quiet_NaN()));
         CHECK(envelope.reduction() == held);
     }
 
@@ -122,12 +123,12 @@ TEST_SUITE("AudioBusDucking")
         config.attackMs = 0.0f;
 
         DuckEnvelope envelope;
-        envelope.update(1.0f, config, 0.01f);
+        static_cast<void>(envelope.update(1.0f, config, 0.01f));
         CHECK(envelope.gain() < 1.0f);
 
         for (int i = 0; i < 1000 && !envelope.isUnity(); ++i)
         {
-            envelope.release(100.0f, 0.01f);
+            static_cast<void>(envelope.release(100.0f, 0.01f));
         }
         CHECK(envelope.isUnity());
         CHECK(envelope.gain() == 1.0f);
