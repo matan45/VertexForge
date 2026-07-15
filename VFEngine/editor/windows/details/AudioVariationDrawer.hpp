@@ -173,7 +173,10 @@ namespace windows::details
             changed = true;
         }
         ImGui::EndDisabled();
-        if (atCap && ImGui::IsItemHovered())
+        // AllowWhenDisabled: ImGui::IsItemHovered() bails on a disabled item by
+        // default, which would make the one tooltip explaining WHY the button is
+        // greyed out the only one you can never read.
+        if (atCap && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         {
             ImGui::SetTooltip("A source can hold at most %zu clips.", types::AUDIO_MAX_VARIANTS);
         }
@@ -271,7 +274,7 @@ namespace windows::details
             }
         }
 
-        AudioPreviewPick<AudioData> pick;
+        AudioPreviewPick pick;
         if (pool.empty())
         {
             return pick;

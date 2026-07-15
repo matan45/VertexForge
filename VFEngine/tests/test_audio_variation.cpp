@@ -70,14 +70,15 @@ TEST_SUITE("AudioVariation")
         // signature. This is the invariant the ticket's Verify line rests on.
         for (std::size_t n = 2; n <= 8; ++n)
         {
-            for (uint8_t last = 0; last < n; ++last)
+            for (std::size_t last = 0; last < n; ++last)
             {
+                const auto lastU8 = static_cast<uint8_t>(last);
                 for (int step = 0; step <= 1024; ++step)
                 {
                     const float u = static_cast<float>(step) / 1024.0f;
-                    const uint8_t pick = types::selectVariant(n, last, RANDOM, u);
-                    REQUIRE(pick != last);
-                    REQUIRE(pick < n);
+                    const uint8_t pick = types::selectVariant(n, lastU8, RANDOM, u);
+                    REQUIRE(pick != lastU8);
+                    REQUIRE(static_cast<std::size_t>(pick) < n);
                 }
             }
         }
@@ -178,7 +179,11 @@ TEST_SUITE("AudioVariation")
                 ++distinct;
             }
         }
-        CHECK(distinct == 64);
+        // Not `== 64`: audioPcgHash is a bijection on uint32 but the float
+        // conversion is lossy, so a freak collision is possible (~2e-6 over 64
+        // draws). A shared-stream bug would give 0, so this bound is just as
+        // discriminating without the fragility.
+        CHECK(distinct >= 60);
     }
 
     // ---------- jitter ----------
