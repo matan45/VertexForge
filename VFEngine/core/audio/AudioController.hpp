@@ -94,6 +94,7 @@ namespace core::audio {
         bool isBusMuted(const std::string& busName) const;
         bool isBusSoloed(const std::string& busName) const;
         std::vector<std::string> getBusNames() const;
+        std::vector<types::AudioBusLevel> getBusLevels() const;
         void saveMixSnapshot(const std::string& name);
         void loadMixSnapshot(const std::string& name);
         void deleteMixSnapshot(const std::string& name);

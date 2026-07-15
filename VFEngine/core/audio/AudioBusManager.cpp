@@ -32,6 +32,10 @@ namespace core::audio
         snapshots.clear();
         buses.clear();
         nameToId.clear();
+        meterEntries.clear();
+        meterNodesScratch.clear();
+        directPowerScratch.clear();
+        meterRmsScratch.clear();
         nextBusId = 0;
     }
 
@@ -91,6 +95,7 @@ namespace core::audio
 
         nameToId[name] = bus.id;
         buses.push_back(std::move(bus));
+        meterEntries.resize(buses.size());
 
         recalculateEffectiveVolumes();
         return buses.back().id;
@@ -130,6 +135,25 @@ namespace core::audio
         return names;
     }
 
+    std::vector<types::AudioBusLevel> AudioBusManager::getBusLevels() const
+    {
+        std::shared_lock lock(busMutex);
+        std::vector<types::AudioBusLevel> levels;
+        levels.reserve(buses.size());
+        for (std::size_t i = 0; i < buses.size(); ++i)
+        {
+            types::AudioBusLevel level;
+            level.name = buses[i].name;
+            if (i < meterEntries.size())
+            {
+                level.rms = meterEntries[i].rms;
+                level.peakHold = meterEntries[i].peakHold;
+            }
+            levels.push_back(std::move(level));
+        }
+        return levels;
+    }
+
     void AudioBusManager::setBusVolume(const std::string& name, float volume)
     {
         std::unique_lock lock(busMutex);
@@ -167,6 +191,47 @@ namespace core::audio
         volumesDirty = false;
         recalculateEffectiveVolumes();
         applyEffectiveVolumesToSources();
+    }
+
+    void AudioBusManager::updateBusMeters(std::span<const SourceMeterSample> samples,
+                                           float deltaTime)
+    {
+        std::unique_lock lock(busMutex);
+        const std::size_t count = buses.size();
+        meterEntries.resize(count);
+        meterNodesScratch.resize(count);
+        directPowerScratch.assign(count, 0.0f);
+        meterRmsScratch.assign(count, 0.0f);
+
+        for (const SourceMeterSample& sample : samples)
+        {
+            const auto trackedIt = trackedSources.find(sample.handle);
+            if (trackedIt == trackedSources.end() || trackedIt->second.busId >= count)
+                continue;
+
+            const float dryRms = metering::finiteNonNegative(sample.dryRms);
+            const float userVolume = metering::finiteNonNegative(trackedIt->second.userVolume);
+            const float amplitude = dryRms * userVolume;
+            if (std::isfinite(amplitude))
+                directPowerScratch[trackedIt->second.busId] += amplitude * amplitude;
+        }
+
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            meterNodesScratch[i].parentId = buses[i].parentId;
+            meterNodesScratch[i].volume = buses[i].volume;
+            meterNodesScratch[i].effectiveVolume = buses[i].effectiveVolume;
+            meterNodesScratch[i].muted = buses[i].muted;
+            meterNodesScratch[i].soloed = buses[i].soloed;
+        }
+
+        metering::accumulateBusRms(meterNodesScratch, directPowerScratch, meterRmsScratch);
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            meterEntries[i].rms = meterRmsScratch[i];
+            meterEntries[i].peakHold = metering::decayPeakHold(
+                meterEntries[i].peakHold, meterEntries[i].rms, deltaTime);
+        }
     }
 
     float AudioBusManager::getBusVolume(const std::string& name) const
@@ -416,6 +481,7 @@ namespace core::audio
 
         buses.clear();
         nameToId.clear();
+        meterEntries.clear();
         nextBusId = 0;
 
         if (definitions.empty())

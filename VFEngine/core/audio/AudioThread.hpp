@@ -67,7 +67,7 @@ namespace core::audio
     private:
         void threadLoop();
         void processCommand(AudioCommand& cmd);
-        void publishSnapshot();
+        void publishSnapshot(float deltaTime);
 
         // VK-1513 voice limiting.
         // What the pooled path retains about a playing voice. OpenAL has no priority
@@ -77,6 +77,7 @@ namespace core::audio
         struct VoiceRecord
         {
             AudioHandle internal = InvalidAudioHandle;
+            ALuint bufferId = 0;
             uint8_t priority = 128;
             bool is3D = false;
             glm::vec3 position{0.0f};
@@ -111,6 +112,7 @@ namespace core::audio
 
         // VK-1513: arbitration state for pooled voices, keyed by external handle.
         std::unordered_map<AudioHandle, VoiceRecord> voiceRecords;
+        std::vector<SourceMeterSample> sourceMeterSamples;
         std::atomic<int> maxRealVoices{kDefaultMaxRealVoices}; // <= 0 disables the cap
         std::atomic<int> realVoiceCount{0};
         // Audio-thread-only; refreshed by ApplySettingsCmd. Matches AudioSettings' default.

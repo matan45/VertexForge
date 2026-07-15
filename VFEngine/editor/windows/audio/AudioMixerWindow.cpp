@@ -4,6 +4,49 @@
 #include "events/audio/AudioEffectEvents.hpp"
 #include "types/AudioEffectTypes.hpp"
 #include <imgui.h>
+#include <algorithm>
+#include <cmath>
+
+namespace
+{
+    constexpr float kBusMeterWidth = 12.0f;
+    constexpr float kBusMeterHeight = 150.0f;
+    constexpr float kBusMeterFloorDb = -60.0f;
+
+    float busMeterNorm(float value)
+    {
+        if (!std::isfinite(value) || value <= 0.0f)
+            return 0.0f;
+        const float db = 20.0f * std::log10(value);
+        return std::clamp((db - kBusMeterFloorDb) / -kBusMeterFloorDb, 0.0f, 1.0f);
+    }
+
+    void drawBusMeter(ImVec2 pos, ImVec2 size, float rms, float peakHold)
+    {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
+                                IM_COL32(40, 40, 40, 255));
+
+        const float normalizedRms = busMeterNorm(rms);
+        const float fillHeight = normalizedRms * size.y;
+        const ImU32 color = normalizedRms < 0.8f ? IM_COL32(90, 200, 90, 255)
+            : normalizedRms < 0.95f ? IM_COL32(220, 200, 60, 255)
+                                    : IM_COL32(230, 80, 60, 255);
+        if (fillHeight > 0.0f)
+        {
+            drawList->AddRectFilled(ImVec2(pos.x, pos.y + size.y - fillHeight),
+                                    ImVec2(pos.x + size.x, pos.y + size.y), color);
+        }
+
+        const float normalizedPeak = busMeterNorm(peakHold);
+        if (normalizedPeak > 0.0f)
+        {
+            const float y = pos.y + size.y - normalizedPeak * size.y;
+            drawList->AddLine(ImVec2(pos.x, y), ImVec2(pos.x + size.x, y),
+                              IM_COL32(240, 240, 240, 255), 2.0f);
+        }
+    }
+}
 
 namespace windows
 {
@@ -47,11 +90,14 @@ namespace windows
     void AudioMixerWindow::drawBusChannels()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        auto busNames = dispatcher.query(events::audio::GetBusNamesQuery{});
-        if (busNames.empty()) { ImGui::TextDisabled("No audio buses configured"); return; }
+        const auto busLevels = dispatcher.query(events::audio::GetBusLevelsQuery{});
+        if (busLevels.empty()) { ImGui::TextDisabled("No audio buses configured"); return; }
 
-        for (size_t i = 0; i < busNames.size(); ++i) {
-            const auto& name = busNames[i];
+        ImGui::TextDisabled("Levels: estimated, pre-effects");
+
+        for (size_t i = 0; i < busLevels.size(); ++i) {
+            const auto& level = busLevels[i];
+            const auto& name = level.name;
             ImGui::BeginGroup();
             ImGui::PushID(static_cast<int>(i));
 
@@ -69,6 +115,17 @@ namespace windows
                 dispatcher.execute(cmd);
             }
             ImGui::PopItemWidth();
+            ImGui::SameLine();
+            const ImVec2 meterPos = ImGui::GetCursorScreenPos();
+            drawBusMeter(meterPos, ImVec2(kBusMeterWidth, kBusMeterHeight),
+                         level.rms, level.peakHold);
+            ImGui::Dummy(ImVec2(kBusMeterWidth, kBusMeterHeight));
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Estimated level (pre-effects)\n"
+                                  "RMS envelope with bus gain and distance attenuation\n"
+                                  "Floor: -60 dB");
+            }
             ImGui::Text("%.0f%%", volume * 100.0f);
 
             events::audio::IsBusMutedQuery muteQuery; muteQuery.busName = name;
@@ -92,7 +149,7 @@ namespace windows
 
             ImGui::PopID();
             ImGui::EndGroup();
-            if (i < busNames.size() - 1) { ImGui::SameLine(); ImGui::Dummy(ImVec2(10, 0)); ImGui::SameLine(); }
+            if (i < busLevels.size() - 1) { ImGui::SameLine(); ImGui::Dummy(ImVec2(10, 0)); ImGui::SameLine(); }
         }
     }
 

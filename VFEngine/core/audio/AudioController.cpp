@@ -364,6 +364,12 @@ namespace core::audio
         return busManager->getBusNames();
     }
 
+    std::vector<types::AudioBusLevel> AudioController::getBusLevels() const
+    {
+        if (!initialized) return {};
+        return busManager->getBusLevels();
+    }
+
     void AudioController::saveMixSnapshot(const std::string& name)
     {
         if (!initialized || !commandQueue) return;

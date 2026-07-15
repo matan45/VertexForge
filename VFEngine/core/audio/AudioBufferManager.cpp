@@ -3,6 +3,7 @@
 #include "resource/ResourceManager.hpp"
 #include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
+#include "resource/AudioAnalysis.hpp"
 
 namespace core::audio
 {
@@ -10,6 +11,7 @@ namespace core::audio
     {
         pathToBuffer.clear();
         bufferToPath.clear();
+        bufferEnvelopes.clear();
     }
 
     ALuint AudioBufferManager::loadBuffer(const std::string& path)
@@ -42,6 +44,9 @@ namespace core::audio
             return 0;
         }
 
+        std::vector<uint8_t> envelope = resource::buildRmsEnvelope(
+            audioData->data, audioData->channels, audioData->sampleRate);
+
         AudioBufferInfo info;
         info.bufferId = bufferId;
         info.channels = audioData->channels;
@@ -51,6 +56,7 @@ namespace core::audio
 
         pathToBuffer[path] = info;
         bufferToPath[bufferId] = path;
+        bufferEnvelopes[bufferId] = std::move(envelope);
 
         return bufferId;
     }
@@ -68,6 +74,7 @@ namespace core::audio
         AudioSystem::checkError("unloadBuffer");
 
         bufferToPath.erase(bufferId);
+        bufferEnvelopes.erase(bufferId);
         pathToBuffer.erase(it);
     }
 
@@ -93,6 +100,7 @@ namespace core::audio
 
         pathToBuffer.clear();
         bufferToPath.clear();
+        bufferEnvelopes.clear();
     }
 
     bool AudioBufferManager::isLoaded(const std::string& path) const
@@ -118,6 +126,14 @@ namespace core::audio
             return it->second;
         }
         return std::nullopt;
+    }
+
+    float AudioBufferManager::sampleEnvelope(ALuint bufferId, float seconds) const
+    {
+        const auto it = bufferEnvelopes.find(bufferId);
+        return it != bufferEnvelopes.end()
+            ? resource::sampleEnvelope(it->second, seconds)
+            : 0.0f;
     }
 
     ALuint AudioBufferManager::createBufferFromData(const short* data, size_t dataSize,

@@ -55,6 +55,14 @@ namespace types
         int maxRealVoices = 0;
     };
 
+    // VK-1514: estimated post-bus-fader, pre-effects RMS and its decaying hold.
+    struct AudioBusLevel
+    {
+        std::string name;
+        float rms = 0.0f;
+        float peakHold = 0.0f;
+    };
+
     struct AudioBusDefinition
     {
         std::string name;

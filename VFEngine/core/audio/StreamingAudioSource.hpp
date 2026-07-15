@@ -1,11 +1,12 @@
 #pragma once
 #include "AudioSource.hpp"
+#include "StreamingMetering.hpp"
 #include "resource/AudioResource.hpp"
 #include <AL/al.h>
 #include <vector>
 #include <memory>
 #include <string>
-#include <unordered_map>
+#include <optional>
 
 namespace core::audio {
     
@@ -41,9 +42,10 @@ namespace core::audio {
         
         size_t samplesPerBuffer = 0;
         
-        size_t totalSamplesPlayed = 0;
-        
-        std::unordered_map<ALuint, size_t> bufferSampleCounts;
+        // VK-1514: mirrors the actual AL queue. Asset-relative starts keep the playhead
+        // and meter correct when loop-head buffers sit behind still-audible tail buffers.
+        std::vector<QueuedEnvelopeChunk> queuedChunks;
+        size_t nextDecodedSample = 0;
         
     public:
         explicit StreamingAudioSource();
@@ -82,6 +84,7 @@ namespace core::audio {
         void applyConfig(const AudioSourceConfig& config);
         
         float getPlaybackPosition() const;
+        StreamingPlaybackMetrics getPlaybackMetrics() const;
         bool setPlaybackPosition(float seconds);
         
         float getDuration() const;
@@ -93,9 +96,13 @@ namespace core::audio {
         
         void cleanupBuffers();
         
-        bool fillBuffer(ALuint bufferId);
+        std::optional<QueuedEnvelopeChunk> fillBuffer(ALuint bufferId);
         
-        bool queueBuffer(ALuint bufferId);
+        bool queueBuffer(QueuedEnvelopeChunk chunk);
+
+        bool fillAndQueueBuffer(ALuint bufferId);
+
+        void resetQueuedState(size_t nextSample = 0);
         
         void processFinishedBuffers();
         

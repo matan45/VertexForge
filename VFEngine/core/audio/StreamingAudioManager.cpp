@@ -96,6 +96,14 @@ namespace core::audio {
         return 0.0f;
     }
 
+    StreamingPlaybackMetrics StreamingAudioManager::getPlaybackMetrics(AudioHandle handle) const {
+        auto it = activeSources.find(handle);
+        if (it != activeSources.end()) {
+            return it->second->getPlaybackMetrics();
+        }
+        return {};
+    }
+
     bool StreamingAudioManager::setPlaybackPosition(AudioHandle handle, float seconds) {
         auto it = activeSources.find(handle);
         if (it != activeSources.end()) {

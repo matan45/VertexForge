@@ -243,6 +243,12 @@ namespace services {
                 return getBusNames();
             });
 
+        // VK-1514: diagnostic query goes directly to the provider, like voice stats.
+        dispatcher.registerQueryHandler<events::audio::GetBusLevelsQuery>(
+            [this](const auto&) {
+                return audioProvider->getBusLevels();
+            });
+
         dispatcher.registerQueryHandler<events::audio::GetSnapshotNamesQuery>(
             [this](const auto&) {
                 return getSnapshotNames();

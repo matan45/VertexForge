@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 // ============================================================
@@ -171,6 +172,100 @@ TEST_SUITE("AudioAnalysis")
     TEST_CASE("levels: channels == 0 returns empty")
     {
         CHECK(resource::computeWindowLevels(std::vector<short>{1, 2}, 0, 0, 2).empty());
+    }
+
+    // ---------- compact RMS envelope ----------
+
+    TEST_CASE("envelope: dB quantizer reserves zero for silence and round-trips the display range")
+    {
+        CHECK(resource::encodeEnvelopeDb(0.0f) == 0);
+        CHECK(resource::decodeEnvelopeDb(0) == 0.0f);
+        CHECK(resource::encodeEnvelopeDb(1.0f) == 255);
+        CHECK(resource::encodeEnvelopeDb(std::numeric_limits<float>::quiet_NaN()) == 0);
+        CHECK(resource::encodeEnvelopeDb(std::numeric_limits<float>::infinity()) == 0);
+        CHECK(resource::encodeEnvelopeDb(-1.0f) == 0);
+
+        uint8_t previous = 0;
+        for (int db = -60; db <= 0; ++db)
+        {
+            const float linear = std::pow(10.0f, static_cast<float>(db) / 20.0f);
+            const uint8_t code = resource::encodeEnvelopeDb(linear);
+            CHECK(code >= previous);
+            previous = code;
+            const float decodedDb = 20.0f * std::log10(resource::decodeEnvelopeDb(code));
+            CHECK(std::fabs(decodedDb - static_cast<float>(db)) <= 0.24f);
+        }
+    }
+
+    TEST_CASE("envelope: mono DC and sine pin RMS semantics")
+    {
+        const std::vector<short> dc(100, -32768);
+        const auto dcEnvelope = resource::buildRmsEnvelope(dc, 1, 1000);
+        REQUIRE(dcEnvelope.size() == 10);
+        CHECK(resource::decodeEnvelopeDb(dcEnvelope[0]) == doctest::Approx(1.0f));
+
+        std::vector<short> sine(1000);
+        for (std::size_t i = 0; i < sine.size(); ++i)
+        {
+            sine[i] = static_cast<short>(std::lround(
+                32767.0 * std::sin(2.0 * resource::kPi * static_cast<double>(i) / 20.0)));
+        }
+        const auto sineEnvelope = resource::buildRmsEnvelope(sine, 1, 1000);
+        REQUIRE(sineEnvelope.size() == 100);
+        CHECK(resource::decodeEnvelopeDb(sineEnvelope[0]) == doctest::Approx(0.707f).epsilon(0.02));
+    }
+
+    TEST_CASE("envelope: stereo uses channel power without phase cancellation")
+    {
+        std::vector<short> leftOnly(200, 0);
+        std::vector<short> antiPhase(200, 0);
+        for (std::size_t frame = 0; frame < 100; ++frame)
+        {
+            leftOnly[frame * 2] = -32768;
+            antiPhase[frame * 2] = -32768;
+            antiPhase[frame * 2 + 1] = 32767;
+        }
+
+        const auto leftEnvelope = resource::buildRmsEnvelope(leftOnly, 2, 1000);
+        const auto antiEnvelope = resource::buildRmsEnvelope(antiPhase, 2, 1000);
+        REQUIRE_FALSE(leftEnvelope.empty());
+        REQUIRE_FALSE(antiEnvelope.empty());
+        CHECK(resource::decodeEnvelopeDb(leftEnvelope[0]) == doctest::Approx(0.707f).epsilon(0.02));
+        CHECK(resource::decodeEnvelopeDb(antiEnvelope[0]) == doctest::Approx(1.0f).epsilon(0.01));
+    }
+
+    TEST_CASE("envelope: rational windows cover odd sample rates and the final partial window")
+    {
+        const std::vector<short> oneSecond(22050, -32768);
+        CHECK(resource::buildRmsEnvelope(oneSecond, 1, 22050).size() == 100);
+
+        const std::vector<short> partial(505, -32768);
+        const auto envelope = resource::buildRmsEnvelope(partial, 1, 1000);
+        REQUIRE(envelope.size() == 51);
+        CHECK(resource::decodeEnvelopeDb(envelope.back()) == doctest::Approx(1.0f));
+    }
+
+    TEST_CASE("envelope: invalid formats and incomplete interleaved frames are safe")
+    {
+        CHECK(resource::buildRmsEnvelope(std::vector<short>{}, 1, 1000).empty());
+        CHECK(resource::buildRmsEnvelope(std::vector<short>{1, 2}, 0, 1000).empty());
+        CHECK(resource::buildRmsEnvelope(std::vector<short>{1, 2}, 1, 0).empty());
+
+        const std::vector<short> incomplete{-32768, 0, 32767};
+        const auto envelope = resource::buildRmsEnvelope(incomplete, 2, 100);
+        REQUIRE(envelope.size() == 1);
+        CHECK(resource::decodeEnvelopeDb(envelope[0]) == doctest::Approx(0.707f).epsilon(0.02));
+    }
+
+    TEST_CASE("envelope: playhead sampling maps windows and clamps safely")
+    {
+        const std::vector<uint8_t> envelope{0, 1, 255};
+        CHECK(resource::sampleEnvelope(envelope, -1.0f) == 0.0f);
+        CHECK(resource::sampleEnvelope(envelope, 0.0f) == 0.0f);
+        CHECK(resource::sampleEnvelope(envelope, 0.01f) == doctest::Approx(resource::decodeEnvelopeDb(1)));
+        CHECK(resource::sampleEnvelope(envelope, 0.02f) == doctest::Approx(1.0f));
+        CHECK(resource::sampleEnvelope(envelope, 100.0f) == doctest::Approx(1.0f));
+        CHECK(resource::sampleEnvelope(envelope, std::numeric_limits<float>::quiet_NaN()) == 0.0f);
     }
 
     // ---------- fftRadix2 ----------

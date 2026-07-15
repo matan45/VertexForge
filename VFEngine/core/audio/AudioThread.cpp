@@ -105,7 +105,7 @@ namespace core::audio
             deps.sourceManager->updateFades(deltaTime * 1000.0f);
 
             // Publish state snapshot for main-thread queries
-            publishSnapshot();
+            publishSnapshot(deltaTime);
 
             // Sleep until next command or 5ms timeout (~200Hz update rate)
             commandQueue.waitForCommands(std::chrono::milliseconds(5));
@@ -123,6 +123,7 @@ namespace core::audio
             if constexpr (std::is_same_v<T, PlaySoundCmd>)
             {
                 AudioHandle handle = InvalidAudioHandle;
+                ALuint bufferId = 0;
                 if (command.params.streaming)
                 {
                     AudioSourceConfig config;
@@ -151,7 +152,7 @@ namespace core::audio
                 }
                 else
                 {
-                    ALuint bufferId = deps.bufferManager->loadBuffer(command.path);
+                    bufferId = deps.bufferManager->loadBuffer(command.path);
                     if (bufferId != 0)
                     {
                         // VK-1513: arbitrate against the real-voice budget before taking a
@@ -240,6 +241,7 @@ namespace core::audio
                     {
                         VoiceRecord rec;
                         rec.internal = handle;
+                        rec.bufferId = bufferId;
                         rec.priority = command.params.priority;
                         rec.is3D = command.params.is3D;
                         rec.position = command.params.position;
@@ -540,7 +542,7 @@ namespace core::audio
         forgetVoice(externalHandle);
     }
 
-    void AudioThread::publishSnapshot()
+    void AudioThread::publishSnapshot(float deltaTime)
     {
         int writeIdx = 1 - readIndex.load(std::memory_order_acquire);
         auto& snapshot = snapshots[writeIdx];
@@ -548,16 +550,22 @@ namespace core::audio
 
         // Build snapshot using external handles (what the main thread knows)
         std::vector<AudioHandle> finished;
+        sourceMeterSamples.clear();
+        sourceMeterSamples.reserve(activeHandles.size());
         for (AudioHandle extHandle : activeHandles)
         {
             AudioHandle internal = resolveHandle(extHandle);
             AudioStateSnapshot::SourceState state;
             bool sourceFinished = false;
+            float sourceRms = 0.0f;
 
             if (StreamingAudioManager::isStreamingHandle(internal))
             {
                 state.playing = deps.streamingManager->isPlaying(internal);
-                state.playbackPosition = deps.streamingManager->getPlaybackPosition(internal);
+                const StreamingPlaybackMetrics metrics =
+                    deps.streamingManager->getPlaybackMetrics(internal);
+                state.playbackPosition = metrics.positionSeconds;
+                sourceRms = metrics.rms;
                 state.duration = deps.streamingManager->getDuration(internal);
                 sourceFinished = deps.streamingManager->isFinished(internal);
             }
@@ -569,6 +577,20 @@ namespace core::audio
                     state.playing = source->isPlaying();
                     state.playbackPosition = source->getPlaybackPosition();
                     sourceFinished = source->isStopped();
+
+                    const auto recordIt = voiceRecords.find(extHandle);
+                    if (recordIt != voiceRecords.end())
+                    {
+                        const VoiceRecord& record = recordIt->second;
+                        const float envelope = deps.bufferManager->sampleEnvelope(
+                            record.bufferId, state.playbackPosition);
+                        AttenuationParams attenuation = record.atten;
+                        attenuation.model = distanceModel;
+                        const float distance = record.is3D
+                            ? glm::distance(listenerPosition, record.position)
+                            : 0.0f;
+                        sourceRms = envelope * estimateAudibleGain(1.0f, attenuation, distance);
+                    }
                 }
                 else
                 {
@@ -576,6 +598,9 @@ namespace core::audio
                     continue;
                 }
             }
+
+            if (state.playing && !sourceFinished && sourceRms > 0.0f && std::isfinite(sourceRms))
+                sourceMeterSamples.push_back({internal, sourceRms});
 
             snapshot.sources[extHandle] = state;
 
@@ -586,6 +611,8 @@ namespace core::audio
                 finished.push_back(extHandle);
             }
         }
+
+        deps.busManager->updateBusMeters(sourceMeterSamples, deltaTime);
 
         for (AudioHandle h : finished)
         {

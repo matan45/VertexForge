@@ -198,6 +198,10 @@ namespace core {
         return audioController->getBusNames();
     }
 
+    std::vector<types::AudioBusLevel> AudioAdapter::getBusLevels() const {
+        return audioController->getBusLevels();
+    }
+
     void AudioAdapter::saveMixSnapshot(const std::string& name) {
         audioController->saveMixSnapshot(name);
     }

@@ -39,6 +39,7 @@ namespace core::audio
         bool isPlaying(AudioHandle handle) const;
         bool isFinished(AudioHandle handle) const;
         float getPlaybackPosition(AudioHandle handle) const;
+        StreamingPlaybackMetrics getPlaybackMetrics(AudioHandle handle) const;
         bool setPlaybackPosition(AudioHandle handle, float seconds);
         float getDuration(AudioHandle handle) const;
 

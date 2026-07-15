@@ -1,5 +1,6 @@
 #pragma once
 #include "AudioSourceManager.hpp"
+#include "BusMetering.hpp"
 #include "types/AudioTypes.hpp"
 #include "types/AudioEffectTypes.hpp"
 #include <AL/al.h>
@@ -9,6 +10,7 @@
 #include <map>
 #include <functional>
 #include <shared_mutex>
+#include <span>
 
 namespace core::audio
 {
@@ -42,6 +44,12 @@ namespace core::audio
         float userVolume = 1.0f;
     };
 
+    struct SourceMeterSample
+    {
+        AudioHandle handle = 0;
+        float dryRms = 0.0f;
+    };
+
     namespace BusNames
     {
         constexpr const char* Master = "Master";
@@ -69,6 +77,7 @@ namespace core::audio
         AudioBus* getBusByName(const std::string& name);
         uint32_t getBusIdByName(const std::string& name) const;
         std::vector<std::string> getBusNames() const;
+        std::vector<types::AudioBusLevel> getBusLevels() const;
 
         // Bus controls
         void setBusVolume(const std::string& name, float volume);
@@ -90,6 +99,7 @@ namespace core::audio
 
         // Call once per frame to flush deferred volume recalculations
         void flushDirtyVolumes();
+        void updateBusMeters(std::span<const SourceMeterSample> samples, float deltaTime);
 
         // Snapshots
         void saveSnapshot(const std::string& name);
@@ -131,5 +141,11 @@ namespace core::audio
         AudioEffectManager* effectManager = nullptr;
         ReverbZoneManager* reverbZoneManager = nullptr;
         bool volumesDirty = false;
+
+        // VK-1514: protected by busMutex alongside the topology and tracked routing.
+        std::vector<metering::Entry> meterEntries;
+        std::vector<metering::BusNode> meterNodesScratch;
+        std::vector<float> directPowerScratch;
+        std::vector<float> meterRmsScratch;
     };
 }

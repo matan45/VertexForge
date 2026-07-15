@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <cstddef>
@@ -44,6 +45,102 @@ namespace resource
         float rms  = 0.0f;
         float peak = 0.0f; // instantaneous |sample| peak
     };
+
+    // VK-1514: compact whole-asset RMS envelopes for estimated bus metering. Code 0 is
+    // reserved for exact silence; positive codes cover the display's -60..0 dB range.
+    inline constexpr std::size_t kEnvelopeWindowsPerSecond = 100;
+    inline constexpr float       kEnvelopeFloorDb          = -60.0f;
+
+    inline uint8_t encodeEnvelopeDb(float rms)
+    {
+        if (!std::isfinite(rms) || rms <= 0.0f)
+            return 0;
+
+        const float db = std::clamp(20.0f * std::log10(rms), kEnvelopeFloorDb, 0.0f);
+        const float normalized = (db - kEnvelopeFloorDb) / -kEnvelopeFloorDb;
+        return static_cast<uint8_t>(1 + std::lround(normalized * 254.0f));
+    }
+
+    inline float decodeEnvelopeDb(uint8_t code)
+    {
+        static const std::array<float, 256> lut = []
+        {
+            std::array<float, 256> values{};
+            for (std::size_t i = 1; i < values.size(); ++i)
+            {
+                const float db = kEnvelopeFloorDb
+                    + static_cast<float>(i - 1) * (-kEnvelopeFloorDb / 254.0f);
+                values[i] = std::pow(10.0f, db / 20.0f);
+            }
+            return values;
+        }();
+        return lut[code];
+    }
+
+    // Builds 10 ms power-RMS windows over all complete interleaved frames. Channel
+    // powers are averaged rather than downmixed, so anti-phase stereo cannot cancel.
+    inline std::vector<uint8_t> buildRmsEnvelope(std::span<const short> interleaved,
+                                                  uint32_t channels,
+                                                  uint32_t sampleRate)
+    {
+        if (interleaved.empty() || channels == 0 || sampleRate == 0)
+            return {};
+
+        const std::size_t totalFrames = interleaved.size() / channels;
+        if (totalFrames == 0)
+            return {};
+
+        const std::uint64_t scaledFrames = static_cast<std::uint64_t>(totalFrames)
+            * static_cast<std::uint64_t>(kEnvelopeWindowsPerSecond);
+        const std::size_t windowCount = static_cast<std::size_t>(
+            (scaledFrames + sampleRate - 1u) / sampleRate);
+
+        std::vector<uint8_t> envelope(windowCount, 0);
+        for (std::size_t window = 0; window < windowCount; ++window)
+        {
+            const std::size_t beginFrame = std::min<std::size_t>(
+                totalFrames,
+                static_cast<std::size_t>((static_cast<std::uint64_t>(window) * sampleRate)
+                                         / kEnvelopeWindowsPerSecond));
+            const std::size_t endFrame = std::min<std::size_t>(
+                totalFrames,
+                static_cast<std::size_t>((static_cast<std::uint64_t>(window + 1) * sampleRate)
+                                         / kEnvelopeWindowsPerSecond));
+            if (endFrame <= beginFrame)
+                continue;
+
+            double sumSquares = 0.0;
+            for (std::size_t frame = beginFrame; frame < endFrame; ++frame)
+            {
+                const std::size_t base = frame * channels;
+                for (uint32_t channel = 0; channel < channels; ++channel)
+                {
+                    const double sample = static_cast<double>(interleaved[base + channel])
+                        / static_cast<double>(kInt16Norm);
+                    sumSquares += sample * sample;
+                }
+            }
+
+            const double sampleCount = static_cast<double>(endFrame - beginFrame)
+                * static_cast<double>(channels);
+            envelope[window] = encodeEnvelopeDb(
+                static_cast<float>(std::sqrt(sumSquares / sampleCount)));
+        }
+        return envelope;
+    }
+
+    inline float sampleEnvelope(std::span<const uint8_t> envelope, float seconds)
+    {
+        if (envelope.empty() || !std::isfinite(seconds))
+            return 0.0f;
+
+        seconds = std::max(seconds, 0.0f);
+        const double scaled = static_cast<double>(seconds)
+            * static_cast<double>(kEnvelopeWindowsPerSecond);
+        if (scaled >= static_cast<double>(envelope.size()))
+            return decodeEnvelopeDb(envelope.back());
+        return decodeEnvelopeDb(envelope[static_cast<std::size_t>(scaled)]);
+    }
 
     enum class WindowFn
     {

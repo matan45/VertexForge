@@ -1,5 +1,6 @@
 #pragma once
 #include "../EventTypes.hpp"
+#include "types/AudioTypes.hpp"
 #include <string>
 #include <vector>
 
@@ -46,6 +47,10 @@ namespace events::audio {
 
     struct GetBusNamesQuery : ::events::IQuery<std::vector<std::string>> {
         std::string_view getName() const override { return "GetBusNames"; }
+    };
+
+    struct GetBusLevelsQuery : ::events::IQuery<std::vector<types::AudioBusLevel>> {
+        std::string_view getName() const override { return "GetBusLevels"; }
     };
 
     struct SaveMixSnapshotCommand : ::events::ICommand<void> {
