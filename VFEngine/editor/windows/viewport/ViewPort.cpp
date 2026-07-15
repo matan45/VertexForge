@@ -136,7 +136,7 @@ namespace windows
 
             handleEntityPicking(isPlayMode, vp, vs, attenuationGizmoConsumesMouse);
             selector.update(picker, *editorCamera, isPlayMode, vp, vs,
-                            attenuationGizmoConsumesMouse);
+                            audioAttenuationGizmo.isDragging());
             handleSculptBrush();
             handlePaintBrush();
             handleHoleBrush();

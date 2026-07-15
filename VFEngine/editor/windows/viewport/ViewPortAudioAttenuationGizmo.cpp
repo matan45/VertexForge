@@ -14,8 +14,8 @@
 #include "events/terrain/PaintModeEvents.hpp"
 #include "events/terrain/SplineTerrainEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
-#include "ImGuizmo.h"
 #include <imgui.h>
+#include "ImGuizmo.h"
 #include <memory>
 
 namespace

@@ -39,7 +39,7 @@ namespace windows
         // the viewport window is current (the overlay draws into its DrawList).
         void update(const ViewPortPicker& picker, const editor::EditorCamera& camera,
                     bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize,
-                    bool customGizmoConsumesMouse = false);
+                    bool customGizmoDragging = false);
 
         bool isMarqueeActive() const { return marqueeActive; }
 

@@ -85,9 +85,11 @@ namespace windows
                                    const editor::EditorCamera& camera,
                                    bool isPlayMode, glm::vec2 viewportPos,
                                    glm::vec2 viewportSize,
-                                   bool customGizmoConsumesMouse)
+                                   bool customGizmoDragging)
     {
-        if (isPlayMode || customGizmoConsumesMouse)
+        // Passive custom-handle hover must not cancel a marquee that already
+        // owns LMB. A captured custom drag still wins and resets the gesture.
+        if (isPlayMode || customGizmoDragging)
         {
             resetMarquee();
             return;

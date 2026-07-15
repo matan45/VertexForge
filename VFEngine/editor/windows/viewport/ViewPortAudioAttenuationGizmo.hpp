@@ -31,6 +31,8 @@ namespace windows
             return dragging || hoveredHandle != audioattenuation::HandleKind::None;
         }
 
+        bool isDragging() const { return dragging; }
+
     private:
         bool isToolModeActive() const;
         bool isContextStillEditable(bool viewportAvailable,
