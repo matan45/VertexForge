@@ -53,6 +53,16 @@ namespace
     {
         return atten(types::AudioDistanceModel::None, 1.0f, 100.0f, 1.0f);
     }
+
+    // VK-1521: a voice fading out to die. releaseGain is how much of it is left —
+    // ~1 just after the ramp is armed, ~0 as it finishes.
+    VoiceCandidate releasing(uint64_t handle, uint8_t priority, float audibleGain,
+                             float releaseGain)
+    {
+        VoiceCandidate v = voice(handle, priority, audibleGain);
+        v.releaseGain = releaseGain;
+        return v;
+    }
 }
 
 TEST_SUITE("AudioVoicePolicy")
@@ -314,5 +324,136 @@ TEST_SUITE("AudioVoicePolicy")
         const VoiceDecision d = decidePlay(live, voice(9, 128, 0.4f), 2);
         CHECK(d.kind == VoiceDecisionKind::Steal);
         CHECK(d.victim == 2);
+    }
+
+    // --- VK-1521: ranking scale, and electing a dying voice ---------------------
+
+    TEST_CASE("ranking: a voice is scored on its TARGET gain, not its ramped gain")
+    {
+        // The exact shape of F3. A is authored at full volume but is 50ms into a 2000ms
+        // fade-in, so its live AL_GAIN is ~2.5% of target. B is a tenth as loud, steady.
+        //
+        // These two candidates are the two possible answers to "what is A's audibleGain",
+        // and they rank OPPOSITELY — which is the whole bug. gatherLiveVoices used to read
+        // AL_GAIN and so built the first; it now builds the second.
+        const VoiceCandidate rampedA = voice(1, 128, 1.0f * 0.025f);
+        const VoiceCandidate targetA = voice(1, 128, 1.0f);
+        const VoiceCandidate steadyB = voice(2, 128, 0.1f);
+
+        CHECK_FALSE(moreImportant(rampedA, steadyB)); // ramped: A is the FIRST thing stolen
+        CHECK(moreImportant(targetA, steadyB));       // target: A is correctly the loudest
+
+        // And so, at a full budget, the ramped scale steals the sound that just started.
+        const std::vector<VoiceCandidate> ramped{rampedA, steadyB};
+        const VoiceDecision bad = decidePlay(ramped, voice(9, 128, 0.05f), 2);
+        CHECK(bad.kind == VoiceDecisionKind::Steal);
+        CHECK(bad.victim == 1); // the 2s fade-in, 50ms in
+
+        const std::vector<VoiceCandidate> target{targetA, steadyB};
+        const VoiceDecision good = decidePlay(target, voice(9, 128, 0.05f), 2);
+        CHECK(good.kind == VoiceDecisionKind::Deny); // nothing here is worth evicting
+    }
+
+    TEST_CASE("ranking: releaseGain is inert for a voice that is not dying")
+    {
+        // The default must leave every pre-VK-1521 ranking bit-identical — this is the
+        // guarantee that lets the rest of this file stay unmodified.
+        CHECK(voiceScore(voice(1, 128, 0.5f)) == doctest::Approx(voiceScore(releasing(1, 128, 0.5f, 1.0f))));
+        CHECK(voice(1, 128, 0.5f).releaseGain == doctest::Approx(1.0f));
+    }
+
+    TEST_CASE("policy: a nearly-finished fade-out is the cheapest voice to steal")
+    {
+        // 1 is authored loud but has almost finished dying (5% left); 2 is quiet but alive.
+        // Cutting 1 costs almost nothing, so it must go first even though 2 is quieter.
+        const std::vector<VoiceCandidate> live{releasing(1, 128, 1.0f, 0.05f), voice(2, 128, 0.1f)};
+        const VoiceDecision d = decidePlay(live, voice(9, 128, 0.5f), 2);
+        CHECK(d.kind == VoiceDecisionKind::Steal);
+        CHECK(d.victim == 1);
+    }
+
+    TEST_CASE("policy: a fade-out that just started is protected — the anti-click case")
+    {
+        // 1 was armed moments ago and is still at 95% volume: cutting it is as audible as
+        // cutting any live voice, and is exactly the click fadeOutAndRelease exists to
+        // avoid. The quiet live voice must be the victim instead.
+        const std::vector<VoiceCandidate> live{releasing(1, 128, 1.0f, 0.95f), voice(2, 128, 0.2f)};
+        const VoiceDecision d = decidePlay(live, voice(9, 128, 0.5f), 2);
+        CHECK(d.kind == VoiceDecisionKind::Steal);
+        CHECK(d.victim == 2);
+    }
+
+    TEST_CASE("policy: a budget full of dying voices still admits new sound")
+    {
+        // A level transition ramping every voice out at once. Excluding releasing voices
+        // from candidacy would leave nothing to steal and starve all new sound for the
+        // length of the fade; scoring them by their tail keeps them stealable.
+        const std::vector<VoiceCandidate> live{releasing(1, 128, 0.5f, 0.05f),
+                                               releasing(2, 128, 0.5f, 0.05f)};
+        const VoiceDecision d = decidePlay(live, voice(9, 128, 0.4f), 2);
+        CHECK(d.kind == VoiceDecisionKind::Steal);
+    }
+
+    TEST_CASE("ranking: releaseGain keeps a strict weak ordering under sort")
+    {
+        // A broken comparator is UB in std::sort and trips MSVC's debug iterators, so the
+        // new multiplier must not introduce a non-finite score or an intransitive pair.
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        std::vector<VoiceCandidate> mixed{
+            voice(1, 128, 0.5f),           releasing(2, 128, 1.0f, 0.0f),
+            releasing(3, 0, 1.0f, 0.5f),   releasing(4, 255, 0.1f, 1.0f),
+            releasing(5, 128, 1.0f, nan),  voice(6, 128, nan),
+        };
+        for (const VoiceCandidate& v : mixed)
+            CHECK(std::isfinite(voiceScore(v)));
+
+        // A non-finite ramp sanitizes to silent rather than poisoning the order.
+        CHECK(voiceScore(releasing(5, 128, 1.0f, nan)) == doctest::Approx(0.0f));
+
+        std::sort(mixed.begin(), mixed.end(), moreImportant);
+        for (std::size_t i = 0; i + 1 < mixed.size(); ++i)
+            CHECK_FALSE(moreImportant(mixed[i + 1], mixed[i]));
+    }
+
+    // --- VK-1513/1521: occupancy is not candidacy -------------------------------
+
+    TEST_CASE("policy: reservedSlots default of zero preserves every prior decision")
+    {
+        // The proof obligation for the signature change: at 0 this must be the function it
+        // always was, including the empty-live case that used to short-circuit to Allow.
+        const std::vector<VoiceCandidate> live{voice(1, 128, 0.5f)};
+        CHECK(decidePlay(live, voice(9, 128, 0.9f), 4).kind == VoiceDecisionKind::Allow);
+        CHECK(decidePlay(live, voice(9, 128, 0.9f), 4, 0).kind == VoiceDecisionKind::Allow);
+
+        const std::vector<VoiceCandidate> none{};
+        CHECK(decidePlay(none, voice(9, 128, 0.9f), 4).kind == VoiceDecisionKind::Allow);
+    }
+
+    TEST_CASE("policy: a slot held by a ramp counts as occupied but is not a victim")
+    {
+        // One live voice, one slot still held by a fade whose record is already reaped,
+        // cap 2. Counting only `live` says "1 < 2, Allow" — and then acquireSource finds
+        // nothing and the sound is silently dropped. Reserved makes the pool honest.
+        const std::vector<VoiceCandidate> live{voice(1, 128, 0.9f)};
+        CHECK(decidePlay(live, voice(9, 128, 0.5f), 2).kind == VoiceDecisionKind::Allow);
+
+        const VoiceDecision d = decidePlay(live, voice(9, 128, 0.5f), 2, 1);
+        CHECK(d.kind == VoiceDecisionKind::Deny); // 0.5 does not beat the live 0.9
+
+        // Louder incoming: it steals the LIVE voice. The reserved slot is not a candidate —
+        // there is no voice behind it to evict, and its slot comes back on its own.
+        const VoiceDecision steal = decidePlay(live, voice(9, 128, 1.0f), 2, 1);
+        CHECK(steal.kind == VoiceDecisionKind::Steal);
+        CHECK(steal.victim == 1);
+    }
+
+    TEST_CASE("policy: a pool full of nothing but ramps denies rather than allowing")
+    {
+        // Every slot held by a fade-out, no live voice at all. The old `live.empty()`
+        // short-circuit would Allow into a pool with no slot to give.
+        const std::vector<VoiceCandidate> none{};
+        CHECK(decidePlay(none, voice(9, 128, 0.9f), 2, 2).kind == VoiceDecisionKind::Deny);
+        // One slot back: room again.
+        CHECK(decidePlay(none, voice(9, 128, 0.9f), 2, 1).kind == VoiceDecisionKind::Allow);
     }
 }

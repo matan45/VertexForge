@@ -62,6 +62,10 @@ namespace core::audio {
             bool hasLastFrame = false;          // VK-1506: false until first frame observed
             bool velocityDispatched = false;    // VK-1506: last dispatch carried non-zero velocity
             bool seenPlaying = false;
+            // The frame this emitter was last seen by the component view. Both erase sites
+            // live INSIDE that view's loop, so an entity destroyed mid-playback is never
+            // visited again and its entry could never be reclaimed by them.
+            std::uint64_t lastSeenFrame = 0;
 
             // VK-1518 geometry occlusion.
             // rayAccum: time owed toward this emitter's next ray. Seeded with a per-entity
@@ -98,6 +102,11 @@ namespace core::audio {
 
         ReverbZoneManager* reverbZoneManager = nullptr;
         std::unordered_map<std::uint64_t, EmitterCacheEntry> emitterCache;
+        // Monotonic frame counter for the emitterCache sweep. Deliberately not an entt
+        // on_destroy hook: the sweep also reclaims an entity that merely lost its
+        // WorldTransformComponent (which on_destroy<AudioSource3DComponent> would miss), and
+        // it needs no signal wiring or init/shutdown owner.
+        std::uint64_t frameCounter = 0;
 
         // VK-1518: reused across frames so the per-frame ray scheduling doesn't allocate.
         std::vector<OcclusionCandidate> occlusionScratch;

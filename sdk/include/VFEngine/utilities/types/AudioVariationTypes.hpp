@@ -45,10 +45,19 @@ namespace types
     inline constexpr std::size_t AUDIO_MAX_VARIANTS = 255u; // 0..254; 0xFF reserved
 
     // Jitter safety rails. AudioSource::setPitch/setVolume pass the raw float
-    // straight to alSourcef with no clamp of their own, and OpenAL rejects
-    // AL_PITCH <= 0 with AL_INVALID_VALUE — which only logs, leaving the source
-    // at its PREVIOUS pitch. Jitter makes that reachable (0.5 * (1 + 1.0*-1) == 0),
-    // so the clamp is a correctness requirement, not a nicety.
+    // straight to alSourcef with no clamp of their own, and the two invalid pitches
+    // fail differently — which is why the floor is > 0 and not >= 0:
+    //   pitch 0 is ACCEPTED (openal-soft al/source.cpp guards `>= T{0}`, not `> 0`).
+    //     The mixer then floors the step at 1 instead of 0 (alc/alu.cpp, `std::max(
+    //     fastf2u(pitch * MixerFracOne), 1u)`, MixerFracOne == 1<<16), so the voice
+    //     advances at 1/65536 speed — a 1s clip holds its pooled slot for ~18h. A
+    //     virtualized voice is worse: its simulated clock scales by pitch, so the
+    //     clock freezes outright and the voice never expires at all.
+    //   pitch < 0 is REJECTED with AL_INVALID_VALUE, which only logs — the source
+    //     keeps its PREVIOUS pitch while the mirrored record keeps the negative, and
+    //     the two disagree from then on.
+    // Jitter reaches 0 on its own (0.5 * (1 + 1.0*-1) == 0), so the clamp is a
+    // correctness requirement, not a nicety.
     //
     // The bounds are deliberately wider than the drawers' authored ranges
     // (pitch [0.5, 2.0], volume [0, 1]): authored pitch 2.0 with 50% variation
@@ -225,6 +234,23 @@ namespace types
     inline float audioJitterPitch(float pitch, float variation, float rSigned) noexcept
     {
         return audioApplyVariation(pitch, variation, rSigned, AUDIO_MIN_PITCH, AUDIO_MAX_PITCH);
+    }
+
+    // The same rails for a pitch that arrives already authored — from a script native or
+    // hand-edited JSON — rather than from the jitter path above. Unlike
+    // audioApplyVariation there is no unclamped passthrough: an authored pitch has no
+    // "variation == 0 means don't touch it" contract to honour.
+    //
+    // Every writer of a voice's pitch must route through this. The AL source and the
+    // CPU-side record that mirrors it are written from the same command, so clamping one
+    // and not the other is what makes them diverge.
+    inline constexpr float audioClampPitch(float pitch) noexcept
+    {
+        if (!(pitch > AUDIO_MIN_PITCH))
+        {
+            return AUDIO_MIN_PITCH; // NaN-safe
+        }
+        return pitch < AUDIO_MAX_PITCH ? pitch : AUDIO_MAX_PITCH;
     }
 
     // Note the asymmetry at the top of the range: the drawers author volume in

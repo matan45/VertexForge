@@ -68,6 +68,17 @@ namespace core::audio
         size_t getActiveCount() const { return activeHandles.size(); }
         size_t getPoolSize() const { return sourcePool.size(); }
 
+        // VK-1513: slots actually handed out. Ground truth rather than a proxy — acquire
+        // pops freeIndices, retireSlot pushes it back, and growPool grows both in lockstep,
+        // so this is exact by construction even when a slot is held by a ramp whose voice
+        // record is already gone.
+        //
+        // Deliberately NOT activeHandles.size() + fadingQueue.size(): by the membership
+        // invariant above, a fading-IN handle is in BOTH, so that sum double-counts every
+        // fade-in — and a budget arbitrating on it would steal live voices while slots sat
+        // free.
+        size_t occupiedSlots() const { return sourcePool.size() - freeIndices.size(); }
+
         // VK-1513. The pool is never shrunk — destroying AL sources under live voices would
         // cut them off mid-playback. Lowering the cap only stops further growth.
         void setMaxVoices(int cap) { maxVoices = cap; }

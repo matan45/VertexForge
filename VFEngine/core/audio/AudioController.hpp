@@ -65,6 +65,9 @@ namespace core::audio {
         void pauseSound(AudioHandle handle);
         void resumeSound(AudioHandle handle);
         bool isPlaying(AudioHandle handle) const;
+        // isPlaying plus "was this play thrown away". One snapshot read, because
+        // getSnapshot() deep-copies its map and the caller polls per emitter per frame.
+        types::SoundStatus getSoundStatus(AudioHandle handle) const;
         void setVolume(AudioHandle handle, float volume);
         void setPitch(AudioHandle handle, float pitch);
         void setSourceTransform(AudioHandle handle, const glm::vec3& position,

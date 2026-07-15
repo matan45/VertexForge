@@ -194,4 +194,22 @@ namespace types
             return settings;
         }
     };
+
+    // VK-1513. The full answer about a live handle, read from one snapshot.
+    //
+    // `rejected` disambiguates the two very different things "not playing" can mean. The
+    // handle is minted on the calling thread and returned immediately, BEFORE the audio
+    // thread has arbitrated the request — so for the first few ticks "not playing" honestly
+    // means "not yet", and a caller must not conclude anything from it. If the arbitration
+    // then throws the request away (the voice budget denied it AND the virtual set was
+    // full), "not playing" becomes permanent — but it looks identical, so a caller waiting
+    // to observe the voice play waits forever. This is the flag that tells them apart.
+    //
+    // Lives here rather than beside AudioHandle so the Audio DLL can answer the query
+    // without pulling in a service interface for a POD.
+    struct SoundStatus
+    {
+        bool playing = false;
+        bool rejected = false;
+    };
 }

@@ -312,6 +312,14 @@ namespace core::audio
         AudioSystem::checkError("setRolloffFactor");
     }
 
+    // Sources are pooled, so this is the ONLY thing standing between a new voice and
+    // whatever its slot's previous tenant left behind. It must therefore be total: every
+    // AL property and every CPU mirror this class owns is written here, unconditionally.
+    // Adding state to AudioSource without adding it here is what produced VK-1506's
+    // velocity leak — a fresh one-shot inheriting a dead emitter's doppler.
+    //
+    // Fade and pause are deliberately absent: a fade is AudioSourceManager's queue state,
+    // not a property of the source, and pause is a transition rather than a value.
     void AudioSource::applyConfig(const AudioSourceConfig& config)
     {
         setVolume(config.volume);
@@ -319,6 +327,7 @@ namespace core::audio
         setLooping(config.loop);
         set3D(config.is3D);
         setPosition(config.position);
+        setVelocity(config.velocity);
         setMinDistance(config.minDistance);
         setMaxDistance(config.maxDistance);
         setRolloffFactor(config.rolloffFactor);
@@ -328,6 +337,9 @@ namespace core::audio
         setConeInnerAngle(config.innerConeAngle);
         setConeOuterAngle(config.outerConeAngle);
         setConeOuterGain(config.outerConeGain);
+        // settle, not set: for a fresh play all three are 0 and this is exactly
+        // resetOcclusionState(); for a revive it must land already-muffled.
+        settleOcclusion(config.occlusion, config.occlusionLpfAmount, config.occlusionVolumeAmount);
     }
 
     float AudioSource::getPlaybackPosition() const
@@ -421,6 +433,15 @@ namespace core::audio
         occlusionTarget = std::clamp(occlusion, 0.0f, 1.0f);
         occlusionLpfAmount = std::clamp(lpfAmount, 0.0f, 1.0f);
         occlusionVolumeAmount = std::clamp(volumeAmount, 0.0f, 1.0f);
+    }
+
+    void AudioSource::settleOcclusion(float occlusion, float lpfAmount, float volumeAmount)
+    {
+        setOcclusion(occlusion, lpfAmount, volumeAmount);
+        // Skip the attack/release glide entirely. updateDistanceFilter would otherwise
+        // ramp currentOcclusion up from 0 at kAttackRate, which for a restored voice is
+        // an audible swell rather than the steady state it was already in.
+        currentOcclusion = occlusionTarget;
     }
 
     void AudioSource::resetOcclusionState()

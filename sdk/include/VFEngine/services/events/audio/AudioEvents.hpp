@@ -122,6 +122,21 @@ namespace events::audio {
         std::string_view getName() const override { return "IsSoundPlaying"; }
     };
 
+    // VK-1513. Everything a caller needs to know about a handle it holds, in ONE query.
+    //
+    // Deliberately not a second query beside IsSoundPlayingQuery: the answer is read from a
+    // snapshot that is returned BY VALUE (AudioThread::getSnapshot deep-copies its source
+    // map), and the caller is AudioSceneUpdater, which asks once per 3D emitter per frame.
+    // Two queries would be two deep copies per emitter per frame.
+    //
+    // `rejected` exists because "not playing" is ambiguous on its own: a handle the audio
+    // thread has not reached yet and a handle it has thrown away look identical, and the
+    // caller cannot wait forever to tell them apart.
+    struct SoundStatusQuery : ::events::IQuery<types::SoundStatus> {
+        services::AudioHandle handle;
+        std::string_view getName() const override { return "SoundStatus"; }
+    };
+
     struct GetPlaybackPositionQuery : ::events::IQuery<float> {
         services::AudioHandle handle;
         std::string_view getName() const override { return "GetPlaybackPosition"; }

@@ -577,8 +577,6 @@ namespace handlers {
                 const float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 // VK-1506: listener (camera) velocity feeds doppler.
                 audioSceneUpdater->updateListenerFromPrimaryCamera(dt);
-                // VK-1505: re-sync playing 3D emitters so sounds follow moving entities.
-                audioSceneUpdater->updateEmitters(dt);
             }
         }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
@@ -635,6 +633,18 @@ namespace handlers {
         frameTaskGraph->addTask("Transforms", [sceneGraphFn]() {
             if (sceneGraphFn) sceneGraphFn();
         });
+
+        // VK-1505: emitter following is independent of the listener and must read
+        // WorldTransformComponents produced by Transforms, so it is its own task ordered
+        // after them (mirrors the editor's AudioEmitters task). Pinned to the main thread
+        // for the same reason as AudioListener above, and additionally because occlusion
+        // fires a synchronous physics RaycastQuery (AudioSceneUpdater::serveOcclusionRays).
+        frameTaskGraph->addTask("AudioEmitters", [this]() {
+            if (audioSceneUpdater) {
+                audioSceneUpdater->updateEmitters(
+                    static_cast<float>(engineTime::Timer::getGameDeltaTime()));
+            }
+        }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
         // Pinned to the main thread: prepares cameras and dispatches render commands
         // (offScreen->prepareCameras, UpdateMeshCamera/IBL, getViewportTexture) - the
@@ -729,6 +739,14 @@ namespace handlers {
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
         frameTaskGraph->addDependency("Transforms", "Plugins");
         frameTaskGraph->addDependency("Transforms", "VFX");
+
+        // VK-1505: emitters must read up-to-date WorldTransformComponents.
+        frameTaskGraph->addDependency("AudioEmitters", "Transforms");
+        // VK-1518: occlusion rays fire from occlusionListenerPosition, which
+        // updateListenerFromPrimaryCamera -> updateReverbZones writes. Implied transitively
+        // (Transforms already follows AudioListener), but declared because addDependency
+        // only warns and skips, so a transitive edge can vanish without failing the build.
+        frameTaskGraph->addDependency("AudioEmitters", "AudioListener");
 
         // PostUpdate after transforms.
         frameTaskGraph->addDependency("PostUpdate", "Transforms");

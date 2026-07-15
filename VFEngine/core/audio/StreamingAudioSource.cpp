@@ -439,39 +439,17 @@ namespace core::audio
                                     header.channels, header.sampleRate);
     }
 
-    bool StreamingAudioSource::setPlaybackPosition(float seconds)
+    // Refill the AL queue from `sample` and put the source back into `prevState`. Shared by
+    // both exits of setPlaybackPosition, because the failure path needs it just as much as
+    // the success path: a stream left with an empty queue reports position 0, and a Playing
+    // one with nothing to mix is walked to Finished by processFinishedBuffers and reaped a
+    // tick later.
+    //
+    // Safe to call play() here: `state` is still prevState, so its `if (state == Finished)`
+    // branch cannot fire and re-reset what we have just queued.
+    void StreamingAudioSource::refillAndRestore(size_t sample, StreamingState prevState)
     {
-        if (!streamHandle) return false;
-
-        // Clamp to valid range (must match what seekToTime does internally)
-        seconds = std::max(0.0f, std::min(seconds, streamHandle->getDuration()));
-
-        StreamingState prevState = state;
-
-        if (sourceId != 0)
-        {
-            alSourceStop(sourceId);
-
-            ALint queuedCount = 0;
-            alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
-            if (queuedCount > 0)
-            {
-                std::vector<ALuint> unqueuedBuffers(queuedCount);
-                alSourceUnqueueBuffers(sourceId, queuedCount, unqueuedBuffers.data());
-            }
-        }
-
-        // The AL queue is gone even if the decoder seek fails.
-        resetQueuedState();
-
-        if (!streamHandle->seekToTime(seconds))
-        {
-            return false;
-        }
-
-        const auto& header = streamHandle->getHeader();
-        nextDecodedSample = static_cast<size_t>(seconds * static_cast<float>(header.sampleRate)
-                                               * static_cast<float>(header.channels));
+        resetQueuedState(sample);
 
         for (ALuint bufferId : bufferIds)
         {
@@ -491,7 +469,67 @@ namespace core::audio
         {
             state = StreamingState::Stopped;
         }
+    }
 
+    bool StreamingAudioSource::setPlaybackPosition(float seconds)
+    {
+        if (!streamHandle) return false;
+
+        // FIRST, before anything is torn down: alSourceStop zeroes AL_BYTE_OFFSET and
+        // resetQueuedState empties queuedChunks, and the reported position is derived from
+        // both — so read it once, here, or a failed seek has nothing to roll back to.
+        //
+        // The PLAYHEAD, deliberately, not nextDecodedSample: that is the decoder's WRITE
+        // cursor, a whole queue ahead of what is being heard, so restoring it would answer a
+        // failed scrub by silently jumping forward.
+        const float restoreSeconds = getPlaybackPosition();
+
+        // Clamp to valid range (must match what seekToTime does internally)
+        seconds = std::max(0.0f, std::min(seconds, streamHandle->getDuration()));
+
+        const StreamingState prevState = state;
+
+        if (sourceId != 0)
+        {
+            alSourceStop(sourceId);
+
+            ALint queuedCount = 0;
+            alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
+            if (queuedCount > 0)
+            {
+                std::vector<ALuint> unqueuedBuffers(queuedCount);
+                alSourceUnqueueBuffers(sourceId, queuedCount, unqueuedBuffers.data());
+            }
+        }
+
+        const auto& header = streamHandle->getHeader();
+        const auto sampleAt = [&header](float t) {
+            return static_cast<size_t>(t * static_cast<float>(header.sampleRate)
+                                       * static_cast<float>(header.channels));
+        };
+
+        if (!streamHandle->seekToTime(seconds))
+        {
+            // A failed seek must leave the stream where it was, not destroy it. Bailing out
+            // here with an empty queue is what made a failed scrub snap the preview playhead
+            // to 0 — and it also stranded a Playing source with nothing to mix, so the
+            // stream itself died a tick later.
+            if (streamHandle->seekToTime(restoreSeconds))
+            {
+                refillAndRestore(sampleAt(restoreSeconds), prevState);
+            }
+            else
+            {
+                // Even the rollback failed. The top of the file is the one offset the
+                // decoder is guaranteed to reach, and a stream playing from 0 beats a
+                // stream that no longer exists.
+                streamHandle->reset();
+                refillAndRestore(0, prevState);
+            }
+            return false;
+        }
+
+        refillAndRestore(sampleAt(seconds), prevState);
         return true;
     }
 

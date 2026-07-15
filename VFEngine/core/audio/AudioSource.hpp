@@ -33,6 +33,18 @@ namespace core::audio
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;
         glm::vec3 direction{0.0f, 0.0f, -1.0f};
+
+        // VK-1506 / VK-1518. These two joined the config late, and the reason they belong
+        // here rather than on their own setters is the invariant applyConfig now carries:
+        // it fully determines every AL property and CPU mirror on the source, so a pool
+        // slot cannot inherit anything from its previous tenant. Velocity was the hole —
+        // nothing reset AL_VELOCITY on recycle, so a fresh one-shot doppler-shifted at the
+        // dead emitter's speed. Occlusion had resetOcclusionState() at every choke point,
+        // which is the same idea spelled twice; the defaults below make it one.
+        glm::vec3 velocity{0.0f};
+        float occlusion = 0.0f;             // cut amounts, not gains: 0 == no cut
+        float occlusionLpfAmount = 0.0f;
+        float occlusionVolumeAmount = 0.0f;
     };
 
     class AudioSource
@@ -58,6 +70,12 @@ namespace core::audio
         float occlusionVolumeAmount = 0.0f;
 
         void resetOcclusionState();
+
+        // setOcclusion + land the glide on its target in one step, for a source whose
+        // occlusion is being RESTORED rather than newly observed. A revived voice was
+        // already muffled when it lost its slot, so gliding in from 0 over the attack time
+        // would swell it audibly through the wall it is supposed to be behind.
+        void settleOcclusion(float occlusion, float lpfAmount, float volumeAmount);
 
     public:
         explicit AudioSource();

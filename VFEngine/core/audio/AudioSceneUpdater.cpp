@@ -121,6 +121,11 @@ namespace core::audio {
         // velocity is flushed to zero so a stopped source stops pitch-shifting.
         constexpr float kVelocityEps = 1e-3f;
 
+        // Stamped onto every entry the view below visits; dispatchOcclusion then reclaims
+        // whatever it did not reach. Wraps after ~9.7e9 years at 60fps, and a wrap would at
+        // worst spare one stale entry for one frame.
+        ++frameCounter;
+
         auto view = registry.view<components::AudioSource3DComponent,
                                   components::TransformComponent,
                                   components::WorldTransformComponent>();
@@ -139,9 +144,13 @@ namespace core::audio {
             // Race-safe stale-handle reset (VK-1354-aware): the lock-free snapshot may not
             // yet show a just-started handle, so "not playing" only counts as "finished"
             // once we have positively observed it playing at least once (seenPlaying latch).
-            events::audio::IsSoundPlayingQuery playingQuery;
-            playingQuery.handle = services::AudioHandle{comp.activeHandle};
-            const bool nowPlaying = dispatcher.query(playingQuery);
+            //
+            // Replaces IsSoundPlayingQuery one-for-one rather than joining it — the answer
+            // costs a snapshot deep-copy, and this runs per 3D emitter per frame.
+            events::audio::SoundStatusQuery statusQuery;
+            statusQuery.handle = services::AudioHandle{comp.activeHandle};
+            const types::SoundStatus status = dispatcher.query(statusQuery);
+            const bool nowPlaying = status.playing;
 
             auto it = emitterCache.find(key);
             const bool known = (it != emitterCache.end() && it->second.handle == comp.activeHandle);
@@ -149,9 +158,15 @@ namespace core::audio {
             bool seen = known ? it->second.seenPlaying : false;
             seen = seen || nowPlaying;
 
-            if (seen && !nowPlaying)
+            // VK-1513: `rejected` is the escape from the latch. The seen && !nowPlaying rule
+            // needs the voice to have played at least once, which a rejected play never does
+            // — so without this arm the component sits isPlaying forever, polling every
+            // frame, while a script reading isPlaying() is told false. The two disagree until
+            // the scene unloads.
+            if ((seen && !nowPlaying) || status.rejected)
             {
-                // Genuinely finished — clear stale runtime flags and drop the cache entry.
+                // Genuinely finished, or never going to start — clear stale runtime flags
+                // and drop the cache entry.
                 comp.isPlaying = false;
                 comp.activeHandle = 0;
                 emitterCache.erase(key);
@@ -172,9 +187,14 @@ namespace core::audio {
             {
                 // VK-1518: a new voice, or the same entity restarted on a different handle.
                 // Force the next occlusion dispatch (the sentinel may already be spent on a
-                // reused slot) and re-seed the ray phase. Without this a VK-1515-revived
-                // voice would sit on a freshly reset pool source, i.e. audibly un-muffled,
-                // until its next scheduled ray.
+                // reused slot) and re-seed the ray phase.
+                //
+                // This deliberately does NOT cover a VK-1515 revive, and never could: a
+                // revive re-registers under the SAME external handle, so `known` stays true
+                // and this branch is skipped. A revived voice restores its own occlusion on
+                // the audio thread (AudioThread::reviveVoice, from VoiceMirror) — which is
+                // the right place for it anyway, since it also covers occlusion set from
+                // script with no emitter cache in play at all.
                 entry.occlusionDispatched = -1.0f;
                 entry.lpfDispatched = -1.0f;
                 entry.volumeDispatched = -1.0f;
@@ -251,6 +271,7 @@ namespace core::audio {
             entry.lastFramePosition = pos;
             entry.hasLastFrame = true;
             entry.seenPlaying = seen;
+            entry.lastSeenFrame = frameCounter;
         }
 
         serveOcclusionRays();
@@ -326,32 +347,44 @@ namespace core::audio {
         // A separate dispatch from the transform re-sync above, and deliberately so: that one
         // is gated on the emitter MOVING, but occlusion changes when the WORLD moves. A
         // stationary source behind a closing door has to be told.
-        for (auto& cached : emitterCache)
+        //
+        // This already walks the whole map every frame, so the stale sweep rides along for
+        // free rather than paying for a pass of its own. An entity destroyed mid-playback
+        // stops being visited by updateEmitters' view, so neither erase site in that loop
+        // can ever reclaim it — over a long session with thousands of transient combat
+        // emitters the map grows without bound, and this loop's cost grows with every
+        // emitter that has ever died rather than with the live ones.
+        for (auto it = emitterCache.begin(); it != emitterCache.end();)
         {
-            EmitterCacheEntry& entry = cached.second;
-            if (entry.handle == 0)
+            EmitterCacheEntry& entry = it->second;
+
+            // Not visited by this frame's view: the entity is gone, or has lost a component
+            // the view requires. Either way nothing will ever touch this entry again.
+            if (entry.lastSeenFrame != frameCounter)
             {
+                it = emitterCache.erase(it);
                 continue;
             }
 
-            const bool dirty = entry.occlusionDispatched != entry.occlusionValue
-                            || entry.lpfDispatched != entry.lpfAmount
-                            || entry.volumeDispatched != entry.volumeAmount;
-            if (!dirty)
+            const bool dirty = entry.handle != 0
+                            && (entry.occlusionDispatched != entry.occlusionValue
+                                || entry.lpfDispatched != entry.lpfAmount
+                                || entry.volumeDispatched != entry.volumeAmount);
+            if (dirty)
             {
-                continue;
+                events::audio::SetSoundOcclusionCommand cmd;
+                cmd.handle = services::AudioHandle{entry.handle};
+                cmd.occlusion = entry.occlusionValue;
+                cmd.lpfAmount = entry.lpfAmount;
+                cmd.volumeAmount = entry.volumeAmount;
+                dispatcher.execute(cmd);
+
+                entry.occlusionDispatched = entry.occlusionValue;
+                entry.lpfDispatched = entry.lpfAmount;
+                entry.volumeDispatched = entry.volumeAmount;
             }
 
-            events::audio::SetSoundOcclusionCommand cmd;
-            cmd.handle = services::AudioHandle{entry.handle};
-            cmd.occlusion = entry.occlusionValue;
-            cmd.lpfAmount = entry.lpfAmount;
-            cmd.volumeAmount = entry.volumeAmount;
-            dispatcher.execute(cmd);
-
-            entry.occlusionDispatched = entry.occlusionValue;
-            entry.lpfDispatched = entry.lpfAmount;
-            entry.volumeDispatched = entry.volumeAmount;
+            ++it;
         }
     }
 

@@ -122,6 +122,10 @@ namespace core {
         return audioController->isPlaying(handle);
     }
 
+    types::SoundStatus AudioAdapter::getSoundStatus(services::AudioHandleId handle) const {
+        return audioController->getSoundStatus(handle);
+    }
+
     void AudioAdapter::setVolume(services::AudioHandleId handle, float volume) {
         audioController->setVolume(handle, volume);
     }

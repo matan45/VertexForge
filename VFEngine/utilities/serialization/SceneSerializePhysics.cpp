@@ -100,7 +100,6 @@ namespace serialization
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
         j["busName"] = audioSource.busName;
-        j["priority"] = audioSource.priority;
         j["fadeInMs"] = audioSource.fadeInMs;
         writeAudioVariation(j, audioSource);
         return j;
@@ -125,7 +124,6 @@ namespace serialization
         {
             audioSource.busName = it->get<std::string>();
         }
-        readVoicePriority(j, audioSource.priority);
         readAudioFadeIn(j, audioSource.fadeInMs);
         readAudioVariation(j, audioSource);
         // Reset runtime state

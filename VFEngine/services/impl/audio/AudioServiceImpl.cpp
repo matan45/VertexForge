@@ -158,6 +158,11 @@ namespace services {
                 return isPlaying(query.handle);
             });
 
+        dispatcher.registerQueryHandler<events::audio::SoundStatusQuery>(
+            [this](const auto& query) {
+                return audioProvider->getSoundStatus(query.handle.id);
+            });
+
         dispatcher.registerQueryHandler<events::audio::GetPlaybackPositionQuery>(
             [this](const auto& query) {
                 return getPlaybackPosition(query.handle);

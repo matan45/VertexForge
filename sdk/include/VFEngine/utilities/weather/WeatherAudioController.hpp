@@ -1,6 +1,7 @@
 #pragma once
 
 #include "WeatherTypes.hpp"
+#include "WeatherLoopGate.hpp"
 #include <cstdint>
 #include <string>
 
@@ -26,7 +27,8 @@ namespace weather
 
     private:
         void updateLoop(float deltaTime, float targetVolume,
-                        uint64_t& handle, float& volume, const std::string& path);
+                        uint64_t& handle, float& volume, float& silentTime,
+                        const std::string& path);
         // VK-1521: fadeInMs hands the onset to the engine's streaming fade. Callers pass
         // CROSSFADE_DURATION_MS so a loop's fade-in and fade-out are symmetric — which is
         // what makes a rain -> snow switch an actual crossfade rather than a cut plus a ramp.
@@ -42,6 +44,13 @@ namespace weather
         float rainVolume = 0.0f;
         float windVolume = 0.0f;
         float snowVolume = 0.0f;
+
+        // VK-1521: how long each target has been continuously silent. The debounce that
+        // stops a one-frame intensity dip from arming an uncancellable 2s fade-out and
+        // leaving a second stream stacked on top of it. See WeatherLoopGate.hpp.
+        float rainSilentTime = 0.0f;
+        float windSilentTime = 0.0f;
+        float snowSilentTime = 0.0f;
 
         PrecipitationType activePrecipType = PrecipitationType::None;
         bool initialized = false;

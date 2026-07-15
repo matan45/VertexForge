@@ -13,6 +13,7 @@
 #include "types/AudioTypes.hpp" // types::AudioVoiceRow — the overlay's per-voice payload
 #include <thread>
 #include <atomic>
+#include <deque>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -29,6 +30,11 @@ namespace core::audio
             bool playing = false;
             float playbackPosition = 0.0f;
             float duration = 0.0f;
+            // VK-1513: the audio thread threw this play away — the budget denied it and the
+            // virtual set was full. The caller already holds a handle and has already set
+            // its component playing, so without this the component waits forever to observe
+            // a voice that will never exist.
+            bool rejected = false;
         };
         std::unordered_map<AudioHandle, SourceState> sources;
     };
@@ -94,12 +100,47 @@ namespace core::audio
         // `params` is the single source of truth for the voice's mutable state: the command
         // branches write volume/pitch/position back into it, so a record can never disagree
         // with the AL source it mirrors (a second copy of `position` did exactly that).
+        // VK-1506 / VK-1518 / VK-1521. The runtime state a voice ACCRUES, as opposed to the
+        // play request it was born from (`params`). Every field here is something the engine
+        // observed or was told after the fact — a velocity, an occlusion verdict, a pause —
+        // and every one of them lives on the AL source, which a demote destroys.
+        //
+        // Deliberately NOT merged into PlaySoundParams: that type is the caller's authored
+        // request, it is VF_AUDIO_API and embedded by value (the full-rebuild hazard), and
+        // an occlusion verdict is not something the caller ever asked for.
+        //
+        // It is ONE struct so demote and revive move it as a unit. This bug class came from
+        // three features each adding a piece of source state and each forgetting one half of
+        // the round trip: velocity was never reset on recycle, occlusion was never restored
+        // on revive, pause was captured at demote and then dropped on the floor. Add a field
+        // here and both halves are structural rather than remembered.
+        struct VoiceMirror
+        {
+            glm::vec3 velocity{0.0f};
+            float occlusion = 0.0f;
+            float occlusionLpfAmount = 0.0f;
+            float occlusionVolumeAmount = 0.0f;
+            bool paused = false;
+        };
+
         struct VoiceRecord
         {
             AudioHandle internal = InvalidAudioHandle;
             ALuint bufferId = 0;
             std::string path;
             PlaySoundParams params;
+            VoiceMirror mirror;
+            // VK-1521. This voice is fading out to DIE — FadeOutAndReleaseCmd armed the
+            // ramp and the caller has already let go of the handle. The distinction the
+            // budget needs and cannot otherwise make: AudioSourceManager knows a ramp is
+            // running but not that its end is a funeral, and a fade-out that is merely a
+            // duck would be a legitimate voice to keep.
+            //
+            // Terminal voices must never be virtualized. Doing so captures params.volume
+            // (the PRE-fade target), drops the ramp with the released source, and revives
+            // the voice at full gain — and for a looping one whose handle the caller no
+            // longer holds, nothing can ever stop it again.
+            bool releasing = false;
         };
 
         // VK-1515. A voice that lost the real-voice budget but is kept alive on a simulated
@@ -109,10 +150,10 @@ namespace core::audio
         {
             std::string path;
             PlaySoundParams params;
+            VoiceMirror mirror; // carried across the demote so revive can restore it
             ALuint bufferId = 0;
             float clock = 0.0f;    // simulated playback position, seconds
             float duration = 0.0f; // 0 = unknown: never expires on its own
-            bool paused = false;
         };
 
         // VK-1515. Streaming voices are exempt from the budget and get no VoiceRecord, but
@@ -126,18 +167,35 @@ namespace core::audio
             std::string busName;
         };
 
+        // The gain a voice is RANKED on: what it would be heard at with no ramp in flight.
+        // The one expression all three rankers share — see estimateAudibleGain on why this
+        // must never be read back out of AL_GAIN.
+        float targetGain(const PlaySoundParams& params) const;
+        // Shared by all three rankers so they cannot drift onto different scales again.
+        // `releaseGain` is 1.0 for anything that is not a terminal fade-out.
+        VoiceCandidate makeCandidate(AudioHandle externalHandle, const PlaySoundParams& params,
+                                     float releaseGain) const;
+
         std::vector<VoiceCandidate> gatherLiveVoices() const;
         std::vector<VoiceCandidate> gatherVirtualVoices() const;
-        VoiceCandidate makeCandidate(const PlaySoundCmd& command) const;
-        // Hard-stops a voice and drops every trace of it. Used for steal victims.
+        // Acquire a pool slot and start `command` on it. InvalidAudioHandle == no voice.
+        AudioHandle tryStartRealVoice(const PlaySoundCmd& command, ALuint bufferId);
+        // VK-1513: publish that a play was thrown away, so the caller can stop waiting for
+        // it. The handle gets no registry entry at all — that is what being rejected means —
+        // so this is the only trace of it that ever reaches the main thread.
+        void rejectVoice(AudioHandle externalHandle);
+
+        // Hard-stops a voice and drops every trace of it. Used for steal victims, and for
+        // a terminal fade-out the budget wants to reap rather than revive.
         void releaseVoice(AudioHandle externalHandle);
         void forgetVoice(AudioHandle externalHandle);
 
-        // VK-1515 virtualization.
-        void virtualizeVoice(AudioHandle externalHandle, std::string path,
-                             const PlaySoundParams& params, ALuint bufferId,
-                             float startClock, bool paused);
-        void demoteVoice(AudioHandle externalHandle); // real -> virtual, keeping the clock
+        // VK-1515 virtualization. Both return false when the virtual ceiling refuses; the
+        // voice is then left exactly as it was, and what that means is the caller's call.
+        bool virtualizeVoice(AudioHandle externalHandle, std::string path,
+                             const PlaySoundParams& params, const VoiceMirror& mirror,
+                             ALuint bufferId, float startClock);
+        bool demoteVoice(AudioHandle externalHandle); // real -> virtual, keeping the clock
         bool reviveVoice(AudioHandle externalHandle); // virtual -> real, seeking to the clock
         void updateVirtualClocks(float deltaTime);
         void rebalanceRealVirtual(float deltaTime);
@@ -147,6 +205,8 @@ namespace core::audio
         // The mutable state of a voice, whichever registry currently owns it. Returns null
         // for streaming voices (which keep no params) and unknown handles.
         PlaySoundParams* findVoiceParams(AudioHandle externalHandle);
+        // Same, for the state the caller never authored. See VoiceMirror.
+        VoiceMirror* findVoiceMirror(AudioHandle externalHandle);
 
         AudioCommandQueue& commandQueue;
         Dependencies deps;
@@ -176,6 +236,18 @@ namespace core::audio
         std::unordered_map<AudioHandle, VirtualVoice> virtualVoices;
         std::unordered_map<AudioHandle, StreamingVoiceRecord> streamingRecords;
         std::vector<SourceMeterSample> sourceMeterSamples;
+
+        // VK-1513: recently rejected handles, each with a countdown in ticks.
+        //
+        // A ring with a TTL rather than a set, for two reasons. The tick runs at ~200Hz
+        // while AudioSceneUpdater polls at frame rate, so a rejection published for a single
+        // tick would usually be missed entirely — it has to linger long enough to be seen.
+        // And nothing ever acknowledges a rejection, so entries have to expire on their own
+        // or this would be the leak it exists to report. Bounded as a backstop: a scene
+        // pathological enough to reject faster than these drain must not also grow a queue.
+        std::deque<std::pair<AudioHandle, int>> rejectedRing;
+        static constexpr std::size_t kRejectedRingMax = 128;
+        static constexpr int kRejectedTicks = 200; // ~1s at the 5ms tick
         std::atomic<int> maxRealVoices{kDefaultMaxRealVoices}; // <= 0 disables the cap
         std::atomic<int> realVoiceCount{0};
         std::atomic<int> virtualVoiceCount{0};

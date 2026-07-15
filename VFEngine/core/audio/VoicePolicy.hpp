@@ -68,6 +68,18 @@ namespace core::audio
     // outright, which is exactly VK-1513's pre-virtualization behaviour.
     inline constexpr int kDefaultMaxVirtualVoices = 512;
 
+    // Is there room for one more virtual voice? A predicate rather than a bare comparison
+    // because the ceiling above is only a runaway guard if EVERY route into the virtual set
+    // is gated on it — the Deny path checked it inline while the steal and rebalance paths
+    // (both via demoteVoice) did not, so a saturated scene appended without bound and the
+    // 20Hz sort over the whole set grew until it missed the audio thread's tick deadline.
+    // <= 0 disables virtualization entirely, mirroring the real budget's convention.
+    inline constexpr bool canVirtualize(std::size_t current,
+                                        int ceiling = kDefaultMaxVirtualVoices)
+    {
+        return ceiling > 0 && current < static_cast<std::size_t>(ceiling);
+    }
+
     // VK-1515. How decisively a virtual voice must out-score the worst real voice before
     // it takes that slot: 1.25 = a 25% louder-after-priority win, ~1.9 dB.
     //
@@ -117,6 +129,21 @@ namespace core::audio
         uint64_t handle = kInvalidVoiceHandle;
         uint8_t priority = kDefaultVoicePriority;
         float audibleGain = 1.0f;
+        // VK-1521. How much of a RELEASING voice is left to lose: its fade-out ramp
+        // multiplier, 1.0 at the top of the ramp and ~0 at the end. 1.0 for every voice
+        // that is not releasing, which is why the default makes it inert — a voice with
+        // nothing dying about it must rank exactly as it did before this field existed.
+        //
+        // This is what lets a dying voice be the right victim WITHOUT clicking. A fade-out
+        // that has barely started is still nearly full volume and costs just as much to cut
+        // as any live voice, so it scores like one and is protected. One that is nearly
+        // finished is the cheapest thing in the scene, so it is elected first — where the
+        // cut is inaudible and is masked by the louder voice taking its slot in the same
+        // tick (the same argument AudioThread's steal path already makes for itself).
+        //
+        // Tail-appended with a default, mirroring FadingSource::direction, so every
+        // existing brace-init still compiles and still means what it did.
+        float releaseGain = 1.0f;
     };
 
     struct VoiceDecision
@@ -206,10 +233,18 @@ namespace core::audio
 
     // Estimated gain the listener actually hears from a voice `distance` away.
     //
-    // `sourceGain` is the voice's AL_GAIN, which in this engine already carries
-    // userVolume * effectiveBusVolume (AudioBusManagerEffects applies it per source), so
-    // bus volume, mute and solo are folded in for free — mute a bus and its voices become
-    // stealable, with no duplicated bus math and no extra locking.
+    // `sourceGain` is the voice's TARGET gain: userVolume * effectiveBusVolume. Bus volume,
+    // mute and solo are folded in, so muting a bus makes its voices stealable.
+    //
+    // It must be built from the voice's params and its bus, NOT read back out of AL_GAIN.
+    // Until VK-1521 those were the same number, and reading AL_GAIN got the bus multiplier
+    // for free; a fade then made AL_GAIN = userVolume * busGain * rampGain, and the ranker
+    // that read it silently started scoring a 2s fade-in — 2.5% of target 50ms in — as the
+    // least audible thing in the scene, and stealing it. Where a ramp is part of the
+    // ranking it enters through VoiceCandidate::releaseGain, deliberately and only for a
+    // voice that is actually dying. If you are tempted to read the live gain back, the
+    // question you are answering is "what do I hear" — which is the overlay's question,
+    // not the budget's.
     //
     // Pass distance = 0 for a 2D voice: those are AL_SOURCE_RELATIVE at the origin, so a
     // listener-to-source distance is meaningless for them and they attenuate not at all.
@@ -259,11 +294,17 @@ namespace core::audio
     // score would make moreImportant() violate strict-weak-ordering (UB in std::sort and
     // friends) and because "least important" is the safe outcome for a voice whose
     // position is already garbage.
+    //
+    // releaseGain is clamped rather than trusted: it is read back from a live ramp, and a
+    // non-finite one would poison the score into breaking the strict weak ordering below.
     inline float voiceScore(const VoiceCandidate& v)
     {
         if (!std::isfinite(v.audibleGain))
             return 0.0f;
-        return v.audibleGain * priorityWeight(v.priority);
+        const float release = std::isfinite(v.releaseGain)
+                                  ? std::clamp(v.releaseGain, 0.0f, 1.0f)
+                                  : 0.0f;
+        return v.audibleGain * priorityWeight(v.priority) * release;
     }
 
     // Strict-weak "more important than": by score descending, then by handle ascending
@@ -292,12 +333,30 @@ namespace core::audio
     // significance-cap precedent). Streaming voices must not be passed in: they never draw
     // from the pooled sources this budget governs, and being AL_SOURCE_RELATIVE they have
     // no world position to score.
+    //
+    // `reservedSlots` are pool slots that are occupied but NOT represented in `live` — a
+    // fade-out still holding its slot after its voice record has been reaped, say. The two
+    // are separate arguments because `live` answers two different questions that only
+    // coincide when nothing is fading: how FULL the pool is, and who may be STOLEN from.
+    // Counting occupancy from live.size() alone is what lets a play be admitted against a
+    // pool that has no slot left to give it. A reserved slot is deliberately not a steal
+    // candidate: it has no voice to evict, and its slot returns on its own.
     inline VoiceDecision decidePlay(std::span<const VoiceCandidate> live,
                                     const VoiceCandidate& incoming,
-                                    int maxRealVoices)
+                                    int maxRealVoices,
+                                    int reservedSlots = 0)
     {
-        if (maxRealVoices <= 0 || live.empty() || static_cast<int>(live.size()) < maxRealVoices)
+        // live.empty() is not a separate Allow case: with max > 0 it already implies
+        // 0 < max. It only mattered as a guard for the front()/subspan(1) below, which is
+        // where it now lives — otherwise an empty live set with a full pool would Allow
+        // against a pool that cannot serve it.
+        const int occupied = static_cast<int>(live.size()) + reservedSlots;
+        if (maxRealVoices <= 0 || occupied < maxRealVoices)
             return {VoiceDecisionKind::Allow, kInvalidVoiceHandle};
+
+        // Full, but nothing to steal from — every slot is held by a ramp we must not cut.
+        if (live.empty())
+            return {VoiceDecisionKind::Deny, kInvalidVoiceHandle};
 
         const VoiceCandidate* worst = &live.front();
         for (const VoiceCandidate& v : live.subspan(1))

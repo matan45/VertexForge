@@ -233,7 +233,6 @@ namespace services
                             playCmd.pitch = snap.pitch;
                             playCmd.loop = snap.loop;
                             playCmd.busName = snap.busName;
-                            playCmd.priority = audioComp.priority; // VK-1513
                             newHandle = disp.execute(playCmd);
 
                             audioComp.activeHandle = newHandle;

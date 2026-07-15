@@ -211,6 +211,22 @@ namespace core::audio
         return it != snapshot.sources.end() && it->second.playing;
     }
 
+    types::SoundStatus AudioController::getSoundStatus(AudioHandle handle) const
+    {
+        types::SoundStatus status;
+        if (!initialized || !audioThread) return status;
+        // ONE getSnapshot() — it returns by value and deep-copies its source map, and the
+        // caller asks per 3D emitter per frame. Answering `playing` and `rejected` from two
+        // separate queries would double that cost for every emitter in the scene.
+        const auto& snapshot = audioThread->getSnapshot();
+        if (const auto it = snapshot.sources.find(handle); it != snapshot.sources.end())
+        {
+            status.playing = it->second.playing;
+            status.rejected = it->second.rejected;
+        }
+        return status;
+    }
+
     void AudioController::setVolume(AudioHandle handle, float volume)
     {
         if (!initialized || !commandQueue) return;

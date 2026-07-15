@@ -213,16 +213,40 @@ TEST_SUITE("AudioVariation")
         CHECK(types::audioJitterPitch(2.0f, 0.1f, 1.0f) == doctest::Approx(2.2f));
     }
 
-    TEST_CASE("jitter clamps pitch above zero — OpenAL rejects AL_PITCH <= 0")
+    TEST_CASE("jitter clamps pitch above zero — a zero-pitch voice never ends")
     {
-        // alSourcef(AL_PITCH, 0) fails with AL_INVALID_VALUE, which only logs and
-        // silently leaves the source at its PREVIOUS pitch. 0.5 * (1 + 1.0*-1)
-        // reaches exactly 0, so this clamp is load-bearing.
+        // alSourcef(AL_PITCH, 0) is ACCEPTED (openal-soft guards `>= 0`), and the mixer
+        // then floors the step at 1/65536 speed, so the voice holds its pooled slot for
+        // hours. 0.5 * (1 + 1.0*-1) reaches exactly 0, so this clamp is load-bearing.
         const float p = types::audioJitterPitch(0.5f, 1.0f, -1.0f);
         CHECK(p > 0.0f);
         CHECK(p == doctest::Approx(types::AUDIO_MIN_PITCH));
 
         CHECK(types::audioJitterPitch(3.0f, 1.0f, 1.0f) == doctest::Approx(types::AUDIO_MAX_PITCH));
+    }
+
+    TEST_CASE("audioClampPitch rails an authored pitch that never went through jitter")
+    {
+        // The jitter path is not the only writer: VFX sequence steps, world-sector
+        // restore and the service layer all hand a raw authored pitch to PlaySoundCmd.
+        // Pitch 0 is the one that matters — AL accepts it, so nothing downstream
+        // complains while the voice becomes immortal (its virtual clock scales by pitch
+        // and stops advancing).
+        CHECK(types::audioClampPitch(0.0f) == doctest::Approx(types::AUDIO_MIN_PITCH));
+        // Negative is rejected by AL, which only logs — the source keeps its previous
+        // pitch while the record keeps the negative, and they disagree from then on.
+        CHECK(types::audioClampPitch(-1.0f) == doctest::Approx(types::AUDIO_MIN_PITCH));
+        CHECK(types::audioClampPitch(100.0f) == doctest::Approx(types::AUDIO_MAX_PITCH));
+
+        // In range, untouched — the common case must not be perturbed.
+        CHECK(types::audioClampPitch(1.0f) == doctest::Approx(1.0f));
+        CHECK(types::audioClampPitch(0.5f) == doctest::Approx(0.5f));
+        CHECK(types::audioClampPitch(2.0f) == doctest::Approx(2.0f));
+
+        // NaN is not merely clamped-by-luck: `!(pitch > lo)` is false for NaN, so it
+        // lands on the floor rather than propagating into AL_PITCH and the clock.
+        CHECK(types::audioClampPitch(std::numeric_limits<float>::quiet_NaN())
+              == doctest::Approx(types::AUDIO_MIN_PITCH));
     }
 
     TEST_CASE("volume jitter respects the [0,1] rails and keeps a muted source muted")

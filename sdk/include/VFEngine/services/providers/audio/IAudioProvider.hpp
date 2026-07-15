@@ -63,6 +63,9 @@ namespace services {
         virtual void pauseSound(AudioHandleId handle) = 0;
         virtual void resumeSound(AudioHandleId handle) = 0;
         virtual bool isPlaying(AudioHandleId handle) const = 0;
+        // isPlaying plus whether the audio thread threw the play away. One call, because the
+        // answer costs a snapshot copy and the caller asks per emitter per frame.
+        virtual types::SoundStatus getSoundStatus(AudioHandleId handle) const = 0;
         virtual void setVolume(AudioHandleId handle, float volume) = 0;
         virtual void setPitch(AudioHandleId handle, float pitch) = 0;
         virtual void setSourceTransform(AudioHandleId handle, const glm::vec3& position,

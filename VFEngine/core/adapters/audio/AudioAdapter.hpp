@@ -39,6 +39,7 @@ namespace core
         void pauseSound(services::AudioHandleId handle) override;
         void resumeSound(services::AudioHandleId handle) override;
         bool isPlaying(services::AudioHandleId handle) const override;
+        types::SoundStatus getSoundStatus(services::AudioHandleId handle) const override;
         void setVolume(services::AudioHandleId handle, float volume) override;
         void setPitch(services::AudioHandleId handle, float pitch) override;
         void setSourceTransform(services::AudioHandleId handle, const glm::vec3& position,

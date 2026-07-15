@@ -103,6 +103,9 @@ namespace core::audio {
         bool fillAndQueueBuffer(ALuint bufferId);
 
         void resetQueuedState(size_t nextSample = 0);
+        // Refill the AL queue from `sample` and restore `prevState`. Both exits of
+        // setPlaybackPosition go through this — a failed seek must leave a usable stream.
+        void refillAndRestore(size_t sample, StreamingState prevState);
         
         void processFinishedBuffers();
         
