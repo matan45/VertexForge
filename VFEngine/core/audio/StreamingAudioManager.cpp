@@ -215,12 +215,20 @@ namespace core::audio {
         if (it == activeSources.end())
             return;
 
+        auto fadeIt = findFade(handle);
+
+        // A repeat fade-out is a no-op, mirroring the pooled path — there, a fading-out voice
+        // has left activeHandles so startFadeOut's guard rejects it. A fading-out STREAM has
+        // no such tell: it deliberately stays in activeSources for the whole ramp. Without
+        // this, a second request would restart the ramp from where it had got to and the
+        // sound would linger past the release the caller already asked for.
+        if (fadeIt != fadingStreams.end() && fadeIt->direction == fade::FadeDirection::Out)
+            return;
+
         if (!fade::isRampable(durationMs)) {
             stop(handle);                 // hard cut, and it purges the ramp entry
             return;
         }
-
-        auto fadeIt = findFade(handle);
 
         float baseVolume;
         float startGain;

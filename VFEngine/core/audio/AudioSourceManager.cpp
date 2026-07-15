@@ -247,18 +247,13 @@ namespace core::audio {
 
     void AudioSourceManager::startFadeOut(AudioHandle handle, float durationMs)
     {
-        // VK-1521: resolve the slot from EITHER map. A fade-out may now interrupt an
-        // in-flight fade-in, and a fading-in handle is in both; a fading-out one is in
-        // neither activeHandles nor (as far as this lookup cares) anywhere else.
-        const auto act = activeHandles.find(handle);
-        auto fadeIt = findFade(handle);
-
-        size_t index;
-        if (act != activeHandles.end())
-            index = act->second;
-        else if (fadeIt != fadingQueue.end())
-            index = fadeIt->poolIndex;
-        else
+        // Guard deliberately UNCHANGED from pre-VK-1521: the handle must be in
+        // activeHandles. A voice already fading OUT is not (this function removed it), so a
+        // repeat fade-out stays the no-op it has always been rather than restarting the ramp.
+        // The one case newly admitted is a handle mid-fade-IN — which, by the invariant in
+        // the header, is still in activeHandles precisely because it is still a normal voice.
+        auto it = activeHandles.find(handle);
+        if (it == activeHandles.end())
             return;
 
         if (!fade::isRampable(durationMs))
@@ -269,18 +264,20 @@ namespace core::audio {
             return;
         }
 
+        const size_t index = it->second;
         // Drive-by (VK-1513): this dereferenced sourcePool[index] unchecked, unlike
         // updateFades below which bounds-checks the same index. Harmless once growPool's
         // index desync is fixed, but the asymmetry was an oversight.
         if (index >= sourcePool.size()) {
-            activeHandles.erase(handle);
-            if (fadeIt != fadingQueue.end())
-                fadingQueue.erase(fadeIt);
+            activeHandles.erase(it);
+            if (const auto stale = findFade(handle); stale != fadingQueue.end())
+                fadingQueue.erase(stale);   // a fade-in entry would otherwise be orphaned
             return;
         }
 
         float baseVolume;
         float startGain;
+        auto fadeIt = findFade(handle);   // only ever a fade-IN here, per the guard above
         if (fadeIt != fadingQueue.end())
         {
             // Hand off from the ramp already in flight: continue from the multiplier the
@@ -308,9 +305,9 @@ namespace core::audio {
         fadingQueue.push_back({handle, index, baseVolume, startGain, durationMs, durationMs,
                                fade::FadeDirection::Out});
 
-        // Remove from activeHandles so normal update() doesn't auto-release it. A no-op if
-        // this handle was already fading out.
-        activeHandles.erase(handle);
+        // Remove from activeHandles so normal update() doesn't auto-release it out from
+        // under the ramp. `it` survived the fadingQueue mutation above — different container.
+        activeHandles.erase(it);
     }
 
     void AudioSourceManager::updateFades(float deltaTimeMs)
