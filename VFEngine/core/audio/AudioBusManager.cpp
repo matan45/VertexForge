@@ -397,11 +397,9 @@ namespace core::audio
 
             if (effectManager)
             {
-                auto chain = effectManager->getBusEffectChain(bus.id);
-                if (!chain.empty())
-                {
-                    snapshot.busEffects[bus.id] = chain;
-                }
+                // Presence is meaningful even for an empty chain: runtime snapshots
+                // restore effects, while settings-loaded snapshots omit this entry.
+                snapshot.busEffects[bus.id] = effectManager->getBusEffectChain(bus.id);
             }
         }
         snapshots[name] = std::move(snapshot);
@@ -426,6 +424,12 @@ namespace core::audio
             if (muteIt != snapshot.busMutes.end())
             {
                 bus.muted = muteIt->second;
+            }
+
+            auto effectsIt = snapshot.busEffects.find(bus.id);
+            if (effectsIt != snapshot.busEffects.end())
+            {
+                replaceBusEffectChainLocked(bus.id, effectsIt->second);
             }
         }
 

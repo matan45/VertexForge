@@ -6,6 +6,65 @@
 
 namespace core::audio
 {
+    void AudioBusManager::replaceBusEffectChainLocked(
+        uint32_t busId, const std::vector<types::BusEffectConfig>& chain)
+    {
+        if (!effectManager)
+        {
+            return;
+        }
+
+        const int maxEffects = effectManager->getMaxEffectsPerBus();
+        if (maxEffects < 0 || chain.size() > static_cast<std::size_t>(maxEffects))
+        {
+            vfLogWarning("AudioBusManager: Snapshot chain for bus {} has {} effects, maximum is {}; keeping current chain",
+                         busId, chain.size(), maxEffects);
+            return;
+        }
+
+        std::vector<ALuint> sourceIds;
+        if (sourceResolveCallback)
+        {
+            sourceIds.reserve(trackedSources.size());
+            for (const auto& [handle, tracked] : trackedSources)
+            {
+                if (tracked.busId != busId)
+                {
+                    continue;
+                }
+
+                const ALuint sourceId = sourceResolveCallback(handle);
+                if (sourceId != 0)
+                {
+                    sourceIds.push_back(sourceId);
+                }
+            }
+        }
+
+        // OpenAL refuses to delete an auxiliary slot while a source send references it.
+        for (const ALuint sourceId : sourceIds)
+        {
+            effectManager->unrouteSource(sourceId, busId);
+        }
+
+        effectManager->clearBusEffects(busId);
+        for (std::size_t effectIndex = 0; effectIndex < chain.size(); ++effectIndex)
+        {
+            if (!effectManager->addEffect(busId, chain[effectIndex]))
+            {
+                vfLogWarning("AudioBusManager: Failed to restore effect {} ({}) on bus {}",
+                             effectIndex,
+                             types::audioEffectTypeToString(chain[effectIndex].type),
+                             busId);
+            }
+        }
+
+        for (const ALuint sourceId : sourceIds)
+        {
+            effectManager->routeSourceToBus(sourceId, busId);
+        }
+    }
+
     bool AudioBusManager::addBusEffect(const std::string& busName, const types::BusEffectConfig& config)
     {
         std::unique_lock lock(busMutex);

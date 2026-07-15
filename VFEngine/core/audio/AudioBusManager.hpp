@@ -129,6 +129,8 @@ namespace core::audio
         void recalculateEffectiveVolumes();
         void recalculateBusEffective(AudioBus& bus, float parentEffective, bool parentMuted, bool anySoloed);
         void applyEffectiveVolumesToSources();
+        void replaceBusEffectChainLocked(uint32_t busId,
+                                         const std::vector<types::BusEffectConfig>& chain);
 
         mutable std::shared_mutex busMutex;
 

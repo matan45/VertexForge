@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace
 {
@@ -167,11 +168,11 @@ namespace windows
 
             if (ImGui::TreeNode("Parameters")) {
                 switch (effect.type) {
-                case types::AudioEffectType::Reverb:    drawReverbEditor(selectedBusName, effect.id); break;
-                case types::AudioEffectType::EQ:        drawEQEditor(selectedBusName, effect.id); break;
-                case types::AudioEffectType::Compressor: drawCompressorEditor(selectedBusName, effect.id); break;
-                case types::AudioEffectType::Echo:      drawEchoEditor(selectedBusName, effect.id); break;
-                case types::AudioEffectType::Chorus:    drawChorusEditor(selectedBusName, effect.id); break;
+                case types::AudioEffectType::Reverb:    drawReverbEditor(selectedBusName, effect); break;
+                case types::AudioEffectType::EQ:        drawEQEditor(selectedBusName, effect); break;
+                case types::AudioEffectType::Compressor: drawCompressorEditor(selectedBusName, effect); break;
+                case types::AudioEffectType::Echo:      drawEchoEditor(selectedBusName, effect); break;
+                case types::AudioEffectType::Chorus:    drawChorusEditor(selectedBusName, effect); break;
                 }
                 ImGui::TreePop();
             }
@@ -193,7 +194,8 @@ namespace windows
         else if (maxEffects == 0) { ImGui::TextDisabled("EFX not available"); }
     }
 
-    void AudioMixerWindow::drawReverbEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawReverbEditor(const std::string& busName,
+                                             const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
         static std::vector<std::string> presetNames = {
@@ -202,17 +204,27 @@ namespace windows
             "Hallway", "Forest", "City", "Mountains", "Underwater",
             "Chapel", "Castle Hall", "Factory Hall"};
 
-        static int selectedPreset = 0;
+        const auto* storedParams = std::get_if<types::ReverbParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid reverb parameters");
+            return;
+        }
+
+        const std::string& currentPreset = storedParams->presetName.empty()
+            ? presetNames.front()
+            : storedParams->presetName;
         ImGui::PushItemWidth(200);
-        if (ImGui::BeginCombo("Preset##rv", presetNames[selectedPreset].c_str())) {
+        if (ImGui::BeginCombo("Preset##rv", currentPreset.c_str())) {
             for (int i = 0; i < static_cast<int>(presetNames.size()); ++i) {
-                bool isSelected = (selectedPreset == i);
+                bool isSelected = presetNames[i] == currentPreset;
                 if (ImGui::Selectable(presetNames[i].c_str(), isSelected)) {
-                    selectedPreset = i;
-                    types::BusEffectConfig config; config.id = effectId; config.type = types::AudioEffectType::Reverb;
-                    types::ReverbParams params; params.presetName = presetNames[i]; config.params = params;
+                    types::BusEffectConfig config = effect;
+                    types::ReverbParams params = *storedParams;
+                    params.presetName = presetNames[i];
+                    config.params = std::move(params);
                     events::audio::UpdateBusEffectCommand cmd;
-                    cmd.busName = busName; cmd.effectId = effectId; cmd.config = config;
+                    cmd.busName = busName; cmd.effectId = effect.id; cmd.config = std::move(config);
                     dispatcher.execute(cmd);
                 }
                 if (isSelected) ImGui::SetItemDefaultFocus();
@@ -223,12 +235,19 @@ namespace windows
         ImGui::TextDisabled("Use presets to configure reverb parameters");
     }
 
-    void AudioMixerWindow::drawEQEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawEQEditor(const std::string& busName,
+                                         const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // EQ band controls
-        static types::EQParams eqParams;
+        const auto* storedParams = std::get_if<types::EQParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid EQ parameters");
+            return;
+        }
+
+        types::EQParams eqParams = *storedParams;
 
         bool changed = false;
         ImGui::PushItemWidth(150);
@@ -246,44 +265,56 @@ namespace windows
 
         if (changed)
         {
-            types::BusEffectConfig config;
-            config.id = effectId;
-            config.type = types::AudioEffectType::EQ;
+            types::BusEffectConfig config = effect;
             config.params = eqParams;
 
             events::audio::UpdateBusEffectCommand cmd;
             cmd.busName = busName;
-            cmd.effectId = effectId;
-            cmd.config = config;
+            cmd.effectId = effect.id;
+            cmd.config = std::move(config);
             dispatcher.execute(cmd);
         }
     }
 
-    void AudioMixerWindow::drawCompressorEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawCompressorEditor(const std::string& busName,
+                                                 const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        static bool compOn = true;
+        const auto* storedParams = std::get_if<types::CompressorParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid compressor parameters");
+            return;
+        }
+
+        bool compOn = storedParams->onOff;
         if (ImGui::Checkbox("Compressor On", &compOn))
         {
-            types::BusEffectConfig config;
-            config.id = effectId;
-            config.type = types::AudioEffectType::Compressor;
+            types::BusEffectConfig config = effect;
             config.params = types::CompressorParams{compOn};
 
             events::audio::UpdateBusEffectCommand cmd;
             cmd.busName = busName;
-            cmd.effectId = effectId;
-            cmd.config = config;
+            cmd.effectId = effect.id;
+            cmd.config = std::move(config);
             dispatcher.execute(cmd);
         }
     }
 
-    void AudioMixerWindow::drawEchoEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawEchoEditor(const std::string& busName,
+                                           const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        static types::EchoParams echoParams;
+        const auto* storedParams = std::get_if<types::EchoParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid echo parameters");
+            return;
+        }
+
+        types::EchoParams echoParams = *storedParams;
         bool changed = false;
 
         ImGui::PushItemWidth(150);
@@ -296,24 +327,30 @@ namespace windows
 
         if (changed)
         {
-            types::BusEffectConfig config;
-            config.id = effectId;
-            config.type = types::AudioEffectType::Echo;
+            types::BusEffectConfig config = effect;
             config.params = echoParams;
 
             events::audio::UpdateBusEffectCommand cmd;
             cmd.busName = busName;
-            cmd.effectId = effectId;
-            cmd.config = config;
+            cmd.effectId = effect.id;
+            cmd.config = std::move(config);
             dispatcher.execute(cmd);
         }
     }
 
-    void AudioMixerWindow::drawChorusEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawChorusEditor(const std::string& busName,
+                                             const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        static types::ChorusParams chorusParams;
+        const auto* storedParams = std::get_if<types::ChorusParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid chorus parameters");
+            return;
+        }
+
+        types::ChorusParams chorusParams = *storedParams;
         bool changed = false;
 
         ImGui::PushItemWidth(150);
@@ -330,15 +367,13 @@ namespace windows
 
         if (changed)
         {
-            types::BusEffectConfig config;
-            config.id = effectId;
-            config.type = types::AudioEffectType::Chorus;
+            types::BusEffectConfig config = effect;
             config.params = chorusParams;
 
             events::audio::UpdateBusEffectCommand cmd;
             cmd.busName = busName;
-            cmd.effectId = effectId;
-            cmd.config = config;
+            cmd.effectId = effect.id;
+            cmd.config = std::move(config);
             dispatcher.execute(cmd);
         }
     }

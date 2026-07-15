@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include "types/AudioEffectTypes.hpp"
 
 namespace windows
 {
@@ -28,10 +29,10 @@ namespace windows
         void drawCreateBusSection();
         void drawSnapshotSection();
         void drawEffectChainSection();
-        void drawReverbEditor(const std::string& busName, uint32_t effectId);
-        void drawEQEditor(const std::string& busName, uint32_t effectId);
-        void drawCompressorEditor(const std::string& busName, uint32_t effectId);
-        void drawEchoEditor(const std::string& busName, uint32_t effectId);
-        void drawChorusEditor(const std::string& busName, uint32_t effectId);
+        void drawReverbEditor(const std::string& busName, const types::BusEffectConfig& effect);
+        void drawEQEditor(const std::string& busName, const types::BusEffectConfig& effect);
+        void drawCompressorEditor(const std::string& busName, const types::BusEffectConfig& effect);
+        void drawEchoEditor(const std::string& busName, const types::BusEffectConfig& effect);
+        void drawChorusEditor(const std::string& busName, const types::BusEffectConfig& effect);
     };
 }
