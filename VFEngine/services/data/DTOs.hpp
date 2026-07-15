@@ -210,6 +210,14 @@ namespace services
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
 
+        // VK-1518: mirrors AudioSource3DComponent's occlusion block. Both floats are CUT
+        // amounts at full occlusion (0 = inert); occlusionLayerMask is the trace channel
+        // (bit N = collision layer N), Static|Kinematic by default.
+        bool enableOcclusion = false;
+        float occlusionLpf = 0.7f;
+        float occlusionVolume = 0.3f;
+        uint16_t occlusionLayerMask = 0x0005;
+
         float innerConeAngle = 360.0f;
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;

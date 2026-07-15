@@ -40,6 +40,20 @@ namespace core::audio
         glm::vec3 velocity;
     };
 
+    // VK-1518: latest geometry-occlusion verdict for a playing 3D source, plus the authored
+    // cut amounts. Deliberately NOT folded into SetSourceTransformCmd: that command is
+    // dirty-gated on movement, so a stationary emitter behind a closing door would never
+    // re-dispatch. The two cadences are also different (transform: per-frame when moving;
+    // occlusion: ~10 Hz round-robin). occlusion is 0 (clear) .. 1 (blocked); the amounts are
+    // cut amounts at full occlusion (0 = inert), matching AudioSource3DComponent.
+    struct SetSourceOcclusionCmd
+    {
+        AudioHandle handle;
+        float occlusion;
+        float lpfAmount;
+        float volumeAmount;
+    };
+
     struct SetListenerCmd
     {
         glm::vec3 position;
@@ -108,7 +122,8 @@ namespace core::audio
 
     using AudioCommand = std::variant<
         PlaySoundCmd, StopSoundCmd, PauseSoundCmd, ResumeSoundCmd,
-        SetVolumeCmd, SetPitchCmd, SetSourceTransformCmd, SetListenerCmd, SetPlaybackPosCmd,
+        SetVolumeCmd, SetPitchCmd, SetSourceTransformCmd, SetSourceOcclusionCmd,
+        SetListenerCmd, SetPlaybackPosCmd,
         ApplySettingsCmd, BusVolumeCmd, BusMuteCmd, BusSoloCmd, CreateBusCmd,
         AddBusEffectCmd, RemoveBusEffectCmd, UpdateBusEffectCmd,
         SetBusEffectEnabledCmd, SetBusEffectWetDryCmd,

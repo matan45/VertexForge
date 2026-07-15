@@ -1,13 +1,30 @@
 #include "AudioSceneUpdater.hpp"
 #include "ReverbZoneManager.hpp"
+#include "OcclusionPolicy.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/audio/AudioEvents.hpp"
+#include "../../services/events/physics/PhysicsEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "math/TransformUtils.hpp"
+#include <algorithm>
 #include <cstdint>
 
 namespace core::audio {
+
+    namespace
+    {
+        // VK-1518: spread each emitter's ray cadence by a stable per-entity phase, so a
+        // scene that starts 40 sounds on one frame doesn't then re-ray all 40 on the same
+        // frame forever after. Knuth multiplicative hash — entity ids are small and
+        // sequential, which a plain modulo would leave clustered.
+        float seedRayPhase(std::uint64_t key)
+        {
+            const auto mixed = static_cast<std::uint32_t>(key * 2654435761ull);
+            const float t = static_cast<float>(mixed % 1000u) / 1000.0f;
+            return t * occlusion::kRayInterval;
+        }
+    }
 
     void AudioSceneUpdater::updateListenerFromCamera(const glm::vec3& position,
                                                       const glm::vec3& forward,
@@ -36,6 +53,13 @@ namespace core::audio {
 
     void AudioSceneUpdater::updateReverbZones(const glm::vec3& listenerPosition)
     {
+        // VK-1518: cache the ray origin for occlusion. OUTSIDE the reverbZoneManager guard
+        // on purpose — a scene with no reverb zones still needs occlusion. This hook is the
+        // only listener-position feed both hosts share, so it is what makes occlusion work
+        // in the editor at all (see occlusionListenerPosition in the header).
+        occlusionListenerPosition = listenerPosition;
+        hasOcclusionListener = true;
+
         if (reverbZoneManager)
         {
             auto& registry = scene::EntityRegistry::getRegistry();
@@ -144,6 +168,20 @@ namespace core::audio {
             // `it` is not used past this point (this may insert and invalidate it).
             EmitterCacheEntry& entry = emitterCache[key];
 
+            if (!known)
+            {
+                // VK-1518: a new voice, or the same entity restarted on a different handle.
+                // Force the next occlusion dispatch (the sentinel may already be spent on a
+                // reused slot) and re-seed the ray phase. Without this a VK-1515-revived
+                // voice would sit on a freshly reset pool source, i.e. audibly un-muffled,
+                // until its next scheduled ray.
+                entry.occlusionDispatched = -1.0f;
+                entry.lpfDispatched = -1.0f;
+                entry.volumeDispatched = -1.0f;
+                entry.occlusionValue = 0.0f;
+                entry.rayAccum = seedRayPhase(key);
+            }
+
             // VK-1506: velocity from a single-frame finite difference. The basis
             // (lastFramePosition) is refreshed EVERY frame below — independent of the
             // dispatch dirty-check — so slow movers aren't over-estimated by a stale delta.
@@ -176,12 +214,144 @@ namespace core::audio {
                 entry.velocityDispatched = moving;
             }
 
+            // VK-1518: the authored cut amounts ride the occlusion command rather than the
+            // play-time config, which costs nothing here (we already hold the component) and
+            // makes inspector edits apply live. A disabled emitter reports amount 0, which
+            // occlusionGain treats as inert — so unticking the box glides it back to clear
+            // rather than freezing it mid-muffle.
+            entry.lpfAmount = comp.enableOcclusion ? comp.occlusionLpf : 0.0f;
+            entry.volumeAmount = comp.enableOcclusion ? comp.occlusionVolume : 0.0f;
+
+            if (!comp.enableOcclusion || !hasOcclusionListener
+                || glm::distance(occlusionListenerPosition, pos) > comp.maxDistance)
+            {
+                // Off, no listener yet, or already past its own falloff and inaudible —
+                // either way it reads as clear and must not spend a ray.
+                entry.occlusionValue = 0.0f;
+                entry.rayAccum = 0.0f;
+            }
+            else
+            {
+                entry.rayAccum += dt;
+                if (entry.rayAccum >= occlusion::kRayInterval)
+                {
+                    OcclusionCandidate candidate;
+                    candidate.key = key;
+                    candidate.handle = comp.activeHandle;
+                    candidate.position = pos;
+                    candidate.overdue = entry.rayAccum;
+                    candidate.layerMask = comp.occlusionLayerMask;
+                    occlusionScratch.push_back(candidate);
+                }
+            }
+
             // Per-frame bookkeeping (always): refresh the velocity basis and the seen latch,
             // keeping the last-dispatched pos/dir untouched when not re-synced this frame.
             entry.handle = comp.activeHandle;
             entry.lastFramePosition = pos;
             entry.hasLastFrame = true;
             entry.seenPlaying = seen;
+        }
+
+        serveOcclusionRays();
+        dispatchOcclusion();
+    }
+
+    void AudioSceneUpdater::serveOcclusionRays()
+    {
+        if (occlusionScratch.empty())
+        {
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        const auto budget = static_cast<std::size_t>(kMaxOcclusionRaysPerFrame);
+        if (occlusionScratch.size() > budget)
+        {
+            // Serve the most-overdue first. Skipped candidates keep their accumulated time
+            // and win a later frame, so nothing starves; nth_element gets the top N without
+            // sorting the tail we're about to drop.
+            std::nth_element(occlusionScratch.begin(),
+                             occlusionScratch.begin() + kMaxOcclusionRaysPerFrame,
+                             occlusionScratch.end(),
+                             [](const OcclusionCandidate& a, const OcclusionCandidate& b)
+                             { return a.overdue > b.overdue; });
+            occlusionScratch.resize(budget);
+        }
+
+        for (const auto& candidate : occlusionScratch)
+        {
+            auto it = emitterCache.find(candidate.key);
+            if (it == emitterCache.end() || it->second.handle != candidate.handle)
+            {
+                continue;
+            }
+            EmitterCacheEntry& entry = it->second;
+
+            const glm::vec3 toEmitter = candidate.position - occlusionListenerPosition;
+            const float distance = glm::length(toEmitter);
+            if (distance <= occlusion::kSelfHitSkin)
+            {
+                // Sitting on top of the listener — no room for a wall, and the ray would
+                // have a non-positive length.
+                entry.occlusionValue = 0.0f;
+                entry.rayAccum = 0.0f;
+                continue;
+            }
+
+            // Same synchronous main-thread pattern as ViewPort's pick ray. Safe here: both
+            // hosts order the audio task after PhysicsSync, so this frame's step is done.
+            // CQRS structs are not aggregates — default-construct, then assign.
+            events::physics::RaycastQuery rayQuery;
+            rayQuery.origin = occlusionListenerPosition;
+            rayQuery.direction = toEmitter / distance;
+            // Stop short of the emitter so its OWN collider isn't mistaken for a wall.
+            rayQuery.maxDistance = distance - occlusion::kSelfHitSkin;
+            rayQuery.layerMask = candidate.layerMask;
+            const services::RaycastHit hit = dispatcher.query(rayQuery);
+
+            entry.occlusionValue = occlusion::occlusionFromRay(hit.hit, hit.distance, distance,
+                                                               occlusion::kSelfHitSkin);
+            entry.rayAccum = 0.0f;
+        }
+
+        occlusionScratch.clear();
+    }
+
+    void AudioSceneUpdater::dispatchOcclusion()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // A separate dispatch from the transform re-sync above, and deliberately so: that one
+        // is gated on the emitter MOVING, but occlusion changes when the WORLD moves. A
+        // stationary source behind a closing door has to be told.
+        for (auto& cached : emitterCache)
+        {
+            EmitterCacheEntry& entry = cached.second;
+            if (entry.handle == 0)
+            {
+                continue;
+            }
+
+            const bool dirty = entry.occlusionDispatched != entry.occlusionValue
+                            || entry.lpfDispatched != entry.lpfAmount
+                            || entry.volumeDispatched != entry.volumeAmount;
+            if (!dirty)
+            {
+                continue;
+            }
+
+            events::audio::SetSoundOcclusionCommand cmd;
+            cmd.handle = services::AudioHandle{entry.handle};
+            cmd.occlusion = entry.occlusionValue;
+            cmd.lpfAmount = entry.lpfAmount;
+            cmd.volumeAmount = entry.volumeAmount;
+            dispatcher.execute(cmd);
+
+            entry.occlusionDispatched = entry.occlusionValue;
+            entry.lpfDispatched = entry.lpfAmount;
+            entry.volumeDispatched = entry.volumeAmount;
         }
     }
 

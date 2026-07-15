@@ -119,6 +119,35 @@ public class Audio {
     }
 
     // ============================================
+    // Geometry Occlusion (VK-1518)
+    // ============================================
+
+    // Muffle a 3D audio source when level geometry blocks the line of sight from the
+    // listener. The engine raycasts listener -> emitter and folds the result into the
+    // same direct filter the distance filter uses, with a smooth attack/release.
+    // enabled: toggle occlusion on/off
+    // lpfAmount: how much of the high end is CUT when fully occluded (0.0 = no effect,
+    //            1.0 = fully dark). This is what makes a wall sound like a wall.
+    // volumeAmount: how much volume is CUT when fully occluded (0.0 = no effect,
+    //               1.0 = silent). Direct path only - reverb sends are untouched.
+    public static function setOcclusion(int entityId, bool enabled, float lpfAmount, float volumeAmount): void {
+        _native_audio_setOcclusion(entityId, enabled, lpfAmount, volumeAmount);
+    }
+
+    // Set which collision layers block sound (the "trace channel"): bit N = layer N.
+    // Defaults to Static|Kinematic (0x0005) so walls and doors occlude but trigger
+    // volumes and the player's own capsule do not. Layers: Static 0, Dynamic 1,
+    // Kinematic 2, Sensor 3.
+    public static function setOcclusionLayerMask(int entityId, int layerMask): void {
+        _native_audio_setOcclusionLayerMask(entityId, layerMask);
+    }
+
+    // Check if geometry occlusion is enabled on a 3D audio source
+    public static function getOcclusionEnabled(int entityId): bool {
+        return _native_audio_getOcclusionEnabled(entityId);
+    }
+
+    // ============================================
     // Cone Attenuation (VK-918)
     // ============================================
 

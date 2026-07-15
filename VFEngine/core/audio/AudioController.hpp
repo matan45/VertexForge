@@ -68,6 +68,9 @@ namespace core::audio {
         void setPitch(AudioHandle handle, float pitch);
         void setSourceTransform(AudioHandle handle, const glm::vec3& position,
                                 const glm::vec3& direction, const glm::vec3& velocity);
+        // VK-1518: geometry occlusion verdict + authored cut amounts for a playing 3D source.
+        void setSourceOcclusion(AudioHandle handle, float occlusion,
+                                float lpfAmount, float volumeAmount);
 
         // === Listener ===
         void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,

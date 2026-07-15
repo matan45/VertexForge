@@ -133,6 +133,11 @@ namespace core {
         audioController->setSourceTransform(handle, position, direction, velocity);
     }
 
+    void AudioAdapter::setSourceOcclusion(services::AudioHandleId handle, float occlusion,
+                                          float lpfAmount, float volumeAmount) {
+        audioController->setSourceOcclusion(handle, occlusion, lpfAmount, volumeAmount);
+    }
+
     void AudioAdapter::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
                                             const glm::vec3& up, const glm::vec3& velocity) {
         audioController->setListenerPosition(position, forward, up, velocity);

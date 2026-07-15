@@ -131,6 +131,16 @@ namespace services {
                                                       cmd.direction, cmd.velocity);
             });
 
+        // VK-1518: per-emitter geometry-occlusion verdict. Engine-internal loop (driven by
+        // AudioSceneUpdater's raycast), so it calls the provider directly for the same
+        // reason SetSoundTransformCommand does.
+        dispatcher.registerCommandHandler<events::audio::SetSoundOcclusionCommand>(
+            [this](const auto& cmd) {
+                if (audioProvider)
+                    audioProvider->setSourceOcclusion(cmd.handle.id, cmd.occlusion,
+                                                      cmd.lpfAmount, cmd.volumeAmount);
+            });
+
         // Streaming Audio Commands
         dispatcher.registerCommandHandler<events::audio::PlayStreamingSoundCommand>(
             [this](const auto& cmd) {

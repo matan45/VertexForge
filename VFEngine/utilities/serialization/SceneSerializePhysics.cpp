@@ -70,6 +70,10 @@ namespace serialization
         j["filterStartDistance"] = audioSource.filterStartDistance;
         j["filterMaxDistance"] = audioSource.filterMaxDistance;
         j["filterIntensity"] = audioSource.filterIntensity;
+        j["enableOcclusion"] = audioSource.enableOcclusion;
+        j["occlusionLpf"] = audioSource.occlusionLpf;
+        j["occlusionVolume"] = audioSource.occlusionVolume;
+        j["occlusionLayerMask"] = audioSource.occlusionLayerMask;
         j["innerConeAngle"] = audioSource.innerConeAngle;
         j["outerConeAngle"] = audioSource.outerConeAngle;
         j["outerConeGain"] = audioSource.outerConeGain;
@@ -107,6 +111,17 @@ namespace serialization
                 audioSource.filterMaxDistance = it->get<float>();
             if (auto it = j.find("filterIntensity"); it != j.end() && it->is_number())
                 audioSource.filterIntensity = it->get<float>();
+            // VK-1518. Absent in scenes saved before geometry occlusion, so the struct
+            // defaults apply (enableOcclusion = false) — no migration needed.
+            if (auto it = j.find("enableOcclusion"); it != j.end() && it->is_boolean())
+                audioSource.enableOcclusion = it->get<bool>();
+            if (auto it = j.find("occlusionLpf"); it != j.end() && it->is_number())
+                audioSource.occlusionLpf = it->get<float>();
+            if (auto it = j.find("occlusionVolume"); it != j.end() && it->is_number())
+                audioSource.occlusionVolume = it->get<float>();
+            if (auto it = j.find("occlusionLayerMask"); it != j.end() && it->is_number_unsigned())
+                audioSource.occlusionLayerMask = static_cast<uint16_t>(
+                    std::min(it->get<uint64_t>(), static_cast<uint64_t>(0xFFFF)));
             if (auto it = j.find("innerConeAngle"); it != j.end() && it->is_number())
                 audioSource.innerConeAngle = it->get<float>();
             if (auto it = j.find("outerConeAngle"); it != j.end() && it->is_number())

@@ -83,6 +83,20 @@ namespace events::audio {
         std::string_view getName() const override { return "SetSoundTransform"; }
     };
 
+    // VK-1518: geometry-occlusion verdict for a playing 3D source (AudioSceneUpdater's
+    // round-robin listener->emitter raycast). Separate from SetSoundTransformCommand because
+    // that one is dirty-gated on movement and runs at a different cadence — a stationary
+    // emitter behind a closing door still has to be told it is occluded.
+    // occlusion: 0 = clear, 1 = blocked. The amounts are CUT amounts at full occlusion
+    // (0 = inert), matching AudioSource3DComponent::occlusionLpf / occlusionVolume.
+    struct SetSoundOcclusionCommand : ::events::ICommand<void> {
+        services::AudioHandle handle;
+        float occlusion = 0.0f;
+        float lpfAmount = 0.0f;
+        float volumeAmount = 0.0f;
+        std::string_view getName() const override { return "SetSoundOcclusion"; }
+    };
+
     // ============================================================
     // STREAMING AUDIO COMMANDS
     // ============================================================

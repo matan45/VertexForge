@@ -43,6 +43,8 @@ namespace core
         void setPitch(services::AudioHandleId handle, float pitch) override;
         void setSourceTransform(services::AudioHandleId handle, const glm::vec3& position,
                                 const glm::vec3& direction, const glm::vec3& velocity) override;
+        void setSourceOcclusion(services::AudioHandleId handle, float occlusion,
+                                float lpfAmount, float volumeAmount) override;
 
         // === Listener ===
         void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,

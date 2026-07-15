@@ -230,6 +230,13 @@ namespace core::audio
         commandQueue->enqueue(SetSourceTransformCmd{handle, position, direction, velocity});
     }
 
+    void AudioController::setSourceOcclusion(AudioHandle handle, float occlusion,
+                                             float lpfAmount, float volumeAmount)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetSourceOcclusionCmd{handle, occlusion, lpfAmount, volumeAmount});
+    }
+
     void AudioController::stopAll()
     {
         if (!initialized || !commandQueue) return;

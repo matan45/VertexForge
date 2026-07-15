@@ -48,6 +48,17 @@ namespace core::audio
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
 
+        // VK-1518 geometry occlusion. occlusionTarget is the last verdict pushed by
+        // SetSourceOcclusionCmd; currentOcclusion is its attack/release glide. The two
+        // amounts are CUT amounts at full occlusion (0 = inert), like filterIntensity —
+        // so 0 is the neutral value a pooled source resets to (see detachFilter).
+        float occlusionTarget = 0.0f;
+        float currentOcclusion = 0.0f;
+        float occlusionLpfAmount = 0.0f;
+        float occlusionVolumeAmount = 0.0f;
+
+        void resetOcclusionState();
+
     public:
         explicit AudioSource();
         ~AudioSource();
@@ -111,6 +122,12 @@ namespace core::audio
         void initFilter();
         void cleanUpFilter();
         void setDistanceFilterParams(bool enabled, float startDist, float maxDist, float intensity);
+
+        // VK-1518: latest geometry-occlusion verdict for this voice (0 = clear, 1 = blocked)
+        // plus the authored cut amounts. Pushed per-emitter from AudioSceneUpdater's raycast;
+        // the glide and the AL writes happen in updateDistanceFilter.
+        void setOcclusion(float occlusion, float lpfAmount, float volumeAmount);
+
         void updateDistanceFilter(float distance, float deltaTime);
         void detachFilter();
     };

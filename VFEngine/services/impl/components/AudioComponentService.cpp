@@ -185,6 +185,10 @@ namespace services {
         data.filterStartDistance = comp.filterStartDistance;
         data.filterMaxDistance = comp.filterMaxDistance;
         data.filterIntensity = comp.filterIntensity;
+        data.enableOcclusion = comp.enableOcclusion;
+        data.occlusionLpf = comp.occlusionLpf;
+        data.occlusionVolume = comp.occlusionVolume;
+        data.occlusionLayerMask = comp.occlusionLayerMask;
         data.innerConeAngle = comp.innerConeAngle;
         data.outerConeAngle = comp.outerConeAngle;
         data.outerConeGain = comp.outerConeGain;
@@ -221,6 +225,10 @@ namespace services {
         comp.filterStartDistance = audioData.filterStartDistance;
         comp.filterMaxDistance = audioData.filterMaxDistance;
         comp.filterIntensity = audioData.filterIntensity;
+        comp.enableOcclusion = audioData.enableOcclusion;
+        comp.occlusionLpf = audioData.occlusionLpf;
+        comp.occlusionVolume = audioData.occlusionVolume;
+        comp.occlusionLayerMask = audioData.occlusionLayerMask;
         comp.innerConeAngle = audioData.innerConeAngle;
         comp.outerConeAngle = audioData.outerConeAngle;
         comp.outerConeGain = audioData.outerConeGain;

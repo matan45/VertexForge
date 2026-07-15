@@ -124,6 +124,23 @@ namespace components
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
 
+        // VK-1518: geometry occlusion — a listener->emitter raycast muffles this source when
+        // level geometry blocks it. Opt-in, so no existing scene changes behaviour.
+        // Both floats are CUT AMOUNTS at full occlusion (0 = inert, 1 = full cut), matching
+        // filterIntensity above. occlusionLpf drives AL_LOWPASS_GAINHF and occlusionVolume
+        // drives AL_LOWPASS_GAIN on the direct path — deliberately NOT AL_GAIN, which
+        // already carries volume * bus * fade.
+        bool enableOcclusion = false;
+        float occlusionLpf = 0.7f;     // cut 70% of the highs when fully occluded
+        float occlusionVolume = 0.3f;  // cut 30% of the volume when fully occluded
+        // The "trace channel": which collision layers count as blocking. Static|Kinematic by
+        // default, so walls and moving doors occlude but trigger volumes and the player's own
+        // Dynamic capsule do not (the raycast has no sensor filter — it matches on layer
+        // only). Bit N = layer N; indices per types::PhysicsSettings::createDefault():
+        // Static 0, Dynamic 1, Kinematic 2, Sensor 3. Kept as a literal rather than an
+        // include — this header must not depend on PhysicsTypes.hpp.
+        uint16_t occlusionLayerMask = 0x0005;
+
         float innerConeAngle = 360.0f;
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;

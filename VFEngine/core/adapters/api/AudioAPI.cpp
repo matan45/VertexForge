@@ -13,6 +13,8 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "math/TransformUtils.hpp"
+#include <algorithm>
+#include <cstdint>
 
 namespace core::api
 {
@@ -375,6 +377,63 @@ namespace core::api
                     if (registry.all_of<components::AudioSource3DComponent>(*entity))
                     {
                         return value::Value(registry.get<components::AudioSource3DComponent>(*entity).enableDistanceFilter);
+                    }
+                    return value::Value(false);
+                }});
+
+            // === Geometry Occlusion (VK-1518) ===
+            // lpf/volume are CUT AMOUNTS at full occlusion (0 = inert, 1 = full cut), like
+            // the distance filter's intensity. AudioSceneUpdater raycasts and pushes the
+            // verdict to the audio thread; scripts only author the component.
+            interpreter->registerNativeFunction("_native_audio_setOcclusion",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    if (args.size() < 4) return value::Value(std::monostate{});
+                    auto entity = resolveEntity(args[0]);
+                    if (!entity) return value::Value(std::monostate{});
+
+                    bool enabled = extractBool(args[1]);
+                    float lpf = extractFloat(args[2]);
+                    float volume = extractFloat(args[3]);
+
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    if (registry.all_of<components::AudioSource3DComponent>(*entity))
+                    {
+                        auto& comp = registry.get<components::AudioSource3DComponent>(*entity);
+                        comp.enableOcclusion = enabled;
+                        comp.occlusionLpf = lpf;
+                        comp.occlusionVolume = volume;
+                    }
+                    return value::Value(std::monostate{});
+                }});
+
+            // The trace channel: bit N = collision layer N blocks sound.
+            interpreter->registerNativeFunction("_native_audio_setOcclusionLayerMask",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    if (args.size() < 2) return value::Value(std::monostate{});
+                    auto entity = resolveEntity(args[0]);
+                    if (!entity) return value::Value(std::monostate{});
+
+                    const auto mask = static_cast<uint16_t>(
+                        std::clamp(extractInt64(args[1]), int64_t{0}, int64_t{0xFFFF}));
+
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    if (registry.all_of<components::AudioSource3DComponent>(*entity))
+                    {
+                        registry.get<components::AudioSource3DComponent>(*entity).occlusionLayerMask = mask;
+                    }
+                    return value::Value(std::monostate{});
+                }});
+
+            interpreter->registerNativeFunction("_native_audio_getOcclusionEnabled",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    if (args.empty()) return value::Value(false);
+                    auto entity = resolveEntity(args[0]);
+                    if (!entity) return value::Value(false);
+
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    if (registry.all_of<components::AudioSource3DComponent>(*entity))
+                    {
+                        return value::Value(registry.get<components::AudioSource3DComponent>(*entity).enableOcclusion);
                     }
                     return value::Value(false);
                 }});

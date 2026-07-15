@@ -5,6 +5,7 @@
 #include "events/project/SceneEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/audio/AudioBusEvents.hpp"
+#include "events/physics/PhysicsEvents.hpp"  // VK-1518: occlusion trace-channel layer names
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "resource/VfAudioHeader.hpp"
@@ -61,6 +62,8 @@ namespace windows::details
             changed |= drawSpatialSettings(audioData);
             ImGui::Spacing();
             changed |= drawDistanceFilterSettings(audioData);
+            ImGui::Spacing();
+            changed |= drawOcclusionSettings(audioData);
             ImGui::Spacing();
             changed |= drawConeSettings(audioData);
 
@@ -351,6 +354,123 @@ namespace windows::details
             }
         }
 
+        ImGui::Unindent(10.0f);
+
+        return changed;
+    }
+
+    bool AudioSource3DDrawer::drawOcclusionSettings(services::AudioSource3DData& audioData)
+    {
+        bool changed = false;
+
+        ImGui::Text("Occlusion:");
+        ImGui::Indent(10.0f);
+
+        if (ImGui::Checkbox("Enable Occlusion##3D", &audioData.enableOcclusion))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Muffle this sound when level geometry blocks the line of sight\n"
+                              "between the listener and this emitter");
+        }
+
+        if (audioData.enableOcclusion)
+        {
+            // Both sliders are CUT AMOUNTS, not gains: 0 leaves the sound untouched, 1 is a
+            // full cut. Same sense as Filter Intensity above. The tooltips have to say so —
+            // it is the one thing the name alone gets wrong.
+            if (ImGui::SliderFloat("Occlusion Low-pass##3D", &audioData.occlusionLpf, 0.0f, 1.0f, "%.2f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("How much of the high end is cut when fully occluded\n"
+                                  "0 = no effect, 1 = fully dark. This is what makes a wall\n"
+                                  "sound like a wall rather than just a volume drop.");
+            }
+
+            if (ImGui::SliderFloat("Occlusion Volume##3D", &audioData.occlusionVolume, 0.0f, 1.0f, "%.2f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("How much volume is cut when fully occluded\n"
+                                  "0 = no effect, 1 = silent. Affects the direct path only,\n"
+                                  "so an occluded sound still feeds reverb zones.");
+            }
+
+            changed |= drawOcclusionLayerMask(audioData);
+        }
+
+        ImGui::Unindent(10.0f);
+
+        return changed;
+    }
+
+    bool AudioSource3DDrawer::drawOcclusionLayerMask(services::AudioSource3DData& audioData)
+    {
+        bool changed = false;
+
+        // Same source of truth (and same fallback) as ColliderDrawer's layer combo.
+        std::vector<types::CollisionLayer> layers;
+        try
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::physics::GetCollisionLayersQuery layersQuery;
+            layers = dispatcher.query(layersQuery);
+        }
+        catch (...)
+        {
+            // Query failed, fall through to the defaults below.
+        }
+
+        if (layers.empty())
+        {
+            layers = types::PhysicsSettings::createDefault().layers;
+        }
+
+        if (layers.empty())
+        {
+            ImGui::TextDisabled("No collision layers available");
+            return false;
+        }
+
+        ImGui::Text("Blocked By:");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("The trace channel: which collision layers count as blocking.\n"
+                              "Leave Sensor off (trigger volumes are not walls), and leave the\n"
+                              "layer your player capsule lives on off, or the listener's own\n"
+                              "body will occlude everything.");
+        }
+
+        ImGui::Indent(10.0f);
+        for (const auto& layer : layers)
+        {
+            if (layer.index >= 16)
+            {
+                continue;  // the mask is a uint16_t; MAX_COLLISION_LAYERS is 16
+            }
+            const auto bit = static_cast<uint16_t>(1u << layer.index);
+            bool enabled = (audioData.occlusionLayerMask & bit) != 0;
+            const std::string label = layer.name + "##OcclusionLayer" + std::to_string(layer.index);
+            if (ImGui::Checkbox(label.c_str(), &enabled))
+            {
+                if (enabled)
+                {
+                    audioData.occlusionLayerMask |= bit;
+                }
+                else
+                {
+                    audioData.occlusionLayerMask &= static_cast<uint16_t>(~bit);
+                }
+                changed = true;
+            }
+        }
         ImGui::Unindent(10.0f);
 
         return changed;

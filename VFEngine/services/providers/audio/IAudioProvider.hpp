@@ -63,6 +63,10 @@ namespace services {
         virtual void setPitch(AudioHandleId handle, float pitch) = 0;
         virtual void setSourceTransform(AudioHandleId handle, const glm::vec3& position,
                                         const glm::vec3& direction, const glm::vec3& velocity) = 0;
+        // VK-1518: geometry occlusion. occlusion is 0 (clear) .. 1 (blocked); lpfAmount and
+        // volumeAmount are the authored CUT amounts at full occlusion (0 = inert).
+        virtual void setSourceOcclusion(AudioHandleId handle, float occlusion,
+                                        float lpfAmount, float volumeAmount) = 0;
 
         // === Listener ===
         virtual void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,

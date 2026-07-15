@@ -382,6 +382,30 @@ namespace core::audio
                     }
                 }
             }
+            else if constexpr (std::is_same_v<T, SetSourceOcclusionCmd>)
+            {
+                AudioHandle internal = resolveHandle(command.handle);
+                if (StreamingAudioManager::isStreamingHandle(internal))
+                {
+                    // VK-1518: no-op, for the same reason SetSourceTransformCmd is (VK-1505).
+                    // A streaming source is listener-relative and unspatialized, and
+                    // StreamingAudioSource holds no AL filter at all, so there is nothing to
+                    // occlude. Unreachable from AudioSceneUpdater today (the 3D component
+                    // path never sets params.streaming); kept for symmetry.
+                }
+                else
+                {
+                    AudioSource* source = deps.sourceManager->getSource(internal);
+                    if (source)
+                    {
+                        source->setOcclusion(command.occlusion, command.lpfAmount,
+                                             command.volumeAmount);
+                    }
+                    // Deliberately NOT mirrored into findVoiceParams: occlusion does not feed
+                    // estimateAudibleGain, so VK-1513's voice scoring is unchanged by it.
+                    // Deprioritising occluded voices is a separate design question.
+                }
+            }
             else if constexpr (std::is_same_v<T, SetListenerCmd>)
             {
                 listenerPosition = command.position;
