@@ -165,6 +165,23 @@ namespace config
     }
 
     // ============================================
+    // EditorAudioSettings
+    // ============================================
+
+    inline void to_json(json& j, const EditorAudioSettings& s)
+    {
+        j = json{
+            {"globalMuted", s.globalMuted}
+        };
+    }
+
+    inline void from_json(const json& j, EditorAudioSettings& s)
+    {
+        EditorAudioSettings defaults;
+        s.globalMuted = j.value("globalMuted", defaults.globalMuted);
+    }
+
+    // ============================================
     // EditorPreferences (master struct)
     // ============================================
 
@@ -177,7 +194,8 @@ namespace config
             {"windowLayout", prefs.windowLayout},
             {"export", prefs.exportSettings},
             {"previewWindows", prefs.previewWindows},
-            {"memory", prefs.memory}
+            {"memory", prefs.memory},
+            {"audio", prefs.audio}
         };
     }
 
@@ -201,5 +219,9 @@ namespace config
         // Guard with a default so old settings files (without the memory key) still load.
         if (j.contains("memory") && j["memory"].is_object())
             prefs.memory = j["memory"].get<MemorySettings>();
+
+        // Old settings files predate the global editor-audio toggle and remain audible.
+        if (j.contains("audio") && j["audio"].is_object())
+            prefs.audio = j["audio"].get<EditorAudioSettings>();
     }
 }

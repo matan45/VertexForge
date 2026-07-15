@@ -1,5 +1,6 @@
 #include "EditorSettingsService.hpp"
 #include "../../events/editor/EditorSettingsEvents.hpp"
+#include "../../events/audio/AudioBusEvents.hpp"
 #include "config/EditorPreferencesSerializer.hpp"
 #include "print/Log.hpp"
 #include <fstream>
@@ -35,7 +36,19 @@ namespace services
                 std::lock_guard<std::mutex> lock(settingsMutex);
                 ensureLoaded();
                 currentSettings = cmd.settings;
-                applyLogLevel(currentSettings.debug.logLevel);
+                applyRuntimeSettings();
+                save();
+                notifySettingsChanged();
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<::events::editor::SetEditorAudioMutedCommand>(
+            [this](const ::events::editor::SetEditorAudioMutedCommand& cmd)
+            {
+                std::lock_guard<std::mutex> lock(settingsMutex);
+                ensureLoaded();
+                currentSettings.audio.globalMuted = cmd.muted;
+                applyRuntimeSettings();
                 save();
                 notifySettingsChanged();
                 return true;
@@ -55,6 +68,7 @@ namespace services
             {
                 std::lock_guard<std::mutex> lock(settingsMutex);
                 currentSettings = config::EditorPreferences::createDefault();
+                applyRuntimeSettings();
                 save();
                 notifySettingsChanged();
                 return true;
@@ -73,6 +87,11 @@ namespace services
             {
                 return getSettingsPath();
             });
+
+        // Audio handlers are registered before editor settings during bootstrap, so
+        // applying persisted runtime preferences here is safe and does not depend on UI.
+        std::lock_guard<std::mutex> lock(settingsMutex);
+        ensureLoaded();
     }
 
     void EditorSettingsService::ensureLoaded()
@@ -80,12 +99,17 @@ namespace services
         if (loaded) return;
         loaded = true;
 
-        std::string path = getSettingsPath();
-        if (path.empty()) return;
+        const std::string path = getSettingsPath();
+        if (path.empty())
+        {
+            applyRuntimeSettings();
+            return;
+        }
 
         if (!std::filesystem::exists(path))
         {
             save();
+            applyRuntimeSettings();
             return;
         }
 
@@ -99,14 +123,24 @@ namespace services
 
             if (!j.is_null())
                 currentSettings = j.get<config::EditorPreferences>();
-
-            applyLogLevel(currentSettings.debug.logLevel);
         }
         catch (const std::exception& e)
         {
             vfLogWarning("[EditorSettingsService] Failed to load settings: {}", e.what());
             currentSettings = config::EditorPreferences::createDefault();
         }
+
+        applyRuntimeSettings();
+    }
+
+    void EditorSettingsService::applyRuntimeSettings()
+    {
+        applyLogLevel(currentSettings.debug.logLevel);
+
+        ::events::audio::SetBusMutedCommand muteCommand;
+        muteCommand.busName = "Master";
+        muteCommand.muted = currentSettings.audio.globalMuted;
+        ::events::EventDispatcher::instance().execute(muteCommand);
     }
 
     void EditorSettingsService::save()

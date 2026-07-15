@@ -14,6 +14,7 @@ namespace windows
         void registerHotkeys();
         void handleHotkeys();
         void drawPlayControls();
+        void drawAudioMuteToggle();
         void drawBuildActions();
 
     public:

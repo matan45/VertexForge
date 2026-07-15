@@ -1,4 +1,5 @@
 #include <doctest.h>
+#include <audio/BusGainPolicy.hpp>
 #include <audio/BusMetering.hpp>
 
 #include <limits>
@@ -60,6 +61,15 @@ TEST_SUITE("AudioBusMetering")
             {BusNode{0, 1.0f, 0.0f, true, false}, BusNode{0, 1.0f, 0.0f, false, false}},
             {0.0f, 1.0f});
         CHECK(out[1] == doctest::Approx(1.0f));
+        CHECK(out[0] == doctest::Approx(0.0f));
+    }
+
+    TEST_CASE("muted Master remains zero when a child is soloed")
+    {
+        const auto out = meter(
+            {BusNode{0, 1.0f, 0.0f, true, false}, BusNode{0, 0.5f, 0.0f, false, true}},
+            {0.0f, 1.0f});
+        CHECK(out[1] == doctest::Approx(0.5f));
         CHECK(out[0] == doctest::Approx(0.0f));
     }
 
@@ -146,5 +156,35 @@ TEST_SUITE("AudioBusMetering")
         CHECK(decayPeakHold(0.1f, 0.2f, 10.0f) == doctest::Approx(0.2f));
         CHECK(decayPeakHold(1.0f, 0.0f, -1.0f) == doctest::Approx(1.0f));
         CHECK(decayPeakHold(nan, 0.2f, 0.1f) == doctest::Approx(0.2f));
+    }
+}
+
+TEST_SUITE("AudioBusGainPolicy")
+{
+    using core::audio::gainpolicy::childEffectiveVolume;
+    using core::audio::gainpolicy::rootEffectiveVolume;
+
+    TEST_CASE("Master mute wins over child solo filtering")
+    {
+        const float master = rootEffectiveVolume(1.0f, true, false, true);
+        CHECK(master == 0.0f);
+        CHECK(childEffectiveVolume(0.8f, master, false, true, true, true) == 0.0f);
+    }
+
+    TEST_CASE("self mute wins when the same bus is soloed")
+    {
+        CHECK(childEffectiveVolume(0.8f, 1.0f, true, false, true, true) == 0.0f);
+    }
+
+    TEST_CASE("solo child keeps the established non-muted orphan bypass")
+    {
+        CHECK(childEffectiveVolume(0.8f, 0.0f, false, false, true, true)
+              == doctest::Approx(0.8f));
+    }
+
+    TEST_CASE("non-solo path multiplies parent and child gain")
+    {
+        CHECK(childEffectiveVolume(0.5f, 0.25f, false, false, false, false)
+              == doctest::Approx(0.125f));
     }
 }

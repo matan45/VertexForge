@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/audio/AudioBusEvents.hpp"
 #include "events/audio/AudioEffectEvents.hpp"
+#include "events/editor/EditorSettingsEvents.hpp"
 #include "types/AudioEffectTypes.hpp"
 #include <imgui.h>
 #include <algorithm>
@@ -103,8 +104,15 @@ namespace windows
             bool muted = dispatcher.query(muteQuery);
             if (muted) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
             if (ImGui::Button("M", ImVec2(25, 20))) {
-                events::audio::SetBusMutedCommand cmd; cmd.busName = name; cmd.muted = !muted;
-                dispatcher.execute(cmd);
+                if (name == "Master") {
+                    events::editor::SetEditorAudioMutedCommand cmd;
+                    cmd.muted = !muted;
+                    dispatcher.execute(cmd);
+                } else {
+                    events::audio::SetBusMutedCommand cmd;
+                    cmd.busName = name; cmd.muted = !muted;
+                    dispatcher.execute(cmd);
+                }
             }
             if (muted) ImGui::PopStyleColor();
 

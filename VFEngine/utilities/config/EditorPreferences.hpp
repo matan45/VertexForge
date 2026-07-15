@@ -10,7 +10,7 @@ namespace config
     struct EditorSettingsSchemaVersion
     {
         static constexpr uint32_t major = 1;
-        static constexpr uint32_t minor = 2;
+        static constexpr uint32_t minor = 3;
     };
 
     struct AppearanceSettings
@@ -61,6 +61,13 @@ namespace config
         uint64_t cpuMemoryBudgetBytes = 8ull * 1024 * 1024 * 1024;
     };
 
+    // Per-user editor-wide audio controls. This is intentionally separate from
+    // project audio settings because it also affects previews and play testing.
+    struct EditorAudioSettings
+    {
+        bool globalMuted = false;
+    };
+
     struct EditorPreferences
     {
         AppearanceSettings appearance;
@@ -69,6 +76,7 @@ namespace config
         ExportSettings exportSettings;
         PreviewWindowSettings previewWindows;
         MemorySettings memory;
+        EditorAudioSettings audio;
 
         static EditorPreferences createDefault()
         {

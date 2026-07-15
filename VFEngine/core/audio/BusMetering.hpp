@@ -93,7 +93,13 @@ namespace core::audio::metering
                 }
                 visited[depth++] = current;
 
-                if (anySoloed)
+                if (nodes[current].muted)
+                {
+                    // Mute always wins over solo. A child meter is still pre-parent, but
+                    // the muted node and every ancestor receive zero power.
+                    power = 0.0f;
+                }
+                else if (anySoloed)
                 {
                     if (current == origin)
                     {

@@ -22,6 +22,13 @@ namespace events::editor {
         std::string_view getName() const override { return "ResetEditorSettings"; }
     };
 
+    // Updates the persisted per-user Master mute without replacing unrelated settings.
+    struct SetEditorAudioMutedCommand : ICommand<bool> {
+        bool muted = false;
+
+        std::string_view getName() const override { return "SetEditorAudioMuted"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================

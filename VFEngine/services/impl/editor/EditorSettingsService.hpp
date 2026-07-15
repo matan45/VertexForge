@@ -20,6 +20,7 @@ namespace services
 
     private:
         void ensureLoaded();
+        void applyRuntimeSettings();
         void save();
         void notifySettingsChanged();
         std::string getSettingsPath() const;
