@@ -9,6 +9,7 @@
 #include "../asset/AssetRef.hpp"
 #include "../animator/SocketTypes.hpp"
 #include "../types/AudioEffectTypes.hpp"
+#include "../types/AudioVariationTypes.hpp"
 
 namespace components
 {
@@ -105,8 +106,23 @@ namespace components
         // the opposite convention — that one is zone override, not budget eviction.
         uint8_t priority = 128;
 
+        // VK-1520: variation container. The playable pool is [audioRef] ++ the
+        // valid entries of clipVariants, so audioRef IS variant 0 and stays in
+        // the rotation. Defaults (Single + zero variation) make playback
+        // byte-identical to pre-VK-1520 for every existing scene.
+        std::vector<asset::AssetRef> clipVariants;
+        types::AudioPlayOrder playOrder = types::AudioPlayOrder::Single;
+        float pitchVariation = 0.0f;  // +/- fraction of the authored pitch; 0 = inert
+        float volumeVariation = 0.0f; // +/- fraction of the authored volume; 0 = inert
+
         uint64_t activeHandle = 0;
         bool isPlaying = false;
+        // VK-1520 runtime state, like activeHandle/isPlaying above: never
+        // serialized, never in the DTO. lastVariant drives no-immediate-repeat;
+        // playCount is the per-play seed entropy (seeding from lastVariant alone
+        // would collapse the sequence into a fixed cycle).
+        uint8_t lastVariant = types::AUDIO_VARIANT_NONE;
+        uint32_t playCount = 0;
     };
 
     struct AudioSource3DComponent
@@ -151,8 +167,18 @@ namespace components
         // VK-1513: see AudioSource2DComponent::priority. Lower = more important.
         uint8_t priority = 128;
 
+        // VK-1520: see AudioSource2DComponent's variation block. Pool is
+        // [audioRef] ++ valid(clipVariants); audioRef is variant 0.
+        std::vector<asset::AssetRef> clipVariants;
+        types::AudioPlayOrder playOrder = types::AudioPlayOrder::Single;
+        float pitchVariation = 0.0f;
+        float volumeVariation = 0.0f;
+
         uint64_t activeHandle = 0;
         bool isPlaying = false;
+        // VK-1520 runtime state — not serialized, not in the DTO.
+        uint8_t lastVariant = types::AUDIO_VARIANT_NONE;
+        uint32_t playCount = 0;
     };
 
     struct ScriptEntry

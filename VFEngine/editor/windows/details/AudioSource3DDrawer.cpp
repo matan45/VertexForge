@@ -61,6 +61,8 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawAudioSettings(audioData);
             ImGui::Spacing();
+            changed |= drawVariation(audioData);
+            ImGui::Spacing();
             changed |= drawSpatialSettings(audioData);
             ImGui::Spacing();
             changed |= drawDistanceFilterSettings(audioData);
@@ -96,6 +98,7 @@ namespace windows::details
 
             uint64_t previewKey = handle.id;
             audioPreviewHandles.erase(previewKey);
+            previewRolls.erase(previewKey);
         }
 
         return true;
@@ -123,85 +126,68 @@ namespace windows::details
 
     bool AudioSource3DDrawer::drawAudioFilePath(services::AudioSource3DData& audioData)
     {
-        bool changed = false;
+        // VK-1520: the clip pool is drawn as one flat list — row 0 is audioRef,
+        // rows 1..N are clipVariants.
+        const bool changed = drawClipVariantList(audioData, "3D");
+        drawStereoBadge(audioData);
+        return changed;
+    }
 
-        if (audioData.audioRef.isValid())
+    // VK-1507 advisory badge: OpenAL spatializes mono best. A stereo clip on a 3D
+    // source is downmixed at runtime (AL_SOURCE_SPATIALIZE_SOFT), but a Force-Mono
+    // reimport is smaller and spatializes cleaner.
+    //
+    // VK-1520 note: this checks audioRef (pool variant 0) only, not the variant
+    // clips — the path cache holds a single entry, and badging every variant would
+    // need a map keyed by path for no real gain. The badge is advisory either way,
+    // and Half 1 of VK-1507 makes stereo audible regardless.
+    void AudioSource3DDrawer::drawStereoBadge(const services::AudioSource3DData& audioData)
+    {
+        if (!audioData.audioRef.isValid())
         {
-            const std::string fullPath = audioData.audioRef.resolve();
-
-            std::string filename = fullPath;
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-            {
-                filename = filename.substr(lastSlash + 1);
-            }
-            ImGui::Text("File: %s", filename.c_str());
-
-            // Advisory badge: OpenAL spatializes mono best. A stereo clip on a 3D
-            // source is downmixed at runtime (AL_SOURCE_SPATIALIZE_SOFT), but a
-            // Force-Mono reimport is smaller and spatializes cleaner. Re-read the
-            // .vfAudio header only when the resolved path changes (no per-frame IO).
-            if (fullPath != cachedStereoPath)
-            {
-                cachedStereoPath = fullPath;
-                cachedIsStereo = false;
-                std::ifstream headerFile(fullPath, std::ios::binary);
-                if (headerFile.good())
-                {
-                    resource::VfAudioHeader header;
-                    resource::readVfAudioHeader(headerFile, header);
-                    // The reader performs no validation, so only trust the channel
-                    // count when the stream read succeeded and the file is a .vfAudio.
-                    if (headerFile.good() &&
-                        header.fileType == static_cast<uint8_t>(resource::FileType::AUDIO))
-                    {
-                        cachedIsStereo = header.channels > 1;
-                    }
-                }
-            }
-
-            if (cachedIsStereo)
-            {
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
-                                   "Stereo clip - reimport with Force Mono for full spatialization");
-            }
-        }
-        else
-        {
-            ImGui::TextDisabled("No audio file selected");
+            return;
         }
 
-        if (ImGui::Button("Select Audio File##3D"))
+        const std::string fullPath = audioData.audioRef.resolve();
+
+        // Re-read the .vfAudio header only when the resolved path changes (no
+        // per-frame disk IO).
+        if (fullPath != cachedStereoPath)
         {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Audio Files (*.vfAudio)", L"*.vfAudio"}});
-            if (!path.empty())
+            cachedStereoPath = fullPath;
+            cachedIsStereo = false;
+            std::ifstream headerFile(fullPath, std::ios::binary);
+            if (headerFile.good())
             {
-                std::ifstream file(path);
-                if (file.good())
+                resource::VfAudioHeader header;
+                resource::readVfAudioHeader(headerFile, header);
+                // The reader performs no validation, so only trust the channel
+                // count when the stream read succeeded and the file is a .vfAudio.
+                if (headerFile.good() &&
+                    header.fileType == static_cast<uint8_t>(resource::FileType::AUDIO))
                 {
-                    file.close();
-                    audioData.audioRef = asset::AssetRef::fromPath(path);
-                    changed = true;
-                }
-                else
-                {
-                    vfLogError("Selected audio file does not exist or cannot be read: {}", path);
+                    cachedIsStereo = header.channels > 1;
                 }
             }
         }
 
-        ImGui::SameLine();
-        bool clearDisabled = !audioData.audioRef.isValid();
-        ImGui::BeginDisabled(clearDisabled);
-        if (ImGui::Button("Clear##Audio3D"))
+        if (cachedIsStereo)
         {
-            audioData.audioRef = asset::AssetRef::invalid();
-            changed = true;
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+                               "Stereo clip - reimport with Force Mono for full spatialization");
         }
-        ImGui::EndDisabled();
+    }
 
+    bool AudioSource3DDrawer::drawVariation(services::AudioSource3DData& audioData)
+    {
+        // Collapsed by default: the single-clip user never has to open it.
+        if (!ImGui::CollapsingHeader("Variation##3D"))
+        {
+            return false;
+        }
+        ImGui::Indent(10.0f);
+        const bool changed = drawVariationSettings(audioData, "3D");
+        ImGui::Unindent(10.0f);
         return changed;
     }
 
@@ -559,8 +545,14 @@ namespace windows::details
 
         bool isPaused = hasPreviewHandle && !isCurrentlyPlaying;
 
-        // Play button
-        bool canPlay = audioData.audioRef.isValid() && !isCurrentlyPlaying;
+        // Play button. VK-1520: a variant-only source (audioRef cleared but variants
+        // authored) is playable, so gate on the pool rather than on audioRef alone.
+        bool hasClip = audioData.audioRef.isValid();
+        for (const auto& variant : audioData.clipVariants)
+        {
+            hasClip = hasClip || variant.isValid();
+        }
+        bool canPlay = hasClip && !isCurrentlyPlaying;
         ImGui::BeginDisabled(!canPlay);
         if (ImGui::Button("Play##3D", ImVec2(60, 0)))
         {
@@ -577,11 +569,16 @@ namespace windows::details
                 auto transformOpt = dispatcher.query(transformQuery);
                 glm::vec3 position = transformOpt.has_value() ? transformOpt->position : glm::vec3(0.0f);
 
+                // VK-1520: audition through the same roll the runtime uses, so
+                // hitting Play five times gives five different footsteps. This is
+                // the only place a designer can actually hear the container.
+                const auto pick = rollPreview(audioData, previewRolls[previewKey]);
+
                 events::audio::PlaySound3DCommand playCmd;
-                playCmd.path = audioData.audioRef.resolve();
+                playCmd.path = pick.path;
                 playCmd.position = position;
-                playCmd.params.volume = audioData.volume;
-                playCmd.params.pitch = audioData.pitch;
+                playCmd.params.volume = pick.volume;
+                playCmd.params.pitch = pick.pitch;
                 playCmd.params.loop = audioData.loop;
                 playCmd.params.minDistance = audioData.minDistance;
                 playCmd.params.maxDistance = audioData.maxDistance;
@@ -605,8 +602,12 @@ namespace windows::details
                     playCmd.params.direction = glm::normalize(forward);
                 }
 
-                services::AudioHandle newHandle = dispatcher.execute(playCmd);
-                audioPreviewHandles[previewKey] = newHandle;
+                // Empty path == nothing playable (every clip in the pool invalid).
+                if (!pick.path.empty())
+                {
+                    services::AudioHandle newHandle = dispatcher.execute(playCmd);
+                    audioPreviewHandles[previewKey] = newHandle;
+                }
             }
         }
         ImGui::EndDisabled();
@@ -644,5 +645,6 @@ namespace windows::details
     void AudioSource3DDrawer::clearHandles()
     {
         audioPreviewHandles.clear();
+        previewRolls.clear();
     }
 }

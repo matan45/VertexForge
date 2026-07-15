@@ -2,6 +2,7 @@
 #include "data/EntityHandle.hpp"
 #include "data/DTOs.hpp"
 #include "interfaces/audio/IAudioService.hpp"
+#include "AudioVariationDrawer.hpp"
 #include <string>
 #include <unordered_map>
 
@@ -11,6 +12,10 @@ namespace windows::details
     {
     private:
         std::unordered_map<uint64_t, services::AudioHandle> audioPreviewHandles;
+        // VK-1520: per-entity preview cursor, so hitting Play repeatedly auditions
+        // the variation instead of the same clip. Runtime state, kept here rather
+        // than on the DTO — see AudioVariationDrawer.hpp.
+        AudioPreviewRollMap previewRolls;
 
         // Cached stereo check for the assigned clip: reading the .vfAudio header
         // every frame would hit disk, so only re-read when the resolved path changes.
@@ -24,6 +29,8 @@ namespace windows::details
     private:
         bool drawHeader(bool& outRemove);
         bool drawAudioFilePath(services::AudioSource3DData& audioData);
+        void drawStereoBadge(const services::AudioSource3DData& audioData);
+        bool drawVariation(services::AudioSource3DData& audioData);
         bool drawAudioSettings(services::AudioSource3DData& audioData);
         bool drawSpatialSettings(services::AudioSource3DData& audioData);
         bool drawDistanceFilterSettings(services::AudioSource3DData& audioData);

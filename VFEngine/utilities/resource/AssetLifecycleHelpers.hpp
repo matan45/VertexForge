@@ -30,12 +30,21 @@ namespace resource {
 		{
 			const auto& audio = entity.getComponent<components::AudioSource2DComponent>();
 			if (audio.audioRef.isValid()) lifecycle.acquire(audio.audioRef.getGUID(), AssetType::Audio);
+			// VK-1520: the variant clips are playable too, so they must be kept loaded.
+			for (const auto& variant : audio.clipVariants)
+			{
+				if (variant.isValid()) lifecycle.acquire(variant.getGUID(), AssetType::Audio);
+			}
 		}
 
 		if (entity.hasComponent<components::AudioSource3DComponent>())
 		{
 			const auto& audio = entity.getComponent<components::AudioSource3DComponent>();
 			if (audio.audioRef.isValid()) lifecycle.acquire(audio.audioRef.getGUID(), AssetType::Audio);
+			for (const auto& variant : audio.clipVariants)
+			{
+				if (variant.isValid()) lifecycle.acquire(variant.getGUID(), AssetType::Audio);
+			}
 		}
 
 		if (entity.hasComponent<components::VFXComponent>())
@@ -104,12 +113,21 @@ namespace resource {
 		{
 			const auto& audio = entity.getComponent<components::AudioSource2DComponent>();
 			if (audio.audioRef.isValid()) lifecycle.release(audio.audioRef.getGUID());
+			// VK-1520: mirrors the acquire loop above.
+			for (const auto& variant : audio.clipVariants)
+			{
+				if (variant.isValid()) lifecycle.release(variant.getGUID());
+			}
 		}
 
 		if (entity.hasComponent<components::AudioSource3DComponent>())
 		{
 			const auto& audio = entity.getComponent<components::AudioSource3DComponent>();
 			if (audio.audioRef.isValid()) lifecycle.release(audio.audioRef.getGUID());
+			for (const auto& variant : audio.clipVariants)
+			{
+				if (variant.isValid()) lifecycle.release(variant.getGUID());
+			}
 		}
 
 		if (entity.hasComponent<components::VFXComponent>())

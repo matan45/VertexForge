@@ -10,11 +10,14 @@
 #include "../../../services/events/audio/AudioBusEvents.hpp"
 #include "../../../services/events/audio/AudioEffectEvents.hpp"
 #include "types/AudioEffectTypes.hpp"
+#include "types/AudioVariationTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "math/TransformUtils.hpp"
 #include <algorithm>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace core::api
 {
@@ -32,6 +35,80 @@ namespace core::api
             {
                 func(registry.get<components::AudioSource3DComponent>(entity));
             }
+        }
+
+        // VK-1520: the outcome of one variation roll — which clip to play and the
+        // jittered pitch/volume to play it at.
+        struct AudioPlayRoll
+        {
+            std::string path;
+            float volume = 1.0f;
+            float pitch = 1.0f;
+        };
+
+        // VK-1520: picks the clip and rolls the pitch/volume jitter for one play.
+        // Runs main-thread at play time, so the audio thread is untouched — the
+        // jittered values ride the existing PlaySound/PlayStreaming command params.
+        //
+        // The pool is [audioRef] ++ valid(clipVariants): audioRef IS variant 0 and
+        // stays in the rotation, so a designer who adds variants alongside an
+        // existing clip never finds that clip silently stops playing. Invalid refs
+        // (a row added but no file picked yet) are compacted out here, so
+        // lastVariant indexes the compacted pool.
+        //
+        // Returns an empty path when there is nothing playable, which is exactly
+        // the condition the pre-VK-1520 `!audioRef.isValid()` guard tested.
+        template<typename Comp>
+        AudioPlayRoll rollAudioPlay(entt::entity entity, Comp& audioComp)
+        {
+            std::vector<const asset::AssetRef*> pool;
+            pool.reserve(1 + audioComp.clipVariants.size());
+            if (audioComp.audioRef.isValid())
+            {
+                pool.push_back(&audioComp.audioRef);
+            }
+            for (const auto& variant : audioComp.clipVariants)
+            {
+                if (pool.size() >= types::AUDIO_MAX_VARIANTS)
+                {
+                    break;
+                }
+                if (variant.isValid())
+                {
+                    pool.push_back(&variant);
+                }
+            }
+            if (pool.empty())
+            {
+                return {};
+            }
+
+            const uint32_t seed =
+                types::audioPlaySeed(static_cast<uint32_t>(entity), audioComp.playCount++);
+
+            const uint8_t index = types::selectVariant(
+                pool.size(), audioComp.lastVariant, audioComp.playOrder,
+                types::audioVarianceUnit(seed, types::AudioVarianceStream::ClipSelect));
+            audioComp.lastVariant = index;
+
+            AudioPlayRoll roll;
+            roll.path = pool[index]->resolve();
+            // Jitter is deliberately applied to the command params only, NEVER
+            // written back into the component: the component holds the AUTHORED
+            // value. Writing back would make audio.getPitch() return jittered
+            // values, make the drawer's Pitch slider visibly crawl, persist the
+            // crawled value into the scene on the next SetAudioSourceDataCommand,
+            // and compound every play into an unbounded ratchet.
+            //
+            // Jitter is orthogonal to playOrder — a designer with one clip must be
+            // able to de-mechanise it without authoring fake variants.
+            roll.pitch = types::audioJitterPitch(
+                audioComp.pitch, audioComp.pitchVariation,
+                types::audioVarianceSigned(seed, types::AudioVarianceStream::Pitch));
+            roll.volume = types::audioJitterVolume(
+                audioComp.volume, audioComp.volumeVariation,
+                types::audioVarianceSigned(seed, types::AudioVarianceStream::Volume));
+            return roll;
         }
 
         template<typename Func>
@@ -65,7 +142,11 @@ namespace core::api
                         return value::Value(static_cast<int64_t>(0));
 
                     auto& audioComp = registry.get<components::AudioSource2DComponent>(*entity);
-                    if (!audioComp.audioRef.isValid())
+                    // VK-1520: rolls the clip + jitter. An empty path means nothing
+                    // playable, which subsumes the old !audioRef.isValid() guard and
+                    // additionally covers a variant-only source (audioRef cleared).
+                    const auto roll = rollAudioPlay(*entity, audioComp);
+                    if (roll.path.empty())
                         return value::Value(static_cast<int64_t>(0));
 
                     if (audioComp.activeHandle != 0)
@@ -76,9 +157,9 @@ namespace core::api
                     }
 
                     events::audio::PlayStreamingSoundCommand cmd;
-                    cmd.path = audioComp.audioRef.resolve();
-                    cmd.params.volume = audioComp.volume;
-                    cmd.params.pitch = audioComp.pitch;
+                    cmd.path = roll.path;
+                    cmd.params.volume = roll.volume;
+                    cmd.params.pitch = roll.pitch;
                     cmd.params.loop = audioComp.loop;
                     cmd.params.is3D = false;
                     cmd.params.busName = audioComp.busName;
@@ -102,7 +183,10 @@ namespace core::api
                         return value::Value(static_cast<int64_t>(0));
 
                     auto& audioComp = registry.get<components::AudioSource3DComponent>(*entity);
-                    if (!audioComp.audioRef.isValid())
+                    // VK-1520: see _native_audio_play2d — pool-empty subsumes the old
+                    // !audioRef.isValid() guard and covers variant-only sources.
+                    const auto roll = rollAudioPlay(*entity, audioComp);
+                    if (roll.path.empty())
                         return value::Value(static_cast<int64_t>(0));
 
                     glm::vec3 position(0.0f);
@@ -120,10 +204,10 @@ namespace core::api
                     }
 
                     events::audio::PlaySound3DCommand cmd;
-                    cmd.path = audioComp.audioRef.resolve();
+                    cmd.path = roll.path;
                     cmd.position = position;
-                    cmd.params.volume = audioComp.volume;
-                    cmd.params.pitch = audioComp.pitch;
+                    cmd.params.volume = roll.volume;
+                    cmd.params.pitch = roll.pitch;
                     cmd.params.loop = audioComp.loop;
                     cmd.params.is3D = true;
                     cmd.params.minDistance = audioComp.minDistance;
