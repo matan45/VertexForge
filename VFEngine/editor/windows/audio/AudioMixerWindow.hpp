@@ -28,6 +28,7 @@ namespace windows
         void drawBusChannels();
         void drawCreateBusSection();
         void drawSnapshotSection();
+        void drawDuckingSection();
         void drawEffectChainSection();
         void drawReverbEditor(const std::string& busName, const types::BusEffectConfig& effect);
         void drawEQEditor(const std::string& busName, const types::BusEffectConfig& effect);

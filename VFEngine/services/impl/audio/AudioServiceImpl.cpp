@@ -229,6 +229,16 @@ namespace services {
                 setBusSoloed(cmd.busName, cmd.soloed);
             });
 
+        dispatcher.registerCommandHandler<events::audio::SetBusDuckCommand>(
+            [this](const auto& cmd) {
+                setBusDuck(cmd.targetBus, cmd.config);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::RemoveBusDuckCommand>(
+            [this](const auto& cmd) {
+                removeBusDuck(cmd.targetBus);
+            });
+
         dispatcher.registerCommandHandler<events::audio::SaveMixSnapshotCommand>(
             [this](const auto& cmd) {
                 saveMixSnapshot(cmd.name);
@@ -269,6 +279,11 @@ namespace services {
         dispatcher.registerQueryHandler<events::audio::GetBusLevelsQuery>(
             [this](const auto&) {
                 return audioProvider->getBusLevels();
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetBusDuckQuery>(
+            [this](const auto& query) {
+                return getBusDuck(query.targetBus);
             });
 
         dispatcher.registerQueryHandler<events::audio::GetSnapshotNamesQuery>(
@@ -425,6 +440,20 @@ namespace services {
 
     std::vector<std::string> AudioServiceImpl::getBusNames() const {
         return audioProvider->getBusNames();
+    }
+
+    void AudioServiceImpl::setBusDuck(const std::string& targetBus,
+                                      const types::BusDuckConfig& config) {
+        audioProvider->setBusDuck(targetBus, config);
+    }
+
+    void AudioServiceImpl::removeBusDuck(const std::string& targetBus) {
+        audioProvider->removeBusDuck(targetBus);
+    }
+
+    std::optional<types::BusDuckConfig> AudioServiceImpl::getBusDuck(
+        const std::string& targetBus) const {
+        return audioProvider->getBusDuck(targetBus);
     }
 
     void AudioServiceImpl::saveMixSnapshot(const std::string& name) {

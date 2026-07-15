@@ -1,5 +1,6 @@
 #pragma once
 #include "AudioSourceManager.hpp"
+#include "BusDucking.hpp"
 #include "BusMetering.hpp"
 #include "types/AudioTypes.hpp"
 #include "types/AudioEffectTypes.hpp"
@@ -9,6 +10,7 @@
 #include <unordered_map>
 #include <map>
 #include <functional>
+#include <optional>
 #include <shared_mutex>
 #include <span>
 
@@ -23,6 +25,11 @@ namespace core::audio
         bool muted = false;
         bool soloed = false;
         float effectiveVolume = 1.0f;
+        std::optional<types::BusDuckConfig> duckConfig;
+        uint32_t duckSourceBusId = 0;
+        ducking::DuckEnvelope duckEnvelope;
+        float duckGain = 1.0f;
+        float duckReleaseMs = types::BusDuckConfig{}.releaseMs;
         std::vector<uint32_t> childIds;
     };
 
@@ -92,6 +99,12 @@ namespace core::audio
         bool isBusMuted(const std::string& name) const;
         bool isBusSoloed(const std::string& name) const;
 
+        // Sidechain ducking. Mutations run on the audio thread; getBusDuck() is a
+        // cross-thread value read protected by busMutex.
+        bool setBusDuck(const std::string& targetBus, const types::BusDuckConfig& config);
+        bool removeBusDuck(const std::string& targetBus);
+        std::optional<types::BusDuckConfig> getBusDuck(const std::string& targetBus) const;
+
         // Source-to-bus assignment
         void assignSource(AudioHandle handle, const std::string& busName, float userVolume);
         void detachSourceRouting(AudioHandle handle);
@@ -99,6 +112,7 @@ namespace core::audio
         void setSourceUserVolume(AudioHandle handle, float volume);
 
         // Call once per frame to flush deferred volume recalculations
+        void updateDucking(float deltaTime);
         void flushDirtyVolumes();
         void updateBusMeters(std::span<const SourceMeterSample> samples, float deltaTime);
 

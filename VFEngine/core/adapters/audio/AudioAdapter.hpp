@@ -73,6 +73,11 @@ namespace core
         bool isBusSoloed(const std::string& busName) const override;
         std::vector<std::string> getBusNames() const override;
         std::vector<types::AudioBusLevel> getBusLevels() const override;
+        void setBusDuck(const std::string& targetBus,
+                        const types::BusDuckConfig& config) override;
+        void removeBusDuck(const std::string& targetBus) override;
+        std::optional<types::BusDuckConfig> getBusDuck(
+            const std::string& targetBus) const override;
         void saveMixSnapshot(const std::string& name) override;
         void loadMixSnapshot(const std::string& name) override;
         void deleteMixSnapshot(const std::string& name) override;

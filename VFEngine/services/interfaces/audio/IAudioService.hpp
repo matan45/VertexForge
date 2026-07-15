@@ -3,7 +3,9 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
+#include <optional>
 #include "types/AudioEffectTypes.hpp"
+#include "types/AudioTypes.hpp"
 
 namespace services {
 
@@ -94,6 +96,11 @@ namespace services {
         virtual bool isBusMuted(const std::string& busName) const = 0;
         virtual bool isBusSoloed(const std::string& busName) const = 0;
         virtual std::vector<std::string> getBusNames() const = 0;
+        virtual void setBusDuck(const std::string& targetBus,
+                                const types::BusDuckConfig& config) = 0;
+        virtual void removeBusDuck(const std::string& targetBus) = 0;
+        virtual std::optional<types::BusDuckConfig> getBusDuck(
+            const std::string& targetBus) const = 0;
         virtual void saveMixSnapshot(const std::string& name) = 0;
         virtual void loadMixSnapshot(const std::string& name) = 0;
         virtual void deleteMixSnapshot(const std::string& name) = 0;

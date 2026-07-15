@@ -16,6 +16,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
+#include <optional>
 
 namespace core::audio {
 
@@ -102,6 +103,9 @@ namespace core::audio {
         bool isBusSoloed(const std::string& busName) const;
         std::vector<std::string> getBusNames() const;
         std::vector<types::AudioBusLevel> getBusLevels() const;
+        void setBusDuck(const std::string& targetBus, const types::BusDuckConfig& config);
+        void removeBusDuck(const std::string& targetBus);
+        std::optional<types::BusDuckConfig> getBusDuck(const std::string& targetBus) const;
         void saveMixSnapshot(const std::string& name);
         void loadMixSnapshot(const std::string& name);
         void deleteMixSnapshot(const std::string& name);

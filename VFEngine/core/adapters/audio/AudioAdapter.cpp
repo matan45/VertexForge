@@ -215,6 +215,20 @@ namespace core {
         return audioController->getBusLevels();
     }
 
+    void AudioAdapter::setBusDuck(const std::string& targetBus,
+                                  const types::BusDuckConfig& config) {
+        audioController->setBusDuck(targetBus, config);
+    }
+
+    void AudioAdapter::removeBusDuck(const std::string& targetBus) {
+        audioController->removeBusDuck(targetBus);
+    }
+
+    std::optional<types::BusDuckConfig> AudioAdapter::getBusDuck(
+        const std::string& targetBus) const {
+        return audioController->getBusDuck(targetBus);
+    }
+
     void AudioAdapter::saveMixSnapshot(const std::string& name) {
         audioController->saveMixSnapshot(name);
     }

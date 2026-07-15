@@ -125,6 +125,7 @@ namespace core::audio
             }
 
             // Per-tick audio update (the work that was on the main thread)
+            deps.busManager->updateDucking(deltaTime);
             deps.busManager->flushDirtyVolumes();
             deps.sourceManager->update();
             deps.streamingManager->update();
@@ -459,6 +460,14 @@ namespace core::audio
             else if constexpr (std::is_same_v<T, CreateBusCmd>)
             {
                 deps.busManager->createBus(command.name, command.parentName);
+            }
+            else if constexpr (std::is_same_v<T, SetBusDuckCmd>)
+            {
+                deps.busManager->setBusDuck(command.targetBus, command.config);
+            }
+            else if constexpr (std::is_same_v<T, RemoveBusDuckCmd>)
+            {
+                deps.busManager->removeBusDuck(command.targetBus);
             }
             else if constexpr (std::is_same_v<T, AddBusEffectCmd>)
             {

@@ -190,7 +190,7 @@ namespace core::audio
             if (bus.name == "Master")
             {
                 bus.effectiveVolume = gainpolicy::rootEffectiveVolume(
-                    bus.volume, bus.muted, bus.soloed, anySoloed);
+                    bus.volume * bus.duckGain, bus.muted, bus.soloed, anySoloed);
                 recalculateBusEffective(
                     bus, bus.effectiveVolume, bus.muted, anySoloed);
                 break;
@@ -208,7 +208,8 @@ namespace core::audio
 
             bool effectivelyMuted = child->muted || parentMuted;
             child->effectiveVolume = gainpolicy::childEffectiveVolume(
-                child->volume, parentEffective, child->muted, parentMuted,
+                child->volume * child->duckGain, parentEffective,
+                child->muted, parentMuted,
                 child->soloed, anySoloed);
 
             recalculateBusEffective(*child, child->effectiveVolume, effectivelyMuted, anySoloed);

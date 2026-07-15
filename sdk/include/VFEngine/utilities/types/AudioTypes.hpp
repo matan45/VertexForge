@@ -104,7 +104,27 @@ namespace types
         float playbackPosition = 0.0f; // seconds; a virtual voice's simulated clock
     };
 
-    // VK-1514: estimated post-bus-fader, pre-effects RMS and its decaying hold.
+    // VK-1519: one fixed-reduction sidechain assignment for a target bus. amountDb is a
+    // positive attenuation amount; 0 dB is inert. These limits are shared by the backend
+    // and editor so queued commands cannot bypass UI validation.
+    inline constexpr float kBusDuckMinThresholdDb = -60.0f;
+    inline constexpr float kBusDuckMaxThresholdDb = 0.0f;
+    inline constexpr float kBusDuckMinAmountDb = 0.0f;
+    inline constexpr float kBusDuckMaxAmountDb = 60.0f;
+    inline constexpr float kBusDuckMinTimeMs = 0.0f;
+    inline constexpr float kBusDuckMaxTimeMs = 10000.0f;
+
+    struct BusDuckConfig
+    {
+        std::string sourceBus;
+        float thresholdDb = -30.0f;
+        float amountDb = 12.0f;
+        float attackMs = 50.0f;
+        float releaseMs = 250.0f;
+    };
+
+    // VK-1514/VK-1519: estimated post-authored-bus-fader, pre-duck, pre-effects RMS and
+    // its decaying hold. Duck detectors deliberately consume this stable signal.
     struct AudioBusLevel
     {
         std::string name;

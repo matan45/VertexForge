@@ -48,6 +48,10 @@ namespace windows
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
+        drawDuckingSection();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
         drawEffectChainSection();
         ImGui::Spacing();
         ImGui::Separator();
@@ -65,7 +69,7 @@ namespace windows
         const auto busLevels = dispatcher.query(events::audio::GetBusLevelsQuery{});
         if (busLevels.empty()) { ImGui::TextDisabled("No audio buses configured"); return; }
 
-        ImGui::TextDisabled("Levels: estimated, pre-effects");
+        ImGui::TextDisabled("Levels: estimated, pre-duck, pre-effects");
 
         for (size_t i = 0; i < busLevels.size(); ++i) {
             const auto& level = busLevels[i];
@@ -94,7 +98,7 @@ namespace windows
             ImGui::Dummy(ImVec2(kBusMeterWidth, kBusMeterHeight));
             if (ImGui::IsItemHovered())
             {
-                ImGui::SetTooltip("Estimated level (pre-effects)\n"
+                ImGui::SetTooltip("Estimated detector level (pre-duck, pre-effects)\n"
                                   "RMS envelope with bus gain and distance attenuation\n"
                                   "Floor: -60 dB");
             }
@@ -126,10 +130,109 @@ namespace windows
             }
             if (soloed) ImGui::PopStyleColor();
 
+            events::audio::GetBusDuckQuery duckQuery;
+            duckQuery.targetBus = name;
+            const auto duckConfig = dispatcher.query(duckQuery);
+            ImGui::TextDisabled("Duck by...");
+            ImGui::PushItemWidth(80.0f);
+            const char* duckPreview = duckConfig ? duckConfig->sourceBus.c_str() : "None";
+            if (ImGui::BeginCombo("##duckSource", duckPreview)) {
+                const bool noDuck = !duckConfig;
+                if (ImGui::Selectable("None", noDuck) && duckConfig) {
+                    events::audio::RemoveBusDuckCommand cmd;
+                    cmd.targetBus = name;
+                    dispatcher.execute(cmd);
+                }
+                if (noDuck) ImGui::SetItemDefaultFocus();
+
+                for (const auto& sourceLevel : busLevels) {
+                    if (sourceLevel.name == name) continue;
+                    const bool selected = duckConfig
+                        && duckConfig->sourceBus == sourceLevel.name;
+                    if (ImGui::Selectable(sourceLevel.name.c_str(), selected)) {
+                        types::BusDuckConfig config = duckConfig.value_or(types::BusDuckConfig{});
+                        config.sourceBus = sourceLevel.name;
+                        events::audio::SetBusDuckCommand cmd;
+                        cmd.targetBus = name;
+                        cmd.config = std::move(config);
+                        dispatcher.execute(cmd);
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopItemWidth();
+
             ImGui::PopID();
             ImGui::EndGroup();
             if (i < busLevels.size() - 1) { ImGui::SameLine(); ImGui::Dummy(ImVec2(10, 0)); ImGui::SameLine(); }
         }
+    }
+
+    void AudioMixerWindow::drawDuckingSection()
+    {
+        if (selectedBusName.empty()) {
+            ImGui::TextDisabled("Select a bus to edit its ducking");
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::audio::GetBusDuckQuery query;
+        query.targetBus = selectedBusName;
+        const auto storedConfig = dispatcher.query(query);
+
+        ImGui::Text("Ducking: %s", selectedBusName.c_str());
+        if (!storedConfig) {
+            ImGui::TextDisabled("Choose a source from the strip's 'Duck by...' selector");
+            return;
+        }
+
+        types::BusDuckConfig config = *storedConfig;
+        bool changed = false;
+        const auto busNames = dispatcher.query(events::audio::GetBusNamesQuery{});
+
+        ImGui::PushItemWidth(180.0f);
+        if (ImGui::BeginCombo("Source Bus", config.sourceBus.c_str())) {
+            for (const auto& sourceName : busNames) {
+                if (sourceName == selectedBusName) continue;
+                const bool selected = sourceName == config.sourceBus;
+                if (ImGui::Selectable(sourceName.c_str(), selected)) {
+                    config.sourceBus = sourceName;
+                    changed = true;
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        changed |= ImGui::SliderFloat("Threshold", &config.thresholdDb,
+                                      types::kBusDuckMinThresholdDb,
+                                      types::kBusDuckMaxThresholdDb, "%.1f dB");
+        changed |= ImGui::SliderFloat("Reduction", &config.amountDb,
+                                      types::kBusDuckMinAmountDb,
+                                      types::kBusDuckMaxAmountDb, "%.1f dB");
+        changed |= ImGui::DragFloat("Attack", &config.attackMs, 1.0f,
+                                    types::kBusDuckMinTimeMs,
+                                    types::kBusDuckMaxTimeMs, "%.0f ms");
+        changed |= ImGui::DragFloat("Release", &config.releaseMs, 1.0f,
+                                    types::kBusDuckMinTimeMs,
+                                    types::kBusDuckMaxTimeMs, "%.0f ms");
+        ImGui::PopItemWidth();
+
+        if (changed) {
+            events::audio::SetBusDuckCommand cmd;
+            cmd.targetBus = selectedBusName;
+            cmd.config = std::move(config);
+            dispatcher.execute(cmd);
+        }
+
+        if (ImGui::Button("Remove Ducking")) {
+            events::audio::RemoveBusDuckCommand cmd;
+            cmd.targetBus = selectedBusName;
+            dispatcher.execute(cmd);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("Runtime only; removal follows the configured release");
     }
 
     void AudioMixerWindow::drawEffectChainSection()

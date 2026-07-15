@@ -3,6 +3,7 @@
 #include "ReverbZoneManager.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace core::audio
@@ -183,6 +184,96 @@ namespace core::audio
 
         bus->soloed = soloed;
         volumesDirty = true;
+    }
+
+    bool AudioBusManager::setBusDuck(const std::string& targetBus,
+                                     const types::BusDuckConfig& config)
+    {
+        std::unique_lock lock(busMutex);
+        const auto targetIt = nameToId.find(targetBus);
+        const auto sourceIt = nameToId.find(config.sourceBus);
+        if (targetIt == nameToId.end() || sourceIt == nameToId.end())
+        {
+            vfLogWarning("AudioBusManager: Cannot duck '{}' from unknown source bus '{}'",
+                         targetBus, config.sourceBus);
+            return false;
+        }
+        if (targetIt->second == sourceIt->second)
+        {
+            vfLogWarning("AudioBusManager: Bus '{}' cannot duck itself", targetBus);
+            return false;
+        }
+
+        auto* target = getBus(targetIt->second);
+        if (!target)
+        {
+            return false;
+        }
+
+        target->duckConfig = ducking::sanitizeConfig(config);
+        target->duckSourceBusId = sourceIt->second;
+        target->duckReleaseMs = target->duckConfig->releaseMs;
+        return true;
+    }
+
+    bool AudioBusManager::removeBusDuck(const std::string& targetBus)
+    {
+        std::unique_lock lock(busMutex);
+        const auto targetIt = nameToId.find(targetBus);
+        if (targetIt == nameToId.end())
+        {
+            return false;
+        }
+
+        auto* target = getBus(targetIt->second);
+        if (!target || !target->duckConfig)
+        {
+            return false;
+        }
+
+        target->duckReleaseMs = target->duckConfig->releaseMs;
+        target->duckConfig.reset();
+        return true;
+    }
+
+    std::optional<types::BusDuckConfig> AudioBusManager::getBusDuck(
+        const std::string& targetBus) const
+    {
+        std::shared_lock lock(busMutex);
+        const auto targetIt = nameToId.find(targetBus);
+        if (targetIt == nameToId.end() || targetIt->second >= buses.size())
+        {
+            return std::nullopt;
+        }
+        return buses[targetIt->second].duckConfig;
+    }
+
+    void AudioBusManager::updateDucking(float deltaTime)
+    {
+        std::unique_lock lock(busMutex);
+        for (auto& bus : buses)
+        {
+            float nextGain = 1.0f;
+            if (bus.duckConfig)
+            {
+                const float sourceRms = bus.duckSourceBusId < meterEntries.size()
+                    ? meterEntries[bus.duckSourceBusId].rms : 0.0f;
+                nextGain = bus.duckEnvelope.update(
+                    sourceRms, *bus.duckConfig, deltaTime);
+            }
+            else if (!bus.duckEnvelope.isUnity())
+            {
+                nextGain = bus.duckEnvelope.release(bus.duckReleaseMs, deltaTime);
+            }
+
+            const bool reachedUnity = nextGain == 1.0f && bus.duckGain != 1.0f;
+            if (reachedUnity
+                || std::abs(nextGain - bus.duckGain) >= ducking::kGainDirtyEpsilon)
+            {
+                bus.duckGain = nextGain;
+                volumesDirty = true;
+            }
+        }
     }
 
     void AudioBusManager::flushDirtyVolumes()

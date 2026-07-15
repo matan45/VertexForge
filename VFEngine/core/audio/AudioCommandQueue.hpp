@@ -74,6 +74,8 @@ namespace core::audio
     struct BusMuteCmd { std::string busName; bool muted; };
     struct BusSoloCmd { std::string busName; bool soloed; };
     struct CreateBusCmd { std::string name; std::string parentName; };
+    struct SetBusDuckCmd { std::string targetBus; types::BusDuckConfig config; };
+    struct RemoveBusDuckCmd { std::string targetBus; };
 
     struct AddBusEffectCmd
     {
@@ -125,6 +127,7 @@ namespace core::audio
         SetVolumeCmd, SetPitchCmd, SetSourceTransformCmd, SetSourceOcclusionCmd,
         SetListenerCmd, SetPlaybackPosCmd,
         ApplySettingsCmd, BusVolumeCmd, BusMuteCmd, BusSoloCmd, CreateBusCmd,
+        SetBusDuckCmd, RemoveBusDuckCmd,
         AddBusEffectCmd, RemoveBusEffectCmd, UpdateBusEffectCmd,
         SetBusEffectEnabledCmd, SetBusEffectWetDryCmd,
         LoadSnapshotCmd, SaveSnapshotCmd, DeleteSnapshotCmd,

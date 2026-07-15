@@ -389,6 +389,26 @@ namespace core::audio
         return busManager->getBusLevels();
     }
 
+    void AudioController::setBusDuck(const std::string& targetBus,
+                                     const types::BusDuckConfig& config)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetBusDuckCmd{targetBus, config});
+    }
+
+    void AudioController::removeBusDuck(const std::string& targetBus)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(RemoveBusDuckCmd{targetBus});
+    }
+
+    std::optional<types::BusDuckConfig> AudioController::getBusDuck(
+        const std::string& targetBus) const
+    {
+        if (!initialized) return std::nullopt;
+        return busManager->getBusDuck(targetBus);
+    }
+
     void AudioController::saveMixSnapshot(const std::string& name)
     {
         if (!initialized || !commandQueue) return;
