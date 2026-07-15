@@ -84,9 +84,10 @@ namespace windows
     void ViewPortSelection::update(const ViewPortPicker& picker,
                                    const editor::EditorCamera& camera,
                                    bool isPlayMode, glm::vec2 viewportPos,
-                                   glm::vec2 viewportSize)
+                                   glm::vec2 viewportSize,
+                                   bool customGizmoConsumesMouse)
     {
-        if (isPlayMode)
+        if (isPlayMode || customGizmoConsumesMouse)
         {
             resetMarquee();
             return;

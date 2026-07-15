@@ -9,6 +9,7 @@
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/scene/ReverbZoneEvents.hpp"
 #include "resource/AssetLifecycleManager.hpp"
+#include <cmath>
 
 namespace services {
 
@@ -306,6 +307,30 @@ namespace services {
         return true;
     }
 
+    bool AudioComponentService::setAudioSource3DDistances(EntityHandle entity,
+                                                          float minDistance,
+                                                          float maxDistance) {
+        if (!std::isfinite(minDistance) || !std::isfinite(maxDistance) ||
+            minDistance < 0.0f || maxDistance < minDistance) {
+            return false;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
+        comp.minDistance = minDistance;
+        comp.maxDistance = maxDistance;
+        return true;
+    }
+
     // ========== REVERB ZONE COMPONENT OPERATIONS ==========
 
     bool AudioComponentService::addReverbZoneComponent(EntityHandle entity) {
@@ -426,6 +451,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::scene::SetAudioSource3DDataCommand>(
             [this](const events::scene::SetAudioSource3DDataCommand& cmd) {
                 return setAudioSource3DData(cmd.entity, cmd.audioData);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetAudioSource3DDistancesCommand>(
+            [this](const events::scene::SetAudioSource3DDistancesCommand& cmd) {
+                return setAudioSource3DDistances(cmd.entity, cmd.minDistance, cmd.maxDistance);
             });
 
         dispatcher.registerQueryHandler<events::scene::HasAudioSource3DComponentQuery>(

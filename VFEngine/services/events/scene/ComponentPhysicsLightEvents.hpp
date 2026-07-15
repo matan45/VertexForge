@@ -67,6 +67,16 @@ namespace events::scene {
         std::string_view getName() const override { return "SetAudioSource3DData"; }
     };
 
+    // Narrow authoring path for viewport attenuation handles. Unlike the full
+    // DTO setter, this never retargets clips or creates a missing component.
+    struct SetAudioSource3DDistancesCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        float minDistance = 0.0f;
+        float maxDistance = 0.0f;
+
+        std::string_view getName() const override { return "SetAudioSource3DDistances"; }
+    };
+
     struct HasAudioSource3DComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
