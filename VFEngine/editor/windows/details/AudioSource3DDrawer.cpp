@@ -5,7 +5,9 @@
 #include "events/project/SceneEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/audio/AudioBusEvents.hpp"
-#include "events/physics/PhysicsEvents.hpp"  // VK-1518: occlusion trace-channel layer names
+// VK-1518: occlusion trace-channel layer names (same pair ColliderDrawer uses)
+#include "events/physics/PhysicsSettingsEvents.hpp"
+#include "types/PhysicsTypes.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "resource/VfAudioHeader.hpp"
