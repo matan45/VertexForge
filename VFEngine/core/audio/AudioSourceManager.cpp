@@ -75,42 +75,58 @@ namespace core::audio {
         return handle;
     }
 
+    std::vector<AudioSourceManager::FadingSource>::iterator
+    AudioSourceManager::findFade(AudioHandle handle) {
+        return std::find_if(fadingQueue.begin(), fadingQueue.end(),
+            [handle](const FadingSource& fading) { return fading.handle == handle; });
+    }
+
+    std::vector<AudioSourceManager::FadingSource>::const_iterator
+    AudioSourceManager::findFade(AudioHandle handle) const {
+        return std::find_if(fadingQueue.begin(), fadingQueue.end(),
+            [handle](const FadingSource& fading) { return fading.handle == handle; });
+    }
+
+    void AudioSourceManager::retireSlot(size_t poolIndex) {
+        if (poolIndex >= sourcePool.size())
+            return;
+        auto* source = sourcePool[poolIndex].get();
+        source->stop();
+        source->detachFilter();
+        source->setBuffer(0);
+        freeIndices.push_back(poolIndex);
+    }
+
     void AudioSourceManager::releaseSource(AudioHandle handle) {
+        // VK-1521: resolved BEFORE the branch, because a fading-IN handle is in both maps
+        // (see the invariant in the header). The old code only cleared fadingQueue on the
+        // not-in-activeHandles path, which was complete while fade-out was the only fade —
+        // a fade-in reaching the branch below would have had its slot freed here and its
+        // ramp left running, so updateFades would keep writing gain into a slot already
+        // re-issued to another voice and would free that slot a SECOND time on completion.
+        // Reachable via demoteVoice (AudioThread) releasing a voice that is still ramping.
+        auto fadeIt = findFade(handle);
+
         auto it = activeHandles.find(handle);
         if (it == activeHandles.end()) {
-            auto fadeIt = std::find_if(fadingQueue.begin(), fadingQueue.end(),
-                [handle](const FadingSource& fading) { return fading.handle == handle; });
             if (fadeIt == fadingQueue.end())
                 return;
 
-            if (fadeIt->poolIndex < sourcePool.size()) {
-                auto* source = sourcePool[fadeIt->poolIndex].get();
-                source->stop();
-                source->detachFilter();
-                source->setBuffer(0);
-                freeIndices.push_back(fadeIt->poolIndex);
-            }
+            retireSlot(fadeIt->poolIndex);
             fadingQueue.erase(fadeIt);
             return;
         }
 
-        size_t index = it->second;
-
-        if (index < sourcePool.size()) {
-            sourcePool[index]->stop();
-            sourcePool[index]->detachFilter();
-            sourcePool[index]->setBuffer(0);
-            freeIndices.push_back(index);
-        }
-
+        retireSlot(it->second);
         activeHandles.erase(it);
+        if (fadeIt != fadingQueue.end())
+            fadingQueue.erase(fadeIt);
     }
 
     AudioSource* AudioSourceManager::getSource(AudioHandle handle) {
         auto it = activeHandles.find(handle);
         if (it == activeHandles.end()) {
-            const auto fadeIt = std::find_if(fadingQueue.begin(), fadingQueue.end(),
-                [handle](const FadingSource& fading) { return fading.handle == handle; });
+            const auto fadeIt = findFade(handle);
             if (fadeIt == fadingQueue.end() || fadeIt->poolIndex >= sourcePool.size())
                 return nullptr;
             return sourcePool[fadeIt->poolIndex].get();
@@ -127,8 +143,7 @@ namespace core::audio {
     const AudioSource* AudioSourceManager::getSource(AudioHandle handle) const {
         auto it = activeHandles.find(handle);
         if (it == activeHandles.end()) {
-            const auto fadeIt = std::find_if(fadingQueue.begin(), fadingQueue.end(),
-                [handle](const FadingSource& fading) { return fading.handle == handle; });
+            const auto fadeIt = findFade(handle);
             if (fadeIt == fadingQueue.end() || fadeIt->poolIndex >= sourcePool.size())
                 return nullptr;
             return sourcePool[fadeIt->poolIndex].get();
@@ -144,17 +159,19 @@ namespace core::audio {
 
     void AudioSourceManager::setVolume(AudioHandle handle, float volume)
     {
-        const auto fadeIt = std::find_if(fadingQueue.begin(), fadingQueue.end(),
-            [handle](const FadingSource& fading) { return fading.handle == handle; });
+        const auto fadeIt = findFade(handle);
         if (fadeIt != fadingQueue.end())
         {
+            // The bus flushes userVolume * effectiveBusVolume through here every tick (and
+            // continuously while a bus is ducking), with no fade term in it. Re-base rather
+            // than write it straight to AL_GAIN, or the flush would stomp the ramp — the
+            // failure mode is intermittent, which is exactly why it re-bases by hand.
             fadeIt->baseVolume = volume;
             if (fadeIt->poolIndex < sourcePool.size())
             {
-                const float ratio = fadeIt->totalMs > 0.0f
-                    ? std::clamp(fadeIt->remainingMs / fadeIt->totalMs, 0.0f, 1.0f)
-                    : 0.0f;
-                sourcePool[fadeIt->poolIndex]->setVolume(volume * ratio);
+                const float gain = fade::rampGain(fadeIt->direction, fadeIt->startGain,
+                                                  fadeIt->remainingMs, fadeIt->totalMs);
+                sourcePool[fadeIt->poolIndex]->setVolume(volume * gain);
             }
             return;
         }
@@ -188,34 +205,112 @@ namespace core::audio {
         }
     }
 
-    void AudioSourceManager::startFadeOut(AudioHandle handle, float durationMs)
+    void AudioSourceManager::startFadeIn(AudioHandle handle, float durationMs)
     {
-        auto it = activeHandles.find(handle);
+        // A fade-in only ever arms a voice that is already live and un-faded: the caller is
+        // the play path, one line before source->play(). A handle that is mid-fade-out is
+        // deliberately not revivable this way — it is on its way to being released.
+        const auto it = activeHandles.find(handle);
         if (it == activeHandles.end())
             return;
+        if (findFade(handle) != fadingQueue.end())
+            return; // already ramping — never stack a second entry (see the invariant)
 
-        if (!std::isfinite(durationMs) || durationMs <= 0.0f)
+        // Not rampable means "no fade", i.e. leave the voice at the full gain the caller
+        // already applied. This is what makes fadeInMs = 0 byte-identical to pre-VK-1521.
+        if (!fade::isRampable(durationMs))
+            return;
+
+        const size_t index = it->second;
+        if (index >= sourcePool.size())
+            return;
+
+        auto* source = sourcePool[index].get();
+        // baseVolume is the ramp's TARGET: whatever gain the caller has just settled on
+        // (assignSource writes userVolume * effectiveBusVolume immediately before this).
+        // Safe to read back here precisely because no ramp is in flight yet — the guard
+        // above rejected that case — so AL_GAIN IS the bus target.
+        const float target = source->getVolume();
+
+        fadingQueue.push_back({handle, index, target, 1.0f, durationMs, durationMs,
+                               fade::FadeDirection::In});
+
+        // Silence it NOW — the caller has not called play() yet, so the very first buffer
+        // the mixer touches is already at the bottom of the ramp and there is no pop.
+        source->setVolume(target * fade::rampGain(fade::FadeDirection::In, 1.0f,
+                                                  durationMs, durationMs));
+
+        // handle deliberately STAYS in activeHandles: a fading-in voice is an ordinary
+        // playing voice, so update() must still reap it when its clip ends and
+        // updateFilters must still drive its distance filter. See the header invariant.
+    }
+
+    void AudioSourceManager::startFadeOut(AudioHandle handle, float durationMs)
+    {
+        // VK-1521: resolve the slot from EITHER map. A fade-out may now interrupt an
+        // in-flight fade-in, and a fading-in handle is in both; a fading-out one is in
+        // neither activeHandles nor (as far as this lookup cares) anywhere else.
+        const auto act = activeHandles.find(handle);
+        auto fadeIt = findFade(handle);
+
+        size_t index;
+        if (act != activeHandles.end())
+            index = act->second;
+        else if (fadeIt != fadingQueue.end())
+            index = fadeIt->poolIndex;
+        else
+            return;
+
+        if (!fade::isRampable(durationMs))
         {
+            // Hard cut. releaseSource handles both maps, so it cleans up whichever
+            // membership this handle actually had.
             releaseSource(handle);
             return;
         }
 
-        size_t index = it->second;
         // Drive-by (VK-1513): this dereferenced sourcePool[index] unchecked, unlike
         // updateFades below which bounds-checks the same index. Harmless once growPool's
         // index desync is fixed, but the asymmetry was an oversight.
         if (index >= sourcePool.size()) {
-            activeHandles.erase(it);
+            activeHandles.erase(handle);
+            if (fadeIt != fadingQueue.end())
+                fadingQueue.erase(fadeIt);
             return;
         }
 
-        auto* source = sourcePool[index].get();
-        float currentVolume = source->getVolume();
+        float baseVolume;
+        float startGain;
+        if (fadeIt != fadingQueue.end())
+        {
+            // Hand off from the ramp already in flight: continue from the multiplier the
+            // voice audibly reached instead of jumping to full and falling.
+            //
+            // baseVolume is INHERITED, never re-read from AL_GAIN. AL_GAIN is base*gain, so
+            // capturing it as the new base would be silently undone by the very next bus
+            // flush (which rewrites baseVolume to the real target) and the fade-out would
+            // jump up mid-ramp. Intermittent, ducking-dependent, and it would ship.
+            baseVolume = fadeIt->baseVolume;
+            startGain = fade::rampGain(fadeIt->direction, fadeIt->startGain,
+                                       fadeIt->remainingMs, fadeIt->totalMs);
+            // REPLACE, never stack: the queue is scanned with find_if, so a second entry for
+            // this handle would shadow the one updateFades advances — and both would free
+            // the same poolIndex on completion.
+            fadingQueue.erase(fadeIt);
+        }
+        else
+        {
+            // Steady state: nothing is ramping, so AL_GAIN IS the bus-multiplied target.
+            baseVolume = sourcePool[index]->getVolume();
+            startGain = 1.0f;
+        }
 
-        fadingQueue.push_back({handle, index, currentVolume, durationMs, durationMs});
+        fadingQueue.push_back({handle, index, baseVolume, startGain, durationMs, durationMs,
+                               fade::FadeDirection::Out});
 
-        // Remove from activeHandles so normal update() doesn't auto-release it
-        activeHandles.erase(it);
+        // Remove from activeHandles so normal update() doesn't auto-release it. A no-op if
+        // this handle was already fading out.
+        activeHandles.erase(handle);
     }
 
     void AudioSourceManager::updateFades(float deltaTimeMs)
@@ -227,24 +322,32 @@ namespace core::audio {
 
             if (it->remainingMs <= 0.0f)
             {
-                // Fade complete — stop and release
-                if (it->poolIndex < sourcePool.size())
+                if (it->direction == fade::FadeDirection::In)
                 {
-                    auto* source = sourcePool[it->poolIndex].get();
-                    source->stop();
-                    source->detachFilter();
-                    source->setBuffer(0);
-                    freeIndices.push_back(it->poolIndex);
+                    // VK-1521: a fade-in ends the RAMP, not the voice. Settle exactly on the
+                    // target and drop the entry; the handle never left activeHandles, so
+                    // update() takes over reaping it when the clip actually finishes.
+                    // rampGain is exact at the endpoint, so this lands on baseVolume rather
+                    // than stranding the voice at ~99% until the next bus flush.
+                    if (it->poolIndex < sourcePool.size())
+                        sourcePool[it->poolIndex]->setVolume(
+                            it->baseVolume * fade::rampGain(it->direction, it->startGain,
+                                                            it->remainingMs, it->totalMs));
+                    it = fadingQueue.erase(it);
+                    continue;
                 }
+
+                // Fade complete — stop and release. Deliberately does not write the final 0
+                // gain: the source is being stopped and its buffer detached anyway.
+                retireSlot(it->poolIndex);
                 it = fadingQueue.erase(it);
             }
             else
             {
-                // Ramp volume down
-                float t = it->remainingMs / it->totalMs;
-                float fadedVolume = it->baseVolume * t;
+                const float gain = fade::rampGain(it->direction, it->startGain,
+                                                  it->remainingMs, it->totalMs);
                 if (it->poolIndex < sourcePool.size())
-                    sourcePool[it->poolIndex]->setVolume(fadedVolume);
+                    sourcePool[it->poolIndex]->setVolume(it->baseVolume * gain);
                 ++it;
             }
         }
@@ -252,13 +355,14 @@ namespace core::audio {
 
     float AudioSourceManager::getFadeGain(AudioHandle handle) const
     {
-        const auto it = std::find_if(fadingQueue.begin(), fadingQueue.end(),
-            [handle](const FadingSource& fading) { return fading.handle == handle; });
+        const auto it = findFade(handle);
         if (it == fadingQueue.end())
             return 1.0f;
-        if (!std::isfinite(it->totalMs) || it->totalMs <= 0.0f)
-            return 0.0f;
-        return std::clamp(it->remainingMs / it->totalMs, 0.0f, 1.0f);
+        // Must be the SAME expression updateFades multiplies into AL_GAIN — publishSnapshot
+        // re-applies this for the bus meters and would square the ramp if the two drifted.
+        // Note this rises for a fade-IN: returning 1.0f there would spike the bus meters to
+        // full at the start of every fade-in.
+        return fade::rampGain(it->direction, it->startGain, it->remainingMs, it->totalMs);
     }
 
     void AudioSourceManager::updateFilters(const glm::vec3& listenerPos, float deltaTime) {

@@ -30,6 +30,11 @@ namespace plugin {
     //      lower = more important). It crosses the boundary by reference in
     //      PluginContext::playSound3D/playStreamingSound, so a plugin built against v18
     //      would construct a shorter object and the engine would read past its end.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 19;
+    // v20: services::AudioParams appends fadeInMs (ramp a sound up from silence instead of
+    //      starting at full gain; 0 = no fade). Same boundary and same hazard as v19 — it
+    //      crosses by reference in PluginContext::playSound3D/playStreamingSound, so a plugin
+    //      built against v19 would construct a shorter object and the engine would read past
+    //      its end.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 20;
 
 }

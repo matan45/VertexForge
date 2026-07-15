@@ -253,6 +253,19 @@ namespace windows::details
                               "Distant sounds are already ranked quieter, so priority is a tie-breaker.");
         }
 
+        // VK-1521: ramp up from silence when the sound starts. 0 = no fade.
+        if (ImGui::DragFloat("Fade In (ms)##3D", &audioData.fadeInMs, 10.0f, 0.0f, 10000.0f,
+                             "%.0f"))
+        {
+            audioData.fadeInMs = std::max(0.0f, audioData.fadeInMs);
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Ramp this sound up from silence over this many milliseconds.\n"
+                              "0 = start at full volume.");
+        }
+
         return changed;
     }
 

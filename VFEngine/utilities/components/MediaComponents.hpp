@@ -106,6 +106,12 @@ namespace components
         // the opposite convention — that one is zone override, not budget eviction.
         uint8_t priority = 128;
 
+        // VK-1521: ramp up from silence over this many ms when the sound starts. 0 = no fade,
+        // so existing scenes are unchanged. This component plays through the STREAMING path
+        // (_native_audio_play2d dispatches PlayStreamingSoundCommand), so it is the streaming
+        // ramp that makes this field do anything.
+        float fadeInMs = 0.0f;
+
         // VK-1520: variation container. The playable pool is [audioRef] ++ the
         // valid entries of clipVariants, so audioRef IS variant 0 and stays in
         // the rotation. Defaults (Single + zero variation) make playback
@@ -166,6 +172,10 @@ namespace components
 
         // VK-1513: see AudioSource2DComponent::priority. Lower = more important.
         uint8_t priority = 128;
+
+        // VK-1521: see AudioSource2DComponent::fadeInMs. 0 = no fade. This component plays
+        // through the pooled path (_native_audio_play3d dispatches PlaySound3DCommand).
+        float fadeInMs = 0.0f;
 
         // VK-1520: see AudioSource2DComponent's variation block. Pool is
         // [audioRef] ++ valid(clipVariants); audioRef is variant 0.

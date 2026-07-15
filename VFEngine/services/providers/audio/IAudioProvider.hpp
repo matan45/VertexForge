@@ -37,6 +37,9 @@ namespace services {
 
         // VK-1513: see services::AudioParams::priority. Lower = more important.
         uint8_t priority = 128;
+
+        // VK-1521: see services::AudioParams::fadeInMs. 0 = no fade.
+        float fadeInMs = 0.0f;
     };
 
     class IAudioProvider {

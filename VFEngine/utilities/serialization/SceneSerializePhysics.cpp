@@ -18,6 +18,17 @@ namespace serialization
                 priority = static_cast<uint8_t>(std::clamp(it->get<int>(), 0, 255));
         }
 
+        // VK-1521. Absent in scenes saved before fade-in, so the struct default (0 == no
+        // fade) applies and playback stays byte-identical — no migration needed. Negatives
+        // are clamped away rather than left to the ramp's isRampable() guard: a hand-edited
+        // scene should round-trip as the 0 the editor would show, not as a value that only
+        // behaves like 0.
+        void readAudioFadeIn(const json& j, float& fadeInMs)
+        {
+            if (auto it = j.find("fadeInMs"); it != j.end() && it->is_number())
+                fadeInMs = std::max(0.0f, it->get<float>());
+        }
+
         // VK-1520. Shared by both audio source components — their variation blocks
         // are identical, so template over the component rather than duplicating.
         //
@@ -90,6 +101,7 @@ namespace serialization
         j["loop"] = audioSource.loop;
         j["busName"] = audioSource.busName;
         j["priority"] = audioSource.priority;
+        j["fadeInMs"] = audioSource.fadeInMs;
         writeAudioVariation(j, audioSource);
         return j;
     }
@@ -114,6 +126,7 @@ namespace serialization
             audioSource.busName = it->get<std::string>();
         }
         readVoicePriority(j, audioSource.priority);
+        readAudioFadeIn(j, audioSource.fadeInMs);
         readAudioVariation(j, audioSource);
         // Reset runtime state
         audioSource.activeHandle = 0;
@@ -145,6 +158,7 @@ namespace serialization
         j["showDebugCone"] = audioSource.showDebugCone;
         j["busName"] = audioSource.busName;
         j["priority"] = audioSource.priority;
+        j["fadeInMs"] = audioSource.fadeInMs;
         writeAudioVariation(j, audioSource);
         return j;
     }
@@ -199,6 +213,7 @@ namespace serialization
             if (auto it = j.find("busName"); it != j.end() && it->is_string())
                 audioSource.busName = it->get<std::string>();
             readVoicePriority(j, audioSource.priority);
+            readAudioFadeIn(j, audioSource.fadeInMs);
         }
     } // anonymous namespace
 

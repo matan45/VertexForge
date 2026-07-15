@@ -38,6 +38,14 @@ namespace core::audio
         // AudioSourceConfig, which exists only to be mapped onto OpenAL, and OpenAL has no
         // priority concept.
         uint8_t priority = 128;
+
+        // VK-1521: ramp this sound up from silence over fadeInMs instead of starting at full
+        // gain. 0 (the default) means no fade, which keeps every pre-VK-1521 play byte-identical.
+        // Consumed at play time by AudioSourceManager::startFadeIn (pooled) or passed into
+        // StreamingAudioManager::playStreaming (streaming) — and, like priority above,
+        // deliberately NOT forwarded into AudioSourceConfig: the ramp is driven by the fade
+        // queues, and OpenAL has no fade concept to map it onto.
+        float fadeInMs = 0.0f;
     };
     #pragma warning(pop)
 }

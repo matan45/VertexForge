@@ -61,20 +61,39 @@ namespace weather
     void WeatherAudioController::updateLoop(float deltaTime, float targetVolume,
                                              uint64_t& handle, float& volume, const std::string& path)
     {
-        float diff = targetVolume - volume;
+        // VK-1521: the onset is now the engine's fade, not a hand-rolled ramp from zero.
+        // Gate on the TARGET rather than on the follower's output, because the follower no
+        // longer has to climb from silence for the loop to start.
+        if (targetVolume > 0.01f && handle == 0 && !path.empty())
+        {
+            startLoop(handle, path, targetVolume, CROSSFADE_DURATION_MS);
+            // Seeding is load-bearing, not tidiness. Leave `volume` at 0 and the follower
+            // below would ramp 0 -> target WHILE the engine ramps 0 -> 1 over the same
+            // window: the two multiply into a squared onset curve. The engine owns the
+            // onset now, so the follower must start already AT the target and only track
+            // it from here.
+            volume = targetVolume;
+        }
+
+        // The follower stays: it chases a continuously moving target (gusts, precipitation
+        // intensity swings), which a fixed-duration fade cannot model. It is deltaTime-scaled,
+        // so its rate is frame-rate independent.
+        const float diff = targetVolume - volume;
         volume += std::clamp(diff, -VOLUME_RAMP_SPEED * deltaTime, VOLUME_RAMP_SPEED * deltaTime);
 
-        if (volume > 0.01f && handle == 0 && !path.empty())
-            startLoop(handle, path, 0.0f);
-
+        // Safe during a fade-in: this lands in StreamingAudioManager::setVolume, which
+        // re-bases the ramp's target instead of overwriting AL_GAIN, so the fade survives.
         if (handle != 0)
             setLoopVolume(handle, volume);
 
-        if (volume <= 0.01f && handle != 0)
+        // Gate on the target too — the tail is a real 2s fade now, so there is no need to
+        // hand-ramp down to ~0.01 first just to hide what used to be a hard cut.
+        if (targetVolume <= 0.01f && handle != 0)
             fadeOutLoop(handle);
     }
 
-    void WeatherAudioController::startLoop(uint64_t& handle, const std::string& path, float volume)
+    void WeatherAudioController::startLoop(uint64_t& handle, const std::string& path, float volume,
+                                            float fadeInMs)
     {
         try
         {
@@ -85,6 +104,7 @@ namespace weather
             cmd.params.streaming = true;
             cmd.params.volume = volume;
             cmd.params.busName = "Weather";
+            cmd.params.fadeInMs = fadeInMs;
             auto result = dispatcher.execute(cmd);
             handle = result.id;
         }

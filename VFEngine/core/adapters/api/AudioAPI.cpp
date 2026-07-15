@@ -164,6 +164,7 @@ namespace core::api
                     cmd.params.is3D = false;
                     cmd.params.busName = audioComp.busName;
                     cmd.params.priority = audioComp.priority;
+                    cmd.params.fadeInMs = audioComp.fadeInMs;
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;
@@ -228,6 +229,7 @@ namespace core::api
 
                     cmd.params.busName = audioComp.busName;
                     cmd.params.priority = audioComp.priority;
+                    cmd.params.fadeInMs = audioComp.fadeInMs;
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;

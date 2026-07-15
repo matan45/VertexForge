@@ -137,6 +137,7 @@ namespace services {
         data.loop = comp.loop;
         data.busName = comp.busName;
         data.priority = comp.priority;
+        data.fadeInMs = comp.fadeInMs;
         data.clipVariants = comp.clipVariants;
         data.playOrder = comp.playOrder;
         data.pitchVariation = comp.pitchVariation;
@@ -163,6 +164,7 @@ namespace services {
         comp.loop = audioData.loop;
         comp.busName = audioData.busName;
         comp.priority = audioData.priority;
+        comp.fadeInMs = audioData.fadeInMs;
         comp.playOrder = audioData.playOrder;
         comp.pitchVariation = audioData.pitchVariation;
         comp.volumeVariation = audioData.volumeVariation;
@@ -253,6 +255,7 @@ namespace services {
         data.showDebugCone = comp.showDebugCone;
         data.busName = comp.busName;
         data.priority = comp.priority;
+        data.fadeInMs = comp.fadeInMs;
         data.clipVariants = comp.clipVariants;
         data.playOrder = comp.playOrder;
         data.pitchVariation = comp.pitchVariation;
@@ -294,6 +297,7 @@ namespace services {
         comp.showDebugCone = audioData.showDebugCone;
         comp.busName = audioData.busName;
         comp.priority = audioData.priority;
+        comp.fadeInMs = audioData.fadeInMs;
         comp.playOrder = audioData.playOrder;
         comp.pitchVariation = audioData.pitchVariation;
         comp.volumeVariation = audioData.volumeVariation;

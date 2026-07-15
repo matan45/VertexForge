@@ -128,7 +128,10 @@ namespace core::audio
             deps.busManager->updateDucking(deltaTime);
             deps.busManager->flushDirtyVolumes();
             deps.sourceManager->update();
-            deps.streamingManager->update();
+            // VK-1521: streaming now carries fades of its own, so it needs the clock too.
+            // Milliseconds, matching updateFades below — the rest of the tick is in seconds,
+            // but every fade quantity in this module is ms.
+            deps.streamingManager->update(deltaTime * 1000.0f);
             deps.sourceManager->updateFilters(listenerPosition, deltaTime);
             deps.sourceManager->updateFades(deltaTime * 1000.0f);
 
@@ -163,7 +166,12 @@ namespace core::audio
                 {
                     const AudioSourceConfig config = configFromParams(command.params);
 
-                    handle = deps.streamingManager->playStreaming(command.path, config);
+                    // VK-1521: fadeInMs goes in rather than being armed after the call —
+                    // playStreaming calls play() itself, so arming afterwards would leak an
+                    // instant of full-gain audio. assignSource below then re-bases the ramp
+                    // onto userVolume * effectiveBusVolume via the setVolume interception.
+                    handle = deps.streamingManager->playStreaming(command.path, config, {},
+                                                                  command.params.fadeInMs);
                     if (handle != InvalidAudioHandle)
                     {
                         deps.busManager->assignSource(handle, command.params.busName, command.params.volume);
@@ -221,6 +229,11 @@ namespace core::audio
                                     source->applyConfig(configFromParams(command.params));
                                     deps.busManager->assignSource(handle, command.params.busName,
                                                                   command.params.volume);
+                                    // VK-1521: after assignSource, whose gain write is the
+                                    // ramp's target, and before play(), so the first buffer
+                                    // the mixer touches is already at the bottom of the ramp.
+                                    deps.sourceManager->startFadeIn(handle,
+                                                                    command.params.fadeInMs);
                                     source->play();
                                 }
                                 else
@@ -518,21 +531,25 @@ namespace core::audio
                 AudioHandle internal = resolveHandle(command.handle);
                 if (internal != InvalidAudioHandle)
                 {
+                    // Preserve the old immediate EFX/reverb detach while retaining
+                    // the bus record long enough to meter the audible fade ramp.
+                    deps.busManager->detachSourceRouting(internal);
                     if (StreamingAudioManager::isStreamingHandle(internal))
                     {
-                        // Streaming sources cannot be faded — stop immediately
-                        deps.streamingManager->stop(internal);
+                        // VK-1521: streams can fade now. This was a hard stop, which is why
+                        // music could never crossfade — music is the thing that streams.
+                        deps.streamingManager->startFadeOut(internal, command.fadeDurationMs);
                     }
                     else
                     {
-                        // Preserve the old immediate EFX/reverb detach while retaining
-                        // the bus record long enough to meter the audible fade ramp.
-                        deps.busManager->detachSourceRouting(internal);
                         deps.sourceManager->startFadeOut(internal, command.fadeDurationMs);
                     }
                 }
-                if (StreamingAudioManager::isStreamingHandle(internal))
-                    forgetVoice(command.handle);
+                // VK-1521: the eager streaming-only forgetVoice that used to live here is
+                // gone. It existed because stop() destroyed the source outright, so nothing
+                // would ever have GC'd the handle. Now the ramp needs its voice record to
+                // survive to the end — publishSnapshot reaps it once the fade completes and
+                // isFinished() flips, exactly as it already does for pooled voices.
             }
             else if constexpr (std::is_same_v<T, StopAllCmd>)
             {
@@ -966,7 +983,12 @@ namespace core::audio
                 const StreamingPlaybackMetrics metrics =
                     deps.streamingManager->getPlaybackMetrics(internal);
                 state.playbackPosition = metrics.positionSeconds;
-                sourceRms = metrics.rms;
+                // VK-1521: mirrors the pooled branch below. This term feeds the BUS meters,
+                // which deliberately omit the source's own gain (the bus applies userVolume
+                // downstream), so it reads no AL_GAIN at all and must re-apply the ramp by
+                // hand or a fading stream would meter at full. row.level below is the
+                // opposite case and must NOT — see the comment there.
+                sourceRms = metrics.rms * deps.streamingManager->getFadeGain(internal);
                 state.duration = deps.streamingManager->getDuration(internal);
                 sourceFinished = deps.streamingManager->isFinished(internal);
 

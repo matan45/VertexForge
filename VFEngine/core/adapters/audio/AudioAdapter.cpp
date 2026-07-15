@@ -70,6 +70,7 @@ namespace core {
         coreParams.direction = params.direction;
         coreParams.busName = params.busName;
         coreParams.priority = params.priority;
+        coreParams.fadeInMs = params.fadeInMs;
 
         return audioController->playSound3D(path, position, coreParams);
     }
@@ -96,6 +97,7 @@ namespace core {
         coreParams.direction = params.direction;
         coreParams.busName = params.busName;
         coreParams.priority = params.priority;
+        coreParams.fadeInMs = params.fadeInMs;
 
         return audioController->playStreamingSound(path, coreParams);
     }

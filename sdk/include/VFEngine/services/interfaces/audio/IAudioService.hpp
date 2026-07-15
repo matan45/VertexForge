@@ -43,6 +43,13 @@ namespace services {
         // by reference (PluginContext::playSound3D), so the field must not slot into an
         // existing padding hole where sizeof would stay unchanged. Plugin API v19.
         uint8_t priority = 128;
+
+        // VK-1521: ramp up from silence over this many milliseconds instead of starting at
+        // full gain. 0 = no fade, so every existing caller is unchanged. Pair it with
+        // fadeOutAndRelease on the outgoing sound to crossfade. Appended at the tail for the
+        // same ABI reason as priority above — this struct crosses the plugin boundary by
+        // reference (PluginContext::playSound3D/playStreamingSound). Plugin API v20.
+        float fadeInMs = 0.0f;
     };
 
     class IAudioService {

@@ -191,6 +191,20 @@ namespace windows::details
                               "When the voice budget is full, the least important sound is stolen.");
         }
 
+        // VK-1521: ramp up from silence when the sound starts. 0 = no fade.
+        if (ImGui::DragFloat("Fade In (ms)##2D", &audioData.fadeInMs, 10.0f, 0.0f, 10000.0f,
+                             "%.0f"))
+        {
+            audioData.fadeInMs = std::max(0.0f, audioData.fadeInMs);
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Ramp this sound up from silence over this many milliseconds.\n"
+                              "0 = start at full volume. Pair with a fade-out on the outgoing\n"
+                              "sound to crossfade music.");
+        }
+
         return changed;
     }
 
@@ -253,6 +267,9 @@ namespace windows::details
                     playCmd.params.pitch = pick.pitch;
                     playCmd.params.loop = audioData.loop;
                     playCmd.params.busName = audioData.busName;
+                    // VK-1521: audition the authored fade too — this is a streaming play,
+                    // so it exercises the exact path the ticket's music crossfade uses.
+                    playCmd.params.fadeInMs = audioData.fadeInMs;
 
                     services::AudioHandle newHandle = dispatcher.execute(playCmd);
                     audioPreviewHandles[previewKey] = newHandle;

@@ -407,6 +407,7 @@ namespace services {
         playParams.direction = params.direction;
         playParams.busName = params.busName;
         playParams.priority = params.priority;
+        playParams.fadeInMs = params.fadeInMs;
         return playParams;
     }
 

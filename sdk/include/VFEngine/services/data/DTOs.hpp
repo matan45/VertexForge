@@ -194,6 +194,8 @@ namespace services
         std::string busName = "Music";
         // VK-1513: lower = more important (0 = critical, 255 = least, 128 = neutral).
         uint8_t priority = 128;
+        // VK-1521: fade-in ramp length in ms. 0 = no fade.
+        float fadeInMs = 0.0f;
 
         // VK-1520: mirrors AudioSource2DComponent's variation block. Pool is
         // [audioRef] ++ valid(clipVariants) — audioRef is variant 0. AUTHORED
@@ -237,6 +239,8 @@ namespace services
         std::string busName = "SFX";
         // VK-1513: lower = more important (0 = critical, 255 = least, 128 = neutral).
         uint8_t priority = 128;
+        // VK-1521: fade-in ramp length in ms. 0 = no fade.
+        float fadeInMs = 0.0f;
 
         // VK-1520: see AudioSource2DData's variation block. Authored fields only.
         std::vector<asset::AssetRef> clipVariants;
